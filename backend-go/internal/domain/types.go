@@ -605,6 +605,11 @@ type Project struct {
 	// Quality is the quality subprocess of the obra: issues, rework actions
 	// and per-unit QC records (OC-060..OC-062, #302).
 	Quality          *QualityJob       `json:"quality,omitempty"`
+	// Costing is the job costing subprocess of the obra: baseline frozen from
+	// quote snapshot + release, time entries and other actual costs
+	// (OC-080..OC-084, #304). Material actuals derive from stock movements
+	// assigned to the obra. Server-authoritative via the costing endpoints.
+	Costing          *JobCosting       `json:"costing,omitempty"`
 	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
 	Events            []ProjectEvent      `json:"events,omitempty"`
 	Notes             string              `json:"notes,omitempty"`

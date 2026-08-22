@@ -29,6 +29,8 @@ import type {
 } from '@muebles/domain';
 
 import type { DropdownMenuSection } from '../../common';
+import type { CostingHandlers } from './CostingPanel';
+import type { CostingPanelView } from '../costingView';
 
 // ─── Catalogs ───────────────────────────────────────────────────────
 
@@ -194,6 +196,15 @@ export interface ProjectDetailContextValue {
     projectId: string,
     items: readonly import('@muebles/domain').InstallationChecklistItem[],
   ) => void;
+  // --- Job costing (OC-080..OC-084, #304) ---
+  readonly costingView?: CostingPanelView | null;
+  readonly costingHandlers?: CostingHandlers;
+  readonly canManageCosting?: boolean;
+  readonly canCaptureCosting?: boolean;
+  readonly canRecordOtherCosting?: boolean;
+  readonly canVoidCosting?: boolean;
+  readonly costingLabelsByMaterial?: Readonly<Record<string, string>>;
+
   readonly onImportNesting?: (
     projectId: string,
     nestingImport: NonNullable<Project['nestingImport']>,

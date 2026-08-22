@@ -47,6 +47,9 @@ import {
 } from '../../common';
 import { ProjectFloorProgressStrip } from '../../production/ProjectFloorProgressStrip';
 import { ProjectStalenessBanner } from './ProjectStalenessBanner';
+import { CostingPanel } from './CostingPanel';
+import type { CostingPanelView } from '../costingView';
+import type { CostingHandlers } from './CostingPanel';
 import { ProductionReleaseModal } from './ProductionReleaseModal';
 import { ChangeOrderModal } from './ChangeOrderModal';
 import { ProjectItemsSection } from './ProjectItemsSection';
@@ -195,6 +198,15 @@ export interface ProjectDetailViewProps {
     projectId: string,
     nestingImport: NonNullable<Project['nestingImport']>,
   ) => void;
+
+  // --- Job costing (OC-080..OC-084, #304): estimate vs actual panel ---
+  readonly costingView?: CostingPanelView | null;
+  readonly costingHandlers?: CostingHandlers;
+  readonly canManageCosting?: boolean;
+  readonly canCaptureCosting?: boolean;
+  readonly canRecordOtherCosting?: boolean;
+  readonly canVoidCosting?: boolean;
+  readonly costingLabelsByMaterial?: Readonly<Record<string, string>>;
   readonly onUpdateProjectLevelChoices?: (
     projectId: string,
     choices: OptionChoices,
@@ -616,6 +628,18 @@ function ProjectDetailViewInner(): ReactNode {
               canEditContent={canEditContent}
             />
           </section>
+
+          {ctx.costingView && ctx.showCosts ? (
+            <CostingPanel
+              view={ctx.costingView}
+              handlers={ctx.costingHandlers ?? {}}
+              labelsByMaterial={ctx.costingLabelsByMaterial}
+              canManage={ctx.canManageCosting ?? false}
+              canCapture={ctx.canCaptureCosting ?? false}
+              canRecordOther={ctx.canRecordOtherCosting ?? false}
+              canVoid={ctx.canVoidCosting ?? false}
+            />
+          ) : null}
         </div>
 
         <ProjectTotalsAside />
@@ -737,6 +761,13 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onExportScenarioPdf,
     onUpdateInstallationChecklist,
     onImportNesting,
+    costingView = null,
+    costingHandlers,
+    canManageCosting = false,
+    canCaptureCosting = false,
+    canRecordOtherCosting = false,
+    canVoidCosting = false,
+    costingLabelsByMaterial = {},
     onUpdateProjectLevelChoices,
     onRestoreVersion,
     canMutate,
@@ -796,6 +827,13 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
       missingGroups,
       groupLabels,
       showCosts,
+    costingView,
+    costingHandlers,
+    canManageCosting,
+    canCaptureCosting,
+    canRecordOtherCosting,
+    canVoidCosting,
+    costingLabelsByMaterial,
       exportMenu,
       exportBlockMessage,
       exportErrors,

@@ -32,6 +32,8 @@ import type {
   MaterialRequirementLine,
   QualityIssue,
   QualityIssueStatus,
+  TimeEntry,
+  OtherActualCost,
   ReworkAction,
   UnitQcChecklistItem,
 } from '@muebles/domain';
@@ -45,6 +47,7 @@ import type {
   InstallationCloseoutCheck,
   MaterialPlanningView,
   QualityView,
+  JobCostingView,
 } from './workspaceRepository';
 import { CloseoutGateError, MaterialsReleaseGateError } from './workspaceRepository';
 import {
@@ -94,6 +97,9 @@ import {
   warrantyTicketToApi,
   workshopSettingsFromApi,
   workshopSettingsToApi,
+  jobCostingFromApi,
+  jobCostSummaryFromApi,
+  materialCostValuationFromApi,
 } from './apiMappers';
 
 import { SCHEMA_VERSION } from './seed';
@@ -2312,6 +2318,119 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(`Failed to override unit QC: ${res.status} ${text}`);
     }
     return this.parseQualityView((await res.json()) as Record<string, unknown>);
+  }
+
+  private parseJobCostingView(raw: Record<string, unknown>): JobCostingView {
+    return {
+      costing: jobCostingFromApi(raw.costing) ?? null,
+      summary: jobCostSummaryFromApi(raw.summary),
+      material: materialCostValuationFromApi(raw.material),
+      eventsAppended: Number(raw.events_appended ?? raw.eventsAppended ?? 0) || undefined,
+    };
+  }
+
+  async getJobCosting(projectId: string): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to get job costing: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  async captureCostBaseline(projectId: string): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/baseline`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to capture cost baseline: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  async setCostingLaborRate(projectId: string, ratePerHour: number): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/labor-rate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ rate_per_hour: ratePerHour }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to set labor rate: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  async recordCostingTime(
+    projectId: string,
+    payload: { category: TimeEntry['category']; minutes: number; note?: string },
+  ): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/time`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        category: payload.category,
+        minutes: payload.minutes,
+        ...(payload.note ? { note: payload.note } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to record costing time: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  async voidCostingTime(projectId: string, entryId: string, reason?: string): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/time/${entryId}/void`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ ...(reason ? { reason } : {}) }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to void costing time: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  async recordCostingOtherCost(
+    projectId: string,
+    payload: { kind: OtherActualCost['kind']; amount: number; vendor?: string; note?: string },
+  ): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/other`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        kind: payload.kind,
+        amount: payload.amount,
+        ...(payload.vendor ? { vendor: payload.vendor } : {}),
+        ...(payload.note ? { note: payload.note } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to record other cost: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
+  }
+
+  async voidCostingOtherCost(projectId: string, costId: string, reason?: string): Promise<JobCostingView> {
+    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/other/${costId}/void`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ ...(reason ? { reason } : {}) }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to void other cost: ${res.status} ${text}`);
+    }
+    return this.parseJobCostingView((await res.json()) as Record<string, unknown>);
   }
 }
 

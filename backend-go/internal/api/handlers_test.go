@@ -102,6 +102,12 @@ type stubStore struct {
 	qualityJob                *domain.QualityJob
 	releasedRevision          string
 	qualityEvents             []domain.ProjectEvent
+	// Job costing (OC-080..OC-084): in-memory state + audit write log.
+	jobCosting            *domain.JobCosting
+	costingPriceSnapshot  *domain.QuotePriceSnapshot
+	costingConsumption    []domain.MaterialConsumptionInput
+	costingEvents         []domain.ProjectEvent
+	costingProjectMissing bool
 	installationUnits             []domain.ModuleUnitExecution
 	installationItems             []domain.ProjectItem
 	installationHasStartedEvent   bool
@@ -524,6 +530,32 @@ func (s *stubStore) MutateProjectQuality(
 		s.moduleUnits = mutation.Units
 	}
 	s.qualityEvents = append(s.qualityEvents, mutation.Events...)
+	return mutation, nil
+}
+
+func (s *stubStore) MutateProjectCosting(
+	_ context.Context,
+	projectID string,
+	mutate func(*domain.JobCostingSnapshot) (*domain.JobCostingMutation, error),
+) (*domain.JobCostingMutation, error) {
+	if s.costingProjectMissing {
+		return nil, errors.New("project not found")
+	}
+	snap := &domain.JobCostingSnapshot{
+		Costing:           s.jobCosting,
+		PriceSnapshot:     s.costingPriceSnapshot,
+		ProductionRelease: s.productionRelease,
+		Quality:           s.qualityJob,
+		Consumption:       append([]domain.MaterialConsumptionInput(nil), s.costingConsumption...),
+	}
+	mutation, err := mutate(snap)
+	if err != nil {
+		return nil, err
+	}
+	if mutation.Costing != nil {
+		s.jobCosting = mutation.Costing
+	}
+	s.costingEvents = append(s.costingEvents, mutation.Events...)
 	return mutation, nil
 }
 

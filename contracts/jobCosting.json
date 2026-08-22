@@ -1,0 +1,36 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-080..OC-084, issue #304): vocabulario canónico de job costing — categorías de tiempo, tipos de otros costos, bases de valorización de material y semántica de verdad de datos. Consumido por packages/domain/src/jobCosting.test.ts y backend-go/internal/domain/jobCostingParity_test.go — una divergencia rompe CI en algún lado (docs/architecture.md §7). Actualizar fixture + ambas implementaciones juntos.",
+  "timeEntryCategories": [
+    "sales_design",
+    "engineering",
+    "cut",
+    "cnc",
+    "edge_banding",
+    "assembly",
+    "qc_rework",
+    "shipping",
+    "installation",
+    "warranty"
+  ],
+  "rejectedTimeEntryCategories": ["carpinteria", "pintura", "oficina"],
+  "otherCostKinds": [
+    "freight",
+    "outsource",
+    "external_installation",
+    "consumable"
+  ],
+  "rejectedOtherCostKinds": ["marketing", "impuestos", "alquiler"],
+  "materialValuationBases": ["po_unit_cost", "catalog"],
+  "materialValuationTruth": {
+    "po_unit_cost": "actual",
+    "catalog": "proxy"
+  },
+  "summaryNullSemantics": {
+    "revenue": "null antes de capturar baseline (OC-080)",
+    "estimatedDirectCost": "null antes de capturar baseline",
+    "actualLaborCost": "null mientras no haya tarifa horaria configurada y existan minutos registrados (no esconder el faltante)",
+    "actualDirectCost": "null cuando el costo de mano de obra no es valorizable",
+    "variance": "null sin baseline o sin costo directo actual completo",
+    "actualGrossMargin": "null sin baseline o sin costo directo actual completo"
+  }
+}

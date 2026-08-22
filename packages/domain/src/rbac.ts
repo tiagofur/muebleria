@@ -620,6 +620,20 @@ const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> 
   // Quality / rework (OC-060/061): supervisors and floor report damage.
   quality_issue_reported: ['admin', 'gerente_produccion', 'produccion'],
   rework_started: ['admin', 'gerente_produccion', 'produccion'],
+  // Job costing (OC-080..084): gerencia freezes the baseline; anyone operating
+  // logs labor time; supervisors void wrong entries.
+  cost_baseline_captured: ['admin', 'gerente_ventas', 'gerente_produccion'],
+  cost_time_recorded: [
+    'admin',
+    'gerente_ventas',
+    'vendedor',
+    'gerente_produccion',
+    'ingeniero',
+    'produccion',
+    'almacen',
+  ],
+  cost_other_recorded: ['admin', 'gerente_ventas', 'gerente_produccion', 'almacen'],
+  cost_entry_voided: ['admin', 'gerente_ventas', 'gerente_produccion'],
   shipment_loaded: ['admin', 'gerente_produccion', 'produccion', 'almacen'],
   shipment_departed: ['admin', 'gerente_produccion', 'produccion', 'almacen'],
   installation_started: ['admin', 'gerente_ventas', 'gerente_produccion', 'produccion'],

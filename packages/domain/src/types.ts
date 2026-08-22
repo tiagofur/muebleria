@@ -1175,6 +1175,11 @@ export interface Project {
    * Quality job: issues, rework actions and per-unit QC records (OC-060..OC-062).
    */
   readonly quality?: import('./quality').QualityJob;
+  /**
+   * Job costing: frozen baseline, time entries and other actual costs
+   * (OC-080..OC-084). Material actuals derive from stock consumption.
+   */
+  readonly costing?: import('./jobCosting').JobCosting;
 }
 
 /** Lifecycle stage for a project photo. */

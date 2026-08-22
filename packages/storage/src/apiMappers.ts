@@ -85,6 +85,14 @@ import type {
   QualityIssueStatus,
   QualityIssueCategory,
   ReworkAction,
+  CostBaseline,
+  CostTruth,
+  JobCosting,
+  JobCostSummary,
+  MaterialCostValuation,
+  MaterialValuationBasis,
+  TimeEntry,
+  OtherActualCost,
   UnitQcRecord,
   UnitQcChecklistItem,
   QcGateCheck,
@@ -102,6 +110,7 @@ import type {
   ShowcasePhotoItem,
   WorkshopSettings,
 } from '@muebles/domain';
+import { TIME_ENTRY_CATEGORIES, OTHER_COST_KINDS } from '@muebles/domain';
 
 
 import {
@@ -199,6 +208,13 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
  * Preserves 0 (valid PBR value) — unlike `num(..., 0)` which can't tell 0 from
  * "missing". Used for nullable REAL preview_* fields.
  */
+/** Nullable string: empty/missing → undefined (camelCase optional fields). */
+function optionalStr(v: unknown): string | undefined {
+  if (v === null || v === undefined) return undefined;
+  const s = typeof v === 'string' ? v : String(v);
+  return s === '' ? undefined : s;
+}
+
 function optionalNum(v: unknown): number | undefined {
   if (v === null || v === undefined || v === '') return undefined;
   if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
@@ -1630,6 +1646,8 @@ export function projectToApi(p: Project): Record<string, unknown> {
     material_planning: p.materialPlanning ? materialPlanningToApi(p.materialPlanning) : null,
     // OC-060..062 — quality job (same: quality endpoints are the only writers).
     quality: p.quality ? qualityJobToApi(p.quality) : null,
+    // OC-080..084 — job costing (same: costing endpoints are the only writers).
+    costing: p.costing ? jobCostingToApi(p.costing) : null,
     // OC-010 — lifecycle append-only event stream
     events: (p.events ?? []).map((e) => projectEventToApi(e)),
   };
@@ -1833,6 +1851,8 @@ export function projectFromApi(raw: Record<string, unknown>): Project {
     materialPlanning: materialPlanningFromApi(raw.material_planning ?? raw.materialPlanning),
     // OC-060..062 — quality job (issues, rework actions, unit QC)
     quality: qualityJobFromApi(raw.quality),
+    // OC-080..084 — job costing (baseline, time entries, other actuals)
+    costing: jobCostingFromApi(raw.costing),
     // OC-011 — commercial status outcome
     commercialStatus: commercialStatusFromApi(
       raw.commercial_status ?? raw.commercialStatus,
@@ -3539,5 +3559,211 @@ export function poItemToApi(it: {
     quantity: it.quantity,
     ...(it.unitCost !== undefined ? { unit_cost: it.unitCost } : {}),
     ...(it.allocatedProjectId ? { allocated_project_id: it.allocatedProjectId } : {}),
+  };
+}
+
+/* ── Job costing (OC-080..OC-084) ─────────────────────────────────────────── */
+
+function costBaselineFromApi(raw: unknown): CostBaseline | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  const source = (rec.source ?? {}) as Record<string, unknown>;
+  return {
+    id: str(rec.id),
+    projectId: str(rec.project_id ?? rec.projectId),
+    capturedAt: str(rec.captured_at ?? rec.capturedAt),
+    capturedByUserId: optionalStr(rec.captured_by_user_id ?? rec.capturedByUserId),
+    source: {
+      quoteSnapshotCapturedAt: str(source.quote_snapshot_captured_at ?? source.quoteSnapshotCapturedAt),
+      projectVersion: num(source.project_version ?? source.projectVersion),
+      releaseId: str(source.release_id ?? source.releaseId),
+      bomFingerprint: str(source.bom_fingerprint ?? source.bomFingerprint),
+    },
+    revenue: num(rec.revenue),
+    materialsCost: num(rec.materials_cost ?? rec.materialsCost),
+    edgeTotal: num(rec.edge_total ?? rec.edgeTotal),
+    hardwareTotal: num(rec.hardware_total ?? rec.hardwareTotal),
+    laborModular: num(rec.labor_modular ?? rec.laborModular),
+    laborFixedCost: num(rec.labor_fixed_cost ?? rec.laborFixedCost),
+    estimatedDirectCost: num(rec.estimated_direct_cost ?? rec.estimatedDirectCost),
+    expectedGrossMargin: num(rec.expected_gross_margin ?? rec.expectedGrossMargin),
+    expectedMarginPercent: num(rec.expected_margin_percent ?? rec.expectedMarginPercent),
+  };
+}
+
+function costBaselineToApi(b: CostBaseline): Record<string, unknown> {
+  return {
+    id: b.id,
+    project_id: b.projectId,
+    captured_at: b.capturedAt,
+    captured_by_user_id: b.capturedByUserId,
+    source: {
+      quote_snapshot_captured_at: b.source.quoteSnapshotCapturedAt,
+      project_version: b.source.projectVersion,
+      release_id: b.source.releaseId,
+      bom_fingerprint: b.source.bomFingerprint,
+    },
+    revenue: b.revenue,
+    materials_cost: b.materialsCost,
+    edge_total: b.edgeTotal,
+    hardware_total: b.hardwareTotal,
+    labor_modular: b.laborModular,
+    labor_fixed_cost: b.laborFixedCost,
+    estimated_direct_cost: b.estimatedDirectCost,
+    expected_gross_margin: b.expectedGrossMargin,
+    expected_margin_percent: b.expectedMarginPercent,
+  };
+}
+
+function timeEntryFromApi(raw: unknown): TimeEntry {
+  const rec = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: str(rec.id),
+    category: str(rec.category) as TimeEntry['category'],
+    minutes: num(rec.minutes),
+    at: str(rec.at),
+    byUserId: optionalStr(rec.by_user_id ?? rec.byUserId),
+    byName: optionalStr(rec.by_name ?? rec.byName),
+    note: optionalStr(rec.note),
+    ratePerHour: num(rec.rate_per_hour ?? rec.ratePerHour),
+    removedAt: optionalStr(rec.removed_at ?? rec.removedAt),
+    removedByUserId: optionalStr(rec.removed_by_user_id ?? rec.removedByUserId),
+    removedByName: optionalStr(rec.removed_by_name ?? rec.removedByName),
+  };
+}
+
+function timeEntryToApi(e: TimeEntry): Record<string, unknown> {
+  return {
+    id: e.id,
+    category: e.category,
+    minutes: e.minutes,
+    at: e.at,
+    by_user_id: e.byUserId,
+    by_name: e.byName,
+    note: e.note,
+    rate_per_hour: e.ratePerHour,
+    removed_at: e.removedAt,
+    removed_by_user_id: e.removedByUserId,
+    removed_by_name: e.removedByName,
+  };
+}
+
+function otherActualCostFromApi(raw: unknown): OtherActualCost {
+  const rec = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: str(rec.id),
+    kind: str(rec.kind) as OtherActualCost['kind'],
+    amount: num(rec.amount),
+    at: str(rec.at),
+    byUserId: optionalStr(rec.by_user_id ?? rec.byUserId),
+    byName: optionalStr(rec.by_name ?? rec.byName),
+    vendor: optionalStr(rec.vendor),
+    note: optionalStr(rec.note),
+    removedAt: optionalStr(rec.removed_at ?? rec.removedAt),
+    removedByUserId: optionalStr(rec.removed_by_user_id ?? rec.removedByUserId),
+    removedByName: optionalStr(rec.removed_by_name ?? rec.removedByName),
+  };
+}
+
+function otherActualCostToApi(c: OtherActualCost): Record<string, unknown> {
+  return {
+    id: c.id,
+    kind: c.kind,
+    amount: c.amount,
+    at: c.at,
+    by_user_id: c.byUserId,
+    by_name: c.byName,
+    vendor: c.vendor,
+    note: c.note,
+    removed_at: c.removedAt,
+    removed_by_user_id: c.removedByUserId,
+    removed_by_name: c.removedByName,
+  };
+}
+
+export function jobCostingFromApi(raw: unknown): JobCosting | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const rec = raw as Record<string, unknown>;
+  const entries: readonly unknown[] = Array.isArray(rec.time_entries ?? rec.timeEntries)
+    ? ((rec.time_entries ?? rec.timeEntries) as readonly unknown[])
+    : [];
+  const costs: readonly unknown[] = Array.isArray(rec.other_costs ?? rec.otherCosts)
+    ? ((rec.other_costs ?? rec.otherCosts) as readonly unknown[])
+    : [];
+  return {
+    id: str(rec.id),
+    projectId: str(rec.project_id ?? rec.projectId),
+    baseline: costBaselineFromApi(rec.baseline),
+    laborRatePerHour: num(rec.labor_rate_per_hour ?? rec.laborRatePerHour),
+    timeEntries: entries.map(timeEntryFromApi),
+    otherCosts: costs.map(otherActualCostFromApi),
+    createdAt: str(rec.created_at ?? rec.createdAt),
+  };
+}
+
+export function jobCostingToApi(j: JobCosting): Record<string, unknown> {
+  return {
+    id: j.id,
+    project_id: j.projectId,
+    baseline: j.baseline ? costBaselineToApi(j.baseline) : undefined,
+    labor_rate_per_hour: j.laborRatePerHour,
+    time_entries: j.timeEntries.map(timeEntryToApi),
+    other_costs: j.otherCosts.map(otherActualCostToApi),
+    created_at: j.createdAt,
+  };
+}
+
+export function jobCostSummaryFromApi(raw: unknown): JobCostSummary {
+  const rec = (raw ?? {}) as Record<string, unknown>;
+  const minutesRaw = (rec.minutes_by_category ?? rec.minutesByCategory ?? {}) as Record<string, unknown>;
+  const otherRaw = (rec.other_cost_by_kind ?? rec.otherCostByKind ?? {}) as Record<string, unknown>;
+  const minutesByCategory = {} as Record<TimeEntry['category'], number>;
+  for (const category of TIME_ENTRY_CATEGORIES) {
+    minutesByCategory[category] = num(minutesRaw[category]);
+  }
+  const otherCostByKind = {} as Record<OtherActualCost['kind'], number>;
+  for (const kind of OTHER_COST_KINDS) {
+    otherCostByKind[kind] = num(otherRaw[kind]);
+  }
+  return {
+    revenue: optionalNum(rec.revenue) ?? null,
+    estimatedDirectCost: optionalNum(rec.estimated_direct_cost ?? rec.estimatedDirectCost) ?? null,
+    actualMaterialCost: num(rec.actual_material_cost ?? rec.actualMaterialCost),
+    actualMaterialTruth: (str(rec.actual_material_truth ?? rec.actualMaterialTruth) || 'missing') as CostTruth,
+    actualLaborMinutes: num(rec.actual_labor_minutes ?? rec.actualLaborMinutes),
+    actualLaborCost: optionalNum(rec.actual_labor_cost ?? rec.actualLaborCost) ?? null,
+    actualOtherCost: num(rec.actual_other_cost ?? rec.actualOtherCost),
+    actualDirectCost: optionalNum(rec.actual_direct_cost ?? rec.actualDirectCost) ?? null,
+    variance: optionalNum(rec.variance) ?? null,
+    expectedGrossMargin: optionalNum(rec.expected_gross_margin ?? rec.expectedGrossMargin) ?? null,
+    expectedMarginPercent: optionalNum(rec.expected_margin_percent ?? rec.expectedMarginPercent) ?? null,
+    actualGrossMargin: optionalNum(rec.actual_gross_margin ?? rec.actualGrossMargin) ?? null,
+    actualMarginPercent: optionalNum(rec.actual_margin_percent ?? rec.actualMarginPercent) ?? null,
+    minutesByCategory,
+    otherCostByKind,
+  };
+}
+
+export function materialCostValuationFromApi(raw: unknown): MaterialCostValuation {
+  const rec = (raw ?? {}) as Record<string, unknown>;
+  const lines: readonly unknown[] = Array.isArray(rec.lines) ? rec.lines : [];
+  const missing: readonly unknown[] = Array.isArray(rec.missing_valuation_material_ids ?? rec.missingValuationMaterialIds)
+    ? ((rec.missing_valuation_material_ids ?? rec.missingValuationMaterialIds) as readonly unknown[])
+    : [];
+  return {
+    lines: lines.map((l) => {
+      const line = (l ?? {}) as Record<string, unknown>;
+      return {
+        materialId: str(line.material_id ?? line.materialId),
+        quantity: num(line.quantity),
+        unitCost: num(line.unit_cost ?? line.unitCost),
+        amount: num(line.amount),
+        basis: str(line.basis) as MaterialValuationBasis,
+        truth: str(line.truth) as CostTruth,
+      };
+    }),
+    total: num(rec.total),
+    truth: (str(rec.truth) || 'missing') as CostTruth,
+    missingValuationMaterialIds: missing.map((m) => str(m)),
   };
 }

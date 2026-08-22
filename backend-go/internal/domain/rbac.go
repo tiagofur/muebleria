@@ -337,6 +337,12 @@ var projectEventAppendRoles = map[string][]UserRole{
 	// Quality / rework (OC-060..062) — parity with TS rbac.ts.
 	"quality_issue_reported": {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
 	"rework_started":         {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	// Job costing (OC-080..084) — parity with TS rbac.ts: gerencia freezes the
+	// baseline; anyone operating logs labor time; supervisors void entries.
+	"cost_baseline_captured": {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
+	"cost_time_recorded":     {RoleAdmin, RoleGerenteVentas, RoleVendedor, RoleGerenteProduccion, RoleIngeniero, RoleProduccion, RoleAlmacen},
+	"cost_other_recorded":    {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleAlmacen},
+	"cost_entry_voided":      {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion},
 	"shipment_loaded":        {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
 	"shipment_departed":      {RoleAdmin, RoleGerenteProduccion, RoleProduccion, RoleAlmacen},
 	"installation_started":   {RoleAdmin, RoleGerenteVentas, RoleGerenteProduccion, RoleProduccion},

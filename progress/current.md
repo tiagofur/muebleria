@@ -1,40 +1,4 @@
-# Sesión cerrada: Issue #302 — Operational Core O3: MRP ligero, reservas, compras, QC y retrabajo
+# Sesión
 
-**Fecha:** 2026-08-21
-**Feature:** F138 — `operational_core_o3` — **done**
-**Rama:** `feat/f138-mrp-qc` (pusheada)
-
-## Resumen
-
-OC-050..OC-054 + OC-060..OC-062 implementados de punta a punta: requerimientos
-desde el BOM liberado (sin heurísticas), disponibilidad honesta de 6 cantidades,
-reservas con caps, shortage→PO con allocation/costos/fechas, liberación con
-evidencia y override auditado; QualityIssue/ReworkAction con job costing y
-efecto físico, checklist QC por unidad y gate server-side antes de empaquetar.
-
-- Dominio TS puro + contracts de paridad TS↔Go (materialPlanning,
-  qualityStatuses) con tests espejo.
-- Backend Go: migraciones 000071–000073, endpoints server-authoritative con
-  SELECT FOR UPDATE + eventos en la misma tx, QC gate 409 en advance unit,
-  anti-smuggling de materials_release en el PUT agregado, fix de paridad RBAC
-  de eventos de calidad.
-- Storage TS (mappers + repo API + POs guest) y UI (MaterialPlanningPanel en
-  Almacén, QualityPanel en Embalaje, wiring store/AppContent).
-
-Review: CHANGES_REQUESTED (3 defects menores) → aplicados → **APPROVED**
-(ver `progress/review_F138.md` y `progress/history.md`).
-
-## Verificación final
-
-domain 877 · storage 147 · ui 1187 · web 301 · mobile 45 · desktop 17 ·
-excel 89 · `pnpm typecheck` OK · `go test ./...` OK (incluye deuda saldada).
-
-## Deuda del review — saldada (mismo PR #321)
-
-- ~~R2: cablear `consumePlannedMaterials` al despacho de picking~~ — hecho:
-  endpoint `/materials/consume` + `ConsumePlannedMaterials` (Go) + hook
-  `onDespachado` en `togglePick` + consumo en AppContent; `consumed` cubre la
-  línea en cobertura/gates (TS y Go corregidos y testeado en espejo).
-- ~~R1: marcar `≈` en tableros de la cobertura~~ — hecho (title "Planchas
-  estimadas del BOM liberado").
-- Pendiente externo: F123 (tests Compras/Almacén) sigue pending en el ledger.
+_No hay sesión activa. La última sesión cerrada fue F139 (issue #304) el
+2026-08-21 — ver `progress/history.md`._
