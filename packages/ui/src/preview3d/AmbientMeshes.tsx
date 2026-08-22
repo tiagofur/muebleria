@@ -249,7 +249,12 @@ export function FloorAmbientMesh({
   readonly position?: Vec3;
   readonly lightingMode?: SceneLightingMode;
   readonly paintHover?: boolean;
-  readonly onClick?: () => void;
+  /** F143 — recibe el evento para distinguir click real de orbit/pan. */
+  readonly onClick?: (e?: {
+    clientX: number;
+    clientY: number;
+    nativeEvent?: PointerEvent | MouseEvent;
+  }) => void;
 }): ReactNode {
   const color = resolveFloorColor(material);
   const phys = resolveFloorPhysical(material, lightingMode);
@@ -265,7 +270,7 @@ export function FloorAmbientMesh({
           onClick
             ? (e) => {
                 e.stopPropagation();
-                onClick();
+                onClick(e);
               }
             : undefined
         }

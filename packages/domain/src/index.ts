@@ -357,6 +357,31 @@ export type {
   CollisionPeer,
 } from './kitchenLayout';
 
+export {
+  COMMAND_GAP_MM,
+  copySelectionToClipboard,
+  duplicateSelectionCommand,
+  pasteClipboardCommand,
+  pasteRelativeCommand,
+  firstFreeOffsetOnWall,
+  parsePlacementKey,
+  placementKeyOf,
+} from './kitchenLayoutCommands';
+export {
+  alignSelectionCommand,
+  centerSelectionOnWallCommand,
+  compactSelectionOnWallCommand,
+  distributeSelectionCommand,
+} from './kitchenArrangementCommands';
+export type {
+  ClipboardEntry,
+  ItemQuantityPatch,
+  LayoutCommandErrorReason,
+  LayoutCommandResult,
+  PlacementKey,
+  WallSpan,
+} from './kitchenLayoutCommands';
+
 export { roundHardwarePurchaseQuantity } from './engine/labels';
 
 export {

@@ -990,3 +990,30 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
   del empty state; test del auto-switch bootstrap→De la obra). Deuda:
   hover/active de `.spatial-studio__filter` (preexistente, ahora multiplica).
 - **Cierre:** commit + push sobre `feat/f141-proyectar-library` (PR #329).
+
+## 2026-08-22 — F143 selección multi/jerárquica + clipboard/align (#310, meta #308 E3)
+- **Agente:** implementador + reviewer (ZCode).
+- **Feature:** F143 — proyectar_multiselect_align, rama `feat/f143-multiselect-align`
+  desde `main` (S2 sigue en PR #330; S3 no necesita su código).
+- **Cambios:**
+  - Dominio: `kitchenLayoutCommands.ts` (duplicate/copy/paste/pasteRelative +
+    `firstFreeOffsetOnWall`) y `kitchenArrangementCommands.ts`
+    (compact/distribute/align/center) — intenciones puras con rechazos que
+    enseñan; `pruneKitchenLayout(+extraInstanceKeys)` (patrón extraItemIds).
+  - UI pura: `studioSelection.ts` (click/toggle/rango/prune/primaria) y
+    `preview3d/dragGuides.ts` (gap a vecino/extremo de muro).
+  - Studio: selección multi canvas↔lista↔inspector↔plano 2D, click-vacío bajo
+    umbral (orbit/pan estable), barra contextual `StudioSelectionBar`,
+    inspector N>1, modo detalle "Ver piezas" (pieza/herraje), atajos
+    Ctrl+C/V/D + Delete + Esc con precedencia, historial
+    `{layout, itemQuantities}` (undo de comandos que bumpean quantity).
+  - Escena: `selectedModuleKeys` multi + modifiers en `onSelectModule`,
+    part/hardware pick (modo detalle), guías de distancia efímeras,
+    guard de click-fondo (isPastDragThreshold).
+  - design.md §3.7: 10 iconos nuevos documentados.
+- **Verificación:** 2.872 tests + typecheck exit 0; smoke WebGL 2/2 con
+  screenshot review; review APPROVED (4 hallazgos aplicados) —
+  `progress/review_F143.md`.
+- **Cierre:** commit único + push (PR), comentario de cierre en #310.
+- **Deuda explícita:** drill-down a agregado (identidad estable en preview),
+  drag de grupo y nudge → F144.

@@ -18,6 +18,7 @@ import {
   Bounds,
   ContactShadows,
   Environment,
+  Html,
   OrbitControls,
   PerspectiveCamera,
   OrthographicCamera,
@@ -73,6 +74,7 @@ import {
   resolveCountertopPhysical,
 } from './AmbientMeshes';
 import { isPastDragThreshold } from './moduleDragGesture';
+import { planBoxForModule, resolveDragGuide } from './dragGuides';
 import {
   LIBRARY_DRAG_MIME,
   PAINT_DRAG_MIME,
@@ -88,6 +90,25 @@ import './moduleScene3d.css';
 
 export type { SceneLightingMode } from './sceneLighting';
 export type { PaintSurface, PaintDrop } from './paintMaterial';
+
+/**
+ * F143 — modificadores de selección leídos del evento nativo del puntero.
+ * Shift añade (rango en listas); Ctrl/Cmd alterna.
+ */
+export type ModuleSelectModifiers = {
+  readonly shift: boolean;
+  readonly ctrlOrMeta: boolean;
+};
+
+function pointerModifiers(e: {
+  nativeEvent?: PointerEvent | MouseEvent;
+}): ModuleSelectModifiers {
+  const n = e.nativeEvent;
+  return {
+    shift: Boolean(n?.shiftKey),
+    ctrlOrMeta: Boolean(n && (n.ctrlKey || n.metaKey)),
+  };
+}
 
 export type FurnitureSceneModule = {
   readonly key: string;
@@ -201,8 +222,28 @@ export type FurnitureScene3DProps = {
   readonly walls?: readonly FurnitureSceneWall[];
   /** Selected module instance key (highlight whole cabinet). */
   readonly selectedModuleKey?: string | null;
-  /** Click a module (or empty) to select. Prefer over part pick when set. */
-  readonly onSelectModule?: (moduleKey: string | null) => void;
+  /**
+   * F143 — multi-selección: claves de instancias seleccionadas. Cuando se
+   * pasa, gana sobre `selectedModuleKey`.
+   */
+  readonly selectedModuleKeys?: readonly string[] | null;
+  /**
+   * Click a module (or empty) to select. Prefer over part pick when set.
+   * F143: los modificadores (Shift añade, Ctrl/Cmd alterna) llegan en el
+   * segundo argumento para que el studio resuelva la intención.
+   */
+  readonly onSelectModule?: (
+    moduleKey: string | null,
+    modifiers?: ModuleSelectModifiers,
+  ) => void;
+  /**
+   * F143 — herraje seleccionado en modo detalle. Identidad estable:
+   * `${componentInstanceId}:${hardwareId}` (la misma del mesh key).
+   */
+  readonly selectedHardwareId?: string | null;
+  readonly onSelectHardware?: (hardwareId: string | null) => void;
+  /** F143 — guías temporales de distancia durante el drag de muro. */
+  readonly showDragGuides?: boolean;
   /**
    * Drag cabinets along kitchen walls (spatial studio). Keys = module.instanceKey.
    * Workshop mm frames must match the displayed (shifted) layout.
@@ -377,6 +418,8 @@ function BoardMesh({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   hardwarePlacements,
   hardwareCatalog,
+  hardwareSelectedId,
+  onSelectHardwareId,
   gizmoRawPlacement,
   onGizmoPlacementChange,
 }: {
@@ -395,6 +438,10 @@ function BoardMesh({
    */
   readonly hardwarePlacements?: readonly ResolvedHardwarePlacement[];
   readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
+  /** F143 — id de herraje seleccionado (modo detalle) para highlight. */
+  readonly hardwareSelectedId?: string | null;
+  /** F143 — click en herraje (modo detalle). */
+  readonly onSelectHardwareId?: (hardwareId: string) => void;
   /** F131: raw placement backing the first resolved one (gizmo edit target). */
   readonly gizmoRawPlacement?: HardwarePlacement;
   /** F131: gizmo edits flow up (snap 32mm); absent → gizmo mounts read-only. */
@@ -417,12 +464,17 @@ function BoardMesh({
           if (!hardware) return null; // swapped/removed → no orphan mesh (VH-09)
           // Remount on hardware/shape swap so material + geometry refresh
           // cleanly (mirrors BoardMeshMaterial key discipline).
+          const hardwareId = `${placement.componentInstanceId}:${placement.hardwareId}`;
           return (
             <HardwareMesh
               key={`${visual.id}:${placement.hardwareId}:${placement.componentInstanceId}`}
               placement={placement}
               hardware={hardware}
               lightingMode={lightingMode}
+              selected={hardwareSelectedId === hardwareId}
+              onSelect={
+                onSelectHardwareId ? () => onSelectHardwareId(hardwareId) : undefined
+              }
             />
           );
         })
@@ -1015,6 +1067,8 @@ function ModuleGroup({
   onSelectPart,
   moduleSelected,
   onSelectModule,
+  hardwareSelectedId,
+  onSelectHardwareId,
   wallDrag,
   wallDragEnabled,
   onModuleWallOffset,
@@ -1046,7 +1100,13 @@ function ModuleGroup({
   readonly isolateSelected?: boolean;
   readonly onSelectPart?: (partId: string) => void;
   readonly moduleSelected?: boolean;
-  readonly onSelectModule?: (moduleKey: string) => void;
+  readonly onSelectModule?: (
+    moduleKey: string,
+    modifiers?: ModuleSelectModifiers,
+  ) => void;
+  /** F143 — herraje seleccionado (modo detalle). */
+  readonly hardwareSelectedId?: string | null;
+  readonly onSelectHardwareId?: (hardwareId: string) => void;
   readonly lightingMode?: SceneLightingMode;
   readonly ambientCountertop?: AmbientMaterial;
   readonly paintHoverCountertop?: boolean;
@@ -1277,7 +1337,7 @@ function ModuleGroup({
         onSelectModule
           ? (e) => {
               e.stopPropagation();
-              onSelectModule(mod.key);
+              onSelectModule(mod.key, pointerModifiers(e));
             }
           : undefined
       }
@@ -1295,7 +1355,7 @@ function ModuleGroup({
               pressStart.current = { x: e.clientX, y: e.clientY };
               dragging.current = false;
               dragMode.current = null;
-              onSelectModule?.(mod.key);
+              onSelectModule?.(mod.key, pointerModifiers(e));
               document.body.style.cursor = 'grab';
             }
           : undefined
@@ -1350,6 +1410,8 @@ function ModuleGroup({
             lightingMode={lightingMode}
             hardwarePlacements={placementsByPartId.get(v.id)}
             hardwareCatalog={hardwareCatalog}
+            hardwareSelectedId={hardwareSelectedId}
+            onSelectHardwareId={onSelectHardwareId}
             gizmoRawPlacement={rawPlacementsByInstanceId?.get(v.id)?.[0]}
             onGizmoPlacementChange={
               onUpdatePlacement
@@ -1367,6 +1429,84 @@ type CameraViewType = {
   readonly type: 'front' | 'top' | 'side' | 'isometric';
   readonly ts: number;
 };
+
+/**
+ * F143 — guía temporal de distancia durante el drag de un mueble: gap al
+ * vecino o extremo de muro más cercano. Cálculo puro en dragGuides.ts; este
+ * componente sólo dibuja la línea + etiqueta. Nada se persiste.
+ */
+function WallDragGuides({
+  modules,
+  draggedKey,
+  wallDragByKey,
+}: {
+  readonly modules: readonly FurnitureSceneModule[];
+  readonly draggedKey: string;
+  readonly wallDragByKey?: FurnitureScene3DProps['wallDragByKey'];
+}): ReactNode | null {
+  const guide = useMemo(() => {
+    const dragged = modules.find((m) => m.key === draggedKey);
+    if (!dragged) return null;
+    const peers = modules
+      .filter((m) => m.key !== draggedKey)
+      .map((m) => planBoxForModule(m));
+    const frame = wallDragByKey?.[draggedKey];
+    if (frame) {
+      // Extremos del muro como pares sintéticos de ancho cero.
+      const a = ((frame.angleDeg % 360) + 360) % 360;
+      const dirX = a > 45 && a < 135 ? 0 : a >= 135 && a <= 225 ? -1 : a > 225 && a < 315 ? 0 : 1;
+      const dirY = a > 45 && a < 135 ? 1 : a >= 135 && a <= 225 ? 0 : a > 225 && a < 315 ? -1 : 0;
+      for (const t of [0, frame.lengthMm]) {
+        const x = frame.originXMm + dirX * t;
+        const y = frame.originYMm + dirY * t;
+        peers.push({
+          minX: x,
+          maxX: x,
+          minY: y - 600,
+          maxY: y + 600,
+        });
+      }
+    }
+    return resolveDragGuide(planBoxForModule(dragged), peers);
+  }, [modules, draggedKey, wallDragByKey]);
+
+  const lineObject = useMemo(() => {
+    if (!guide) return null;
+    const geometry =
+      guide.kind === 'x'
+        ? new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(guide.fromX, 30, guide.atY),
+            new THREE.Vector3(guide.toX, 30, guide.atY),
+          ])
+        : new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(guide.atX, 30, guide.fromY),
+            new THREE.Vector3(guide.atX, 30, guide.toY),
+          ]);
+    const material = new THREE.LineBasicMaterial({
+      color: 0xf5c542,
+      transparent: true,
+      opacity: 0.9,
+    });
+    return new THREE.Line(geometry, material);
+  }, [guide]);
+
+  if (!guide || !lineObject) return null;
+  const mid =
+    guide.kind === 'x'
+      ? ([guide.fromX + (guide.toX - guide.fromX) / 2, 40, guide.atY] as const)
+      : ([guide.atX, 40, guide.fromY + (guide.toY - guide.fromY) / 2] as const);
+  return (
+    <group>
+      <primitive object={lineObject} />
+      <Html position={mid} center zIndexRange={[10, 0]}>
+        <span className="module-scene-3d__drag-guide-label">
+          {guide.gapMm} mm
+        </span>
+      </Html>
+    </group>
+  );
+}
+
 
 function CameraViewSetter({
   cameraView,
@@ -1431,7 +1571,11 @@ function SceneContent({
   isolateSelected,
   onSelectPart,
   selectedModuleKey,
+  selectedModuleKeys,
   onSelectModule,
+  selectedHardwareId,
+  onSelectHardware,
+  showDragGuides,
   rawHardwarePlacements,
   onUpdateHardwarePlacement,
   wallDragByKey,
@@ -1486,7 +1630,14 @@ function SceneContent({
   readonly isolateSelected?: boolean;
   readonly onSelectPart?: (partId: string) => void;
   readonly selectedModuleKey?: string | null;
-  readonly onSelectModule?: (moduleKey: string | null) => void;
+  readonly selectedModuleKeys?: readonly string[] | null;
+  readonly onSelectModule?: (
+    moduleKey: string | null,
+    modifiers?: ModuleSelectModifiers,
+  ) => void;
+  readonly selectedHardwareId?: string | null;
+  readonly onSelectHardware?: (hardwareId: string | null) => void;
+  readonly showDragGuides?: boolean;
   readonly rawHardwarePlacements?: FurnitureScene3DProps['rawHardwarePlacements'];
   readonly onUpdateHardwarePlacement?: FurnitureScene3DProps['onUpdateHardwarePlacement'];
   readonly wallDragByKey?: FurnitureScene3DProps['wallDragByKey'];
@@ -1538,6 +1689,63 @@ function SceneContent({
     return map;
   }, [hardwareCatalog]);
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
+
+  // F143 — selección múltiple: Set memoizado para highlight O(1) por módulo.
+  const selectedKeySet = useMemo(() => {
+    const keys = selectedModuleKeys ?? (selectedModuleKey ? [selectedModuleKey] : []);
+    return new Set(keys);
+  }, [selectedModuleKeys, selectedModuleKey]);
+
+  // F143 — clave del módulo en drag activo (para las guías de distancia).
+  const [activeDragKey, setActiveDragKey] = useState<string | null>(null);
+  const handleWallDragStart = useCallback(
+    (key: string) => {
+      setActiveDragKey(key);
+      onModuleWallDragStart?.(key);
+    },
+    [onModuleWallDragStart],
+  );
+  const handleWallDragEnd = useCallback(
+    (key: string) => {
+      setActiveDragKey(null);
+      onModuleWallDragEnd?.(key);
+    },
+    [onModuleWallDragEnd],
+  );
+  const handleFreeDragStart = useCallback(
+    (key: string) => {
+      setActiveDragKey(key);
+      onModuleFreeDragStart?.(key);
+    },
+    [onModuleFreeDragStart],
+  );
+  const handleFreeDragEnd = useCallback(
+    (key: string) => {
+      setActiveDragKey(null);
+      onModuleFreeDragEnd?.(key);
+    },
+    [onModuleFreeDragEnd],
+  );
+
+  /**
+   * F143 — click en vacío limpia la selección sólo si fue un click real:
+   * un orbit/pan que empieza en el piso no debe perder la selección (North
+   * Star §11.1). Mismo umbral de 6px que el drag de módulos.
+   */
+  const bgPress = useRef<{ x: number; y: number } | null>(null);
+  const backgroundClickClears = (e: {
+    clientX: number;
+    clientY: number;
+    nativeEvent?: PointerEvent | MouseEvent;
+  }): boolean => {
+    const mods = pointerModifiers(e);
+    if (mods.shift || mods.ctrlOrMeta) return false;
+    const start = bgPress.current;
+    bgPress.current = null;
+    if (!start) return false;
+    return !isPastDragThreshold(start.x, start.y, e.clientX, e.clientY);
+  };
+
   const { camera, gl, scene } = useThree();
   const paintRaycaster = useMemo(() => new THREE.Raycaster(), []);
   const unplacedRaycaster = useMemo(() => new THREE.Raycaster(), []);
@@ -1809,9 +2017,13 @@ function SceneContent({
       */}
       <Bounds fit={!cameraView} margin={1.25}>
         <group
+          onPointerDown={(e) => {
+            bgPress.current = { x: e.clientX, y: e.clientY };
+          }}
           onClick={
             onSelectModule
-              ? () => {
+              ? (e) => {
+                  if (!backgroundClickClears(e)) return;
                   onSelectModule(null);
                 }
               : undefined
@@ -1829,7 +2041,14 @@ function SceneContent({
                 position={[framing.center[0], -1, framing.center[2]]}
                 lightingMode={lightMode}
                 paintHover={paintHoverSurface?.kind === 'floor'}
-                onClick={() => {
+                onClick={(
+                  e?: {
+                    clientX: number;
+                    clientY: number;
+                    nativeEvent?: PointerEvent | MouseEvent;
+                  },
+                ) => {
+                  if (!e || !backgroundClickClears(e)) return;
                   onSelectModule?.(null);
                   onSelectWall?.(null);
                   onSelectPart?.(null as any);
@@ -1842,6 +2061,7 @@ function SceneContent({
                 receiveShadow
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (!backgroundClickClears(e)) return;
                   onSelectModule?.(null);
                   onSelectWall?.(null);
                   onSelectPart?.(null as any);
@@ -1914,24 +2134,24 @@ function SceneContent({
               selectedPartId={selectedPartId}
               isolateSelected={isolateSelected}
               onSelectPart={onSelectPart}
-              moduleSelected={selectedModuleKey === mod.key}
-              onSelectModule={
-                onSelectModule
-                  ? (key) => {
-                      onSelectModule(key);
-                    }
+              moduleSelected={selectedKeySet.has(mod.key)}
+              onSelectModule={onSelectModule}
+              hardwareSelectedId={selectedHardwareId}
+              onSelectHardwareId={
+                onSelectHardware
+                  ? (id) => onSelectHardware(id)
                   : undefined
               }
               wallDrag={wallDragByKey?.[mod.key]}
               wallDragEnabled={wallDragEnabled}
               onModuleWallOffset={onModuleWallOffset}
-              onModuleWallDragStart={onModuleWallDragStart}
-              onModuleWallDragEnd={onModuleWallDragEnd}
+              onModuleWallDragStart={handleWallDragStart}
+              onModuleWallDragEnd={handleWallDragEnd}
               freeDrag={Boolean(freeDragByKey?.[mod.key])}
               planShiftMm={planShiftMm}
               onModuleFreeMove={onModuleFreeMove}
-              onModuleFreeDragStart={onModuleFreeDragStart}
-              onModuleFreeDragEnd={onModuleFreeDragEnd}
+              onModuleFreeDragStart={handleFreeDragStart}
+              onModuleFreeDragEnd={handleFreeDragEnd}
               draggingInvalid={draggingInvalid}
               lightingMode={lightMode}
               ambientCountertop={ambientCountertop}
@@ -1941,6 +2161,14 @@ function SceneContent({
               setOrbitSuppressed={setOrbitSuppressed}
             />
           ))}
+          {/* F143 — guía temporal de distancia durante el drag (capa efímera). */}
+          {showDragGuides && activeDragKey ? (
+            <WallDragGuides
+              modules={modules}
+              draggedKey={activeDragKey}
+              wallDragByKey={wallDragByKey}
+            />
+          ) : null}
           {/* Ambient room box: back wall + per-wall baseboards + optional
               ceiling. Only when an ambient material is present and not in
               catalog mode (spec #4149 room box + lighting gating). */}
@@ -2073,7 +2301,11 @@ export function FurnitureScene3D({
   isolateSelected = false,
   walls = [],
   selectedModuleKey = null,
+  selectedModuleKeys = null,
   onSelectModule,
+  selectedHardwareId = null,
+  onSelectHardware,
+  showDragGuides = false,
   wallDragByKey,
   onModuleWallOffset,
   onModuleWallDragStart,
@@ -2399,11 +2631,19 @@ export function FurnitureScene3D({
                     selectionEnabled && onSelectPart ? onSelectPart : undefined
                   }
                   selectedModuleKey={selectedModuleKey}
+                  selectedModuleKeys={selectedModuleKeys}
                   onSelectModule={
                     selectionEnabled && onSelectModule
                       ? onSelectModule
                       : undefined
                   }
+                  selectedHardwareId={selectedHardwareId}
+                  onSelectHardware={
+                    selectionEnabled && onSelectHardware
+                      ? onSelectHardware
+                      : undefined
+                  }
+                  showDragGuides={showDragGuides}
                   wallDragByKey={wallDragByKey}
                   onModuleWallOffset={onModuleWallOffset}
                   onModuleWallDragStart={onModuleWallDragStart}
