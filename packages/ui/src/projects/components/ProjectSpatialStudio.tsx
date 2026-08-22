@@ -2419,25 +2419,6 @@ export function ProjectSpatialStudio({
                   activeCeilingId={layout.ceilingMaterialId}
                   activeCountertopId={layout.countertopMaterialId}
                   testId="spatial-studio-material-palette"
-                  onSelectMaterial={(mat, targetSurface) => {
-                    if (!canEdit) return;
-                    if (targetSurface === 'floor') {
-                      commit({ ...layout, floorMaterialId: mat.id });
-                    } else if (targetSurface === 'wall') {
-                      if (activeWallId) {
-                        const updatedWalls = (layout.walls ?? []).map((w) =>
-                          w.id === activeWallId ? { ...w, wallMaterialId: mat.id } : w,
-                        );
-                        commit({ ...layout, walls: updatedWalls });
-                      } else {
-                        commit({ ...layout, wallMaterialId: mat.id });
-                      }
-                    } else if (targetSurface === 'ceiling') {
-                      commit({ ...layout, ceilingMaterialId: mat.id, showCeiling: true });
-                    } else if (targetSurface === 'countertop') {
-                      commit({ ...layout, countertopMaterialId: mat.id, showCountertop: true });
-                    }
-                  }}
                 />
               </section>
               )}

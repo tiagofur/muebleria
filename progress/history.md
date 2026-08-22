@@ -1022,3 +1022,14 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
   mobile 45 · desktop 17 · web 301) · typecheck 0 errores · go build+vet+test 8 pkgs ·
   smoke WebGL 1 passed · screenshot review OK.
 - **Cierre:** commit + push sobre `feat/f142-materials-dock` (stacked, base F141/PR #329).
+
+## 2026-08-22 — F142 iteración 2 — acabados ambientales drag-only (PR #330)
+- **Agente:** implementador (ZCode), feedback del dueño del producto.
+- **Cambios:** eliminado el mecanismo "Aplicar con clic a:" de la paleta Ambiente
+  (pills Suelo/Pared/Techo/Mesada + onSelectMaterial). Los acabados ambientales se
+  aplican sólo arrastrando al canvas — la superficie la resuelve el raycast del drop.
+  Chips pasan de botón a tarjeta arrastrable; highlight activo = aplicado en
+  cualquier superficie (badges Piso/Pared/Techo/Mesada ya lo comunican).
+- **Verificación:** MaterialPalette + studio 60 tests · ui 1.279 · typecheck 0 ·
+  smoke WebGL 1 passed.
+- **Cierre:** commit + push sobre `feat/f142-materials-dock` (PR #330).
