@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   canApplyMaterial,
+  decodeLibraryDrag,
   decodePaintDrag,
   decodeUnplacedDrag,
+  encodeLibraryDrag,
   encodePaintDrag,
   encodeUnplacedDrag,
   resolvePaintSurface,
@@ -167,5 +169,43 @@ describe('encodeUnplacedDrag / decodeUnplacedDrag', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { instanceIndex: _idx, ...rest } = validPayload;
     expect(decodeUnplacedDrag(JSON.stringify(rest))).toBeNull();
+  });
+});
+
+// ─── F141 encode/decode de tarjeta de biblioteca ────────────────────────────
+
+describe('encodeLibraryDrag / decodeLibraryDrag', () => {
+  const validPayload = {
+    moduleId: 'mod-1',
+    widthMm: 600,
+    heightMm: 720,
+    depthMm: 560,
+  };
+
+  it('round-trips a valid payload', () => {
+    const encoded = encodeLibraryDrag(validPayload);
+    expect(decodeLibraryDrag(encoded)).toEqual(validPayload);
+  });
+
+  it('returns null for null/empty input', () => {
+    expect(decodeLibraryDrag(null)).toBeNull();
+    expect(decodeLibraryDrag('')).toBeNull();
+  });
+
+  it('returns null for corrupt JSON', () => {
+    expect(decodeLibraryDrag('{bad')).toBeNull();
+  });
+
+  it('returns null when moduleId is missing or empty', () => {
+    expect(decodeLibraryDrag(JSON.stringify({ ...validPayload, moduleId: '' }))).toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { moduleId: _id, ...rest } = validPayload;
+    expect(decodeLibraryDrag(JSON.stringify(rest))).toBeNull();
+  });
+
+  it('returns null when dims are not numbers', () => {
+    expect(
+      decodeLibraryDrag(JSON.stringify({ ...validPayload, depthMm: '560' })),
+    ).toBeNull();
   });
 });

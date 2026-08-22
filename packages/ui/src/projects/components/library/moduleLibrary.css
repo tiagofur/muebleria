@@ -1,0 +1,188 @@
+/*
+ * moduleLibrary.css — biblioteca lateral de muebles de Proyectar (F141/#309).
+ * Solo tokens del design system (docs/design.md §3); clases del studio
+ * reutilizadas para secciones/chips/filas.
+ */
+
+.module-library {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.module-library__controls {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  background: var(--surface-card);
+}
+
+.module-library__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.module-library__level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.module-library__level-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.module-library__count {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.module-library .ui-search {
+  min-width: 0;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.module-library__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.module-library__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.module-library__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.module-library__card {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+
+.module-library__pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition-colors);
+  font: inherit;
+  color: inherit;
+}
+
+.module-library__pick:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-default);
+}
+
+.module-library__pick:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.module-library__pick:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .module-library__pick:active {
+    transform: none;
+  }
+}
+
+.module-library__thumb {
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-input);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.module-library__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.module-library__silhouette {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: calc(var(--touch-min) - var(--space-1));
+  max-width: calc(var(--touch-min) - var(--space-1));
+  background: var(--surface-selected);
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-sm);
+}
+
+.module-library__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.module-library__name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-library__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.module-library__dims {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.module-library__fav {
+  flex: none;
+  align-self: center;
+}
+
+/*
+ * Estado activo del favorito: estrella llena + tinte tonal (§3.6.1 selected).
+ * Doble clase para ganarle a .btn--icon en orden de cascada regardless del
+ * orden de bundle de las hojas.
+ */
+.module-library .module-library__fav--on {
+  color: var(--warning-700);
+  background: var(--warning-50);
+}

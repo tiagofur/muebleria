@@ -359,6 +359,27 @@ describe('kitchenLayout', () => {
     expect(pruned.placements[0]!.itemId).toBe('keep');
   });
 
+  it('keeps placements of just-created items passed as extraItemIds (F141)', () => {
+    const layout: ProjectKitchenLayout = {
+      walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0 }],
+      placements: [
+        {
+          itemId: 'fresh-item',
+          instanceIndex: 0,
+          wallId: 'w1',
+          offsetMm: 0,
+          elevation: 'floor',
+        },
+        { itemId: 'gone', instanceIndex: 0, wallId: 'w1', offsetMm: 100, elevation: 'floor' },
+      ],
+    };
+    const pruned = pruneKitchenLayout(layout, [], ['fresh-item']);
+    expect(pruned.placements).toHaveLength(1);
+    expect(pruned.placements[0]!.itemId).toBe('fresh-item');
+    // Sin extraItemIds, ambos placements se purgan.
+    expect(pruneKitchenLayout(layout, []).placements).toHaveLength(0);
+  });
+
   it('places free (island) modules by freeX/Y/yaw without wall id', () => {
     const layout: ProjectKitchenLayout = {
       walls: [

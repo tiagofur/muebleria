@@ -424,6 +424,7 @@ pnpm add lucide-react --filter @muebles/ui
 | Reactivar | `Eye` |
 | Exportar Excel | `FileSpreadsheet` |
 | Duplicar | `Copy` |
+| Favorito (biblioteca Proyectar) | `Star` |
 | Buscar | `Search` |
 | Cerrar modal | `X` |
 | Atrás | `ChevronLeft` |
@@ -466,6 +467,14 @@ las demás usan `tabIndex=-1`. Flechas izquierda/derecha, Home y End mueven foco
 y selección; Enter/Espacio mantienen la activación nativa. El foco visible
 (`--shadow-focus`) es distinto de la selección. Un count opcional acompaña al
 label, nunca lo reemplaza.
+
+**Variante compact (sidebars de editor denso):** dentro de sidebars de
+herramientas densas (p. ej. Proyectar), las peer pills pueden compactarse por
+scope CSS del contenedor: sin el chrome de página de `.tabs` (fondo de
+área, borde inferior, márgenes negativos, sticky) y con altura reducida
+(`min-height: 2rem`, padding `--space-1/--space-2`, count ~1rem). El contrato
+ARIA y la matriz de estados no cambian; sólo la densidad. El scope vive en el
+CSS del editor (`projectSpatialStudio.css`), no en `tabs.css` global.
 
 **Estados:** default = texto secundario y borde sutil (peer) o sin subrayado
 (workflow); hover = superficie hover / texto primario; pressed = desplazamiento

@@ -15,6 +15,7 @@ import {
 } from 'react';
 import type {
   Module,
+  ModuleCategory,
   PlacementElevation,
   Project,
   ProjectItem,
@@ -125,6 +126,8 @@ import {
 } from '../projectHelpers';
 import type { Catalog, ModuleBaseMode } from '@muebles/domain';
 import { WorkspaceTabs } from '../../common/Tabs';
+import { ModuleLibraryPanel, moduleDefaultDims } from './library/ModuleLibraryPanel';
+import { useLibraryCollections } from './library/useLibraryFavorites';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -135,6 +138,8 @@ export type ProjectSpatialStudioProps = {
   readonly open: boolean;
   readonly project: Project;
   readonly modules: readonly Module[];
+  /** F141 (#309): categorías jerárquicas para la biblioteca lateral. */
+  readonly categories?: readonly ModuleCategory[];
   readonly catalog: Module3DCatalogInput;
   readonly canEdit: boolean;
   readonly onClose: () => void;
@@ -153,8 +158,11 @@ export type ProjectSpatialStudioProps = {
     readonly listFilter?: ListFilter;
     readonly selectKey?: string | null;
   } | null;
-  /** Open quote add-item modal while keeping Proyectar open. */
-  readonly onRequestAddItem?: () => void;
+  /**
+   * F141 (#309): insert rápido desde la biblioteca (mismo camino que el modal
+   * add-item). Devuelve el id del ítem creado o null si no se pudo crear.
+   */
+  readonly onInsertFromCatalog?: (moduleId: string) => string | null;
   /**
    * Soft lock actor for multi-user Proyectar. When omitted, no lock protocol.
    */
@@ -166,7 +174,34 @@ export type ProjectSpatialStudioProps = {
 
 type InspectorTab = 'props' | 'position';
 export type ListFilter = 'all' | 'unplaced' | 'placed';
-export type SidebarTab = 'modules' | 'materials' | 'room';
+/**
+ * Tabs del sidebar izquierdo = fuentes de inserción (¿qué puedo insertar?).
+ * Las propiedades del ambiente viven en el inspector derecho (¿qué puedo
+ * cambiar?) cuando no hay mueble seleccionado (North Star §8.3).
+ */
+export type SidebarTab = 'modules' | 'materials';
+
+/**
+ * F065/F141: estado del ghost durante un drag al viewport. `unplaced` arrastra
+ * un ítem existente sin colocar; `library` arrastra una tarjeta del catálogo —
+ * el ítem se crea recién al confirmar el drop (inserción atómica).
+ */
+type GhostDragState =
+  | {
+      readonly kind: 'unplaced';
+      readonly itemId: string;
+      readonly instanceIndex: number;
+      readonly widthMm: number;
+      readonly heightMm: number;
+      readonly depthMm: number;
+    }
+  | {
+      readonly kind: 'library';
+      readonly moduleId: string;
+      readonly widthMm: number;
+      readonly heightMm: number;
+      readonly depthMm: number;
+    };
 
 function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -234,6 +269,7 @@ export function ProjectSpatialStudio({
   open,
   project,
   modules,
+  categories = [],
   catalog,
   canEdit: statusCanEdit,
   onClose,
@@ -242,7 +278,7 @@ export function ProjectSpatialStudio({
   resolveMediaUrl,
   quoteSalePrice = null,
   bootstrap = null,
-  onRequestAddItem,
+  onInsertFromCatalog,
   planActor,
   onAcquirePlanEdit,
   onRenewPlanEdit,
@@ -270,6 +306,10 @@ export function ProjectSpatialStudio({
   }>({ type: 'isometric', ts: 0 });
   const [listCollapsed, setListCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('modules');
+  /** F141v2: sub-pestañas del tab Muebles — biblioteca (insert) vs ítems de la obra. */
+  const [modulesSubTab, setModulesSubTab] = useState<'library' | 'items'>(
+    'library',
+  );
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [undoStack, setUndoStack] = useState<ProjectKitchenLayout[]>([]);
   const [redoStack, setRedoStack] = useState<ProjectKitchenLayout[]>([]);
@@ -282,14 +322,8 @@ export function ProjectSpatialStudio({
   );
   const [draggingInvalid, setDraggingInvalid] = useState(false);
 
-  // F065 — ghost drag de ítem sin colocar al viewport 3D
-  const [ghostDrag, setGhostDrag] = useState<{
-    readonly itemId: string;
-    readonly instanceIndex: number;
-    readonly widthMm: number;
-    readonly heightMm: number;
-    readonly depthMm: number;
-  } | null>(null);
+  // F065/F141 — ghost drag al viewport 3D (ítem sin colocar o tarjeta de biblioteca)
+  const [ghostDrag, setGhostDrag] = useState<GhostDragState | null>(null);
   const [ghostHit, setGhostHit] = useState<{
     readonly wallId: string | null;
     readonly offsetMm: number;
@@ -298,6 +332,8 @@ export function ProjectSpatialStudio({
   } | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [defaultWallsMsg, setDefaultWallsMsg] = useState<string | null>(null);
+  // F141 — favoritos/recientes/mi taller de la biblioteca (localStorage v1).
+  const libraryCollections = useLibraryCollections();
   /** Read-only space navigation — must not persist layout / activeSpaceId. */
   const [viewSpaceId, setViewSpaceId] = useState<string | null>(null);
   const wallDragSession = useRef(false);
@@ -327,6 +363,7 @@ export function ProjectSpatialStudio({
       seededDefaultWalls.current = false;
       setPlanLockBlocked(false);
       setDefaultWallsMsg(null);
+      setModulesSubTab('library');
       return;
     }
     // Default camera 3/4 (isometric) on every open for framing.
@@ -343,7 +380,11 @@ export function ProjectSpatialStudio({
     });
     if (lastBootstrapKey.current === key) return;
     lastBootstrapKey.current = key;
-    if (bootstrap.listFilter) setListFilter(bootstrap.listFilter);
+    if (bootstrap.listFilter) {
+      setListFilter(bootstrap.listFilter);
+      // El cue "sin colocar" vive en la sub-pestaña de ítems de la obra.
+      setModulesSubTab('items');
+    }
     if (bootstrap.selectKey) {
       setSelectedKey(bootstrap.selectKey);
       setInspectorTab('props');
@@ -758,7 +799,14 @@ export function ProjectSpatialStudio({
 
   const commit = (
     next: ProjectKitchenLayout,
-    opts?: { readonly history?: 'push' | 'none' },
+    opts?: {
+      readonly history?: 'push' | 'none';
+      /**
+       * F141: ids de ítems recién creados (biblioteca) que aún no están en
+       * project.items — el prune no debe purgar sus placements.
+       */
+      readonly extraItemIds?: readonly string[];
+    },
   ) => {
     const history = opts?.history ?? 'push';
     if (history === 'push' && !wallDragSession.current) {
@@ -772,7 +820,9 @@ export function ProjectSpatialStudio({
       spaces: next.spaces ?? layout.spaces,
       activeSpaceId: next.activeSpaceId ?? layout.activeSpaceId,
     });
-    onChangeLayout(pruneKitchenLayout(merged, project.items));
+    onChangeLayout(
+      pruneKitchenLayout(merged, project.items, opts?.extraItemIds ?? []),
+    );
   };
 
   /**
@@ -970,6 +1020,11 @@ export function ProjectSpatialStudio({
     wallId: string,
     /** Offset en mm desde el origen del muro. Si se omite, usa nextOffsetOnWall. */
     offsetMm?: number,
+    /**
+     * F141: módulo del ítem cuando éste todavía no está en `project` (insert
+     * desde biblioteca: el proyecto re-renderiza después del commit).
+     */
+    moduleHint?: Module,
   ) => {
     if (!canEdit) return;
     const base = ensureWalls();
@@ -981,8 +1036,14 @@ export function ProjectSpatialStudio({
         return nextOffsetOnWall(base, wall.id, footprints, 20);
       }
       const item2 = project.items.find((it) => it.id === itemId);
-      const mod2 = item2 ? modules.find((m) => m.id === item2.moduleId) : undefined;
-      const dims2 = item2 ? resolveItemDims(item2, mod2) : { width: 600, height: 720, depth: 560 };
+      const mod2 = item2
+        ? modules.find((m) => m.id === item2.moduleId)
+        : moduleHint;
+      const dims2 = item2
+        ? resolveItemDims(item2, mod2)
+        : moduleHint
+          ? moduleDefaultDims(moduleHint)
+          : { width: 600, height: 720, depth: 560 };
       const wallLen = wall.lengthMm;
       const peers = base.placements
         .filter((p) => p.wallId === wall.id && !isFreePlacement(p))
@@ -1003,7 +1064,7 @@ export function ProjectSpatialStudio({
     const item = project.items.find((it) => it.id === itemId);
     const mod = item
       ? modules.find((m) => m.id === item.moduleId)
-      : undefined;
+      : moduleHint;
     const placement: ProjectItemPlacement = {
       itemId,
       instanceIndex,
@@ -1011,10 +1072,14 @@ export function ProjectSpatialStudio({
       offsetMm: resolvedOffset,
       elevation: defaultElevationForModule(mod),
     };
-    commit({
-      ...base,
-      placements: [...base.placements, placement],
-    });
+    commit(
+      {
+        ...base,
+        placements: [...base.placements, placement],
+      },
+      // Ítems recién creados (biblioteca) aún no están en project.items.
+      { extraItemIds: [itemId] },
+    );
     setSelectedKey(`${itemId}#${instanceIndex}`);
     setTargetWallId(wall.id);
   };
@@ -1026,14 +1091,20 @@ export function ProjectSpatialStudio({
     planXMm?: number,
     /** Plan Y en mm (layout no-shifted). Si se omite, centra en el espacio. */
     planYMm?: number,
+    /** F141: módulo cuando el ítem todavía no está en `project` (biblioteca). */
+    moduleHint?: Module,
   ) => {
     if (!canEdit) return;
     const base = ensureWalls();
     const item = project.items.find((it) => it.id === itemId);
     const mod = item
       ? modules.find((m) => m.id === item.moduleId)
-      : undefined;
-    const dims = item ? resolveItemDims(item, mod) : null;
+      : moduleHint;
+    const dims = item
+      ? resolveItemDims(item, mod)
+      : moduleHint
+        ? moduleDefaultDims(moduleHint)
+        : null;
     const width = dims?.width ?? 600;
     const depth = dims?.depth ?? 560;
     const frames = resolveWallFrames(base.walls);
@@ -1067,10 +1138,14 @@ export function ProjectSpatialStudio({
       freeYMm,
       freeYawDeg: 0,
     };
-    commit({
-      ...base,
-      placements: [...base.placements, placement],
-    });
+    commit(
+      {
+        ...base,
+        placements: [...base.placements, placement],
+      },
+      // Ítems recién creados (biblioteca) aún no están en project.items.
+      { extraItemIds: [itemId] },
+    );
     setSelectedKey(`${itemId}#${instanceIndex}`);
     setInspectorTab('position');
   };
@@ -1367,6 +1442,37 @@ export function ProjectSpatialStudio({
     readonly planYMm: number;
   }) => {
     if (!ghostDrag || !canEdit) return;
+    if (ghostDrag.kind === 'library') {
+      // F141: inserción atómica — si el drop es inválido o la creación falla,
+      // no se crea ningún ítem ni placement.
+      if (!onInsertFromCatalog) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
+      const valid = calcGhostValid(drop, ghostDrag);
+      if (valid === false) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
+      const itemId = onInsertFromCatalog(ghostDrag.moduleId);
+      if (!itemId) {
+        setGhostDrag(null);
+        setGhostHit(null);
+        return;
+      }
+      libraryCollections.trackInsert(ghostDrag.moduleId);
+      const mod = modules.find((m) => m.id === ghostDrag.moduleId);
+      if (drop.wallId) {
+        placeOnWall(itemId, 0, drop.wallId, drop.offsetMm, mod);
+      } else {
+        placeAsIsland(itemId, 0, drop.planXMm, drop.planYMm, mod);
+      }
+      setGhostDrag(null);
+      setGhostHit(null);
+      return;
+    }
     if (drop.wallId) {
       placeOnWall(
         ghostDrag.itemId,
@@ -1382,6 +1488,45 @@ export function ProjectSpatialStudio({
         drop.planYMm,
       );
     }
+    setGhostDrag(null);
+    setGhostHit(null);
+  };
+
+  // ── F141 Biblioteca: inserción por click/teclado ─────────────────────────
+
+  /** F141v2: biblioteca disponible (editable + insert conectado). Read-only ⇒ sólo ítems. */
+  const libraryAvailable = canEdit && Boolean(onInsertFromCatalog);
+
+  const handleLibraryInsert = (moduleId: string) => {
+    if (!onInsertFromCatalog) return;
+    const itemId = onInsertFromCatalog(moduleId);
+    if (!itemId) return;
+    libraryCollections.trackInsert(moduleId);
+    const mod = modules.find((m) => m.id === moduleId);
+    if (activeWallId) {
+      placeOnWall(itemId, 0, activeWallId, undefined, mod);
+    } else {
+      // Sin muro activo el ítem queda "Sin colocar"; lo hacemos visible.
+      setListFilter('unplaced');
+      setSelectedKey(`${itemId}#0`);
+      setInspectorTab('props');
+    }
+  };
+
+  const handleLibraryCardDragStart = (
+    moduleId: string,
+    dims: { readonly width: number; readonly height: number; readonly depth: number },
+  ): void => {
+    setGhostDrag({
+      kind: 'library',
+      moduleId,
+      widthMm: dims.width,
+      heightMm: dims.height,
+      depthMm: dims.depth,
+    });
+  };
+
+  const handleLibraryCardDragEnd = (): void => {
     setGhostDrag(null);
     setGhostHit(null);
   };
@@ -1735,11 +1880,6 @@ export function ProjectSpatialStudio({
                   label: 'Materiales',
                   icon: <Palette size={14} aria-hidden />,
                 },
-                {
-                  id: 'room' as const,
-                  label: 'Ambiente',
-                  icon: <MapIcon size={14} aria-hidden />,
-                },
               ]}
               activeTab={sidebarTab}
               onTabChange={setSidebarTab}
@@ -1761,17 +1901,6 @@ export function ProjectSpatialStudio({
                   Muebles
                 </h3>
                 <div className="spatial-studio__sidebar-head-actions">
-                  {canEdit && onRequestAddItem ? (
-                    <button
-                      type="button"
-                      className="btn btn--small"
-                      onClick={onRequestAddItem}
-                      data-testid="spatial-studio-add-item"
-                      title="Agregar mueble a la cotización"
-                    >
-                      <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     className="btn btn--ghost btn--small"
@@ -1795,55 +1924,106 @@ export function ProjectSpatialStudio({
                 </p>
               ) : null}
 
+              {libraryAvailable ? (
+                <div className="spatial-studio__sidebar-nav">
+                  <WorkspaceTabs
+                    tabs={[
+                      { id: 'library' as const, label: 'Biblioteca' },
+                      {
+                        id: 'items' as const,
+                        label: 'De la obra',
+                        count: footprints.length,
+                      },
+                    ]}
+                    activeTab={modulesSubTab}
+                    onTabChange={setModulesSubTab}
+                    ariaLabel="Secciones de muebles"
+                    idPrefix="spatial-studio-modules"
+                    testIdPrefix="spatial-studio-modules"
+                  />
+                </div>
+              ) : null}
               <div
-                className="spatial-studio__filter-row"
-                role="group"
-                aria-label="Filtro de lista"
+                role={libraryAvailable ? 'tabpanel' : undefined}
+                id={
+                  libraryAvailable
+                    ? `spatial-studio-modules-panel-${modulesSubTab}`
+                    : undefined
+                }
+                aria-labelledby={
+                  libraryAvailable
+                    ? `spatial-studio-modules-tab-${modulesSubTab}`
+                    : undefined
+                }
               >
-                <button
-                  type="button"
-                  className={
-                    listFilter === 'all'
-                      ? 'spatial-studio__filter spatial-studio__filter--on'
-                      : 'spatial-studio__filter'
-                  }
-                  onClick={() => setListFilter('all')}
-                  data-testid="spatial-studio-filter-all"
-                >
-                  Todos ({footprints.length})
-                </button>
-                <button
-                  type="button"
-                  className={
-                    listFilter === 'unplaced'
-                      ? 'spatial-studio__filter spatial-studio__filter--on'
-                      : 'spatial-studio__filter'
-                  }
-                  onClick={() => setListFilter('unplaced')}
-                  data-testid="spatial-studio-filter-unplaced"
-                >
-                  Sin colocar
-                  {unplaced.length > 0 ? (
-                    <span className="spatial-studio__filter-badge">
-                      {unplaced.length}
-                    </span>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  className={
-                    listFilter === 'placed'
-                      ? 'spatial-studio__filter spatial-studio__filter--on'
-                      : 'spatial-studio__filter'
-                  }
-                  onClick={() => setListFilter('placed')}
-                  data-testid="spatial-studio-filter-placed"
-                >
-                  En plano ({layout.placements.length})
-                </button>
-              </div>
-
-              {listFilter !== 'placed' ? (
+                {libraryAvailable && modulesSubTab === 'library' ? (
+                  <ModuleLibraryPanel
+                    modules={modules}
+                    categories={categories}
+                    canEdit={canEdit}
+                    resolveMediaUrl={resolveMediaUrl}
+                    collections={libraryCollections}
+                    onInsert={handleLibraryInsert}
+                    onCardDragStart={handleLibraryCardDragStart}
+                    onCardDragEnd={handleLibraryCardDragEnd}
+                  />
+                ) : (
+                  <>
+                        <div
+                          className="spatial-studio__filter-row"
+                          role="group"
+                          aria-label="Filtro de lista"
+                        >
+                          <button
+                            type="button"
+                            className={
+                              listFilter === 'all'
+                                ? 'spatial-studio__filter spatial-studio__filter--on'
+                                : 'spatial-studio__filter'
+                            }
+                            onClick={() => setListFilter('all')}
+                            data-testid="spatial-studio-filter-all"
+                          >
+                            Todos ({footprints.length})
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              listFilter === 'unplaced'
+                                ? 'spatial-studio__filter spatial-studio__filter--on'
+                                : 'spatial-studio__filter'
+                            }
+                            onClick={() => setListFilter('unplaced')}
+                            data-testid="spatial-studio-filter-unplaced"
+                          >
+                            Sin colocar
+                            {unplaced.length > 0 ? (
+                              <span className="spatial-studio__filter-badge">
+                                {unplaced.length}
+                              </span>
+                            ) : null}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              listFilter === 'placed'
+                                ? 'spatial-studio__filter spatial-studio__filter--on'
+                                : 'spatial-studio__filter'
+                            }
+                            onClick={() => setListFilter('placed')}
+                            data-testid="spatial-studio-filter-placed"
+                          >
+                            En plano ({layout.placements.length})
+                          </button>
+                        </div>
+                        {footprints.length === 0 ? (
+                          <p className="spatial-studio__hint">
+                            {libraryAvailable
+                              ? 'Arrastrá un mueble desde la Biblioteca al plano para empezar.'
+                              : 'Esta cotización todavía no tiene muebles.'}
+                          </p>
+                        ) : null}
+                        {listFilter !== 'placed' && unplaced.length > 0 ? (
                 <section className="spatial-studio__section">
                   <h3 className="spatial-studio__section-title">
                     Sin colocar ({unplaced.length})
@@ -1901,6 +2081,7 @@ export function ProjectSpatialStudio({
                                         e.dataTransfer.setData(UNPLACED_DRAG_MIME, payload);
                                         e.dataTransfer.effectAllowed = 'move';
                                         setGhostDrag({
+                                          kind: 'unplaced',
                                           itemId: f.itemId,
                                           instanceIndex: f.instanceIndex,
                                           widthMm: dims.width,
@@ -2053,7 +2234,10 @@ export function ProjectSpatialStudio({
                     </ul>
                   )}
                 </section>
-              ) : null}
+                  ) : null}
+                  </>
+                )}
+              </div>
             </>
           ) : null}
 
@@ -2110,376 +2294,6 @@ export function ProjectSpatialStudio({
             </>
           ) : null}
 
-          {sidebarTab === 'room' ? (
-            <>
-              <div className="spatial-studio__sidebar-head">
-                <h3 className="spatial-studio__section-title" style={{ margin: 0 }}>
-                  Ambiente · {activeSpaceName}
-                </h3>
-                <div className="spatial-studio__sidebar-head-actions">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => setListCollapsed(true)}
-                    title="Ocultar lista"
-                    data-testid="spatial-studio-collapse-list"
-                    aria-label="Ocultar lista"
-                  >
-                    <PanelLeftClose size={16} strokeWidth={1.5} aria-hidden />
-                  </button>
-                </div>
-              </div>
-
-              <section className="spatial-studio__section">
-                {canEdit ? (
-                  <label className="spatial-studio__field">
-                    <span>Nombre del ambiente</span>
-                    <input
-                      type="text"
-                      value={activeSpaceName}
-                      disabled={!canEdit}
-                      onChange={(e) => handleRenameActiveSpace(e.target.value)}
-                      data-testid="spatial-studio-space-name"
-                    />
-                  </label>
-                ) : null}
-                {canEdit && spaces.length > 1 ? (
-                  <button
-                    type="button"
-                    className="btn btn--small"
-                    onClick={handleRemoveActiveSpace}
-                    title="Eliminar este ambiente y sus colocaciones"
-                    data-testid="spatial-studio-remove-space"
-                  >
-                    <Trash2 size={14} strokeWidth={1.5} aria-hidden /> Eliminar
-                    ambiente
-                  </button>
-                ) : null}
-
-                <div className="spatial-studio__field spatial-studio__field--block">
-                  <label className="spatial-studio__field spatial-studio__check-row">
-                    <input
-                      type="checkbox"
-                      checked={layout.showCountertop !== false}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        commit({
-                          ...layout,
-                          showCountertop: e.target.checked,
-                        })
-                      }
-                      data-testid="spatial-studio-toggle-countertop"
-                    />
-                    <span>Mesada visual sobre bajos</span>
-                  </label>
-
-                  <label className="spatial-studio__field spatial-studio__check-row">
-                    <input
-                      type="checkbox"
-                      checked={layout.showCeiling === true}
-                      disabled={!canEdit}
-                      onChange={(e) =>
-                        commit({
-                          ...layout,
-                          showCeiling: e.target.checked,
-                        })
-                      }
-                      data-testid="spatial-studio-toggle-ceiling"
-                    />
-                    <span>Mostrar techo</span>
-                  </label>
-                </div>
-
-                {canEdit ? (
-                  <div className="spatial-studio__import">
-                    <input
-                      ref={importInputRef}
-                      type="file"
-                      accept=".dxf,.png,.jpg,.jpeg,.webp,.pdf,image/*"
-                      className="spatial-studio__import-input"
-                      data-testid="spatial-studio-import-input"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = '';
-                        if (f) void handleImportPlanFile(f);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn--small"
-                      onClick={() => importInputRef.current?.click()}
-                      title="Importar DXF (muros) o imagen de plano (fondo)"
-                      data-testid="spatial-studio-import-plan"
-                    >
-                      <FileUp size={14} strokeWidth={1.5} aria-hidden /> Importar
-                      plano
-                    </button>
-                    {layout.underlay ? (
-                      <>
-                        <label className="spatial-studio__field">
-                          <span>
-                            Ancho real del plano (mm)
-                            {layout.underlay.fileName
-                              ? ` · ${layout.underlay.fileName}`
-                              : ''}
-                          </span>
-                          <input
-                            type="number"
-                            min={100}
-                            step={50}
-                            value={Math.round(layout.underlay.widthMm)}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              if (Number.isFinite(v)) handleScaleUnderlay(v);
-                            }}
-                            data-testid="spatial-studio-underlay-width"
-                          />
-                        </label>
-                        <p className="spatial-studio__hint">
-                          Alto efectivo:{' '}
-                          {Math.round(layout.underlay.heightMm)} mm · opacity{' '}
-                          {Math.round((layout.underlay.opacity ?? 0.45) * 100)}%
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn--small"
-                          onClick={handleClearUnderlay}
-                          data-testid="spatial-studio-clear-underlay"
-                        >
-                          Quitar fondo
-                        </button>
-                      </>
-                    ) : (
-                      <p className="spatial-studio__hint">
-                        DXF → muros · PNG/JPG → fondo para trazar. PDF: exportá a
-                        imagen.
-                      </p>
-                    )}
-                    {importMessage ? (
-                      <p
-                        className="spatial-studio__import-msg"
-                        data-testid="spatial-studio-import-msg"
-                        role="status"
-                      >
-                        {importMessage}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {layout.walls.length === 0 ? (
-                  <div className="spatial-studio__empty-walls">
-                    <p className="spatial-studio__hint">
-                      Todavía no hay muros en «{activeSpaceName}». Creá una L para
-                      empezar a colocar.
-                    </p>
-                    {canEdit ? (
-                      <button
-                        type="button"
-                        className="btn btn--primary btn--small"
-                        onClick={createL}
-                        data-testid="spatial-studio-create-l"
-                      >
-                        Crear cocina en L
-                      </button>
-                    ) : null}
-                  </div>
-                ) : (
-                  <ul className="spatial-studio__wall-list">
-                    {layout.walls.map((w, i) => (
-                      <li key={w.id}>
-                        <button
-                          type="button"
-                          className={
-                            activeWallId === w.id
-                              ? 'spatial-studio__wall-btn spatial-studio__wall-btn--active'
-                              : 'spatial-studio__wall-btn'
-                          }
-                          onClick={() => setTargetWallId(w.id)}
-                          data-testid={`spatial-studio-wall-${w.id}`}
-                        >
-                          {w.name?.trim() || `Muro ${i + 1}`} · {w.lengthMm} mm
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {canEdit && activeWallId ? (
-                  <div
-                    className="spatial-studio__field"
-                    style={{ marginTop: 'var(--space-2)' }}
-                  >
-                    <span>Material de este muro</span>
-                    <select
-                      value={
-                        layout.walls.find((w) => w.id === activeWallId)
-                          ?.wallMaterialId ?? ''
-                      }
-                      disabled={!canEdit}
-                      onChange={(e) => {
-                        const matId = e.target.value || undefined;
-                        const updatedWalls = (layout.walls ?? []).map((w) =>
-                          w.id === activeWallId
-                            ? { ...w, wallMaterialId: matId }
-                            : w,
-                        );
-                        commit({ ...layout, walls: updatedWalls });
-                      }}
-                      data-testid="spatial-studio-select-wall-material"
-                    >
-                      <option value="">(Usar material general de muros)</option>
-                      {availableAmbientMaterials
-                        .filter((m) => m.surfaceType === 'wall')
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.code})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                ) : null}
-
-                {layout.walls.length > 0 ? (
-                  <div
-                    className="spatial-studio__field"
-                    style={{ marginTop: 'var(--space-3)' }}
-                  >
-                    <span className="spatial-studio__field-label">
-                      Zoclo / patas (bajos)
-                    </span>
-                    <p className="spatial-studio__hint">
-                      Espacio bajo los muebles de piso para zoclo o patas. Default del
-                      plano: {resolveBaseClearanceMm(layout, { elevation: 'floor' })}{' '}
-                      mm.
-                    </p>
-                    <div
-                      className="spatial-studio__preset-grid"
-                      role="listbox"
-                      aria-label="Altura de zoclo del plano"
-                    >
-                      {BASE_CLEARANCE_PRESETS_MM.map((mm) => {
-                        const current = resolveBaseClearanceMm(layout, {
-                          elevation: 'floor',
-                        });
-                        const active = current === mm;
-                        return (
-                          <button
-                            key={mm}
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            disabled={!canEdit}
-                            className={
-                              active
-                                ? 'spatial-studio__preset spatial-studio__preset--active'
-                                : 'spatial-studio__preset'
-                            }
-                            onClick={() =>
-                              commit({
-                                ...layout,
-                                baseClearanceMm: mm,
-                              })
-                            }
-                            data-testid={`spatial-studio-layout-plinth-${mm}`}
-                          >
-                            <span className="spatial-studio__preset-name">
-                              {mm === 0 ? 'Sin' : `${mm}`}
-                            </span>
-                            <span className="spatial-studio__preset-dims">
-                              {mm === 0 ? 'al piso' : 'mm'}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <label className="spatial-studio__field">
-                      <span>Personalizado (mm)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        disabled={!canEdit}
-                        value={
-                          layout.baseClearanceMm ?? DEFAULT_BASE_CLEARANCE_MM
-                        }
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          if (!Number.isFinite(v)) return;
-                          commit({
-                            ...layout,
-                            baseClearanceMm: Math.max(0, Math.round(v)),
-                          });
-                        }}
-                        data-testid="spatial-studio-layout-plinth-custom"
-                      />
-                    </label>
-
-                    <span className="spatial-studio__field-label">
-                      Alacenas (altura de instalación)
-                    </span>
-                    <p className="spatial-studio__hint">
-                      Base inferior de los altos:{' '}
-                      {resolveWallCabinetZMm(layout)} mm del piso.
-                    </p>
-                    <div
-                      className="spatial-studio__preset-grid"
-                      role="listbox"
-                      aria-label="Altura de alacenas"
-                    >
-                      {WALL_CABINET_Z_PRESETS_MM.map((mm) => {
-                        const active = resolveWallCabinetZMm(layout) === mm;
-                        return (
-                          <button
-                            key={mm}
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            disabled={!canEdit}
-                            className={
-                              active
-                                ? 'spatial-studio__preset spatial-studio__preset--active'
-                                : 'spatial-studio__preset'
-                            }
-                            onClick={() =>
-                              commit({ ...layout, wallCabinetZMm: mm })
-                            }
-                            data-testid={`spatial-studio-wall-z-${mm}`}
-                          >
-                            <span className="spatial-studio__preset-name">
-                              {mm}
-                            </span>
-                            <span className="spatial-studio__preset-dims">mm</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <label className="spatial-studio__field">
-                      <span>Personalizado altos (mm)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        disabled={!canEdit}
-                        value={
-                          layout.wallCabinetZMm ?? DEFAULT_WALL_CABINET_Z_MM
-                        }
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          if (!Number.isFinite(v)) return;
-                          commit({
-                            ...layout,
-                            wallCabinetZMm: Math.max(0, Math.round(v)),
-                          });
-                        }}
-                        data-testid="spatial-studio-wall-z-custom"
-                      />
-                    </label>
-                  </div>
-                ) : null}
-              </section>
-            </>
-          ) : null}
 
           {warnings.length > 0 ? (
             <section className="spatial-studio__section">
@@ -2957,13 +2771,367 @@ export function ProjectSpatialStudio({
           className="spatial-studio__inspector"
           data-testid="spatial-studio-inspector"
         >
-          <h3 className="spatial-studio__section-title">Propiedades</h3>
           {!selectedItem || !selectedRef ? (
-            <p className="spatial-studio__hint">
-              Seleccioná un mueble en la lista o en el 3D — como en Promob: a la
-              derecha editás medida, acabados y posición.
-            </p>
+            <>
+              <h3 className="spatial-studio__section-title">
+                Ambiente · {activeSpaceName}
+              </h3>
+              <section className="spatial-studio__section">
+                {canEdit ? (
+                  <label className="spatial-studio__field">
+                    <span>Nombre del ambiente</span>
+                    <input
+                      type="text"
+                      value={activeSpaceName}
+                      disabled={!canEdit}
+                      onChange={(e) => handleRenameActiveSpace(e.target.value)}
+                      data-testid="spatial-studio-space-name"
+                    />
+                  </label>
+                ) : null}
+                {canEdit && spaces.length > 1 ? (
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    onClick={handleRemoveActiveSpace}
+                    title="Eliminar este ambiente y sus colocaciones"
+                    data-testid="spatial-studio-remove-space"
+                  >
+                    <Trash2 size={14} strokeWidth={1.5} aria-hidden /> Eliminar
+                    ambiente
+                  </button>
+                ) : null}
+
+                <div className="spatial-studio__field spatial-studio__field--block">
+                  <label className="spatial-studio__field spatial-studio__check-row">
+                    <input
+                      type="checkbox"
+                      checked={layout.showCountertop !== false}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          showCountertop: e.target.checked,
+                        })
+                      }
+                      data-testid="spatial-studio-toggle-countertop"
+                    />
+                    <span>Mesada visual sobre bajos</span>
+                  </label>
+
+                  <label className="spatial-studio__field spatial-studio__check-row">
+                    <input
+                      type="checkbox"
+                      checked={layout.showCeiling === true}
+                      disabled={!canEdit}
+                      onChange={(e) =>
+                        commit({
+                          ...layout,
+                          showCeiling: e.target.checked,
+                        })
+                      }
+                      data-testid="spatial-studio-toggle-ceiling"
+                    />
+                    <span>Mostrar techo</span>
+                  </label>
+                </div>
+
+                {canEdit ? (
+                  <div className="spatial-studio__import">
+                    <input
+                      ref={importInputRef}
+                      type="file"
+                      accept=".dxf,.png,.jpg,.jpeg,.webp,.pdf,image/*"
+                      className="spatial-studio__import-input"
+                      data-testid="spatial-studio-import-input"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) void handleImportPlanFile(f);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() => importInputRef.current?.click()}
+                      title="Importar DXF (muros) o imagen de plano (fondo)"
+                      data-testid="spatial-studio-import-plan"
+                    >
+                      <FileUp size={14} strokeWidth={1.5} aria-hidden /> Importar
+                      plano
+                    </button>
+                    {layout.underlay ? (
+                      <>
+                        <label className="spatial-studio__field">
+                          <span>
+                            Ancho real del plano (mm)
+                            {layout.underlay.fileName
+                              ? ` · ${layout.underlay.fileName}`
+                              : ''}
+                          </span>
+                          <input
+                            type="number"
+                            min={100}
+                            step={50}
+                            value={Math.round(layout.underlay.widthMm)}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              if (Number.isFinite(v)) handleScaleUnderlay(v);
+                            }}
+                            data-testid="spatial-studio-underlay-width"
+                          />
+                        </label>
+                        <p className="spatial-studio__hint">
+                          Alto efectivo:{' '}
+                          {Math.round(layout.underlay.heightMm)} mm · opacity{' '}
+                          {Math.round((layout.underlay.opacity ?? 0.45) * 100)}%
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={handleClearUnderlay}
+                          data-testid="spatial-studio-clear-underlay"
+                        >
+                          Quitar fondo
+                        </button>
+                      </>
+                    ) : (
+                      <p className="spatial-studio__hint">
+                        DXF → muros · PNG/JPG → fondo para trazar. PDF: exportá a
+                        imagen.
+                      </p>
+                    )}
+                    {importMessage ? (
+                      <p
+                        className="spatial-studio__import-msg"
+                        data-testid="spatial-studio-import-msg"
+                        role="status"
+                      >
+                        {importMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {layout.walls.length === 0 ? (
+                  <div className="spatial-studio__empty-walls">
+                    <p className="spatial-studio__hint">
+                      Todavía no hay muros en «{activeSpaceName}». Creá una L para
+                      empezar a colocar.
+                    </p>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--small"
+                        onClick={createL}
+                        data-testid="spatial-studio-create-l"
+                      >
+                        Crear cocina en L
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <ul className="spatial-studio__wall-list">
+                    {layout.walls.map((w, i) => (
+                      <li key={w.id}>
+                        <button
+                          type="button"
+                          className={
+                            activeWallId === w.id
+                              ? 'spatial-studio__wall-btn spatial-studio__wall-btn--active'
+                              : 'spatial-studio__wall-btn'
+                          }
+                          onClick={() => setTargetWallId(w.id)}
+                          data-testid={`spatial-studio-wall-${w.id}`}
+                        >
+                          {w.name?.trim() || `Muro ${i + 1}`} · {w.lengthMm} mm
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {canEdit && activeWallId ? (
+                  <div
+                    className="spatial-studio__field"
+                    style={{ marginTop: 'var(--space-2)' }}
+                  >
+                    <span>Material de este muro</span>
+                    <select
+                      value={
+                        layout.walls.find((w) => w.id === activeWallId)
+                          ?.wallMaterialId ?? ''
+                      }
+                      disabled={!canEdit}
+                      onChange={(e) => {
+                        const matId = e.target.value || undefined;
+                        const updatedWalls = (layout.walls ?? []).map((w) =>
+                          w.id === activeWallId
+                            ? { ...w, wallMaterialId: matId }
+                            : w,
+                        );
+                        commit({ ...layout, walls: updatedWalls });
+                      }}
+                      data-testid="spatial-studio-select-wall-material"
+                    >
+                      <option value="">(Usar material general de muros)</option>
+                      {availableAmbientMaterials
+                        .filter((m) => m.surfaceType === 'wall')
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.code})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {layout.walls.length > 0 ? (
+                  <div
+                    className="spatial-studio__field"
+                    style={{ marginTop: 'var(--space-3)' }}
+                  >
+                    <span className="spatial-studio__field-label">
+                      Zoclo / patas (bajos)
+                    </span>
+                    <p className="spatial-studio__hint">
+                      Espacio bajo los muebles de piso para zoclo o patas. Default del
+                      plano: {resolveBaseClearanceMm(layout, { elevation: 'floor' })}{' '}
+                      mm.
+                    </p>
+                    <div
+                      className="spatial-studio__preset-grid"
+                      role="listbox"
+                      aria-label="Altura de zoclo del plano"
+                    >
+                      {BASE_CLEARANCE_PRESETS_MM.map((mm) => {
+                        const current = resolveBaseClearanceMm(layout, {
+                          elevation: 'floor',
+                        });
+                        const active = current === mm;
+                        return (
+                          <button
+                            key={mm}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            disabled={!canEdit}
+                            className={
+                              active
+                                ? 'spatial-studio__preset spatial-studio__preset--active'
+                                : 'spatial-studio__preset'
+                            }
+                            onClick={() =>
+                              commit({
+                                ...layout,
+                                baseClearanceMm: mm,
+                              })
+                            }
+                            data-testid={`spatial-studio-layout-plinth-${mm}`}
+                          >
+                            <span className="spatial-studio__preset-name">
+                              {mm === 0 ? 'Sin' : `${mm}`}
+                            </span>
+                            <span className="spatial-studio__preset-dims">
+                              {mm === 0 ? 'al piso' : 'mm'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <label className="spatial-studio__field">
+                      <span>Personalizado (mm)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={10}
+                        disabled={!canEdit}
+                        value={
+                          layout.baseClearanceMm ?? DEFAULT_BASE_CLEARANCE_MM
+                        }
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (!Number.isFinite(v)) return;
+                          commit({
+                            ...layout,
+                            baseClearanceMm: Math.max(0, Math.round(v)),
+                          });
+                        }}
+                        data-testid="spatial-studio-layout-plinth-custom"
+                      />
+                    </label>
+
+                    <span className="spatial-studio__field-label">
+                      Alacenas (altura de instalación)
+                    </span>
+                    <p className="spatial-studio__hint">
+                      Base inferior de los altos:{' '}
+                      {resolveWallCabinetZMm(layout)} mm del piso.
+                    </p>
+                    <div
+                      className="spatial-studio__preset-grid"
+                      role="listbox"
+                      aria-label="Altura de alacenas"
+                    >
+                      {WALL_CABINET_Z_PRESETS_MM.map((mm) => {
+                        const active = resolveWallCabinetZMm(layout) === mm;
+                        return (
+                          <button
+                            key={mm}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            disabled={!canEdit}
+                            className={
+                              active
+                                ? 'spatial-studio__preset spatial-studio__preset--active'
+                                : 'spatial-studio__preset'
+                            }
+                            onClick={() =>
+                              commit({ ...layout, wallCabinetZMm: mm })
+                            }
+                            data-testid={`spatial-studio-wall-z-${mm}`}
+                          >
+                            <span className="spatial-studio__preset-name">
+                              {mm}
+                            </span>
+                            <span className="spatial-studio__preset-dims">mm</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <label className="spatial-studio__field">
+                      <span>Personalizado altos (mm)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={10}
+                        disabled={!canEdit}
+                        value={
+                          layout.wallCabinetZMm ?? DEFAULT_WALL_CABINET_Z_MM
+                        }
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (!Number.isFinite(v)) return;
+                          commit({
+                            ...layout,
+                            wallCabinetZMm: Math.max(0, Math.round(v)),
+                          });
+                        }}
+                        data-testid="spatial-studio-wall-z-custom"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </section>
+              <p className="spatial-studio__hint">
+                Seleccioná un mueble en el plano o en «De la obra» para editar
+                sus propiedades.
+              </p>
+            </>
           ) : (
+            <>
+              <h3 className="spatial-studio__section-title">Propiedades</h3>
             <div className="spatial-studio__inspector-body">
               <div className="spatial-studio__identity">
                 <p className="spatial-studio__item-label">
@@ -3660,6 +3828,7 @@ export function ProjectSpatialStudio({
                 </div>
               ) : null}
             </div>
+            </>
           )}
 
           <p className="spatial-studio__phase-note">

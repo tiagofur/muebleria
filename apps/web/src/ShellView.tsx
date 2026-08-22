@@ -323,7 +323,7 @@ import type { NavigateFunction } from 'react-router-dom';
 export interface ShellViewCtx {
   readonly acquirePlanEditSession: (projectId: string) => boolean;
   readonly actorRole: string | null | undefined;
-  readonly addProjectItem: (projectId: string, input: { readonly moduleId: string; readonly quantity: number; readonly optionChoices: OptionChoices; readonly measurePresetId?: string | undefined; readonly baseMode?: ModuleBaseMode | undefined; }) => void;
+  readonly addProjectItem: (projectId: string, input: { readonly moduleId: string; readonly quantity: number; readonly optionChoices: OptionChoices; readonly measurePresetId?: string | undefined; readonly baseMode?: ModuleBaseMode | undefined; }) => string | undefined;
   readonly agregados: readonly Agregado[];
   readonly allowedNavIds: ReadonlySet<string>;
   readonly ambientCategories: readonly CategoryNode[];

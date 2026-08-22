@@ -931,3 +931,62 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
   runtime projectLifecycle↔siteSurvey, craft UI) → aplicados → **APPROVED**
   (ver `progress/review_F140.md`).
 - **Cierre:** F140 `done`; rama `feat/f140-operational-core-ux` pushed.
+
+## 2026-08-21 — F141 proyectar_module_library (#309 P3D-0a, meta #308 etapa E1)
+- **Agente:** implementador + reviewer (ZCode).
+- **Feature:** Biblioteca lateral persistente de muebles en Proyectar
+  (North Star §§5–6; primer slice del editor 3D vNext).
+- **Cambios:**
+  - `packages/ui/src/projects/components/library/`: `searchModules` (búsqueda
+    tolerante pura), `useLibraryFavorites` (favoritos/recientes/mi-taller,
+    localStorage v1), `ModuleLibraryPanel` (chips jerárquicos L1/L2 +
+    breadcrumb + thumbnails con silueta paramétrica) + CSS co-localizado.
+  - Drag de tarjeta → viewport con nuevo MIME `application/x-muebles-library`
+    reutilizando el gesto F065; drop = creación atómica de ProjectItem +
+    placement (drop inválido/ESC no crea ítem); click inserta al muro activo.
+  - `addProjectItem` devuelve id del ítem; `insertCatalogItem` en screen
+    state vía `quickAddPayloadForModule` (misma fórmula de seeding que el
+    modal); `pruneKitchenLayout` acepta `extraItemIds` para no purgar
+    placements de ítems recién creados pre-re-render.
+  - Smoke Playwright WebGL real del studio (`tests/smoke/`, script `pnpm
+    smoke`) como verificación base de E2+; screenshot review del panel.
+- **Verificación:** suite completa 2.806 pass (domain 942 · storage 153 ·
+  ui 1.259 · web 301 · mobile 45 · desktop 17 · excel 89) · typecheck 7/7 ·
+  smoke WebGL 1 passed.
+- **Review:** CHANGES_REQUESTED (2 medios: px sueltos, aria-pressed; 3 bajas)
+  → aplicados → **APPROVED** (ver `progress/review_F141.md`).
+- **Cierre:** F141 `done`; rama `feat/f141-proyectar-library` pushed.
+  Deuda E2+: modal add-item partiendo de `quickAddPayloadForModule`; extraer
+  familia place/ghost del studio (3.857 líneas) a un hook.
+
+## 2026-08-22 — F141 follow-up closure (PR #329)
+- **Seguimiento:** el commit `1957fbd` corrigió la CI y refinó la biblioteca:
+  selector de alcance jerárquico escalable, búsqueda scoped, una sola lista sin
+  scroll anidado y persistencia de navegación.
+- **Verificación:** GitHub Actions run `32583641510` verde (feature harness,
+  Go tests y TypeScript/tests).
+- **Review:** **APPROVED**. F141 queda `done`.
+
+## 2026-08-22 — F141 iteración de producto (UX del menú lateral, PR #329)
+- **Agente:** implementador + reviewer (ZCode), feedback del dueño del producto.
+- **Feature:** F141 (reabierto para la iteración; misma entrega, PR #329 abierto).
+- **Cambios:**
+  - Sub-tabs **Biblioteca | De la obra** (WorkspaceTabs peer, count en la
+    segunda) dentro del tab Muebles; default Biblioteca; el cue post-agregar
+    (bootstrap listFilter) auto-switchea a De la obra. Read-only sin
+    biblioteca ⇒ ítems directos sin sub-tabs.
+  - Head "En proyecto" y botón **Agregar eliminados** (la biblioteca
+    reemplaza el modal dentro de Proyectar; el modal sigue vivo en la lista
+    de cotización). Prop `onRequestAddItem` retirada del studio + wiring.
+  - Panel: chips de colecciones (Catálogo/Favoritos/Recientes/Mi taller) +
+    **cascada de categorías por nivel** (un renglón de chips por nivel con
+    labels; "Todas" sólo en nivel 1; re-selección deselecciona; path
+    sanitizado contra categorías borradas; persistencia {scope,path,search}).
+    Reemplaza el select "Alcance" aplanado del follow-up anterior.
+- **Verificación:** suite completa 2.808 pass · typecheck 7/7 · smoke WebGL
+  verde · screenshot review (sub-tabs+contador, niveles con labels, sin
+  Agregar).
+- **Review:** **APPROVED** con 2 hallazgos menores aplicados (copy read-only
+  del empty state; test del auto-switch bootstrap→De la obra). Deuda:
+  hover/active de `.spatial-studio__filter` (preexistente, ahora multiplica).
+- **Cierre:** commit + push sobre `feat/f141-proyectar-library` (PR #329).

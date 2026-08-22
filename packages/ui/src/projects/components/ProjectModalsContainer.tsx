@@ -117,7 +117,8 @@ export interface ProjectModalsContainerProps {
   readonly onConfirmReopen: (projectId: string) => void;
   readonly onClosePresentation: () => void;
   readonly onGoToProyectar?: () => void;
-  readonly onOpenAddItemModal: () => void;
+  /** F141 (#309): insert desde la biblioteca de Proyectar; devuelve el id del ítem creado. */
+  readonly onInsertCatalogItem?: (moduleId: string) => string | null;
   readonly onAcquirePlanEdit?: () => boolean;
   readonly onRenewPlanEdit?: () => boolean;
   readonly onReleasePlanEdit?: () => void;
@@ -190,7 +191,7 @@ export function ProjectModalsContainer({
   onConfirmReopen,
   onClosePresentation,
   onGoToProyectar,
-  onOpenAddItemModal,
+  onInsertCatalogItem,
   onAcquirePlanEdit,
   onRenewPlanEdit,
   onReleasePlanEdit,
@@ -289,6 +290,7 @@ export function ProjectModalsContainer({
           open={showSpatialStudio}
           project={selectedProject}
           modules={modules}
+          categories={categories}
           catalog={{
             ...project3dCatalog,
             structures: catalogStructures ?? [],
@@ -303,9 +305,9 @@ export function ProjectModalsContainer({
               : null)
           }
           bootstrap={spatialBootstrap}
-          onRequestAddItem={
+          onInsertFromCatalog={
             canMutate && selectedProject.status === 'draft'
-              ? onOpenAddItemModal
+              ? onInsertCatalogItem
               : undefined
           }
           planActor={planActor}

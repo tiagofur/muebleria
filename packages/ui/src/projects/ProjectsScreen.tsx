@@ -127,7 +127,8 @@ export interface ProjectsScreenProps {
       measurePresetId?: string;
       baseMode?: ModuleBaseMode;
     },
-  ) => void;
+    /** F141: id del ítem creado, para colocar desde la biblioteca de Proyectar. */
+  ) => string | undefined;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
   /** Reorder items by moving from one index to another (F052 / drag & drop). */
@@ -938,7 +939,7 @@ export function ProjectsScreen({
               }
             : undefined
         }
-        onOpenAddItemModal={state.openAddItemModal}
+        onInsertCatalogItem={state.insertCatalogItem}
         onAcquirePlanEdit={planActor && onAcquirePlanEdit ? state.handleAcquirePlanEdit : undefined}
         onRenewPlanEdit={planActor && onRenewPlanEdit ? state.handleRenewPlanEdit : undefined}
         onReleasePlanEdit={planActor && onReleasePlanEdit ? state.handleReleasePlanEdit : undefined}

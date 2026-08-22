@@ -3217,6 +3217,33 @@
       ],
       "status": "done",
       "createdAt": "2026-08-21"
+    },
+    {
+      "id": "F141",
+      "phase": 0,
+      "name": "proyectar_module_library",
+      "title": "Issue #309 P3D-0a — Biblioteca lateral persistente de muebles en Proyectar (meta #308, etapa E1)",
+      "description": "Modelo mental Biblioteca → Canvas → Inspector dentro del studio (North Star §§5–6). El tab Muebles gana una sección Biblioteca del catálogo como fuente de inserción sin salir de Proyectar: búsqueda tolerante por nombre/código/categoría (normaliza acentos/mayúsculas, función pura searchModules), categorías jerárquicas ModuleCategory mediante un selector de alcance compacto con rutas completas + breadcrumb visible, thumbnails vía Module.imageUrl con fallback silueta paramétrica por dimensiones, Favoritos/Recientes/Mi taller (pins del taller) v1 en localStorage (patrón useInspectorSectionState; sync per-user v2 como deuda), estado de búsqueda/alcance preservado mientras se trabaja en el canvas. Inserción: drag de tarjeta al viewport reutilizando el gesto F065 (ghost/snap/validez verde-rojo, ESC cancela) con creación atómica del ProjectItem al drop (mismo camino de persistencia que ProjectAddItemModal vía quickAddPayloadForModule puro + addProjectItem que ahora devuelve el id del ítem nuevo); alternativa click/teclado (click inserta; si hay muro activo coloca con nextOffset, si no queda sin colocar). Virtualización deferida hasta que la medición lo exija.",
+      "acceptance": [
+        "Biblioteca visible dentro del tab Muebles del studio sin salir del editor; búsqueda tolerante (nombre/código/categoría, acentos) con tests de la función pura",
+        "Jerarquía ModuleCategory navegable por rutas de cualquier profundidad mediante un selector de alcance compacto + breadcrumb, con búsqueda scoped; estado búsqueda/alcance preservado durante trabajo en canvas",
+        "Favoritos/Recientes/Mi taller persisten en localStorage v1 y sobreviven recarga",
+        "Drag de tarjeta al viewport muestra ghost con validez y al drop crea el ProjectItem y lo coloca atómicamente (muro o isla); ESC cancela sin crear ítem",
+        "Click/Enter en tarjeta inserta el ítem; con muro activo lo coloca en el próximo offset, sin muro queda 'Sin colocar' y visible en la lista",
+        "addProjectItem devuelve el id del ítem creado (cliente autoritativo, persistencia por proyecto completo); payload construido por helper puro compartido (sin fórmulas duplicadas UI/domain)",
+        "Smoke Playwright real del studio (WebGL/SwiftShader): abre Proyectar, biblioteca renderiza, insert por click crea el ítem",
+        "pnpm test + pnpm typecheck verdes; sin regresiones en los 36 tests existentes del studio"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "docs/proyectar-3d-roadmap-vnext.md",
+        "docs/design.md",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx",
+        "packages/ui/src/projects/components/library/",
+        "packages/ui/src/preview3d/paintMaterial.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-21"
     }
   ]
 }

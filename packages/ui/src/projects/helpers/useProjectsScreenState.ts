@@ -34,6 +34,7 @@ import {
   emptyProjectDraft,
   filterProjectsList,
   projectToDraft,
+  quickAddPayloadForModule,
   setItemOptionChoice,
   setProjectLevelChoice,
   validateItemQuantity,
@@ -74,7 +75,8 @@ export interface UseProjectsScreenStateProps {
       measurePresetId?: string;
       baseMode?: ModuleBaseMode;
     },
-  ) => void;
+    /** F141: id del ítem creado, para colocar desde la biblioteca de Proyectar. */
+  ) => string | undefined;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onUpdateKitchenLayout?: (
     projectId: string,
@@ -357,6 +359,27 @@ export function useProjectsScreenState({
     }
   };
 
+  /**
+   * F141 (#309): inserción rápida desde la biblioteca de Proyectar. Mismo
+   * seeding que el modal (quickAddPayloadForModule) y mismo camino de
+   * persistencia (onAddItem); devuelve el id del ítem creado para que el
+   * studio lo coloque, o null si no se pudo crear.
+   */
+  const insertCatalogItem = (moduleId: string): string | null => {
+    if (!selectedId || !selectedProject || !canMutate) return null;
+    const mod = modules.find((m) => m.id === moduleId);
+    if (!mod) return null;
+    const payload = quickAddPayloadForModule(mod, {
+      optionGroups,
+      catalogComponents,
+      catalogStructures,
+      catalogAgregados,
+      projectLevelChoices: selectedProject.projectLevelChoices,
+      measureDefaults: selectedProject.measureDefaults,
+    });
+    return onAddItem(selectedId, payload) ?? null;
+  };
+
   const openSpatialStudioUnplaced = () => {
     setPostAddPlaceCue(false);
     setSpatialBootstrap({ listFilter: 'unplaced', selectKey: null });
@@ -479,6 +502,7 @@ export function useProjectsScreenState({
     handleSubmitMeta,
     openAddItemModal,
     handleAddItemSubmit,
+    insertCatalogItem,
     openSpatialStudioUnplaced,
     updateItemMeasurePreset,
     updateItemQuantity,

@@ -163,3 +163,52 @@ export function decodeUnplacedDrag(
     return null;
   }
 }
+
+// ─── F141 Drag de tarjeta de biblioteca → viewport 3D ───────────────────────
+
+/**
+ * MIME type para arrastrar un módulo del catálogo (biblioteca) al viewport.
+ * Distinto de UNPLACED_DRAG_MIME porque el ítem todavía no existe: el drop
+ * crea el ProjectItem y lo coloca en la misma operación (inserción atómica).
+ */
+export const LIBRARY_DRAG_MIME = 'application/x-muebles-library';
+
+/** Payload del drag de una tarjeta de la biblioteca. */
+export type LibraryDragPayload = {
+  readonly moduleId: string;
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly depthMm: number;
+};
+
+/** Serializa el payload de una tarjeta de biblioteca. */
+export function encodeLibraryDrag(payload: LibraryDragPayload): string {
+  return JSON.stringify(payload);
+}
+
+/** Deserializa el payload de biblioteca; devuelve null si corrupto. */
+export function decodeLibraryDrag(
+  raw: string | null,
+): LibraryDragPayload | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<LibraryDragPayload>;
+    if (
+      typeof parsed.moduleId === 'string' &&
+      parsed.moduleId.length > 0 &&
+      typeof parsed.widthMm === 'number' &&
+      typeof parsed.heightMm === 'number' &&
+      typeof parsed.depthMm === 'number'
+    ) {
+      return {
+        moduleId: parsed.moduleId,
+        widthMm: parsed.widthMm,
+        heightMm: parsed.heightMm,
+        depthMm: parsed.depthMm,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

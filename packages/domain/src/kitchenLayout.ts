@@ -465,12 +465,31 @@ function prunePlacementsInSpace(
   });
 }
 
-/** Drop placements that no longer match items; keep walls and plan defaults. */
+/**
+ * Drop placements that no longer match items; keep walls and plan defaults.
+ *
+ * `extraItemIds` (F141/#309) mantiene placements de ítems recién creados que
+ * todavía no llegaron en `items` — el insert desde la biblioteca de Proyectar
+ * crea el ítem y lo coloca en el mismo evento, antes de que el proyecto
+ * re-renderice. Se tratan como quantity 1 (los inserts nuevos usan siempre
+ * instanceIndex 0).
+ */
 export function pruneKitchenLayout(
   layout: ProjectKitchenLayout,
   items: readonly ProjectItem[],
+  extraItemIds: readonly string[] = [],
 ): ProjectKitchenLayout {
   const itemById = new Map(items.map((it) => [it.id, it]));
+  for (const id of extraItemIds) {
+    if (!itemById.has(id)) {
+      itemById.set(id, {
+        id,
+        moduleId: '',
+        quantity: 1,
+        optionChoices: {},
+      });
+    }
+  }
   const placements = prunePlacementsInSpace(
     layout.walls,
     layout.placements,
