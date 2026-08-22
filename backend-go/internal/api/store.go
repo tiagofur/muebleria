@@ -154,6 +154,14 @@ type Store interface {
 		projectID string,
 		mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
 	) (*domain.QualityMutation, error)
+	// Job costing (OC-080..084): locked read-modify-write of the costing JSONB
+	// (baseline, time entries, other costs) with the valuation context (quote
+	// snapshot, release, rework, job consumption) and audit events.
+	MutateProjectCosting(
+		ctx context.Context,
+		projectID string,
+		mutate func(snap *domain.JobCostingSnapshot) (*domain.JobCostingMutation, error),
+	) (*domain.JobCostingMutation, error)
 	// Project lifecycle events log (OC-010): immutable append-only events.
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)

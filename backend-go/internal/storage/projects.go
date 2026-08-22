@@ -675,7 +675,7 @@ func structurePinArg(pin *int) interface{} {
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, created_at, updated_at
 		FROM projects
 		WHERE id = $1;
 	`
@@ -706,7 +706,8 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var installation []byte
 	var materialPlanning []byte
 	var quality []byte
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &installation, &materialPlanning, &quality, &p.CreatedAt, &p.UpdatedAt)
+	var costing []byte
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &installation, &materialPlanning, &quality, &costing, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -795,6 +796,12 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		var job domain.QualityJob
 		if err := json.Unmarshal(quality, &job); err == nil {
 			p.Quality = &job
+		}
+	}
+	if len(costing) > 0 && string(costing) != "null" {
+		var costingJob domain.JobCosting
+		if err := json.Unmarshal(costing, &costingJob); err == nil {
+			p.Costing = &costingJob
 		}
 	}
 

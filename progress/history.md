@@ -863,3 +863,40 @@ web 301 · mobile 45 · desktop 17 · excel 89 · `pnpm typecheck` OK ·
 
 Verificación: domain 877 · storage 147 · ui 1187 · web 301 · mobile 45 ·
 desktop 17 · excel 89 · `pnpm typecheck` OK · `go test ./...` OK.
+
+## 2026-08-21 — F139: operational_core_o5 (issue #304, OC-080..OC-084)
+
+- **Cierre:** F139 `done`.
+- **Rama:** `feat/f139-job-costing`
+- **Agente:** implementador + reviewer
+
+## Resumen
+
+OC-080..OC-084 implementados de punta a punta: `CostBaseline` congelado desde
+quote snapshot + production release (recaptura sólo tras nueva liberación),
+`TimeEntry` por categoría OC-081 (+ sales_design) con tarifa horaria congelada
+por entrada y void soft auditado, otros actuals flete/outsource/instalación
+externa/consumible, material real valorizado desde consumo de stock asignado a
+obra (unitCost de OC recibida → catálogo como proxy, truth actual|proxy|
+missing) + rework, y el resumen estimate vs actual (revenue, estimated/actual
+direct cost, variance, expected/actual gross margin) con nulls honestos cuando
+la fuente no permite afirmar el valor.
+
+- Dominio TS puro (`jobCosting.ts`) + paridad TS↔Go vía
+  `contracts/jobCosting.json` y eventos `cost_*` en `contracts/projectEventTypes.json`
+  con tests espejo en ambos lados.
+- Backend Go: migración 000074 (`projects.costing` JSONB), endpoints
+  server-authoritative GET/POST costing con SELECT FOR UPDATE + eventos en la
+  misma tx, redacción de costos (roles sin permiso → 403), RBAC derivado de la
+  matriz de eventos.
+- Storage TS (mappers round-trip + repo API) y UI (CostingPanel en el detalle
+  de Cotizaciones, wiring dual local/API en AppContent).
+
+Review: CHANGES_REQUESTED (2 defects: fórmula de costo en UI y error
+enmascarado en loadQuoteSnapshotTx) → aplicados → **APPROVED**
+(ver `progress/review_F139.md`).
+
+## Verificación final
+
+domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
+`pnpm typecheck` OK · `go test ./...` OK (sin caché tras fixes).

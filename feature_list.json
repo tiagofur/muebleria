@@ -3155,6 +3155,36 @@
       ],
       "status": "done",
       "createdAt": "2026-08-21"
+    },
+    {
+      "id": "F139",
+      "phase": 0,
+      "name": "operational_core_o5",
+      "title": "Issue #304 — Operational Core O5: Job Costing, estimado vs real por obra (OC-080..OC-084)",
+      "description": "Responder cuánto se esperaba ganar y cuánto se ganó realmente por obra. CostBaseline capturado desde quote snapshot + production release (revenue, material/cantos/herrajes/MO estimada, costo directo estimado, margen esperado) (OC-080); TimeEntry por categoría engineering/cut/cnc/edge_banding/assembly/qc_rework/shipping/installation/warranty/sales_design con tarifa horaria snapshot por entrada y void auditado (OC-081); material actual desde consumo de stock asignado a obra valorizado (unitCost de PO recibida, fallback catálogo, truth actual|proxy) + rework materialCost (OC-082); otros actuals flete/outsource/instalación externa/consumible (OC-083); resumen estimate vs actual con revenue, estimated/actual direct cost, variance, expected/actual gross margin con fuentes trazables (OC-084). No contabilidad fiscal ni nómina. Persistencia JSONB projects.costing; paridad TS↔Go vía contracts/jobCosting.json + eventos cost_*; endpoints server-authoritative con RBAC y redacción de costos para roles sin permiso; panel Costos en la obra.",
+      "acceptance": [
+        "CostBaseline capturable sólo con priceSnapshot + productionRelease vigente; congela revenue/breakdown completo/margen esperado con source trazable (snapshotAt, releaseId, bomFingerprint, projectVersion) (OC-080)",
+        "TimeEntry con categorías OC-081 + sales_design opcional, minutes>0, tarifa snapshot por entrada, void soft con autor; other actuals freight/outsource/external_installation/consumable (OC-081, OC-083)",
+        "Material actual = consumo de stock asignado a obra valorizado (unitCost PO más reciente → fallback costPer* catálogo, línea con truth actual|proxy) + rework materialCost; sin doble conteo de receipts (OC-082)",
+        "JobCostSummary con revenue, estimatedDirectCost, actualDirectCost (material+labor+other), variance, expectedGrossMargin, actualGrossMargin y minutos por categoría; null cuando la fuente no permite afirmar el valor (OC-084, Data Truth)",
+        "Eventos cost_baseline_captured, cost_time_recorded, cost_other_recorded, cost_entry_voided con RBAC en matriz TS+Go y fixture compartido",
+        "Backend Go: GET /api/projects/{id}/costing (resumen computado server-side, redactado para roles sin ver costos), POST costing/baseline, costing/time, costing/time/{entryId}/void, costing/other, costing/other/{costId}/void con SELECT FOR UPDATE + eventos en la misma tx; migración projects.costing JSONB",
+        "Paridad TS↔Go: contracts/jobCosting.json (categorías, kinds, política de valorización) con tests espejo en ambos lados",
+        "Storage TS: métodos opcionales en WorkspaceRepository, implementación API repo, mappers snake_case con round-trip",
+        "UI web: panel Costos por obra (baseline, actuals por fuente, estimate vs actual, variance y márgenes) sin calcular dominio en React, respetando redacción de costos",
+        "pnpm test + pnpm typecheck verdes; go test ./... verde"
+      ],
+      "references": [
+        "docs/operational-core-v1.md",
+        "docs/prd-v2.md",
+        "docs/architecture.md",
+        "docs/project-lifecycle.md",
+        "packages/domain/src/jobCosting.ts",
+        "contracts/jobCosting.json",
+        "backend-go/internal/api/jobCosting.go"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-21"
     }
   ]
 }

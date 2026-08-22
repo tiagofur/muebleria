@@ -152,6 +152,16 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/projects/{id}/installation", authMW(http.HandlerFunc(server.HandleProjectInstallation)))
 	mux.Handle("POST /api/projects/{id}/installation/closeout", authMW(http.HandlerFunc(server.HandleProjectInstallationCloseout)))
 
+	// Job costing (OC-080..OC-084, #304): baseline frozen from quote snapshot
+	// + release, time entries, other actuals and the estimate vs actual view.
+	mux.Handle("GET /api/projects/{id}/costing", authMW(http.HandlerFunc(server.HandleProjectCosting)))
+	mux.Handle("POST /api/projects/{id}/costing/baseline", authMW(http.HandlerFunc(server.HandleCostingBaseline)))
+	mux.Handle("POST /api/projects/{id}/costing/labor-rate", authMW(http.HandlerFunc(server.HandleCostingLaborRate)))
+	mux.Handle("POST /api/projects/{id}/costing/time", authMW(http.HandlerFunc(server.HandleCostingTime)))
+	mux.Handle("POST /api/projects/{id}/costing/time/{entryId}/void", authMW(http.HandlerFunc(server.HandleCostingTimeVoid)))
+	mux.Handle("POST /api/projects/{id}/costing/other", authMW(http.HandlerFunc(server.HandleCostingOther)))
+	mux.Handle("POST /api/projects/{id}/costing/other/{costId}/void", authMW(http.HandlerFunc(server.HandleCostingOtherVoid)))
+
 	// Lifecycle events (OC-010): append-only audit trail.
 	mux.Handle("GET /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))
 	mux.Handle("POST /api/projects/{id}/events", authMW(http.HandlerFunc(server.HandleProjectEvents)))

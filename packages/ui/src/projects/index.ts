@@ -48,6 +48,18 @@ export {
   type LifecyclePanelProps,
 } from './components/LifecyclePanel';
 
+export { CostingPanel } from './components/CostingPanel';
+export type { CostingHandlers } from './components/CostingPanel';
+export { costingPanelView, MATERIAL_TRUTH_LABELS_ES, MATERIAL_BASIS_LABELS_ES } from './costingView';
+export type {
+  CostingPanelView,
+  CostingBaselineView,
+  CostingSummaryView,
+  CostingMaterialLineView,
+  CostingTimeEntryView,
+  CostingOtherCostView,
+} from './costingView';
+
 export {
   PROJECT_STATUSES,
   statusOptionsForRole,

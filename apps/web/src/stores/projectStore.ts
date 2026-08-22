@@ -441,6 +441,8 @@ export interface ProjectState {
   readonly applyInstallationProject: (projectId: string, project: Project) => void;
   readonly applyMaterialPlanningProject: (projectId: string, project: Project) => void;
   readonly applyQualityProject: (projectId: string, project: Project) => void;
+  /** Job costing (#304): apply a costing action result to the stored project. */
+  readonly applyCostingProject: (projectId: string, project: Project) => void;
   /** PROD-3.2 — stamp export revision after factory pack/export. */
   readonly recordProductionExport: (projectId: string) => void;
   /** PROD-3.2 — ensure OP revision when opening plant-ready order. */
@@ -1456,6 +1458,12 @@ export function createProjectStore(options: InternalOptions) {
     },
 
     applyQualityProject: (projectId, updated) => {
+      const project = get().projects.find((p) => p.id === projectId);
+      if (!project || updated === project) return;
+      patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));
+    },
+
+    applyCostingProject: (projectId, updated) => {
       const project = get().projects.find((p) => p.id === projectId);
       if (!project || updated === project) return;
       patch(set, get, (ps) => ps.map((p) => (p.id === projectId ? updated : p)));

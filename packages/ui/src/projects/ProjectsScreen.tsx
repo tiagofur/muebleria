@@ -54,6 +54,8 @@ import {
 import '../catalogs/catalogs.css';
 import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
+import type { CostingHandlers } from './components/CostingPanel';
+import type { CostingPanelView } from './costingView';
 import { ProjectsListView } from './components/ProjectsListView';
 import { ProjectModalsContainer } from './components/ProjectModalsContainer';
 import {
@@ -167,6 +169,15 @@ export interface ProjectsScreenProps {
     projectId: string,
     nestingImport: NonNullable<import('@muebles/domain').Project['nestingImport']>,
   ) => void;
+
+  // --- Job costing (OC-080..OC-084, #304): estimate vs actual panel ---
+  readonly costingViewByProject?: Readonly<Record<string, CostingPanelView>>;
+  readonly costingHandlers?: CostingHandlers;
+  readonly canManageCosting?: boolean;
+  readonly canCaptureCosting?: boolean;
+  readonly canRecordOtherCosting?: boolean;
+  readonly canVoidCosting?: boolean;
+  readonly costingLabelsByMaterial?: Readonly<Record<string, string>>;
   /** F029: project-wide option defaults (empty keys inherit on each line). */
   readonly onUpdateProjectLevelChoices?: (
     projectId: string,
@@ -446,6 +457,13 @@ export function ProjectsScreen({
   onExportScenarioPdf,
   onUpdateInstallationChecklist,
   onImportNesting,
+  costingViewByProject,
+  costingHandlers,
+  canManageCosting = false,
+  canCaptureCosting = false,
+  canRecordOtherCosting = false,
+  canVoidCosting = false,
+  costingLabelsByMaterial,
   onUpdateProjectLevelChoices,
   onUpdateMeasureDefaults,
   onSelectionChange,
@@ -749,6 +767,13 @@ export function ProjectsScreen({
           onExportScenarioPdf={onExportScenarioPdf}
           onUpdateInstallationChecklist={onUpdateInstallationChecklist}
           onImportNesting={onImportNesting}
+          costingView={costingViewByProject?.[state.selectedProject!.id] ?? null}
+          costingHandlers={costingHandlers}
+          canManageCosting={canManageCosting}
+          canCaptureCosting={canCaptureCosting}
+          canRecordOtherCosting={canRecordOtherCosting}
+          canVoidCosting={canVoidCosting}
+          costingLabelsByMaterial={costingLabelsByMaterial}
           onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
           canMutate={canMutate}
           canDelete={canDelete}

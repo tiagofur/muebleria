@@ -192,6 +192,8 @@ import {
   type MaterialPlanningHandlers,
   type QualityPanelView,
   type QualityHandlers,
+  type CostingPanelView,
+  type CostingHandlers,
 } from '@muebles/ui';
 import {
   APIWorkspaceRepository,
@@ -428,6 +430,14 @@ export interface ShellViewCtx {
   readonly qualityByProject: Readonly<Record<string, QualityPanelView>>;
   readonly qualityHandlers: QualityHandlers;
   readonly canOverrideQc: boolean;
+  /** #304 — job costing: estimate vs actual per obra (roles con costos). */
+  readonly costingViewByProject: Readonly<Record<string, CostingPanelView>>;
+  readonly costingHandlers: CostingHandlers;
+  readonly costingLabelsByMaterial: Readonly<Record<string, string>>;
+  readonly canManageCosting: boolean;
+  readonly canCaptureCosting: boolean;
+  readonly canRecordOtherCosting: boolean;
+  readonly canVoidCosting: boolean;
   readonly handleLoadCocinaLopezDemo: () => void;
   readonly handleOverridesChange: (overrides: Readonly<Record<string, unknown>>) => void;
   readonly handleReceivePurchaseOrder: (id: string, lines: readonly PoLineInput[]) => Promise<void>;
@@ -672,6 +682,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     planningHandlers,
     qualityByProject,
     qualityHandlers,
+    costingViewByProject,
+    costingHandlers,
+    costingLabelsByMaterial,
+    canManageCosting,
+    canCaptureCosting,
+    canRecordOtherCosting,
+    canVoidCosting,
     canOverrideQc,
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
@@ -1815,6 +1832,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onReopen={reopenProject}
           onRestoreVersion={restoreProjectVersion}
           showCosts={showCosts}
+          costingViewByProject={costingViewByProject}
+          costingHandlers={costingHandlers}
+          costingLabelsByMaterial={costingLabelsByMaterial}
+          canManageCosting={canManageCosting}
+          canCaptureCosting={canCaptureCosting}
+          canRecordOtherCosting={canRecordOtherCosting}
+          canVoidCosting={canVoidCosting}
           autoPresentId={presentId}
           photos={selectedProjectId ? projectActions.photos[selectedProjectId] : undefined}
           onUploadPhotos={projectActions.uploadProjectPhotos}

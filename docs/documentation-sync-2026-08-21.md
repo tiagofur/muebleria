@@ -159,11 +159,15 @@ La solución adoptada es:
 
 ### DS-16 — Quote costing no equivale a Job Costing
 
-**Estado actual:** `QuoteBreakdown` + snapshot de costos estimados.
+**Estado actual (2026-08-21, F139/#304):** resuelto. `QuoteBreakdown` + snapshot
+siguen siendo el lado estimado; el costing job de la obra agrega el lado real:
+`CostBaseline` congelado desde snapshot + release, `TimeEntry` por categoría
+OC-081 con tarifa congelada, otros costos OC-083, material real valorizado
+desde consumo de stock asignado a obra (unitCost OC → catálogo proxy) +
+rework, con resumen estimate vs actual y márgenes (`GET /projects/{id}/costing`,
+panel Costos en la cotización).
 
-**Gap:** no hay actual material/labor/rework integrado por obra.
-
-**Resolución:** OC-080–084.
+**Resolución:** OC-080–084 — implementado (F139).
 
 ---
 

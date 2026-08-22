@@ -14,6 +14,10 @@ import {
   materialAvailabilityFromApi,
   releaseChecksFromApi,
   qualityJobFromApi,
+  jobCostingFromApi,
+  jobCostingToApi,
+  jobCostSummaryFromApi,
+  materialCostValuationFromApi,
   qualityJobToApi,
   hardwareToApi,
   hardwareFromApi,
@@ -69,6 +73,9 @@ import type {
   QualityJob,
   ProjectTemplate,
   Structure,
+  JobCosting,
+  JobCostSummary,
+  MaterialCostValuation,
 } from '@muebles/domain';
 
 describe('apiMappers', () => {
@@ -2294,5 +2301,115 @@ describe('quality job roundtrip (OC-060..OC-062)', () => {
     };
     const back = qualityJobFromApi(qualityJobToApi(job));
     expect(back).toEqual(job);
+  });
+});
+
+describe('job costing roundtrip (OC-080..OC-084)', () => {
+  it('jobCostingToApi/FromApi preserve baseline, time entries and other costs', () => {
+    const costing: JobCosting = {
+      id: 'jc-1',
+      projectId: 'p-cost-1',
+      baseline: {
+        id: 'cb-1',
+        projectId: 'p-cost-1',
+        capturedAt: '2026-08-21T12:00:00.000Z',
+        capturedByUserId: 'mgr-1',
+        source: {
+          quoteSnapshotCapturedAt: '2026-08-20T10:00:00.000Z',
+          projectVersion: 3,
+          releaseId: 'rel-1',
+          bomFingerprint: 'fp-abc123',
+        },
+        revenue: 400,
+        materialsCost: 100,
+        edgeTotal: 20,
+        hardwareTotal: 30,
+        laborModular: 50,
+        laborFixedCost: 10,
+        estimatedDirectCost: 210,
+        expectedGrossMargin: 190,
+        expectedMarginPercent: 47.5,
+      },
+      laborRatePerHour: 30,
+      timeEntries: [
+        {
+          id: 'tme-1',
+          category: 'cut',
+          minutes: 60,
+          at: '2026-08-21T14:00:00.000Z',
+          byUserId: 'op-1',
+          byName: 'Operario',
+          note: 'Corte de frentes',
+          ratePerHour: 30,
+        },
+        {
+          id: 'tme-2',
+          category: 'assembly',
+          minutes: 45,
+          at: '2026-08-21T16:00:00.000Z',
+          ratePerHour: 30,
+          removedAt: '2026-08-21T17:00:00.000Z',
+          removedByUserId: 'mgr-1',
+          removedByName: 'Gerente',
+        },
+      ],
+      otherCosts: [
+        {
+          id: 'oth-1',
+          kind: 'freight',
+          amount: 80.5,
+          at: '2026-08-21T18:00:00.000Z',
+          vendor: 'Transporte SRL',
+          note: 'Entrega en obra',
+        },
+      ],
+      createdAt: '2026-08-21T12:00:00.000Z',
+    };
+    const back = jobCostingFromApi(jobCostingToApi(costing));
+    expect(back).toEqual(costing);
+  });
+
+  it('jobCostSummaryFromApi keeps explicit nulls (Data Truth) and breakdowns', () => {
+    const summary = jobCostSummaryFromApi({
+      revenue: null,
+      estimated_direct_cost: null,
+      actual_material_cost: 78,
+      actual_material_truth: 'proxy',
+      actual_labor_minutes: 180,
+      actual_labor_cost: null,
+      actual_other_cost: 105,
+      actual_direct_cost: null,
+      variance: null,
+      expected_gross_margin: null,
+      expected_margin_percent: null,
+      actual_gross_margin: null,
+      actual_margin_percent: null,
+      minutes_by_category: { cut: 60, assembly: 90 },
+      other_cost_by_kind: { freight: 80 },
+    });
+    expect(summary.revenue).toBeNull();
+    expect(summary.actualLaborCost).toBeNull();
+    expect(summary.actualDirectCost).toBeNull();
+    expect(summary.actualMaterialCost).toBe(78);
+    expect(summary.actualMaterialTruth).toBe('proxy');
+    expect(summary.minutesByCategory.cut).toBe(60);
+    expect(summary.minutesByCategory.warranty).toBe(0);
+    expect(summary.otherCostByKind.freight).toBe(80);
+  });
+
+  it('materialCostValuationFromApi preserves valuation truth per line', () => {
+    const valuation = materialCostValuationFromApi({
+      lines: [
+        { material_id: 'mat-1', quantity: 5, unit_cost: 10, amount: 50, basis: 'po_unit_cost', truth: 'actual' },
+        { material_id: 'mat-2', quantity: 2, unit_cost: 8, amount: 16, basis: 'catalog', truth: 'proxy' },
+      ],
+      total: 66,
+      truth: 'proxy',
+      missing_valuation_material_ids: ['mat-3'],
+    });
+    expect(valuation.total).toBe(66);
+    expect(valuation.truth).toBe('proxy');
+    expect(valuation.lines[1]?.basis).toBe('catalog');
+    expect(valuation.missingValuationMaterialIds).toEqual(['mat-3']);
   });
 });

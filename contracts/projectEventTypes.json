@@ -37,6 +37,10 @@
     "production_completed",
     "quality_issue_reported",
     "rework_started",
+    "cost_baseline_captured",
+    "cost_time_recorded",
+    "cost_other_recorded",
+    "cost_entry_voided",
     "shipment_loaded",
     "shipment_departed",
     "installation_started",
@@ -47,5 +51,9 @@
     "project_closed",
     "warranty_opened"
   ],
-  "rejectedTypes": ["quote_accepted", "production_finished", "delivered"]
+  "rejectedTypes": [
+    "quote_accepted",
+    "production_finished",
+    "delivered"
+  ]
 }

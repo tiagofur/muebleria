@@ -40,6 +40,11 @@ import type {
   QualityIssueStatus,
   ReworkAction,
   UnitQcChecklistItem,
+  JobCosting,
+  JobCostSummary,
+  MaterialCostValuation,
+  TimeEntry,
+  OtherActualCost,
 } from '@muebles/domain';
 
 /** Derived closeout gate check as returned by the installation endpoints. */
@@ -101,6 +106,14 @@ export interface QualityView {
     readonly status: string;
     readonly gate: { readonly ready: boolean; readonly overridden: boolean };
   }[];
+  readonly eventsAppended?: number;
+}
+
+/** Derived estimate vs actual view of a project's costing (OC-080..OC-084). */
+export interface JobCostingView {
+  readonly costing: JobCosting | null;
+  readonly summary: JobCostSummary;
+  readonly material: MaterialCostValuation;
   readonly eventsAppended?: number;
 }
 export interface WorkspaceRepository {
@@ -389,6 +402,35 @@ export interface WorkspaceRepository {
     unitId: string,
     reason: string,
   ): Promise<QualityView>;
+
+  // --- Job costing (OC-080..OC-084) ---
+
+  /** Read the costing + server-computed estimate vs actual view (OC-084). */
+  getJobCosting?(projectId: string): Promise<JobCostingView>;
+
+  /** Freeze the baseline from the quote snapshot + release (OC-080). */
+  captureCostBaseline?(projectId: string): Promise<JobCostingView>;
+
+  /** Set the shop hourly rate in force for new time entries. */
+  setCostingLaborRate?(projectId: string, ratePerHour: number): Promise<JobCostingView>;
+
+  /** Record actual labor time, freezing the current hourly rate (OC-081). */
+  recordCostingTime?(
+    projectId: string,
+    payload: { category: TimeEntry['category']; minutes: number; note?: string },
+  ): Promise<JobCostingView>;
+
+  /** Soft-void a time entry (supervisors, audited). */
+  voidCostingTime?(projectId: string, entryId: string, reason?: string): Promise<JobCostingView>;
+
+  /** Record an out-of-production actual cost (OC-083). */
+  recordCostingOtherCost?(
+    projectId: string,
+    payload: { kind: OtherActualCost['kind']; amount: number; vendor?: string; note?: string },
+  ): Promise<JobCostingView>;
+
+  /** Soft-void an other actual cost (supervisors, audited). */
+  voidCostingOtherCost?(projectId: string, costId: string, reason?: string): Promise<JobCostingView>;
 
   // --- Production Activity Tracking (gerente_produccion) ---
 

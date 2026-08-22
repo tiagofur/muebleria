@@ -61,6 +61,13 @@ export type ProductionLogisticsEventType =
 
 export type QualityEventType = 'quality_issue_reported' | 'rework_started';
 
+/** Job costing events (OC-080..OC-084). */
+export type CostEventType =
+  | 'cost_baseline_captured'
+  | 'cost_time_recorded'
+  | 'cost_other_recorded'
+  | 'cost_entry_voided';
+
 export type InstallationCloseEventType =
   | 'installation_started'
   | 'installation_completed'
@@ -77,6 +84,7 @@ export type ProjectEventType =
   | MaterialsEventType
   | ProductionLogisticsEventType
   | QualityEventType
+  | CostEventType
   | InstallationCloseEventType;
 
 /**
@@ -122,6 +130,10 @@ export const PROJECT_EVENT_TYPES: readonly ProjectEventType[] = [
   'production_completed',
   'quality_issue_reported',
   'rework_started',
+  'cost_baseline_captured',
+  'cost_time_recorded',
+  'cost_other_recorded',
+  'cost_entry_voided',
   'shipment_loaded',
   'shipment_departed',
   'installation_started',
@@ -255,6 +267,10 @@ export const PROJECT_EVENT_TYPE_LABELS_ES: Readonly<Record<ProjectEventType, str
   production_completed: 'Producción completada',
   quality_issue_reported: 'Problema de calidad reportado',
   rework_started: 'Retrabajo iniciado',
+  cost_baseline_captured: 'Baseline de costos capturado',
+  cost_time_recorded: 'Tiempo de obra registrado',
+  cost_other_recorded: 'Costo externo registrado',
+  cost_entry_voided: 'Registro de costo anulado',
   shipment_loaded: 'Cargado para despacho',
   shipment_departed: 'Despacho enviado a obra',
   installation_started: 'Instalación iniciada en obra',

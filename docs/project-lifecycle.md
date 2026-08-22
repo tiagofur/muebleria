@@ -184,6 +184,18 @@ quality_issue_reported
 rework_started
 ```
 
+Job costing (OC-080..OC-084, #304): el baseline congelado, el tiempo registrado
+y los costos externos dejan hitos auditados; la trazabilidad fina (categorías
+OC-081, tipos OC-083, valorización de consumo) vive en el costing job de la
+obra. Las anulaciones son soft (void) con autor:
+
+```text
+cost_baseline_captured
+cost_time_recorded
+cost_other_recorded
+cost_entry_voided
+```
+
 ### 4.7 Instalación/cierre
 
 ```text
