@@ -13,6 +13,9 @@ import {
   collectDescendantIds,
   filterModulesByCategory,
   filterAmbientMaterialsByCategory,
+  filterMaterialBoardsByCategory,
+  materialManufacturer,
+  MATERIAL_MANUFACTURER_UNSET,
   subtreeHeight,
 } from './categories';
 import { ValidationError } from './errors';
@@ -160,5 +163,41 @@ describe('category hierarchy', () => {
     expect(
       filterAmbientMaterialsByCategory(ambMaterials, 'ac2', ambientCats).map((m) => m.id),
     ).toEqual(['am4']);
+  });
+});
+
+// ─── F142: materiales de taller (fabricante + subgrupos) ─────────────────────
+
+describe('filterMaterialBoardsByCategory', () => {
+  const materialCats = [
+    { id: 'mc-melamina', name: 'Melamina', sortOrder: 1 },
+    { id: 'mc-blancos', name: 'Blancos', parentId: 'mc-melamina', sortOrder: 1 },
+    { id: 'mc-mdf', name: 'MDF', sortOrder: 2 },
+  ];
+  const boards = [
+    { id: 'b1', categoryId: 'mc-blancos' },
+    { id: 'b2', categoryId: 'mc-mdf' },
+    { id: 'b3' },
+  ] as import('./types').MaterialBoard[];
+
+  it('null filter returns all; subtree includes descendants', () => {
+    expect(filterMaterialBoardsByCategory(boards, null, materialCats)).toHaveLength(3);
+    expect(
+      filterMaterialBoardsByCategory(boards, 'mc-melamina', materialCats).map((m) => m.id),
+    ).toEqual(['b1']);
+  });
+
+  it('uncategorized filter returns boards without subgrupo', () => {
+    expect(
+      filterMaterialBoardsByCategory(boards, UNCATEGORIZED_FILTER, materialCats).map((m) => m.id),
+    ).toEqual(['b3']);
+  });
+});
+
+describe('materialManufacturer', () => {
+  it('resuelve el fabricante o (sin definir) para datos previos a F142', () => {
+    expect(materialManufacturer({ manufacturer: '  Arauco ' } as import('./types').MaterialBoard)).toBe('Arauco');
+    expect(materialManufacturer({} as import('./types').MaterialBoard)).toBe(MATERIAL_MANUFACTURER_UNSET);
+    expect(materialManufacturer({ manufacturer: '   ' } as import('./types').MaterialBoard)).toBe(MATERIAL_MANUFACTURER_UNSET);
   });
 });

@@ -212,3 +212,79 @@ export function decodeLibraryDrag(
     return null;
   }
 }
+
+// ─── F142 Drag de material de taller (tablero) → mueble del canvas ──────────
+
+/**
+ * MIME type para arrastrar un tablero (MaterialBoard) desde el dock hacia un
+ * mueble del canvas. Distinto de PAINT_DRAG_MIME (ambiental): un tablero
+ * NUNCA puede caer en piso/pared/techo (superficies no cotizables) — el drop
+ * se resuelve contra muebles y fuera de ellos se rechaza con feedback.
+ */
+export const BOARD_PAINT_DRAG_MIME = 'application/x-muebles-board-paint';
+
+/** Payload del drag de un material de taller. */
+export type BoardPaintDragPayload = {
+  readonly materialId: string;
+};
+
+/** Serializa el payload de tablero. */
+export function encodeBoardPaintDrag(
+  payload: BoardPaintDragPayload,
+): string {
+  return JSON.stringify(payload);
+}
+
+/** Deserializa el payload de tablero; devuelve null si corrupto. */
+export function decodeBoardPaintDrag(
+  raw: string | null,
+): BoardPaintDragPayload | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<BoardPaintDragPayload>;
+    if (typeof parsed.materialId === 'string' && parsed.materialId.length > 0) {
+      return { materialId: parsed.materialId };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Nodo de escena normalizado para el resolver de tableros: la cadena de
+ * padres se recorre vía `parent` leyendo `userData`. Desacoplado de
+ * THREE.Object3D para poder testear en jsdom sin WebGL.
+ */
+export type SceneHitNode = {
+  readonly userData?: Record<string, unknown> | undefined;
+  readonly parent?: unknown;
+};
+
+/**
+ * F142 — resuelve el mueble objetivo de un drop de tablero a partir de los
+ * hits del raycast (más cercano primero). Reglas:
+ *
+ * - sólo el hit MÁS CERCANO cuenta: superficies delante del mueble (piso,
+ *   muro, techo) rechazan el drop en vez de atravesarlo hacia el mueble que
+ *   está detrás;
+ * - meshes marcados `boardPaintBlocked` (mesada ambiental del mueble)
+ *   rechazan aunque cuelguen del group del módulo: el tablero nunca se
+ *   aplica a una superficie no cotizable;
+ * - devuelve el `moduleKey` del group ancestro, o null si no hay mueble.
+ */
+export function resolveBoardPaintTarget(
+  hits: readonly { readonly object: SceneHitNode }[],
+): string | null {
+  const first = hits[0];
+  if (!first) return null;
+  let node: unknown = first.object;
+  while (node) {
+    const current = node as SceneHitNode;
+    if (current.userData?.boardPaintBlocked === true) return null;
+    const key = current.userData?.moduleKey;
+    if (typeof key === 'string' && key.length > 0) return key;
+    node = current.parent;
+  }
+  return null;
+}

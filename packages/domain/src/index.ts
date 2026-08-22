@@ -16,6 +16,7 @@ export type {
   AmbientCategory,
   CategoryNode,
   MaterialBoard,
+  MaterialCategory,
   EdgeBand,
   Hardware,
   User,
@@ -193,7 +194,10 @@ export {
   collectDescendantIds,
   filterModulesByCategory,
   filterAmbientMaterialsByCategory,
+  filterMaterialBoardsByCategory,
   subtreeHeight,
+  materialManufacturer,
+  MATERIAL_MANUFACTURER_UNSET,
 } from './categories';
 
 export { DomainError, ValidationError, ResolutionError } from './errors';

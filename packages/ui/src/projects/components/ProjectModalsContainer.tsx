@@ -11,6 +11,7 @@ import type {
   FurnitureType,
   Hardware,
   MaterialBoard,
+  MaterialCategory,
   Module,
   ModuleBaseMode,
   ModuleCategory,
@@ -119,6 +120,13 @@ export interface ProjectModalsContainerProps {
   readonly onGoToProyectar?: () => void;
   /** F141 (#309): insert desde la biblioteca de Proyectar; devuelve el id del ítem creado. */
   readonly onInsertCatalogItem?: (moduleId: string) => string | null;
+  /** F142: choice a nivel proyecto desde el dock de tableros. */
+  readonly onUpdateProjectLevelChoice?: (
+    groupCode: string,
+    optionId: string,
+  ) => void;
+  /** F142: subgrupos de tableros para el dock de Proyectar. */
+  readonly materialCategories?: readonly MaterialCategory[];
   readonly onAcquirePlanEdit?: () => boolean;
   readonly onRenewPlanEdit?: () => boolean;
   readonly onReleasePlanEdit?: () => void;
@@ -192,6 +200,8 @@ export function ProjectModalsContainer({
   onClosePresentation,
   onGoToProyectar,
   onInsertCatalogItem,
+  onUpdateProjectLevelChoice,
+  materialCategories = [],
   onAcquirePlanEdit,
   onRenewPlanEdit,
   onReleasePlanEdit,
@@ -310,6 +320,12 @@ export function ProjectModalsContainer({
               ? onInsertCatalogItem
               : undefined
           }
+          onUpdateProjectLevelChoice={
+            canMutate && selectedProject.status === 'draft'
+              ? onUpdateProjectLevelChoice
+              : undefined
+          }
+          materialCategories={materialCategories}
           planActor={planActor}
           onAcquirePlanEdit={onAcquirePlanEdit}
           onRenewPlanEdit={onRenewPlanEdit}

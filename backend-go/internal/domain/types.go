@@ -99,13 +99,16 @@ type MaterialBoard struct {
 	ID           string  `json:"id"`
 	Code         string  `json:"code"`
 	Name         string  `json:"name"`
-	WidthMm      int     `json:"width_mm"`
-	LengthMm     int     `json:"length_mm"`
-	ThicknessMm  int     `json:"thickness_mm"`
-	GrainDefault bool    `json:"grain_default"`
-	BoardPrice   float64 `json:"board_price"`
-	WastePercent float64 `json:"waste_percent"`
-	CostPerM2    float64 `json:"cost_per_m2"`
+	Manufacturer string  `json:"manufacturer"`
+	// CategoryID links the board into the MaterialCategory tree (F142 subgrupos).
+	CategoryID    string  `json:"category_id,omitempty"`
+	WidthMm       int     `json:"width_mm"`
+	LengthMm      int     `json:"length_mm"`
+	ThicknessMm   int     `json:"thickness_mm"`
+	GrainDefault  bool    `json:"grain_default"`
+	BoardPrice    float64 `json:"board_price"`
+	WastePercent  float64 `json:"waste_percent"`
+	CostPerM2     float64 `json:"cost_per_m2"`
 	// DefaultEdgeBandID links the default edge band by id (never by name).
 	DefaultEdgeBandID string `json:"default_edge_band_id,omitempty"`
 	// ImageURL is a relative media path (e.g. /api/media/xxx.webp), never base64.

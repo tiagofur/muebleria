@@ -54,6 +54,13 @@ type Store interface {
 	UpdateAmbientCategory(ctx context.Context, id string, c *domain.AmbientCategory) error
 	DeleteAmbientCategory(ctx context.Context, id string) error
 
+	// Catalog: material categories (F142: subgrupos de tableros)
+	ListMaterialCategories(ctx context.Context) ([]domain.MaterialCategory, error)
+	GetMaterialCategoryByID(ctx context.Context, id string) (*domain.MaterialCategory, error)
+	CreateMaterialCategory(ctx context.Context, c *domain.MaterialCategory) error
+	UpdateMaterialCategory(ctx context.Context, id string, c *domain.MaterialCategory) error
+	DeleteMaterialCategory(ctx context.Context, id string) error
+
 	// Catalog: edge bands
 	ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, error)
 	GetEdgeBandByID(ctx context.Context, id string) (*domain.EdgeBand, error)

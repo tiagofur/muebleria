@@ -1031,6 +1031,7 @@ export function AppContent({
   const hardware = catalog?.hardware ?? [];
   const ambientMaterials = catalog?.ambientMaterials ?? [];
   const ambientCategories = catalog?.ambientCategories ?? [];
+  const materialCategories = catalog?.materialCategories ?? [];
   const optionGroups = catalog?.optionGroups ?? [];
   const modules = catalog?.modules ?? [];
   const structures = catalog?.structures ?? [];
@@ -2722,6 +2723,7 @@ export function AppContent({
     allowedNavIds,
     ambientCategories,
     ambientMaterials,
+    materialCategories,
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,

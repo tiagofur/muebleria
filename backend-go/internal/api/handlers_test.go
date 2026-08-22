@@ -55,6 +55,15 @@ type stubStore struct {
 	createAmbientCategoryOK     bool
 	updateAmbientCategoryCalled bool
 	deleteAmbientCategoryCalled bool
+	// Material categories (F142)
+	listMaterialCategories        []domain.MaterialCategory
+	materialCategoryReturnedByID  *domain.MaterialCategory
+	materialCategoryGetByIDErr    error
+	createMaterialCategoryErr     error
+	createMaterialCategoryOK      bool
+	updateMaterialCategoryCalled  bool
+	deleteMaterialCategoryCalled  bool
+	deleteMaterialCategoryErrHook error
 	// Auth test hooks
 	getUserByEmail      *domain.User
 	getUserByEmailErr   error
@@ -306,6 +315,33 @@ func (s *stubStore) UpdateAmbientCategory(_ context.Context, _ string, _ *domain
 }
 func (s *stubStore) DeleteAmbientCategory(_ context.Context, _ string) error {
 	s.deleteAmbientCategoryCalled = true
+	return nil
+}
+func (s *stubStore) ListMaterialCategories(context.Context) ([]domain.MaterialCategory, error) {
+	if s.listMaterialCategories != nil {
+		return s.listMaterialCategories, nil
+	}
+	return []domain.MaterialCategory{}, nil
+}
+func (s *stubStore) GetMaterialCategoryByID(_ context.Context, _ string) (*domain.MaterialCategory, error) {
+	return s.materialCategoryReturnedByID, s.materialCategoryGetByIDErr
+}
+func (s *stubStore) CreateMaterialCategory(_ context.Context, _ *domain.MaterialCategory) error {
+	if s.createMaterialCategoryErr != nil {
+		return s.createMaterialCategoryErr
+	}
+	s.createMaterialCategoryOK = true
+	return nil
+}
+func (s *stubStore) UpdateMaterialCategory(_ context.Context, _ string, _ *domain.MaterialCategory) error {
+	s.updateMaterialCategoryCalled = true
+	return nil
+}
+func (s *stubStore) DeleteMaterialCategory(_ context.Context, _ string) error {
+	s.deleteMaterialCategoryCalled = true
+	if s.deleteMaterialCategoryErrHook != nil {
+		return s.deleteMaterialCategoryErrHook
+	}
 	return nil
 }
 func (s *stubStore) ListEdgeBands(context.Context) ([]domain.EdgeBand, error) {
@@ -1066,7 +1102,7 @@ func TestHandleCustomersDuplicateKeyReturns409(t *testing.T) {
 
 func TestHandleMaterialsDuplicateKeyReturns409(t *testing.T) {
 	srv := &Server{Store: &stubStore{createMaterialErr: dupErr("error creating material board")}}
-	body := strings.NewReader(`{"code":"MAT-DUP","name":"Dup","width_mm":100,"length_mm":100,"thickness_mm":18,"board_price":10}`)
+	body := strings.NewReader(`{"code":"MAT-DUP","name":"Dup","manufacturer":"Arauco","width_mm":100,"length_mm":100,"thickness_mm":18,"board_price":10}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1311,7 +1347,7 @@ func TestOwnership_AdminReassignProjectOwner(t *testing.T) {
 func TestRBAC_VendedorCannotCreateMaterial(t *testing.T) {
 	store := &stubStore{}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
+	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","manufacturer":"Arauco","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1326,7 +1362,7 @@ func TestRBAC_VendedorCannotCreateMaterial(t *testing.T) {
 
 func TestRBAC_ProduccionCannotCreateMaterial(t *testing.T) {
 	srv := &Server{Store: &stubStore{}}
-	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
+	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","manufacturer":"Arauco","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "p1", string(domain.RoleProduccion))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1339,7 +1375,7 @@ func TestRBAC_ProduccionCannotCreateMaterial(t *testing.T) {
 func TestRBAC_IngenieroCanCreateMaterial(t *testing.T) {
 	store := &stubStore{}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
+	body := strings.NewReader(`{"id":"m1","code":"M1","name":"Board","manufacturer":"Arauco","width_mm":1830,"length_mm":2750,"thickness_mm":15,"grain_default":false,"board_price":100,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/materials", body), "eng", string(domain.RoleIngeniero))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1966,7 +2002,7 @@ func TestHandleMaterialByIDUpdateCleansReplacedImage(t *testing.T) {
 	}
 	srv := &Server{Store: store, MediaDir: dir}
 
-	body := strings.NewReader(`{"code":"C","name":"N","image_url":"/api/media/new.jpg","preview_texture_url":"","board_price":1,"waste_percent":0,"active":true}`)
+	body := strings.NewReader(`{"code":"C","name":"N","manufacturer":"Arauco","image_url":"/api/media/new.jpg","preview_texture_url":"","board_price":1,"waste_percent":0,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
 	req.SetPathValue("id", "m1")
 	rr := httptest.NewRecorder()
@@ -1994,7 +2030,7 @@ func TestHandleMaterialByIDUpdateReceivesTextureTiles(t *testing.T) {
 	srv := &Server{Store: store}
 
 	body := strings.NewReader(`{
-		"code":"MAD-1","name":"Madera","width_mm":1830,"length_mm":2440,"thickness_mm":18,
+		"code":"MAD-1","name":"Madera","manufacturer":"Arauco","width_mm":1830,"length_mm":2440,"thickness_mm":18,
 		"board_price":10,"waste_percent":5,"active":true,
 		"preview_texture_url":"/api/media/wood.webp",
 		"preview_texture_tile_width_mm":400,
@@ -2033,7 +2069,7 @@ func TestHandleMaterialByIDUpdateKeepsSameImage(t *testing.T) {
 	}
 	srv := &Server{Store: store, MediaDir: dir}
 
-	body := strings.NewReader(`{"code":"C","name":"Renamed","image_url":"/api/media/keep.jpg","board_price":1,"waste_percent":0,"active":true}`)
+	body := strings.NewReader(`{"code":"C","name":"Renamed","manufacturer":"Arauco","image_url":"/api/media/keep.jpg","board_price":1,"waste_percent":0,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
 	req.SetPathValue("id", "m1")
 	rr := httptest.NewRecorder()

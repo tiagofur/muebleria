@@ -434,6 +434,10 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &m) {
 			return
 		}
+		if strings.TrimSpace(m.Manufacturer) == "" {
+			respondWithError(w, http.StatusBadRequest, "El fabricante del tablero es obligatorio")
+			return
+		}
 		m.Active = true
 		err := s.Store.CreateMaterialBoard(r.Context(), &m)
 		if err != nil {
@@ -484,6 +488,11 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		if cur, err := s.Store.GetMaterialBoardByID(r.Context(), id); err == nil && cur != nil {
 			prevImage = cur.ImageURL
 			prevTexture = cur.PreviewTextureURL
+			if strings.TrimSpace(m.Manufacturer) == "" {
+				// Syncs de catálogos legacy (pre-fabricante obligatorio) llegan sin
+				// fabricante: conservar el existente en vez de romper la sincronización.
+				m.Manufacturer = cur.Manufacturer
+			}
 		}
 		err := s.Store.UpdateMaterialBoard(r.Context(), id, &m)
 		if err != nil {

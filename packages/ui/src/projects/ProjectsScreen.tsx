@@ -13,6 +13,7 @@ import type {
   Component,
   Customer,
   EdgeBand,
+  MaterialCategory,
   ExportIssue,
   FurnitureType,
   Hardware,
@@ -85,6 +86,8 @@ export interface ProjectsScreenProps {
   /** Agregados catalog for 3D preview (so module.agregados render in project 3D). */
   readonly catalogAgregados?: readonly Agregado[];
   readonly materials: readonly MaterialBoard[];
+  /** F142: subgrupos de tableros para el dock de Proyectar. */
+  readonly materialCategories?: readonly MaterialCategory[];
   readonly edges: readonly EdgeBand[];
   readonly hardware: readonly Hardware[];
   /** Ambient materials for 3D room scenes (floor/wall textures). */
@@ -434,6 +437,7 @@ export function ProjectsScreen({
   categories = [],
   optionGroups,
   materials,
+  materialCategories = [],
   edges,
   hardware,
   ambientMaterials = [],
@@ -940,6 +944,13 @@ export function ProjectsScreen({
             : undefined
         }
         onInsertCatalogItem={state.insertCatalogItem}
+        onUpdateProjectLevelChoice={
+          onUpdateProjectLevelChoices
+            ? (groupCode, optionId) =>
+                state.updateProjectLevelChoice(groupCode, optionId)
+            : undefined
+        }
+        materialCategories={materialCategories}
         onAcquirePlanEdit={planActor && onAcquirePlanEdit ? state.handleAcquirePlanEdit : undefined}
         onRenewPlanEdit={planActor && onRenewPlanEdit ? state.handleRenewPlanEdit : undefined}
         onReleasePlanEdit={planActor && onReleasePlanEdit ? state.handleReleasePlanEdit : undefined}
