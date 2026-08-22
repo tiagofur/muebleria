@@ -62,6 +62,11 @@ test.describe('Proyectar studio (WebGL smoke)', () => {
       .first();
     expect(await firstCard.count()).toBeGreaterThan(0);
 
+    // Sin selección: el inspector derecho muestra las propiedades del ambiente.
+    await page.waitForSelector('[data-testid="spatial-studio-space-name"]', {
+      timeout: 10_000,
+    });
+
     // Evidencia de screenshot review (design.md §8); test-results/ es gitignored.
     await page.screenshot({
       path: 'test-results/proyectar-studio-library.png',
@@ -76,6 +81,11 @@ test.describe('Proyectar studio (WebGL smoke)', () => {
     await expect
       .poll(async () => await itemsTab.textContent(), { timeout: 20_000 })
       .not.toBe(countBefore ?? '');
+
+    // El insert selecciona el mueble: el inspector pasa de ambiente a mueble.
+    await page.waitForSelector('[data-testid="spatial-studio-dims"]', {
+      timeout: 10_000,
+    });
 
     // La sub-pestaña De la obra muestra la lista de ítems del proyecto.
     await itemsTab.click();

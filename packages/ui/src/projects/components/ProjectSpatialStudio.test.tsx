@@ -521,7 +521,6 @@ describe('ProjectSpatialStudio', () => {
         onChangeLayout={onChangeLayout}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     const input = screen.getByTestId(
       'spatial-studio-import-input',
     ) as HTMLInputElement;
@@ -579,7 +578,6 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     const input = screen.getByTestId(
       'spatial-studio-import-input',
     ) as HTMLInputElement;
@@ -1025,7 +1023,6 @@ EOF
     );
 
     expect(screen.getByTestId('project-spatial-studio')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-create-l'));
     expect(onChangeLayout).toHaveBeenCalled();
     const withWalls = onChangeLayout.mock.calls[0]![0];
@@ -1081,7 +1078,6 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-wall-z-1500'));
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ wallCabinetZMm: 1500 }),
@@ -1113,7 +1109,6 @@ EOF
         onChangeLayout={onChangeLayout}
       />,
     );
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-layout-plinth-120'));
     expect(onChangeLayout).toHaveBeenCalledWith(
       expect.objectContaining({ baseClearanceMm: 120 }),
@@ -1381,7 +1376,6 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
       />,
     );
     // Ceiling toggle lives in the room tab (ambience settings, not materials).
-    fireEvent.click(screen.getByTestId('spatial-studio-tab-room'));
     fireEvent.click(screen.getByTestId('spatial-studio-toggle-ceiling'));
     expect(onChangeLayout).toHaveBeenCalled();
     const next = onChangeLayout.mock.calls.at(-1)![0] as {
@@ -1535,7 +1529,7 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
     );
   });
 
-  it('switches sidebar tabs between Muebles, Materiales, and Ambiente', () => {
+  it('switches sidebar tabs between Muebles and Materiales (Ambiente vive en el inspector)', () => {
     render(
       <ProjectSpatialStudio
         open
@@ -1550,17 +1544,16 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
 
     const btnModules = screen.getByTestId('spatial-studio-tab-modules');
     const btnMaterials = screen.getByTestId('spatial-studio-tab-materials');
-    const btnRoom = screen.getByTestId('spatial-studio-tab-room');
 
     expect(btnModules.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByTestId('spatial-studio-filter-all')).toBeTruthy();
+    // Sin selección: el inspector derecho muestra las propiedades del ambiente.
+    expect(screen.getByTestId('spatial-studio-space-name')).toBeTruthy();
+    expect(screen.queryByTestId('spatial-studio-tab-room')).toBeNull();
 
     fireEvent.click(btnMaterials);
     expect(btnMaterials.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('spatial-studio-material-palette')).toBeTruthy();
-
-    fireEvent.click(btnRoom);
-    expect(btnRoom.getAttribute('aria-selected')).toBe('true');
+    // El ambiente sigue accesible en el inspector con la pestaña Materiales activa.
     expect(screen.getByTestId('spatial-studio-space-name')).toBeTruthy();
   });
 
@@ -1599,16 +1592,14 @@ describe('ProjectSpatialStudio — ambient scene materials', () => {
       'spatial-studio-sidebar-tab-modules',
     );
 
-    // Roving arrows move selection with focus (modules → materials → room)
+    // Roving arrows move selection with focus (modules → materials)
     const materialsTab = screen.getByTestId('spatial-studio-tab-materials');
-    const roomTab = screen.getByTestId('spatial-studio-tab-room');
     expect(materialsTab.getAttribute('tabIndex')).toBe('-1');
     fireEvent.keyDown(tablist, { key: 'ArrowRight' });
     expect(materialsTab.getAttribute('aria-selected')).toBe('true');
     expect(document.activeElement).toBe(materialsTab);
     fireEvent.keyDown(tablist, { key: 'ArrowRight' });
-    expect(roomTab.getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(roomTab);
+    expect(modulesTab.getAttribute('aria-selected')).toBe('true');
     fireEvent.keyDown(tablist, { key: 'Home' });
     expect(modulesTab.getAttribute('aria-selected')).toBe('true');
 
