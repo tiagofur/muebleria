@@ -157,6 +157,12 @@ materials_ready
 materials_release_overridden
 ```
 
+Los emite el subproceso de planificación de materiales de la obra (OC-050..054):
+`materials_required` al derivar requerimientos del BOM liberado,
+`materials_reserved`/`materials_shortage_detected` al reservar contra
+disponibilidad, y `materials_ready` (+ `materials_release_overridden` cuando
+hay faltantes) en la liberación con evidencia.
+
 ### 4.6 Producción/logística
 
 El detalle de estación vive en ejecución de pieza/unidad; el proyecto recibe hitos:
@@ -166,6 +172,16 @@ production_started
 production_completed
 shipment_loaded
 shipment_departed
+```
+
+Calidad/retrabajo (OC-060..062): los defectos detectados antes de entrega y las
+decisiones de retrabajo dejan hitos auditados (con costo de material/minutos en
+el payload); la trazabilidad fina (categorías, resolución, QC por unidad) vive
+en el quality job de la obra:
+
+```text
+quality_issue_reported
+rework_started
 ```
 
 ### 4.7 Instalación/cierre

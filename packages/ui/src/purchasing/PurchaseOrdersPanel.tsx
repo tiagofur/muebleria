@@ -40,6 +40,8 @@ export type PoLineInput = {
   kind: StockMaterialKind;
   materialId: string;
   quantity: number;
+  readonly unitCost?: number;
+  readonly allocatedProjectId?: string;
 };
 
 export type PurchaseOrdersPanelProps = {

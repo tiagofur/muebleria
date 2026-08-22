@@ -788,3 +788,78 @@ además arquitectura, paridad, RBAC, la triple defensa OC-074 y la migración
 
 Verificación final: domain 836 · storage 143 · excel 89 · ui 1169 · mobile 45 ·
 desktop 17 · web 301 · `pnpm typecheck` OK · `go test ./...` OK.
+
+## Issue #302 / F138 — Operational Core O3: MRP ligero, reservas, compras, QC y retrabajo (2026-08-21)
+
+**Feature:** F138 — `operational_core_o3` — done · **Rama:** `feat/f138-mrp-qc`
+
+Conecta BOM liberado → materiales → producción y registra calidad/retrabajo
+(OC-050..OC-054 + OC-060..OC-062).
+
+Qué se implementó:
+
+- **MRP ligero (OC-050..054):** `MaterialRequirement` materializado sólo desde
+  el `ProductionRelease` (bomFingerprint; sin heurísticas); stock conceptual
+  `onHand/reserved/available/incoming/required/shortage` como funciones puras
+  (warehouse + cobertura por obra); reservas por obra
+  `active/released/consumed` con caps contra disponibilidad de TODAS las obras;
+  shortage → PO draft con allocation a obra; PO extendida con `unitCost`
+  snapshot por línea, `requiredBy`/`expectedAt`, `poLineCost`/`poTotalCost`;
+  `materialsRelease` con evidencia (3 gates: requerimientos derivados, líneas
+  cubiertas, reservas respaldadas por stock) y override auditado que emite
+  `materials_release_overridden` + `materials_ready` live (antes sólo backfill).
+- **QC y retrabajo (OC-060..062):** `QualityIssue` (7 categorías,
+  open→resolved→verified con reopen, vínculo pieza/mueble/unidad);
+  `ReworkAction` rework/refabricate/scrap/accept_as_is con
+  `materialCost`/`laborMinutes` (job costing) y efecto físico en la pieza
+  (reabrir ruta / scrapped) en la misma tx; checklist QC por unidad (6 puntos
+  de production-flow-v2 §10) y gate server-side que bloquea
+  `module_qc → packaged` sin QC aprobado ni issues abiertos, con override de
+  supervisor auditado (espejo local en el store para offline).
+- **Persistencia/paridad:** migraciones 000071 (projects.material_planning
+  JSONB), 000072 (projects.quality JSONB), 000073 (columnas PO);
+  contracts/materialPlanning.json + qualityStatuses.json con parity TS↔Go
+  (tests espejo de vocabularios/transiciones/gates); endpoints
+  server-authoritative (GET/derive/reserve/release + issue/transition/rework/
+  qc/override) con SELECT FOR UPDATE, stock+plannings+POs en la tx, RBAC por
+  evento y auditoría en la misma tx. FIX de paridad incluido: rbac.go no tenía
+  quality_issue_reported/rework_started.
+- **Anti-smuggling OC-054:** el PUT agregado del proyecto dejó de escribir
+  `materials_release` (la liberación sólo corre por el endpoint con
+  evidencia/eventos); planning/quality ni siquiera viajan en el PUT.
+- **UI:** `MaterialPlanningPanel` (cobertura/reservas/shortage/gates con
+  override, labels de catálogo) dentro de las cards de Almacén (botón
+  «Planificar y liberar» abre el panel en vez de liberar a ciegas);
+  `QualityPanel` (issues + rework con costing + checklist QC + override
+  supervisor) en la estación Embalaje de Producción; wiring AppContent con
+  mirror server en modo API y acciones puras offline; `roleCanSuperviseFloor`
+  TS nuevo (paridad Go).
+
+Review (progress/review_F138.md): CHANGES_REQUESTED con 3 defects menores —
+labels crudos de material en la cobertura (§7.2), planning local aplicado en
+vez del devuelto por el server en modo API, ids crudos en QualityPanel — todos
+aplicados (el campo de pieza pasó a select con `partCode · U<idx>`) y suites
+re-verificadas en verde. Recomendaciones R1 (marcar `≈` en tableros, la
+estimación ya está rotulada en la sección) y R2 (consumo de reservas al
+despachar picking: `consumePlannedMaterials` existe en dominio, falta cablear
+en purchasingStore.togglePick) quedan como deuda explícita.
+
+Verificación final: domain 875 (+39) · storage 147 (+4) · ui 1186 (+13) ·
+web 301 · mobile 45 · desktop 17 · excel 89 · `pnpm typecheck` OK ·
+`go test ./...` OK.
+
+### F138 — deuda de review saldada (2026-08-21, mismo PR #321)
+
+- **R2 (consumo de reservas al picking):** endpoint
+  `POST /api/projects/{id}/materials/consume` con `ConsumePlannedMaterials`
+  (Go, espejo de la acción pura TS), repo `consumeMaterials`, hook
+  `onDespachado` en `purchasingStore.togglePick` y consumo en
+  `AppContent.handleTogglePick` (planning del server en modo API; acción pura
+  en offline). Semántica corregida en TS y Go: reservas `consumed` cubren la
+  línea en cobertura/gates OC-054 sin contar como reservadas en la
+  disponibilidad del depósito; desmarcar revierte stock, nunca el consumo.
+- **R1 (data truth):** la tabla de cobertura marca `≈` las líneas de tableros
+  con title "Planchas estimadas del BOM liberado".
+
+Verificación: domain 877 · storage 147 · ui 1187 · web 301 · mobile 45 ·
+desktop 17 · excel 89 · `pnpm typecheck` OK · `go test ./...` OK.

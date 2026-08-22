@@ -27,6 +27,10 @@ export { InstalacionesProjectDetail } from './InstalacionesProjectDetail';
 export type { InstalacionesProjectDetailProps } from './InstalacionesProjectDetail';
 export { InstallationJobPanel } from './InstallationJobPanel';
 export type { InstallationJobPanelHandlers } from './InstallationJobPanel';
+export { QualityPanel } from './QualityPanel';
+export type { QualityHandlers } from './QualityPanel';
+export { qualityPanelView } from './qualityView';
+export type { QualityPanelView } from './qualityView';
 export {
   installationJobCardView,
   canCompleteInstallationNow,

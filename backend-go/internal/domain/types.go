@@ -598,6 +598,13 @@ type Project struct {
 	// closeout — OC-070..OC-074). Server-authoritative: only mutated through
 	// the dedicated installation endpoints, never through the project PUT.
 	Installation     *InstallationJob   `json:"installation,omitempty"`
+	// MaterialPlanning is the MRP subprocess of the obra: requirements from
+	// the released BOM, reservations and the evidence-backed release
+	// (OC-050..OC-054, #302). Server-authoritative via the materials endpoints.
+	MaterialPlanning *MaterialPlanning `json:"material_planning,omitempty"`
+	// Quality is the quality subprocess of the obra: issues, rework actions
+	// and per-unit QC records (OC-060..OC-062, #302).
+	Quality          *QualityJob       `json:"quality,omitempty"`
 	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
 	Events            []ProjectEvent      `json:"events,omitempty"`
 	Notes             string              `json:"notes,omitempty"`

@@ -30,6 +30,16 @@ import type {
   InstallationJob,
   InstallationJobStatus,
   ClientCloseout,
+  MaterialPlanning,
+  MaterialRequirementLine,
+  MaterialsReleaseCheck,
+  ProjectMaterialLineCoverage,
+  MaterialAvailability,
+  QualityJob,
+  QualityIssue,
+  QualityIssueStatus,
+  ReworkAction,
+  UnitQcChecklistItem,
 } from '@muebles/domain';
 
 /** Derived closeout gate check as returned by the installation endpoints. */
@@ -60,6 +70,39 @@ export class CloseoutGateError extends Error {
   }
 }
 
+/** Derived evidence view of a project's material planning (OC-050..OC-054). */
+export interface MaterialPlanningView {
+  readonly planning: MaterialPlanning | null;
+  readonly coverage: readonly ProjectMaterialLineCoverage[];
+  readonly availability: readonly MaterialAvailability[];
+  readonly releaseChecks: readonly MaterialsReleaseCheck[];
+  readonly releaseReady: boolean;
+  readonly released: boolean;
+  readonly eventsAppended?: number;
+}
+
+/** Error thrown when the OC-054 release gates block the materials release. */
+export class MaterialsReleaseGateError extends Error {
+  readonly checks: readonly MaterialsReleaseCheck[];
+  constructor(checks: readonly MaterialsReleaseCheck[], message: string) {
+    super(message);
+    this.name = 'MaterialsReleaseGateError';
+    this.checks = checks;
+  }
+}
+
+/** Derived view of a project's quality job (OC-060..OC-062). */
+export interface QualityView {
+  readonly quality: QualityJob | null;
+  readonly openIssues: number;
+  readonly reworkCost: { readonly materialCost: number; readonly laborMinutes: number };
+  readonly unitGates: readonly {
+    readonly unitId: string;
+    readonly status: string;
+    readonly gate: { readonly ready: boolean; readonly overridden: boolean };
+  }[];
+  readonly eventsAppended?: number;
+}
 export interface WorkspaceRepository {
   /** Load full workspace; missing file → seed workspace. */
   load(): Promise<Workspace>;
@@ -253,6 +296,99 @@ export interface WorkspaceRepository {
       photoIds?: readonly string[];
     },
   ): Promise<{ installation: InstallationJob; closeout?: ClientCloseout } & InstallationView>;
+
+  // --- Material planning (OC-050..OC-054) ---
+
+  /** Read the planning + derived evidence view (coverage, release gates). */
+  getMaterialPlanning?(projectId: string): Promise<MaterialPlanningView>;
+
+  /** Materialize requirements from the released BOM (server binds release). */
+  deriveMaterialRequirements?(
+    projectId: string,
+    lines: readonly MaterialRequirementLine[],
+  ): Promise<MaterialPlanningView>;
+
+  /** Reserve against warehouse availability; shortage remainder is audited. */
+  reserveMaterials?(
+    projectId: string,
+    lines?: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<MaterialPlanningView>;
+
+  /**
+   * A picking despacho consumes the project's active reservations (oldest
+   * first, partial splits). Reservation records are history: an unmark
+   * reverts stock but never revokes consumption (R2 F138).
+   */
+  consumeMaterials?(
+    projectId: string,
+    lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
+  ): Promise<MaterialPlanningView>;
+
+  /**
+   * Evidence-backed materials release (OC-054). Failing gates require an
+   * override reason; throws MaterialsReleaseGateError (with the checks) on 409.
+   */
+  releaseMaterials?(
+    projectId: string,
+    overrideReason?: string,
+  ): Promise<MaterialPlanningView>;
+
+  // --- Quality job (OC-060..OC-062) ---
+
+  /** Read the quality job + derived view (open issues, rework cost, QC gates). */
+  getQuality?(projectId: string): Promise<QualityView>;
+
+  /** Report a quality issue linked to a piece/unit (OC-060). */
+  reportQualityIssue?(
+    projectId: string,
+    payload: {
+      description: string;
+      category: QualityIssue['category'];
+      projectItemId?: string;
+      partInstanceId?: string;
+      moduleUnitId?: string;
+      station?: QualityIssue['station'];
+      notes?: string;
+      photoIds?: readonly string[];
+    },
+  ): Promise<QualityView>;
+
+  /** Resolve / verify / reopen a quality issue. */
+  transitionQualityIssue?(
+    projectId: string,
+    issueId: string,
+    toStatus: QualityIssueStatus,
+    notes?: string,
+  ): Promise<QualityView>;
+
+  /** Record the OC-061 resolution with costing + physical piece effect. */
+  recordQualityRework?(
+    projectId: string,
+    payload: {
+      issueId: string;
+      action: ReworkAction['action'];
+      reason?: string;
+      partInstanceId?: string;
+      targetOperation?: string;
+      materialCost?: number;
+      laborMinutes?: number;
+    },
+  ): Promise<QualityView>;
+
+  /** Per-unit QC checklist (OC-062); packaging reads it through the gate. */
+  recordQualityUnitQc?(
+    projectId: string,
+    unitId: string,
+    checklist: readonly UnitQcChecklistItem[],
+    notes?: string,
+  ): Promise<QualityView>;
+
+  /** Supervisor-only audited override to package without approved QC. */
+  overrideQualityUnitQc?(
+    projectId: string,
+    unitId: string,
+    reason: string,
+  ): Promise<QualityView>;
 
   // --- Production Activity Tracking (gerente_produccion) ---
 

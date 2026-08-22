@@ -639,6 +639,16 @@ const PROJECT_EVENT_APPEND_ROLES: Readonly<Record<string, readonly UserRole[]>> 
   change_order_rejected: ['admin', 'gerente_ventas', 'gerente_produccion'],
 };
 
+/**
+ * Supervisor-only floor actions (OC-032 assembly override, OC-061 rework,
+ * OC-062 QC override): the unrestricted roles of roleCanAdvanceStation.
+ * Scoped station operators (produccion/almacen) never qualify — parity with
+ * Go RoleCanSuperviseFloor.
+ */
+export function roleCanSuperviseFloor(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas' || role === 'gerente_produccion' || role === 'ingeniero';
+}
+
 export function roleCanAppendProjectEvent(
   role: string | null | undefined,
   type: string,

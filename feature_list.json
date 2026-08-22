@@ -3121,6 +3121,40 @@
       ],
       "status": "done",
       "createdAt": "2026-08-21"
+    },
+    {
+      "id": "F138",
+      "phase": 0,
+      "name": "operational_core_o3",
+      "title": "Issue #302 — Operational Core O3: MRP ligero, reservas, compras, QC y retrabajo (OC-050..OC-054, OC-060..OC-062)",
+      "description": "Conectar BOM liberado → materiales → producción y registrar calidad/retrabajo. MaterialRequirement derivado del release real (bomFingerprint) y materializado por obra (OC-050); stock conceptual onHand/reserved/available/incoming/required/shortage (OC-051); reservas por obra con estado active/released/consumed (OC-051/052); shortage genera PO con allocation a obra, unit cost snapshot, requiredBy/expectedAt y recepciones parciales (OC-052/053); materialsRelease respaldado por evidencia (reservado/recibido/faltante) con override auditado que emite materials_release_overridden + materials_ready live (OC-054). QualityIssue con categorías (dimensional, acabado/canto, mecanizado, daño, faltante, armado, otro) y vínculo a pieza/mueble (OC-060); ReworkAction rework/refabricate/scrap/accept_as_is con material/tiempo afectado para job costing (OC-061); checklist de QC por unidad y gate que bloquea module_qc → packaged sin QC aprobado, con override de supervisor auditado (OC-062). Persistencia JSONB (projects.material_planning, projects.quality) + columnas PO; paridad TS↔Go vía contracts/materialPlanning.json y contracts/qualityStatuses.json; endpoints server-authoritative con RBAC y auditoría vía lifecycle events; pantallas Almacén (planificación) y Producción (QC) en web.",
+      "acceptance": [
+        "MaterialRequirement derivado del BOM liberado (release+bomFingerprint), materializado y persistido por obra — no heurísticas de dashboard (OC-050)",
+        "Disponibilidad por material onHand/reserved/available/incoming/required/shortage como funciones puras, con reservas por obra active/released/consumed (OC-051)",
+        "Shortage materializado alimenta POs con allocation a obra, unit cost snapshot y requiredBy/expectedAt; recepciones parciales conservadas (OC-052, OC-053)",
+        "materialsRelease con evidencia: checks evaluables (requerimientos derivados, líneas cubiertas, reservas respaldadas por stock) + override auditado que emite materials_release_overridden; materials_ready se emite live (OC-054)",
+        "QualityIssue con categorías OC-060, estados y transiciones validadas, vínculo a pieza/mueble/unidad (OC-060)",
+        "ReworkAction rework/refabricate/scrap/accept_as_is con materialCost/laborMinutes para job costing, integrado al rework físico de piezas (OC-061)",
+        "QC gate por unidad antes de packaged: checklist evaluable, bloqueo server-side en advance unit y override de supervisor auditado (OC-062)",
+        "Persistencia: projects.material_planning y projects.quality JSONB (migraciones), columnas purchase_orders/purchase_order_items, mappers TS snake_case, repos local y API",
+        "Backend Go: GET/PUT /api/projects/{id}/materials + POST materials/release con gates/RBAC/eventos, GET/PUT /api/projects/{id}/quality, QC gate en POST units advance; paridad contracts (materialPlanning, qualityStatuses)",
+        "UI web: evidencia de planificación en Almacén (requerimientos/reservas/shortage/PO/release con override) y panel QC (issues, rework, checklist por unidad) sin calcular dominio en React",
+        "pnpm test + pnpm typecheck verdes; go test ./... verde"
+      ],
+      "references": [
+        "docs/operational-core-v1.md",
+        "docs/prd-v2.md",
+        "docs/production-flow-v2.md",
+        "docs/project-lifecycle.md",
+        "packages/domain/src/materialPlanning.ts",
+        "packages/domain/src/quality.ts",
+        "contracts/materialPlanning.json",
+        "contracts/qualityStatuses.json",
+        "backend-go/internal/api/materialPlanning.go",
+        "backend-go/internal/api/quality.go"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-21"
     }
   ]
 }

@@ -2902,3 +2902,27 @@
 .ship-board__section-header .ship-board__section-title {
   flex: 1 1 auto;
 }
+
+/* ── Quality panel (OC-060..OC-062, F138) ────────────────────────────────── */
+
+.quality-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.quality-panel__checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.quality-panel__check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+}

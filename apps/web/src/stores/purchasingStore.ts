@@ -95,6 +95,8 @@ export interface PurchasingState {
     id?: string;
     supplierId: string;
     notes?: string;
+    requiredBy?: string;
+    expectedAt?: string;
     items: readonly PoLineInput[];
   }) => Promise<void>;
   readonly emitPurchaseOrder: (id: string) => Promise<void>;
@@ -113,6 +115,11 @@ export interface PurchasingState {
   readonly togglePick: (
     input: TogglePickInput,
     debitLinesFor: (projectId: string, material: PickingMaterial) => readonly StockDebitLine[],
+    hooks?: {
+      /** R2 F138: called after a despacho persists, with its debit lines —
+       * the caller consumes the project's material reservations. */
+      onDespachado?: (projectId: string, lines: readonly StockDebitLine[]) => void;
+    },
   ) => void;
 }
 
@@ -340,6 +347,7 @@ export function createPurchasingStore(options: InternalOptions) {
     togglePick: (
       { projectId, material, status },
       debitLinesFor,
+      hooks,
     ) => {
       const lockKey = pickingKey(projectId, material);
       if (inFlightPicks.has(lockKey)) {
@@ -412,6 +420,9 @@ export function createPurchasingStore(options: InternalOptions) {
             // 2) Recién ahora persiste el picking despachado.
             await persistPicking('despachado');
             await get().refreshStock();
+            // 3) R2 F138: el despacho consume las reservas de la obra (el
+            // material salió del depósito hacia el proyecto).
+            hooks?.onDespachado?.(projectId, lines);
           } else {
             // Desmarcar: revierte los despachos activos de esta obra/tipo
             // (ledger, sobrevive a recargas) y persiste pendiente.

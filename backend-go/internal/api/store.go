@@ -138,6 +138,22 @@ type Store interface {
 		projectID string,
 		mutate func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error),
 	) (*domain.InstallationMutation, error)
+	// Material planning (OC-050..054): locked read-modify-write of the
+	// material_planning JSONB with the warehouse context (stock, plannings,
+	// POs), the evidence gates and the audit lifecycle events.
+	MutateProjectMaterialPlanning(
+		ctx context.Context,
+		projectID string,
+		mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
+	) (*domain.MaterialPlanningMutation, error)
+	// Quality job (OC-060..062): locked read-modify-write of the quality JSONB
+	// (issues, rework actions, unit QC) plus the physical executions a rework
+	// action may touch, with audit events in the same transaction.
+	MutateProjectQuality(
+		ctx context.Context,
+		projectID string,
+		mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
+	) (*domain.QualityMutation, error)
 	// Project lifecycle events log (OC-010): immutable append-only events.
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)

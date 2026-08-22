@@ -8,6 +8,13 @@ import {
   edgeToApi,
   catalogFromApi,
   installationJobFromApi,
+  materialPlanningFromApi,
+  materialPlanningToApi,
+  materialCoverageFromApi,
+  materialAvailabilityFromApi,
+  releaseChecksFromApi,
+  qualityJobFromApi,
+  qualityJobToApi,
   hardwareToApi,
   hardwareFromApi,
   materialToApi,
@@ -30,6 +37,7 @@ import {
   changeOrderFromApi,
   projectTemplateToApi,
   projectTemplateFromApi,
+  purchaseOrderFromApi,
   breakdownFromApi,
   componentToApi,
   componentFromApi,
@@ -57,6 +65,8 @@ import type {
   PartInstance,
   ModuleUnitExecution,
   InstallationJob,
+  MaterialPlanning,
+  QualityJob,
   ProjectTemplate,
   Structure,
 } from '@muebles/domain';
@@ -2120,5 +2130,169 @@ describe('installation job roundtrip (OC-070..OC-074)', () => {
   it('installationJobFromApi tolera ausencia y null (obras sin job)', () => {
     expect(installationJobFromApi(undefined)).toBeUndefined();
     expect(installationJobFromApi(null)).toBeUndefined();
+  });
+});
+
+describe('material planning roundtrip (OC-050..OC-054)', () => {
+  it('materialPlanningToApi/FromApi preserve requirements, reservations and release evidence', () => {
+    const planning: MaterialPlanning = {
+      id: 'mplan-1',
+      projectId: 'p-prod-phase2',
+      requirements: {
+        releaseId: 'rel-1',
+        bomFingerprint: 'fp-abc123',
+        derivedAt: '2026-08-21T10:00:00.000Z',
+        derivedBy: 'alm-1',
+        lines: [
+          { kind: 'herrajes', materialId: 'hw-1', quantity: 10 },
+          { kind: 'tableros', materialId: 'board-1', quantity: 4 },
+          { kind: 'cintillas', materialId: 'edge-1', quantity: 25.15 },
+        ],
+      },
+      reservations: [
+        {
+          id: 'mres-1',
+          kind: 'herrajes',
+          materialId: 'hw-1',
+          quantity: 10,
+          status: 'released',
+          reservedBy: 'alm-1',
+          reservedAt: '2026-08-21T11:00:00.000Z',
+          releasedAt: '2026-08-21T12:00:00.000Z',
+        },
+      ],
+      release: {
+        releasedBy: 'alm-1',
+        releasedAt: '2026-08-21T12:00:00.000Z',
+        override: {
+          reason: 'Cliente trae herrajes propios',
+          byUserId: 'alm-1',
+          at: '2026-08-21T12:00:00.000Z',
+          failingChecks: ['lines_reserved'],
+        },
+      },
+      createdAt: '2026-08-21T10:00:00.000Z',
+    };
+    const back = materialPlanningFromApi(materialPlanningToApi(planning));
+    expect(back).toEqual(planning);
+  });
+
+  it('coverage and release checks survive the wire format', () => {
+    const coverage = materialCoverageFromApi([
+      {
+        kind: 'herrajes',
+        material_id: 'hw-1',
+        required: 10,
+        reserved: 6,
+        pending_reserve: 4,
+        available: 2,
+        incoming_allocated: 10,
+        shortage: 0,
+        covered: false,
+      },
+    ]);
+    expect(coverage[0]).toEqual({
+      kind: 'herrajes',
+      materialId: 'hw-1',
+      required: 10,
+      reserved: 6,
+      pendingReserve: 4,
+      available: 2,
+      incomingAllocated: 10,
+      shortage: 0,
+      covered: false,
+    });
+    const checks = releaseChecksFromApi([
+      { code: 'requirements_derived', label: 'x', passed: true, required: true, details: 'd' },
+    ]);
+    expect(checks[0]?.code).toBe('requirements_derived');
+    const availability = materialAvailabilityFromApi([
+      { kind: 'tableros', material_id: 'b-1', on_hand: 3, reserved: 1, available: 2, incoming: 5, required: 4, shortage: 0 },
+    ]);
+    expect(availability[0]).toMatchObject({ kind: 'tableros', materialId: 'b-1', onHand: 3, shortage: 0 });
+  });
+
+  it('purchaseOrderFromApi keeps the OC-052/053 allocation, cost snapshot and dates', () => {
+    const po = purchaseOrderFromApi({
+      id: 'po-1',
+      number: 'OC-0001',
+      supplier_id: 'sup-1',
+      status: 'emitida',
+      items: [
+        {
+          kind: 'herrajes',
+          material_id: 'hw-1',
+          quantity: 20,
+          received_quantity: 5,
+          unit_cost: 12.5,
+          allocated_project_id: 'p-prod-phase2',
+        },
+      ],
+      required_by: '2026-09-01',
+      expected_at: '2026-08-30',
+      created_at: '2026-08-21T10:00:00Z',
+      updated_at: '2026-08-21T10:00:00Z',
+    });
+    expect(po.items[0]?.unitCost).toBe(12.5);
+    expect(po.items[0]?.allocatedProjectId).toBe('p-prod-phase2');
+    expect(po.requiredBy).toBe('2026-09-01');
+    expect(po.expectedAt).toBe('2026-08-30');
+  });
+});
+
+describe('quality job roundtrip (OC-060..OC-062)', () => {
+  it('qualityJobToApi/FromApi preserve issues, rework costing and unit QC', () => {
+    const job: QualityJob = {
+      id: 'qjob-1',
+      projectId: 'p-prod-phase2',
+      issues: [
+        {
+          id: 'qiss-1',
+          description: 'Canto despegado',
+          category: 'acabado_canto',
+          status: 'resolved',
+          partInstanceId: 'p1_i1_u1_LAT_1',
+          moduleUnitId: 'p-prod-phase2_item-1_u1',
+          station: 'module_qc',
+          reportedBy: 'qc-1',
+          reportedAt: '2026-08-21T11:00:00.000Z',
+          resolvedAt: '2026-08-21T12:00:00.000Z',
+          resolvedBy: 'sup-1',
+          resolutionNotes: 'Retrabajar: pegado de nuevo',
+        },
+      ],
+      reworkActions: [
+        {
+          id: 'rwrk-1',
+          issueId: 'qiss-1',
+          action: 'rework',
+          reason: 'Canto mal pegado',
+          materialCost: 25.5,
+          laborMinutes: 30,
+          partInstanceId: 'p1_i1_u1_LAT_1',
+          byUserId: 'sup-1',
+          at: '2026-08-21T12:00:00.000Z',
+        },
+      ],
+      unitQc: [
+        {
+          unitId: 'p-prod-phase2_item-1_u1',
+          checklist: [
+            { code: 'square', passed: true },
+            { code: 'finish', passed: true },
+          ],
+          passedAt: '2026-08-21T13:00:00.000Z',
+          passedBy: 'qc-1',
+          override: {
+            reason: 'Despacho urgente',
+            byUserId: 'sup-1',
+            at: '2026-08-21T13:30:00.000Z',
+          },
+        },
+      ],
+      createdAt: '2026-08-21T10:00:00.000Z',
+    };
+    const back = qualityJobFromApi(qualityJobToApi(job));
+    expect(back).toEqual(job);
   });
 });

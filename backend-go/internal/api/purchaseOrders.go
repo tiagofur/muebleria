@@ -9,6 +9,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -17,9 +18,13 @@ import (
 )
 
 type poItemRequest struct {
-	Kind       string  `json:"kind"`
-	MaterialID string  `json:"material_id"`
-	Quantity   float64 `json:"quantity"`
+	Kind       string   `json:"kind"`
+	MaterialID string   `json:"material_id"`
+	Quantity   float64  `json:"quantity"`
+	// OC-053: unit cost snapshot (job costing) frozen with the line.
+	UnitCost *float64 `json:"unit_cost,omitempty"`
+	// OC-052: the obra this line was bought for (real-need allocation).
+	AllocatedProjectID *string `json:"allocated_project_id,omitempty"`
 }
 
 type purchaseOrderRequest struct {
@@ -27,6 +32,52 @@ type purchaseOrderRequest struct {
 	SupplierID string          `json:"supplier_id"`
 	Notes      string          `json:"notes"`
 	Items      []poItemRequest `json:"items"`
+	// OC-053: need-by / supplier-promised dates (YYYY-MM-DD).
+	RequiredBy *string `json:"required_by,omitempty"`
+	ExpectedAt *string `json:"expected_at,omitempty"`
+}
+
+var poDatePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// validatePOExtras checks the OC-052/053 fields: dates are YYYY-MM-DD, the
+// unit cost is non-negative and the allocated obra exists.
+func (s *Server) validatePOExtras(r *http.Request, body *purchaseOrderRequest) string {
+	for _, date := range []*string{body.RequiredBy, body.ExpectedAt} {
+		if date != nil && *date != "" && !poDatePattern.MatchString(*date) {
+			return "required_by/expected_at deben tener formato YYYY-MM-DD"
+		}
+	}
+	seenProjects := map[string]bool{}
+	for _, it := range body.Items {
+		if it.UnitCost != nil && *it.UnitCost < 0 {
+			return "unit_cost no puede ser negativo"
+		}
+		if it.AllocatedProjectID != nil && *it.AllocatedProjectID != "" {
+			if seenProjects[*it.AllocatedProjectID] {
+				continue
+			}
+			project, err := s.Store.GetProjectByID(r.Context(), *it.AllocatedProjectID)
+			if err != nil || project == nil {
+				return "la obra allocada no existe: " + *it.AllocatedProjectID
+			}
+			seenProjects[*it.AllocatedProjectID] = true
+		}
+	}
+	return ""
+}
+
+func poItemsFromRequest(items []poItemRequest) []domain.PurchaseOrderItem {
+	out := make([]domain.PurchaseOrderItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, domain.PurchaseOrderItem{
+			Kind:               domain.StockMaterialKind(it.Kind),
+			MaterialID:         strings.TrimSpace(it.MaterialID),
+			Quantity:           it.Quantity,
+			UnitCost:           it.UnitCost,
+			AllocatedProjectID: it.AllocatedProjectID,
+		})
+	}
+	return out
 }
 
 // poNumber derives a stable human number from the client-minted id: OC-XXXXXX.
@@ -94,21 +145,19 @@ func (s *Server) HandlePurchaseOrders(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusBadRequest, "la orden necesita al menos un ítem válido (material + cantidad > 0)")
 			return
 		}
-		items := make([]domain.PurchaseOrderItem, 0, len(body.Items))
-		for _, it := range body.Items {
-			items = append(items, domain.PurchaseOrderItem{
-				Kind:       domain.StockMaterialKind(it.Kind),
-				MaterialID: strings.TrimSpace(it.MaterialID),
-				Quantity:   it.Quantity,
-			})
+		if msg := s.validatePOExtras(r, &body); msg != "" {
+			respondWithError(w, http.StatusBadRequest, msg)
+			return
 		}
 		po := domain.PurchaseOrder{
 			ID:         id,
 			Number:     poNumber(id),
 			SupplierID: supplierID,
 			Status:     domain.POBorrador,
-			Items:      items,
+			Items:      poItemsFromRequest(body.Items),
 			Notes:      strings.TrimSpace(body.Notes),
+			RequiredBy: body.RequiredBy,
+			ExpectedAt: body.ExpectedAt,
 		}
 		if uid := actorID(claims); uid != "" {
 			po.CreatedBy = &uid
@@ -169,17 +218,15 @@ func (s *Server) HandlePurchaseOrderByID(w http.ResponseWriter, r *http.Request)
 			respondWithError(w, http.StatusBadRequest, "la orden necesita al menos un ítem válido (material + cantidad > 0)")
 			return
 		}
-		items := make([]domain.PurchaseOrderItem, 0, len(body.Items))
-		for _, it := range body.Items {
-			items = append(items, domain.PurchaseOrderItem{
-				Kind:       domain.StockMaterialKind(it.Kind),
-				MaterialID: strings.TrimSpace(it.MaterialID),
-				Quantity:   it.Quantity,
-			})
+		if msg := s.validatePOExtras(r, &body); msg != "" {
+			respondWithError(w, http.StatusBadRequest, msg)
+			return
 		}
 		current.SupplierID = strings.TrimSpace(body.SupplierID)
 		current.Notes = strings.TrimSpace(body.Notes)
-		current.Items = items
+		current.Items = poItemsFromRequest(body.Items)
+		current.RequiredBy = body.RequiredBy
+		current.ExpectedAt = body.ExpectedAt
 		if err := s.Store.UpdatePurchaseOrder(r.Context(), *current); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "no se pudo actualizar la orden de compra")
 			return

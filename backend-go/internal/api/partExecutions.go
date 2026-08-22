@@ -347,6 +347,7 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 	var updatedUnit *domain.ModuleUnitExecution
 	var readiness *domain.AssemblyReadiness
 	var gateBlocked *domain.AssemblyReadiness
+	var qcGateBlocked *domain.UnitQcGateResult
 	mutation, err := s.Store.MutateProjectPartExecutions(r.Context(), projectID, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
 		idx := -1
 		for i, u := range snap.Units {
@@ -389,6 +390,18 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 			}
 		}
 
+		// QC gate (OC-062): a unit only enters packaging with an approved QC
+		// checklist and no open quality issue — or an audited supervisor
+		// override recorded on its QC record.
+		if target == domain.ModuleUnitStatusPackaged && unit.Status == domain.ModuleUnitStatusModuleQC {
+			gate := domain.EvaluateUnitQcGate(snap.Quality, unit)
+			if !gate.Ready {
+				blocked := gate
+				qcGateBlocked = &blocked
+				return nil, fmt.Errorf("QC_GATE")
+			}
+		}
+
 		before := deriveItemStatuses(snap)
 		advanced, changed := domain.AdvanceModuleUnitStatus(unit, target, time.Now().UTC(), body.Notes)
 		if !changed {
@@ -426,6 +439,13 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 			respondWithJSON(w, http.StatusConflict, map[string]interface{}{
 				"error":              "el gate de armado bloquea el avance",
 				"assembly_readiness": *gateBlocked,
+			})
+			return
+		}
+		if qcGateBlocked != nil {
+			respondWithJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":    "el gate de QC bloquea el empaquetado de la unidad",
+				"qc_gate":  *qcGateBlocked,
 			})
 			return
 		}

@@ -1,0 +1,9 @@
+{
+  "comment": "Contract fixture de paridad TS↔Go (OC-050..OC-054, AGENTS.md): vocabularios del MRP ligero — estados de reserva de material y códigos de gates de liberación de material con evidencia.",
+  "reservationStatuses": ["active", "released", "consumed"],
+  "releaseCheckCodes": [
+    "requirements_derived",
+    "lines_reserved",
+    "reservations_backed"
+  ]
+}

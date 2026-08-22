@@ -129,6 +129,23 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/projects/{id}/units/{unitId}/advance", authMW(http.HandlerFunc(server.HandleAdvanceModuleUnit)))
 	mux.Handle("POST /api/projects/{id}/units/{unitId}/assembly-override", authMW(http.HandlerFunc(server.HandleAssemblyOverride)))
 
+	// Material planning (OC-050..OC-054, #302): requirements from the released
+	// BOM, reservations, shortage and the evidence-backed materials release.
+	mux.Handle("GET /api/projects/{id}/materials", authMW(http.HandlerFunc(server.HandleProjectMaterials)))
+	mux.Handle("POST /api/projects/{id}/materials/derive", authMW(http.HandlerFunc(server.HandleMaterialsDerive)))
+	mux.Handle("POST /api/projects/{id}/materials/reserve", authMW(http.HandlerFunc(server.HandleMaterialsReserve)))
+	mux.Handle("POST /api/projects/{id}/materials/consume", authMW(http.HandlerFunc(server.HandleMaterialsConsume)))
+	mux.Handle("POST /api/projects/{id}/materials/release", authMW(http.HandlerFunc(server.HandleMaterialsRelease)))
+
+	// Quality & rework (OC-060..OC-062, #302): issues, rework actions with
+	// job costing and the per-unit QC gate — server-authoritative.
+	mux.Handle("GET /api/projects/{id}/quality", authMW(http.HandlerFunc(server.HandleProjectQuality)))
+	mux.Handle("POST /api/projects/{id}/quality/issue", authMW(http.HandlerFunc(server.HandleQualityIssue)))
+	mux.Handle("POST /api/projects/{id}/quality/issue/{issueId}/transition", authMW(http.HandlerFunc(server.HandleQualityIssueTransition)))
+	mux.Handle("POST /api/projects/{id}/quality/rework", authMW(http.HandlerFunc(server.HandleQualityRework)))
+	mux.Handle("POST /api/projects/{id}/quality/qc/{unitId}", authMW(http.HandlerFunc(server.HandleQualityUnitQc)))
+	mux.Handle("POST /api/projects/{id}/quality/qc/{unitId}/override", authMW(http.HandlerFunc(server.HandleQualityUnitQcOverride)))
+
 	// Installation job (OC-070..OC-074, #303): visits, field issues, punch
 	// items and gated closeout — server-authoritative with audit events.
 	mux.Handle("GET /api/projects/{id}/installation", authMW(http.HandlerFunc(server.HandleProjectInstallation)))

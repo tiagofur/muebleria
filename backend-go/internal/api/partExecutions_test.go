@@ -1,6 +1,7 @@
 package api
 
 import (
+	"time"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -396,6 +397,20 @@ func TestPartExec_UnitAdvanceRecordsPackageCount(t *testing.T) {
 	store.partInstances[0].Status = domain.PartInstanceStatusReadyForAssembly
 	store.partInstances[0].RequiredOperations[0].Status = domain.PartOperationStatusCompleted
 	store.moduleUnits[0].Status = domain.ModuleUnitStatusModuleQC
+	// QC gate (OC-062): packaging requires an approved per-unit checklist.
+	passedAt := time.Date(2026, 8, 21, 11, 0, 0, 0, time.UTC)
+	store.qualityJob = &domain.QualityJob{UnitQC: []domain.UnitQcRecord{{
+		UnitID: "p1_i1_u1",
+		Checklist: []domain.UnitQcChecklistItem{
+			{Code: domain.QcCheckSquare, Passed: true},
+			{Code: domain.QcCheckDimensions, Passed: true},
+			{Code: domain.QcCheckHardware, Passed: true},
+			{Code: domain.QcCheckDoorsDrawers, Passed: true},
+			{Code: domain.QcCheckFinish, Passed: true},
+			{Code: domain.QcCheckIdentification, Passed: true},
+		},
+		PassedAt: &passedAt,
+	}}}
 
 	rr := doPartExec(srv, http.MethodPost, "/api/projects/p1/units/p1_i1_u1/advance",
 		string(domain.RoleProduccion), `{"target_status":"packaged","package_count":3}`)
@@ -404,6 +419,56 @@ func TestPartExec_UnitAdvanceRecordsPackageCount(t *testing.T) {
 	}
 	if store.moduleUnits[0].PackageCount == nil || *store.moduleUnits[0].PackageCount != 3 {
 		t.Fatalf("packaging must record package_count=3, got %+v", store.moduleUnits[0].PackageCount)
+	}
+}
+
+func TestPartExec_QCGateBlocksPackagingWithoutChecklist(t *testing.T) {
+	store, srv := partExecFixtures("rev-1")
+	store.partInstances[0].Status = domain.PartInstanceStatusReadyForAssembly
+	store.partInstances[0].RequiredOperations[0].Status = domain.PartOperationStatusCompleted
+	store.moduleUnits[0].Status = domain.ModuleUnitStatusModuleQC
+
+	rr := doPartExec(srv, http.MethodPost, "/api/projects/p1/units/p1_i1_u1/advance",
+		string(domain.RoleProduccion), `{"target_status":"packaged","package_count":1}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("QC gate must block packaging with 409, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Error  string                 `json:"error"`
+		QCGate domain.UnitQcGateResult `json:"qc_gate"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if body.QCGate.Ready || len(body.QCGate.Failing) == 0 {
+		t.Fatalf("QC gate response must carry the failing checks: %+v", body.QCGate)
+	}
+	if store.moduleUnits[0].Status != domain.ModuleUnitStatusModuleQC {
+		t.Fatal("the unit must stay in module_qc when the gate blocks")
+	}
+}
+
+func TestPartExec_QCGateOpenIssueBlocksPackaging(t *testing.T) {
+	store, srv := partExecFixtures("rev-1")
+	store.partInstances[0].Status = domain.PartInstanceStatusReadyForAssembly
+	store.partInstances[0].RequiredOperations[0].Status = domain.PartOperationStatusCompleted
+	store.moduleUnits[0].Status = domain.ModuleUnitStatusModuleQC
+	passedAt := time.Date(2026, 8, 21, 11, 0, 0, 0, time.UTC)
+	store.qualityJob = &domain.QualityJob{
+		UnitQC: []domain.UnitQcRecord{{
+			UnitID:    "p1_i1_u1",
+			Checklist: []domain.UnitQcChecklistItem{{Code: domain.QcCheckSquare, Passed: true}},
+			PassedAt:  &passedAt,
+		}},
+		Issues: []domain.QualityIssue{{
+			ID: "qiss-1", Description: "Cajón trabado", Category: domain.QualityCategoryArmado,
+			Status: domain.QualityIssueOpen, ModuleUnitID: "p1_i1_u1",
+			ReportedAt: passedAt,
+		}},
+	}
+
+	rr := doPartExec(srv, http.MethodPost, "/api/projects/p1/units/p1_i1_u1/advance",
+		string(domain.RoleProduccion), `{"target_status":"packaged","package_count":1}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("open issue must block packaging (409), got %d", rr.Code)
 	}
 }
 

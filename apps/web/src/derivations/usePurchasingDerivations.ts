@@ -190,11 +190,42 @@ export function usePurchasingDerivations(deps: PurchasingDerivationsDeps) {
   );
 
 
+  /**
+   * OC-050: requirement lines of a project's released BOM (herrajes por
+   * hardwareId con compra por paquete, tableros por planchas estimadas,
+   * cintillas por ml de canto) — the input for materializing the planning
+   * snapshot. Unlike stockDebitLinesFor, untracked materials are included:
+   * a requirement exists whether or not the warehouse tracks the material.
+   */
+  const requirementLinesFor = useCallback(
+    (
+      projectId: string,
+    ): Array<{ kind: StockMaterialKind; materialId: string; quantity: number }> => {
+      const project = purchasingProjects.find((p) => p.projectId === projectId);
+      if (!project) return [];
+      const lines: Array<{ kind: StockMaterialKind; materialId: string; quantity: number }> = [];
+      for (const h of project.hardware) {
+        if (h.hardwareId) lines.push({ kind: 'herrajes', materialId: h.hardwareId, quantity: h.purchaseQuantity });
+      }
+      for (const s of project.sheetEstimates ?? []) {
+        if (s.estimatedSheets > 0) lines.push({ kind: 'tableros', materialId: s.materialId, quantity: s.estimatedSheets });
+      }
+      const totals = computeProductionTotals(project.cutRows);
+      for (const e of totals.edges) {
+        const id = stockCatalog.edgeIdByCode[e.edgeBandCode ?? e.key];
+        if (id && e.ml > 0) lines.push({ kind: 'cintillas', materialId: id, quantity: e.ml });
+      }
+      return lines;
+    },
+    [purchasingProjects, stockCatalog],
+  );
+
   return {
     purchasingProjects,
     warehouseProjects,
     fabricMetricsByProject,
     moduleLabelForFabric,
     stockDebitLinesFor,
+    requirementLinesFor,
   };
 }
