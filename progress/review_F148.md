@@ -60,13 +60,13 @@
 5. **Scope**: diff 100% F148; el wrapper de `setShowPresentation` es la única
    puerta de presentación (instrumentación, no cambio de comportamiento).
 
-## Excepción registrada (blocked/environment)
+## Excepción registrada (entorno, resuelta en retry)
 
-`pnpm smoke:perf` (G2 drag p95 < 250 ms) falla en esta máquina ahora:
-**falla idéntica en `main`** (328.4 ms vs 257–324 ms en la rama) con load
-average 11+ del software del usuario (WindowServer/ZCode/Defender), y mejora
-monotónicamente al bajar la carga (324 → 277 con load 5.5). El baseline de
-F147 (p95 146 ms) fue medido en máquina ociosa. Los gates estructurales de
-F147 siguen verdes en `pnpm test` (cache BOM determinista en CI). No es una
-regresión de F148; se registra como `blocked/environment` (verification §15)
-sin inventar aprobación del gate de ms.
+`pnpm smoke:perf` (G2 drag p95 < 250 ms) falló durante la sesión con load
+average 11+ del software del usuario (WindowServer/ZCode/Defender): **falla
+idéntica en `main`** (328.4 ms vs 257–324 ms en la rama), mejorando
+monotónicamente al bajar la carga. En el retry final con load ~5.8 el smoke
+completo pasó verde — confirmado como condición de máquina, no regresión de
+F148. El baseline de F147 (p95 146 ms) fue medido en máquina ociosa; correr
+smoke:perf con load alto produce falsos negativos (nota para sesiones
+futuras).

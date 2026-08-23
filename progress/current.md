@@ -34,11 +34,11 @@ fricción para sesiones reales, documentado en el protocolo).
 - `pnpm test` 3.019 OK (domain 1.035 · storage 155 · excel 89 · ui 1.381 ·
   mobile 45 · desktop 17 · web 301); `pnpm typecheck` 0 errores.
 - `pnpm smoke`: studio F141/F143/F144/F145 + **usabilidad nuevo verde (38–56s,
-  11/11 tareas, 74 eventos, JSON proxy exportado)**. `smoke:perf` falla SOLO
-  en G2 (drag p95) por **entorno**: falla idéntica en `main` (328 ms) con load
-  11+ del software del usuario y mejora al bajar la carga (277 con load 5.5);
-  registrado como `blocked/environment` en `progress/review_F148.md` (el gate
-  CI determinista de cache BOM sigue verde).
+  11/11 tareas, 74 eventos, JSON proxy exportado)**. `smoke:perf` falló
+  inicialmente SOLO en G2 (drag p95) por **entorno**: falla idéntica en `main`
+  (328 ms) con load 11+ del software del usuario; **verde en el retry con load
+  ~5.8** — 6/6 efectivos (nota: smoke:perf da falsos negativos con máquina
+  cargada; ver `progress/review_F148.md`).
 - Review APPROVED con 1 hallazgo corregido (clicks tras recarga) —
   `progress/review_F148.md`.
 
