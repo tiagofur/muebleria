@@ -136,6 +136,14 @@ export interface ProjectModalsContainerProps {
     layout: import('@muebles/domain').ProjectKitchenLayout,
   ) => void;
   readonly onUpdateItem?: (projectId: string, item: ProjectItem) => void;
+  /** Elimina una línea de la cotización desde Proyectar (scope obra). */
+  readonly onRemoveItem?: (projectId: string, itemId: string) => void;
+  /** Re-inserta ítems eliminados (undo de Proyectar), con su id original. */
+  readonly onRestoreItems?: (
+    projectId: string,
+    items: readonly ProjectItem[],
+    order?: readonly string[],
+  ) => void;
   readonly onClose3DModal: () => void;
   readonly onCloseTemplatePicker: () => void;
   readonly onConfirmFromTemplate: (payload: {
@@ -208,6 +216,8 @@ export function ProjectModalsContainer({
   onCloseSpatialStudio,
   onUpdateKitchenLayout,
   onUpdateItem,
+  onRemoveItem,
+  onRestoreItems,
   onClose3DModal,
   onCloseTemplatePicker,
   onConfirmFromTemplate,
@@ -344,6 +354,17 @@ export function ProjectModalsContainer({
           onUpdateItem={
             canMutate && selectedProject.status === 'draft' && onUpdateItem
               ? (item) => onUpdateItem(selectedProject.id, item)
+              : undefined
+          }
+          onRemoveItem={
+            canMutate && selectedProject.status === 'draft' && onRemoveItem
+              ? (itemId) => onRemoveItem(selectedProject.id, itemId)
+              : undefined
+          }
+          onRestoreItems={
+            canMutate && selectedProject.status === 'draft' && onRestoreItems
+              ? (items, order) =>
+                  onRestoreItems(selectedProject.id, items, order)
               : undefined
           }
         />

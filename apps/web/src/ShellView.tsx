@@ -520,6 +520,11 @@ export interface ShellViewCtx {
   readonly renewPlanEditSession: (projectId: string) => boolean;
   readonly reopenProject: (id: string) => void;
   readonly resolveMediaUrl: (url: string | undefined) => string | undefined;
+  readonly restoreProjectItems: (
+    projectId: string,
+    items: readonly import('@muebles/domain').ProjectItem[],
+    order?: readonly string[],
+  ) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;
   readonly routeComponentEditId: string | null;
   readonly routeComponentId: string | null;
@@ -779,6 +784,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     renewPlanEditSession,
     reopenProject,
     resolveMediaUrl,
+    restoreProjectItems,
     restoreProjectVersion,
     routeComponentEditId,
     routeComponentId,
@@ -1767,6 +1773,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onAddItem={addProjectItem}
           onUpdateItem={updateProjectItem}
           onRemoveItem={removeProjectItem}
+          onRestoreItems={restoreProjectItems}
           onUpdateProjectLevelChoices={updateProjectLevelChoices}
           onUpdateMeasureDefaults={updateMeasureDefaults}
           onUpdateKitchenLayout={updateKitchenLayout}

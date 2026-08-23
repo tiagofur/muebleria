@@ -1494,6 +1494,7 @@ export function AppContent({
   const addProjectItem = projectActions.addProjectItem;
   const updateProjectItem = projectActions.updateProjectItem;
   const removeProjectItem = projectActions.removeProjectItem;
+  const restoreProjectItems = projectActions.restoreProjectItems;
   const updateProjectLevelChoices = projectActions.updateProjectLevelChoices;
   const updateMeasureDefaults = projectActions.updateMeasureDefaults;
   const updateInstallationChecklist = projectActions.updateInstallationChecklist;
@@ -2906,6 +2907,7 @@ export function AppContent({
     renewPlanEditSession,
     reopenProject,
     resolveMediaUrl,
+    restoreProjectItems,
     restoreProjectVersion,
     routeComponentEditId,
     routeComponentId,

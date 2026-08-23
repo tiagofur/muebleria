@@ -3,9 +3,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import {
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
 import { useState } from 'react';
-import type { Module, Project } from '@muebles/domain';
+import { pruneKitchenLayout, type Module, type Project } from '@muebles/domain';
 
 vi.mock('../../preview3d', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../preview3d')>();
@@ -2304,23 +2310,16 @@ describe('ProjectSpatialStudio F143 — comandos', () => {
     ).toBe(false);
   });
 
-  it('Ctrl+D duplica y Delete quita la selección del plano', () => {
-    const { onChangeLayout, onUpdateItem } = setup();
+  it('Delete pregunta el alcance; default (sólo plano) quita del plano', () => {
+    const { onChangeLayout } = setup();
     fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
-    fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
-    expect(onUpdateItem).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'it-a', quantity: 2 }),
-    );
-    // la copia quedó seleccionada: Delete la quita del plano
     fireEvent.keyDown(window, { key: 'Delete' });
+    fireEvent.click(screen.getByTestId('studio-delete-confirm'));
     const layout = lastLayout(onChangeLayout);
     expect(
-      layout?.placements.some((p) => p.itemId === 'it-a' && p.instanceIndex === 1),
-    ).toBe(false);
-    // el original y it-b quedan intactos
-    expect(
       layout?.placements.some((p) => p.itemId === 'it-a' && p.instanceIndex === 0),
-    ).toBe(true);
+    ).toBe(false);
+    // it-b queda intacto y la cotización no se toca (scope plano)
     expect(layout?.placements.some((p) => p.itemId === 'it-b')).toBe(true);
   });
 
@@ -3000,5 +2999,218 @@ describe('ProjectSpatialStudio — dock de tableros (F142)', () => {
     });
     fireEvent.click(screen.getByTestId('mock-board-drop-hit'));
     expect(onUpdateProjectLevelChoice).toHaveBeenCalledWith('FRENTE', 'mat-1');
+  });
+});
+
+// ── Eliminar con alcance: sólo del plano vs obra ────────────────────────────
+
+describe('ProjectSpatialStudio — eliminar con alcance', () => {
+  function setup(over?: { project?: Project }) {
+    const onChangeLayout = vi.fn();
+    const onUpdateItem = vi.fn();
+    const onRemoveItem = vi.fn();
+    const onRestoreItems = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={over?.project ?? placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+        onUpdateItem={onUpdateItem}
+        onRemoveItem={onRemoveItem}
+        onRestoreItems={onRestoreItems}
+      />,
+    );
+    return { onChangeLayout, onUpdateItem, onRemoveItem, onRestoreItems };
+  }
+
+  const chooseProjectScope = () => {
+    fireEvent.click(
+      screen.getByTestId('studio-delete-option-project').querySelector('input')!,
+    );
+  };
+
+  it('Delete abre el diálogo de alcance; Cancelar no toca nada', () => {
+    const { onChangeLayout, onRemoveItem } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'Delete' });
+    // ambos alcances disponibles para una selección colocada
+    expect(screen.getByTestId('studio-delete-option-plan')).toBeTruthy();
+    expect(screen.getByTestId('studio-delete-option-project')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('studio-delete-cancel'));
+    expect(onRemoveItem).not.toHaveBeenCalled();
+    expect(onChangeLayout).not.toHaveBeenCalled();
+    // el diálogo se desmonta (animación de cierre del Modal)
+    return waitFor(() =>
+      expect(screen.queryByTestId('studio-delete-confirm')).toBeNull(),
+    );
+  });
+
+  it('eliminar del proyecto quita la línea completa (todas las copias)', () => {
+    const qtyProject: Project = {
+      ...placedProject,
+      items: [
+        { ...placedProject.items[0]!, quantity: 2 },
+        placedProject.items[1]!,
+      ],
+    };
+    const { onRemoveItem } = setup({ project: qtyProject });
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-delete'));
+    chooseProjectScope();
+    // la línea se muestra con su cantidad total antes de confirmar
+    expect(screen.getByTestId('studio-delete-targets').textContent).toContain(
+      '×2',
+    );
+    fireEvent.click(screen.getByTestId('studio-delete-confirm'));
+    expect(onRemoveItem).toHaveBeenCalledTimes(1);
+    expect(onRemoveItem).toHaveBeenCalledWith('it-a');
+  });
+
+  it('eliminar del proyecto: undo restaura ítems y plano; redo vuelve a eliminar', () => {
+    const onRemoveItem = vi.fn();
+    const onRestoreItems = vi.fn();
+    // Host con estado: replica el store real (remove poda plano, restore
+    // re-inserta con el id original) para ejercitar undo/redo de verdad.
+    function Host() {
+      const [proj, setProj] = useState<Project>(placedProject);
+      return (
+        <ProjectSpatialStudio
+          open
+          project={proj}
+          modules={[modA]}
+          catalog={catalog}
+          canEdit
+          onClose={vi.fn()}
+          onChangeLayout={(next) =>
+            setProj((p) => ({ ...p, kitchenLayout: next }))
+          }
+          onRemoveItem={(itemId) => {
+            onRemoveItem(itemId);
+            setProj((p) => {
+              const items = p.items.filter((i) => i.id !== itemId);
+              return {
+                ...p,
+                items,
+                kitchenLayout: p.kitchenLayout
+                  ? pruneKitchenLayout(p.kitchenLayout, items)
+                  : p.kitchenLayout,
+              };
+            });
+          }}
+          onRestoreItems={(items, order) => {
+            onRestoreItems(items, order);
+            setProj((p) => {
+              const known = new Set(p.items.map((i) => i.id));
+              const restored = items.filter((it) => !known.has(it.id));
+              // mismo contrato que el store: insertar antes del primer
+              // sobreviviente posterior en el orden original
+              let next = [...p.items];
+              for (const it of restored) {
+                const idx = order?.indexOf(it.id) ?? -1;
+                const successors = new Set(
+                  idx >= 0 && order ? order.slice(idx + 1) : [],
+                );
+                const at = next.findIndex((cur) => successors.has(cur.id));
+                next.splice(at >= 0 ? at : next.length, 0, it);
+              }
+              return { ...p, items: next };
+            });
+          }}
+        />
+      );
+    }
+    render(<Host />);
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-cmd-delete'));
+    chooseProjectScope();
+    fireEvent.click(screen.getByTestId('studio-delete-confirm'));
+    expect(onRemoveItem).toHaveBeenCalledWith('it-a');
+    // la fila colocada desaparece con la línea
+    expect(screen.queryByTestId('spatial-studio-placed-it-a-0')).toBeNull();
+
+    // undo: la línea vuelve con su id original y su colocación en el plano,
+    // y viaja el orden original de la lista para restaurar la posición
+    fireEvent.click(screen.getByTestId('spatial-studio-undo'));
+    expect(onRestoreItems).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'it-a' })]),
+      ['it-a', 'it-b'],
+    );
+    expect(screen.getByTestId('spatial-studio-placed-it-a-0')).toBeTruthy();
+
+    // redo: la eliminación se vuelve a aplicar
+    fireEvent.click(screen.getByTestId('spatial-studio-redo'));
+    expect(onRemoveItem).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('spatial-studio-placed-it-a-0')).toBeNull();
+
+    // undo tras redo: restaura de nuevo y el orden de la lista sigue
+    // viajando (la contracara de la contracara conserva itemOrderBefore)
+    fireEvent.click(screen.getByTestId('spatial-studio-undo'));
+    expect(onRestoreItems).toHaveBeenCalledTimes(2);
+    expect(onRestoreItems).toHaveBeenLastCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'it-a' })]),
+      ['it-a', 'it-b'],
+    );
+    expect(screen.getByTestId('spatial-studio-placed-it-a-0')).toBeTruthy();
+  });
+
+  it('selección sin colocar: sólo ofrece quitar de la obra', () => {
+    const unplacedOnly: Project = {
+      ...placedProject,
+      kitchenLayout: {
+        walls: placedProject.kitchenLayout!.walls,
+        placements: [placedProject.kitchenLayout!.placements[1]!],
+      },
+    };
+    const { onRemoveItem } = setup({ project: unplacedOnly });
+    fireEvent.click(screen.getByTestId('spatial-studio-unplaced-it-a-0'));
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.queryByTestId('studio-delete-option-plan')).toBeNull();
+    fireEvent.click(screen.getByTestId('studio-delete-confirm'));
+    expect(onRemoveItem).toHaveBeenCalledWith('it-a');
+  });
+
+  it('multi-selección elimina las líneas de ambos ítems', () => {
+    const { onRemoveItem } = setup();
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-b-0'), {
+      ctrlKey: true,
+    });
+    fireEvent.keyDown(window, { key: 'Delete' });
+    chooseProjectScope();
+    fireEvent.click(screen.getByTestId('studio-delete-confirm'));
+    expect(onRemoveItem).toHaveBeenCalledWith('it-a');
+    expect(onRemoveItem).toHaveBeenCalledWith('it-b');
+  });
+
+  it('sin onRemoveItem el alcance obra se bloquea y explica por qué', () => {
+    render(
+      <ProjectSpatialStudio
+        open
+        project={placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('spatial-studio-placed-it-a-0'));
+    fireEvent.keyDown(window, { key: 'Delete' });
+    const radio = screen
+      .getByTestId('studio-delete-option-project')
+      .querySelector('input')! as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+    expect(screen.getByTestId('studio-delete-option-project').textContent).toContain(
+      'La obra no permite quitar muebles de la cotización',
+    );
+    // el alcance plano (default) sigue disponible
+    expect(
+      (screen.getByTestId('studio-delete-confirm') as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 });

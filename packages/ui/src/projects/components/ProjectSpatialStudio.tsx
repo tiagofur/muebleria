@@ -186,6 +186,11 @@ import {
 } from './studioSelection';
 import { StudioSelectionBar } from './StudioSelectionBar';
 import {
+  StudioDeleteDialog,
+  type StudioDeleteScope,
+  type StudioDeleteTarget,
+} from './StudioDeleteDialog';
+import {
   pushPlanHistory,
   redoLabelOf,
   undoLabelOf,
@@ -212,6 +217,20 @@ export type ProjectSpatialStudioProps = {
   readonly onChangeLayout: (layout: ProjectKitchenLayout) => void;
   /** Update a quote line (measures / options) — same as list editor. */
   readonly onUpdateItem?: (item: ProjectItem) => void;
+  /**
+   * Elimina una línea de la cotización (lista de muebles). El prune del
+   * layout lo hace el store; el studio restaura en undo vía onRestoreItems.
+   */
+  readonly onRemoveItem?: (itemId: string) => void;
+  /**
+   * Re-inserta ítems eliminados (undo de "Eliminar del proyecto"), id
+   * original. `order` (ids antes de eliminar) permite restaurar cada línea
+   * en su posición original en la lista de muebles.
+   */
+  readonly onRestoreItems?: (
+    items: readonly ProjectItem[],
+    order?: readonly string[],
+  ) => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   /** Project sale total (read-only context in chrome). */
   readonly quoteSalePrice?: number | null;
@@ -383,6 +402,8 @@ export function ProjectSpatialStudio({
   onClose,
   onChangeLayout,
   onUpdateItem,
+  onRemoveItem,
+  onRestoreItems,
   resolveMediaUrl,
   quoteSalePrice = null,
   bootstrap = null,
@@ -468,6 +489,8 @@ export function ProjectSpatialStudio({
   const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [undoStack, setUndoStack] = useState<PlanHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<PlanHistoryEntry[]>([]);
+  /** Eliminar con alcance: diálogo «¿sólo del plano o también de la obra?». */
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showFloorGrid, setShowFloorGrid] = useState(true);
   const [lightingMode, setLightingMode] = useState<SceneLightingMode>(
     DEFAULT_SCENE_LIGHTING_MODE,
@@ -682,7 +705,8 @@ export function ProjectSpatialStudio({
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        handleRemoveSelectionFromPlan();
+        // Eliminar pregunta el alcance (sólo plano vs obra) antes de actuar.
+        if (selection.keys.length > 0) setDeleteDialogOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -1185,6 +1209,59 @@ export function ProjectSpatialStudio({
     [preview.walls],
   );
 
+  // ── Eliminar con alcance: sólo del plano 3D o también de la obra ─────────
+  // (hooks antes del early return de `!open`: el orden debe ser estable)
+
+  /** Alguna instancia seleccionada está colocada (el alcance "sólo 3D" aplica). */
+  const hasPlacedSelection = useMemo(
+    () =>
+      selection.keys.some((key) => {
+        const parsed = parsePlacementKey(key);
+        if (!parsed) return false;
+        return layout.placements.some(
+          (p) =>
+            p.itemId === parsed.itemId &&
+            p.instanceIndex === parsed.instanceIndex,
+        );
+      }),
+    [selection.keys, layout.placements],
+  );
+
+  /** Líneas de la cotización (lista de muebles) afectadas por el scope obra. */
+  const deleteTargets = useMemo<readonly StudioDeleteTarget[]>(() => {
+    const ids = new Set(
+      selection.keys
+        .map((key) => parsePlacementKey(key)?.itemId)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+    const targets: StudioDeleteTarget[] = [];
+    for (const item of project.items) {
+      if (!ids.has(item.id)) continue;
+      const mod = modules.find((m) => m.id === item.moduleId);
+      const allForItem = allKitchenPlacements(baseLayout).filter(
+        (p) => p.itemId === item.id,
+      );
+      const activeForItem = baseLayout.placements.filter(
+        (p) => p.itemId === item.id,
+      );
+      targets.push({
+        itemId: item.id,
+        code: mod?.code?.trim() || '—',
+        name: mod?.name?.trim() || item.id,
+        quantity: item.quantity,
+        otherSpacesPlacements: Math.max(
+          0,
+          allForItem.length - activeForItem.length,
+        ),
+      });
+    }
+    return targets;
+  }, [selection.keys, project.items, modules, baseLayout]);
+
+  // Sin selección no hay nada que eliminar: el diálogo se cierra solo.
+  useEffect(() => {
+    if (selection.keys.length === 0) setDeleteDialogOpen(false);
+  }, [selection.keys.length]);
 
   if (!open) return null;
 
@@ -1477,8 +1554,13 @@ export function ProjectSpatialStudio({
    * completos (quantity, customDims…; viajan por onUpdateItem). Las claves
    * cuyos índices serían stale para el prune actual pasan como extra hasta
    * que el proyecto re-renderice con el quantity restaurado.
+   *
+   * Eliminación de ítems ("Eliminar del proyecto"): los snapshots ausentes
+   * en project.items se restauran por onRestoreItems (id original); los
+   * removedItemIds presentes se vuelven a quitar (redo de la eliminación).
    */
   const applyHistoryEntry = (entry: PlanHistoryEntry) => {
+    const restored: ProjectItem[] = [];
     for (const snap of entry.itemSnapshots) {
       const item = project.items.find((i) => i.id === snap.id);
       if (item) {
@@ -1489,27 +1571,57 @@ export function ProjectSpatialStudio({
           quantity: snap.quantity,
           customDims: snap.customDims,
         });
+      } else {
+        restored.push(snap);
       }
     }
+    if (restored.length > 0) onRestoreItems?.(restored, entry.itemOrderBefore);
+    for (const removedId of entry.removedItemIds ?? []) {
+      if (project.items.some((i) => i.id === removedId)) {
+        onRemoveItem?.(removedId);
+      }
+    }
+    const restoredIds = new Set(restored.map((i) => i.id));
     const restoredItems = new Set(entry.itemSnapshots.map((p) => p.id));
     const extraKeys = entry.layout.placements
       .filter((p) => {
         if (!restoredItems.has(p.itemId)) return false;
+        // Restaurados: sus placements viajan protegidos por extraItemIds.
+        if (restoredIds.has(p.itemId)) return false;
         const current = project.items.find((i) => i.id === p.itemId)?.quantity;
         return current !== undefined && p.instanceIndex >= Math.max(1, current);
       })
       .map((p) => `${p.itemId}#${p.instanceIndex}`);
     onChangeLayout(
-      pruneKitchenLayout(entry.layout, project.items, [], extraKeys),
+      pruneKitchenLayout(
+        entry.layout,
+        project.items,
+        [...restoredIds],
+        extraKeys,
+      ),
     );
   };
 
-  /** Contracara "después" de la entrada: snapshot de los ítems afectados tal como están ahora. */
-  const currentItemSnapshotsOf = (
-    snapshots: readonly ProjectItem[],
-  ): readonly ProjectItem[] => {
-    const ids = new Set(snapshots.map((s) => s.id));
-    return project.items.filter((i) => ids.has(i.id));
+  /**
+   * Contracara de una entrada para el stack inverso: ítems que existen HOY
+   * entre los tocados (snapshots + removed) como snapshots completos; los
+   * ausentes hoy como removedItemIds (así el redo de una eliminación vuelve
+   * a quitar las líneas restauradas por el undo). El orden de la lista
+   * viaja con la contracara: un undo tras redo también restaura posiciones.
+   */
+  const historyCounterpartOf = (entry: PlanHistoryEntry) => {
+    const tracked = [
+      ...entry.itemSnapshots.map((s) => s.id),
+      ...(entry.removedItemIds ?? []),
+    ];
+    const known = new Set(project.items.map((i) => i.id));
+    return {
+      itemSnapshots: project.items.filter((i) => tracked.includes(i.id)),
+      removedItemIds: tracked.filter((id) => !known.has(id)),
+      ...(entry.itemOrderBefore
+        ? { itemOrderBefore: entry.itemOrderBefore }
+        : {}),
+    };
   };
 
   const undoPlan = () => {
@@ -1521,7 +1633,7 @@ export function ProjectSpatialStudio({
       {
         intent: prev.intent,
         layout,
-        itemSnapshots: currentItemSnapshotsOf(prev.itemSnapshots),
+        ...historyCounterpartOf(prev),
         ts: Date.now(),
       },
     ]);
@@ -1538,7 +1650,7 @@ export function ProjectSpatialStudio({
       {
         intent: next.intent,
         layout,
-        itemSnapshots: currentItemSnapshotsOf(next.itemSnapshots),
+        ...historyCounterpartOf(next),
         ts: Date.now(),
       },
     ]);
@@ -1736,6 +1848,52 @@ export function ProjectSpatialStudio({
       },
       { intent: 'Quitar del plano' },
     );
+  };
+
+  // ── Eliminar con alcance: sólo del plano 3D o también de la obra ─────────
+
+  /**
+   * Ejecuta la eliminación con el alcance elegido. "Plano" es el unplace
+   * existente (undo vía layout). "Obra" elimina las líneas completas: el
+   * snapshot de history restaura ítems y plano en el undo (North Star §12).
+   */
+  const handleConfirmDelete = (scope: StudioDeleteScope) => {
+    setDeleteDialogOpen(false);
+    if (!canEdit || selection.keys.length === 0) return;
+    if (scope === 'plan') {
+      handleRemoveSelectionFromPlan();
+      trackUsability('delete', {
+        scope: 'plan',
+        count: selection.keys.length,
+      });
+      return;
+    }
+    if (!onRemoveItem) return;
+    const targetIds = new Set(deleteTargets.map((t) => t.itemId));
+    const affected = project.items.filter((item) => targetIds.has(item.id));
+    if (affected.length === 0) return;
+    setUndoStack((s) => [
+      ...pushPlanHistory(s, {
+        intent:
+          affected.length === 1
+            ? 'Eliminar mueble de la obra'
+            : `Eliminar ${affected.length} muebles de la obra`,
+        layout,
+        itemSnapshots: affected,
+        // Posiciones originales: el undo restaura cada línea en su lugar.
+        itemOrderBefore: project.items.map((i) => i.id),
+        ts: Date.now(),
+      }),
+    ]);
+    setRedoStack([]);
+    // El store quita también los placements de las líneas eliminadas.
+    for (const item of affected) onRemoveItem(item.id);
+    trackUsability('delete', {
+      scope: 'project',
+      items: affected.length,
+      instances: selection.keys.length,
+    });
+    setSelection(EMPTY_STUDIO_SELECTION);
   };
 
   // ── F144: precisión — nudge de teclado, fit selección, update de ítem ──
@@ -3991,6 +4149,20 @@ export function ProjectSpatialStudio({
             onCenter={handleCenterOnWall}
             onFitSelection={fitSelection}
             onRemoveFromPlan={handleRemoveSelectionFromPlan}
+            onDelete={() => {
+              if (canEdit && selection.keys.length > 0) {
+                setDeleteDialogOpen(true);
+              }
+            }}
+          />
+
+          <StudioDeleteDialog
+            open={deleteDialogOpen}
+            targets={deleteTargets}
+            hasPlacedSelection={hasPlacedSelection}
+            canRemoveFromProject={Boolean(onRemoveItem)}
+            onCancel={() => setDeleteDialogOpen(false)}
+            onConfirm={handleConfirmDelete}
           />
 
           {showPlan2d && planMini ? (

@@ -21,6 +21,7 @@ import {
   Crosshair,
   Focus,
   ListX,
+  Trash2,
 } from 'lucide-react';
 
 export type StudioSelectionBarProps = {
@@ -47,6 +48,11 @@ export type StudioSelectionBarProps = {
   ) => void;
   readonly onCenter: () => void;
   readonly onRemoveFromPlan: () => void;
+  /**
+   * Eliminar con alcance: abre el diálogo que pregunta si sólo del plano 3D
+   * o también de la lista de muebles de la obra.
+   */
+  readonly onDelete: () => void;
   /** F144 — encuadrar la cámara en la selección (acción de vista). */
   readonly onFitSelection: () => void;
 };
@@ -69,6 +75,7 @@ export function StudioSelectionBar({
   onAlignIslands,
   onCenter,
   onRemoveFromPlan,
+  onDelete,
   onFitSelection,
 }: StudioSelectionBarProps): ReactNode {
   if (count === 0) return null;
@@ -310,6 +317,20 @@ export function StudioSelectionBar({
         data-testid="spatial-studio-cmd-remove-plan"
       >
         <ListX size={14} strokeWidth={1.5} aria-hidden /> Quitar del plano
+      </button>
+
+      <button
+        type="button"
+        className="btn btn--small btn--danger"
+        onClick={onDelete}
+        disabled={!canEdit}
+        title={
+          readOnlyTitle ??
+          'Eliminar la selección (elegís si sólo del plano o también de la lista de muebles)'
+        }
+        data-testid="spatial-studio-cmd-delete"
+      >
+        <Trash2 size={14} strokeWidth={1.5} aria-hidden /> Eliminar
       </button>
 
       {status ? (

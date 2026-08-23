@@ -8,6 +8,10 @@
  * de una ventana de tiempo se pliegan: la ráfaga "←←←" es UNA entrada cuyo
  * before sigue siendo el estado original.
  *
+ * `removedItemIds` cubre la eliminación de ítems de la obra: la entrada que
+ * restaura el ítem lleva su snapshot completo; la contracara (redo) lleva el
+ * id para volver a quitarlo.
+ *
  * No usamos el CommandManager genérico de domain: el estado del plano vive en
  * el componente padre y viaja por callbacks (onChangeLayout/onUpdateItem);
  * replicamos sus semánticas (límite, labels, redo-clear) sobre snapshots.
@@ -25,6 +29,18 @@ export type PlanHistoryEntry = {
   readonly layout: ProjectKitchenLayout;
   /** Ítems completos antes de la intención (quantity, customDims, …). */
   readonly itemSnapshots: readonly ProjectItem[];
+  /**
+   * Ítems ausentes en el estado destino de la entrada: al aplicar la entrada
+   * se eliminan de la obra (contra cara del undo de "Eliminar del proyecto").
+   * Los snapshots completos viajan en la entrada que restaura el ítem.
+   */
+  readonly removedItemIds?: readonly string[];
+  /**
+   * Orden completo de los ids de project.items ANTES de la intención (sólo
+   * la llenan intents que eliminan ítems). El undo restaura cada ítem en su
+   * posición original relativa: antes de su primer sobreviviente posterior.
+   */
+  readonly itemOrderBefore?: readonly string[];
   /** Clave de coalescing (ej. 'nudge'); sin clave = siempre entrada nueva. */
   readonly coalesceKey?: string;
   /** Marca temporal (ms) para la ventana de coalescing. */
