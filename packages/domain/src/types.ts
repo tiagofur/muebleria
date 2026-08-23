@@ -810,6 +810,51 @@ export interface ProjectProductionState {
 export type PlacementElevation = 'floor' | 'wall';
 
 /**
+ * Kind of wall opening (F145/#311). Presentation-only — never reaches BOM.
+ */
+export type WallOpeningKind = 'window' | 'door' | 'pass';
+
+export const WALL_OPENING_KINDS: readonly WallOpeningKind[] = [
+  'window',
+  'door',
+  'pass',
+];
+
+export const WALL_OPENING_KIND_LABELS_ES: Readonly<
+  Record<WallOpeningKind, string>
+> = {
+  window: 'Ventana',
+  door: 'Puerta',
+  pass: 'Pasaje',
+};
+
+/** Kind defaults (mm) when the caller omits height/sill. */
+export const WALL_OPENING_DEFAULTS_MM: Readonly<
+  Record<WallOpeningKind, { readonly heightMm: number; readonly sillMm: number }>
+> = {
+  window: { heightMm: 1200, sillMm: 900 },
+  door: { heightMm: 2100, sillMm: 0 },
+  pass: { heightMm: 900, sillMm: 1050 },
+};
+
+/**
+ * A hole in a wall: window, door or pass-through (F145/#311).
+ * `offsetMm` runs along the wall from its start; `sillMm` is the bottom
+ * height from the floor (0 for doors). Presentation-only — never in BOM.
+ */
+export interface WallOpening {
+  readonly id: string;
+  readonly kind: WallOpeningKind;
+  /** Distance along the wall from its start (mm). */
+  readonly offsetMm: number;
+  readonly widthMm: number;
+  /** Vertical size (mm). Omit = kind default (window 1200 / door 2100 / pass 900). */
+  readonly heightMm?: number;
+  /** Bottom height from floor (mm). Omit = kind default (window 900 / door 0 / pass 1050). */
+  readonly sillMm?: number;
+}
+
+/**
  * Straight wall segment in plan (mm).
  * angleDeg: 0 = along +X, 90 = along +Y (L kitchen).
  */
@@ -824,6 +869,8 @@ export interface KitchenWall {
   readonly originYMm?: number;
   /** Optional per-wall ambient material override. Omit = inherit space wallMaterialId. */
   readonly wallMaterialId?: string;
+  /** Wall openings (windows/doors/passes). Presentation-only — never in BOM. */
+  readonly openings?: readonly WallOpening[];
 }
 
 /** How a quote unit is anchored in the kitchen plan. Default `wall`. */

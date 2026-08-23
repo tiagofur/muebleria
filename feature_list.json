@@ -3307,6 +3307,36 @@
       "status": "done",
       "createdAt": "2026-08-22",
       "completedAt": "2026-08-22"
+    },
+    {
+      "id": "F145",
+      "phase": 0,
+      "name": "proyectar_environment_multispace",
+      "title": "Issue #311 P3D-4 — Environment authoring + multi-ambiente 5★ en Proyectar (meta #308, etapa E5)",
+      "description": "North Star §§13–14: crear/navegar ambientes tan confiable como colocar muebles. Authoring de muros dentro del studio: tarjetas editables por muro en el inspector Ambiente (nombre, largo mm, ángulo con chips 0/90/180/270 + numérico, origen avanzado colapsado) con commits en blur/Enter como UNA intención (CommitOnBlurInput, bar F144); Agregar muro encadena desde el último extremo girando +90° (rectángulos naturales); Quitar muro descoloca sus muebles y el mensaje enseña el conteo. Huecos (WallOpening window/door/pass, presentation-only jamás en BOM) en KitchenWall con comandos puros kitchenEnvironmentCommands.ts: add/update/remove con ValidationError que enseña (hueco fuera del muro, solape, altura > muro, acortar muro bajo hueco), alta rápida en el primer tramo libre con defaults por tipo. splitWallSegments (geometría pura) parte el muro en boxes sólidos alrededor de huecos → 3D con huecos REALES sin CSG (WallMesh/WallAmbientMesh por segmentos + vidrio translúcido en ventanas) y planta 2D con vanos punteados. kitchenLayoutWarnings avisa mueble que tapa hueco y hueco que sobresale. fit room (botón Ajustar) encuadra muros+muebles con la cámara fit-selection; Ocultar muros atenúa (fantasma 0.12) los muros entre cámara y ambiente (wallsOccludingCamera puro, tracker con guard por contenido del set — la órbita no re-renderiza); cámara por ambiente: switch re-encuadra con la vista recordada del espacio destino. Storage: apiMappers openings snake_case con round-trip test (backend guarda blob JSON, sin cambios Go). Subplan SDD: issue #311 comment 5384066402. Nota de orden: current.md post-F144 apuntaba #313 primero; decisión explícita del usuario adelantó #311.",
+      "acceptance": [
+        "Inspector Ambiente: muros editables (nombre/largo/ángulo/origen avanzado) sin salir del editor; commits en blur/Enter como una intención de undo etiquetada",
+        "Agregar muro encadena +90° desde el último extremo; quitar muro descoloca sus muebles con mensaje que enseña el conteo (política de ownership documentada)",
+        "Huecos ventana/puerta/pasaje con validaciones de dominio que enseñan (fuera de muro, solape, altura) y warnings de mueble tapando hueco; nunca tocan BOM/precio",
+        "3D renderiza muros por splitWallSegments con huecos reales (sin CSG) y vidrio en ventanas; planta 2D muestra vanos punteados con tooltip",
+        "Toolbar: Ajustar (fit room) encuadra el ambiente completo; Ocultar muros atenúa los que bloquean (aria-pressed, default off, guard de performance por contenido)",
+        "Cambio de ambiente re-encuadra con la vista recordada del espacio destino; agregar muro en un espacio no toca los demás; sin mezcla de geometrías",
+        "Round-trip storage de openings (snake_case) verdes; legacy sin openings tolerado",
+        "pnpm test + typecheck verdes (2.952 tests); smoke WebGL real 4/4 incl. F145 multi-ambiente con screenshot revisado"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "docs/proyectar-3d-roadmap-vnext.md",
+        "packages/domain/src/kitchenEnvironmentCommands.ts",
+        "packages/domain/src/kitchenLayout.ts",
+        "packages/storage/src/apiMappers.ts",
+        "packages/ui/src/preview3d/FurnitureScene3D.tsx",
+        "packages/ui/src/preview3d/AmbientMeshes.tsx",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx",
+        "tests/smoke/proyectar-studio.spec.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23"
     }
   ]
 }

@@ -14,7 +14,9 @@ import type {
   ProjectItem,
   ProjectItemPlacement,
   ProjectKitchenLayout,
+  WallOpening,
 } from './types';
+import { WALL_OPENING_KIND_LABELS_ES } from './types';
 
 /** Default space id for legacy single-space layouts. */
 export const DEFAULT_KITCHEN_SPACE_ID = 'space-main';
@@ -54,6 +56,8 @@ export type ResolvedWallFrame = {
   readonly endYMm: number;
   /** Optional per-wall ambient material override (propagated from KitchenWall). */
   readonly wallMaterialId?: string;
+  /** Wall openings (F145/#311, presentation-only). */
+  readonly openings?: readonly WallOpening[];
 };
 
 export type KitchenPlacedModule = {
@@ -350,6 +354,7 @@ export function resolveWallFrames(
       endXMm,
       endYMm,
       wallMaterialId: w.wallMaterialId,
+      ...(w.openings && w.openings.length > 0 ? { openings: w.openings } : {}),
     });
     cursorX = endXMm;
     cursorY = endYMm;
@@ -441,6 +446,33 @@ export function kitchenLayoutWarnings(
       if (a.offsetMm + aw > b.offsetMm + 1) {
         warnings.push('Hay solape entre muebles en el mismo muro.');
         break;
+      }
+    }
+  }
+
+  // F145 — openings: furniture covering a hole, or a hole beyond its wall.
+  for (const wall of layout.walls) {
+    const openings = wall.openings ?? [];
+    if (openings.length === 0) continue;
+    const wallName = wall.name?.trim() || 'el muro';
+    for (const o of openings) {
+      const label = WALL_OPENING_KIND_LABELS_ES[o.kind];
+      if (o.offsetMm < 0 || o.offsetMm + o.widthMm > wall.lengthMm + 1) {
+        warnings.push(
+          `La ${label.toLowerCase()} del muro «${wallName}» sobresale del muro.`,
+        );
+        continue;
+      }
+      for (const p of layout.placements) {
+        if (isFreePlacement(p) || p.wallId !== wall.id) continue;
+        if (!wallById.has(p.wallId)) continue;
+        const width = fpByKey.get(`${p.itemId}#${p.instanceIndex}`)?.width ?? 600;
+        if (p.offsetMm < o.offsetMm + o.widthMm - 1 && o.offsetMm < p.offsetMm + width - 1) {
+          warnings.push(
+            `Un mueble tapa la ${label.toLowerCase()} del muro «${wallName}» (a ${Math.round(o.offsetMm)} mm). Reubicá el mueble o el hueco.`,
+          );
+          break;
+        }
       }
     }
   }

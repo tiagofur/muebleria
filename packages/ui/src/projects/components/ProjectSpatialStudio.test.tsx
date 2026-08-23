@@ -2601,3 +2601,206 @@ describe('ProjectSpatialStudio F144 — precisión y a medida', () => {
     ]);
   });
 });
+
+describe('ProjectSpatialStudio F145 — environment authoring + multi-ambiente', () => {
+  function setup(over?: { project?: Project }) {
+    const onChangeLayout = vi.fn();
+    render(
+      <ProjectSpatialStudio
+        open
+        project={over?.project ?? placedProject}
+        modules={[modA]}
+        catalog={catalog}
+        canEdit
+        onClose={vi.fn()}
+        onChangeLayout={onChangeLayout}
+      />,
+    );
+    return { onChangeLayout };
+  }
+
+  const openWallEditor = () => {
+    fireEvent.click(screen.getByTestId('spatial-studio-wall-w1'));
+    return screen.getByTestId('spatial-studio-wall-editor-w1');
+  };
+
+  it('agregar muro encadena desde el último extremo girando 90°', () => {
+    const { onChangeLayout } = setup();
+    fireEvent.change(screen.getByTestId('spatial-studio-new-wall-length'), {
+      target: { value: '2500' },
+    });
+    fireEvent.click(screen.getByTestId('spatial-studio-add-wall'));
+    const layout = onChangeLayout.mock.calls.at(-1)![0];
+    expect(layout.walls).toHaveLength(2);
+    expect(layout.walls[1]!.lengthMm).toBe(2500);
+    expect(layout.walls[1]!.angleDeg).toBe(90);
+    expect(layout.walls[1]!.originXMm).toBe(3000);
+  });
+
+  it('editar largo del muro commitea en blur como una intención', () => {
+    const { onChangeLayout } = setup();
+    openWallEditor();
+    const length = screen.getByTestId('spatial-studio-wall-length');
+    fireEvent.change(length, { target: { value: '4000' } });
+    // Tipear no commitea (bar F144: una intención por edición).
+    expect(onChangeLayout).not.toHaveBeenCalled();
+    fireEvent.blur(length);
+    const layout = onChangeLayout.mock.calls.at(-1)![0];
+    expect(layout.walls[0]!.lengthMm).toBe(4000);
+  });
+
+  it('rechaza acortar por debajo de un hueco y enseña por qué', () => {
+    const withOpening: Project = {
+      ...placedProject,
+      kitchenLayout: {
+        ...placedProject.kitchenLayout!,
+        walls: [
+          {
+            ...placedProject.kitchenLayout!.walls[0]!,
+            openings: [
+              { id: 'o1', kind: 'window', offsetMm: 2600, widthMm: 300 },
+            ],
+          },
+        ],
+      },
+    };
+    const { onChangeLayout } = setup({ project: withOpening });
+    openWallEditor();
+    const length = screen.getByTestId('spatial-studio-wall-length');
+    fireEvent.change(length, { target: { value: '2000' } });
+    fireEvent.blur(length);
+    expect(onChangeLayout).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId('spatial-studio-env-msg').textContent,
+    ).toContain('fuera del muro');
+  });
+
+  it('quitar muro descoloca sus muebles y el mensaje enseña el conteo', () => {
+    const { onChangeLayout } = setup();
+    openWallEditor();
+    fireEvent.click(screen.getByTestId('spatial-studio-remove-wall'));
+    const layout = onChangeLayout.mock.calls.at(-1)![0];
+    expect(layout.walls).toHaveLength(0);
+    expect(layout.placements).toHaveLength(0);
+    expect(screen.getByTestId('spatial-studio-env-msg').textContent).toMatch(
+      /2 muebles quedaron? sin colocar/,
+    );
+  });
+
+  it('agregar ventana usa defaults en el primer tramo libre', () => {
+    const { onChangeLayout } = setup();
+    openWallEditor();
+    fireEvent.click(screen.getByTestId('spatial-studio-add-opening-window'));
+    const layout = onChangeLayout.mock.calls.at(-1)![0];
+    const openings = layout.walls[0]!.openings!;
+    expect(openings).toHaveLength(1);
+    expect(openings[0]!.kind).toBe('window');
+    expect(openings[0]!.widthMm).toBe(1200);
+    expect(openings[0]!.heightMm).toBe(1200);
+    expect(openings[0]!.sillMm).toBe(900);
+    expect(openings[0]!.offsetMm).toBe(0);
+    // Sin error: el mensaje de ambiente no aparece.
+    expect(screen.queryByTestId('spatial-studio-env-msg')).toBeNull();
+  });
+
+  it('hueco sin lugar libre no commitea y enseña a resolverlo', () => {
+    const tight: Project = {
+      ...placedProject,
+      kitchenLayout: {
+        walls: [
+          {
+            id: 'w1',
+            lengthMm: 1500,
+            angleDeg: 0,
+            name: 'Muro A',
+            openings: [
+              { id: 'o1', kind: 'door', offsetMm: 0, widthMm: 800 },
+            ],
+          },
+        ],
+        placements: [],
+      },
+    };
+    const { onChangeLayout } = setup({ project: tight });
+    openWallEditor();
+    // 1500 − 800 (puerta) = 700 < 1200 (ventana) → no cabe.
+    fireEvent.click(screen.getByTestId('spatial-studio-add-opening-window'));
+    expect(onChangeLayout).not.toHaveBeenCalled();
+    expect(screen.getByTestId('spatial-studio-env-msg').textContent).toContain(
+      'No queda lugar libre',
+    );
+  });
+
+  it('toolbar: Ajustar (fit room) y Ocultar muros con estado presionado', () => {
+    setup();
+    expect(
+      screen.getByTestId('spatial-studio-cam-fit-room'),
+    ).toBeDefined();
+    const toggle = screen.getByTestId('spatial-studio-toggle-hide-walls');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('multi-ambiente: switch re-encuadra, agrega muro sólo en el espacio activo y no mezcla', () => {
+    const spy = vi.fn();
+    const multiSpaceProject: Project = {
+      ...placedProject,
+      kitchenLayout: {
+        walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0, name: 'Muro A' }],
+        placements: [],
+        activeSpaceId: 'sp-1',
+        spaces: [
+          {
+            id: 'sp-1',
+            name: 'Cocina',
+            walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0, name: 'Muro A' }],
+            placements: [],
+          },
+          { id: 'sp-2', name: 'Baño', walls: [], placements: [] },
+        ],
+      },
+    };
+    function Host() {
+      const [proj, setProj] = useState<Project>(multiSpaceProject);
+      return (
+        <ProjectSpatialStudio
+          open
+          project={proj}
+          modules={[modA]}
+          catalog={catalog}
+          canEdit
+          onClose={vi.fn()}
+          onChangeLayout={(next) => {
+            spy(next);
+            setProj((p) => ({ ...p, kitchenLayout: next }));
+          }}
+        />
+      );
+    }
+    render(<Host />);
+
+    // Switch a Baño: el ambiente activo cambia y Baño arranca vacío.
+    fireEvent.click(screen.getByTestId('spatial-studio-space-tab-sp-2'));
+    let layout = spy.mock.calls.at(-1)![0];
+    expect(layout.activeSpaceId).toBe('sp-2');
+    expect(layout.walls).toHaveLength(0);
+
+    // Agregar muro en Baño: sólo ese espacio gana el muro.
+    fireEvent.click(screen.getByTestId('spatial-studio-add-wall'));
+    layout = spy.mock.calls.at(-1)![0];
+    expect(layout.walls).toHaveLength(1);
+    const cocina = layout.spaces!.find((s: { id: string }) => s.id === 'sp-1')!;
+    const banio = layout.spaces!.find((s: { id: string }) => s.id === 'sp-2')!;
+    expect(cocina.walls).toHaveLength(1);
+    expect(cocina.walls[0]!.id).toBe('w1');
+    expect(banio.walls).toHaveLength(1);
+
+    // Volver a Cocina: muro original intacto, sin mezclar geometrías.
+    fireEvent.click(screen.getByTestId('spatial-studio-space-tab-sp-1'));
+    layout = spy.mock.calls.at(-1)![0];
+    expect(layout.activeSpaceId).toBe('sp-1');
+    expect(layout.walls).toHaveLength(1);
+    expect(layout.walls[0]!.id).toBe('w1');
+  });
+});

@@ -14,6 +14,8 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  EnvironmentCommandResult,
+  KitchenWall,
   Module,
   ModuleCategory,
   PlacementElevation,
@@ -24,6 +26,8 @@ import type {
 } from '@muebles/domain';
 import {
   addKitchenSpace,
+  addOpening,
+  addWall,
   allKitchenPlacements,
   alignSelectionCommand,
   BASE_CLEARANCE_PRESETS_MM,
@@ -38,6 +42,7 @@ import {
   distributeSelectionCommand,
   duplicateSelectionCommand,
   emptyKitchenLayout,
+  MIN_WALL_LENGTH_MM,
   moduleAcceptsCustomDims,
   nudgeSelectionCommand,
   parsePlacementKey,
@@ -52,6 +57,8 @@ import {
   planEditSessionHeldByOther,
   pruneKitchenLayout,
   removeKitchenSpace,
+  removeOpening,
+  removeWall,
   renameKitchenSpace,
   repackPlacementsOnWall,
   reorderPlacementOnWall,
@@ -59,6 +66,8 @@ import {
   resolveBaseClearanceMm,
   resolveItemDims as domainResolveItemDims,
   resolveModuleBaseMode,
+  updateOpening,
+  updateWall,
   validateItemCustomDims,
   resolveWallCabinetZMm,
   resolveWallFrames,
@@ -66,13 +75,17 @@ import {
   seedDefaultLWallsIfEmpty,
   setActiveKitchenSpace,
   snapOffsetOnWall,
+  splitWallSegments,
   syncActiveKitchenSpace,
+  WALL_OPENING_DEFAULTS_MM,
+  WALL_OPENING_KIND_LABELS_ES,
   PATAS_ROLE,
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
   WALL_CABINET_Z_PRESETS_MM,
   type ClipboardEntry,
   type LayoutCommandResult,
+  type WallOpeningKind,
 } from '@muebles/domain';
 import {
   ArrowDown,
@@ -246,6 +259,56 @@ function newId(): string {
   return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * F145 — input numérico/texto que commitea en blur/Enter como UNA intención
+ * (bar F144 §12: la ráfaga de teclas no genera una entrada de undo por tecla).
+ * El draft local se re-sincroniza cuando la prop cambia (undo, comandos).
+ */
+function CommitOnBlurInput({
+  value,
+  onCommit,
+  testId,
+  type = 'number',
+  min,
+  max,
+  step,
+  title,
+  ariaLabel,
+}: {
+  readonly value: string | number;
+  readonly onCommit: (raw: string) => void;
+  readonly testId: string;
+  readonly type?: 'number' | 'text';
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  readonly title?: string;
+  readonly ariaLabel?: string;
+}): ReactNode {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  return (
+    <input
+      type={type}
+      value={draft}
+      min={min}
+      max={max}
+      step={step}
+      title={title}
+      aria-label={ariaLabel}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== String(value)) onCommit(draft);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Escape') setDraft(String(value));
+      }}
+      data-testid={testId}
+    />
+  );
+}
+
 function defaultElevationForModule(
   module: Module | undefined,
 ): PlacementElevation {
@@ -354,6 +417,20 @@ export function ProjectSpatialStudio({
       readonly spanMm: number;
     };
   }>({ type: 'isometric', ts: 0 });
+  /**
+   * F145 — vista recordada por ambiente: al cambiar de espacio se re-encuadra
+   * con la vista que ese ambiente tenía (default 3/4), sin heredar el encuadre
+   * del espacio anterior.
+   */
+  const cameraBySpaceRef = useRef<Record<string, 'front' | 'top' | 'side' | 'isometric'>>(
+    {},
+  );
+  /** F145 — modo «ocultar muros»: fantasma los muros entre cámara y ambiente. */
+  const [hideOccludingWalls, setHideOccludingWalls] = useState(false);
+  /** F145 — mensajes que enseñan (agregar/quitar muro, huecos). */
+  const [envMessage, setEnvMessage] = useState<string | null>(null);
+  /** F145 — largo propuesto para el próximo muro (input «Agregar muro»). */
+  const [newWallLengthMm, setNewWallLengthMm] = useState(3000);
   /** F144 — ajustes de precisión del taller (nudge/snap), persistentes. */
   const precision = useStudioPrecisionSettings();
   const [precisionOpen, setPrecisionOpen] = useState(false);
@@ -1011,7 +1088,53 @@ export function ProjectSpatialStudio({
   if (!open) return null;
 
   const fireCamera = (type: 'front' | 'top' | 'side' | 'isometric') => {
+    // F145 — la vista queda recordada para este ambiente.
+    if (activeSpaceId) {
+      cameraBySpaceRef.current[activeSpaceId] = type;
+    }
     setCameraView({ type, ts: Date.now() });
+  };
+
+  /**
+   * F145 — fit room: encuadra todo el ambiente (muros + muebles) con la misma
+   * cámara matemática del fit-selection. Sin selección requerida.
+   */
+  const fitRoom = () => {
+    const boxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [];
+    for (const w of preview.walls) {
+      boxes.push({
+        minX: Math.min(w.originXMm, w.endXMm),
+        maxX: Math.max(w.originXMm, w.endXMm),
+        minY: Math.min(w.originYMm, w.endYMm),
+        maxY: Math.max(w.originYMm, w.endYMm),
+      });
+    }
+    for (const m of preview.modules) {
+      const yaw = ((Math.round(m.yawDeg / 90) * 90) % 360 + 360) % 360;
+      const ex = yaw === 90 || yaw === 270 ? m.depth : m.width;
+      const ey = yaw === 90 || yaw === 270 ? m.width : m.depth;
+      boxes.push({
+        minX: m.originX - ex / 2,
+        maxX: m.originX + ex / 2,
+        minY: m.originY - ey / 2,
+        maxY: m.originY + ey / 2,
+      });
+    }
+    if (boxes.length === 0) return;
+    const minX = Math.min(...boxes.map((b) => b.minX));
+    const maxX = Math.max(...boxes.map((b) => b.maxX));
+    const minY = Math.min(...boxes.map((b) => b.minY));
+    const maxY = Math.max(...boxes.map((b) => b.maxY));
+    setCameraView({
+      type: 'fit-selection',
+      ts: Date.now(),
+      fit: {
+        centerX: Math.round((minX + maxX) / 2),
+        centerY: Math.round((minY + maxY) / 2),
+        heightMm: Math.max(preview.totalHeight, 1200),
+        spanMm: Math.round(Math.max(maxX - minX, maxY - minY)),
+      },
+    });
   };
 
   const commit = (
@@ -1114,6 +1237,12 @@ export function ProjectSpatialStudio({
     commit(setActiveKitchenSpace(layout, spaceId));
     setSelection(EMPTY_STUDIO_SELECTION);
     setTargetWallId(null);
+    // F145 — re-encuadra con la vista recordada del ambiente destino (default
+    // 3/4): el canvas nunca hereda el encuadre del espacio anterior.
+    setCameraView({
+      type: cameraBySpaceRef.current[spaceId] ?? 'isometric',
+      ts: Date.now(),
+    });
   };
 
   const handleAddSpace = () => {
@@ -1650,6 +1779,118 @@ export function ProjectSpatialStudio({
     });
   };
 
+  /* ── F145 — environment authoring: muros y huecos (intenciones de dominio) ── */
+
+  const runEnvCommand = (
+    result: EnvironmentCommandResult,
+    intent: string,
+    onSuccess?: (r: Extract<EnvironmentCommandResult, { ok: true }>) => void,
+  ) => {
+    if (!result.ok) {
+      setEnvMessage(result.message);
+      return;
+    }
+    setEnvMessage(null);
+    commit(result.layout, { intent });
+    onSuccess?.(result);
+  };
+
+  const handleAddWall = (lengthMm: number) => {
+    if (!canEdit) return;
+    const res = addWall(layout, { lengthMm }, newId);
+    runEnvCommand(res, 'Agregar muro');
+    if (res.ok) setTargetWallId(null);
+  };
+
+  const handleUpdateWall = (
+    wallId: string,
+    patch: Parameters<typeof updateWall>[2],
+  ) => {
+    if (!canEdit) return;
+    runEnvCommand(
+      updateWall(layout, wallId, patch),
+      `Editar ${layout.walls.find((w) => w.id === wallId)?.name ?? 'muro'}`,
+    );
+  };
+
+  const handleRemoveWall = (wallId: string) => {
+    if (!canEdit) return;
+    const wall = layout.walls.find((w) => w.id === wallId);
+    const res = removeWall(layout, wallId);
+    if (res.ok) {
+      setEnvMessage(
+        res.unplacedCount && res.unplacedCount > 0
+          ? `Quitamos ${wall?.name ?? 'el muro'}: ${
+              res.unplacedCount === 1
+                ? '1 mueble quedó sin colocar'
+                : `${res.unplacedCount} muebles quedaron sin colocar`
+            } (los verás en la lista «Sin colocar»).`
+          : null,
+      );
+      commit(res.layout, { intent: `Quitar ${wall?.name ?? 'muro'}` });
+      if (targetWallId === wallId) setTargetWallId(null);
+    } else {
+      setEnvMessage(res.message);
+    }
+  };
+
+  /**
+   * Huecos: alta rápida con defaults del tipo en el primer tramo libre del
+   * muro; los campos quedan editables en la tarjeta del muro.
+   */
+  const firstFreeOpeningOffset = (
+    wall: KitchenWall,
+    widthMm: number,
+  ): number | null => {
+    const spans = (wall.openings ?? [])
+      .map((o) => ({ start: o.offsetMm, end: o.offsetMm + o.widthMm }))
+      .sort((a, b) => a.start - b.start);
+    let cursor = 0;
+    for (const s of spans) {
+      if (s.start - cursor >= widthMm) return cursor;
+      cursor = Math.max(cursor, s.end);
+    }
+    if (wall.lengthMm - cursor >= widthMm) return cursor;
+    return null;
+  };
+
+  const handleAddOpening = (wallId: string, kind: WallOpeningKind) => {
+    if (!canEdit) return;
+    const wall = layout.walls.find((w) => w.id === wallId);
+    if (!wall) return;
+    const width = kind === 'door' ? 800 : kind === 'window' ? 1200 : 900;
+    const offset = firstFreeOpeningOffset(wall, width);
+    if (offset === null) {
+      setEnvMessage(
+        `No queda lugar libre en ${wall.name ?? 'el muro'} para una ${
+          WALL_OPENING_KIND_LABELS_ES[kind].toLowerCase()
+        } de ${width} mm. Liberá un tramo o acortá otro hueco.`,
+      );
+      return;
+    }
+    runEnvCommand(
+      addOpening(layout, wallId, { kind, offsetMm: offset, widthMm: width }, newId),
+      `Agregar ${WALL_OPENING_KIND_LABELS_ES[kind].toLowerCase()}`,
+    );
+  };
+
+  const handleUpdateOpening = (
+    wallId: string,
+    openingId: string,
+    patch: Parameters<typeof updateOpening>[3],
+  ) => {
+    if (!canEdit) return;
+    runEnvCommand(
+      updateOpening(layout, wallId, openingId, patch),
+      'Editar hueco',
+    );
+  };
+
+  const handleRemoveOpening = (wallId: string, openingId: string) => {
+    if (!canEdit) return;
+    runEnvCommand(removeOpening(layout, wallId, openingId), 'Quitar hueco');
+  };
+
   const placeOnWall = (
     itemId: string,
     instanceIndex: number,
@@ -1893,6 +2134,7 @@ export function ProjectSpatialStudio({
     endYMm: w.endYMm,
     heightMm: 2400,
     wallMaterialId: w.wallMaterialId,
+    ...(w.openings && w.openings.length > 0 ? { openings: w.openings } : {}),
   }));
 
   const applyOffsetOnWall = (
@@ -3143,6 +3385,15 @@ export function ProjectSpatialStudio({
               <button
                 type="button"
                 className="btn btn--small"
+                onClick={fitRoom}
+                title="Ajustar cámara al ambiente completo (muros + muebles)"
+                data-testid="spatial-studio-cam-fit-room"
+              >
+                Ajustar
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
                 onClick={() => fireCamera('isometric')}
                 title="Reset vista"
                 data-testid="spatial-studio-cam-reset"
@@ -3314,6 +3565,20 @@ export function ProjectSpatialStudio({
               <button
                 type="button"
                 className={
+                  hideOccludingWalls
+                    ? 'btn btn--small spatial-studio__tool--on'
+                    : 'btn btn--small'
+                }
+                aria-pressed={hideOccludingWalls}
+                onClick={() => setHideOccludingWalls((v) => !v)}
+                title="Atenuar los muros entre la cámara y el ambiente para que no bloqueen el trabajo"
+                data-testid="spatial-studio-toggle-hide-walls"
+              >
+                Ocultar muros
+              </button>
+              <button
+                type="button"
+                className={
                   showPlan2d
                     ? 'btn btn--small spatial-studio__tool--on'
                     : 'btn btn--small'
@@ -3418,6 +3683,7 @@ export function ProjectSpatialStudio({
                 fillViewport
                 showHint={false}
                 cameraView={cameraView}
+                hideOccludingWalls={hideOccludingWalls}
                 testId="spatial-studio-scene"
                 colorMode={colorMode}
                 materialColors={materialColors}
@@ -3560,21 +3826,69 @@ export function ProjectSpatialStudio({
                   const y2 =
                     planMini.pad + (f.endYMm - planMini.minY) * planMini.scale;
                   const active = f.id === activeWallId;
+                  // F145 — huecos del muro: tramos sólidos + vano punteado.
+                  const wall = layout.walls.find((w) => w.id === f.id);
+                  const dxMm = f.endXMm - f.originXMm;
+                  const dyMm = f.endYMm - f.originYMm;
+                  const wallLenMm = Math.max(1, Math.hypot(dxMm, dyMm));
+                  const dirX = dxMm / wallLenMm;
+                  const dirY = dyMm / wallLenMm;
+                  const pxAt = (tMm: number) => ({
+                    x: x1 + dirX * tMm * planMini.scale,
+                    y: y1 + dirY * tMm * planMini.scale,
+                  });
+                  const solidSegments = wall
+                    ? splitWallSegments(wall, 2400).filter(
+                        (s) => s.zBottomMm === 0 && s.zTopMm >= 2400,
+                      )
+                    : [{ startMm: 0, lengthMm: wallLenMm }];
                   return (
                     <g key={f.id}>
-                      <line
-                        x1={x1}
-                        y1={y1}
-                        x2={x2}
-                        y2={y2}
-                        stroke={
-                          active
-                            ? 'var(--accent-500, #3b82f6)'
-                            : 'var(--text-primary, #e2e8f0)'
-                        }
-                        strokeWidth={active ? 5 : 3}
-                        strokeLinecap="square"
-                      />
+                      {solidSegments.map((s, si) => {
+                        const a = pxAt(s.startMm);
+                        const b = pxAt(s.startMm + s.lengthMm);
+                        return (
+                          <line
+                            key={si}
+                            x1={a.x}
+                            y1={a.y}
+                            x2={b.x}
+                            y2={b.y}
+                            stroke={
+                              active
+                                ? 'var(--accent-500, #3b82f6)'
+                                : 'var(--text-primary, #e2e8f0)'
+                            }
+                            strokeWidth={active ? 5 : 3}
+                            strokeLinecap="square"
+                          />
+                        );
+                      })}
+                      {(wall?.openings ?? []).map((o) => {
+                        const a = pxAt(Math.max(0, o.offsetMm));
+                        const b = pxAt(
+                          Math.min(wallLenMm, o.offsetMm + o.widthMm),
+                        );
+                        return (
+                          <line
+                            key={`op-${o.id}`}
+                            x1={a.x}
+                            y1={a.y}
+                            x2={b.x}
+                            y2={b.y}
+                            stroke="var(--accent-400, #60a5fa)"
+                            strokeWidth={active ? 4 : 2.5}
+                            strokeDasharray="4 3"
+                            strokeLinecap="butt"
+                          >
+                            <title>
+                              {`${WALL_OPENING_KIND_LABELS_ES[o.kind]} · ${
+                                o.widthMm
+                              } mm a ${Math.round(o.offsetMm)} mm`}
+                            </title>
+                          </line>
+                        );
+                      })}
                     </g>
                   );
                 })}
@@ -3873,24 +4187,316 @@ export function ProjectSpatialStudio({
                   </div>
                 ) : (
                   <ul className="spatial-studio__wall-list">
-                    {layout.walls.map((w, i) => (
-                      <li key={w.id}>
-                        <button
-                          type="button"
-                          className={
-                            activeWallId === w.id
-                              ? 'spatial-studio__wall-btn spatial-studio__wall-btn--active'
-                              : 'spatial-studio__wall-btn'
-                          }
-                          onClick={() => setTargetWallId(w.id)}
-                          data-testid={`spatial-studio-wall-${w.id}`}
-                        >
-                          {w.name?.trim() || `Muro ${i + 1}`} · {w.lengthMm} mm
-                        </button>
-                      </li>
-                    ))}
+                    {layout.walls.map((w, i) => {
+                      const wallLabel = w.name?.trim() || `Muro ${i + 1}`;
+                      const openings = w.openings ?? [];
+                      return (
+                        <li key={w.id}>
+                          <button
+                            type="button"
+                            className={
+                              activeWallId === w.id
+                                ? 'spatial-studio__wall-btn spatial-studio__wall-btn--active'
+                                : 'spatial-studio__wall-btn'
+                            }
+                            onClick={() =>
+                              setTargetWallId(activeWallId === w.id ? null : w.id)
+                            }
+                            data-testid={`spatial-studio-wall-${w.id}`}
+                            aria-expanded={activeWallId === w.id}
+                          >
+                            {wallLabel} · {w.lengthMm} mm
+                            {openings.length > 0
+                              ? ` · ${openings.length} hueco${openings.length === 1 ? '' : 's'}`
+                              : ''}
+                          </button>
+                          {canEdit && activeWallId === w.id ? (
+                            <div
+                              className="spatial-studio__wall-editor"
+                              data-testid={`spatial-studio-wall-editor-${w.id}`}
+                            >
+                              <label className="spatial-studio__field">
+                                <span>Nombre</span>
+                                <CommitOnBlurInput
+                                  type="text"
+                                  value={w.name ?? ''}
+                                  onCommit={(raw) =>
+                                    handleUpdateWall(w.id, { name: raw })
+                                  }
+                                  testId="spatial-studio-wall-name"
+                                />
+                              </label>
+                              <div className="spatial-studio__wall-grid">
+                                <label className="spatial-studio__field">
+                                  <span>Largo (mm)</span>
+                                  <CommitOnBlurInput
+                                    value={w.lengthMm}
+                                    min={MIN_WALL_LENGTH_MM}
+                                    step={50}
+                                    onCommit={(raw) => {
+                                      const v = Number(raw);
+                                      if (Number.isFinite(v)) {
+                                        handleUpdateWall(w.id, { lengthMm: v });
+                                      }
+                                    }}
+                                    testId="spatial-studio-wall-length"
+                                  />
+                                </label>
+                                <label className="spatial-studio__field">
+                                  <span>Ángulo (°)</span>
+                                  <CommitOnBlurInput
+                                    value={w.angleDeg}
+                                    step={15}
+                                    onCommit={(raw) => {
+                                      const v = Number(raw);
+                                      if (Number.isFinite(v)) {
+                                        handleUpdateWall(w.id, { angleDeg: v });
+                                      }
+                                    }}
+                                    testId="spatial-studio-wall-angle"
+                                  />
+                                </label>
+                              </div>
+                              <div
+                                className="spatial-studio__preset-grid"
+                                role="group"
+                                aria-label="Ángulos rectos"
+                              >
+                                {[0, 90, 180, 270].map((deg) => (
+                                  <button
+                                    key={deg}
+                                    type="button"
+                                    className={
+                                      ((w.angleDeg % 360) + 360) % 360 === deg
+                                        ? 'spatial-studio__preset spatial-studio__preset--active'
+                                        : 'spatial-studio__preset'
+                                    }
+                                    onClick={() =>
+                                      handleUpdateWall(w.id, { angleDeg: deg })
+                                    }
+                                    data-testid={`spatial-studio-wall-angle-${deg}`}
+                                  >
+                                    {deg}°
+                                  </button>
+                                ))}
+                              </div>
+                              <details className="spatial-studio__wall-advanced">
+                                <summary className="spatial-studio__hint">
+                                  Origen del muro (avanzado)
+                                </summary>
+                                <div className="spatial-studio__wall-grid">
+                                  <label className="spatial-studio__field">
+                                    <span>X (mm)</span>
+                                    <CommitOnBlurInput
+                                      value={w.originXMm ?? 0}
+                                      step={50}
+                                      onCommit={(raw) => {
+                                        const v = Number(raw);
+                                        if (Number.isFinite(v)) {
+                                          handleUpdateWall(w.id, { originXMm: v });
+                                        }
+                                      }}
+                                      testId="spatial-studio-wall-origin-x"
+                                    />
+                                  </label>
+                                  <label className="spatial-studio__field">
+                                    <span>Y (mm)</span>
+                                    <CommitOnBlurInput
+                                      value={w.originYMm ?? 0}
+                                      step={50}
+                                      onCommit={(raw) => {
+                                        const v = Number(raw);
+                                        if (Number.isFinite(v)) {
+                                          handleUpdateWall(w.id, { originYMm: v });
+                                        }
+                                      }}
+                                      testId="spatial-studio-wall-origin-y"
+                                    />
+                                  </label>
+                                </div>
+                              </details>
+
+                              <span className="spatial-studio__field-label">
+                                Huecos del muro
+                              </span>
+                              {openings.length === 0 ? (
+                                <p className="spatial-studio__hint">
+                                  Ventanas, puertas y pasajes se ven en el 3D y en la
+                                  planta; no afectan la cotización.
+                                </p>
+                              ) : (
+                                <ul className="spatial-studio__opening-list">
+                                  {openings.map((o) => {
+                                    const defaults = WALL_OPENING_DEFAULTS_MM[o.kind];
+                                    return (
+                                      <li
+                                        key={o.id}
+                                        className="spatial-studio__opening-row"
+                                        data-testid="spatial-studio-opening"
+                                      >
+                                        <span className="spatial-studio__opening-kind">
+                                          {WALL_OPENING_KIND_LABELS_ES[o.kind]}
+                                        </span>
+                                        <label className="spatial-studio__field">
+                                          <span>Distancia</span>
+                                          <CommitOnBlurInput
+                                            value={o.offsetMm}
+                                            min={0}
+                                            step={50}
+                                            onCommit={(raw) => {
+                                              const v = Number(raw);
+                                              if (Number.isFinite(v)) {
+                                                handleUpdateOpening(w.id, o.id, {
+                                                  offsetMm: v,
+                                                });
+                                              }
+                                            }}
+                                            testId="spatial-studio-opening-offset"
+                                          />
+                                        </label>
+                                        <label className="spatial-studio__field">
+                                          <span>Ancho</span>
+                                          <CommitOnBlurInput
+                                            value={o.widthMm}
+                                            min={100}
+                                            step={50}
+                                            onCommit={(raw) => {
+                                              const v = Number(raw);
+                                              if (Number.isFinite(v)) {
+                                                handleUpdateOpening(w.id, o.id, {
+                                                  widthMm: v,
+                                                });
+                                              }
+                                            }}
+                                            testId="spatial-studio-opening-width"
+                                          />
+                                        </label>
+                                        <label className="spatial-studio__field">
+                                          <span>Alto</span>
+                                          <CommitOnBlurInput
+                                            value={o.heightMm ?? defaults.heightMm}
+                                            min={100}
+                                            step={50}
+                                            onCommit={(raw) => {
+                                              const v = Number(raw);
+                                              if (Number.isFinite(v)) {
+                                                handleUpdateOpening(w.id, o.id, {
+                                                  heightMm: v,
+                                                });
+                                              }
+                                            }}
+                                            testId="spatial-studio-opening-height"
+                                          />
+                                        </label>
+                                        <label className="spatial-studio__field">
+                                          <span>Antepecho</span>
+                                          <CommitOnBlurInput
+                                            value={o.sillMm ?? defaults.sillMm}
+                                            min={0}
+                                            step={50}
+                                            onCommit={(raw) => {
+                                              const v = Number(raw);
+                                              if (Number.isFinite(v)) {
+                                                handleUpdateOpening(w.id, o.id, {
+                                                  sillMm: v,
+                                                });
+                                              }
+                                            }}
+                                            testId="spatial-studio-opening-sill"
+                                          />
+                                        </label>
+                                        <button
+                                          type="button"
+                                          className="btn btn--small"
+                                          onClick={() => handleRemoveOpening(w.id, o.id)}
+                                          title={`Quitar ${WALL_OPENING_KIND_LABELS_ES[
+                                            o.kind
+                                          ].toLowerCase()}`}
+                                          data-testid="spatial-studio-opening-remove"
+                                        >
+                                          <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                              <div
+                                className="spatial-studio__preset-grid"
+                                role="group"
+                                aria-label="Agregar hueco"
+                              >
+                                {(['window', 'door', 'pass'] as const).map((kind) => (
+                                  <button
+                                    key={kind}
+                                    type="button"
+                                    className="spatial-studio__preset"
+                                    onClick={() => handleAddOpening(w.id, kind)}
+                                    title={`Agregar ${WALL_OPENING_KIND_LABELS_ES[
+                                      kind
+                                    ].toLowerCase()} en el primer tramo libre`}
+                                    data-testid={`spatial-studio-add-opening-${kind}`}
+                                  >
+                                    + {WALL_OPENING_KIND_LABELS_ES[kind]}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <button
+                                type="button"
+                                className="btn btn--small"
+                                onClick={() => handleRemoveWall(w.id)}
+                                title="Quitar el muro; sus muebles quedan sin colocar"
+                                data-testid="spatial-studio-remove-wall"
+                              >
+                                <Trash2 size={14} strokeWidth={1.5} aria-hidden /> Quitar
+                                muro
+                              </button>
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
+
+                {canEdit ? (
+                  <div className="spatial-studio__field spatial-studio__wall-add">
+                    <label className="spatial-studio__field">
+                      <span>Nuevo muro (mm)</span>
+                      <input
+                        type="number"
+                        min={MIN_WALL_LENGTH_MM}
+                        step={50}
+                        value={newWallLengthMm}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v)) setNewWallLengthMm(v);
+                        }}
+                        data-testid="spatial-studio-new-wall-length"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() => handleAddWall(newWallLengthMm)}
+                      title="Encadena un muro al final del ambiente girando 90°"
+                      data-testid="spatial-studio-add-wall"
+                    >
+                      <Plus size={14} strokeWidth={1.5} aria-hidden /> Agregar muro
+                    </button>
+                  </div>
+                ) : null}
+
+                {envMessage ? (
+                  <p
+                    className="spatial-studio__import-msg"
+                    role="status"
+                    data-testid="spatial-studio-env-msg"
+                  >
+                    {envMessage}
+                  </p>
+                ) : null}
 
                 {canEdit && activeWallId ? (
                   <div

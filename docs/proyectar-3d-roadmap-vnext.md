@@ -61,6 +61,11 @@ Todos deben leer `docs/proyectar-3d-north-star.md` cuando se implementen.
 > herrajes (F070) sigue sin cablearse con datos reales; el authoring vivo es el editor 2D
 > por cara (F131).
 
+> **Estado (2026-08-23):** **#311 P3D-4 done** (F145 — environment authoring + multi-ambiente:
+> muros editables en el studio, huecos reales en 3D/2D, fit room, ocultar muros, cámara por
+> ambiente). El orden vigente restante: #313 (contract tests, pospuesto por decisión
+> explícita al adelantar #311) → #312 (performance) → #314 (benchmark).
+
 ---
 
 ## 2. P3D-0 — Workspace 3D y bibliotecas (#309)

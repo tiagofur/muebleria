@@ -295,3 +295,85 @@ test.describe('Proyectar studio (WebGL smoke F144)', () => {
     ).toHaveCount(1);
   });
 });
+
+/**
+ * F145 (#311): environment authoring + multi-ambiente en el studio real.
+ * Abrir muro → hueco de ventana con defaults; crear ambiente nuevo → agregar
+ * muro sólo ahí; volver a Cocina sin mezcla de geometrías; toolbar Ajustar /
+ * Ocultar muros. Caminos de dominio cubiertos en unit; acá el wiring WebGL.
+ */
+test.describe('Proyectar studio (WebGL smoke F145)', () => {
+  test('authoring de muros/huecos + switch de ambientes sin mezcla (F145)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await enterAsGuest(page);
+    await page.goto('/quotes');
+    await page.waitForSelector('.app-sidebar', { timeout: 30_000 });
+
+    const draftCard = page
+      .locator('.project-card', { hasText: 'Demo plantilla' })
+      .first();
+    test.skip((await draftCard.count()) === 0, 'seed sin proyecto draft');
+    await draftCard.click();
+    await page.waitForSelector('.workspace-chrome, .project-detail', {
+      timeout: 20_000,
+    });
+    await page.click('[data-testid="project-chrome-projectar"]');
+    await page.waitForSelector('[data-testid="spatial-studio-scene"] canvas', {
+      timeout: 45_000,
+    });
+
+    // Ambiente activo inequívoco (Cocina default del seed) con muros L.
+    const spaceName = page.locator('[data-testid="spatial-studio-space-name"]');
+    await expect(spaceName).toHaveValue('Cocina');
+    const wallButtons = page.locator('.spatial-studio__wall-btn');
+    const cocinaWalls = await wallButtons.count();
+    expect(cocinaWalls).toBeGreaterThan(0);
+
+    // Authoring: abrir el primer muro y agregar una ventana (defaults).
+    await wallButtons.first().click();
+    await page.waitForSelector('[data-testid="spatial-studio-add-opening-window"]', {
+      timeout: 10_000,
+    });
+    await page.click('[data-testid="spatial-studio-add-opening-window"]');
+    await page.waitForSelector('[data-testid="spatial-studio-opening"]', {
+      timeout: 10_000,
+    });
+    // La tarjeta del muro ahora informa el hueco.
+    await expect(wallButtons.first()).toContainText('hueco');
+
+    // Toolbar: Ajustar (fit room) y Ocultar muros (toggle presionado).
+    await page.click('[data-testid="spatial-studio-cam-fit-room"]');
+    const hideToggle = page.locator('[data-testid="spatial-studio-toggle-hide-walls"]');
+    await hideToggle.click();
+    await expect(hideToggle).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(400);
+
+    // Multi-ambiente: crear Baño, agregar muro sólo ahí y volver sin mezcla.
+    await page.click('[data-testid="spatial-studio-add-space"]');
+    await expect(spaceName).toHaveValue(/Espacio 2/, { timeout: 10_000 });
+    await page.waitForSelector('[data-testid="spatial-studio-add-wall"]', {
+      timeout: 10_000,
+    });
+    await page.click('[data-testid="spatial-studio-add-wall"]');
+    await expect
+      .poll(async () => await wallButtons.count(), { timeout: 10_000 })
+      .toBe(1);
+
+    await page.screenshot({
+      path: 'test-results/proyectar-multispace.png',
+      fullPage: false,
+    });
+
+    // Volver a Cocina: los muros del ambiente original están intactos.
+    const spacesTabs = page.locator(
+      '[data-testid^="spatial-studio-space-tab-"]',
+    );
+    await spacesTabs.first().click();
+    await expect(spaceName).toHaveValue('Cocina');
+    await expect
+      .poll(async () => await wallButtons.count(), { timeout: 10_000 })
+      .toBe(cocinaWalls);
+  });
+});
