@@ -14,7 +14,8 @@
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "visual": "playwright test --config=playwright.config.ts",
-    "smoke": "playwright test --config=playwright.config.ts tests/smoke"
+    "smoke": "playwright test --config=playwright.config.ts tests/smoke",
+    "smoke:perf": "playwright test --config=playwright.config.ts tests/smoke/proyectar-perf.spec.ts"
   },
 
   "devDependencies": {

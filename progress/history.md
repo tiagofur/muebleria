@@ -1083,3 +1083,13 @@ recuperados ambos sobre main via cherry-pick en `recover/f142-materials-dock`
 + `feat/f146-contracts-p3d7`, F145→F146 por colisión de numeración con #311.
 Verificación completa verde (go 8 paquetes, pnpm 2.982, typecheck); review
 APPROVED con sección de recuperación en `progress/review_F146.md`.
+
+## F147 — proyectar_performance_budget (#312 P3D-6 · meta #308) — 2026-08-23
+
+Escena de referencia versionada + telemetría + smoke de budget con gates.
+Cache BOM por contenido (2.175 re-resoluciones por drag → 0), memos de escena,
+órbita 0 commits. Baseline: 538 drawCalls/21k tris, drag p95 146ms, commits
+max 5,6ms. Gap P3D-6b registrado: costo de render (long tasks por frame en
+drag/órbita). Docs: proyectar-3d-performance.md (budgets, hardware objetivo,
+checklist). Verificación: 2.990 tests + smoke 5/5 + typecheck; review APPROVED
+(progreso en progress/review_F147.md).

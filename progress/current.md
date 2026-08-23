@@ -1,55 +1,49 @@
 # Sesión
 
-**Feature cerrada:** F146 — proyectar_design_bom_price_contracts (#313 P3D-7,
-meta #308) **+ recuperación del trabajo huérfano de F142 (#309 P3D-0b)**
+**Feature cerrada:** F147 — proyectar_performance_budget (#312 P3D-6, meta #308)
 **Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
-**Review:** APPROVED — `progress/review_F146.md` (incluye sección de recuperación)
+**SDD:** https://github.com/tiagofur/muebleria/issues/312#issuecomment-5387133235
 
-## Incidente detectado y resuelto: PRs apilados mergeados a su rama base
+## Resultado
 
-Dos PRs se cerraron "verdes" en GitHub **sin tocar main**:
+Performance del editor 3D como requisito verificable (North Star §§17–18).
+**Fixture de referencia** versionado (`perfReferenceScene`: 30 ítems / 27
+instancias activas en 3 muros + isla + espacio Office que resuelve sin
+renderizarse; ≥300 piezas; test de conteo impide adelgazarlo). **Telemetría**
+`perfTelemetry.ts` en `window.__proyectarPerfSnapshot`: renderer.info probe,
+Profiler del studio (no-op prod), longtask observer, latencia pointermove→frame
+del drag y stats del cache BOM con missReasons. **Smoke `pnpm smoke:perf`**
+con gates duros + baseline JSON + screenshot; flag local de seed
+(`muebles_seed_perf_reference`) sin tocar seeds normales.
 
-- **PR #330 (F142)**: base `feat/f141-proyectar-library`, mergeado 2h después
-  de que esa rama ya hubiera ido a main (#329). Todo el código F142 (dock de
-  materiales Ambiente|Tableros, backend de categorías con migración 000077,
-  BoardMaterialPalette, paintMaterial) quedó huérfano. main sólo tenía la
-  entrada del ledger (restaurada a mano en b34c8d8) **sin el código** — la
-  sesión F145-env lo interpretaba como pérdida sólo de ledger.
-- **PR #333 (F146, entonces F145)**: base `feat/f144-precision-dims`, mergeado
-  13 segundos después de que #332 ya hubiera ido a main. Fixture compartido +
-  suites contract TS/Go + customDims backend (migración 000078) huérfanos.
+Optimizaciones medidas (no folklore): **cache de resolveItemBom por firma de
+CONTENIDO** de catálogo — la versión por identidad fallaba 2.175 veces por
+drag porque los selectores reconstruyen arrays por render; ahora layout-change
+⇒ 0 re-resoluciones (gate vitest CI + gate runtime en smoke). Memo
+`sceneModules`/`sceneWalls`, catálogo estable en ProjectModalsContainer, guard
+de cámara en WallOcclusionTracker. **Órbita ⇒ 0 commits React** (gate §17.1,
+botón derecho por construcción).
 
-`progress/current.md` de la sesión anterior decía #313 "pospuesto" porque su
-árbol local (rama de #334) nunca vio el trabajo de #333.
-
-## Recuperación
-
-- **Rama `recover/f142-materials-dock`** (base main): cherry-pick
-  `5617311..e530c0c` (F142 + v2 + v3 + docs). Conflictos resueltos conservando
-  la evolución F143–F145 de main (import union, `moduleSelected` =
-  multiselección ∪ hover de pintura, mocks unificados, describe F142 al final
-  del test). Un conflicto semántico: `setSelectedKey` → `setSelection({keys,
-  anchor})` (commit propio).
-- **Rama `feat/f146-contracts-p3d7`** (apilada): cherry-pick `b1e5c68`
-  renumerado **F145→F146** (colisión con #311 environment_multispace en el
-  ledger de main); descripción corrige "migración 000077"→000078; review
-  renombrado a `review_F146.md`; comentarios de código renumerados.
-- Completitud verificada: archivos propios **idénticos** a las ramas huérfanas
-  (diff vacío; para F146, idénticos salvo el sed F145→F146). 0 markers de
-  conflicto en el repo.
+**Gap registrado (P3D-6b): costo de render** — frames de drag/órbita son long
+tasks (p95 222ms dev build; 538 draw calls, materiales físicos + shadows; sólo
+21k triángulos ⇒ el problema es draw calls, no GPU). Gates de ms calibrados al
+baseline con objetivo documentado; `docs/proyectar-3d-performance.md` define
+hardware objetivo, presupuesto objetivo-vs-gate, baseline y checklist de
+profiling obligatorio para hot path.
 
 ## Verificación (evidencia)
 
-- `go vet` limpio; `go test -count=1 ./...` 8 paquetes OK (storage contra
-  Postgres real; migraciones 000077+000078 aplicadas).
-- `pnpm test` 2.982 OK (domain 1.031 · storage 155 · excel 89 · ui 1.344 ·
-  mobile 45 · desktop 17 · web 301); `pnpm typecheck` OK.
-- Contract tras renumeración: TS `designBomPriceContract` 6/6 +
-  `domainBoundaryGuard` 2/2; Go `TestDesignBomPriceContract` 4 escenarios +
-  3 unitarios `ResolveBomWithDims` — verdes.
-- Review APPROVED (R1–R8) en `progress/review_F146.md`.
+- `pnpm test` 2.990 OK (domain 1.035 · storage 155 · excel 89 · ui 1.348 ·
+  mobile 45 · desktop 17 · web 301); `pnpm typecheck` 0 errores.
+- `pnpm smoke` 5/5 (F141–F145 existentes + perf nuevo 42s con gates verdes);
+  baseline en `test-results/proyectar-perf-baseline.json` (538 drawCalls ·
+  20.692 tris · commits max 5,6ms · drag p95 146ms · BOM 29 frías + 6.409
+  hits · órbita 0 commits).
+- Review APPROVED con 4 hallazgos corregidos (hooks violation movida antes
+  del early return, cache por contenido, órbita botón derecho, shape del
+  ResolvedBom) — `progress/review_F147.md`.
 
 ## Siguiente etapa
 
-#312 (P3D-6) performance → #314 (P3D-8) benchmark. El issue #313 queda
-cerrado al mergear los PRs de recuperación.
+#314 (P3D-8) benchmark de usabilidad; P3D-6b (costo de render) queda
+registrado como candidata paralela de alto impacto.

@@ -845,6 +845,11 @@ export {
   plantillaCatalogWithModules,
   seedCocinaEstandarTemplate,
 } from './__fixtures__/plantillaDemo';
+export {
+  buildPerfReferenceProject,
+  perfReferenceCatalog,
+  PERF_REFERENCE_PROJECT_ID,
+} from './__fixtures__/perfReferenceScene';
 
 // --- CRM Showcase & Portfolio (CRM Phase 4) ---
 export {

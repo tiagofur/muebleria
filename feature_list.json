@@ -3394,6 +3394,33 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F147",
+      "phase": 0,
+      "name": "proyectar_performance_budget",
+      "title": "Issue #312 P3D-6 — Performance budget y escena de referencia para Proyectar 3D (meta #308)",
+      "description": "Convierte la performance del editor 3D en requisito verificable (North Star §§17–18). Fixture de referencia versionado (perfReferenceScene: 30 ítems / 27 instancias en el espacio activo + espacio secundario, ≥300 piezas, test de conteo que impide adelgazarlo). Telemetría perfTelemetry (renderer.info probe cada 30 frames, Profiler del studio, longtask observer, latencia pointermove→frame del drag, stats del cache BOM) expuesta en window.__proyectarPerfSnapshot. Smoke pnpm smoke:perf con gates duros (draw calls/triángulos, drag p95, órbita 0 commits, BOM 0 re-resoluciones, long tasks p95) + baseline JSON + screenshot. Optimizaciones justificadas por medición: cache de resolveItemBom claveado por firma de CONTENIDO de catálogo (los selectores reconstruían arrays por render: 2.175 re-resoluciones BOM por drag → 0; WeakMaps item→projectLevelChoices→firma), memo sceneModules/sceneWalls (identidad estable por preview), catálogo estable en ProjectModalsContainer y guard de cámara en WallOcclusionTracker (sin realloc por frame). Gate CI determinista project3dPreview.cacheGate.test.ts: layout-change ⇒ 0 re-resoluciones; item-change ⇒ exactamente 1. Baseline documentado en docs/proyectar-3d-performance.md con hardware objetivo y checklist de profiling obligatorio para hot path. GAP REGISTRADO (P3D-6b): costo de render (long tasks por frame en drag/órbita; 538 draw calls, materiales físicos + shadows) — el baseline lo mide y deja como follow-up con números.",
+      "acceptance": [
+        "Fixture reproducible versionado: generador puro determinista con test de conteo (≥20 instancias activas, ≥300 piezas, >0 herrajes, placements válidos)",
+        "Telemetría: renderer drawCalls/triangles, commits React por fase, long tasks, drag feedback p95, re-resoluciones BOM con missReasons — en window.__proyectarPerfSnapshot",
+        "Smoke de budget con gates duros + baseline JSON versionable en test-results + screenshot; flag local de seed sin tocar seeds normales",
+        "Cache BOM: layout-only change ⇒ 0 re-resoluciones (gate vitest + runtime en smoke); cambio de ítem ⇒ exactamente 1; firma de contenido inmune a clonación de referencias",
+        "Órbita (input irrelevante) ⇒ 0 commits React (gate §17.1 en smoke con botón derecho)",
+        "Baseline y budgets documentados con hardware objetivo, objetivos vs gates y checklist de profiling; roadmap/verification/AGENTS actualizados",
+        "pnpm test + pnpm typecheck + pnpm smoke (5/5 incl. perf) verdes; reviewer antes de cerrar"
+      ],
+      "references": [
+        "docs/proyectar-3d-performance.md",
+        "docs/proyectar-3d-north-star.md",
+        "packages/domain/src/__fixtures__/perfReferenceScene.ts",
+        "packages/ui/src/preview3d/perfTelemetry.ts",
+        "packages/ui/src/preview3d/project3dPreview.ts",
+        "tests/smoke/proyectar-perf.spec.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
     }
   ]
 }

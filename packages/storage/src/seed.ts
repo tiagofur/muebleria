@@ -6,6 +6,7 @@
 import type { Workspace } from '@muebles/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
+  buildPerfReferenceProject,
   createCocinaLopezDemoProject,
   createPlantillaDemoProject,
   seedCatalogExpandedLatAm,
@@ -28,17 +29,39 @@ import {
 export const SCHEMA_VERSION = 3 as const;
 
 /**
+ * F147 / #312 — flag local (localStorage) que agrega la escena de referencia
+ * de performance al seed. Lo setea el smoke de performance antes de cargar la
+ * app; los seeds normales (tests, primer arranque) quedan intactos.
+ */
+export const SEED_PERF_REFERENCE_FLAG = 'muebles_seed_perf_reference';
+
+function wantsPerfReferenceScene(): boolean {
+  try {
+    return (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem(SEED_PERF_REFERENCE_FLAG) === '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Seed workspace with expanded LatAm catalog (17 modules), demo L-shaped kitchen project
  * ("Cocina López") pre-positioned in 3D with ambient floor/wall materials, plus golden demo project.
  */
 export function createSeedWorkspace(): Workspace {
+  const projects = [
+    createPlantillaDemoProject(),
+    createCocinaLopezDemoProject(),
+  ];
+  if (wantsPerfReferenceScene()) {
+    projects.push(buildPerfReferenceProject());
+  }
   return {
     schemaVersion: SCHEMA_VERSION,
     catalog: seedCatalogExpandedLatAm,
-    projects: [
-      createPlantillaDemoProject(),
-      createCocinaLopezDemoProject(),
-    ],
+    projects,
     projectTemplates: [seedCocinaEstandarTemplate],
     settings: { ...DEFAULT_WORKSHOP_SETTINGS },
   };
