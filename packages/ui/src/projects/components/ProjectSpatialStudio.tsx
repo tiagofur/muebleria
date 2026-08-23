@@ -2482,7 +2482,7 @@ export function ProjectSpatialStudio({
       choices = setItemOptionChoice(choices, code, material.id);
     }
     onUpdateItem?.({ ...item, optionChoices: choices });
-    setSelectedKey(key);
+    setSelection({ keys: [key], anchorKey: key });
     setInspectorTab('props');
     const scopeLabel =
       BOARD_APPLY_SCOPES.find((s) => s.id === boardScope)?.label ?? '';
