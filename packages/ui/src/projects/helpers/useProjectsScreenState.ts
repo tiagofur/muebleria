@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import type {
@@ -129,7 +130,11 @@ export function useProjectsScreenState({
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] =
     useState<ProjectStatusFilter>('all');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Deep-link mount (refresh / post-login remount): seed from the URL so the
+  // first paint already shows the detail instead of flashing the list.
+  const [selectedId, setSelectedIdState] = useState<string | null>(() =>
+    openProjectId && openProjectId !== '' ? openProjectId : null,
+  );
   const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [metaEditingId, setMetaEditingId] = useState<string | null>(null);
   const [metaDraft, setMetaDraft] = useState<ProjectDraft>(() =>
@@ -226,13 +231,24 @@ export function useProjectsScreenState({
     onReleasePlanEdit(selectedProjectId);
   }, [selectedProjectId, onReleasePlanEdit]);
 
-  useEffect(() => {
-    onSelectionChange?.(selectedId);
-  }, [selectedId, onSelectionChange]);
+  // Selection contract (mirrors useRoutableEntitySelection): URL → state
+  // restores WITHOUT notifying the shell again (it owns the URL already);
+  // only local intent (clicks, deletes) publishes state → URL. The previous
+  // unconditional publish effect echoed the mount-time null/restore back to
+  // the router and produced a /quotes ↔ /quotes/:id navigation loop.
+  const selectProject = useCallback(
+    (id: string | null) => {
+      setSelectedIdState(id);
+      onSelectionChange?.(id);
+    },
+    [onSelectionChange],
+  );
 
+  // URL → state restore. Deliberately uses the raw setter (no publish):
+  // the shell already owns the URL for this id.
   useEffect(() => {
     if (openProjectId == null || openProjectId === '') {
-      setSelectedId(null);
+      setSelectedIdState(null);
       setConfirmDelete(false);
       setConfirmRemoveItemId(null);
       setItemError(null);
@@ -241,7 +257,7 @@ export function useProjectsScreenState({
       return;
     }
     if (!projects.some((p) => p.id === openProjectId)) return;
-    setSelectedId(openProjectId);
+    setSelectedIdState(openProjectId);
     setConfirmDelete(false);
     setConfirmRemoveItemId(null);
     setItemError(null);
@@ -256,9 +272,21 @@ export function useProjectsScreenState({
     setMetaModalOpen(true);
   }, [requestCreateKey, workshopSettings]);
 
+  // Ids observed in previous renders: lets us distinguish "project deleted"
+  // (was known, now gone → clear + notify) from "projects still loading"
+  // (deep-linked id not seen yet → wait, never wipe the URL handoff).
+  const seenProjectIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (selectedId && !projects.some((p) => p.id === selectedId)) {
-      setSelectedId(null);
+    for (const project of projects) seenProjectIdsRef.current.add(project.id);
+  }, [projects]);
+
+  useEffect(() => {
+    if (
+      selectedId &&
+      seenProjectIdsRef.current.has(selectedId) &&
+      !projects.some((p) => p.id === selectedId)
+    ) {
+      setSelectedIdState(null);
       onSelectionChange?.(null);
       setConfirmDelete(false);
     }
@@ -310,7 +338,7 @@ export function useProjectsScreenState({
   };
 
   const openDetail = (project: Project) => {
-    setSelectedId(project.id);
+    selectProject(project.id);
     setConfirmDelete(false);
     setConfirmRemoveItemId(null);
     setItemError(null);
@@ -318,7 +346,7 @@ export function useProjectsScreenState({
 
   const backToList = () => {
     setPostAddPlaceCue(false);
-    setSelectedId(null);
+    selectProject(null);
     setConfirmDelete(false);
     setConfirmRemoveItemId(null);
     setItemError(null);
@@ -433,7 +461,7 @@ export function useProjectsScreenState({
   const handleDelete = (id: string) => {
     onDelete(id);
     if (selectedId === id) {
-      setSelectedId(null);
+      selectProject(null);
     }
     setConfirmDelete(false);
   };
@@ -447,7 +475,8 @@ export function useProjectsScreenState({
     statusFilter,
     setStatusFilter,
     selectedId,
-    setSelectedId,
+    /** Local intent selection (state + URL). Raw state stays internal. */
+    setSelectedId: selectProject,
     selectedProject,
     metaModalOpen,
     metaEditingId,
