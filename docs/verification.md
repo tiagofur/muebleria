@@ -309,3 +309,12 @@ materiales, layout) verifica además contra el budget:
 - gate CI determinista: cache de BOM (layout-change ⇒ 0 re-resoluciones) y
   conteo del fixture de referencia;
 - el humo WebGL completo (`pnpm smoke`) sigue siendo local + evidencia.
+
+## Benchmark de usabilidad de Proyectar (F148 / #314)
+
+El script canónico de 11 tareas es una **regresión permanente**:
+`pnpm smoke:usability` (incluido en `pnpm smoke`) corre el script completo con
+la UI real contra el seed demo y falla si un paso deja de ser completable o el
+kit de medición deja de capturar los eventos (detalle en
+`docs/proyectar-3d-usability-benchmark.md`). Los tiempos de esa corrida son
+`proxy` y no cuentan como evidencia de usuario.

@@ -3421,6 +3421,33 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F148",
+      "phase": 0,
+      "name": "proyectar_usability_benchmark",
+      "title": "Issue #314 P3D-8 — Kit de benchmark de usabilidad 5★: instrumentación, protocolo y validación proxy (meta #308)",
+      "description": "Convierte el benchmark de usabilidad de #314 en algo medible y reproducible. Tareas canónicas versionadas (los 11 pasos del script del issue con targets iniciales). Telemetría de sesión usabilityBenchmark.ts (packages/ui, patrón perfTelemetry): timeline append-only de eventos auto (búsqueda biblioteca, insert, move, duplicate/align vía intent de runCommand, edición de dimensión, opción de agregado, material tableros por scope, material ambiental, cambio de ambiente, undo/redo, presentar, ver piezas BOM, clicks del workspace) y de facilitador (inicio/completada/abandonada por tarea, +ayuda, +error), contexto de tarea vigente, persistencia localStorage que sobrevive recargas, export JSON versionado y API window.__proyectarUsability. Panel de facilitador colapsable gateado por flag localStorage muebles_usability_benchmark (patrón seed perf de F147): costo cero con flag apagado (regla North Star performance; smoke:perf intacto). Smoke pnpm smoke:usability que recorre el script canónico completo contra el seed demo con la UI real (regresión permanente de script-completable), exporta test-results/proyectar-usability-proxy.json con source 'proxy' (data truth: no es evidencia de usuario) + screenshot. Summarizer puro testeado (tiempos/mediana por tarea, ayudas, errores, retrocesos=undo, clicks, cumplimiento de targets) para el análisis futuro de sesiones reales. Protocolo canónico docs/proyectar-3d-usability-benchmark.md (métricas operacionalizadas, targets+recalibración, facilitador sin coaching, hoja de observación+encuesta, datos anónimos, baseline proxy, reordenamiento de #309–#313/#277–#297 con evidencia). #314 NO se cierra con esta feature: queda abierto hasta las sesiones reales. Review propia encontró y corrigió un bug de restauración (listener de clicks re-adherido al recargar sesión activa, con test).",
+      "acceptance": [
+        "Tareas canónicas versionadas: 11 pasos del script de #314 con targets iniciales como constantes compartidas",
+        "Telemetría de sesión: eventos append-only auto+facilitador con contexto de tarea, persistencia localStorage que sobrevive recarga, export JSON versionado, window.__proyectarUsability",
+        "Costuras del studio instrumentadas (búsqueda/insert/move/duplicate/align/dimensión/opción/material tableros+ambiental/ambiente/undo-redo/presentar/BOM/clicks): no-op sin sesión activa y panel no montado sin flag; smoke:perf sigue verde",
+        "Panel de facilitador con tokens design.md, BEM y a11y: sesión, marcas por tarea, +ayuda/+error, export/copy",
+        "Smoke pnpm smoke:usability: script canónico completo con UI real, efectos afirmados por tarea, JSON proxy (source 'proxy') a test-results + screenshot; script-completable queda como regresión",
+        "Summarizer puro con tests vitest: tiempos (lista/mediana), ayudas, errores, retrocesos, clicks y cumplimiento de targets por tarea",
+        "Protocolo docs/proyectar-3d-usability-benchmark.md con métricas operacionalizadas, facilitador sin coaching, encuesta post-sesión, data truth proxy vs real y baseline proxy documentado; roadmap/AGENTS/verification actualizados",
+        "pnpm test + pnpm typecheck + pnpm smoke completo (incluye perf) verdes; reviewer antes de cerrar"
+      ],
+      "references": [
+        "docs/proyectar-3d-usability-benchmark.md",
+        "docs/proyectar-3d-north-star.md",
+        "packages/ui/src/preview3d/usabilityBenchmark.ts",
+        "packages/ui/src/projects/components/studio/UsabilityBenchmarkPanel.tsx",
+        "tests/smoke/proyectar-usability.spec.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
     }
   ]
 }

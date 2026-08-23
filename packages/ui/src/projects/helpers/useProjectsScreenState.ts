@@ -28,6 +28,7 @@ import type {
   Structure,
   WorkshopSettings,
 } from '@muebles/domain';
+import { trackUsability } from '../../preview3d/usabilityBenchmark';
 import { useDebouncedValue } from '../../common';
 import { consumeRequestCreateKey } from '../../common/consumeRequestCreateKey';
 import {
@@ -139,7 +140,13 @@ export function useProjectsScreenState({
   const [itemError, setItemError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
-  const [showPresentation, setShowPresentation] = useState(false);
+  const [showPresentation, setShowPresentationRaw] = useState(false);
+  // F148 — única puerta de la presentación: toda apertura/cierre (menú, URL
+  // ?present=, Escape, onGoToProyectar) queda como evento del benchmark.
+  const setShowPresentation = (open: boolean) => {
+    setShowPresentationRaw(open);
+    trackUsability(open ? 'present_open' : 'present_close');
+  };
   const [showSpatialStudio, setShowSpatialStudio] = useState(false);
   const [spatialBootstrap, setSpatialBootstrap] = useState<{
     listFilter?: 'all' | 'unplaced' | 'placed';

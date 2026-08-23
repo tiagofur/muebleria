@@ -283,6 +283,13 @@ negocio.
 #314 es validación; no debe llevar `type:feature`. Cuando exista `type:validation`,
 aplicarlo.
 
+**Estado (F148):** kit de medición entregado — protocolo canónico
+(`docs/proyectar-3d-usability-benchmark.md`), telemetría de sesión
+(`usabilityBenchmark.ts`), panel del facilitador (flag
+`muebles_usability_benchmark`) y smoke `pnpm smoke:usability` que corre el
+script completo como regresión permanente. **#314 sigue abierto hasta las
+sesiones reales** registradas según el protocolo.
+
 ### Script
 
 Usuario completa:

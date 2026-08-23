@@ -1,49 +1,51 @@
 # Sesión
 
-**Feature cerrada:** F147 — proyectar_performance_budget (#312 P3D-6, meta #308)
+**Feature cerrada:** F148 — proyectar_usability_benchmark (#314 P3D-8, meta #308)
 **Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
-**SDD:** https://github.com/tiagofur/muebleria/issues/312#issuecomment-5387133235
+**SDD:** https://github.com/tiagofur/muebleria/issues/314#issuecomment-5387642499
 
 ## Resultado
 
-Performance del editor 3D como requisito verificable (North Star §§17–18).
-**Fixture de referencia** versionado (`perfReferenceScene`: 30 ítems / 27
-instancias activas en 3 muros + isla + espacio Office que resuelve sin
-renderizarse; ≥300 piezas; test de conteo impide adelgazarlo). **Telemetría**
-`perfTelemetry.ts` en `window.__proyectarPerfSnapshot`: renderer.info probe,
-Profiler del studio (no-op prod), longtask observer, latencia pointermove→frame
-del drag y stats del cache BOM con missReasons. **Smoke `pnpm smoke:perf`**
-con gates duros + baseline JSON + screenshot; flag local de seed
-(`muebles_seed_perf_reference`) sin tocar seeds normales.
+Kit de benchmark de usabilidad para #314 (el issue queda ABIERTO hasta las
+sesiones reales). **Telemetría** `usabilityBenchmark.ts` (packages/ui, patrón
+perfTelemetry): tareas canónicas v1 (11 pasos del script con targets
+iniciales), timeline append-only auto+facilitador con contexto de tarea,
+persistencia localStorage que sobrevive recargas (re-adhiere captura de
+clicks), export JSON y `window.__proyectarUsability`. **Costuras** del studio
+instrumentadas (búsqueda/insert/move/command-intent/dimensión/opción/
+materiales tableros+ambiental/ambientes/undo-redo/presentar/BOM/clicks) —
+todas no-op sin sesión. **Panel de facilitador** gateado por flag
+`muebles_usability_benchmark` (ShellView), costo cero sin flag. **Summarizer**
+puro (mediana por tarea, ayudas/errores/retrocesos/clicks, metRatio de
+targets). **Smoke `pnpm smoke:usability`**: script canónico completo con UI
+real (incluye dnd HTML5 sintético para materiales) — regresión permanente de
+script-completable; exporta JSON `source:"proxy"` (data truth). **Protocolo**
+`docs/proyectar-3d-usability-benchmark.md` (métricas operacionalizadas,
+facilitador sin coaching, encuesta post, targets recalibrables, baseline
+proxy). Roadmap §10/AGENTS/verification/design actualizados.
 
-Optimizaciones medidas (no folklore): **cache de resolveItemBom por firma de
-CONTENIDO** de catálogo — la versión por identidad fallaba 2.175 veces por
-drag porque los selectores reconstruyen arrays por render; ahora layout-change
-⇒ 0 re-resoluciones (gate vitest CI + gate runtime en smoke). Memo
-`sceneModules`/`sceneWalls`, catálogo estable en ProjectModalsContainer, guard
-de cámara en WallOcclusionTracker. **Órbita ⇒ 0 commits React** (gate §17.1,
-botón derecho por construcción).
-
-**Gap registrado (P3D-6b): costo de render** — frames de drag/órbita son long
-tasks (p95 222ms dev build; 538 draw calls, materiales físicos + shadows; sólo
-21k triángulos ⇒ el problema es draw calls, no GPU). Gates de ms calibrados al
-baseline con objetivo documentado; `docs/proyectar-3d-performance.md` define
-hardware objetivo, presupuesto objetivo-vs-gate, baseline y checklist de
-profiling obligatorio para hot path.
+**Hallazgos registrados:** #338 (render loop guest+selección+reload,
+preexistente — aislado con diagnóstico; bloquea recarga in-browser a mitad de
+sesión, persistencia cubierta en unit) y "piso sólo aplica por drag" (dato de
+fricción para sesiones reales, documentado en el protocolo).
 
 ## Verificación (evidencia)
 
-- `pnpm test` 2.990 OK (domain 1.035 · storage 155 · excel 89 · ui 1.348 ·
+- `pnpm test` 3.019 OK (domain 1.035 · storage 155 · excel 89 · ui 1.381 ·
   mobile 45 · desktop 17 · web 301); `pnpm typecheck` 0 errores.
-- `pnpm smoke` 5/5 (F141–F145 existentes + perf nuevo 42s con gates verdes);
-  baseline en `test-results/proyectar-perf-baseline.json` (538 drawCalls ·
-  20.692 tris · commits max 5,6ms · drag p95 146ms · BOM 29 frías + 6.409
-  hits · órbita 0 commits).
-- Review APPROVED con 4 hallazgos corregidos (hooks violation movida antes
-  del early return, cache por contenido, órbita botón derecho, shape del
-  ResolvedBom) — `progress/review_F147.md`.
+- `pnpm smoke`: studio F141/F143/F144/F145 + **usabilidad nuevo verde (38–56s,
+  11/11 tareas, 74 eventos, JSON proxy exportado)**. `smoke:perf` falló
+  inicialmente SOLO en G2 (drag p95) por **entorno**: falla idéntica en `main`
+  (328 ms) con load 11+ del software del usuario; **verde en el retry con load
+  ~5.8** — 6/6 efectivos (nota: smoke:perf da falsos negativos con máquina
+  cargada; ver `progress/review_F148.md`).
+- Review APPROVED con 1 hallazgo corregido (clicks tras recarga) —
+  `progress/review_F148.md`.
 
 ## Siguiente etapa
 
-#314 (P3D-8) benchmark de usabilidad; P3D-6b (costo de render) queda
-registrado como candidata paralela de alto impacto.
+Ejecutar las **sesiones reales** según `docs/proyectar-3d-usability-benchmark.md`
+(#314 abierto): reclutar 3–5 participantes del taller, facilitador con panel,
+exportar JSONs a `progress/benchmark/sessions/`, analizar con
+`summarizeUsabilitySessions` y recalibrar targets/reordenar #309–#313/#277–#297
+con evidencia. Paralelas candidatas: #338 (fix render loop) y P3D-6b.

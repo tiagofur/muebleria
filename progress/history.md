@@ -1093,3 +1093,18 @@ max 5,6ms. Gap P3D-6b registrado: costo de render (long tasks por frame en
 drag/órbita). Docs: proyectar-3d-performance.md (budgets, hardware objetivo,
 checklist). Verificación: 2.990 tests + smoke 5/5 + typecheck; review APPROVED
 (progreso en progress/review_F147.md).
+
+## F148 — proyectar_usability_benchmark (#314 P3D-8 · meta #308) — 2026-08-23
+
+Kit de medición del benchmark de usabilidad de #314 (issue queda abierto hasta
+sesiones reales): telemetría de sesión con tareas canónicas v1 (11 pasos +
+targets), eventos auto en las costuras del studio (no-op sin sesión), panel del
+facilitador por flag (costo cero), summarizer puro y smoke
+`pnpm smoke:usability` que corre el script canónico completo con UI real como
+regresión permanente (JSON proxy source:'proxy', data truth). Protocolo canónico
+docs/proyectar-3d-usability-benchmark.md. Hallazgos: #338 (render loop
+guest+selección+reload, preexistente, aislado por diagnóstico) y piso
+drag-only. Verificación: 3.019 tests + typecheck + smoke con usabilidad verde;
+smoke:perf G2 blocked/environment (falla igual en main con load 11+, mejora al
+bajar carga; gate CI determinista verde). Review APPROVED con fix de clicks
+tras recarga (progress/review_F148.md).

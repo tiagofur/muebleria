@@ -151,6 +151,7 @@ import {
   UsersScreen,
   Modal,
   OnboardingTourModal,
+  UsabilityBenchmarkPanel,
   getHasSeenOnboardingTour,
   canShowPricePreview,
   canShowProjectPricePreview,
@@ -1990,6 +1991,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         onClose={() => setShowOnboardingTour(false)}
         onLoadDemoProject={handleLoadCocinaLopezDemo}
       />
+
+      {/* F148 / #314 — panel del facilitador del benchmark de usabilidad
+          (sólo se monta con el flag localStorage del benchmark). */}
+      <UsabilityBenchmarkPanel />
     </AppShell>
   );
 }

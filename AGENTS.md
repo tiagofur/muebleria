@@ -37,6 +37,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Posicionamiento competitivo Proyectar | `docs/proyectar-3d-competitive-position.md` |
 | UX/North Star Proyectar 3D | `docs/proyectar-3d-north-star.md` |
 | Performance budget Proyectar | `docs/proyectar-3d-performance.md` |
+| Benchmark de usabilidad Proyectar | `docs/proyectar-3d-usability-benchmark.md` |
 | Roadmap Proyectar 3D | `docs/proyectar-3d-roadmap-vnext.md` |
 | Baseline MVP histórico | `docs/history/prd.md` |
 | Plan de consolidación | `docs/operational-core-v1.md` |

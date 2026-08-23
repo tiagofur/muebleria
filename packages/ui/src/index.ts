@@ -408,3 +408,16 @@ export {
   type OnboardingTourModalProps,
 } from './onboarding/OnboardingTourModal';
 
+// --- Benchmark de usabilidad Proyectar (F148 / #314) ---
+export { UsabilityBenchmarkPanel } from './usability/UsabilityBenchmarkPanel';
+export {
+  USABILITY_BENCHMARK_FLAG,
+  USABILITY_TASKS,
+  USABILITY_TASKS_VERSION,
+  summarizeUsabilitySessions,
+  type UsabilitySession,
+  type UsabilitySummary,
+  type UsabilityTaskSummary,
+  type UsabilityTargetResult,
+} from './preview3d/usabilityBenchmark';
+

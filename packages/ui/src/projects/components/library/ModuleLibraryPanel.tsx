@@ -25,6 +25,7 @@ import {
   encodeLibraryDrag,
   LIBRARY_DRAG_MIME,
 } from '../../../preview3d/paintMaterial';
+import { trackUsability } from '../../../preview3d/usabilityBenchmark';
 import { searchModules } from './searchModules';
 import type { LibraryCollections } from './useLibraryFavorites';
 import './moduleLibrary.css';
@@ -398,9 +399,10 @@ export function ModuleLibraryPanel({
         </div>
         <SearchInput
           value={search}
-          onChange={(value) =>
-            setNavigation((current) => ({ ...current, search: value }))
-          }
+          onChange={(value) => {
+            setNavigation((current) => ({ ...current, search: value }));
+            trackUsability('library_search', { query: value.slice(0, 80) });
+          }}
           placeholder={searchPlaceholder}
           aria-label={searchAriaLabel}
         />

@@ -150,6 +150,7 @@ import {
   recordProfilerCommit,
   setPerfSceneId,
 } from '../../preview3d/perfTelemetry';
+import { trackUsability } from '../../preview3d/usabilityBenchmark';
 import {
   allFootprints,
   getCategoryTheme,
@@ -1312,16 +1313,32 @@ export function ProjectSpatialStudio({
     if (!material) return;
     if (drop.surface.kind === 'floor') {
       commit({ ...layout, floorMaterialId: drop.materialId });
+      trackUsability('material_ambient_apply', {
+        surface: 'floor',
+        materialId: drop.materialId,
+      });
     } else if (drop.surface.kind === 'wall') {
       const targetWallId = drop.surface.wallId;
       const updatedWalls = (layout.walls ?? []).map((w) =>
         w.id === targetWallId ? { ...w, wallMaterialId: drop.materialId } : w,
       );
       commit({ ...layout, walls: updatedWalls });
+      trackUsability('material_ambient_apply', {
+        surface: 'wall',
+        materialId: drop.materialId,
+      });
     } else if (drop.surface.kind === 'ceiling') {
       commit({ ...layout, ceilingMaterialId: drop.materialId, showCeiling: true });
+      trackUsability('material_ambient_apply', {
+        surface: 'ceiling',
+        materialId: drop.materialId,
+      });
     } else if (drop.surface.kind === 'countertop') {
       commit({ ...layout, countertopMaterialId: drop.materialId, showCountertop: true });
+      trackUsability('material_ambient_apply', {
+        surface: 'countertop',
+        materialId: drop.materialId,
+      });
     }
   };
 
@@ -1329,12 +1346,14 @@ export function ProjectSpatialStudio({
     if (!canEdit) {
       // Read-only: local view only — never persist activeSpaceId on frozen OP.
       setViewSpaceId(spaceId);
+      trackUsability('space_switch', { spaceId, readOnly: true });
       setSelection(EMPTY_STUDIO_SELECTION);
       setTargetWallId(null);
       return;
     }
     if (spaceId === activeSpaceId) return;
     commit(setActiveKitchenSpace(layout, spaceId));
+    trackUsability('space_switch', { spaceId });
     setSelection(EMPTY_STUDIO_SELECTION);
     setTargetWallId(null);
     // F145 — re-encuadra con la vista recordada del ambiente destino (default
@@ -1349,6 +1368,7 @@ export function ProjectSpatialStudio({
     if (!canEdit) return;
     const n = (layout.spaces?.length ?? 0) + 1;
     commit(addKitchenSpace(layout, `Espacio ${n}`, newId));
+    trackUsability('space_add', { name: `Espacio ${n}` });
     setSelection(EMPTY_STUDIO_SELECTION);
     setTargetWallId(null);
   };
@@ -1506,6 +1526,7 @@ export function ProjectSpatialStudio({
       },
     ]);
     applyHistoryEntry(prev);
+    trackUsability('undo');
   };
 
   const redoPlan = () => {
@@ -1522,6 +1543,7 @@ export function ProjectSpatialStudio({
       },
     ]);
     applyHistoryEntry(next);
+    trackUsability('redo');
   };
 
   // ── F143: selección y comandos de productividad ───────────────────────────
@@ -1575,6 +1597,10 @@ export function ProjectSpatialStudio({
       return result;
     }
     setCommandStatus(null);
+    trackUsability('command', {
+      intent: opts?.intent ?? 'Editar plano',
+      keys: result.createdKeys.length || result.itemPatches.length,
+    });
     if (!wallDragSession.current) {
       const affectedIds = new Set<string>(result.itemPatches.map((p) => p.itemId));
       setUndoStack((s) => [
@@ -1802,6 +1828,7 @@ export function ProjectSpatialStudio({
     }
     setDimDraftIssues([]);
     updateSelectedItem({ customDims: candidate }, 'Medida a medida');
+    trackUsability('dimension_edit', { dimKey, valueMm: Math.round(v) });
     // Enseña si la nueva huella desborda el muro donde está colocado.
     if (selectedPlacement && !isFreePlacement(selectedPlacement)) {
       const wall = layout.walls.find((w) => w.id === selectedPlacement.wallId);
@@ -2435,6 +2462,11 @@ export function ProjectSpatialStudio({
         return;
       }
       libraryCollections.trackInsert(ghostDrag.moduleId);
+      trackUsability('insert', {
+        moduleId: ghostDrag.moduleId,
+        via: 'drag',
+        surface: drop.wallId ? 'wall' : 'floor',
+      });
       const mod = modules.find((m) => m.id === ghostDrag.moduleId);
       if (drop.wallId) {
         placeOnWall(itemId, 0, drop.wallId, drop.offsetMm, mod);
@@ -2460,6 +2492,10 @@ export function ProjectSpatialStudio({
         drop.planYMm,
       );
     }
+    trackUsability('move_commit', {
+      via: 'unplaced-drag',
+      surface: drop.wallId ? 'wall' : 'floor',
+    });
     setGhostDrag(null);
     setGhostHit(null);
   };
@@ -2482,6 +2518,10 @@ export function ProjectSpatialStudio({
         return;
       }
       onUpdateProjectLevelChoice('FRENTE', material.id);
+      trackUsability('material_boards_apply', {
+        scope: 'project',
+        materialId: material.id,
+      });
       setBoardStatus(`✓ ${material.name} aplicado a frentes de toda la obra`);
       return;
     }
@@ -2523,6 +2563,11 @@ export function ProjectSpatialStudio({
       choices = setItemOptionChoice(choices, code, material.id);
     }
     onUpdateItem?.({ ...item, optionChoices: choices });
+    trackUsability('material_boards_apply', {
+      scope: boardScope,
+      materialId: material.id,
+      moduleId: item.moduleId,
+    });
     setSelection({ keys: [key], anchorKey: key });
     setInspectorTab('props');
     const scopeLabel =
@@ -2558,6 +2603,11 @@ export function ProjectSpatialStudio({
     const itemId = onInsertFromCatalog(moduleId);
     if (!itemId) return;
     libraryCollections.trackInsert(moduleId);
+    trackUsability('insert', {
+      moduleId,
+      via: 'click',
+      placed: Boolean(activeWallId),
+    });
     const mod = modules.find((m) => m.id === moduleId);
     if (activeWallId) {
       placeOnWall(itemId, 0, activeWallId, undefined, mod);
@@ -2690,6 +2740,7 @@ export function ProjectSpatialStudio({
       history: 'none',
       snap: true,
     });
+    trackUsability('move_commit', { via: 'wall-drag' });
   };
 
   const applyFreePlanPosition = (
@@ -2814,6 +2865,7 @@ export function ProjectSpatialStudio({
   const handleModuleFreeDragEnd = (_moduleKey: string) => {
     wallDragSession.current = false;
     setDraggingInvalid(false);
+    trackUsability('move_commit', { via: 'island-drag' });
   };
 
   const convertSelectedToIsland = () => {
@@ -4689,6 +4741,11 @@ export function ProjectSpatialStudio({
                             : w,
                         );
                         commit({ ...layout, walls: updatedWalls });
+                        trackUsability('material_ambient_apply', {
+                          surface: 'wall',
+                          via: 'select',
+                          materialId: matId ?? '',
+                        });
                       }}
                       data-testid="spatial-studio-select-wall-material"
                     >
@@ -4904,6 +4961,7 @@ export function ProjectSpatialStudio({
                   aria-pressed={detailMode}
                   onClick={() => {
                     setDetailMode((v) => !v);
+                    trackUsability('bom_detail', { open: !detailMode });
                     setDetailPartId(null);
                     setDetailHardwareId(null);
                   }}
@@ -5155,6 +5213,10 @@ export function ProjectSpatialStudio({
                                     group.code,
                                     e.target.value,
                                   ),
+                                });
+                                trackUsability('option_change', {
+                                  group: group.code,
+                                  value: e.target.value,
                                 });
                               }}
                               data-testid={`spatial-studio-choice-${group.code}`}
