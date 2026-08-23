@@ -10,6 +10,7 @@ package storage_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -21,7 +22,7 @@ func TestProjectItem_CustomDimsRoundTrip(t *testing.T) {
 	customer := &domain.Customer{
 		ID:     uuidv4(t),
 		Name:   "Custom Dims S.A.",
-		Email:  "dims@example.com",
+		Email:  "dims-" + time.Now().Format("20060102-150405.000000") + "@example.com",
 		Active: true,
 	}
 	if err := store.CreateCustomer(ctx, customer); err != nil {
@@ -30,6 +31,19 @@ func TestProjectItem_CustomDimsRoundTrip(t *testing.T) {
 	t.Cleanup(func() {
 		_ = store.DeactivateCustomer(ctx, customer.ID)
 	})
+
+	// Módulo propio (patrón structures_108): la FK de project_items no puede
+	// depender del seed — la CI corre contra un Postgres fresco sin datos.
+	mod := &domain.Module{
+		Code: "MOD-DIMS-" + time.Now().Format("20060102-150405.000000"),
+		Name: "Custom Dims Test Module", BaseLaborCost: 10,
+		BoardParts:    []domain.BoardPart{},
+		HardwareLines: []domain.HardwareLine{},
+	}
+	if err := store.CreateModule(ctx, mod); err != nil {
+		t.Fatalf("CreateModule: %v", err)
+	}
+	t.Cleanup(func() { _ = store.DeleteModule(ctx, mod.ID) })
 
 	id := uuidv4(t)
 	dims := &domain.ItemCustomDims{WidthMm: 900, HeightMm: 800, DepthMm: 500}
@@ -42,9 +56,9 @@ func TestProjectItem_CustomDimsRoundTrip(t *testing.T) {
 		Status:       domain.StatusDraft,
 		Items: []domain.ProjectItem{{
 			ID:              uuidv4(t),
-			ModuleID:        "a0000006-0000-0000-0000-000000000003", // módulo del seed (FK)
+			ModuleID:        mod.ID,
 			Quantity:        1,
-			OptionChoices:   map[string]string{"INTERIOR": "a0000006-0000-0000-0000-000000000010"}, // material del seed
+			OptionChoices:   map[string]string{},
 			MeasurePresetID: uuidv4(t),
 			CustomDims:      dims,
 		}},
