@@ -1,0 +1,275 @@
+{
+  "comment": [
+    "F145 / #313 (P3D-7) — Contract diseño→BOM→precio compartido por TS y Go.",
+    "TS: packages/domain/src/designBomPriceContract.test.ts (resolveBom + calcProjectBreakdown + fingerprint).",
+    "Go: backend-go/internal/domain/engine/designBomPriceContract_test.go (ResolveBomWithDims + CalcProjectBreakdown).",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "El componente del agregado usa geometría FIJA a propósito: la resolución de fórmulas",
+    "dentro de agregados (dims del sub-espacio vs dims del padre) aún difiere TS/Go;",
+    "cubrirla es follow-up de #312/#313. La multiplicación de hardware por instancia sí se prueba.",
+    "Dependencia O1/#300: la aserción completa stale→approval→nuevo release llega con Operational Core;",
+    "hoy se congela que el fingerprint de diseño cambia con customDims (escenario stale-fingerprint)."
+  ],
+  "ambientMaterialIds": ["amb-floor-contract", "amb-wall-contract"],
+  "catalog": {
+    "materials": [
+      {
+        "id": "mat-a",
+        "code": "MEL-A",
+        "name": "Melamina Alisa Blanco",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 15,
+        "grainDefault": false,
+        "boardPrice": 100,
+        "wastePercent": 0,
+        "costPerM2": 100,
+        "active": true
+      },
+      {
+        "id": "mat-b",
+        "code": "MEL-B",
+        "name": "Melamina Roble",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 15,
+        "grainDefault": false,
+        "boardPrice": 150,
+        "wastePercent": 0,
+        "costPerM2": 150,
+        "active": true
+      }
+    ],
+    "edges": [],
+    "hardware": [
+      {
+        "id": "hw-jal",
+        "code": "JAL-256",
+        "name": "Jaladera 256",
+        "unit": "piece",
+        "costPerUnit": 10,
+        "active": true
+      }
+    ],
+    "optionGroups": [
+      {
+        "id": "og-interior",
+        "code": "INTERIOR",
+        "name": "Interior",
+        "kind": "board",
+        "required": true,
+        "optionIds": ["mat-a", "mat-b"]
+      },
+      {
+        "id": "og-jal",
+        "code": "JALADERA",
+        "name": "Jaladera",
+        "kind": "hardware",
+        "required": true,
+        "optionIds": ["hw-jal"]
+      }
+    ],
+    "structures": [
+      {
+        "id": "st-carcase",
+        "code": "EST-CAR",
+        "name": "Carcasa paramétrica",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "components": [
+          { "componentId": "comp-frente", "quantity": 1 },
+          { "componentId": "comp-lateral", "quantity": 2 }
+        ],
+        "active": true
+      }
+    ],
+    "components": [
+      {
+        "id": "comp-frente",
+        "code": "FRENTE",
+        "name": "Frente",
+        "placement": "frontal",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 720,
+          "widthMm": 600,
+          "thicknessMm": 18,
+          "lengthFormula": "H",
+          "widthFormula": "W"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["INTERIOR"],
+        "active": true
+      },
+      {
+        "id": "comp-lateral",
+        "code": "LATERAL",
+        "name": "Lateral",
+        "placement": "lateral_izquierdo",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 720,
+          "widthMm": 560,
+          "thicknessMm": 18,
+          "lengthFormula": "H",
+          "widthFormula": "D"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["INTERIOR"],
+        "active": true
+      },
+      {
+        "id": "comp-frente-cajon",
+        "code": "FRENTE-CAJ",
+        "name": "Frente cajón",
+        "placement": "frente_cajon",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 140,
+          "widthMm": 500,
+          "thicknessMm": 18
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["INTERIOR"],
+        "active": true
+      }
+    ],
+    "agregados": [
+      {
+        "id": "agr-cajon",
+        "code": "CAJON",
+        "name": "Cajón",
+        "components": [
+          { "componentId": "comp-frente-cajon", "quantity": 1 }
+        ],
+        "hardwareLines": [
+          { "id": "hl-guia", "quantity": 1, "optionRole": "JALADERA" }
+        ],
+        "active": true
+      }
+    ],
+    "modules": [
+      {
+        "id": "m-bajo",
+        "code": "BA-CAR",
+        "name": "Bajo carcasa",
+        "structureId": "st-carcase",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [
+          { "id": "p600", "name": "600", "width": 600, "height": 720, "depth": 560 },
+          { "id": "p800", "name": "800", "width": 800, "height": 720, "depth": 560 }
+        ],
+        "components": [],
+        "hardwareLines": [
+          { "id": "hl-jal", "quantity": 2, "optionRole": "JALADERA" }
+        ],
+        "active": true
+      }
+    ]
+  },
+  "project": {
+    "id": "prj-contract",
+    "name": "Contract diseño→BOM→precio",
+    "customerId": "c-contract",
+    "currency": "UYU",
+    "marginFactor": 1.5,
+    "laborFixedCost": 0,
+    "status": "draft",
+    "items": [
+      {
+        "id": "item-1",
+        "moduleId": "m-bajo",
+        "quantity": 1,
+        "optionChoices": { "INTERIOR": "mat-a", "JALADERA": "hw-jal" },
+        "measurePresetId": "p600"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "preset-600",
+      "description": "Preset comercial 600: piezas por fórmula H/W/D del preset.",
+      "agregadoQty": 0,
+      "expected": {
+        "parts": [
+          { "description": "Frente", "lengthMm": 720, "widthMm": 600, "materialId": "mat-a", "count": 1 },
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "materialId": "mat-a", "count": 2 }
+        ],
+        "hardwareTotals": { "hw-jal": 2 },
+        "materialsCost": 123.84,
+        "hardwareTotal": 20,
+        "directCost": 143.84,
+        "salePrice": 215.76
+      }
+    },
+    {
+      "id": "custom-dims",
+      "description": "A medida 900×800×500 (F144): el override gana al preset y cambia piezas y precio.",
+      "agregadoQty": 0,
+      "customDims": { "widthMm": 900, "heightMm": 800, "depthMm": 500 },
+      "expected": {
+        "parts": [
+          { "description": "Frente", "lengthMm": 800, "widthMm": 900, "materialId": "mat-a", "count": 1 },
+          { "description": "Lateral", "lengthMm": 800, "widthMm": 500, "materialId": "mat-a", "count": 2 }
+        ],
+        "hardwareTotals": { "hw-jal": 2 },
+        "materialsCost": 152,
+        "hardwareTotal": 20,
+        "directCost": 172,
+        "salePrice": 258
+      }
+    },
+    {
+      "id": "material-change",
+      "description": "Cambio de material de frentes (INTERIOR mat-a→mat-b): BOM y precio cambian.",
+      "agregadoQty": 0,
+      "optionChoicesOverride": { "INTERIOR": "mat-b" },
+      "expected": {
+        "parts": [
+          { "description": "Frente", "lengthMm": 720, "widthMm": 600, "materialId": "mat-b", "count": 1 },
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "materialId": "mat-b", "count": 2 }
+        ],
+        "hardwareTotals": { "hw-jal": 2 },
+        "materialsCost": 185.76,
+        "hardwareTotal": 20,
+        "directCost": 205.76,
+        "salePrice": 308.64
+      }
+    },
+    {
+      "id": "agregado-qty3",
+      "description": "Agregado cajón ×3: piezas del agregado ×3 y hardware (2 del módulo + 1×3 del agregado).",
+      "agregadoQty": 3,
+      "expected": {
+        "parts": [
+          { "description": "Frente", "lengthMm": 720, "widthMm": 600, "materialId": "mat-a", "count": 1 },
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "materialId": "mat-a", "count": 2 },
+          { "description": "Frente cajón", "lengthMm": 140, "widthMm": 500, "materialId": "mat-a", "count": 3 }
+        ],
+        "hardwareTotals": { "hw-jal": 5 },
+        "materialsCost": 144.84,
+        "hardwareTotal": 50,
+        "directCost": 194.84,
+        "salePrice": 292.26
+      }
+    }
+  ],
+  "staleFingerprint": {
+    "description": "Diseño cambia ⇒ fingerprint de producción cambia (TS-only; release/stale completo espera O1/#300).",
+    "customDims": { "widthMm": 900, "heightMm": 720, "depthMm": 560 }
+  }
+}

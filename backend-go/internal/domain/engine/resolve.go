@@ -50,6 +50,41 @@ func ResolveBom(
 	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
 }
 
+// ResolveBomWithDims is the F144-aware variant (#310 / P3D-7): customDims
+// overrides the commercial preset W/H/D for composed (parametric) modules —
+// mirrors TS resolveBom(..., dimsOverride). A non-composed module plus an
+// override is rejected (it cannot honor arbitrary dims). The preset id is
+// still validated so a stale measurePresetID fails loudly even with an
+// override, exactly like the TS engine.
+func ResolveBomWithDims(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	measurePresetID string,
+	structureRevisionPin *int,
+	customDims *domain.ItemCustomDims,
+) (domain.ResolvedBom, error) {
+	if err := ValidateModule(module); err != nil {
+		return domain.ResolvedBom{}, err
+	}
+	if customDims != nil && strings.TrimSpace(module.StructureID) == "" {
+		return domain.ResolvedBom{}, fmt.Errorf(
+			"el mueble %q (%s) no es paramétrico; no admite medidas a medida",
+			module.Name, module.Code,
+		)
+	}
+
+	rawParts := module.BoardParts
+	if strings.TrimSpace(module.StructureID) != "" {
+		composed, err := expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, customDims)
+		if err != nil {
+			return domain.ResolvedBom{}, err
+		}
+		rawParts = composed
+	}
+	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
+}
+
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
 // optional structureRevisionPin so closed-quote items can resolve against the
 // exact structure revision they were quoted with. When pin is nil it behaves
@@ -194,6 +229,16 @@ func expandComposedModuleParts(
 	measurePresetID string,
 	structureRevisionPin *int,
 ) ([]domain.BoardPart, error) {
+	return expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, nil)
+}
+
+func expandComposedModulePartsWithDims(
+	module domain.Module,
+	catalog domain.Catalog,
+	measurePresetID string,
+	structureRevisionPin *int,
+	customDims *domain.ItemCustomDims,
+) ([]domain.BoardPart, error) {
 	found, ok := findStructure(catalog, module.StructureID)
 	if !ok {
 		return nil, fmt.Errorf("structure not found: %s", module.StructureID)
@@ -206,9 +251,14 @@ func expandComposedModuleParts(
 	if err != nil {
 		return nil, err
 	}
+	// resolveModuleDims keeps validating the preset id (stale ids fail loudly,
+	// TS parity); the custom override then replaces the resolved dims.
 	dims, err := resolveModuleDims(module, measurePresetID)
 	if err != nil {
 		return nil, err
+	}
+	if customDims != nil {
+		dims = formulaDims{W: customDims.WidthMm, H: customDims.HeightMm, D: customDims.DepthMm}
 	}
 	if err := validateStructureDims(structure, dims); err != nil {
 		return nil, err

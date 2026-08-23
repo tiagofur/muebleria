@@ -1041,3 +1041,22 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
   cierre en #310.
 - **Deuda explícita:** per-instance dims (no modelado), paridad TS/Go del
   dimsOverride → #313 (siguiente etapa).
+
+## F145 — proyectar_design_bom_price_contracts (#313 P3D-7 · meta #308) — 2026-08-22
+
+- **Alcance:** contract tests diseño→BOM→precio→producción con fixture
+  compartido `contracts/designBomPrice.json` (TS+Go, expected congelados) +
+  cierre de la deuda F144 (customDims en backend Go) + gate "React no duplica
+  lógica de negocio".
+- **Bug real cerrado:** el replace de `project_items` en Go borraba la medida
+  a medida al guardar desde web — `ItemCustomDims`, migración 000078 (JSONB),
+  storage load/replace, `ResolveBomWithDims`, breakdown con dims; round-trip
+  probado contra Postgres.
+- **Contratos:** preset / customDims / material-change / agregado-qty3 en
+  paridad numérica exacta TS↔Go; stale-fingerprint (O1/#300 documentado);
+  anti-leak ambiental en ambas suites.
+- **Gate:** `domainBoundaryGuard.test.ts` con allowlist de deuda purchasing.
+- **Verificación:** go test 8 paquetes + pnpm test 2.924 + typecheck OK;
+  review APPROVED con 3 hallazgos corregidos (`progress/review_F145.md`).
+- **Deuda explícita:** fórmulas dentro de agregados divergen TS/Go (sub-espacio
+  vs padre — documentada en el fixture), purchasing UI math (allowlist).

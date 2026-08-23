@@ -220,12 +220,13 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 		// NEVER iterate module.BoardParts alone (empty after F053 composition).
 		// Mirrors packages/domain calcLiveProjectBreakdown → resolveBom.
 		choices := choicesForItem(project, item)
-		bom, err := ResolveBomWithPin(
+		bom, err := ResolveBomWithDims(
 			module,
 			choices,
 			catalog,
 			item.MeasurePresetID,
 			item.StructureRevisionPin,
+			item.CustomDims,
 		)
 		if err != nil {
 			return domain.QuoteBreakdown{}, err

@@ -518,6 +518,15 @@ type Component struct {
 	UpdatedAt     time.Time          `json:"updated_at"`
 }
 
+// ItemCustomDims is the free per-item dimensions override (F144 / #310), mm.
+// Wins over the commercial preset; only valid for composed (parametric)
+// modules. Mirrors TS ItemCustomDims.
+type ItemCustomDims struct {
+	WidthMm  int `json:"widthMm"`
+	HeightMm int `json:"heightMm"`
+	DepthMm  int `json:"depthMm"`
+}
+
 type ProjectItem struct {
 	ID            string            `json:"id"`
 	ModuleID      string            `json:"module_id"`
@@ -525,6 +534,10 @@ type ProjectItem struct {
 	OptionChoices map[string]string `json:"option_choices"` // group_code -> choice_id
 	// MeasurePresetID selects Module.Presets entry for quotation (H09 / #104).
 	MeasurePresetID string `json:"measure_preset_id,omitempty"`
+	// CustomDims is the free per-item W/H/D override (F144 / #310). nil = preset.
+	// Persisted as project_items.custom_dims JSONB; without it a web save would
+	// silently drop the "a medida" chosen in Proyectar.
+	CustomDims *ItemCustomDims `json:"custom_dims,omitempty"`
 	// BaseMode is the line's base treatment override (F087):
 	// none|plinth_board|plinth_strip|legs. Empty = module default.
 	BaseMode string `json:"base_mode,omitempty"`
