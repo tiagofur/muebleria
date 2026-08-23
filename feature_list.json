@@ -3391,8 +3391,9 @@
         "backend-go/db/migration/000078_project_item_custom_dims.up.sql",
         "packages/ui/src/domainBoundaryGuard.test.ts"
       ],
-      "status": "in_progress",
-      "createdAt": "2026-08-23"
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
     }
   ]
 }

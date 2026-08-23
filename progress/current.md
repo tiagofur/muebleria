@@ -1,50 +1,55 @@
 # Sesión
 
-**Feature cerrada:** F145 — proyectar_environment_multispace (#311 P3D-4, meta #308 etapa E5)
+**Feature cerrada:** F146 — proyectar_design_bom_price_contracts (#313 P3D-7,
+meta #308) **+ recuperación del trabajo huérfano de F142 (#309 P3D-0b)**
 **Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
-**Subplan (SDD):** https://github.com/tiagofur/muebleria/issues/311#issuecomment-5384066402
+**Review:** APPROVED — `progress/review_F146.md` (incluye sección de recuperación)
 
-## Resultado
+## Incidente detectado y resuelto: PRs apilados mergeados a su rama base
 
-Environment authoring + multi-ambiente 5★ (North Star §§13–14). **Muros editables
-dentro del studio**: tarjetas por muro en el inspector Ambiente (nombre, largo mm,
-ángulo con chips 0/90/180/270 + numérico, origen avanzado colapsado) que commitean
-en blur/Enter como UNA intención (`CommitOnBlurInput`, bar F144 §12); Agregar muro
-encadena desde el último extremo girando +90° (rectángulos cierran solos); Quitar
-muro descoloca sus muebles con mensaje que enseña el conteo (política de ownership:
-un placement nunca sobrevive a su muro). **Huecos** (`WallOpening`
-ventana/puerta/pasaje, presentation-only — jamás en BOM) en `KitchenWall` con
-comandos puros `kitchenEnvironmentCommands.ts`: alta rápida en el primer tramo
-libre con defaults por tipo, edición/baja, `ValidationError` que enseña (hueco
-fuera del muro, solape, altura > muro, acortar muro bajo hueco) y warnings de
-mueble tapando hueco. `splitWallSegments` (geometría pura) parte el muro en boxes
-sólidos alrededor de huecos → **3D con huecos reales sin CSG** (WallMesh y
-WallAmbientMesh por segmentos + vidrio translúcido en ventanas) y planta 2D con
-vanos punteados y tooltip. **Fit room** (botón Ajustar) encuadra muros+muebles con
-la cámara `fit-selection` de F144. **Ocultar muros**: atenúa (fantasma 0.12) los
-muros entre cámara y ambiente (`wallsOccludingCamera` puro; tracker con guard por
-CONTENIDO del conjunto — la órbita no re-renderiza; default off). **Cámara por
-ambiente**: el switch re-encuadra con la vista recordada del espacio destino
-(default 3/4) — nunca hereda el encuadre anterior. Storage: `openings` snake_case
-en `apiMappers` con round-trip test (backend guarda blob JSON, sin cambios Go).
-Incidente de ledger detectado y reparado: el commit F143 (21ae7b4) pisó
-`feature_list.json` desde una copia stale y borró la entrada F142 (mergeada en
-PR #330); se restauró la entrada original desde git 1076997.
+Dos PRs se cerraron "verdes" en GitHub **sin tocar main**:
+
+- **PR #330 (F142)**: base `feat/f141-proyectar-library`, mergeado 2h después
+  de que esa rama ya hubiera ido a main (#329). Todo el código F142 (dock de
+  materiales Ambiente|Tableros, backend de categorías con migración 000077,
+  BoardMaterialPalette, paintMaterial) quedó huérfano. main sólo tenía la
+  entrada del ledger (restaurada a mano en b34c8d8) **sin el código** — la
+  sesión F145-env lo interpretaba como pérdida sólo de ledger.
+- **PR #333 (F146, entonces F145)**: base `feat/f144-precision-dims`, mergeado
+  13 segundos después de que #332 ya hubiera ido a main. Fixture compartido +
+  suites contract TS/Go + customDims backend (migración 000078) huérfanos.
+
+`progress/current.md` de la sesión anterior decía #313 "pospuesto" porque su
+árbol local (rama de #334) nunca vio el trabajo de #333.
+
+## Recuperación
+
+- **Rama `recover/f142-materials-dock`** (base main): cherry-pick
+  `5617311..e530c0c` (F142 + v2 + v3 + docs). Conflictos resueltos conservando
+  la evolución F143–F145 de main (import union, `moduleSelected` =
+  multiselección ∪ hover de pintura, mocks unificados, describe F142 al final
+  del test). Un conflicto semántico: `setSelectedKey` → `setSelection({keys,
+  anchor})` (commit propio).
+- **Rama `feat/f146-contracts-p3d7`** (apilada): cherry-pick `b1e5c68`
+  renumerado **F145→F146** (colisión con #311 environment_multispace en el
+  ledger de main); descripción corrige "migración 000077"→000078; review
+  renombrado a `review_F146.md`; comentarios de código renumerados.
+- Completitud verificada: archivos propios **idénticos** a las ramas huérfanas
+  (diff vacío; para F146, idénticos salvo el sed F145→F146). 0 markers de
+  conflicto en el repo.
 
 ## Verificación (evidencia)
 
-- `pnpm test` exit 0 — 2.952 tests (domain 1.022 · storage 154 · excel 89 ·
-  ui 1.324 · mobile 45 · desktop 17 · web 301); `pnpm typecheck` exit 0.
-- Smoke WebGL Playwright 4/4 (F145: abrir muro → ventana con defaults → tarjeta
-  informa hueco → Ajustar + Ocultar muros → crear Espacio 2 → muro sólo ahí →
-  volver a Cocina sin mezcla; screenshot `test-results/proyectar-multispace.png`
-  revisado).
-- Review: **APPROVED** con 3 hallazgos aplicados durante la revisión (guard de
-  performance del auto-hide por contenido del set, commits de campos en
-  blur/Enter, fallback de radius inventado) — `progress/review_F145.md`.
+- `go vet` limpio; `go test -count=1 ./...` 8 paquetes OK (storage contra
+  Postgres real; migraciones 000077+000078 aplicadas).
+- `pnpm test` 2.982 OK (domain 1.031 · storage 155 · excel 89 · ui 1.344 ·
+  mobile 45 · desktop 17 · web 301); `pnpm typecheck` OK.
+- Contract tras renumeración: TS `designBomPriceContract` 6/6 +
+  `domainBoundaryGuard` 2/2; Go `TestDesignBomPriceContract` 4 escenarios +
+  3 unitarios `ResolveBomWithDims` — verdes.
+- Review APPROVED (R1–R8) en `progress/review_F146.md`.
 
 ## Siguiente etapa
 
-#313 (P3D-7) — contract tests diseño→BOM→precio→producción (pospuesto por
-decisión del usuario al ejecutar #311 primero; el freeze del `dimsOverride`
-sigue pendiente). Después #312 (P3D-6) performance → #314 (P3D-8) benchmark.
+#312 (P3D-6) performance → #314 (P3D-8) benchmark. El issue #313 queda
+cerrado al mergear los PRs de recuperación.
