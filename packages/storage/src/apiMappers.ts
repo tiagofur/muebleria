@@ -1100,6 +1100,51 @@ export function customerFromApi(raw: Record<string, unknown>): Customer {
 
 // --- Projects ---
 
+function wallOpeningToApi(o: {
+  id: string;
+  kind: string;
+  offsetMm: number;
+  widthMm: number;
+  heightMm?: number;
+  sillMm?: number;
+}): Record<string, unknown> {
+  return {
+    id: o.id,
+    kind: o.kind,
+    offset_mm: o.offsetMm,
+    width_mm: o.widthMm,
+    height_mm: o.heightMm === undefined ? null : o.heightMm,
+    sill_mm: o.sillMm === undefined ? null : o.sillMm,
+  };
+}
+
+function wallOpeningFromApi(o: unknown): {
+  id: string;
+  kind: 'window' | 'door' | 'pass';
+  offsetMm: number;
+  widthMm: number;
+  heightMm?: number;
+  sillMm?: number;
+} | undefined {
+  const or = o as Record<string, unknown>;
+  const kind = str(or.kind);
+  if (kind !== 'window' && kind !== 'door' && kind !== 'pass') return undefined;
+  const height = or.height_mm ?? or.heightMm;
+  const sill = or.sill_mm ?? or.sillMm;
+  return {
+    id: str(or.id),
+    kind,
+    offsetMm: num(or.offset_mm ?? or.offsetMm, 0),
+    widthMm: num(or.width_mm ?? or.widthMm, 0),
+    ...(height === null || height === undefined || height === ''
+      ? {}
+      : { heightMm: num(height) }),
+    ...(sill === null || sill === undefined || sill === ''
+      ? {}
+      : { sillMm: num(sill) }),
+  };
+}
+
 function kitchenWallToApi(w: {
   id: string;
   name?: string;
@@ -1108,6 +1153,14 @@ function kitchenWallToApi(w: {
   originXMm?: number;
   originYMm?: number;
   wallMaterialId?: string;
+  openings?: readonly {
+    id: string;
+    kind: string;
+    offsetMm: number;
+    widthMm: number;
+    heightMm?: number;
+    sillMm?: number;
+  }[];
 }): Record<string, unknown> {
   return {
     id: w.id,
@@ -1117,6 +1170,7 @@ function kitchenWallToApi(w: {
     origin_x_mm: w.originXMm ?? null,
     origin_y_mm: w.originYMm ?? null,
     wall_material_id: w.wallMaterialId ?? null,
+    openings: (w.openings ?? []).map(wallOpeningToApi),
   };
 }
 
@@ -1251,11 +1305,22 @@ function kitchenWallFromApi(w: unknown): {
   originXMm?: number;
   originYMm?: number;
   wallMaterialId?: string;
+  openings?: readonly {
+    id: string;
+    kind: 'window' | 'door' | 'pass';
+    offsetMm: number;
+    widthMm: number;
+    heightMm?: number;
+    sillMm?: number;
+  }[];
 } {
   const wr = w as Record<string, unknown>;
   const ox = wr.origin_x_mm ?? wr.originXMm;
   const oy = wr.origin_y_mm ?? wr.originYMm;
   const wMatId = str(wr.wall_material_id ?? wr.wallMaterialId);
+  const openings = (Array.isArray(wr.openings) ? wr.openings : [])
+    .map(wallOpeningFromApi)
+    .filter((o): o is NonNullable<typeof o> => o !== undefined);
   return {
     id: str(wr.id),
     name: str(wr.name) || undefined,
@@ -1266,6 +1331,7 @@ function kitchenWallFromApi(w: unknown): {
     originYMm:
       oy === null || oy === undefined || oy === '' ? undefined : num(oy),
     ...(wMatId ? { wallMaterialId: wMatId } : {}),
+    ...(openings.length > 0 ? { openings } : {}),
   };
 }
 

@@ -63,6 +63,8 @@ export type {
   PlacementElevation,
   PlacementMode,
   KitchenWall,
+  WallOpening,
+  WallOpeningKind,
   ProjectItemPlacement,
   KitchenPlanUnderlay,
   KitchenSpace,
@@ -387,6 +389,30 @@ export {
   distributeSelectionCommand,
 } from './kitchenArrangementCommands';
 export { nudgeSelectionCommand } from './kitchenPrecisionCommands';
+export {
+  WALL_OPENING_KINDS,
+  WALL_OPENING_KIND_LABELS_ES,
+  WALL_OPENING_DEFAULTS_MM,
+} from './kitchenEnvironmentCommands';
+export {
+  addWall,
+  updateWall,
+  removeWall,
+  addOpening,
+  updateOpening,
+  removeOpening,
+  splitWallSegments,
+  wallInwardNormal,
+  wallsOccludingCamera,
+  ROOM_WALL_HEIGHT_MM,
+  MIN_WALL_LENGTH_MM,
+  MIN_OPENING_WIDTH_MM,
+} from './kitchenEnvironmentCommands';
+export type {
+  EnvironmentCommandErrorReason,
+  EnvironmentCommandResult,
+  WallSolidSegment,
+} from './kitchenEnvironmentCommands';
 export type {
   ClipboardEntry,
   ItemQuantityPatch,

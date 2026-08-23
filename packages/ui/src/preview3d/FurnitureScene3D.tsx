@@ -13,7 +13,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Bounds,
   ContactShadows,
@@ -30,6 +30,8 @@ import {
   offsetMmFromPlanPoint,
   suggestLegCount,
   DEFAULT_MATERIAL_PREVIEW_COLOR,
+  splitWallSegments,
+  wallsOccludingCamera,
   type AmbientMaterial,
   type Hardware,
   type ModuleBaseMode,
@@ -37,6 +39,7 @@ import {
   type ResolvedBoardPart,
   type HardwarePlacement,
   type ResolvedHardwarePlacement,
+  type WallOpening,
 } from '@muebles/domain';
 import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
@@ -69,6 +72,8 @@ import {
   PAINT_HOVER_COLOR,
   ROOM_WALL_HEIGHT_MM,
   WALL_DEFAULT_COLOR,
+  WALL_GHOST_OPACITY,
+  WINDOW_PANE_COLOR,
   WallAmbientMesh,
   planAmbientScene,
   resolveCountertopPhysical,
@@ -162,6 +167,8 @@ export type FurnitureSceneWall = {
   readonly heightMm?: number;
   /** Optional ambient material override for this specific wall. */
   readonly wallMaterialId?: string;
+  /** Wall openings — rendered as real holes (F145, presentation-only). */
+  readonly openings?: readonly WallOpening[];
 };
 
 export type FurnitureScene3DProps = {
@@ -297,6 +304,11 @@ export type FurnitureScene3DProps = {
   readonly keyboardNavActive?: boolean;
   /** Subtle floor grid in mm (obra look). */
   readonly showFloorGrid?: boolean;
+  /**
+   * F145 — ghost the walls between the camera and the room so they stop
+   * blocking the work (toolbar «Ocultar muros»; default off).
+   */
+  readonly hideOccludingWalls?: boolean;
   /**
    * Scene lighting + material response preset.
    * present = multi-light + env + glossier melamine (default for Proyectar).
@@ -994,15 +1006,24 @@ function FloorGrid({
   );
 }
 
+/**
+ * F145 — muro con huecos reales: `splitWallSegments` (dominio puro) parte el
+ * muro en boxes sólidos alrededor de ventanas/puertas/pasajes, sin CSG. La
+ * ventana lleva un vidrio translúcido de referencia; la puerta queda abierta.
+ * `ghost` (auto-hide) baja la opacidad sin quitar el mesh de referencia.
+ * Constantes compartidas (opacidad/vidrio) viven en AmbientMeshes.
+ */
 function WallMesh({
   wall,
   selected = false,
   paintHover = false,
+  ghost = false,
   onSelect,
 }: {
   readonly wall: FurnitureSceneWall;
   readonly selected?: boolean;
   readonly paintHover?: boolean;
+  readonly ghost?: boolean;
   readonly onSelect?: (wallId: string) => void;
 }): ReactNode {
   const h = wall.heightMm ?? 2400;
@@ -1013,47 +1034,138 @@ function WallMesh({
   const midY = (wall.originYMm + wall.endYMm) / 2;
   const yaw = Math.atan2(dy, dx);
   const thickness = selected ? 48 : 40;
+  const segments = useMemo(
+    () =>
+      splitWallSegments(
+        {
+          id: wall.id,
+          lengthMm: length,
+          angleDeg: 0,
+          ...(wall.openings ? { openings: wall.openings } : {}),
+        },
+        h,
+      ),
+    [wall.id, wall.openings, length, h],
+  );
+  const handleClick = onSelect
+    ? (e: { stopPropagation: () => void }) => {
+        e.stopPropagation();
+        onSelect(wall.id);
+      }
+    : undefined;
+  const handleOver = onSelect
+    ? () => {
+        document.body.style.cursor = 'pointer';
+      }
+    : undefined;
+  const handleOut = onSelect
+    ? () => {
+        document.body.style.cursor = '';
+      }
+    : undefined;
   // Workshop → Three: [x, z, y]; wall sits on floor, long axis along length.
+  // Segment centers are wall-local: x from midpoint, y from h/2.
   return (
     <group position={[midX, h / 2, midY]} rotation={[0, -yaw, 0]}>
-      <mesh
-        position={[0, 0, -thickness / 2]}
-        userData={{ wallId: wall.id }}
-        onClick={
-          onSelect
-            ? (e) => {
-                e.stopPropagation();
-                onSelect(wall.id);
-              }
-            : undefined
-        }
-        onPointerOver={
-          onSelect
-            ? () => {
-                document.body.style.cursor = 'pointer';
-              }
-            : undefined
-        }
-        onPointerOut={
-          onSelect
-            ? () => {
-                document.body.style.cursor = '';
-              }
-            : undefined
-        }
-      >
-        <boxGeometry args={[length, h, thickness]} />
-        <meshStandardMaterial
-          color={paintHover ? PAINT_HOVER_COLOR : WALL_DEFAULT_COLOR}
-          roughness={0.9}
-          metalness={0.05}
-          transparent={paintHover}
-          opacity={paintHover ? 0.85 : 1}
-        />
-        {selected ? <Edges threshold={15} color="#3b82f6" lineWidth={2} /> : null}
-      </mesh>
+      {segments.map((seg, i) => (
+        <mesh
+          key={i}
+          position={[
+            seg.startMm + seg.lengthMm / 2 - length / 2,
+            (seg.zBottomMm + seg.zTopMm) / 2 - h / 2,
+            -thickness / 2,
+          ]}
+          userData={{ wallId: wall.id }}
+          onClick={handleClick}
+          onPointerOver={handleOver}
+          onPointerOut={handleOut}
+        >
+          <boxGeometry args={[seg.lengthMm, seg.zTopMm - seg.zBottomMm, thickness]} />
+          <meshStandardMaterial
+            color={paintHover ? PAINT_HOVER_COLOR : WALL_DEFAULT_COLOR}
+            roughness={0.9}
+            metalness={0.05}
+            transparent={paintHover || ghost}
+            opacity={paintHover ? 0.85 : ghost ? WALL_GHOST_OPACITY : 1}
+            depthWrite={!ghost}
+          />
+          {selected ? <Edges threshold={15} color="#3b82f6" lineWidth={2} /> : null}
+        </mesh>
+      ))}
+      {(wall.openings ?? [])
+        .filter((o) => o.kind === 'window')
+        .map((o) => {
+          const sill = o.sillMm ?? 900;
+          const height = o.heightMm ?? 1200;
+          return (
+            <mesh
+              key={`pane-${o.id}`}
+              position={[
+                o.offsetMm + o.widthMm / 2 - length / 2,
+                sill + height / 2 - h / 2,
+                -thickness / 2,
+              ]}
+              userData={{ wallId: wall.id, openingPane: true }}
+            >
+              <boxGeometry args={[o.widthMm, height, thickness * 0.25]} />
+              <meshStandardMaterial
+                color={WINDOW_PANE_COLOR}
+                transparent
+                opacity={ghost ? 0.04 : 0.3}
+                roughness={0.15}
+                metalness={0.1}
+                depthWrite={false}
+              />
+            </mesh>
+          );
+        })}
     </group>
   );
+}
+
+/**
+ * F145 — auto-hide de muros: rastrea la cámara y marca los muros entre ella y
+ * la habitación (cálculo puro `wallsOccludingCamera`). Sólo actualiza estado
+ * cuando cambia el conjunto; el coste por frame es un dot product por muro.
+ */
+function WallOcclusionTracker({
+  walls,
+  enabled,
+  onOccludedChange,
+}: {
+  readonly walls: readonly FurnitureSceneWall[];
+  readonly enabled: boolean;
+  readonly onOccludedChange: (ids: ReadonlySet<string>) => void;
+}): null {
+  const { camera } = useThree();
+  // Guard por CONTENIDO del conjunto (no por posición): la órbita sólo
+  // re-renderiza cuando un muro efectivamente entra/sale del conjunto oculto.
+  const lastKey = useRef<string>('');
+  useFrame(() => {
+    if (!enabled) {
+      if (lastKey.current !== '') {
+        lastKey.current = '';
+        onOccludedChange(new Set());
+      }
+      return;
+    }
+    const x = Math.round(camera.position.x);
+    const y = Math.round(camera.position.z);
+    const withAngles = walls.map((w) => ({
+      ...w,
+      angleDeg:
+        (Math.atan2(w.endYMm - w.originYMm, w.endXMm - w.originXMm) * 180) /
+        Math.PI,
+    }));
+    const hidden = wallsOccludingCamera(withAngles, x, y);
+    const key = walls
+      .map((w) => (hidden.has(w.id) ? `1${w.id}` : `0${w.id}`))
+      .join('|');
+    if (key === lastKey.current) return;
+    lastKey.current = key;
+    onOccludedChange(hidden);
+  });
+  return null;
 }
 
 function ModuleGroup({
@@ -1631,6 +1743,7 @@ function SceneContent({
   selectedWallId,
   onSelectWall,
   showFloorGrid,
+  hideOccludingWalls = false,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   ambientFloor,
   ambientWall,
@@ -1693,6 +1806,8 @@ function SceneContent({
   readonly selectedWallId?: string | null;
   readonly onSelectWall?: (wallId: string | null) => void;
   readonly showFloorGrid?: boolean;
+  /** F145 — ghost walls between the camera and the room (auto-hide mode). */
+  readonly hideOccludingWalls?: boolean;
   readonly lightingMode?: SceneLightingMode;
   readonly ambientFloor?: AmbientMaterial;
   readonly ambientWall?: AmbientMaterial;
@@ -1730,6 +1845,11 @@ function SceneContent({
     return map;
   }, [hardwareCatalog]);
   const [orbitSuppressed, setOrbitSuppressed] = useState(false);
+
+  // F145 — muros ocultos por la cámara (modo «ocultar muros»).
+  const [occludedWallIds, setOccludedWallIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
 
   // F143 — selección múltiple: Set memoizado para highlight O(1) por módulo.
   const selectedKeySet = useMemo(() => {
@@ -2126,6 +2246,11 @@ function SceneContent({
           {showFloor && showFloorGrid ? (
             <FloorGrid totalWidth={totalWidth} totalDepth={totalDepth} />
           ) : null}
+          <WallOcclusionTracker
+            walls={walls}
+            enabled={hideOccludingWalls}
+            onOccludedChange={setOccludedWallIds}
+          />
           {walls.map((w) => {
             const wMat =
               (w.wallMaterialId
@@ -2133,6 +2258,7 @@ function SceneContent({
                     (m) => m.id === w.wallMaterialId,
                   )
                 : undefined) ?? ambientWall;
+            const ghost = hideOccludingWalls && occludedWallIds.has(w.id);
 
             return wMat ? (
               <WallAmbientMesh
@@ -2142,6 +2268,7 @@ function SceneContent({
                 selected={selectedWallId === w.id}
                 onSelect={onSelectWall}
                 lightingMode={lightMode}
+                ghost={ghost}
                 paintHover={
                   paintHoverSurface?.kind === 'wall' &&
                   paintHoverSurface.wallId === w.id
@@ -2152,6 +2279,7 @@ function SceneContent({
                 key={w.id}
                 wall={w}
                 selected={selectedWallId === w.id}
+                ghost={ghost}
                 paintHover={
                   paintHoverSurface?.kind === 'wall' &&
                   paintHoverSurface.wallId === w.id
@@ -2363,6 +2491,7 @@ export function FurnitureScene3D({
   selectedWallId = null,
   onSelectWall,
   showFloorGrid = false,
+  hideOccludingWalls = false,
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   ambientFloor,
   ambientWall,
@@ -2700,6 +2829,7 @@ export function FurnitureScene3D({
                   selectedWallId={selectedWallId}
                   onSelectWall={onSelectWall}
                   showFloorGrid={showFloorGrid}
+                  hideOccludingWalls={hideOccludingWalls}
                   lightingMode={lightingMode}
                   ambientFloor={ambientFloor}
                   ambientWall={ambientWall}

@@ -80,6 +80,7 @@ import type {
   JobCostSummary,
   MaterialCostValuation,
   SiteSurvey,
+  KitchenWall,
 } from '@muebles/domain';
 
 describe('apiMappers', () => {
@@ -504,6 +505,52 @@ describe('apiMappers', () => {
     expect(round.kitchenLayout?.spaces).toHaveLength(2);
     expect(round.kitchenLayout?.spaces?.[1]?.placements[0]?.itemId).toBe('i2');
     expect(round.kitchenLayout?.activeSpaceId).toBe('sp-cocina');
+  });
+
+  it('round-trips wall openings (F145) and tolera walls sin openings', () => {
+    const withOpenings: KitchenWall = {
+      id: 'w1',
+      lengthMm: 3000,
+      angleDeg: 0,
+      openings: [
+        { id: 'o1', kind: 'window', offsetMm: 1000, widthMm: 1200, heightMm: 1200, sillMm: 900 },
+        { id: 'o2', kind: 'door', offsetMm: 0, widthMm: 900 },
+      ],
+    };
+    const p: Project = {
+      id: 'pr-openings',
+      name: 'Huecos',
+      customerId: 'c1',
+      currency: 'UYU',
+      marginFactor: 1.5,
+      laborFixedCost: 0,
+      status: 'draft',
+      kitchenLayout: {
+        walls: [withOpenings, { id: 'w2', lengthMm: 2000, angleDeg: 90 }],
+        placements: [],
+      },
+      items: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const api = projectToApi(p);
+    const kl = api.kitchen_layout as Record<string, unknown>;
+    const walls = kl.walls as Record<string, unknown>[];
+    expect(walls[0]!.openings).toEqual([
+      { id: 'o1', kind: 'window', offset_mm: 1000, width_mm: 1200, height_mm: 1200, sill_mm: 900 },
+      { id: 'o2', kind: 'door', offset_mm: 0, width_mm: 900, height_mm: null, sill_mm: null },
+    ]);
+    // Wall sin openings serializa [] (no null) y round-trip no la inventa.
+    expect(walls[1]!.openings).toEqual([]);
+
+    const round = projectFromApi(api as Record<string, unknown>);
+    const w1 = round.kitchenLayout?.walls[0]!;
+    expect(w1.openings).toHaveLength(2);
+    expect(w1.openings?.[0]).toEqual({
+      id: 'o1', kind: 'window', offsetMm: 1000, widthMm: 1200, heightMm: 1200, sillMm: 900,
+    });
+    expect(w1.openings?.[1]?.heightMm).toBeUndefined();
+    expect(round.kitchenLayout?.walls[1]!.openings).toBeUndefined();
   });
 
   it('round-trips free-place (island) kitchen placements', () => {

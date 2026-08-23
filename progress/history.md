@@ -1041,3 +1041,31 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
   cierre en #310.
 - **Deuda explícita:** per-instance dims (no modelado), paridad TS/Go del
   dimsOverride → #313 (siguiente etapa).
+
+## F145 — proyectar_environment_multispace (#311 P3D-4 · meta #308) — 2026-08-23
+
+- **Alcance:** environment authoring + multi-ambiente 5★ North Star §§13–14:
+  muros editables en el studio (tarjetas con nombre/largo/ángulo/origen, commits
+  blur/Enter), agregar muro encadenado +90°, quitar muro descolocando con mensaje
+  que enseña; huecos ventana/puerta/pasaje (presentation-only) con validaciones de
+  dominio y warnings; 3D con huecos reales vía `splitWallSegments` (sin CSG) +
+  vidrio en ventanas; fit room; ocultar muros (auto-hide por normal interior,
+  fantasma); cámara por ambiente con re-encuadre en el switch.
+- **Dominio:** `kitchenEnvironmentCommands.ts` (addWall/updateWall/removeWall +
+  addOpening/updateOpening/removeOpening + splitWallSegments + wallInwardNormal +
+  wallsOccludingCamera), `WallOpening`/`KitchenWall.openings` en types,
+  `kitchenLayoutWarnings` extendido (mueble tapa hueco, hueco fuera de muro).
+- **Storage:** `apiMappers` openings snake_case con round-trip (blob JSON en Go,
+  sin cambios backend).
+- **UI:** `CommitOnBlurInput` (una intención por edición), tarjetas de muro +
+  huecos en inspector Ambiente, toolbar Ajustar/Ocultar muros, `WallOcclusionTracker`
+  con guard por contenido, plano 2D con vanos punteados.
+- **Verificación:** 2.952 tests + typecheck exit 0; smoke WebGL 4/4 con screenshot
+  review; review APPROVED con 3 hallazgos aplicados — `progress/review_F145.md`.
+- **Cierre:** commit único + push, comentario de cierre en #311.
+- **Incidente reparado:** F143 (21ae7b4) pisó `feature_list.json` desde una copia
+  stale y borró la entrada F142; restaurada la entrada original desde git
+  (1076997) en orden F141→F145.
+- **Deuda explícita:** obstáculos no anclados a muro (survey ya los modela, no
+  duplicar), vista global multi-space explícita (si demanda), cámara orbit
+  completa por ambiente (v1 recuerda preset).

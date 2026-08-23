@@ -16,10 +16,10 @@
  *    callers mock the viewer (repo convention).
  */
 
-import { Suspense, useEffect, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { Edges, useTexture } from '@react-three/drei';
 import { DoubleSide, RepeatWrapping, SRGBColorSpace } from 'three';
-import type { AmbientMaterial } from '@muebles/domain';
+import { splitWallSegments, type AmbientMaterial } from '@muebles/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
 import {
   contactShadowForFloor,
@@ -43,6 +43,10 @@ export const PAINT_HOVER_COLOR = '#4ade80';
 export const PAINT_HOVER_OPACITY = 0.3;
 /** Standard kitchen wall height (mm). Mirrors WallMesh default. */
 export const ROOM_WALL_HEIGHT_MM = 2400;
+/** F145 — ghost opacity for camera-occluded walls («ocultar muros»). */
+export const WALL_GHOST_OPACITY = 0.12;
+/** F145 — translucent pane fill for window openings (visual reference only). */
+export const WINDOW_PANE_COLOR = '#bcd7e8';
 /** Baseboard strip geometry (mm). Design #4151 Q2 (real thin geometry). */
 export const BASEBOARD_HEIGHT_MM = 100;
 export const BASEBOARD_THICKNESS_MM = 20;
@@ -336,6 +340,7 @@ function WallTextureMaterial({
   tileLengthMm,
   phys,
   selected = false,
+  ghost = false,
 }: {
   readonly url: string;
   readonly lengthMm: number;
@@ -344,6 +349,7 @@ function WallTextureMaterial({
   readonly tileLengthMm?: number;
   readonly phys: AmbientPhysical;
   readonly selected?: boolean;
+  readonly ghost?: boolean;
 }): ReactNode {
   const map = useTexture(url);
   useEffect(() => {
@@ -361,14 +367,19 @@ function WallTextureMaterial({
       envMapIntensity={phys.envMapIntensity}
       emissive={selected ? '#5b9fd4' : '#000000'}
       emissiveIntensity={selected ? 0.35 : 0}
+      transparent={ghost}
+      opacity={ghost ? WALL_GHOST_OPACITY : 1}
+      depthWrite={!ghost}
     />
   );
 }
 
 /**
- * Ambient wall mesh. Mirrors the WallMesh geometry (box [length, 2400,
- * 40|48], workshop→Three [x,z,y] transform) but textured/colored per the
- * ambient material. Selected highlight is preserved (blue emissive tint).
+ * Ambient wall mesh. Mirrors the WallMesh geometry convention (workshop→Three
+ * [x,z,y] transform). F145: renders per solid segment via `splitWallSegments`
+ * so openings are real holes; windows get a translucent reference pane.
+ * Selected highlight is preserved (blue emissive tint); `ghost` fades the wall
+ * when auto-hidden by the camera.
  */
 export function WallAmbientMesh({
   material,
@@ -376,6 +387,7 @@ export function WallAmbientMesh({
   selected = false,
   onSelect,
   lightingMode = 'present',
+  ghost = false,
   paintHover = false,
 }: {
   readonly material: AmbientMaterial;
@@ -383,6 +395,8 @@ export function WallAmbientMesh({
   readonly selected?: boolean;
   readonly onSelect?: (wallId: string) => void;
   readonly lightingMode?: SceneLightingMode;
+  /** F145 — auto-hidden by camera (ghost opacity instead of removal). */
+  readonly ghost?: boolean;
   readonly paintHover?: boolean;
 }): ReactNode {
   const h = wall.heightMm ?? ROOM_WALL_HEIGHT_MM;
@@ -395,68 +409,122 @@ export function WallAmbientMesh({
   const thickness = selected ? 48 : 40;
   const color = resolveWallColor(material);
   const phys = resolveWallPhysical(material, lightingMode);
+  const segments = useMemo(
+    () =>
+      splitWallSegments(
+        {
+          id: wall.id,
+          lengthMm: length,
+          angleDeg: 0,
+          ...(wall.openings ? { openings: wall.openings } : {}),
+        },
+        h,
+      ),
+    [wall.id, wall.openings, length, h],
+  );
+  const handleClick = onSelect
+    ? (e: { stopPropagation: () => void }) => {
+        e.stopPropagation();
+        onSelect(wall.id);
+      }
+    : undefined;
+  const handleOver = onSelect
+    ? () => {
+        if (typeof document !== 'undefined') {
+          document.body.style.cursor = 'pointer';
+        }
+      }
+    : undefined;
+  const handleOut = onSelect
+    ? () => {
+        if (typeof document !== 'undefined') {
+          document.body.style.cursor = '';
+        }
+      }
+    : undefined;
   return (
     <group position={[midX, h / 2, midY]} rotation={[0, -yaw, 0]}>
-      <mesh
-        position={[0, 0, -thickness / 2]}
-        userData={{ wallId: wall.id }}
-        onClick={
-          onSelect
-            ? (e) => {
-                e.stopPropagation();
-                onSelect(wall.id);
+      {segments.map((seg, i) => {
+        const segH = seg.zTopMm - seg.zBottomMm;
+        return (
+          <mesh
+            key={i}
+            position={[
+              seg.startMm + seg.lengthMm / 2 - length / 2,
+              (seg.zBottomMm + seg.zTopMm) / 2 - h / 2,
+              -thickness / 2,
+            ]}
+            userData={{ wallId: wall.id }}
+            onClick={handleClick}
+            onPointerOver={handleOver}
+            onPointerOut={handleOut}
+          >
+            <boxGeometry args={[seg.lengthMm, segH, thickness]} />
+            {selected ? <Edges threshold={15} color="#3b82f6" lineWidth={2} /> : null}
+            <Suspense
+              fallback={
+                <meshStandardMaterial
+                  color={color}
+                  roughness={phys.roughness}
+                  metalness={phys.metalness}
+                  transparent={ghost}
+                  opacity={ghost ? WALL_GHOST_OPACITY : 1}
+                  depthWrite={!ghost}
+                />
               }
-            : undefined
-        }
-        onPointerOver={
-          onSelect
-            ? () => {
-                if (typeof document !== 'undefined') {
-                  document.body.style.cursor = 'pointer';
-                }
-              }
-            : undefined
-        }
-        onPointerOut={
-          onSelect
-            ? () => {
-                if (typeof document !== 'undefined') {
-                  document.body.style.cursor = '';
-                }
-              }
-            : undefined
-        }
-      >
-        <boxGeometry args={[length, h, thickness]} />
-        {selected ? <Edges threshold={15} color="#3b82f6" lineWidth={2} /> : null}
-        <Suspense
-          fallback={
-            <meshStandardMaterial
-              color={color}
-              roughness={phys.roughness}
-              metalness={phys.metalness}
-            />
-          }
-        >
-          {material.previewTextureUrl ? (
-            <WallTextureMaterial
-              url={material.previewTextureUrl}
-              lengthMm={length}
-              heightMm={h}
-              tileWidthMm={material.previewTextureTileWidthMm}
-              tileLengthMm={material.previewTextureTileLengthMm}
-              phys={phys}
-              selected={selected}
-            />
-          ) : (
-            <meshStandardMaterial
-              color={color}
-              roughness={phys.roughness}
-              metalness={phys.metalness}
-            />
-          )}
-        </Suspense>
-      </mesh>
+            >
+              {material.previewTextureUrl ? (
+                <WallTextureMaterial
+                  url={material.previewTextureUrl}
+                  lengthMm={seg.lengthMm}
+                  heightMm={segH}
+                  tileWidthMm={material.previewTextureTileWidthMm}
+                  tileLengthMm={material.previewTextureTileLengthMm}
+                  phys={phys}
+                  selected={selected}
+                  ghost={ghost}
+                />
+              ) : (
+                <meshStandardMaterial
+                  color={color}
+                  roughness={phys.roughness}
+                  metalness={phys.metalness}
+                  transparent={ghost}
+                  opacity={ghost ? WALL_GHOST_OPACITY : 1}
+                  depthWrite={!ghost}
+                />
+              )}
+            </Suspense>
+          </mesh>
+        );
+      })}
+      {(wall.openings ?? [])
+        .filter((o) => o.kind === 'window')
+        .map((o) => {
+          const sill = o.sillMm ?? 900;
+          const height = o.heightMm ?? 1200;
+          return (
+            <mesh
+              key={`pane-${o.id}`}
+              position={[
+                o.offsetMm + o.widthMm / 2 - length / 2,
+                sill + height / 2 - h / 2,
+                -thickness / 2,
+              ]}
+              userData={{ wallId: wall.id, openingPane: true }}
+            >
+              <boxGeometry args={[o.widthMm, height, thickness * 0.25]} />
+              <meshStandardMaterial
+                color={WINDOW_PANE_COLOR}
+                transparent
+                opacity={ghost ? 0.04 : 0.3}
+                roughness={0.15}
+                metalness={0.1}
+                depthWrite={false}
+              />
+            </mesh>
+          );
+        })}
       {paintHover ? (
         <mesh
           position={[0, 0, -thickness / 2]}

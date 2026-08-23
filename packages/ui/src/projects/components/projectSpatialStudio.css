@@ -943,3 +943,72 @@
 .spatial-studio__hint--error {
   color: var(--danger-600);
 }
+
+/* ── F145 — environment authoring: editor de muros y huecos ───────────── */
+
+.spatial-studio__wall-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--surface-card);
+}
+
+.spatial-studio__wall-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.spatial-studio__wall-advanced summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.spatial-studio__opening-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.spatial-studio__opening-row {
+  display: grid;
+  grid-template-columns: auto repeat(4, 1fr) auto;
+  gap: var(--space-1);
+  align-items: end;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.spatial-studio__opening-row:last-child {
+  border-bottom: none;
+}
+
+.spatial-studio__opening-kind {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.spatial-studio__opening-row .spatial-studio__field span {
+  font-size: var(--text-xs);
+}
+
+.spatial-studio__wall-add {
+  display: flex;
+  gap: var(--space-2);
+  align-items: end;
+  margin-top: var(--space-2);
+}
+
+.spatial-studio__wall-add .spatial-studio__field {
+  flex: 1;
+}
