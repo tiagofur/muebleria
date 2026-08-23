@@ -52,6 +52,7 @@ export type {
   Agregado,
   ModuleAgregadoInstance,
   ProjectItem,
+  ItemCustomDims,
   ItemFloorStatus,
   FloorEventSource,
   FloorStatusEvent,
@@ -202,6 +203,18 @@ export {
   resolveModuleMeasurePreset,
   validateModulePresets,
 } from './measurePresets';
+
+export {
+  CUSTOM_DIMS_BOUNDS,
+  moduleAcceptsCustomDims,
+  resolveItemDims,
+  validateItemCustomDims,
+} from './itemDims';
+export type {
+  CustomDimsIssue,
+  ItemDims,
+  ItemDimsSource,
+} from './itemDims';
 
 export {
   DEFAULT_MATERIAL_PREVIEW_COLOR,
@@ -373,6 +386,7 @@ export {
   compactSelectionOnWallCommand,
   distributeSelectionCommand,
 } from './kitchenArrangementCommands';
+export { nudgeSelectionCommand } from './kitchenPrecisionCommands';
 export type {
   ClipboardEntry,
   ItemQuantityPatch,

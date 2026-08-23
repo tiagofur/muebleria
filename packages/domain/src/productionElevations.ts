@@ -12,7 +12,7 @@ import type {
   ProjectItemPlacement,
   ProjectKitchenLayout,
 } from './types';
-import { defaultMeasurePresetId, resolveModuleMeasurePreset } from './measurePresets';
+import { resolveItemDims } from './itemDims';
 import {
   emptyKitchenLayout,
   ensureKitchenSpaces,
@@ -67,20 +67,10 @@ function dimsForItem(
 ): { width: number; height: number; depth: number } {
   const mod = modules.find((m) => m.id === item.moduleId);
   if (!mod) return { width: 600, height: 720, depth: 560 };
-  try {
-    const preset = resolveModuleMeasurePreset(
-      mod,
-      item.measurePresetId?.trim() || defaultMeasurePresetId(mod) || undefined,
-    );
-    if (preset) {
-      return {
-        width: preset.width,
-        height: preset.height,
-        depth: preset.depth,
-      };
-    }
-  } catch {
-    /* fall through */
+  // F144: single-source dims (customDims → preset → module).
+  const resolved = resolveItemDims(item, mod);
+  if (resolved.source !== 'fallback') {
+    return { width: resolved.width, height: resolved.height, depth: resolved.depth };
   }
   if (mod.externalDims) {
     return {

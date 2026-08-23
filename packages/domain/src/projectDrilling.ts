@@ -23,6 +23,7 @@ import type {
   JointDrillingRules,
   ModuleComponentInstance,
   Project,
+  ProjectItem,
   ResolvedBoardPart,
   Structure,
 } from './types';
@@ -93,15 +94,27 @@ export function resolveProjectDrilling(
   const { links } = generateCutRowsWithLinks(project, catalog);
 
   // Resolve each unique module ONCE (placements + derived joints are per
-  // module template; identical copies share the same holes).
-  const derivedByModule = new Map<string, DerivedJointPlacement[]>();
-  const partsByModule = new Map<string, readonly ResolvedBoardPart[]>();
+  // module template; identical copies share the same holes). F144: items with
+  // customDims of the same module are distinct templates — the cache key
+  // carries the dims signature so a "800 a medida" line never reuses the
+  // holes of a preset line.
+  const cacheKeyFor = (
+    module: { readonly id: string },
+    item: ProjectItem,
+  ): string =>
+    item.customDims
+      ? `${module.id}|${item.customDims.widthMm}x${item.customDims.heightMm}x${item.customDims.depthMm}`
+      : module.id;
+  const derivedByKey = new Map<string, DerivedJointPlacement[]>();
+  const partsByKey = new Map<string, readonly ResolvedBoardPart[]>();
+  const moduleIdByKey = new Map<string, string>();
 
   for (const item of project.items) {
     if (!(item.quantity > 0)) continue;
     const module = catalog.modules.find((m) => m.id === item.moduleId);
     if (!module) continue;
-    if (partsByModule.has(module.id)) continue;
+    const cacheKey = cacheKeyFor(module, item);
+    if (partsByKey.has(cacheKey)) continue;
 
     const choices = effectiveOptionChoices(
       item.optionChoices,
@@ -109,14 +122,23 @@ export function resolveProjectDrilling(
     );
     let parts: readonly ResolvedBoardPart[];
     try {
-      parts = resolveBom(module, choices, catalog, item.measurePresetId).boardParts;
+      parts = resolveBom(
+        module,
+        choices,
+        catalog,
+        item.measurePresetId,
+        undefined,
+        undefined,
+        item.customDims,
+      ).boardParts;
     } catch {
       continue; // unresolvable items are reported by the BOM path, not here
     }
-    partsByModule.set(module.id, parts);
+    partsByKey.set(cacheKey, parts);
+    moduleIdByKey.set(cacheKey, module.id);
 
-    derivedByModule.set(
-      module.id,
+    derivedByKey.set(
+      cacheKey,
       deriveJointHardwarePlacements({
         parts: parts as readonly JointPart[],
         hardware: catalog.hardware,
@@ -130,23 +152,24 @@ export function resolveProjectDrilling(
 
   // Map partId → module for link joins (first module owning the part wins;
   // duplicated module lines share geometry so holes are identical).
-  const moduleByPartId = new Map<string, string>();
-  for (const [moduleId, parts] of partsByModule) {
+  const keyByPartId = new Map<string, string>();
+  for (const [key, parts] of partsByKey) {
     for (const part of parts) {
-      if (!moduleByPartId.has(part.id)) moduleByPartId.set(part.id, moduleId);
+      if (!keyByPartId.has(part.id)) keyByPartId.set(part.id, key);
     }
   }
 
   const patterns: ResolvedPartDrilling[] = [];
   let totalHoles = 0;
   for (const link of links) {
-    const moduleId = moduleByPartId.get(link.partId);
+    const cacheKey = keyByPartId.get(link.partId);
+    const moduleId = cacheKey ? moduleIdByKey.get(cacheKey) : undefined;
     const module = moduleId ? catalog.modules.find((m) => m.id === moduleId) : undefined;
     const instances = module
       ? instancesForModule(module, catalog.structures ?? [], module.components)
       : [];
     const manualForPart = manualPlacementsForPart(instances, link.partId);
-    const derivedForPart = (moduleId ? derivedByModule.get(moduleId) ?? [] : []).filter(
+    const derivedForPart = (cacheKey ? derivedByKey.get(cacheKey) ?? [] : []).filter(
       (p) => p.partId === link.partId,
     );
 

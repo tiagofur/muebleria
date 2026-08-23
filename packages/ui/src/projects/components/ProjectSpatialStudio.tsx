@@ -38,6 +38,9 @@ import {
   distributeSelectionCommand,
   duplicateSelectionCommand,
   emptyKitchenLayout,
+  moduleAcceptsCustomDims,
+  nudgeSelectionCommand,
+  parsePlacementKey,
   ensureKitchenSpaces,
   isFreePlacement,
   kitchenLayoutWarnings,
@@ -54,8 +57,9 @@ import {
   reorderPlacementOnWall,
   resolveAmbientMaterials,
   resolveBaseClearanceMm,
+  resolveItemDims as domainResolveItemDims,
   resolveModuleBaseMode,
-  resolveModuleMeasurePreset,
+  validateItemCustomDims,
   resolveWallCabinetZMm,
   resolveWallFrames,
   scalePlanUnderlay,
@@ -68,7 +72,6 @@ import {
   ZOCLO_STRIP_ROLE,
   WALL_CABINET_Z_PRESETS_MM,
   type ClipboardEntry,
-  type ItemQuantityPatch,
   type LayoutCommandResult,
 } from '@muebles/domain';
 import {
@@ -80,6 +83,7 @@ import {
   Eye,
   EyeOff,
   FileUp,
+  Focus,
   Lock,
   Map as MapIcon,
   Move3d,
@@ -89,6 +93,7 @@ import {
   Plus,
   Redo2,
   RefreshCw,
+  Ruler,
   Scan,
   Trash2,
   Undo2,
@@ -150,6 +155,15 @@ import {
   type StudioSelection,
 } from './studioSelection';
 import { StudioSelectionBar } from './StudioSelectionBar';
+import {
+  pushPlanHistory,
+  redoLabelOf,
+  undoLabelOf,
+  type PlanHistoryEntry,
+} from './studioHistory';
+import {
+  useStudioPrecisionSettings,
+} from './studioPrecisionSettings';
 import './projectSpatialStudio.css';
 
 const FurnitureScene3D = lazy(() =>
@@ -232,18 +246,6 @@ function newId(): string {
   return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * F143 — entrada del historial del plano: snapshot de layout + quantities a
- * restaurar al aplicarla. Los comandos que crean instancias (duplicate/paste)
- * bumpean quantity vía onUpdateItem; sin este par, "duplicar → deshacer"
- * dejaría una copia huérfana sin colocar (North Star §12: una intención =
- * una entrada de undo coherente).
- */
-type PlanHistoryEntry = {
-  readonly layout: ProjectKitchenLayout;
-  readonly itemQuantities: readonly ItemQuantityPatch[];
-};
-
 function defaultElevationForModule(
   module: Module | undefined,
 ): PlacementElevation {
@@ -272,31 +274,17 @@ function resolveItemDims(
   module: Module | undefined,
 ): { width: number; height: number; depth: number } {
   if (!module) return { width: 600, height: 720, depth: 560 };
-  try {
-    const preset = resolveModuleMeasurePreset(
-      module,
-      item.measurePresetId?.trim() ||
-        defaultMeasurePresetId(module) ||
-        undefined,
-    );
-    if (preset) {
-      return {
-        width: preset.width,
-        height: preset.height,
-        depth: preset.depth,
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  if (module.externalDims) {
-    return {
-      width: module.externalDims.width,
-      height: module.externalDims.height,
-      depth: module.externalDims.depth,
-    };
-  }
-  return { width: 600, height: 720, depth: 560 };
+  // F144: fuente única de dims (a medida → preset → módulo).
+  const resolved = domainResolveItemDims(
+    {
+      customDims: item.customDims,
+      measurePresetId:
+        item.measurePresetId?.trim() || defaultMeasurePresetId(module) || undefined,
+    },
+    module,
+  );
+  if (resolved.source === 'fallback') return { width: 600, height: 720, depth: 560 };
+  return { width: resolved.width, height: resolved.height, depth: resolved.depth };
 }
 
 export function ProjectSpatialStudio({
@@ -339,6 +327,10 @@ export function ProjectSpatialStudio({
   const [detailHardwareId, setDetailHardwareId] = useState<string | null>(null);
   /** F143 — feedback de comandos (errores que enseñan, aria-live). */
   const [commandStatus, setCommandStatus] = useState<string | null>(null);
+  /** F144 — issues de validación de "A medida" (no commitea inválido). */
+  const [dimDraftIssues, setDimDraftIssues] = useState<
+    readonly { readonly field: string; readonly message: string }[]
+  >([]);
   const [targetWallId, setTargetWallId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('props');
   const [showOutlines, setShowOutlines] = useState(true);
@@ -353,9 +345,18 @@ export function ProjectSpatialStudio({
   // Default 3/4 from first paint so FurnitureScene3D never mounts with
   // cameraView=null (that enables Bounds.fit and steals the isometric preset).
   const [cameraView, setCameraView] = useState<{
-    readonly type: 'front' | 'top' | 'side' | 'isometric';
+    readonly type: 'front' | 'top' | 'side' | 'isometric' | 'fit-selection';
     readonly ts: number;
+    readonly fit?: {
+      readonly centerX: number;
+      readonly centerY: number;
+      readonly heightMm: number;
+      readonly spanMm: number;
+    };
   }>({ type: 'isometric', ts: 0 });
+  /** F144 — ajustes de precisión del taller (nudge/snap), persistentes. */
+  const precision = useStudioPrecisionSettings();
+  const [precisionOpen, setPrecisionOpen] = useState(false);
   const [listCollapsed, setListCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('modules');
   /** F141v2: sub-pestañas del tab Muebles — biblioteca (insert) vs ítems de la obra. */
@@ -480,6 +481,13 @@ export function ProjectSpatialStudio({
         t.tagName === 'TEXTAREA' ||
         t.tagName === 'SELECT' ||
         t.isContentEditable);
+    /**
+     * F144 — las flechas pertenecen al widget enfocado: el roving tabindex
+     * de los tabs (a11y) navega tabs con ←/→; el nudge sólo aplica cuando
+     * el foco no está en un widget que consume flechas.
+     */
+    const arrowsOwnedByWidget = (t: EventTarget | null): boolean =>
+      t instanceof HTMLElement && Boolean(t.closest('[role="tablist"]'));
     const onKey = (e: KeyboardEvent) => {
       const modalOpen = Boolean(document.querySelector('.ui-modal-root.is-open'));
       if (e.key === 'Escape') {
@@ -491,6 +499,11 @@ export function ProjectSpatialStudio({
         }
         // Nested dialogs (e.g. Agregar mueble) own Esc; do not close the studio.
         if (modalOpen) return;
+        // F144: el popover de precisión se cierra antes que nada del studio.
+        if (precisionOpen) {
+          setPrecisionOpen(false);
+          return;
+        }
         if (detailPartId || detailHardwareId) {
           setDetailPartId(null);
           setDetailHardwareId(null);
@@ -505,8 +518,38 @@ export function ProjectSpatialStudio({
       }
       if (modalOpen || isTyping(e.target)) return;
       const meta = e.ctrlKey || e.metaKey;
+      const arrowsForNudge =
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown';
+      if (arrowsForNudge && arrowsOwnedByWidget(e.target)) return;
       if (meta && (e.key === 'c' || e.key === 'C')) {
         handleCopySelection();
+        return;
+      }
+      // F144 — undo/redo por intención (§12), sin pelear con el navegador.
+      if (meta && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) redoPlan();
+        else undoPlan();
+        return;
+      }
+      // F144 — Enfocar selección (acción de vista; también en modo lectura).
+      if (!meta && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        fitSelection();
+        return;
+      }
+      // F144 — nudge de teclado: la selección gana sobre la órbita (#188).
+      if (selection.keys.length > 0 && !detailMode && arrowsForNudge) {
+        const step = precision.nudgeStepFor(e.shiftKey);
+        const handled = handleNudgeSelection(
+          e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0,
+          e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0,
+          e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0,
+        );
+        if (handled) e.preventDefault();
         return;
       }
       if (!canEdit) return;
@@ -975,6 +1018,12 @@ export function ProjectSpatialStudio({
     next: ProjectKitchenLayout,
     opts?: {
       readonly history?: 'push' | 'none';
+      /** F144 — etiqueta de la intención para "Deshacer: …". */
+      readonly intent?: string;
+      /** F144 — clave de coalescing (ráfagas de nudge = 1 entrada). */
+      readonly coalesceKey?: string;
+      /** Ítems afectados por la intención (snapshot ANTES, completos). */
+      readonly itemSnapshots?: readonly ProjectItem[];
       /**
        * F141: ids de ítems recién creados (biblioteca) que aún no están en
        * project.items — el prune no debe purgar sus placements.
@@ -990,7 +1039,14 @@ export function ProjectSpatialStudio({
   ) => {
     const history = opts?.history ?? 'push';
     if (history === 'push' && !wallDragSession.current) {
-      setUndoStack((s) => [...s.slice(-29), { layout, itemQuantities: [] }]);
+      setUndoStack((s) => [
+        ...pushPlanHistory(s, {
+          intent: opts?.intent ?? 'Editar plano',
+          layout,
+          itemSnapshots: opts?.itemSnapshots ?? [],
+          ...(opts?.coalesceKey ? { coalesceKey: opts.coalesceKey } : {}),
+          ts: Date.now(),
+        })]);
       setRedoStack([]);
     }
     // Keep multi-space metadata; write top-level edits into the active space.
@@ -1168,19 +1224,25 @@ export function ProjectSpatialStudio({
   };
 
   /**
-   * F143 — aplicar una entrada del historial restaura layout Y quantities
-   * (los comandos que crean instancias viajan por onUpdateItem). Las claves
+   * F143/F144 — aplicar una entrada del historial restaura layout E ítems
+   * completos (quantity, customDims…; viajan por onUpdateItem). Las claves
    * cuyos índices serían stale para el prune actual pasan como extra hasta
    * que el proyecto re-renderice con el quantity restaurado.
    */
   const applyHistoryEntry = (entry: PlanHistoryEntry) => {
-    for (const patch of entry.itemQuantities) {
-      const item = project.items.find((i) => i.id === patch.itemId);
+    for (const snap of entry.itemSnapshots) {
+      const item = project.items.find((i) => i.id === snap.id);
       if (item) {
-        onUpdateItem?.({ ...item, quantity: patch.quantity });
+        // customDims SIEMPRE explícito: deshacer "a medida" debe sacarlo
+        // aunque el snapshot no lo tuviera (clave undefined = ausente).
+        onUpdateItem?.({
+          ...item,
+          quantity: snap.quantity,
+          customDims: snap.customDims,
+        });
       }
     }
-    const restoredItems = new Set(entry.itemQuantities.map((p) => p.itemId));
+    const restoredItems = new Set(entry.itemSnapshots.map((p) => p.id));
     const extraKeys = entry.layout.placements
       .filter((p) => {
         if (!restoredItems.has(p.itemId)) return false;
@@ -1193,22 +1255,26 @@ export function ProjectSpatialStudio({
     );
   };
 
-  const currentQuantitiesOf = (
-    patches: readonly ItemQuantityPatch[],
-  ): ItemQuantityPatch[] =>
-    patches.map((p) => ({
-      itemId: p.itemId,
-      quantity:
-        project.items.find((i) => i.id === p.itemId)?.quantity ?? p.quantity,
-    }));
+  /** Contracara "después" de la entrada: snapshot de los ítems afectados tal como están ahora. */
+  const currentItemSnapshotsOf = (
+    snapshots: readonly ProjectItem[],
+  ): readonly ProjectItem[] => {
+    const ids = new Set(snapshots.map((s) => s.id));
+    return project.items.filter((i) => ids.has(i.id));
+  };
 
   const undoPlan = () => {
     if (!canEdit || undoStack.length === 0) return;
     const prev = undoStack[undoStack.length - 1]!;
     setUndoStack((s) => s.slice(0, -1));
     setRedoStack((s) => [
-      ...s,
-      { layout, itemQuantities: currentQuantitiesOf(prev.itemQuantities) },
+      ...s.slice(-29),
+      {
+        intent: prev.intent,
+        layout,
+        itemSnapshots: currentItemSnapshotsOf(prev.itemSnapshots),
+        ts: Date.now(),
+      },
     ]);
     applyHistoryEntry(prev);
   };
@@ -1218,8 +1284,13 @@ export function ProjectSpatialStudio({
     const next = redoStack[redoStack.length - 1]!;
     setRedoStack((s) => s.slice(0, -1));
     setUndoStack((s) => [
-      ...s,
-      { layout, itemQuantities: currentQuantitiesOf(next.itemQuantities) },
+      ...s.slice(-29),
+      {
+        intent: next.intent,
+        layout,
+        itemSnapshots: currentItemSnapshotsOf(next.itemSnapshots),
+        ts: Date.now(),
+      },
     ]);
     applyHistoryEntry(next);
   };
@@ -1243,6 +1314,7 @@ export function ProjectSpatialStudio({
     if (key !== selectedKey) {
       setDetailPartId(null);
       setDetailHardwareId(null);
+      setDimDraftIssues([]);
     }
     setInspectorTab('position');
   };
@@ -1260,23 +1332,30 @@ export function ProjectSpatialStudio({
 
   /**
    * Ejecuta una intención de dominio como UNA entrada de undo: snapshot de
-   * layout + quantities previos, patches vía onUpdateItem, layout vía commit
-   * sin historia (ya se pusheó a mano). Selecciona las copias creadas.
+   * layout + ítems previos (completos), patches vía onUpdateItem, layout vía
+   * commit sin historia (ya se pusheó a mano). Selecciona las copias creadas.
+   * F144: la entrada lleva etiqueta y (opcional) clave de coalescing para
+   * ráfagas (nudge).
    */
-  const runCommand = (result: LayoutCommandResult) => {
+  const runCommand = (
+    result: LayoutCommandResult,
+    opts?: { readonly intent?: string; readonly coalesceKey?: string },
+  ) => {
     if (!result.ok) {
       setCommandStatus(result.message);
-      return;
+      return result;
     }
     setCommandStatus(null);
     if (!wallDragSession.current) {
+      const affectedIds = new Set<string>(result.itemPatches.map((p) => p.itemId));
       setUndoStack((s) => [
-        ...s.slice(-29),
-        {
+        ...pushPlanHistory(s, {
+          intent: opts?.intent ?? 'Editar plano',
           layout,
-          itemQuantities: currentQuantitiesOf(result.itemPatches),
-        },
-      ]);
+          itemSnapshots: project.items.filter((i) => affectedIds.has(i.id)),
+          ...(opts?.coalesceKey ? { coalesceKey: opts.coalesceKey } : {}),
+          ts: Date.now(),
+        })]);
       setRedoStack([]);
     }
     for (const patch of result.itemPatches) {
@@ -1312,6 +1391,7 @@ export function ProjectSpatialStudio({
     if (!canEdit || selection.keys.length === 0) return;
     runCommand(
       duplicateSelectionCommand({ ...commandContext(), keys: selection.keys }),
+      { intent: 'Duplicar' },
     );
   };
 
@@ -1335,6 +1415,7 @@ export function ProjectSpatialStudio({
         entries: clipboard,
         cursorByWall: pasteCursorByWall,
       }),
+      { intent: 'Pegar' },
     );
   };
 
@@ -1347,6 +1428,7 @@ export function ProjectSpatialStudio({
         refKey: selectedKey,
         side,
       }),
+      { intent: 'Pegar a referencia' },
     );
   };
 
@@ -1358,6 +1440,7 @@ export function ProjectSpatialStudio({
         footprints,
         keys: selection.keys,
       }),
+      { intent: 'Alinear en muro' },
     );
   };
 
@@ -1365,6 +1448,7 @@ export function ProjectSpatialStudio({
     if (!canEdit) return;
     runCommand(
       distributeSelectionCommand({ layout, footprints, keys: selection.keys, axis }),
+      { intent: 'Distribuir' },
     );
   };
 
@@ -1372,24 +1456,169 @@ export function ProjectSpatialStudio({
     mode: 'left' | 'right' | 'centers-x' | 'front' | 'back' | 'centers-y',
   ) => {
     if (!canEdit) return;
-    runCommand(alignSelectionCommand({ layout, footprints, keys: selection.keys, mode }));
+    runCommand(alignSelectionCommand({ layout, footprints, keys: selection.keys, mode }), {
+      intent: 'Alinear islas',
+    });
   };
 
   const handleCenterOnWall = () => {
     if (!canEdit) return;
     runCommand(
       centerSelectionOnWallCommand({ layout, footprints, keys: selection.keys }),
+      { intent: 'Centrar' },
     );
   };
 
   const handleRemoveSelectionFromPlan = () => {
     if (!canEdit || selection.keys.length === 0) return;
     const keys = new Set(selection.keys);
-    commit({
-      ...layout,
-      placements: layout.placements.filter(
-        (p) => !keys.has(`${p.itemId}#${p.instanceIndex}`),
-      ),
+    commit(
+      {
+        ...layout,
+        placements: layout.placements.filter(
+          (p) => !keys.has(`${p.itemId}#${p.instanceIndex}`),
+        ),
+      },
+      { intent: 'Quitar del plano' },
+    );
+  };
+
+  // ── F144: precisión — nudge de teclado, fit selección, update de ítem ──
+
+  /**
+   * Nudge de la selección completa (North Star §10.2): unidades de muro por
+   * su muro, islas en plano. Ráfaga = 1 entrada de undo (coalesceKey).
+   */
+  const handleNudgeSelection = (
+    deltaWallMm: number,
+    deltaXMm: number,
+    deltaYMm: number,
+  ) => {
+    if (!canEdit || selection.keys.length === 0) return false;
+    const res = nudgeSelectionCommand({
+      layout,
+      footprints,
+      keys: selection.keys,
+      ...(deltaWallMm !== 0 ? { deltaWallMm } : {}),
+      ...(deltaXMm !== 0 ? { deltaXMm } : {}),
+      ...(deltaYMm !== 0 ? { deltaYMm } : {}),
+    });
+    if (!res.ok && res.reason === 'not-placed') return false;
+    runCommand(res, {
+      intent:
+        selection.keys.length === 1
+          ? 'Mover mueble'
+          : `Mover ${selection.keys.length} muebles`,
+      coalesceKey: 'nudge',
+    });
+    return res.ok;
+  };
+
+  /**
+   * F144 — actualizar el ítem seleccionado (medidas a medida / preset) como
+   * UNA intención de undo: snapshot del ítem ANTES + onUpdateItem.
+   */
+  const updateSelectedItem = (
+    patch: Partial<ProjectItem>,
+    intent: string,
+  ) => {
+    if (!canEdit || !selectedItem || !onUpdateItem) return;
+    setUndoStack((s) => [
+      ...pushPlanHistory(s, {
+        intent,
+        layout,
+        itemSnapshots: [selectedItem],
+        ts: Date.now(),
+      }),
+    ]);
+    setRedoStack([]);
+    const next: ProjectItem = { ...selectedItem, ...patch };
+    // Volver a preset = sacar el override a medida (clave ausente, no undefined).
+    const resultItem =
+      'customDims' in patch && patch.customDims === undefined
+        ? (() => {
+            const { customDims: _drop, ...rest } = next;
+            return rest;
+          })()
+        : next;
+    onUpdateItem(resultItem);
+  };
+
+  /**
+   * F144 — editar una dimensión a medida: valida contra el módulo y commitea
+   * como UNA intención (snapshot del ítem). Inválido no commitea; el mensaje
+   * enseña el rango.
+   */
+  const handleCustomDimsBlur = (
+    dimKey: 'widthMm' | 'heightMm' | 'depthMm',
+    v: number,
+  ) => {
+    if (!selectedItem || !selectedModule || !canEdit || !onUpdateItem) return;
+    const base =
+      selectedItem.customDims ??
+      {
+        widthMm: selectedDims?.width ?? 600,
+        heightMm: selectedDims?.height ?? 720,
+        depthMm: selectedDims?.depth ?? 560,
+      };
+    if (v === (selectedItem.customDims?.[dimKey] ?? base[dimKey])) {
+      setDimDraftIssues([]);
+      return;
+    }
+    const candidate = { ...base, [dimKey]: Math.round(v) };
+    const issues = validateItemCustomDims(selectedModule, candidate);
+    if (issues.length > 0) {
+      setDimDraftIssues(issues);
+      return;
+    }
+    setDimDraftIssues([]);
+    updateSelectedItem({ customDims: candidate }, 'Medida a medida');
+    // Enseña si la nueva huella desborda el muro donde está colocado.
+    if (selectedPlacement && !isFreePlacement(selectedPlacement)) {
+      const wall = layout.walls.find((w) => w.id === selectedPlacement.wallId);
+      const width = candidate.widthMm;
+      if (
+        wall &&
+        selectedPlacement.offsetMm + width > wall.lengthMm + 1
+      ) {
+        setCommandStatus(
+          `La nueva medida desborda ${wall.name?.trim() || 'el muro'} — usá Compactar muro o mové el mueble.`,
+        );
+      }
+    }
+  };
+
+  /** F144 — encuadrar la cámara en la selección (funciona en modo lectura). */
+  const fitSelection = () => {
+    if (selection.keys.length === 0) return;
+    const selected = new Set(selection.keys);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let heightMm = 0;
+    for (const m of preview.modules) {
+      if (!selected.has(m.instanceKey)) continue;
+      // AABB en plano según yaw (múltiplos de 90° en el flujo actual).
+      const yaw = ((Math.round(m.yawDeg / 90) * 90) % 360 + 360) % 360;
+      const ex = yaw === 90 || yaw === 270 ? m.depth : m.width;
+      const ey = yaw === 90 || yaw === 270 ? m.width : m.depth;
+      minX = Math.min(minX, m.originX - ex / 2);
+      maxX = Math.max(maxX, m.originX + ex / 2);
+      minY = Math.min(minY, m.originY - ey / 2);
+      maxY = Math.max(maxY, m.originY + ey / 2);
+      heightMm = Math.max(heightMm, (m.baseClearanceMm ?? 0) + m.height);
+    }
+    if (!Number.isFinite(minX)) return;
+    setCameraView({
+      type: 'fit-selection',
+      ts: Date.now(),
+      fit: {
+        centerX: Math.round((minX + maxX) / 2),
+        centerY: Math.round((minY + maxY) / 2),
+        heightMm: Math.round(heightMm),
+        spanMm: Math.round(Math.max(maxX - minX, maxY - minY)),
+      },
     });
   };
 
@@ -1440,7 +1669,7 @@ export function ProjectSpatialStudio({
     if (!wall) return;
     const resolvedOffset = (() => {
       if (offsetMm === undefined) {
-        return nextOffsetOnWall(base, wall.id, footprints, 20);
+        return nextOffsetOnWall(base, wall.id, footprints, precision.settings.wallGapMm);
       }
       const item2 = project.items.find((it) => it.id === itemId);
       const mod2 = item2
@@ -1460,12 +1689,19 @@ export function ProjectSpatialStudio({
           );
           return { offsetMm: p.offsetMm, widthMm: fp?.width ?? 600 };
         });
+      if (!precision.settings.wallSnap) {
+        return Math.max(
+          0,
+          Math.min(Math.max(0, wallLen - dims2.width), Math.round(offsetMm)),
+        );
+      }
       return snapOffsetOnWall({
         offsetMm,
         moduleWidthMm: dims2.width,
         wallLengthMm: wallLen,
         peers,
-        gapMm: 20,
+        thresholdMm: precision.settings.wallSnapThresholdMm,
+        gapMm: precision.settings.wallGapMm,
       });
     })();
     const item = project.items.find((it) => it.id === itemId);
@@ -1531,9 +1767,9 @@ export function ProjectSpatialStudio({
       freeXMm = Math.round((minX + maxX) / 2 - width / 2);
       freeYMm = Math.round((minY + maxY) / 2 - depth / 2);
     }
-    // Snap to 50mm grid.
-    freeXMm = Math.round(freeXMm / 50) * 50;
-    freeYMm = Math.round(freeYMm / 50) * 50;
+    // Snap a la grilla de islas configurada (0 = libre).
+    freeXMm = precision.snapIsland(freeXMm);
+    freeYMm = precision.snapIsland(freeYMm);
     const placement: ProjectItemPlacement = {
       itemId,
       instanceIndex,
@@ -1606,7 +1842,7 @@ export function ProjectSpatialStudio({
       selectedPlacement.itemId,
       selectedPlacement.instanceIndex,
       selectedPlacement.offsetMm + delta,
-      { history: 'push', snap: true },
+      { history: 'push', snap: true, intent: 'Mover en muro', coalesceKey: 'nudge' },
     );
   };
 
@@ -1663,7 +1899,12 @@ export function ProjectSpatialStudio({
     itemId: string,
     instanceIndex: number,
     rawOffset: number,
-    opts?: { readonly history?: 'push' | 'none'; readonly snap?: boolean },
+    opts?: {
+      readonly history?: 'push' | 'none';
+      readonly snap?: boolean;
+      readonly intent?: string;
+      readonly coalesceKey?: string;
+    },
   ) => {
     const placement = layout.placements.find(
       (p) => p.itemId === itemId && p.instanceIndex === instanceIndex,
@@ -1697,23 +1938,23 @@ export function ProjectSpatialStudio({
           modules,
         ),
       }));
-    const offsetMm =
-      opts?.snap === false
-        ? Math.max(
-            0,
-            Math.min(
-              Math.max(0, (wall?.lengthMm ?? 3000) - width),
-              Math.round(rawOffset),
-            ),
-          )
-        : snapOffsetOnWall({
-            offsetMm: rawOffset,
-            moduleWidthMm: width,
-            wallLengthMm: wall?.lengthMm ?? 3000,
-            peers,
-            thresholdMm: 18,
-            gapMm: 20,
-          });
+    const snapEnabled = opts?.snap !== false && precision.settings.wallSnap;
+    const offsetMm = snapEnabled
+      ? snapOffsetOnWall({
+          offsetMm: rawOffset,
+          moduleWidthMm: width,
+          wallLengthMm: wall?.lengthMm ?? 3000,
+          peers,
+          thresholdMm: precision.settings.wallSnapThresholdMm,
+          gapMm: precision.settings.wallGapMm,
+        })
+      : Math.max(
+          0,
+          Math.min(
+            Math.max(0, (wall?.lengthMm ?? 3000) - width),
+            Math.round(rawOffset),
+          ),
+        );
     // Collision check: compute candidate origin by shifting along the wall
     // direction from the current resolved position, then test against peers.
     const currentMod = preview.modules.find(
@@ -1757,14 +1998,24 @@ export function ProjectSpatialStudio({
             : p,
         ),
       },
-      { history: opts?.history ?? 'push' },
+      {
+        history: opts?.history ?? 'push',
+        ...(opts?.intent ? { intent: opts.intent } : {}),
+        ...(opts?.coalesceKey ? { coalesceKey: opts.coalesceKey } : {}),
+      },
     );
   };
 
   const handleModuleWallDragStart = (_moduleKey: string) => {
     if (!canEdit || wallDragSession.current) return;
     wallDragSession.current = true;
-    setUndoStack((s) => [...s.slice(-29), { layout, itemQuantities: [] }]);
+    setUndoStack((s) => [
+      ...pushPlanHistory(s, {
+        intent: 'Mover en muro',
+        layout,
+        itemSnapshots: [],
+        ts: Date.now(),
+      })]);
     setRedoStack([]);
   };
 
@@ -1945,14 +2196,88 @@ export function ProjectSpatialStudio({
     setGhostDrag(null);
     setGhostHit(null);
   };
+  /**
+   * F144 — drag del grupo: si el módulo tomado pertenece a la selección,
+   * sus compañeros seleccionados del mismo muro viajan con él (conserva el
+   * arreglo; valida contra el resto vía nudgeSelectionCommand). Un módulo
+   * solo (o fuera de la selección) usa el camino individual de siempre.
+   */
   const handleModuleWallOffset = (moduleKey: string, offsetMm: number) => {
     if (!canEdit) return;
-    const hash = moduleKey.lastIndexOf('#');
-    if (hash < 0) return;
-    const itemId = moduleKey.slice(0, hash);
-    const instanceIndex = Number(moduleKey.slice(hash + 1)) || 0;
+    const parsed = parsePlacementKey(moduleKey);
+    if (!parsed) return;
+    const dragged = layout.placements.find(
+      (p) => p.itemId === parsed.itemId && p.instanceIndex === parsed.instanceIndex,
+    );
+    if (
+      dragged &&
+      !isFreePlacement(dragged) &&
+      selection.keys.includes(moduleKey)
+    ) {
+      const groupKeys = selection.keys.filter((key) => {
+        const pk = parsePlacementKey(key);
+        const pl = pk
+          ? layout.placements.find(
+              (p) => p.itemId === pk.itemId && p.instanceIndex === pk.instanceIndex,
+            )
+          : undefined;
+        return Boolean(pl && !isFreePlacement(pl) && pl.wallId === dragged.wallId);
+      });
+      if (groupKeys.length > 1) {
+        const wall = layout.walls.find((w) => w.id === dragged.wallId);
+        const fp = footprints.find(
+          (f) => f.itemId === parsed.itemId && f.instanceIndex === parsed.instanceIndex,
+        );
+        const width = fp?.width ?? 600;
+        const peers = layout.placements
+          .filter(
+            (p) =>
+              p.wallId === dragged.wallId &&
+              !groupKeys.includes(`${p.itemId}#${p.instanceIndex}`) &&
+              !isFreePlacement(p),
+          )
+          .map((p) => {
+            const pk = footprints.find(
+              (f) => f.itemId === p.itemId && f.instanceIndex === p.instanceIndex,
+            );
+            return { offsetMm: p.offsetMm, widthMm: pk?.width ?? 600 };
+          });
+        const target = precision.settings.wallSnap
+          ? snapOffsetOnWall({
+              offsetMm,
+              moduleWidthMm: width,
+              wallLengthMm: wall?.lengthMm ?? 3000,
+              peers,
+              thresholdMm: precision.settings.wallSnapThresholdMm,
+              gapMm: precision.settings.wallGapMm,
+            })
+          : Math.max(
+              0,
+              Math.min(
+                Math.max(0, (wall?.lengthMm ?? 3000) - width),
+                Math.round(offsetMm),
+              ),
+            );
+        const delta = target - dragged.offsetMm;
+        if (delta === 0) return;
+        const res = nudgeSelectionCommand({
+          layout,
+          footprints,
+          keys: groupKeys,
+          deltaWallMm: delta,
+          action: 'Mover',
+        });
+        if (!res.ok) {
+          setDraggingInvalid(true);
+          return;
+        }
+        setDraggingInvalid(false);
+        commit(res.layout, { history: 'none' });
+        return;
+      }
+    }
     // Live drag: no per-frame history; light snap while moving.
-    applyOffsetOnWall(itemId, instanceIndex, offsetMm, {
+    applyOffsetOnWall(parsed.itemId, parsed.instanceIndex, offsetMm, {
       history: 'none',
       snap: true,
     });
@@ -1982,11 +2307,11 @@ export function ProjectSpatialStudio({
     instanceIndex: number,
     planXMm: number,
     planYMm: number,
-    opts?: { readonly history?: 'push' | 'none' },
+    opts?: { readonly history?: 'push' | 'none'; readonly intent?: string },
   ) => {
-    // Soft 50 mm grid while free-dragging (obra feel without CAD snap).
-    const freeXMm = Math.round(planXMm / 50) * 50;
-    const freeYMm = Math.round(planYMm / 50) * 50;
+    // Grilla de islas configurable (0 = libre) mientras se arrastra.
+    const freeXMm = precision.snapIsland(planXMm);
+    const freeYMm = precision.snapIsland(planYMm);
     // Collision check for free/island placement.
     const currentMod = preview.modules.find(
       (m) => m.instanceKey === `${itemId}#${instanceIndex}`,
@@ -2026,21 +2351,59 @@ export function ProjectSpatialStudio({
             : p,
         ),
       },
-      { history: opts?.history ?? 'push' },
+      {
+        history: opts?.history ?? 'push',
+        ...(opts?.intent ? { intent: opts.intent } : {}),
+      },
     );
   };
 
+  /** F144 — drag de grupo de islas: las islas seleccionadas viajan juntas. */
   const handleModuleFreeMove = (
     moduleKey: string,
     planXMm: number,
     planYMm: number,
   ) => {
     if (!canEdit) return;
-    const hash = moduleKey.lastIndexOf('#');
-    if (hash < 0) return;
-    const itemId = moduleKey.slice(0, hash);
-    const instanceIndex = Number(moduleKey.slice(hash + 1)) || 0;
-    applyFreePlanPosition(itemId, instanceIndex, planXMm, planYMm, {
+    const parsed = parsePlacementKey(moduleKey);
+    if (!parsed) return;
+    const dragged = layout.placements.find(
+      (p) => p.itemId === parsed.itemId && p.instanceIndex === parsed.instanceIndex,
+    );
+    if (dragged && isFreePlacement(dragged) && selection.keys.includes(moduleKey)) {
+      const groupKeys = selection.keys.filter((key) => {
+        const pk = parsePlacementKey(key);
+        const pl = pk
+          ? layout.placements.find(
+              (p) => p.itemId === pk.itemId && p.instanceIndex === pk.instanceIndex,
+            )
+          : undefined;
+        return Boolean(pl && isFreePlacement(pl));
+      });
+      if (groupKeys.length > 1) {
+        const targetX = precision.snapIsland(planXMm);
+        const targetY = precision.snapIsland(planYMm);
+        const deltaX = targetX - (dragged.freeXMm ?? 0);
+        const deltaY = targetY - (dragged.freeYMm ?? 0);
+        if (deltaX === 0 && deltaY === 0) return;
+        const res = nudgeSelectionCommand({
+          layout,
+          footprints,
+          keys: groupKeys,
+          deltaXMm: deltaX,
+          deltaYMm: deltaY,
+          action: 'Mover',
+        });
+        if (!res.ok) {
+          setDraggingInvalid(true);
+          return;
+        }
+        setDraggingInvalid(false);
+        commit(res.layout, { history: 'none' });
+        return;
+      }
+    }
+    applyFreePlanPosition(parsed.itemId, parsed.instanceIndex, planXMm, planYMm, {
       history: 'none',
     });
   };
@@ -2048,7 +2411,13 @@ export function ProjectSpatialStudio({
   const handleModuleFreeDragStart = (_moduleKey: string) => {
     if (!canEdit || wallDragSession.current) return;
     wallDragSession.current = true;
-    setUndoStack((s) => [...s.slice(-29), { layout, itemQuantities: [] }]);
+    setUndoStack((s) => [
+      ...pushPlanHistory(s, {
+        intent: 'Mover isla',
+        layout,
+        itemSnapshots: [],
+        ts: Date.now(),
+      })]);
     setRedoStack([]);
   };
 
@@ -2787,7 +3156,11 @@ export function ProjectSpatialStudio({
                 className="btn btn--small"
                 disabled={!canEdit || undoStack.length === 0}
                 onClick={undoPlan}
-                title="Deshacer plano"
+                title={
+                  undoStack.length > 0
+                    ? `Deshacer: ${undoLabelOf(undoStack) ?? 'plano'} (Ctrl+Z)`
+                    : 'Deshacer plano'
+                }
                 data-testid="spatial-studio-undo"
               >
                 <Undo2 size={14} strokeWidth={1.5} aria-hidden />
@@ -2797,12 +3170,113 @@ export function ProjectSpatialStudio({
                 className="btn btn--small"
                 disabled={!canEdit || redoStack.length === 0}
                 onClick={redoPlan}
-                title="Rehacer plano"
+                title={
+                  redoStack.length > 0
+                    ? `Rehacer: ${redoLabelOf(redoStack) ?? 'plano'} (Ctrl+Shift+Z)`
+                    : 'Rehacer plano'
+                }
                 data-testid="spatial-studio-redo"
               >
                 <Redo2 size={14} strokeWidth={1.5} aria-hidden />
               </button>
             </div>
+            <div className="spatial-studio__toolbar-group" role="group" aria-label="Precisión">
+              <button
+                type="button"
+                className={
+                  precisionOpen
+                    ? 'btn btn--small spatial-studio__tool--on'
+                    : 'btn btn--small'
+                }
+                aria-pressed={precisionOpen}
+                aria-expanded={precisionOpen}
+                onClick={() => setPrecisionOpen((v) => !v)}
+                title="Precisión: paso de nudge y snap (persiste en este equipo)"
+                data-testid="spatial-studio-precision-toggle"
+              >
+                <Ruler size={14} strokeWidth={1.5} aria-hidden /> Precisión
+              </button>
+            </div>
+            {precisionOpen ? (
+              <div
+                className="spatial-studio__precision-panel"
+                role="dialog"
+                aria-label="Ajustes de precisión"
+                data-testid="spatial-studio-precision-panel"
+              >
+                <label className="spatial-studio__field">
+                  <span>Paso nudge (mm)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    defaultValue={precision.settings.nudgeStepMm}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) precision.update({ nudgeStepMm: v });
+                    }}
+                    data-testid="spatial-studio-precision-nudge"
+                  />
+                </label>
+                <p className="spatial-studio__hint">
+                  Shift+flechas = ×{precision.settings.nudgeCoarseMultiplier} (
+                  {precision.nudgeStepFor(true)} mm).
+                </p>
+                <label className="spatial-studio__field spatial-studio__field--check">
+                  <input
+                    type="checkbox"
+                    checked={precision.settings.wallSnap}
+                    onChange={(e) => precision.update({ wallSnap: e.target.checked })}
+                    data-testid="spatial-studio-precision-wallsnap"
+                  />
+                  <span>Snap de muro (vecinos/extremos)</span>
+                </label>
+                <label className="spatial-studio__field">
+                  <span>Umbral snap (mm)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    defaultValue={precision.settings.wallSnapThresholdMm}
+                    disabled={!precision.settings.wallSnap}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) precision.update({ wallSnapThresholdMm: v });
+                    }}
+                    data-testid="spatial-studio-precision-threshold"
+                  />
+                </label>
+                <label className="spatial-studio__field">
+                  <span>Gap entre muebles (mm)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={200}
+                    defaultValue={precision.settings.wallGapMm}
+                    disabled={!precision.settings.wallSnap}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) precision.update({ wallGapMm: v });
+                    }}
+                    data-testid="spatial-studio-precision-gap"
+                  />
+                </label>
+                <label className="spatial-studio__field">
+                  <span>Grilla islas (mm, 0 = libre)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={500}
+                    defaultValue={precision.settings.islandSnapMm}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) precision.update({ islandSnapMm: v });
+                    }}
+                    data-testid="spatial-studio-precision-island"
+                  />
+                </label>
+              </div>
+            ) : null}
             <div className="spatial-studio__toolbar-group" role="group" aria-label="Visualización">
               <button
                 type="button"
@@ -2962,6 +3436,7 @@ export function ProjectSpatialStudio({
                 showCeiling={layout.showCeiling}
                 selectedModuleKey={selectedKey}
                 selectedModuleKeys={selection.keys}
+                keyboardNavActive={selection.keys.length === 0}
                 onSelectModule={handleSceneSelectModule}
                 selectedPartId={detailMode ? detailPartId : null}
                 onSelectPart={detailMode ? handleSceneSelectPart : undefined}
@@ -3025,6 +3500,7 @@ export function ProjectSpatialStudio({
             onDistribute={handleDistribute}
             onAlignIslands={handleAlignIslands}
             onCenter={handleCenterOnWall}
+            onFitSelection={fitSelection}
             onRemoveFromPlan={handleRemoveSelectionFromPlan}
           />
 
@@ -3744,10 +4220,10 @@ export function ProjectSpatialStudio({
                                   : 'spatial-studio__preset'
                               }
                               onClick={() =>
-                                onUpdateItem?.({
-                                  ...selectedItem,
-                                  measurePresetId: pr.id,
-                                })
+                                updateSelectedItem(
+                                  { measurePresetId: pr.id, customDims: undefined },
+                                  'Medida comercial',
+                                )
                               }
                               data-testid={`spatial-studio-preset-${pr.id}`}
                             >
@@ -3766,6 +4242,97 @@ export function ProjectSpatialStudio({
                     <p className="spatial-studio__hint">
                       Este mueble no tiene presets comerciales — las medidas
                       vienen del módulo base.
+                    </p>
+                  )}
+
+                  {selectedModule && moduleAcceptsCustomDims(selectedModule) ? (
+                    <div className="spatial-studio__field">
+                      <span className="spatial-studio__field-label">
+                        A medida (mm)
+                      </span>
+                      <p className="spatial-studio__hint">
+                        {selectedItem.customDims
+                          ? 'A medida'
+                          : 'Preset comercial'}{' '}
+                        · afecta a las {selectedItem.quantity}{' '}
+                        {selectedItem.quantity === 1 ? 'copia' : 'copias'} ·
+                        cambia BOM y precio.
+                      </p>
+                      <div className="spatial-studio__dims-row">
+                        {(
+                          [
+                            ['widthMm', 'Ancho'],
+                            ['heightMm', 'Alto'],
+                            ['depthMm', 'Prof.'],
+                          ] as const
+                        ).map(([dimKey, dimLabel]) => {
+                          const current = selectedItem.customDims?.[dimKey];
+                          const effective =
+                            selectedDims?.[
+                              dimKey === 'widthMm'
+                                ? 'width'
+                                : dimKey === 'heightMm'
+                                  ? 'height'
+                                  : 'depth'
+                            ] ?? 0;
+                          const issues = dimDraftIssues;
+                          return (
+                            <label
+                              key={dimKey}
+                              className="spatial-studio__dims-cell"
+                            >
+                              <span>{dimLabel}</span>
+                              <input
+                                type="number"
+                                min={1}
+                                step={10}
+                                key={`dim-${dimKey}-${current ?? effective}`}
+                                defaultValue={current ?? effective}
+                                disabled={!canEdit || !onUpdateItem}
+                                aria-invalid={issues.some((i) => i.field === dimKey) || undefined}
+                                onBlur={(e) => {
+                                  const v = Number(e.target.value);
+                                  if (!Number.isFinite(v)) return;
+                                  handleCustomDimsBlur(dimKey, v);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                }}
+                                data-testid={`spatial-studio-dim-${dimKey}`}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {dimDraftIssues.length > 0 ? (
+                        <p
+                          className="spatial-studio__hint spatial-studio__hint--error"
+                          role="alert"
+                          data-testid="spatial-studio-dim-error"
+                        >
+                          {dimDraftIssues[0]!.message}
+                        </p>
+                      ) : null}
+                      {selectedItem.customDims && canEdit && onUpdateItem ? (
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={() =>
+                            updateSelectedItem(
+                              { customDims: undefined },
+                              'Volver a preset',
+                            )
+                          }
+                          data-testid="spatial-studio-dim-clear"
+                        >
+                          Volver a preset
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="spatial-studio__hint">
+                      Medidas a medida no disponibles para este mueble (no es
+                      paramétrico).
                     </p>
                   )}
 
@@ -4006,16 +4573,21 @@ export function ProjectSpatialStudio({
                         className="spatial-studio__hint"
                         data-testid="spatial-studio-free-mode"
                       >
-                        Isla libre — arrastrá en el piso 3D (grilla 50 mm).
+                        Isla libre — arrastrá en el piso 3D
+                        {precision.settings.islandSnapMm > 0
+                          ? ` (grilla ${precision.settings.islandSnapMm} mm)`
+                          : ' (sin grilla)'}
+                        .
                       </p>
                       <label className="spatial-studio__field">
                         <span>X plano (mm)</span>
                         <input
                           type="number"
-                          step={50}
-                          value={Math.round(selectedPlacement.freeXMm ?? 0)}
+                          step={precision.settings.islandSnapMm || 10}
+                          key={`fx-${Math.round(selectedPlacement.freeXMm ?? 0)}`}
+                          defaultValue={Math.round(selectedPlacement.freeXMm ?? 0)}
                           disabled={!canEdit}
-                          onChange={(e) => {
+                          onBlur={(e) => {
                             const v = Number(e.target.value);
                             if (!Number.isFinite(v)) return;
                             applyFreePlanPosition(
@@ -4023,7 +4595,11 @@ export function ProjectSpatialStudio({
                               selectedPlacement.instanceIndex,
                               v,
                               selectedPlacement.freeYMm ?? 0,
+                              { intent: 'Mover isla' },
                             );
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
                           }}
                           data-testid="spatial-studio-free-x"
                         />
@@ -4032,10 +4608,11 @@ export function ProjectSpatialStudio({
                         <span>Y plano (mm)</span>
                         <input
                           type="number"
-                          step={50}
-                          value={Math.round(selectedPlacement.freeYMm ?? 0)}
+                          step={precision.settings.islandSnapMm || 10}
+                          key={`fy-${Math.round(selectedPlacement.freeYMm ?? 0)}`}
+                          defaultValue={Math.round(selectedPlacement.freeYMm ?? 0)}
                           disabled={!canEdit}
-                          onChange={(e) => {
+                          onBlur={(e) => {
                             const v = Number(e.target.value);
                             if (!Number.isFinite(v)) return;
                             applyFreePlanPosition(
@@ -4043,7 +4620,11 @@ export function ProjectSpatialStudio({
                               selectedPlacement.instanceIndex,
                               selectedPlacement.freeXMm ?? 0,
                               v,
+                              { intent: 'Mover isla' },
                             );
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
                           }}
                           data-testid="spatial-studio-free-y"
                         />
@@ -4108,18 +4689,22 @@ export function ProjectSpatialStudio({
                         <input
                           type="number"
                           min={0}
-                          step={10}
-                          value={Math.round(selectedPlacement.offsetMm)}
+                          step={precision.settings.nudgeStepMm}
+                          key={`off-${Math.round(selectedPlacement.offsetMm)}`}
+                          defaultValue={Math.round(selectedPlacement.offsetMm)}
                           disabled={!canEdit}
-                          onChange={(e) => {
+                          onBlur={(e) => {
                             const v = Number(e.target.value);
-                            if (!Number.isFinite(v)) return;
+                            if (!Number.isFinite(v) || v === Math.round(selectedPlacement.offsetMm)) return;
                             applyOffsetOnWall(
                               selectedPlacement.itemId,
                               selectedPlacement.instanceIndex,
                               v,
-                              { history: 'push', snap: false },
+                              { history: 'push', snap: false, intent: 'Offset en muro' },
                             );
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
                           }}
                           data-testid="spatial-studio-offset"
                         />
@@ -4348,8 +4933,8 @@ export function ProjectSpatialStudio({
           )}
 
           <p className="spatial-studio__phase-note">
-            Medidas = presets del catálogo. En el 3D: arrastrá un mueble para
-            deslizarlo a lo largo del muro (órbita con arrastre en el vacío).
+            Medidas: presets del catálogo o a medida por mueble. En el 3D:
+            arrastrá para deslizar (flechas = nudge preciso, Shift = grueso).
           </p>
         </aside>
       </div>

@@ -186,6 +186,7 @@ export function duplicateProject(
     quantity: item.quantity,
     optionChoices: { ...item.optionChoices },
     measurePresetId: item.measurePresetId,
+    ...(item.customDims ? { customDims: item.customDims } : {}),
   }));
 
   // Remap kitchen placements to new item ids (same order).
@@ -280,6 +281,7 @@ export function projectToTemplate(
     quantity: item.quantity,
     optionChoices: { ...item.optionChoices },
     measurePresetId: item.measurePresetId,
+    ...(item.customDims ? { customDims: item.customDims } : {}),
     // structureRevisionPin intentionally dropped: a fresh quote from this
     // template resolves against the live structure revision.
   }));
@@ -338,6 +340,7 @@ export function createProjectFromTemplate(
     quantity: item.quantity,
     optionChoices: { ...item.optionChoices },
     measurePresetId: item.measurePresetId,
+    ...(item.customDims ? { customDims: item.customDims } : {}),
   }));
 
   // Remap kitchen placements to the new item ids (same order).

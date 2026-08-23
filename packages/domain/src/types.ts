@@ -747,6 +747,13 @@ export interface FloorStatusEvent {
   readonly note?: string;
 }
 
+/** Free per-item dimensions override (F144 / #310), mm. */
+export interface ItemCustomDims {
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly depthMm: number;
+}
+
 export interface ProjectItem {
   readonly id: string;
   readonly moduleId: string;
@@ -757,6 +764,13 @@ export interface ProjectItem {
    * Required when the module defines presets; ignored when none.
    */
   readonly measurePresetId?: string;
+  /**
+   * Free per-item dimensions (F144 / #310): mm override of W/H/D for this
+   * quote line. Wins over the commercial preset; flows to BOM/cut/price/3D
+   * via resolveItemDims / resolveBom dimsOverride. Only valid for composed
+   * (parametric) modules — validated by validateItemCustomDims.
+   */
+  readonly customDims?: ItemCustomDims;
   /**
    * Base treatment override for this line (F087): how the unit meets the floor
    * (zoclo board / purchased profile / legs / none). Wins over the catalog

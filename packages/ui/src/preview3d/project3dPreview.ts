@@ -26,7 +26,7 @@ import {
   resolveBoardOptionChoiceId,
   resolveBom,
   resolveHardwarePlacement,
-  resolveModuleMeasurePreset,
+  resolveItemDims,
   baseContextForItem,
   type BaseResolutionContext,
   type PlinthSides,
@@ -106,37 +106,22 @@ function dimsForModule(
   module: Module,
   measurePresetId: string | undefined,
   structures: Module3DCatalogInput['structures'],
+  customDims?: ProjectItem['customDims'],
 ): { width: number; height: number; depth: number } {
-  try {
-    const preset = resolveModuleMeasurePreset(module, measurePresetId);
-    if (preset) {
-      return {
-        width: preset.width,
-        height: preset.height,
-        depth: preset.depth,
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  if (module.externalDims) {
-    return {
-      width: module.externalDims.width,
-      height: module.externalDims.height,
-      depth: module.externalDims.depth,
-    };
-  }
-  if (module.structureId) {
-    const st = structures.find((s) => s.id === module.structureId);
-    if (st?.externalDims) {
-      return {
-        width: st.externalDims.width,
-        height: st.externalDims.height,
-        depth: st.externalDims.depth,
-      };
-    }
-  }
-  return { ...DEFAULT_MODULE_FOOTPRINT_MM };
+  // F144: single-source dims (customDims → preset → module/structure).
+  const structure = module.structureId
+    ? structures.find((s) => s.id === module.structureId)
+    : undefined;
+  const resolved = resolveItemDims(
+    { customDims, measurePresetId },
+    module,
+    structure,
+  );
+  return {
+    width: resolved.width,
+    height: resolved.height,
+    depth: resolved.depth,
+  };
 }
 
 function resolveItemBom(
@@ -165,6 +150,7 @@ function resolveItemBom(
     module,
     measurePresetId,
     catalogInput.structures,
+    item.customDims,
   );
 
   const defaults = defaultOptionChoicesForModule(
@@ -214,7 +200,7 @@ function resolveItemBom(
     : undefined;
 
   try {
-    const bom = resolveBom(module, choices, catalog, measurePresetId, undefined, baseContext);
+    const bom = resolveBom(module, choices, catalog, measurePresetId, undefined, baseContext, item.customDims);
     return {
       parts: bom.boardParts,
       resolvedHardwarePlacements: resolveModuleHardwarePlacements(

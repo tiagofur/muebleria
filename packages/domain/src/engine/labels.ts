@@ -87,6 +87,7 @@ export function generateProjectMaterialSummary(
       item.measurePresetId,
       item.structureRevisionPin,
       baseContextForItem(project, item, catalog),
+      item.customDims,
     );
 
     for (const part of bom.boardParts) {
@@ -279,6 +280,7 @@ export function generateHardwareList(
       item.measurePresetId,
       item.structureRevisionPin,
       baseContextForItem(project, item, catalog),
+      item.customDims,
     );
 
     for (const line of bom.hardwareLines) {
