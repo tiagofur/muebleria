@@ -532,6 +532,43 @@ describe('projectStore — addProjectItem / updateProjectItem / removeProjectIte
     expect(layout?.walls).toHaveLength(1);
   });
 
+  it('restoreProjectItems re-inserta con el id original (undo de Proyectar)', () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    const item: ProjectItem = {
+      id: 'item-1',
+      moduleId: 'mod-1',
+      quantity: 3,
+      optionChoices: { INTERIOR: 'mat-1' },
+    };
+    store.getState().setProjects([makeProject({ items: [item] })]);
+
+    store.getState().removeProjectItem('proj-1', 'item-1');
+    store.getState().restoreProjectItems('proj-1', [item]);
+
+    const items = store.getState().projects[0]!.items;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.id).toBe('item-1');
+    expect(items[0]!.quantity).toBe(3);
+    expect(savedProjects.length).toBeGreaterThan(0);
+  });
+
+  it('restoreProjectItems es idempotente por id (no duplica)', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const item: ProjectItem = {
+      id: 'item-1',
+      moduleId: 'mod-1',
+      quantity: 1,
+      optionChoices: {},
+    };
+    store.getState().setProjects([makeProject({ items: [item] })]);
+
+    store.getState().restoreProjectItems('proj-1', [item]);
+
+    expect(store.getState().projects[0]!.items).toHaveLength(1);
+  });
+
   it('updateProjectItem prunes placements when qty shrinks', () => {
     const { deps } = makeDeps();
     const store = createProjectStore({ deps });

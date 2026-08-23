@@ -3448,6 +3448,31 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F149",
+      "phase": 0,
+      "name": "proyectar_delete_scope",
+      "title": "Eliminar muebles desde Proyectar con alcance explícito: sólo del plano 3D o también de la lista de muebles (meta #308)",
+      "description": "Cerrar el gap reportado por taller: dentro del editor 3D sólo existía 'Quitar del plano' (unplace) y la eliminación de la línea de la cotización exigía salir del studio. Ahora la tecla Delete/Backspace y el botón 'Eliminar' de la barra de selección abren StudioDeleteDialog, que pregunta el alcance antes de actuar: 'Sólo del plano 3D' (unplace existente, los muebles quedan en la lista como sin colocar) o 'Del proyecto (lista de muebles)' (elimina las líneas completas de la cotización vía removeProjectItem; el store purga sus placements). El scope obra muestra las líneas afectadas con su cantidad total (×N) y avisa si el mueble también está colocado en otros ambientes. Selecciones sin colocar ofrecen sólo el alcance obra. Undo/redo cubre la eliminación completa: studioHistory extiende sus entradas con removedItemIds, applyHistoryEntry restaura ítems ausentes vía onRestoreItems (nueva acción restoreProjectItems del store, idempotente y con id original para que los placements del layout restaurado vuelvan a resolver) y la contracara del redo re-elimina las líneas. Telemetría: evento 'delete' del benchmark de usabilidad con scope/counts. Gate: onRemoveItem/onRestoreItems sólo se pasan al studio en draft mutable (igual que onUpdateItem); en modo lectura el alcance obra se bloquea explicando por qué.",
+      "acceptance": [
+        "Tecla Delete/Backspace y botón 'Eliminar' (spatial-studio-cmd-delete) abren el diálogo de alcance; 'Quitar del plano' directo sigue disponible en la barra",
+        "Scope plano: unplace existente, la cotización no se toca",
+        "Scope obra: elimina las líneas completas (todas las copias) vía removeProjectItem; el diálogo las lista con cantidad total y colocaciones en otros ambientes",
+        "Selección sin colocar: sólo ofrece quitar de la obra; sin onRemoveItem el alcance obra queda bloqueado con explicación y el plano sigue disponible",
+        "Undo restaura ítems (id original, vía restoreProjectItems) y su colocación en el plano; redo vuelve a eliminar",
+        "restoreProjectItems idempotente por id y persiste vía saveProject"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "packages/ui/src/projects/components/StudioDeleteDialog.tsx",
+        "packages/ui/src/projects/components/ProjectSpatialStudio.tsx",
+        "packages/ui/src/projects/components/studioHistory.ts",
+        "apps/web/src/stores/projectStore.ts"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
     }
   ]
 }

@@ -145,6 +145,7 @@ export type UsabilityEventType =
   | 'error_note'
   | 'library_search'
   | 'insert'
+  | 'delete'
   | 'move_commit'
   | 'command'
   | 'dimension_edit'

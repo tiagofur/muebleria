@@ -371,6 +371,15 @@ export interface ProjectState {
   ) => string | undefined;
   readonly updateProjectItem: (projectId: string, item: ProjectItem) => void;
   readonly removeProjectItem: (projectId: string, itemId: string) => void;
+  /**
+   * Re-inserta ítems eliminados (undo de "Eliminar del proyecto" en
+   * Proyectar) conservando su id original para que los placements del
+   * layout restaurado vuelvan a resolver. Idempotente por id.
+   */
+  readonly restoreProjectItems: (
+    projectId: string,
+    items: readonly ProjectItem[],
+  ) => void;
   readonly updateProjectLevelChoices: (
     projectId: string,
     choices: OptionChoices,
@@ -1171,6 +1180,22 @@ export function createProjectStore(options: InternalOptions) {
             kitchenLayout: pruneKitchenLayoutOrClear(p.kitchenLayout, items),
             updatedAt: now,
           };
+        }),
+      );
+    },
+
+    restoreProjectItems: (projectId, items) => {
+      const existing = get().projects.find((p) => p.id === projectId);
+      if (!existing || !projectAllowsContentMutation(existing.status)) return;
+      if (items.length === 0) return;
+      const now = new Date().toISOString();
+      patch(set, get, (ps) =>
+        ps.map((p) => {
+          if (p.id !== projectId) return p;
+          const known = new Set(p.items.map((i) => i.id));
+          const restored = items.filter((it) => !known.has(it.id));
+          if (restored.length === 0) return p;
+          return { ...p, items: [...p.items, ...restored], updatedAt: now };
         }),
       );
     },

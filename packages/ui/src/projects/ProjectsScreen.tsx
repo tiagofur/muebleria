@@ -134,6 +134,11 @@ export interface ProjectsScreenProps {
   ) => string | undefined;
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onRemoveItem: (projectId: string, itemId: string) => void;
+  /** Re-inserta ítems eliminados desde Proyectar (undo), con su id original. */
+  readonly onRestoreItems?: (
+    projectId: string,
+    items: readonly ProjectItem[],
+  ) => void;
   /** Reorder items by moving from one index to another (F052 / drag & drop). */
   readonly onReorderItems?: (projectId: string, fromIndex: number, toIndex: number) => void;
   /** Kitchen plan walls + placements (#133). */
@@ -460,6 +465,7 @@ export function ProjectsScreen({
   onAddItem,
   onUpdateItem,
   onRemoveItem,
+  onRestoreItems,
   onReorderItems,
   onUpdateKitchenLayout,
   planActor,
@@ -960,6 +966,8 @@ export function ProjectsScreen({
         }}
         onUpdateKitchenLayout={onUpdateKitchenLayout}
         onUpdateItem={onUpdateItem}
+        onRemoveItem={onRemoveItem}
+        onRestoreItems={onRestoreItems}
         onClose3DModal={() => {
           state.setShow3DModal(false);
           state.setViewerItem(null);
