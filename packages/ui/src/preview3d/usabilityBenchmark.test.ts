@@ -215,6 +215,29 @@ describe('persistencia', () => {
     expect(currentUsabilityTaskId()).toBe('find-module');
   });
 
+  it('re-adhiere la captura de clicks al restaurar una sesión activa', () => {
+    beginUsabilitySession('P1', 'real');
+    startUsabilityTask('place-module');
+    simulateUsabilityReloadForTests();
+    getUsabilitySession(); // dispara la restauración
+
+    document.body.click();
+    const clicks = getUsabilitySession()!.events.filter(
+      (e) => e.type === 'click',
+    );
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0]!.taskId).toBe('place-module');
+
+    // Sesión ya cerrada persistida: restaurar no debe adherir el listener.
+    endUsabilitySession();
+    simulateUsabilityReloadForTests();
+    getUsabilitySession();
+    document.body.click();
+    expect(
+      getUsabilitySession()!.events.filter((e) => e.type === 'click').length,
+    ).toBe(1);
+  });
+
   it('export devuelve JSON válido y clear borra estado y storage', () => {
     beginUsabilitySession('P1', 'proxy');
     const json = exportUsabilitySessionJson()!;

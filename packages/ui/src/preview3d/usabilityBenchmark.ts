@@ -247,6 +247,9 @@ function ensureRestored(): void {
     const parsed = JSON.parse(raw) as UsabilitySession;
     if (parsed?.version !== SESSION_VERSION) return;
     session = parsed;
+    // La captura de clicks se re-adhiere: la sesión restaurada sigue viva
+    // tras una recarga (D4) y debe seguir registrando al participante.
+    if (session.endedAt == null) attachClickTracking();
   } catch {
     // JSON corrupto: arrancar de cero.
   }
