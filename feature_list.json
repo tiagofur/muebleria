@@ -3364,6 +3364,35 @@
       ],
       "status": "done",
       "createdAt": "2026-08-23"
+    },
+    {
+      "id": "F146",
+      "phase": 0,
+      "name": "proyectar_design_bom_price_contracts",
+      "title": "Issue #313 P3D-7 — Contract tests diseño→BOM→precio→producción (meta #308)",
+      "description": "Congela los contracts diseño→BOM→precio→producción con un fixture compartido contracts/designBomPrice.json consumido por TS y Go (patrón projectEventTypes). Cierra la deuda F144: el backend Go no conocía ProjectItem.customDims y al guardar desde web la medida a medida se perdía (replace completo de project_items) — se agrega ItemCustomDims al dominio Go, migración 000078 (project_items.custom_dims JSONB), load/replace en storage, ResolveBomWithDims en el engine (override gana sobre preset; no compuesto rechaza) y CalcProjectBreakdown pasa item.CustomDims. Escenarios canónicos del issue con expected congelados: preset comercial, customDims (piezas por fórmula + precio cambian en AMBOS motores), cambio de material (BOM+precio), agregado qty 3 (piezas y hardware ×3), fingerprint stale con dims (release/stale completo espera O1/#300 — dependencia documentada) y anti-leak ambiental (ids ambientales ausentes de BOM/costo; guard existente como evidencia). Gate adicional: test estático que impide matemática de negocio propia en packages/ui (costPerM2/boardPrice/fórmulas W-H-D fuera de domain). RECUPERACIÓN: el PR #333 se mergeó por error a la rama base feat/f144-precision-dims (no a main) y quedó huérfano; recuperado en feat/f146-contracts-p3d7, renumerado desde F145 por colisión con #311 environment_multispace.",
+      "acceptance": [
+        "contracts/designBomPrice.json define catálogo canónico + escenarios con expected congelados; TS y Go lo consumen y fallan ante cualquier divergencia (mismas piezas, materiales y costos con tolerancia 0.01)",
+        "customDims sobrevive el round-trip del backend Go: struct + migración JSONB nullable + load/replace de project_items (sin la columna, el guardado web borraba la medida)",
+        "ResolveBomWithDims: override gana sobre preset; módulo no compuesto con override rechaza con error — mirror del TS de F144; CalcProjectBreakdown usa item.CustomDims",
+        "Escenario custom-dims: piezas cambian por fórmulas W/H/D y el precio cambia, igual en TS y Go (deuda de paridad F144 congelada)",
+        "Escenario stale-fingerprint: fingerprint de diseño cambia con customDims; dependencia de release/stale completo (O1/#300) documentada en el fixture",
+        "Anti-leak ambiental: ids ambientales del fixture no aparecen en BOM/costo en ninguna suite; guard ambientLeakGuard referenciado como evidencia",
+        "Gate no-duplicación: packages/ui no implementa aritmética de costPerM2/boardPrice ni evalúa fórmulas paramétricas (importar de @muebles/domain permitido)",
+        "go test ./... verde + pnpm test + pnpm typecheck verdes; reviewer antes de cerrar"
+      ],
+      "references": [
+        "docs/proyectar-3d-north-star.md",
+        "docs/proyectar-3d-roadmap-vnext.md",
+        "contracts/designBomPrice.json",
+        "packages/domain/src/designBomPriceContract.test.ts",
+        "backend-go/internal/domain/engine/resolve.go",
+        "backend-go/internal/domain/engine/designBomPriceContract_test.go",
+        "backend-go/db/migration/000078_project_item_custom_dims.up.sql",
+        "packages/ui/src/domainBoundaryGuard.test.ts"
+      ],
+      "status": "in_progress",
+      "createdAt": "2026-08-23"
     }
   ]
 }
