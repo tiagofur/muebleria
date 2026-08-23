@@ -92,6 +92,20 @@ test.describe('Proyectar studio (WebGL smoke)', () => {
     await page.waitForSelector('[data-testid="spatial-studio-filter-all"]', {
       timeout: 10_000,
     });
+
+    // F142: dock de materiales con sub-tabs Ambiente|Tableros.
+    await page.click('[data-testid="spatial-studio-tab-materials"]');
+    await page.click('[data-testid="spatial-studio-materials-tab-boards"]');
+    await page.waitForSelector('[data-testid="board-material-palette"]', {
+      timeout: 10_000,
+    });
+    await page.waitForSelector('[data-testid^="board-palette-card-"]', {
+      timeout: 10_000,
+    });
+    await page.screenshot({
+      path: 'test-results/proyectar-boards-dock.png',
+      fullPage: false,
+    });
   });
 
   /**

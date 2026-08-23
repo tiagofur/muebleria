@@ -3,8 +3,26 @@
  * Depth: root = 1, max = 3 levels.
  */
 
-import type { AmbientMaterial, CategoryNode, Module, ModuleCategory } from './types';
+import type {
+  AmbientMaterial,
+  CategoryNode,
+  MaterialBoard,
+  Module,
+  ModuleCategory,
+} from './types';
 import { ValidationError } from './errors';
+
+/**
+ * Display del fabricante de un tablero (F142). El campo es obligatorio en
+ * forms/API pero opcional en el tipo para tolerar datos previos; los datos
+ * legacy muestran "(sin definir)".
+ */
+export const MATERIAL_MANUFACTURER_UNSET = '(sin definir)';
+
+export function materialManufacturer(material: MaterialBoard): string {
+  const value = material.manufacturer?.trim();
+  return value && value.length > 0 ? value : MATERIAL_MANUFACTURER_UNSET;
+}
 
 /** Maximum depth of a category node (root is depth 1). */
 export const MAX_CATEGORY_DEPTH = 3 as const;
@@ -219,6 +237,23 @@ export function filterAmbientMaterialsByCategory<T extends CategoryNode = Catego
   filterId: CategoryFilterId,
   categories: readonly T[],
 ): AmbientMaterial[] {
+  if (filterId === null) return [...materials];
+  if (filterId === UNCATEGORIZED_FILTER) {
+    return materials.filter((m) => !m.categoryId);
+  }
+  const allowed = categoryFilterIdSet(filterId, categories)!;
+  return materials.filter((m) => m.categoryId && allowed.has(m.categoryId));
+}
+
+/**
+ * Filter board materials (tableros) by category tree node (F142: subgrupos
+ * como los muebles). filterId null = all; UNCATEGORIZED = sin subgrupo.
+ */
+export function filterMaterialBoardsByCategory<T extends CategoryNode = CategoryNode>(
+  materials: readonly MaterialBoard[],
+  filterId: CategoryFilterId,
+  categories: readonly T[],
+): MaterialBoard[] {
   if (filterId === null) return [...materials];
   if (filterId === UNCATEGORIZED_FILTER) {
     return materials.filter((m) => !m.categoryId);

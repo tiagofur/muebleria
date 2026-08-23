@@ -19,6 +19,7 @@ import type {
   Hardware,
   HardwareLine,
   MaterialBoard,
+  MaterialCategory,
   MaterialsRelease,
   Module,
   ModuleCategory,
@@ -115,7 +116,11 @@ import type {
   ShowcasePhotoItem,
   WorkshopSettings,
 } from '@muebles/domain';
-import { TIME_ENTRY_CATEGORIES, OTHER_COST_KINDS } from '@muebles/domain';
+import {
+  TIME_ENTRY_CATEGORIES,
+  OTHER_COST_KINDS,
+  MATERIAL_MANUFACTURER_UNSET,
+} from '@muebles/domain';
 
 
 import {
@@ -145,6 +150,11 @@ export function materialToApi(m: MaterialBoard): Record<string, unknown> {
     id: m.id,
     code: m.code,
     name: m.name,
+    // Legacy local materials (pre-F142) never break API validation: empty maps
+    // to the canonical unset value the server also backfills.
+    manufacturer:
+      m.manufacturer?.trim() || MATERIAL_MANUFACTURER_UNSET,
+    category_id: m.categoryId ?? '',
     width_mm: m.widthMm,
     length_mm: m.lengthMm,
     thickness_mm: m.thicknessMm,
@@ -185,6 +195,8 @@ export function materialFromApi(raw: Record<string, unknown>): MaterialBoard {
     id: str(raw.id),
     code: str(raw.code),
     name: str(raw.name),
+    manufacturer: str(raw.manufacturer) || undefined,
+    categoryId: str(raw.category_id ?? raw.categoryId) || undefined,
     widthMm: num(raw.width_mm ?? raw.widthMm),
     lengthMm: num(raw.length_mm ?? raw.lengthMm),
     thicknessMm: num(raw.thickness_mm ?? raw.thicknessMm),
@@ -301,6 +313,31 @@ export function ambientCategoryToApi(
 export function ambientCategoryFromApi(
   raw: Record<string, unknown>,
 ): AmbientCategory {
+  const parent = str(raw.parentId ?? raw.parent_id);
+  return {
+    id: str(raw.id),
+    name: str(raw.name),
+    parentId: parent || undefined,
+    sortOrder: num(raw.sortOrder ?? raw.sort_order),
+  };
+}
+
+// --- Material categories (F142: subgrupos de tableros, espejo ambient) ---
+
+export function materialCategoryToApi(
+  c: MaterialCategory,
+): Record<string, unknown> {
+  return {
+    id: c.id,
+    name: c.name,
+    parent_id: c.parentId ?? null,
+    sort_order: c.sortOrder,
+  };
+}
+
+export function materialCategoryFromApi(
+  raw: Record<string, unknown>,
+): MaterialCategory {
   const parent = str(raw.parentId ?? raw.parent_id);
   return {
     id: str(raw.id),
@@ -3151,6 +3188,8 @@ export function catalogFromApi(parts: {
   ambient_materials?: unknown;
   ambientCategories?: unknown;
   ambient_categories?: unknown;
+  materialCategories?: unknown;
+  material_categories?: unknown;
 }): Catalog {
   const asRows = (v: unknown): Record<string, unknown>[] =>
     Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -3172,6 +3211,9 @@ export function catalogFromApi(parts: {
     ambientCategories: asRows(parts.ambient_categories ?? parts.ambientCategories).map(
       ambientCategoryFromApi,
     ),
+    materialCategories: asRows(
+      parts.material_categories ?? parts.materialCategories,
+    ).map(materialCategoryFromApi),
   };
 }
 

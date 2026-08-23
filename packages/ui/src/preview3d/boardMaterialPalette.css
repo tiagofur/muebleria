@@ -1,0 +1,181 @@
+/*
+ * boardMaterialPalette.css — dock de tableros del taller en Proyectar
+ * (F142/#309). Mismo lenguaje visual que la Biblioteca (moduleLibrary.css):
+ * chips del studio, renglón por nivel de cascada, tokens only.
+ */
+
+.board-palette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.board-palette__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+}
+
+.board-palette__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.board-palette__level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.board-palette__level-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.board-palette__search {
+  margin: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.board-palette input[type='search'] {
+  min-height: var(--touch-min);
+  padding: var(--density-control-pad-y) var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.board-palette input[type='search']:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.board-palette input[type='search']:focus-visible {
+  outline: none;
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.board-palette__count {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.board-palette__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.board-palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.board-palette__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  text-align: left;
+  transition: var(--transition-colors);
+  font: inherit;
+  color: inherit;
+  user-select: none;
+}
+
+.board-palette__card:hover:not(.board-palette__card--disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-default);
+}
+
+.board-palette__card:active:not(.board-palette__card--disabled) {
+  cursor: grabbing;
+}
+
+.board-palette__card--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-palette__card:active:not(.board-palette__card--disabled) {
+    cursor: grab;
+  }
+}
+
+.board-palette__thumb {
+  flex: none;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-input);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.board-palette__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.board-palette__swatch {
+  display: block;
+  width: calc(var(--touch-min) - var(--space-2));
+  height: calc(var(--touch-min) - var(--space-2));
+  border-radius: var(--radius-sm);
+}
+
+.board-palette__swatch--empty {
+  background: var(--surface-selected);
+  border: 1px solid var(--border-default);
+}
+
+.board-palette__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-palette__name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-palette__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.board-palette__dims {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}

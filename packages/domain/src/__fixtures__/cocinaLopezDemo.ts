@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import {
   IDS,
+  demoMaterialCategories,
   plantillaCatalogWithModules,
   plantillaChoices,
 } from './plantillaDemo';
@@ -371,6 +372,7 @@ const structIsla1200: Structure = {
 export const seedCatalogExpandedLatAm: Catalog = {
   ...plantillaCatalogWithModules,
   ambientMaterials: seedAmbientMaterials,
+  materialCategories: demoMaterialCategories,
   modules: [
     ...plantillaCatalogWithModules.modules,
     modBajo800,

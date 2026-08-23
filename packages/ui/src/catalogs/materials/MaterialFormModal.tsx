@@ -5,7 +5,8 @@
  */
 
 import { type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from 'react';
-import type { EdgeBand } from '@muebles/domain';
+import type { EdgeBand, MaterialCategory } from '@muebles/domain';
+import { categoryPath } from '@muebles/domain';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { CatalogImage, Modal, formatMoneyDisplay } from '../../common';
 import { CatalogPicker } from '../CatalogPicker';
@@ -22,6 +23,8 @@ export interface MaterialFormModalProps {
   readonly error: string | null;
   /** All edges (picker only shows active ones — passed pre-filtered). */
   readonly activeEdges: readonly EdgeBand[];
+  /** F142: subgrupos de materiales (árbol de categorías). */
+  readonly materialCategories: readonly MaterialCategory[];
   readonly canMutate: boolean;
   readonly getCostPerM2: (input: MaterialCostInputs) => number;
   readonly onUploadImage?: (file: File) => Promise<string>;
@@ -44,6 +47,7 @@ export function MaterialFormModal({
   setDraft,
   error,
   activeEdges,
+  materialCategories,
   canMutate,
   getCostPerM2,
   onUploadImage,
@@ -102,6 +106,42 @@ export function MaterialFormModal({
               required
             />
           </div>
+          <div className="catalog-form__field">
+            <label htmlFor="mat-manufacturer">Fabricante</label>
+            <input
+              id="mat-manufacturer"
+              value={draft.manufacturer}
+              onChange={(e) =>
+                setDraft({ ...draft, manufacturer: e.target.value })
+              }
+              placeholder="Ej. Arauco, Masisa…"
+              autoComplete="off"
+              required
+              data-testid="material-form-manufacturer"
+            />
+          </div>
+          {materialCategories.length > 0 ? (
+            <div className="catalog-form__field">
+              <label htmlFor="mat-category">Subgrupo</label>
+              <select
+                id="mat-category"
+                value={draft.categoryId}
+                onChange={(e) =>
+                  setDraft({ ...draft, categoryId: e.target.value })
+                }
+                data-testid="material-form-category"
+              >
+                <option value="">Sin subgrupo</option>
+                {materialCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {categoryPath(category.id, materialCategories)
+                      .map((node) => node.name)
+                      .join(' › ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div
             className="catalog-form__field"
             data-testid="material-image-field"

@@ -10,12 +10,16 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Module, ModuleCategory } from '@muebles/domain';
 import {
-  childrenOf,
   defaultMeasurePresetId,
   filterModulesByCategory,
   resolveModuleMeasurePreset,
 } from '@muebles/domain';
 import { Star } from 'lucide-react';
+import {
+  cascadeLevelLabel,
+  cascadeLevels,
+  sanitizeCategoryPath,
+} from '../../../common/cascadeLevels';
 import { SearchInput } from '../../../common';
 import {
   encodeLibraryDrag,
@@ -222,12 +226,6 @@ function LibraryCard({
   );
 }
 
-function levelLabel(index: number): string {
-  if (index === 0) return 'Categoría';
-  if (index === 1) return 'Subcategoría';
-  return `Nivel ${index + 1}`;
-}
-
 export function ModuleLibraryPanel({
   modules,
   categories,
@@ -283,45 +281,23 @@ export function ModuleLibraryPanel({
    * Ruta sanitizada: descarta ids que dejaron de existir o que ya no cuelgan
    * del nivel anterior (categorías renombradas/re-migradas del catálogo).
    */
-  const path = useMemo(() => {
-    const valid: string[] = [];
-    let parent: string | undefined;
-    for (const id of navigation.path) {
-      const exists = categories.some(
-        (c) => c.id === id && (c.parentId ?? undefined) === parent,
-      );
-      if (!exists) break;
-      valid.push(id);
-      parent = id;
-    }
-    return valid;
-  }, [navigation.path, categories]);
+  const path = useMemo(
+    () => sanitizeCategoryPath(categories, navigation.path),
+    [navigation.path, categories],
+  );
 
   /**
    * Renglones de niveles de la cascada: uno por nivel seleccionado + el
    * siguiente nivel disponible (sólo si tiene hijos). Cada nivel es su
    * propio renglón de chips — nunca todo mezclado en un control.
    */
-  const levelRows = useMemo(() => {
-    if (scope.kind !== 'catalog' || categories.length === 0) return [];
-    const rows: {
-      readonly options: readonly ModuleCategory[];
-      readonly selectedId: string | null;
-    }[] = [];
-    let parent: string | undefined;
-    for (const selectedId of path) {
-      rows.push({
-        options: childrenOf(categories, parent),
-        selectedId,
-      });
-      parent = selectedId;
-    }
-    const next = childrenOf(categories, parent);
-    if (next.length > 0) {
-      rows.push({ options: next, selectedId: null });
-    }
-    return rows;
-  }, [scope, path, categories]);
+  const levelRows = useMemo(
+    () =>
+      scope.kind !== 'catalog' || categories.length === 0
+        ? []
+        : cascadeLevels(categories, path),
+    [scope, path, categories],
+  );
 
   const selectScope = (next: LibraryScope): void => {
     setNavigation((current) => ({ ...current, scope: next }));
@@ -430,11 +406,11 @@ export function ModuleLibraryPanel({
         />
         {levelRows.map((row, index) => (
           <div className="module-library__level" key={index}>
-            <span className="module-library__level-label">{levelLabel(index)}</span>
+            <span className="module-library__level-label">{cascadeLevelLabel(index)}</span>
             <div
               className="module-library__chips"
               role="group"
-              aria-label={`Filtrar por ${levelLabel(index).toLowerCase()}`}
+              aria-label={`Filtrar por ${cascadeLevelLabel(index).toLowerCase()}`}
             >
               {index === 0 ? (
                 <button

@@ -124,3 +124,13 @@ func ValidateAmbientCategoryPlacement(parentID string, categories []AmbientCateg
 	}
 	return ValidateCategoryPlacement(parentID, conv, movingID)
 }
+
+// ValidateMaterialCategoryPlacement ensures create/move of MaterialCategory
+// (F142 subgrupos de tableros) stays within MaxCategoryDepth.
+func ValidateMaterialCategoryPlacement(parentID string, categories []MaterialCategory, movingID string) error {
+	conv := make([]ModuleCategory, len(categories))
+	for i, c := range categories {
+		conv[i] = ModuleCategory{ID: c.ID, Name: c.Name, ParentID: c.ParentID, SortOrder: c.SortOrder}
+	}
+	return ValidateCategoryPlacement(parentID, conv, movingID)
+}

@@ -214,6 +214,10 @@ describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
     expect((screen.getByTestId('material-pbr-roughness-input') as HTMLInputElement).value).toBe('0.08');
     expect((screen.getByTestId('material-pbr-clearcoat-input') as HTMLInputElement).value).toBe('0.85');
 
+    // F142: fabricante obligatorio — completarlo antes de enviar.
+    fireEvent.change(screen.getByTestId('material-form-manufacturer'), {
+      target: { value: 'Arauco' },
+    });
     // Submit form
     const form = screen.getByTestId('material-form-modal').querySelector('form');
     fireEvent.submit(form!);

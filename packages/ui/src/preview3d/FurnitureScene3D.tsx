@@ -81,11 +81,14 @@ import {
 import { isPastDragThreshold } from './moduleDragGesture';
 import { planBoxForModule, resolveDragGuide } from './dragGuides';
 import {
+  BOARD_PAINT_DRAG_MIME,
   LIBRARY_DRAG_MIME,
   PAINT_DRAG_MIME,
   UNPLACED_DRAG_MIME,
+  decodeBoardPaintDrag,
   decodePaintDrag,
   decodeUnplacedDrag,
+  resolveBoardPaintTarget,
   type PaintDrop,
   type PaintSurface,
 } from './paintMaterial';
@@ -420,6 +423,20 @@ export type FurnitureScene3DProps = {
     readonly planXMm: number;
     readonly planYMm: number;
   } | null) => void;
+  /**
+   * F142 — drop de un material de taller (tablero) sobre el canvas. El
+   * studio recibe el material arrastrado y el módulo bajo el cursor
+   * (null = fuera de todo mueble o superficie bloqueada; el caller debe
+   * rechazar con feedback que enseña, nunca aplicar a superficie).
+   */
+  readonly onBoardPaintDrop?: (drop: {
+    readonly moduleKey: string | null;
+    readonly materialId: string;
+  }) => void;
+  /** F142 — hover durante el drag de tablero (highlight del mueble target). */
+  readonly onBoardPaintHover?: (moduleKey: string | null) => void;
+  /** F142 — mueble resaltado como target del drag de tablero. */
+  readonly boardPaintHoverModuleKey?: string | null;
 };
 
 function BoardMesh({
@@ -945,7 +962,7 @@ function CountertopMesh({
   return (
     <mesh
       position={[width / 2, height + thickness / 2, D / 2 - overhangFront / 2]}
-      userData={{ countertop: true }}
+      userData={{ countertop: true, boardPaintBlocked: true }}
     >
       <boxGeometry args={[W, thickness, D]} />
       {paintHover ? (
@@ -1447,6 +1464,7 @@ function ModuleGroup({
     <group
       position={groupPos}
       rotation={groupRot}
+      userData={{ moduleKey: mod.key }}
       onClick={
         onSelectModule
           ? (e) => {
@@ -1754,6 +1772,8 @@ function SceneContent({
   paintHoverSurface = null,
   registerResolvePaintHit,
   registerResolveUnplacedHit,
+  registerResolveModuleHit,
+  boardPaintHoverModuleKey,
   ghostModule = null,
   ghostDropValid,
   ghostPosition = null,
@@ -1831,6 +1851,12 @@ function SceneContent({
       readonly planYMm: number;
     } | null) | null,
   ) => void;
+  /** F142 — registra el resolver de hits de módulos (drag de tablero). */
+  readonly registerResolveModuleHit?: (
+    fn: ((clientX: number, clientY: number) => string | null) | null,
+  ) => void;
+  /** F142 — mueble resaltado como target del drag de tablero. */
+  readonly boardPaintHoverModuleKey?: string | null;
   readonly ghostModule?: FurnitureScene3DProps['ghostModule'];
   readonly ghostDropValid?: boolean;
   readonly ghostPosition?: FurnitureScene3DProps['ghostPosition'];
@@ -2087,6 +2113,31 @@ function SceneContent({
     registerResolveUnplacedHit,
   ]);
 
+  /**
+   * F142 — registra el resolver de hits de módulos: raycasta los meshes y
+   * delega en resolveBoardPaintTarget (hit más cercano; mesada bloqueada).
+   * Un drag de tablero sólo puede aplicar a un mueble; fuera de muebles
+   * devuelve null.
+   */
+  useEffect(() => {
+    if (!registerResolveModuleHit) return;
+    registerResolveModuleHit((clientX, clientY) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
+      unplacedRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+      const meshes: THREE.Object3D[] = [];
+      scene.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh && !obj.userData?.paintHoverOverlay) {
+          meshes.push(obj);
+        }
+      });
+      const hits = unplacedRaycaster.intersectObjects(meshes, false);
+      return resolveBoardPaintTarget(hits);
+    });
+    return () => registerResolveModuleHit(null);
+  }, [camera, gl, scene, unplacedRaycaster, registerResolveModuleHit]);
+
   const framing = useMemo(
     () => sceneFraming(totalWidth, totalHeight, totalDepth),
     [totalWidth, totalHeight, totalDepth],
@@ -2303,7 +2354,10 @@ function SceneContent({
               selectedPartId={selectedPartId}
               isolateSelected={isolateSelected}
               onSelectPart={onSelectPart}
-              moduleSelected={selectedKeySet.has(mod.key)}
+              moduleSelected={
+                selectedKeySet.has(mod.key) ||
+                boardPaintHoverModuleKey === mod.key
+              }
               onSelectModule={onSelectModule}
               hardwareSelectedId={selectedHardwareId}
               onSelectHardwareId={
@@ -2509,6 +2563,9 @@ export function FurnitureScene3D({
   hardwareCatalog,
   onUnplacedDrop,
   onUnplacedHover,
+  onBoardPaintDrop,
+  onBoardPaintHover,
+  boardPaintHoverModuleKey = null,
 }: FurnitureScene3DProps): ReactNode {
   const controlsRef = useRef<any>(null);
   /**
@@ -2523,6 +2580,9 @@ export function FurnitureScene3D({
   /**
    * F065 — resolver de hits para ítems sin colocar. Registrado por SceneContent.
    */
+  const resolveModuleHitRef = useRef<
+    ((clientX: number, clientY: number) => string | null) | null
+  >(null);
   const resolveUnplacedHitRef = useRef<
     ((
       clientX: number,
@@ -2617,7 +2677,7 @@ export function FurnitureScene3D({
         tabIndex={0}
         aria-label="Vista 3D interactiva. Usá las flechas para orbitar, +/- para zoom."
         onDragEnter={
-          (onPaintHover || onUnplacedHover)
+          (onPaintHover || onUnplacedHover || onBoardPaintHover)
             ? (e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
@@ -2625,10 +2685,21 @@ export function FurnitureScene3D({
             : undefined
         }
         onDragOver={
-          (onPaintHover || onUnplacedHover)
+          (onPaintHover || onUnplacedHover || onBoardPaintHover)
             ? (e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
+                // F142: drag de tablero → hover del mueble target
+                if (onBoardPaintHover) {
+                  if (e.dataTransfer.types.includes(BOARD_PAINT_DRAG_MIME)) {
+                    onBoardPaintHover(
+                      resolveModuleHitRef.current?.(e.clientX, e.clientY) ??
+                        null,
+                    );
+                    return;
+                  }
+                  onBoardPaintHover(null);
+                }
                 // F065: ítem sin colocar · F141: tarjeta de biblioteca
                 if (onUnplacedHover) {
                   const isModuleDrag =
@@ -2652,19 +2723,38 @@ export function FurnitureScene3D({
             : undefined
         }
         onDragLeave={
-          (onPaintHover || onUnplacedHover)
+          (onPaintHover || onUnplacedHover || onBoardPaintHover)
             ? (e) => {
                 if (e.currentTarget === e.target) {
                   onPaintHover?.(null);
                   onUnplacedHover?.(null);
+                  onBoardPaintHover?.(null);
                 }
               }
             : undefined
         }
         onDrop={
-          (onPaintDrop || onUnplacedDrop)
+          (onPaintDrop || onUnplacedDrop || onBoardPaintDrop)
             ? (e) => {
                 e.preventDefault();
+
+                // F142: drop de tablero — sólo aplica a muebles; el studio
+                // rechaza con feedback que enseña cuando moduleKey es null.
+                const rawBoard = e.dataTransfer.getData(BOARD_PAINT_DRAG_MIME);
+                if (rawBoard && onBoardPaintDrop) {
+                  const payload = decodeBoardPaintDrag(rawBoard);
+                  if (payload) {
+                    onBoardPaintDrop({
+                      moduleKey:
+                        resolveModuleHitRef.current?.(e.clientX, e.clientY) ??
+                        null,
+                      materialId: payload.materialId,
+                    });
+                  }
+                  onBoardPaintHover?.(null);
+                  if (onUnplacedHover) onUnplacedHover(null);
+                  return;
+                }
 
                 // F065: drop de ítem sin colocar · F141: drop de biblioteca.
                 // El studio distingue la fuente por su estado ghost interno.
@@ -2852,6 +2942,14 @@ export function FurnitureScene3D({
                         }
                       : undefined
                   }
+                  registerResolveModuleHit={
+                    onBoardPaintDrop || onBoardPaintHover
+                      ? (fn) => {
+                          resolveModuleHitRef.current = fn;
+                        }
+                      : undefined
+                  }
+                  boardPaintHoverModuleKey={boardPaintHoverModuleKey}
                   ghostModule={ghostModule}
                   ghostDropValid={ghostDropValid}
                   ghostPosition={ghostPosition}

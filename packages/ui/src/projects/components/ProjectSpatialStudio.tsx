@@ -16,6 +16,7 @@ import {
 import type {
   EnvironmentCommandResult,
   KitchenWall,
+  MaterialCategory,
   Module,
   ModuleCategory,
   PlacementElevation,
@@ -126,6 +127,11 @@ import {
 } from '../../preview3d';
 import { MaterialPalette } from '../../preview3d/MaterialPalette';
 import {
+  BoardMaterialPalette,
+  BOARD_APPLY_SCOPES,
+  type BoardApplyScope,
+} from '../../preview3d/BoardMaterialPalette';
+import {
   PAINT_DRAG_MIME,
   UNPLACED_DRAG_MIME,
   canApplyMaterial,
@@ -212,6 +218,12 @@ export type ProjectSpatialStudioProps = {
    * add-item). Devuelve el id del ítem creado o null si no se pudo crear.
    */
   readonly onInsertFromCatalog?: (moduleId: string) => string | null;
+  /** F142: subgrupos de tableros para el dock de materiales. */
+  readonly materialCategories?: readonly MaterialCategory[];
+  /**
+   * F142: aplica un choice a nivel proyecto (scope "Frentes de toda la obra").
+   */
+  readonly onUpdateProjectLevelChoice?: (groupCode: string, optionId: string) => void;
   /**
    * Soft lock actor for multi-user Proyectar. When omitted, no lock protocol.
    */
@@ -364,6 +376,8 @@ export function ProjectSpatialStudio({
   quoteSalePrice = null,
   bootstrap = null,
   onInsertFromCatalog,
+  materialCategories = [],
+  onUpdateProjectLevelChoice,
   planActor,
   onAcquirePlanEdit,
   onRenewPlanEdit,
@@ -464,6 +478,15 @@ export function ProjectSpatialStudio({
   const [defaultWallsMsg, setDefaultWallsMsg] = useState<string | null>(null);
   // F141 — favoritos/recientes/mi taller de la biblioteca (localStorage v1).
   const libraryCollections = useLibraryCollections();
+  // F142 — dock de tableros: sub-tab, scope de aplicación, drag y feedback.
+  const [materialsSubTab, setMaterialsSubTab] = useState<'ambient' | 'boards'>(
+    'ambient',
+  );
+  const [boardScope, setBoardScope] = useState<BoardApplyScope>('fronts');
+  const [boardPaintHoverKey, setBoardPaintHoverKey] = useState<string | null>(
+    null,
+  );
+  const [boardStatus, setBoardStatus] = useState<string | null>(null);
   /** Read-only space navigation — must not persist layout / activeSpaceId. */
   const [viewSpaceId, setViewSpaceId] = useState<string | null>(null);
   const wallDragSession = useRef(false);
@@ -2400,6 +2423,90 @@ export function ProjectSpatialStudio({
     setGhostHit(null);
   };
 
+  // ── F142 Tableros: aplicación con scope + guards anti-leak ────────────────
+
+  /**
+   * Aplica un tablero (MaterialBoard) a un mueble o a la obra. Guard
+   * anti-leak: el material debe existir en el catálogo de tableros — nunca
+   * se escribe un id en superficies ambientales desde acá.
+   */
+  const applyBoardMaterial = (materialId: string, targetKey: string): void => {
+    if (!canEdit) return;
+    const material = catalog.materials.find((m) => m.id === materialId);
+    if (!material) return;
+
+    if (boardScope === 'project') {
+      if (!onUpdateProjectLevelChoice) {
+        setBoardStatus('Esta obra no permite cambios a nivel proyecto.');
+        return;
+      }
+      onUpdateProjectLevelChoice('FRENTE', material.id);
+      setBoardStatus(`✓ ${material.name} aplicado a frentes de toda la obra`);
+      return;
+    }
+
+    const key = targetKey;
+    const hash = key.lastIndexOf('#');
+    const itemId = hash > 0 ? key.slice(0, hash) : key;
+    const item = project.items.find((it) => it.id === itemId);
+    if (!item) {
+      setBoardStatus('No se encontró el mueble de la selección.');
+      return;
+    }
+    const mod = modules.find((m) => m.id === item.moduleId);
+    const boardGroups = groupsForModuleItem(
+      mod,
+      catalog.optionGroups,
+      catalog.components,
+      catalog.structures,
+    ).filter((g) => g.kind === 'board');
+    const codes =
+      boardScope === 'fronts'
+        ? ['FRENTE']
+        : boardScope === 'interior'
+          ? ['INTERIOR']
+          : boardGroups.map((g) => g.code);
+    const applicable = codes.filter((code) =>
+      boardGroups.some((g) => g.code === code),
+    );
+    if (applicable.length === 0) {
+      setBoardStatus(
+        `Este mueble no tiene grupo de ${
+          boardScope === 'interior' ? 'interior' : 'frentes'
+        } configurable.`,
+      );
+      return;
+    }
+    let choices = item.optionChoices;
+    for (const code of applicable) {
+      choices = setItemOptionChoice(choices, code, material.id);
+    }
+    onUpdateItem?.({ ...item, optionChoices: choices });
+    setSelection({ keys: [key], anchorKey: key });
+    setInspectorTab('props');
+    const scopeLabel =
+      BOARD_APPLY_SCOPES.find((s) => s.id === boardScope)?.label ?? '';
+    setBoardStatus(
+      `✓ ${material.name} aplicado a ${scopeLabel.toLowerCase()} · ${mod?.code ?? ''}`,
+    );
+  };
+
+  const handleBoardPaintDrop = (drop: {
+    readonly moduleKey: string | null;
+    readonly materialId: string;
+  }): void => {
+    if (!canEdit) return;
+    if (!drop.moduleKey) {
+      // Superficie ambiental (o vacío): rechazo que enseña, nunca aplica.
+      setBoardStatus(
+        'Los tableros se aplican a los muebles — arrastrá sobre un mueble.',
+      );
+    } else {
+      applyBoardMaterial(drop.materialId, drop.moduleKey);
+    }
+    setBoardPaintHoverKey(null);
+  };
+
   // ── F141 Biblioteca: inserción por click/teclado ─────────────────────────
 
   /** F141v2: biblioteca disponible (editable + insert conectado). Read-only ⇒ sólo ítems. */
@@ -3265,7 +3372,7 @@ export function ProjectSpatialStudio({
             <>
               <div className="spatial-studio__sidebar-head">
                 <h3 className="spatial-studio__section-title" style={{ margin: 0 }}>
-                  Materiales de ambiente
+                  Materiales
                 </h3>
                 <div className="spatial-studio__sidebar-head-actions">
                   <button
@@ -3281,6 +3388,37 @@ export function ProjectSpatialStudio({
                 </div>
               </div>
 
+              <div className="spatial-studio__sidebar-nav">
+                <WorkspaceTabs
+                  tabs={[
+                    { id: 'ambient' as const, label: 'Ambiente' },
+                    { id: 'boards' as const, label: 'Tableros' },
+                  ]}
+                  activeTab={materialsSubTab}
+                  onTabChange={setMaterialsSubTab}
+                  ariaLabel="Tipos de material"
+                  idPrefix="spatial-studio-materials"
+                  testIdPrefix="spatial-studio-materials"
+                />
+              </div>
+
+              <div
+                role="tabpanel"
+                id={`spatial-studio-materials-panel-${materialsSubTab}`}
+                aria-labelledby={`spatial-studio-materials-tab-${materialsSubTab}`}
+              >
+              {materialsSubTab === 'boards' ? (
+                <BoardMaterialPalette
+                  materials={catalog.materials}
+                  materialCategories={materialCategories}
+                  canEdit={canEdit}
+                  resolveMediaUrl={resolveMediaUrl}
+                  scope={boardScope}
+                  onScopeChange={setBoardScope}
+                  status={boardStatus}
+                  onCardDragEnd={() => setBoardPaintHoverKey(null)}
+                />
+              ) : (
               <section className="spatial-studio__section">
                 <MaterialPalette
                   materials={availableAmbientMaterials}
@@ -3290,27 +3428,10 @@ export function ProjectSpatialStudio({
                   activeCeilingId={layout.ceilingMaterialId}
                   activeCountertopId={layout.countertopMaterialId}
                   testId="spatial-studio-material-palette"
-                  onSelectMaterial={(mat, targetSurface) => {
-                    if (!canEdit) return;
-                    if (targetSurface === 'floor') {
-                      commit({ ...layout, floorMaterialId: mat.id });
-                    } else if (targetSurface === 'wall') {
-                      if (activeWallId) {
-                        const updatedWalls = (layout.walls ?? []).map((w) =>
-                          w.id === activeWallId ? { ...w, wallMaterialId: mat.id } : w,
-                        );
-                        commit({ ...layout, walls: updatedWalls });
-                      } else {
-                        commit({ ...layout, wallMaterialId: mat.id });
-                      }
-                    } else if (targetSurface === 'ceiling') {
-                      commit({ ...layout, ceilingMaterialId: mat.id, showCeiling: true });
-                    } else if (targetSurface === 'countertop') {
-                      commit({ ...layout, countertopMaterialId: mat.id, showCountertop: true });
-                    }
-                  }}
                 />
               </section>
+              )}
+              </div>
             </>
           ) : null}
 
@@ -3741,6 +3862,9 @@ export function ProjectSpatialStudio({
                 }
                 onUnplacedHover={canEdit ? handleUnplacedHover : undefined}
                 onUnplacedDrop={canEdit ? handleUnplacedDrop : undefined}
+                onBoardPaintHover={canEdit ? setBoardPaintHoverKey : undefined}
+                onBoardPaintDrop={canEdit ? handleBoardPaintDrop : undefined}
+                boardPaintHoverModuleKey={boardPaintHoverKey}
               />
             </Suspense>
           ) : (

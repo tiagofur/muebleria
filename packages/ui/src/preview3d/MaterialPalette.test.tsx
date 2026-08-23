@@ -52,12 +52,12 @@ const sampleMaterials: AmbientMaterial[] = [
 ];
 
 describe('MaterialPalette', () => {
-  it('renders target surface switcher and category comboboxes', () => {
+  it('renders category comboboxes without click-apply controls', () => {
     render(<MaterialPalette materials={sampleMaterials} categories={sampleCategories} />);
-    expect(screen.getByTestId('material-palette-target-floor')).toBeTruthy();
-    expect(screen.getByTestId('material-palette-target-wall')).toBeTruthy();
-    expect(screen.getByTestId('material-palette-target-ceiling')).toBeTruthy();
     expect(screen.getByTestId('material-palette-select-l1')).toBeTruthy();
+    // Drag-only: no hay selector de superficie para aplicar con clic.
+    expect(screen.queryByTestId('material-palette-target-floor')).toBeNull();
+    expect(screen.queryByText(/Aplicar con clic/i)).toBeNull();
   });
 
   it('groups materials by category taxonomy', () => {
@@ -100,27 +100,16 @@ describe('MaterialPalette', () => {
     expect(screen.queryByTestId('material-palette-chip-am-1')).toBeNull();
   });
 
-  it('calls onSelectMaterial with selected target surface when clicked', () => {
-    const onSelect = vi.fn();
-    render(
-      <MaterialPalette
-        materials={sampleMaterials}
-        categories={sampleCategories}
-        onSelectMaterial={onSelect}
-      />,
-    );
-
-    // Default target surface is 'floor'
-    fireEvent.click(screen.getByTestId('material-palette-chip-am-1'));
-    expect(onSelect).toHaveBeenCalledWith(sampleMaterials[0], 'floor');
-
-    // Switch target to 'wall'
-    fireEvent.click(screen.getByTestId('material-palette-target-wall'));
-    fireEvent.click(screen.getByTestId('material-palette-chip-am-4'));
-    expect(onSelect).toHaveBeenCalledWith(sampleMaterials[3], 'wall');
+  it('chips are drag-only cards, not clickable buttons', () => {
+    render(<MaterialPalette materials={sampleMaterials} categories={sampleCategories} />);
+    const chip = screen.getByTestId('material-palette-chip-am-1');
+    // Drag-only: la tarjeta no es un botón — se aplica arrastrando al canvas.
+    expect(chip.tagName).toBe('DIV');
+    expect(chip.getAttribute('draggable')).toBe('true');
+    expect(chip.getAttribute('aria-label')).toContain('arrastrar al plano');
   });
 
-  it('marks chip as active when matches current target surface', () => {
+  it('marks chips applied to any surface as active', () => {
     render(
       <MaterialPalette
         materials={sampleMaterials}
@@ -130,14 +119,13 @@ describe('MaterialPalette', () => {
       />,
     );
 
-    // Target surface is floor -> am-1 should be active
     const chip1 = screen.getByTestId('material-palette-chip-am-1');
-    expect(chip1.getAttribute('aria-pressed')).toBe('true');
-
-    // Switch to wall -> am-4 should be active
-    fireEvent.click(screen.getByTestId('material-palette-target-wall'));
     const chip4 = screen.getByTestId('material-palette-chip-am-4');
-    expect(chip4.getAttribute('aria-pressed')).toBe('true');
+    expect(chip1.className).toContain('material-palette__chip--active');
+    expect(chip4.className).toContain('material-palette__chip--active');
+
+    const chip2 = screen.getByTestId('material-palette-chip-am-2');
+    expect(chip2.className).not.toContain('material-palette__chip--active');
   });
 
   it('sets paint drag payload in dataTransfer on dragStart', () => {
@@ -177,29 +165,18 @@ describe('MaterialPalette', () => {
     expect(svg).toBeTruthy();
   });
 
-  it('handles countertop target selection and renders Mesada badge', () => {
-    const onSelect = vi.fn();
+  it('renders Mesada badge for the active countertop material', () => {
     render(
       <MaterialPalette
         materials={sampleMaterials}
         categories={sampleCategories}
         activeCountertopId="am-2"
-        onSelectMaterial={onSelect}
       />,
     );
 
-    expect(screen.getByTestId('material-palette-target-countertop')).toBeTruthy();
-
-    // Verify badge for active countertop material
     const chip2 = screen.getByTestId('material-palette-chip-am-2');
     expect(chip2.textContent).toContain('Mesada');
-
-    // Switch target to countertop and click chip
-    fireEvent.click(screen.getByTestId('material-palette-target-countertop'));
-    expect(chip2.getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(screen.getByTestId('material-palette-chip-am-1'));
-    expect(onSelect).toHaveBeenCalledWith(sampleMaterials[0], 'countertop');
+    expect(chip2.className).toContain('material-palette__chip--active');
   });
 });
 

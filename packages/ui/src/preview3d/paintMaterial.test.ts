@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   canApplyMaterial,
+  decodeBoardPaintDrag,
+  encodeBoardPaintDrag,
   decodeLibraryDrag,
   decodePaintDrag,
   decodeUnplacedDrag,
   encodeLibraryDrag,
   encodePaintDrag,
   encodeUnplacedDrag,
+  resolveBoardPaintTarget,
   resolvePaintSurface,
   type ResolvedIntersect,
+  type SceneHitNode,
 } from './paintMaterial';
 
 describe('resolvePaintSurface', () => {
@@ -206,6 +210,62 @@ describe('encodeLibraryDrag / decodeLibraryDrag', () => {
   it('returns null when dims are not numbers', () => {
     expect(
       decodeLibraryDrag(JSON.stringify({ ...validPayload, depthMm: '560' })),
+    ).toBeNull();
+  });
+});
+
+// ─── F142 encode/decode de drag de tablero ──────────────────────────────────
+
+describe('encodeBoardPaintDrag / decodeBoardPaintDrag', () => {
+  it('round-trips a valid payload', () => {
+    const encoded = encodeBoardPaintDrag({ materialId: 'mat-1' });
+    expect(decodeBoardPaintDrag(encoded)).toEqual({ materialId: 'mat-1' });
+  });
+
+  it('returns null for null/corrupt/empty payloads', () => {
+    expect(decodeBoardPaintDrag(null)).toBeNull();
+    expect(decodeBoardPaintDrag('')).toBeNull();
+    expect(decodeBoardPaintDrag('{bad')).toBeNull();
+    expect(decodeBoardPaintDrag('{"materialId":""}')).toBeNull();
+    expect(decodeBoardPaintDrag('{"other":1}')).toBeNull();
+  });
+});
+
+// ─── F142 resolveBoardPaintTarget (target de drop de tablero) ───────────────
+
+/** Fabrica un nodo de escena fake con userData y cadena de padres. */
+function node(
+  userData: Record<string, unknown>,
+  parent?: unknown,
+): SceneHitNode {
+  return { userData, parent };
+}
+
+describe('resolveBoardPaintTarget', () => {
+  it('devuelve el moduleKey del ancestro del hit más cercano', () => {
+    const moduleGroup = node({ moduleKey: 'it-a#0' });
+    const board = node({ boardId: 'b-1' }, moduleGroup);
+    expect(resolveBoardPaintTarget([{ object: board }])).toBe('it-a#0');
+  });
+
+  it('hit más cercano sin mueble (piso/muro/techo) rechaza aunque haya un mueble detrás', () => {
+    const moduleGroup = node({ moduleKey: 'it-a#0' });
+    const wall = node({ wallId: 'w1' });
+    const boardBehind = node({}, moduleGroup);
+    expect(resolveBoardPaintTarget([{ object: wall }, { object: boardBehind }])).toBeNull();
+  });
+
+  it('mesada ambiental (boardPaintBlocked) rechaza aunque cuelgue del mueble', () => {
+    const moduleGroup = node({ moduleKey: 'it-a#0' });
+    const countertop = node({ countertop: true, boardPaintBlocked: true }, moduleGroup);
+    expect(resolveBoardPaintTarget([{ object: countertop }])).toBeNull();
+  });
+
+  it('sin hits o cadena sin moduleKey devuelve null', () => {
+    expect(resolveBoardPaintTarget([])).toBeNull();
+    expect(resolveBoardPaintTarget([{ object: node({}) }])).toBeNull();
+    expect(
+      resolveBoardPaintTarget([{ object: node({}, node({ other: 1 })) }]),
     ).toBeNull();
   });
 });
