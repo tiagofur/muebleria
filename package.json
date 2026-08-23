@@ -15,7 +15,8 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "visual": "playwright test --config=playwright.config.ts",
     "smoke": "playwright test --config=playwright.config.ts tests/smoke",
-    "smoke:perf": "playwright test --config=playwright.config.ts tests/smoke/proyectar-perf.spec.ts"
+    "smoke:perf": "playwright test --config=playwright.config.ts tests/smoke/proyectar-perf.spec.ts",
+    "smoke:usability": "playwright test --config=playwright.config.ts tests/smoke/proyectar-usability.spec.ts"
   },
 
   "devDependencies": {

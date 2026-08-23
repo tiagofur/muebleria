@@ -438,6 +438,8 @@ pnpm add lucide-react --filter @muebles/ui
 | Quitar del plano (Proyectar) | `ListX` |
 | Enfocar selección (Proyectar) | `Focus` |
 | Precisión nudge/snap (Proyectar) | `Ruler` |
+| Benchmark de usabilidad — panel facilitador (Proyectar) | `Activity` |
+| Exportar JSON de sesión (benchmark usabilidad) | `Download` |
 | Precio / Costo | `DollarSign` |
 | Dimensiones | `Ruler` |
 | Instalación — visita de campo | `CalendarDays` |
