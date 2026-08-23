@@ -142,6 +142,7 @@ export interface ProjectModalsContainerProps {
   readonly onRestoreItems?: (
     projectId: string,
     items: readonly ProjectItem[],
+    order?: readonly string[],
   ) => void;
   readonly onClose3DModal: () => void;
   readonly onCloseTemplatePicker: () => void;
@@ -362,7 +363,8 @@ export function ProjectModalsContainer({
           }
           onRestoreItems={
             canMutate && selectedProject.status === 'draft' && onRestoreItems
-              ? (items) => onRestoreItems(selectedProject.id, items)
+              ? (items, order) =>
+                  onRestoreItems(selectedProject.id, items, order)
               : undefined
           }
         />

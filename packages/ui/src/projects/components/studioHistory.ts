@@ -35,6 +35,12 @@ export type PlanHistoryEntry = {
    * Los snapshots completos viajan en la entrada que restaura el ítem.
    */
   readonly removedItemIds?: readonly string[];
+  /**
+   * Orden completo de los ids de project.items ANTES de la intención (sólo
+   * la llenan intents que eliminan ítems). El undo restaura cada ítem en su
+   * posición original relativa: antes de su primer sobreviviente posterior.
+   */
+  readonly itemOrderBefore?: readonly string[];
   /** Clave de coalescing (ej. 'nudge'); sin clave = siempre entrada nueva. */
   readonly coalesceKey?: string;
   /** Marca temporal (ms) para la ventana de coalescing. */

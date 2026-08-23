@@ -523,6 +523,7 @@ export interface ShellViewCtx {
   readonly restoreProjectItems: (
     projectId: string,
     items: readonly import('@muebles/domain').ProjectItem[],
+    order?: readonly string[],
   ) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;
   readonly routeComponentEditId: string | null;

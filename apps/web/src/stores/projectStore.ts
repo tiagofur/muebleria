@@ -374,11 +374,15 @@ export interface ProjectState {
   /**
    * Re-inserta ítems eliminados (undo de "Eliminar del proyecto" en
    * Proyectar) conservando su id original para que los placements del
-   * layout restaurado vuelvan a resolver. Idempotente por id.
+   * layout restaurado vuelvan a resolver. Idempotente por id. `order` (ids
+   * en el orden anterior a eliminar) restaura cada línea en su posición
+   * original: antes de su primer sobreviviente posterior — así no pisa
+   * reordenamientos hechos entretanto en el resto de la lista.
    */
   readonly restoreProjectItems: (
     projectId: string,
     items: readonly ProjectItem[],
+    order?: readonly string[],
   ) => void;
   readonly updateProjectLevelChoices: (
     projectId: string,
@@ -1184,7 +1188,7 @@ export function createProjectStore(options: InternalOptions) {
       );
     },
 
-    restoreProjectItems: (projectId, items) => {
+    restoreProjectItems: (projectId, items, order) => {
       const existing = get().projects.find((p) => p.id === projectId);
       if (!existing || !projectAllowsContentMutation(existing.status)) return;
       if (items.length === 0) return;
@@ -1195,7 +1199,28 @@ export function createProjectStore(options: InternalOptions) {
           const known = new Set(p.items.map((i) => i.id));
           const restored = items.filter((it) => !known.has(it.id));
           if (restored.length === 0) return p;
-          return { ...p, items: [...p.items, ...restored], updatedAt: now };
+          let next = [...p.items];
+          if (order && order.length > 0) {
+            const orderIndex = new Map(order.map((id, idx) => [id, idx]));
+            const byOriginalPos = [...restored].sort(
+              (a, b) =>
+                (orderIndex.get(a.id) ?? order.length) -
+                (orderIndex.get(b.id) ?? order.length),
+            );
+            for (const item of byOriginalPos) {
+              const myIdx = orderIndex.get(item.id);
+              let insertAt = next.length;
+              if (myIdx !== undefined) {
+                const successors = new Set(order.slice(myIdx + 1));
+                const anchor = next.findIndex((cur) => successors.has(cur.id));
+                if (anchor >= 0) insertAt = anchor;
+              }
+              next.splice(insertAt, 0, item);
+            }
+          } else {
+            next = [...next, ...restored];
+          }
+          return { ...p, items: next, updatedAt: now };
         }),
       );
     },

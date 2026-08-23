@@ -3101,9 +3101,24 @@ describe('ProjectSpatialStudio — eliminar con alcance', () => {
               };
             });
           }}
-          onRestoreItems={(items) => {
-            onRestoreItems(items);
-            setProj((p) => ({ ...p, items: [...p.items, ...items] }));
+          onRestoreItems={(items, order) => {
+            onRestoreItems(items, order);
+            setProj((p) => {
+              const known = new Set(p.items.map((i) => i.id));
+              const restored = items.filter((it) => !known.has(it.id));
+              // mismo contrato que el store: insertar antes del primer
+              // sobreviviente posterior en el orden original
+              let next = [...p.items];
+              for (const it of restored) {
+                const idx = order?.indexOf(it.id) ?? -1;
+                const successors = new Set(
+                  idx >= 0 && order ? order.slice(idx + 1) : [],
+                );
+                const at = next.findIndex((cur) => successors.has(cur.id));
+                next.splice(at >= 0 ? at : next.length, 0, it);
+              }
+              return { ...p, items: next };
+            });
           }}
         />
       );
@@ -3117,10 +3132,12 @@ describe('ProjectSpatialStudio — eliminar con alcance', () => {
     // la fila colocada desaparece con la línea
     expect(screen.queryByTestId('spatial-studio-placed-it-a-0')).toBeNull();
 
-    // undo: la línea vuelve con su id original y su colocación en el plano
+    // undo: la línea vuelve con su id original y su colocación en el plano,
+    // y viaja el orden original de la lista para restaurar la posición
     fireEvent.click(screen.getByTestId('spatial-studio-undo'));
     expect(onRestoreItems).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ id: 'it-a' })]),
+      ['it-a', 'it-b'],
     );
     expect(screen.getByTestId('spatial-studio-placed-it-a-0')).toBeTruthy();
 
@@ -3128,6 +3145,16 @@ describe('ProjectSpatialStudio — eliminar con alcance', () => {
     fireEvent.click(screen.getByTestId('spatial-studio-redo'));
     expect(onRemoveItem).toHaveBeenCalledTimes(2);
     expect(screen.queryByTestId('spatial-studio-placed-it-a-0')).toBeNull();
+
+    // undo tras redo: restaura de nuevo y el orden de la lista sigue
+    // viajando (la contracara de la contracara conserva itemOrderBefore)
+    fireEvent.click(screen.getByTestId('spatial-studio-undo'));
+    expect(onRestoreItems).toHaveBeenCalledTimes(2);
+    expect(onRestoreItems).toHaveBeenLastCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'it-a' })]),
+      ['it-a', 'it-b'],
+    );
+    expect(screen.getByTestId('spatial-studio-placed-it-a-0')).toBeTruthy();
   });
 
   it('selección sin colocar: sólo ofrece quitar de la obra', () => {

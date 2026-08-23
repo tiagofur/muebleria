@@ -222,8 +222,15 @@ export type ProjectSpatialStudioProps = {
    * layout lo hace el store; el studio restaura en undo vía onRestoreItems.
    */
   readonly onRemoveItem?: (itemId: string) => void;
-  /** Re-inserta ítems eliminados (undo de "Eliminar del proyecto"), id original. */
-  readonly onRestoreItems?: (items: readonly ProjectItem[]) => void;
+  /**
+   * Re-inserta ítems eliminados (undo de "Eliminar del proyecto"), id
+   * original. `order` (ids antes de eliminar) permite restaurar cada línea
+   * en su posición original en la lista de muebles.
+   */
+  readonly onRestoreItems?: (
+    items: readonly ProjectItem[],
+    order?: readonly string[],
+  ) => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   /** Project sale total (read-only context in chrome). */
   readonly quoteSalePrice?: number | null;
@@ -1568,7 +1575,7 @@ export function ProjectSpatialStudio({
         restored.push(snap);
       }
     }
-    if (restored.length > 0) onRestoreItems?.(restored);
+    if (restored.length > 0) onRestoreItems?.(restored, entry.itemOrderBefore);
     for (const removedId of entry.removedItemIds ?? []) {
       if (project.items.some((i) => i.id === removedId)) {
         onRemoveItem?.(removedId);
@@ -1599,7 +1606,8 @@ export function ProjectSpatialStudio({
    * Contracara de una entrada para el stack inverso: ítems que existen HOY
    * entre los tocados (snapshots + removed) como snapshots completos; los
    * ausentes hoy como removedItemIds (así el redo de una eliminación vuelve
-   * a quitar las líneas restauradas por el undo).
+   * a quitar las líneas restauradas por el undo). El orden de la lista
+   * viaja con la contracara: un undo tras redo también restaura posiciones.
    */
   const historyCounterpartOf = (entry: PlanHistoryEntry) => {
     const tracked = [
@@ -1610,6 +1618,9 @@ export function ProjectSpatialStudio({
     return {
       itemSnapshots: project.items.filter((i) => tracked.includes(i.id)),
       removedItemIds: tracked.filter((id) => !known.has(id)),
+      ...(entry.itemOrderBefore
+        ? { itemOrderBefore: entry.itemOrderBefore }
+        : {}),
     };
   };
 
@@ -1869,6 +1880,8 @@ export function ProjectSpatialStudio({
             : `Eliminar ${affected.length} muebles de la obra`,
         layout,
         itemSnapshots: affected,
+        // Posiciones originales: el undo restaura cada línea en su lugar.
+        itemOrderBefore: project.items.map((i) => i.id),
         ts: Date.now(),
       }),
     ]);

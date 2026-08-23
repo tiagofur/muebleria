@@ -569,6 +569,79 @@ describe('projectStore — addProjectItem / updateProjectItem / removeProjectIte
     expect(store.getState().projects[0]!.items).toHaveLength(1);
   });
 
+  it('restoreProjectItems con order restaura la posición original', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const a: ProjectItem = { id: 'a', moduleId: 'mod-1', quantity: 1, optionChoices: {} };
+    const b: ProjectItem = { id: 'b', moduleId: 'mod-1', quantity: 1, optionChoices: {} };
+    const c: ProjectItem = { id: 'c', moduleId: 'mod-1', quantity: 1, optionChoices: {} };
+    store.getState().setProjects([makeProject({ items: [a, b, c] })]);
+
+    // se borró el del medio; el undo lo devuelve a su lugar, no al final
+    store.getState().removeProjectItem('proj-1', 'b');
+    store.getState().restoreProjectItems('proj-1', [b], ['a', 'b', 'c']);
+
+    expect(store.getState().projects[0]!.items.map((i) => i.id)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
+  it('restoreProjectItems restaura varios contiguos en orden', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const mk = (id: string): ProjectItem => ({
+      id,
+      moduleId: 'mod-1',
+      quantity: 1,
+      optionChoices: {},
+    });
+    const order = ['a', 'b', 'c', 'd'];
+    store.getState().setProjects([
+      makeProject({ items: order.map((id) => mk(id)) }),
+    ]);
+
+    store.getState().removeProjectItem('proj-1', 'b');
+    store.getState().removeProjectItem('proj-1', 'c');
+    store.getState().restoreProjectItems('proj-1', [mk('c'), mk('b')], order);
+
+    expect(store.getState().projects[0]!.items.map((i) => i.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
+  });
+
+  it('restoreProjectItems no pisa reordenamientos posteriores a la eliminación', () => {
+    const { deps } = makeDeps();
+    const store = createProjectStore({ deps });
+    const mk = (id: string): ProjectItem => ({
+      id,
+      moduleId: 'mod-1',
+      quantity: 1,
+      optionChoices: {},
+    });
+
+    // estado tras eliminar b y que el usuario reordere a/c a [c, a]
+    store.getState().setProjects([makeProject({ items: [mk('c'), mk('a')] })]);
+
+    // b vuelve antes de su primer sobreviviente posterior (c), sin deshacer
+    // el reordenamiento de los demás
+    store.getState().restoreProjectItems('proj-1', [mk('b')], [
+      'a',
+      'b',
+      'c',
+    ]);
+
+    expect(store.getState().projects[0]!.items.map((i) => i.id)).toEqual([
+      'b',
+      'c',
+      'a',
+    ]);
+  });
+
   it('updateProjectItem prunes placements when qty shrinks', () => {
     const { deps } = makeDeps();
     const store = createProjectStore({ deps });

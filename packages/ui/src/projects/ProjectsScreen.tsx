@@ -138,6 +138,7 @@ export interface ProjectsScreenProps {
   readonly onRestoreItems?: (
     projectId: string,
     items: readonly ProjectItem[],
+    order?: readonly string[],
   ) => void;
   /** Reorder items by moving from one index to another (F052 / drag & drop). */
   readonly onReorderItems?: (projectId: string, fromIndex: number, toIndex: number) => void;
