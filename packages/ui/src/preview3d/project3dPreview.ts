@@ -248,6 +248,123 @@ function resolveItemBom(
 }
 
 /**
+ * F147 / #312 (P3D-6) — memoización de resolución BOM por ítem.
+ *
+ * Sin esto, cada commit de layout (incluido cada move de drag/nudge) recrea el
+ * proyecto y `resolveProject3DPreview` re-corre `resolveBom` para TODOS los
+ * ítems: N×resolveBom por actualización de plano. El cache clavea por identidad
+ * de inmutables (item → projectLevelChoices → catalogInput), preservando la
+ * pureza referencial: mismas entradas ⇒ mismo resultado; los cambios de layout
+ * no tocan los ítems ⇒ cache hit. WeakMap ⇒ los ítems borrados se colectan.
+ *
+ * `project3dPreviewStats` es telemetría (smoke de performance) y gate de tests:
+ * una regresión que reintroduzca resolución por layout-change falla el test.
+ */
+export const project3dPreviewStats = {
+  resolutions: 0,
+  cacheHits: 0,
+  /** Telemetría de diagnóstico: qué nivel del cache falló (identidad cambiada). */
+  missReasons: { item: 0, projectLevelChoices: 0, catalog: 0 } as Record<
+    'item' | 'projectLevelChoices' | 'catalog',
+    number
+  >,
+};
+
+export function resetProject3dPreviewStatsForTests(): void {
+  project3dPreviewStats.resolutions = 0;
+  project3dPreviewStats.cacheHits = 0;
+  project3dPreviewStats.missReasons = {
+    item: 0,
+    projectLevelChoices: 0,
+    catalog: 0,
+  };
+}
+
+/** Sentinel de cache para proyectos sin projectLevelChoices (WeakMap no acepta undefined). */
+const NO_PROJECT_LEVEL_CHOICES: Record<string, never> = {};
+
+type ItemBomResult = ReturnType<typeof resolveItemBom>;
+
+/**
+ * Identidad estable por CONTENIDO para objetos de catálogo: los selectores de
+ * arriba reconstruyen arrays/objetos en cada render aunque el contenido no
+ * cambie (firma observada en #312: 2.175 misses "catalog" en un drag). El id
+ * numérico por elemento hace la firma inmune a la clonación de contenedores
+ * y sensible a cambios reales de contenido (edición de catálogo ⇒ re-resolve).
+ */
+const objectIdCache = new WeakMap<object, number>();
+let nextObjectId = 1;
+function objectContentId(o: readonly object[] | object): number {
+  let id = objectIdCache.get(o as object);
+  if (id === undefined) {
+    id = nextObjectId++;
+    objectIdCache.set(o as object, id);
+  }
+  return id;
+}
+
+const EMPTY_ARRAY: readonly unknown[] = [];
+
+function catalogSignature(c: Module3DCatalogInput): string {
+  const arr = (x: readonly object[] | undefined): readonly object[] =>
+    (x as readonly object[] | undefined) ?? (EMPTY_ARRAY as readonly object[]);
+  return [
+    c.modules.map(objectContentId).join('.'),
+    arr(c.structures).map(objectContentId).join('.'),
+    arr(c.components).map(objectContentId).join('.'),
+    arr(c.materials).map(objectContentId).join('.'),
+    arr(c.edges).map(objectContentId).join('.'),
+    arr(c.hardware).map(objectContentId).join('.'),
+    arr(c.optionGroups).map(objectContentId).join('.'),
+    arr(c.agregados).map(objectContentId).join('.'),
+  ].join('|');
+}
+
+/** Nivel catálogo acotado (LRU): firmas de catálogo vivas simultáneamente. */
+const MAX_CATALOG_CACHE_ENTRIES = 8;
+const itemBomCache = new WeakMap<
+  ProjectItem,
+  WeakMap<object, Map<string, ItemBomResult>>
+>();
+
+function resolveItemBomCached(
+  item: ProjectItem,
+  module: Module,
+  project: Project,
+  catalogInput: Module3DCatalogInput,
+): ItemBomResult {
+  const plcKey: object =
+    project.projectLevelChoices ?? NO_PROJECT_LEVEL_CHOICES;
+  let byPlc = itemBomCache.get(item);
+  if (!byPlc) {
+    project3dPreviewStats.missReasons.item += 1;
+    byPlc = new WeakMap();
+    itemBomCache.set(item, byPlc);
+  }
+  let byCatalog = byPlc.get(plcKey);
+  if (!byCatalog) {
+    project3dPreviewStats.missReasons.projectLevelChoices += 1;
+    byCatalog = new Map();
+    byPlc.set(plcKey, byCatalog);
+  }
+  const sig = catalogSignature(catalogInput);
+  const hit = byCatalog.get(sig);
+  if (hit) {
+    project3dPreviewStats.cacheHits += 1;
+    return hit;
+  }
+  project3dPreviewStats.missReasons.catalog += 1;
+  const resolved = resolveItemBom(item, module, project, catalogInput);
+  project3dPreviewStats.resolutions += 1;
+  if (byCatalog.size >= MAX_CATALOG_CACHE_ENTRIES) {
+    const oldest = byCatalog.keys().next().value;
+    if (oldest !== undefined) byCatalog.delete(oldest);
+  }
+  byCatalog.set(sig, resolved);
+  return resolved;
+}
+
+/**
  * Resolve parametric hardware placements (jaladeras) for one module into
  * board-LOCAL mm (Fase 2, WU3). Pure — no Three.js.
  *
@@ -446,7 +563,7 @@ export function resolveProject3DPreview(
         baseClearanceMm: 0,
       };
     }
-    const resolved = resolveItemBom(item, module, project, catalogInput);
+    const resolved = resolveItemBomCached(item, module, project, catalogInput);
     return {
       item,
       module,

@@ -6,6 +6,7 @@
 
 import {
   lazy,
+  Profiler,
   Suspense,
   useEffect,
   useMemo,
@@ -139,7 +140,16 @@ import {
   encodeUnplacedDrag,
 } from '../../preview3d/paintMaterial';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
-import { resolveProject3DPreview } from '../../preview3d/project3dPreview';
+import {
+  project3dPreviewStats,
+  resolveProject3DPreview,
+} from '../../preview3d/project3dPreview';
+import {
+  initProyectarPerf,
+  recordBomResolve,
+  recordProfilerCommit,
+  setPerfSceneId,
+} from '../../preview3d/perfTelemetry';
 import {
   allFootprints,
   getCategoryTheme,
@@ -507,6 +517,14 @@ export function ProjectSpatialStudio({
     setUseR3f(canUseWebGL());
   }, [open]);
 
+  // F147 / #312 — telemetría de performance del editor (long tasks + escena).
+  useEffect(() => {
+    if (!open) return;
+    initProyectarPerf();
+    setPerfSceneId(project.id);
+    return () => setPerfSceneId(null);
+  }, [open, project.id]);
+
   useEffect(() => {
     if (!open) {
       setUndoStack([]);
@@ -803,14 +821,21 @@ export function ProjectSpatialStudio({
       ? targetWallId
       : (layout.walls[0]?.id ?? null);
 
-  const preview = useMemo(
-    () =>
-      resolveProject3DPreview(project, catalog, {
-        unplacedPolicy: 'hide',
-        kitchenWallsOnly: true,
-      }),
-    [project, catalog],
-  );
+  const preview = useMemo(() => {
+    // F147 — costo del resolve dominio→escena (telemetría de performance #312).
+    const t0 = performance.now();
+    const result = resolveProject3DPreview(project, catalog, {
+      unplacedPolicy: 'hide',
+      kitchenWallsOnly: true,
+    });
+    recordBomResolve(
+      performance.now() - t0,
+      project3dPreviewStats.resolutions,
+      project3dPreviewStats.cacheHits,
+      { ...project3dPreviewStats.missReasons },
+    );
+    return result;
+  }, [project, catalog]);
 
   const materialColors = useMemo(
     () => materialColorMap(catalog.materials),
@@ -1107,6 +1132,58 @@ export function ProjectSpatialStudio({
     const scale = (size - pad * 2) / Math.max(spanX, spanY);
     return { minX: bounds.minX, minY: bounds.minY, pad, scale, size };
   }, [planFrames, planPlacements2D, layout.underlay]);
+
+  // F147 — identidades estables por preview: sin el useMemo, cada render del
+  // studio recreaba ambos arrays y re-reconciliaba los ~50 props de cada
+  // ModuleGroup aunque el preview no hubiera cambiado.
+  const sceneModules = useMemo(
+    () =>
+      preview.modules.map((m) => ({
+        key: m.instanceKey,
+        parts: m.parts,
+        width: m.width,
+        height: m.height,
+        depth: m.depth,
+        originX: m.originX,
+        originY: m.originY,
+        originZ: m.originZ,
+        yawDeg: m.yawDeg,
+        baseClearanceMm: m.baseClearanceMm,
+        baseMode: m.baseMode,
+        ...(m.plinthMaterialId
+          ? { plinthMaterialId: m.plinthMaterialId }
+          : {}),
+        ...(m.plinthHardwareColor
+          ? { plinthHardwareColor: m.plinthHardwareColor }
+          : {}),
+        ...(m.plinthMaterialThicknessMm
+          ? { plinthThicknessMm: m.plinthMaterialThicknessMm }
+          : {}),
+        ...(m.plinthSides ? { plinthSides: m.plinthSides } : {}),
+        showCountertop: m.showCountertop,
+        showOuterGhost: true,
+        resolvedHardwarePlacements: m.resolvedHardwarePlacements,
+      })),
+    [preview.modules],
+  );
+
+  const sceneWalls = useMemo(
+    () =>
+      preview.walls.map((w) => ({
+        id: w.id,
+        originXMm: w.originXMm,
+        originYMm: w.originYMm,
+        endXMm: w.endXMm,
+        endYMm: w.endYMm,
+        heightMm: 2400,
+        wallMaterialId: w.wallMaterialId,
+        ...(w.openings && w.openings.length > 0
+          ? { openings: w.openings }
+          : {}),
+      })),
+    [preview.walls],
+  );
+
 
   if (!open) return null;
 
@@ -2124,42 +2201,6 @@ export function ProjectSpatialStudio({
     );
   };
 
-  const sceneModules = preview.modules.map((m) => ({
-    key: m.instanceKey,
-    parts: m.parts,
-    width: m.width,
-    height: m.height,
-    depth: m.depth,
-    originX: m.originX,
-    originY: m.originY,
-    originZ: m.originZ,
-    yawDeg: m.yawDeg,
-    baseClearanceMm: m.baseClearanceMm,
-    baseMode: m.baseMode,
-    ...(m.plinthMaterialId ? { plinthMaterialId: m.plinthMaterialId } : {}),
-    ...(m.plinthHardwareColor
-      ? { plinthHardwareColor: m.plinthHardwareColor }
-      : {}),
-    ...(m.plinthMaterialThicknessMm
-      ? { plinthThicknessMm: m.plinthMaterialThicknessMm }
-      : {}),
-    ...(m.plinthSides ? { plinthSides: m.plinthSides } : {}),
-    showCountertop: m.showCountertop,
-    showOuterGhost: true,
-    resolvedHardwarePlacements: m.resolvedHardwarePlacements,
-  }));
-
-  const sceneWalls = preview.walls.map((w) => ({
-    id: w.id,
-    originXMm: w.originXMm,
-    originYMm: w.originYMm,
-    endXMm: w.endXMm,
-    endYMm: w.endYMm,
-    heightMm: 2400,
-    wallMaterialId: w.wallMaterialId,
-    ...(w.openings && w.openings.length > 0 ? { openings: w.openings } : {}),
-  }));
-
   const applyOffsetOnWall = (
     itemId: string,
     instanceIndex: number,
@@ -2884,6 +2925,12 @@ export function ProjectSpatialStudio({
   };
 
   return (
+    // F147 / #312 — Profiler del subtree del studio (commits para el smoke de
+    // performance). No-op en builds de producción.
+    <Profiler
+      id="proyectar-studio"
+      onRender={(_, phase, duration) => recordProfilerCommit(phase, duration)}
+    >
     <div
       className="spatial-studio"
       role="dialog"
@@ -5669,6 +5716,7 @@ export function ProjectSpatialStudio({
         </aside>
       </div>
     </div>
+    </Profiler>
   );
 }
 

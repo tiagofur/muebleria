@@ -2,7 +2,7 @@
  * Container for all secondary modals in ProjectsScreen (CRUD, templates, 3D, etc.).
  */
 
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type {
   Agregado,
   Component,
@@ -216,6 +216,17 @@ export function ProjectModalsContainer({
   onCloseTemplatesManagement,
   onDeleteTemplate,
 }: ProjectModalsContainerProps): ReactNode {
+  // F147 — identidad estable del catálogo 3D: el literal inline rompía el
+  // cache de resolveItemBom en cada render (cada move de drag re-resolvía el
+  // BOM de TODOS los ítems).
+  const studio3dCatalog = useMemo(
+    () => ({
+      ...project3dCatalog,
+      structures: catalogStructures ?? [],
+      components: catalogComponents ?? [],
+    }),
+    [project3dCatalog, catalogStructures, catalogComponents],
+  );
   return (
     <>
       <ProjectMetaModal
@@ -301,11 +312,7 @@ export function ProjectModalsContainer({
           project={selectedProject}
           modules={modules}
           categories={categories}
-          catalog={{
-            ...project3dCatalog,
-            structures: catalogStructures ?? [],
-            components: catalogComponents ?? [],
-          }}
+          catalog={studio3dCatalog}
           canEdit={Boolean(canMutate && selectedProject.status === 'draft')}
           resolveMediaUrl={resolveImageUrl}
           quoteSalePrice={
@@ -345,11 +352,7 @@ export function ProjectModalsContainer({
       <Project3DModal
         open={show3DModal}
         project={selectedProject}
-        catalog={{
-          ...project3dCatalog,
-          structures: catalogStructures ?? [],
-          components: catalogComponents ?? [],
-        }}
+        catalog={studio3dCatalog}
         resolveMediaUrl={resolveImageUrl}
         focus={
           viewerQuoteRun || !viewerItem

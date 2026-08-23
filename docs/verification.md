@@ -298,3 +298,14 @@ Antes de declarar una feature verificada:
 
 Si un check está bloqueado por entorno, se registra como **blocked/environment**; nunca se
 inventa aprobación.
+
+## Performance de Proyectar (F147 / #312)
+
+Toda feature que toca el hot path del editor 3D (escena, drag, selección,
+materiales, layout) verifica además contra el budget:
+
+- `pnpm smoke:perf` con el baseline de `docs/proyectar-3d-performance.md`
+  (antes/después; empeoramiento > 20% exige tradeoff explícito);
+- gate CI determinista: cache de BOM (layout-change ⇒ 0 re-resoluciones) y
+  conteo del fixture de referencia;
+- el humo WebGL completo (`pnpm smoke`) sigue siendo local + evidencia.

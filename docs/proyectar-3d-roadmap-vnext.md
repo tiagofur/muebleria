@@ -218,7 +218,17 @@ No convertir esto en renderer offline pesado salvo demanda real.
 
 ---
 
-## 8. P3D-6 — Performance & Interaction Budget (#312)
+## 8. P3D-6 — Performance & Interaction Budget (#312) — **ENTREGADO (F147)**
+
+> Estado (F147, 2026-08-23): fixture versionado (30 ítems/27 instancias, test
+> de conteo), telemetría (`window.__proyectarPerfSnapshot`), smoke
+> `pnpm smoke:perf` con gates + baseline JSON, gate CI determinista del cache
+> BOM (0 re-resoluciones por layout-change) y budgets en
+> `docs/proyectar-3d-performance.md`. Optimizaciones justificadas por medición:
+> cache BOM por contenido (2.175 re-resoluciones por drag antes), memo de
+> `sceneModules`/`sceneWalls`, catálogo estable del studio; órbita 0 commits.
+> **Gap abierto → P3D-6b (costo de render)**: long tasks por frame en
+> drag/órbita (draw calls por pieza + shadows); el baseline lo mide.
 
 ### Entregables
 

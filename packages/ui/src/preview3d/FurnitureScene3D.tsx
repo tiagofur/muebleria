@@ -44,6 +44,11 @@ import {
 import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
 import {
+  beginDragFeedbackSample,
+  endDragFeedbackSample,
+  recordRendererSample,
+} from './perfTelemetry';
+import {
   boardPartsToVisuals,
   cameraPositionForView,
   sceneFraming,
@@ -1158,22 +1163,38 @@ function WallOcclusionTracker({
   // Guard por CONTENIDO del conjunto (no por posición): la órbita sólo
   // re-renderiza cuando un muro efectivamente entra/sale del conjunto oculto.
   const lastKey = useRef<string>('');
+  // F147 — el trabajo pesado sólo cuando cambia la cámara o los muros: sin
+  // movimiento no se reallocan arrays/objetos por frame (era churn por useFrame).
+  const lastCam = useRef({ x: Number.NaN, y: Number.NaN });
+  const withAngles = useMemo(
+    () =>
+      walls.map((w) => ({
+        ...w,
+        angleDeg:
+          (Math.atan2(w.endYMm - w.originYMm, w.endXMm - w.originXMm) * 180) /
+          Math.PI,
+      })),
+    [walls],
+  );
   useFrame(() => {
     if (!enabled) {
       if (lastKey.current !== '') {
         lastKey.current = '';
+        lastCam.current = { x: Number.NaN, y: Number.NaN };
         onOccludedChange(new Set());
       }
       return;
     }
     const x = Math.round(camera.position.x);
     const y = Math.round(camera.position.z);
-    const withAngles = walls.map((w) => ({
-      ...w,
-      angleDeg:
-        (Math.atan2(w.endYMm - w.originYMm, w.endXMm - w.originXMm) * 180) /
-        Math.PI,
-    }));
+    if (
+      lastKey.current !== '' &&
+      x === lastCam.current.x &&
+      y === lastCam.current.y
+    ) {
+      return;
+    }
+    lastCam.current = { x, y };
     const hidden = wallsOccludingCamera(withAngles, x, y);
     const key = walls
       .map((w) => (hidden.has(w.id) ? `1${w.id}` : `0${w.id}`))
@@ -1300,11 +1321,16 @@ function ModuleGroup({
 
   const applyDragFromClient = useCallback(
     (clientX: number, clientY: number) => {
+      // F147 — latencia de feedback: evento → frame pintado con el ghost movido.
+      beginDragFeedbackSample();
       const rect = gl.domElement.getBoundingClientRect();
       ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
       ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(ndc, camera);
-      if (!raycaster.ray.intersectPlane(floorPlane, hit)) return;
+      if (!raycaster.ray.intersectPlane(floorPlane, hit)) {
+        requestAnimationFrame(() => endDragFeedbackSample());
+        return;
+      }
       // Three (x,y,z) → workshop (x, y_plan=z)
       if (dragMode.current === 'free' && onModuleFreeMove) {
         const shiftX = planShiftMm?.x ?? 0;
@@ -1314,9 +1340,13 @@ function ModuleGroup({
           Math.round(hit.x - shiftX),
           Math.round(hit.z - shiftY),
         );
+        requestAnimationFrame(() => endDragFeedbackSample());
         return;
       }
-      if (!wallDrag || !onModuleWallOffset) return;
+      if (!wallDrag || !onModuleWallOffset) {
+        requestAnimationFrame(() => endDragFeedbackSample());
+        return;
+      }
       const offset = offsetMmFromPlanPoint(
         {
           originXMm: wallDrag.originXMm,
@@ -1329,6 +1359,7 @@ function ModuleGroup({
         wallDrag.moduleWidthMm,
       );
       onModuleWallOffset(mod.key, offset);
+      requestAnimationFrame(() => endDragFeedbackSample());
     },
     [
       wallDrag,
@@ -1713,6 +1744,28 @@ function CameraViewSetter({
     }
   }, [cameraView, center, maxDim, controlsRef, camera]);
 
+  return null;
+}
+
+/**
+ * F147 / #312 — samplea `renderer.info` cada 30 frames (lectura barata,
+ * throttled). `info.render.*` refleja el último frame; el máximo histórico
+ * queda en telemetría para el gate de draw calls del smoke de performance.
+ */
+function ScenePerfProbe(): null {
+  const gl = useThree((s) => s.gl);
+  const frameCount = useRef(0);
+  useFrame(() => {
+    frameCount.current += 1;
+    if (frameCount.current % 30 !== 0) return;
+    const info = gl.info;
+    recordRendererSample({
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      programs: info.programs?.length ?? 0,
+      geometries: info.memory.geometries,
+    });
+  });
   return null;
 }
 
@@ -2863,6 +2916,7 @@ export function FurnitureScene3D({
                   far={cameraFar}
                 />
               )}
+              <ScenePerfProbe />
               <Suspense fallback={null}>
                 <SceneContent
                   rawHardwarePlacements={rawHardwarePlacements}
