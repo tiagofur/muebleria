@@ -569,7 +569,7 @@ func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, pres
 // loadProjectItems returns all line items + option choices for a project.
 func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) ([]domain.ProjectItem, error) {
 	itemQuery := `
-		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status
+		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims
 		FROM project_items
 		WHERE project_id = $1;
 	`
@@ -585,8 +585,17 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		var measurePresetID *string
 		var structureRevisionPin *int
 		var floorStatus *string
-		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin, &item.BaseMode, &floorStatus); err != nil {
+		var customDims []byte
+		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin, &item.BaseMode, &floorStatus, &customDims); err != nil {
 			return nil, err
+		}
+		// F144: custom_dims JSONB → *ItemCustomDims (NULL/{} = nil → preset).
+		if len(customDims) > 0 && string(customDims) != "null" {
+			var dims domain.ItemCustomDims
+			if err := json.Unmarshal(customDims, &dims); err != nil {
+				return nil, fmt.Errorf("invalid custom_dims for item %s: %w", item.ID, err)
+			}
+			item.CustomDims = &dims
 		}
 		if measurePresetID != nil {
 			item.MeasurePresetID = *measurePresetID
@@ -637,17 +646,21 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		pinArg := structurePinArg(item.StructureRevisionPin)
 		baseModeArg := item.BaseMode
 		floorArg := nullIfEmpty(item.FloorStatus)
+		customDimsArg, err := customDimsArg(item.CustomDims)
+		if err != nil {
+			return fmt.Errorf("invalid custom_dims for item %s: %w", item.ID, err)
+		}
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg)
+				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg, customDimsArg)
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
+				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 				RETURNING id
-			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg).Scan(&item.ID)
+			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg, customDimsArg).Scan(&item.ID)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting project item: %w", err)
@@ -662,6 +675,19 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		}
 	}
 	return nil
+}
+
+// customDimsArg marshals the per-item dims override into a JSONB argument
+// (nil when unset, so the column stays NULL and the item resolves by preset).
+func customDimsArg(dims *domain.ItemCustomDims) (interface{}, error) {
+	if dims == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(dims)
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 // structurePinArg converts a *int pin into a pgx-compatible argument (nil when

@@ -1069,3 +1069,17 @@ domain 911 · storage 150 · ui 1197 · web 301 · mobile 45 · desktop 17 ·
 - **Deuda explícita:** obstáculos no anclados a muro (survey ya los modela, no
   duplicar), vista global multi-space explícita (si demanda), cámara orbit
   completa por ambiente (v1 recuerda preset).
+
+## F146 — proyectar_design_bom_price_contracts (#313 P3D-7 · meta #308) — 2026-08-23
+
+Contract tests diseño→BOM→precio→producción: fixture compartido
+`contracts/designBomPrice.json` con expected congelados consumido por TS (6
+tests) y Go (4 escenarios); cierra la deuda F144 de persistencia (customDims
+en backend Go, migración 000078, `ResolveBomWithDims`); gate
+`domainBoundaryGuard` impide matemática de negocio en packages/ui. **Sesión de
+recuperación:** el PR #333 original se mergeó por error a su rama base (no a
+main) y quedó huérfano junto con el PR #330 de F142 (mismo patrón);
+recuperados ambos sobre main via cherry-pick en `recover/f142-materials-dock`
++ `feat/f146-contracts-p3d7`, F145→F146 por colisión de numeración con #311.
+Verificación completa verde (go 8 paquetes, pnpm 2.982, typecheck); review
+APPROVED con sección de recuperación en `progress/review_F146.md`.
