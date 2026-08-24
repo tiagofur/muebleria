@@ -5,34 +5,26 @@
 > **META:** [#290](https://github.com/tiagofur/muebleria/issues/290)  
 > **Decisión:** **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
 
-Muebles for SketchUp permite diseñar con una herramienta 3D profesional sin convertir
-el modelo SketchUp, la geometría visible ni el código Ruby en la fuente de verdad de
-fabricación. SketchUp captura intención; Muebles resuelve y valida qué se puede fabricar.
-
-## Ruta rápida de revisión
-
-1. Confirmar el ownership en el
-   [ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md).
-2. Revisar el [manufacturing contract](sketchup-manufacturing-contract.md).
-3. Verificar fases y dependencias en [#290](https://github.com/tiagofur/muebleria/issues/290).
-4. Confirmar que los machine packs exigen import/readback y operator sign-off.
+Muebles for SketchUp permite usar SketchUp como superficie profesional de autoría sin
+convertir el modelo, la geometría visible ni Ruby en la fuente de verdad industrial.
+SketchUp captura intención; Muebles resuelve y valida qué se fabrica.
 
 ## 1. Resultado de producto
 
-El producto mantiene tres rutas de entrada que convergen al mismo `Project/Job`:
+Muebles mantiene tres rutas que convergen al mismo `Project/Job`:
 
-| Ruta | Trabajo principal | Usuario típico | Resultado |
-|---|---|---|---|
-| **Cotizar rápido** | Catálogo + options sin abrir 3D | ventas/taller simple | Quote + BOM preliminar |
-| **Proyectar 3D** | Diseño modular nativo, rápido e integrado | ventas/diseño | Authoring intent nativo |
-| **Muebles for SketchUp** | Autoría e interacción 3D profesional | diseñador SketchUp | Authoring intent externo |
+| Ruta | Uso principal | Resultado |
+|---|---|---|
+| **Cotizar rápido** | catálogo + options sin abrir 3D | quote + BOM preliminar |
+| **Proyectar 3D** | diseño modular nativo y rápido | authoring intent nativo |
+| **Muebles for SketchUp** | autoría 3D profesional | authoring intent externo |
 
-Las tres rutas llegan al mismo núcleo:
+Las tres rutas convergen al mismo núcleo:
 
 ```text
 Authoring intent
       ↓
-Muebles catalog resolution
+Catalog + relationship/joint resolution
       ↓
 Resolved BOM + parts + hardware + drilling
       ↓
@@ -46,54 +38,56 @@ Validated manufacturing artifacts
 ```
 
 Proyectar 3D no se abandona ni se degrada. Sigue siendo la ruta nativa para usuarios que
-necesitan velocidad, simplicidad y continuidad sin depender de SketchUp.
+necesitan velocidad y simplicidad sin depender de SketchUp.
 
 ## 2. Propuesta de valor
 
 > **SketchUp diseña. Muebles entiende cómo se fabrica.**
 
-No competimos contra SketchUp como editor 3D generalista. Lo usamos cuando ya es la
-herramienta de autoría preferida y concentramos el moat en:
+El moat se concentra en:
 
-- catálogo y parametrización de muebles;
+- catálogo y parametrización;
+- relaciones constructivas paramétricas entre piezas;
 - BOM y piezas reproducibles;
-- materiales y costos;
+- materiales, cantos y costos;
 - hardware y machining;
 - drilling por pieza/cara;
 - revisiones, approvals y `ProductionRelease`;
-- cut plans y manufacturing preflight;
+- manufacturing preflight;
 - machine profiles/postprocessors;
-- labels, documentación, ejecución de planta e instalación;
-- trazabilidad y job costing.
+- producción, instalación, trazabilidad y job costing.
 
-## 3. Boundary de ownership
+## 3. Ownership
 
 | Concern | SketchUp extension | Muebles | Machine adapter |
 |---|---|---|---|
 | Selección, drag, transform y viewport | **Owns** | Observa intent | No participa |
-| Geometría visual de autoría | **Owns** | Puede validar contexto | No participa |
-| Stable IDs y metadata envelope | Captura/preserva | **Owns schema y validación** | Consume manifest |
-| Catálogo y parameters permitidos | Presenta referencias | **Owns** | No participa |
-| BOM, parts y material requirements | No calcula | **Owns** | Consume DTO resuelto |
-| `HardwarePlacement` intent | Edita interacción | **Owns semántica y resolution** | Consume drilling resuelto |
-| Drilling/machining | Visualiza resultado | **Owns** | Serializa capacidades soportadas |
-| Revision, fingerprint y idempotency | Propaga tokens | **Owns** | Propaga provenance |
-| Preflight y release | Presenta errores | **Owns** | Declara capabilities |
-| PTX/DXF/machine output | No genera | Orquesta y autoriza | Serializa formato específico |
-| Evidencia de compatibilidad | No afirma | Registra soporte | Requiere field evidence |
+| Geometría visual | **Owns** | Valida contexto cuando aplica | No participa |
+| Stable IDs / metadata envelope | Captura/preserva | **Owns schema y validación** | Consume manifest |
+| Catálogo y parameters | Presenta/edita | **Owns** | No participa |
+| `PartRelationship` / joint intent | Captura/edita relaciones y anchors | **Owns semantics/resolution** | Consume resultado |
+| BOM, parts, materiales y costos | No calcula | **Owns** | Consume DTO resuelto |
+| `HardwarePlacement` intent | Edita interacción | **Owns semantics/resolution** | Consume drilling |
+| Derived placements | Visualiza feedback | **Owns** | Consume output |
+| Drilling/machining | Visualiza resultado | **Owns** | Serializa lo soportado |
+| Revision/fingerprint/idempotency | Propaga | **Owns** | Propaga provenance |
+| Preflight/release | Presenta | **Owns** | Declara capabilities |
+| PTX/DXF/machine output | No genera | Orquesta/autoriza | Serializa formato |
 
-### Regla de implementación
-
-Ruby puede validar estructura básica para mejorar UX, pero esa validación nunca sustituye
-el preflight autoritativo. No se implementan en SketchUp:
+Ruby puede validar estructura básica para UX, pero no implementa:
 
 - BOM resolution;
-- cut-list generation;
+- joint/relationship resolution;
+- derived hardware rules;
 - drilling rules;
-- kerf, nesting o cut order;
+- nesting/kerf/cut order;
 - machine capability inference;
 - stale/release decisions;
-- postprocessor logic.
+- postprocessing.
+
+Una perforación derivada de una unión o herraje no es authoring truth independiente.
+SketchUp expresa la intención semántica; Muebles deriva las operaciones y conserva
+provenance hacia la relación, joint o placement que las originó.
 
 ## 4. Contrato conceptual
 
@@ -102,15 +96,18 @@ El intercambio usa un envelope versionado descrito en
 
 Principios:
 
-1. identifiers estables, no nombres visibles como primary keys;
+1. stable IDs, nunca nombres visibles como primary keys;
 2. unidades explícitas en mm y ángulos en grados;
 3. coordinate frames declarados;
 4. authoring intent separado de resolved manufacturing data;
-5. imports idempotentes;
-6. errores estructurados y localizables en SketchUp;
-7. todo output fabricable vinculado a `designRevisionId` y `bomFingerprint`;
-8. capabilities negociadas antes del export;
-9. unknown/ambiguous falla de forma segura.
+5. relaciones entre piezas expresadas como IDs, roles y anchors semánticos;
+6. drilling/machining derivado nunca se persiste como authoring truth primaria;
+7. imports idempotentes;
+8. errores estructurados y localizables;
+9. todo output fabricable vinculado a `designRevisionId` y `bomFingerprint`;
+10. derived operations con provenance a relationship/joint/placement;
+11. capabilities negociadas antes del export;
+12. unknown/ambiguous falla de forma segura.
 
 ## 5. Roadmap por fases
 
@@ -119,6 +116,7 @@ Principios:
 | 0 | P0 | Strategy, ADR y manufacturing contract | [#344](https://github.com/tiagofur/muebleria/issues/344) |
 | 1 | P0 | Extension bootstrap | [#345](https://github.com/tiagofur/muebleria/issues/345) |
 | 1 | P0 | Semantic metadata + round-trip | [#346](https://github.com/tiagofur/muebleria/issues/346) |
+| 2 | P0 | Parametric part relationships + joint-driven machining | [#356](https://github.com/tiagofur/muebleria/issues/356) |
 | 2 | P0 | Manufacturing preflight | [#347](https://github.com/tiagofur/muebleria/issues/347) |
 | 2 | P0 | PTX import/readback validation | [#348](https://github.com/tiagofur/muebleria/issues/348) |
 | 3 | P1 | Parametric library MVP | [#349](https://github.com/tiagofur/muebleria/issues/349) |
@@ -129,129 +127,155 @@ Principios:
 | 5 | P1 | Golden/E2E manufacturing tests | [#354](https://github.com/tiagofur/muebleria/issues/354) |
 | 6 | P2 | Packaging/licensing/update strategy | [#355](https://github.com/tiagofur/muebleria/issues/355) |
 
-El primer slice implementable después de aprobar documentación es:
+## 6. Primer vertical slice demostrable
 
 ```text
 contract approved
 → machine dossiers collected
 → extension skeleton
 → semantic round-trip
+→ parametric part relationships / joints
 → one manufacturable cabinet
+→ hardware placement + machining sync
+→ minimum authoritative preflight
+→ commercial demo
 ```
 
-## 6. Machine dossiers y evidencia
+El preflight completo sigue siendo P0, pero su implementación total no debe bloquear el
+primer vertical slice si existe un subset mínimo autoritativo que impida producir datos
+ambiguos o inseguros.
 
-Client A y Client B son aliases opacos. Ningún issue, fixture, log o documento público
-debe incluir identidad, contacto, dirección, precios, credentials, hostnames o paths
-privados.
+### Primer hito comercial
 
-Cada dossier registra:
+Un gabinete real en SketchUp puede cambiar dimensiones, mover/agregar/eliminar entrepaños
+y mover herrajes; Muebles recalcula correctamente piezas, BOM, cantos y machining sin
+intervención manual sobre coordenadas CNC. Cualquier cambio que afecte una revisión ya
+liberada vuelve stale el output anterior.
 
-- opaque client key;
-- machine, controller, software y versiones confirmadas;
-- input formats aceptados;
-- units, axes, tools y constraints relevantes;
-- sample job sanitizado;
-- expected result y `bomFingerprint`;
-- import/readback evidence;
-- operator checklist/sign-off;
-- resultado `validated`, `partial` o `unsupported`;
-- known limitations.
+## 7. Invariante de relaciones paramétricas
 
-### Quality gate
+El caso canónico es:
 
-Que un archivo abra no demuestra compatibilidad. La afirmación requiere:
+```text
+Shelf S1
+  ↔ PartRelationship / Joint J1
+  ↔ LeftSide / RightSide
+  ↔ JoinerySystem
+  ↔ derived placements / machining
+```
 
-1. export reproducible;
-2. import en la versión exacta del software receptor;
-3. readback de cantidades, dimensiones, orientación y operaciones relevantes;
-4. comparación expected/actual;
-5. operator sign-off en entorno seguro/no productivo.
+Si `Shelf S1` se mueve, agrega, elimina o cambia de sistema de unión:
 
-Un pack nunca demuestra soporte para otra máquina, versión o cliente.
+- cambia authoring intent / anchors;
+- Muebles vuelve a resolver la relación;
+- cambia únicamente machining dependiente;
+- machining no relacionado permanece idéntico;
+- `bomFingerprint`/revision cambian cuando cambia manufacturing truth;
+- un `ProductionRelease` anterior queda stale.
 
-## 7. Manufacturing preflight
+Una bisagra manual sigue otra cadena:
 
-Muebles debe rechazar antes de fabricar:
+```text
+move hinge
+→ HardwarePlacement intent changes
+→ hinge machining changes
+→ shelf machining remains unchanged
+```
+
+Esto se define en [#356](https://github.com/tiagofur/muebleria/issues/356) y se prueba en
+[#354](https://github.com/tiagofur/muebleria/issues/354).
+
+## 8. Manufacturing preflight
+
+Muebles bloquea antes de fabricar:
 
 - schema/version desconocido;
-- stable IDs duplicados o referencias rotas;
+- IDs duplicados o referencias rotas;
 - units/coordinate frame ambiguos;
-- catalog items ausentes o incompatibles;
+- catálogo ausente o incompatible;
+- relationships/joints inválidos, huérfanos o geométricamente imposibles;
 - dimensions/material/thickness inválidos;
 - hardware placement sin host/face/role válido;
-- drilling conflictivo o fuera de la pieza;
-- revisión stale o fingerprint inconsistente;
-- capability requerida no soportada por `MachineProfile`;
+- drilling fuera de límites, profundidad inválida o colisión crítica;
+- revisión stale/fingerprint inconsistente;
+- capability requerida no soportada;
 - blockers críticos de lifecycle/release.
 
-El error vuelve con `code`, `message`, `entityId`, `path`, `severity` y `remediation` para
-que el usuario lo corrija en el contexto correcto, sin mover la regla a SketchUp.
+Los errores vuelven con `code`, `message`, `entityId`, `path`, `severity` y `remediation`.
 
-## 8. Límite comercial
+### Slice mínimo para demo
 
-El programa se activa por demanda concreta, pero cada promesa queda acotada:
+Debe validar al menos identity/revision/fingerprint, catalog references,
+relationships/joints resolubles, dimensiones/espesores, drilling bounds/depth, colisiones
+críticas conocidas y bloqueo seguro ante ambigüedad crítica.
 
-- no vender “compatible con todas las CNC”;
-- no prometer machine code sin versión de hardware/software confirmada;
-- no tratar PTX genérico como garantía de corte correcto;
-- no mezclar roadmap con contrato comercial específico;
-- no distribuir un adapter sin fixture, preflight y evidencia correspondientes.
+## 9. Machine evidence
 
-La venta puede describir la ruta objetivo y el estado de validación. Sólo una combinación
-exacta `machine + controller + softwareVersion + profileVersion` validada puede
-presentarse como compatible.
+La compatibilidad sólo puede afirmarse para una combinación exacta de máquina,
+controlador, software y profile version que tenga evidencia reproducible.
 
-## 9. Riesgos y mitigaciones
+Abrir un archivo no demuestra compatibilidad. El gate exige:
+
+1. export reproducible;
+2. import en el software receptor correcto;
+3. readback de cantidades, dimensiones, orientación y operaciones relevantes;
+4. expected vs actual;
+5. operator sign-off en entorno seguro/no productivo.
+
+Client A y Client B permanecen aislados mediante dossiers, profiles y fixtures propios.
+
+## 10. Riesgos y mitigaciones
 
 | Riesgo | Mitigación |
 |---|---|
-| Duplicar reglas en Ruby | Contract tests y review de ownership |
-| Nombres/geometry como identidad | Stable IDs + catalog references |
-| Drift entre modelo y fabricación | `designRevisionId` + `bomFingerprint` + stale detection |
-| Variantes de máquina ocultas | `MachineProfile` versionado y capability negotiation |
-| Claim prematuro de compatibilidad | Import/readback + operator sign-off |
-| Dos clientes contaminan el core | Machine packs aislados; dominio neutral |
-| Scope CAD infinito | SketchUp owns general authoring; Muebles no recrea SketchUp |
-| Proyectar queda relegado | Roadmap y quality bar nativos continúan en #308/#309 |
-| Update rompe modelos | Schema migration, compatibility matrix y rollback |
+| Duplicar reglas en Ruby | contract tests + ownership review |
+| Nombres/geometry como identidad | stable IDs + catalog references |
+| Machining desconectado de intención | relationships/joints + provenance + #356 |
+| Drift modelo/fabricación | revision + fingerprint + stale detection |
+| Variantes ocultas de máquina | versioned `MachineProfile` + capabilities |
+| Claim prematuro | import/readback + operator sign-off |
+| Clientes contaminan el core | machine packs aislados; dominio neutral |
+| Scope CAD infinito | SketchUp owns general authoring |
+| Proyectar relegado | #308/#309 mantienen su quality bar |
 
-## 10. Esta semana
+## 11. Esta semana
 
-- [ ] Revisar y aprobar #344 mediante un PR sólo de documentación.
+- [ ] Aprobar #344 mediante este PR documental.
 - [ ] Recolectar dossiers sanitizados de Client A y Client B.
-- [ ] Congelar un fixture PTX y expected readback sin ejecutar producción.
+- [ ] Congelar un fixture PTX y expected readback sin producción real.
 - [ ] Confirmar machine/controller/software/version de cada piloto.
-- [ ] Preparar acceptance de #345 y #346.
-- [ ] Mantener el trabajo de producción fuera de este slice documental.
+- [ ] Preparar acceptance de #345, #346 y #356.
+- [ ] Mantener producción fuera de este slice documental.
 
-## 11. Definition of Done del programa
+## 12. Definition of Done del programa
 
 - contract versionado y aprobado;
 - semantic round-trip sin pérdida de identity/units;
+- relationships/joints generan machining derivado, determinístico y trazable;
+- mover/agregar/eliminar una pieza relacionada recalcula sólo lo dependiente;
 - preflight bloquea ambigüedad y stale revisions;
 - un gabinete manufacturable recorre el flujo completo;
 - PTX/machine compatibility tiene field evidence;
 - Client A y Client B permanecen aislados;
-- goldens detectan drift;
+- goldens detectan drift de shelf/joint/hinge;
 - packaging, licensing, updates y rollback están definidos;
 - Proyectar 3D y SketchUp convergen a la misma manufacturing truth.
 
-## 12. Fuentes canónicas
+## 13. Fuentes canónicas
 
 | Concern | Autoridad |
 |---|---|
 | Programa y fases | Este documento + [#290](https://github.com/tiagofur/muebleria/issues/290) |
-| Decisión de ownership | [ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md) |
+| Ownership | [ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md) |
 | Contrato conceptual | [SketchUp Manufacturing Contract](sketchup-manufacturing-contract.md) |
+| Relationships/joints | [#356](https://github.com/tiagofur/muebleria/issues/356) |
 | Arquitectura general | [Arquitectura](architecture.md) |
 | Lifecycle/release/stale | [Project Lifecycle](project-lifecycle.md) |
-| Pieza→mueble | [Production Flow v2](production-flow-v2.md) |
+| Producción pieza→mueble | [Production Flow v2](production-flow-v2.md) |
 | Producto | [PRD v2](prd-v2.md) |
 | Prioridad comercial | [Roadmap Comercial v2](roadmap-comercial-v2.md) |
 | Proyectar nativo | [Proyectar North Star](proyectar-3d-north-star.md) |
 | Verificación | [Verification](verification.md) |
-| Implementación histórica | `feature_list.json` + `progress/history.md` |
 
-Los documentos bajo `docs/history/` preservan decisiones anteriores y no se reescriben
-para simular que esta estrategia siempre existió.
+Los documentos bajo `docs/history/` preservan decisiones anteriores; esta estrategia no
+reescribe el pasado.
