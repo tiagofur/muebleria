@@ -1,7 +1,7 @@
 # SketchUp Manufacturing Contract v1
 
 > **Estado:** conceptual, no ejecutable  
-> **Schema:** `muebles.sketchup-authoring.v1`  
+> **Schema compound identifier:** `muebles.sketchup-authoring.v1`
 > **Tracking:** [#290](https://github.com/tiagofur/muebleria/issues/290),
 > [#344](https://github.com/tiagofur/muebleria/issues/344),
 > [#346](https://github.com/tiagofur/muebleria/issues/346),
@@ -31,18 +31,28 @@ AuthoringEnvelope
 ## 2. Envelope v1
 
 ```ts
+type SchemaIdentityV1 = {
+  schemaId: 'muebles.sketchup-authoring.v1';
+  schemaName: 'muebles.sketchup-authoring';
+  schemaVersion: '1.0';
+};
+
 type AuthoringEnvelopeV1 = {
+  schemaId: SchemaIdentityV1['schemaId'];
   schemaName: 'muebles.sketchup-authoring';
   schemaVersion: '1.0';
   messageId: string;
   idempotencyKey: string;
   sentAt: string;
   projectId: string;
+  baseSourceRevisionId?: string;
   sourceRevisionId: string;
   source: AuthoringSource;
   units: UnitSystem;
   coordinateSystem: CoordinateSystem;
+  mutationMode: 'full-snapshot-with-tombstones';
   assemblies: readonly DesignAssembly[];
+  tombstones: readonly EntityTombstone[];
 };
 
 type AuthoringSource = {
@@ -51,12 +61,64 @@ type AuthoringSource = {
   host: 'sketchup';
   hostVersion: string;
 };
+
+type EntityTombstone = {
+  entityType:
+    | 'assembly'
+    | 'componentInstance'
+    | 'relationship'
+    | 'hardwarePlacement';
+  entityId: StableEntityId;
+  deletedAt: string;
+};
+
+type AuthoringRoundTripResponseV1 = {
+  schemaId: SchemaIdentityV1['schemaId'];
+  schemaName: 'muebles.sketchup-authoring';
+  schemaVersion: '1.0';
+  responseMessageId: string;
+  inReplyToMessageId: string;
+  idempotencyKey: string;
+  projectId: string;
+  sourceRevisionId: string;
+  status: 'accepted' | 'rejected' | 'conflict';
+  migration?: AppliedSchemaMigration;
+  mutationReceipt: MutationReceipt;
+  authoringSnapshot?: ReadonlyAuthoringSnapshot;
+  resolvedFeedback?: ResolvedManufacturingFeedback;
+  issues: readonly ContractIssue[];
+};
+
+type MutationReceipt = {
+  createdEntityIds: readonly StableEntityId[];
+  updatedEntityIds: readonly StableEntityId[];
+  deletedEntityIds: readonly StableEntityId[];
+};
+
+type AppliedSchemaMigration = {
+  migrationId: string;
+  fromSchemaName: string;
+  fromSchemaVersion: string;
+  toSchemaId: SchemaIdentityV1['schemaId'];
+  toSchemaVersion: '1.0';
+};
 ```
 
 Reglas:
 
+- `schemaId` es el compound identifier canónico de la línea major v1 y debe coincidir
+  exactamente con `schemaName: 'muebles.sketchup-authoring'` y el major de
+  `schemaVersion: '1.0'`; cualquier combinación inconsistente se rechaza.
+- `schemaName` + `schemaVersion` conservan la identidad estructurada y la versión exacta
+  para negociación y migrations; `schemaId` no las reemplaza.
 - `messageId` identifica el intento de transporte.
+- `responseMessageId` identifica la respuesta e `inReplyToMessageId` debe ser igual al
+  `messageId` del request aceptado, rechazado o en conflicto.
 - `idempotencyKey` identifica la mutación lógica y evita duplicados.
+- La respuesta repite `idempotencyKey`, `projectId`, `sourceRevisionId` y la identidad de
+  schema para que el round-trip no dependa del orden de llegada.
+- `baseSourceRevisionId` es una precondición optimista cuando ya existe estado aceptado;
+  una base stale produce `conflict` y no aplica mutaciones parciales.
 - `sourceRevisionId` cambia cuando cambia authoring intent relevante.
 - `projectId` no se infiere por file name.
 - `source` identifica client/host versions para compatibilidad y diagnóstico; no cambia ownership industrial.
@@ -74,16 +136,32 @@ IDs mínimos:
 
 - `projectId`;
 - `assemblyId`;
-- `componentId`;
-- `instanceId`;
+- `componentDefinitionId`;
+- `componentInstanceId`;
 - `catalogItemId`;
 - `relationshipId`;
 - `jointPlacementId` cuando aplique;
 - `hardwarePlacementId`;
 - `sourceRevisionId`.
 
-Rename, regroup o cambio de display label no cambia identity. Names, SketchUp entity
-indexes, array positions y geometry hashes no son primary keys.
+Semántica y lifecycle:
+
+- `assemblyId` identifica una instancia concreta del agregado/mueble manufacturable de
+  primer nivel dentro de `projectId`; no identifica una definición reutilizable. Un
+  agregado anidado que necesite identity propia debe recibir su propio
+  `aggregateInstanceId` en una extensión versionada, no reutilizar `assemblyId`.
+- `componentDefinitionId` identifica una definición SketchUp reutilizable dentro de
+  `projectId`. Varias instancias pueden compartirlo; nunca se usa como relationship
+  anchor ni como hardware host.
+- `componentInstanceId` identifica una instancia concreta dentro de `projectId` y es la
+  única identidad válida para anchors y hosts.
+- `assemblyId` y `componentInstanceId` persisten tras rename, regroup, save/reload y
+  round-trip mientras la entidad exista. Son únicos en el proyecto y no se reasignan ni
+  reutilizan después de un delete; el tombstone conserva esa prohibición.
+- `componentDefinitionId` persiste mientras exista la definición. Eliminar una instancia
+  no elimina automáticamente la definición compartida ni las demás instancias.
+
+Names, SketchUp entity indexes, array positions y geometry hashes no son primary keys.
 
 ## 4. Units y coordinate frames
 
@@ -101,7 +179,7 @@ type CoordinateSystem = {
 };
 
 type Transform3D = {
-  frame: 'project' | 'assembly' | 'component';
+  frame: 'project' | 'assembly' | 'componentInstance';
   translationMm: readonly [number, number, number];
   rotationQuaternion: readonly [number, number, number, number];
   scale: readonly [number, number, number];
@@ -130,15 +208,15 @@ type DesignAssembly = {
 };
 
 type DesignComponent = {
-  componentId: StableEntityId;
-  instanceId: StableEntityId;
+  componentDefinitionId: StableEntityId;
+  componentInstanceId: StableEntityId;
   catalogComponentId?: string;
   role: string;
   transform: Transform3D;
 };
 
 type RelationshipAnchor = {
-  componentId: StableEntityId;
+  componentInstanceId: StableEntityId;
   role: string;
   face?: string;
   reference?: string;
@@ -156,7 +234,7 @@ type PartRelationshipIntent = {
 type HardwarePlacementIntent = {
   hardwarePlacementId: StableEntityId;
   catalogHardwareId: string;
-  hostComponentId: StableEntityId;
+  hostComponentInstanceId: StableEntityId;
   anchorFace: string;
   offsetMm: readonly [number, number];
   rotationDeg: number;
@@ -168,7 +246,10 @@ type ParameterValue = string | number | boolean;
 
 `PartRelationshipIntent` expresa intención constructiva, no perforaciones finales. Un
 entrepaño puede relacionarse con dos costados mediante anchors/roles semánticos y un
-`joinerySystemId`; Muebles resuelve el machining correspondiente.
+`joinerySystemId`; Muebles resuelve el machining correspondiente. Si `shelf-instance-01`
+y `shelf-instance-02` comparten `componentDefinitionId: 'shelf-definition'`, cada uno
+conserva relationships y machining propios porque anchors y hardware hosts referencian
+sus `componentInstanceId` distintos.
 
 Estos entities no contienen como input autoritativo:
 
@@ -187,11 +268,40 @@ manufacturing resolution.
 Muebles debe poder producir resultados equivalentes a:
 
 ```ts
-type DerivedOperationProvenance = {
-  relationshipId?: StableEntityId;
-  jointPlacementId?: StableEntityId;
-  hardwarePlacementId?: StableEntityId;
+type RelationshipProvenance = {
+  sourceKind: 'relationship';
+  relationshipId: StableEntityId;
   catalogRuleId?: string;
+};
+
+type JointProvenance = {
+  sourceKind: 'joint';
+  relationshipId: StableEntityId;
+  jointPlacementId: StableEntityId;
+  catalogRuleId?: string;
+};
+
+type ManualHardwarePlacementProvenance = {
+  sourceKind: 'manualHardwarePlacement';
+  hardwarePlacementId: StableEntityId;
+  catalogRuleId?: string;
+};
+
+type DerivedOperationProvenance =
+  | RelationshipProvenance
+  | JointProvenance
+  | ManualHardwarePlacementProvenance;
+
+type DerivedHardwarePlacement = {
+  derivedHardwarePlacementId: StableEntityId;
+  hostComponentInstanceId: StableEntityId;
+  provenance: RelationshipProvenance | JointProvenance;
+};
+
+type DerivedMachiningOperation = {
+  operationId: StableEntityId;
+  hostComponentInstanceId: StableEntityId;
+  provenance: DerivedOperationProvenance;
 };
 ```
 
@@ -202,7 +312,8 @@ Reglas:
 - eliminarla elimina o invalida sólo sus relationships y machining derivado;
 - cambiar `joinerySystemId` recalcula machining desde catálogo/reglas;
 - manual y derived hardware placements deben distinguirse;
-- cada derived operation conserva provenance suficiente hacia su origen;
+- cada derived operation conserva exactamente una variante válida de provenance; `{}` y
+  combinaciones ambiguas de relationship/joint/manual placement son inválidas;
 - relationships inválidas, huérfanas o geométricamente imposibles no generan output fabricable;
 - machining no relacionado permanece estructuralmente equivalente cuando no cambia su source intent.
 
@@ -226,7 +337,47 @@ move hinge
 → shelf machining remains unchanged
 ```
 
-## 7. Revision, fingerprint e idempotency
+## 7. Round-trip, mutations y migrations
+
+```ts
+type ReadonlyAuthoringSnapshot = {
+  projectId: StableEntityId;
+  sourceRevisionId: StableEntityId;
+  assemblies: readonly DesignAssembly[];
+};
+
+type ResolvedManufacturingFeedback = {
+  identity: ManufacturingIdentity;
+  preflightStatus: 'ready' | 'blocked' | 'warning';
+  derivedHardwarePlacements: readonly DerivedHardwarePlacement[];
+  derivedMachiningOperations: readonly DerivedMachiningOperation[];
+  issues: readonly ContractIssue[];
+};
+```
+
+Política V1:
+
+- el request contiene un snapshot completo de entities vivas y tombstones explícitos;
+- un stable ID desconocido crea, uno existente actualiza y un tombstone elimina;
+- omitir una entity existente sin tombstone no la elimina y produce conflicto de
+  snapshot; deletes accidentales por ausencia están prohibidos;
+- create/update/delete se aplican atómicamente contra `baseSourceRevisionId`; una
+  referencia huérfana, base stale o mutación parcial rechaza el request completo;
+- IDs eliminados nunca se reutilizan, aunque se cree después una entity equivalente;
+- `mutationReceipt` devuelve la clasificación create/update/delete decidida por Muebles;
+- `authoringSnapshot` puede devolver authoring intent normalizado para persistencia en
+  SketchUp; no contiene BOM, drilling ni machine output;
+- `resolvedFeedback` es read-only y está ligado a `ManufacturingIdentity`. SketchUp puede
+  renderizarlo o cachearlo como feedback, pero no puede reenviarlo dentro de
+  `DesignAssembly` ni editarlo como authoring truth;
+- sólo una migration registrada, determinística y sin pérdida puede transformar una
+  versión conocida; la respuesta registra `migrationId`, origen y destino;
+- una versión newer/unknown, una migration con pérdida o un mismatch entre
+  `schemaId`/`schemaName`/`schemaVersion` falla antes de mutar el modelo;
+- nunca se hace downgrade ni reinterpretación silenciosa. El payload original y la
+  versión aceptada permanecen auditables.
+
+## 8. Revision, fingerprint e idempotency
 
 ```ts
 type ManufacturingIdentity = {
@@ -246,7 +397,7 @@ type ManufacturingIdentity = {
 - Después de `ProductionRelease`, una revisión distinta marca artifacts previos stale.
 - Nunca se sobrescribe silenciosamente output de una revisión liberada.
 
-## 8. Error model
+## 9. Error model
 
 ```ts
 type ContractIssue = {
@@ -277,6 +428,10 @@ Codes conceptuales mínimos:
 - `MACHINE_CAPABILITY_UNSUPPORTED`;
 - `IDEMPOTENCY_CONFLICT`.
 
+También se requieren codes explícitos para `SOURCE_REVISION_CONFLICT`,
+`ENTITY_TOMBSTONE_INVALID`, `STABLE_ID_REUSE`, `SCHEMA_ID_MISMATCH` y
+`SCHEMA_MIGRATION_UNSAFE`.
+
 `path` usa una ruta estable, por ejemplo:
 
 ```text
@@ -286,13 +441,33 @@ assemblies[assemblyId=asm-01].hardwarePlacements[hardwarePlacementId=hp-03]
 
 Ruby/UI presenta el error; no reimplementa la regla.
 
-## 9. Capability negotiation
+## 10. Capability negotiation
 
 ```ts
 type MachineProfileRef = {
   machineProfileId: string;
-  profileVersion: string;
+  machineProfileRevisionId: string;
 };
+
+type PostprocessorAdapterRef = {
+  postprocessorAdapterId: string;
+  postprocessorAdapterVersion: string;
+  implementationDigest: string;
+};
+
+type SanitizedEvidencePackRef = {
+  evidencePackId: string;
+  evidencePackRevisionId: string;
+  sanitizedUri: string;
+  checksum: string;
+};
+
+type ArtifactCompatibilityEvidence =
+  | { status: 'notClaimed' | 'unsupported' }
+  | {
+      status: 'validated' | 'partial';
+      evidencePack: SanitizedEvidencePackRef;
+    };
 
 type MachineCapability = {
   capabilityId: string;
@@ -311,7 +486,7 @@ type CapabilityNegotiation = {
 Capabilities no se infieren por brand. Unknown/unsupported bloquea el artifact afectado
 salvo override server-authoritative, explícito y auditado.
 
-## 10. Manufacturing preflight
+## 11. Manufacturing preflight
 
 ```ts
 type ManufacturingPreflightResult = {
@@ -346,9 +521,16 @@ Para el primer demo, el subset mínimo autoritativo valida al menos:
 - critical collisions conocidas;
 - bloqueo seguro ante ambigüedad crítica.
 
+Este subset es el milestone verificable `minimum authoritative preflight` de #347. Se
+implementa sobre el fixture de #356 después de cerrar relationships/joints y debe pasar
+antes de iniciar implementación dependiente de #349/#350, llamar manufacturable a un
+gabinete o ejecutar el demo. Los fixtures posteriores de biblioteca/hardware vuelven a
+pasar el mismo gate. No equivale al cierre completo de #347; #348/#351 requieren el
+Definition of Done completo del preflight.
+
 `ready` no equivale a `ProductionRelease`; sólo Muebles crea la release.
 
-## 11. Manufacturing artifact manifest
+## 12. Manufacturing artifact manifest
 
 ```ts
 type ManufacturingArtifactManifest = {
@@ -357,6 +539,8 @@ type ManufacturingArtifactManifest = {
   designRevisionId: string;
   bomFingerprint: string;
   machineProfile: MachineProfileRef;
+  postprocessorAdapter: PostprocessorAdapterRef;
+  compatibilityEvidence: ArtifactCompatibilityEvidence;
   artifacts: readonly {
     artifactId: string;
     kind: 'ptx' | 'dxf' | 'csv' | 'pdf' | 'label' | 'other';
@@ -366,19 +550,26 @@ type ManufacturingArtifactManifest = {
 };
 ```
 
-El manifest demuestra provenance, no compatibilidad física. PTX/CNC requiere además
-import/readback y operator sign-off para la combinación exacta de machine/software.
+El manifest fija la revisión exacta del machine profile y la identidad, versión y digest
+del postprocessor adapter que produjo los bytes. `compatibilityEvidence` obliga a que un
+claim `validated|partial` enlace un pack sanitizado y revisionado; `notClaimed` o
+`unsupported` no puede adjuntarlo como apariencia de validación. El evidence pack nunca
+contiene un path privado, identidad del cliente ni una URL con credenciales. El manifest
+demuestra provenance, no compatibilidad física. PTX/CNC requiere además import/readback
+y operator sign-off para la combinación exacta de machine/software.
 
-## 12. Example payload
+## 13. Example payload
 
 ```json
 {
+  "schemaId": "muebles.sketchup-authoring.v1",
   "schemaName": "muebles.sketchup-authoring",
   "schemaVersion": "1.0",
   "messageId": "msg-01J6A2",
   "idempotencyKey": "project-42:source-rev-8",
   "sentAt": "2026-08-24T05:00:00Z",
   "projectId": "project-42",
+  "baseSourceRevisionId": "source-rev-7",
   "sourceRevisionId": "source-rev-8",
   "source": {
     "client": "muebles-for-sketchup",
@@ -392,6 +583,7 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
     "upAxis": "z",
     "projectFrameId": "frame-project-42"
   },
+  "mutationMode": "full-snapshot-with-tombstones",
   "assemblies": [
     {
       "assemblyId": "assembly-base-01",
@@ -411,8 +603,8 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
       },
       "components": [
         {
-          "componentId": "side-left",
-          "instanceId": "side-left-01",
+          "componentDefinitionId": "definition-side-panel",
+          "componentInstanceId": "side-left-01",
           "role": "left-side",
           "transform": {
             "frame": "assembly",
@@ -422,8 +614,8 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
           }
         },
         {
-          "componentId": "side-right",
-          "instanceId": "side-right-01",
+          "componentDefinitionId": "definition-side-panel",
+          "componentInstanceId": "side-right-01",
           "role": "right-side",
           "transform": {
             "frame": "assembly",
@@ -433,12 +625,23 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
           }
         },
         {
-          "componentId": "shelf",
-          "instanceId": "shelf-01",
+          "componentDefinitionId": "definition-shelf",
+          "componentInstanceId": "shelf-01",
           "role": "shelf",
           "transform": {
             "frame": "assembly",
             "translationMm": [18, 0, 350],
+            "rotationQuaternion": [0, 0, 0, 1],
+            "scale": [1, 1, 1]
+          }
+        },
+        {
+          "componentDefinitionId": "definition-shelf",
+          "componentInstanceId": "shelf-02",
+          "role": "shelf",
+          "transform": {
+            "frame": "assembly",
+            "translationMm": [18, 0, 520],
             "rotationQuaternion": [0, 0, 0, 1],
             "scale": [1, 1, 1]
           }
@@ -448,39 +651,76 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
         {
           "relationshipId": "rel-shelf-01",
           "kind": "shelf-support",
-          "source": { "componentId": "shelf", "role": "shelf-edge" },
+          "source": {
+            "componentInstanceId": "shelf-01",
+            "role": "shelf-edge"
+          },
           "targets": [
-            { "componentId": "side-left", "role": "inside-face" },
-            { "componentId": "side-right", "role": "inside-face" }
+            {
+              "componentInstanceId": "side-left-01",
+              "role": "inside-face"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "role": "inside-face"
+            }
+          ],
+          "joinerySystemId": "minifix-dowel"
+        },
+        {
+          "relationshipId": "rel-shelf-02",
+          "kind": "shelf-support",
+          "source": {
+            "componentInstanceId": "shelf-02",
+            "role": "shelf-edge"
+          },
+          "targets": [
+            {
+              "componentInstanceId": "side-left-01",
+              "role": "inside-face"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "role": "inside-face"
+            }
           ],
           "joinerySystemId": "minifix-dowel"
         }
       ]
     }
-  ]
+  ],
+  "tombstones": []
 }
 ```
 
-El ejemplo es ilustrativo y no congela el schema ejecutable final.
+Los dos entrepaños comparten `componentDefinitionId` y conservan identidad, relationships
+y machining independientes mediante sus `componentInstanceId`. El ejemplo es
+ilustrativo y no congela el schema ejecutable final.
 
-## 13. Invariants y verification
+## 14. Invariants y verification
 
 - [ ] SketchUp input representa authoring intent, no final manufacturing data.
 - [ ] Stable IDs sobreviven rename y round-trip.
+- [ ] `componentDefinitionId` puede compartirse; anchors y hardware hosts usan siempre `componentInstanceId`.
+- [ ] `assemblyId`/`componentInstanceId` tienen scope de proyecto, persisten y no se reutilizan tras delete.
 - [ ] Units y frames siempre son explícitos.
 - [ ] Relationships usan IDs/roles/anchors semánticos, no final CNC coordinates.
 - [ ] Mover/agregar/eliminar un entrepaño recalcula sólo machining dependiente.
 - [ ] Mover una bisagra no altera machining no relacionado.
-- [ ] Derived operations conservan provenance.
+- [ ] Derived operations conservan una variante no vacía de provenance.
 - [ ] Muebles resuelve BOM, parts, hardware y drilling.
+- [ ] Request/response se correlacionan y create/update/delete son atómicos e idempotentes.
+- [ ] Resolved feedback permanece read-only y separado del authoring snapshot.
+- [ ] Unknown/unsafe schema migration falla antes de mutar el modelo.
 - [ ] Idempotency conflict falla; no duplica.
-- [ ] Todo artifact incluye revision/fingerprint/profile provenance.
+- [ ] Todo artifact incluye revision/fingerprint, machine profile revision y adapter identity/version/digest.
+- [ ] Claims validated/partial enlazan un evidence pack sanitizado y revisionado.
 - [ ] Stale revision no produce output silencioso.
 - [ ] Unsupported capability bloquea antes del export.
 - [ ] Contract fixtures prueban parity cuando una regla exista en TS y Go.
 - [ ] Field compatibility requiere import/readback y operator sign-off.
 
-## 14. Security y privacy
+## 15. Security y privacy
 
 - business payloads no incluyen secrets ni session tokens;
 - logs y fixtures usan IDs opacos y redaction;
@@ -489,7 +729,7 @@ El ejemplo es ilustrativo y no congela el schema ejecutable final.
 - SketchUp/Ruby no se considera security boundary;
 - auth/token transport se define fuera de este contract de negocio.
 
-## 15. Non-goals v1
+## 16. Non-goals v1
 
 - JSON Schema definitivo;
 - endpoint/transport final;

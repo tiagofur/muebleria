@@ -11,7 +11,8 @@ SketchUp captura intención; Muebles resuelve y valida qué se fabrica.
 
 ## 1. Resultado de producto
 
-Muebles mantiene tres rutas que convergen al mismo `Project/Job`:
+Muebles mantiene **tres modos de entrada y dos rutas de autoría 3D** que convergen al
+mismo `Project/Job`:
 
 | Ruta | Uso principal | Resultado |
 |---|---|---|
@@ -19,7 +20,7 @@ Muebles mantiene tres rutas que convergen al mismo `Project/Job`:
 | **Proyectar 3D** | diseño modular nativo y rápido | authoring intent nativo |
 | **Muebles for SketchUp** | autoría 3D profesional | authoring intent externo |
 
-Las tres rutas convergen al mismo núcleo:
+Los tres modos de entrada convergen al mismo núcleo:
 
 ```text
 Authoring intent
@@ -39,6 +40,11 @@ Validated manufacturing artifacts
 
 Proyectar 3D no se abandona ni se degrada. Sigue siendo la ruta nativa para usuarios que
 necesitan velocidad y simplicidad sin depender de SketchUp.
+
+SketchUp avanza como un carril paralelo activado por evidencia de pilotos. Su prioridad
+interna P0/P1/P2 ordena ese carril, pero no desplaza los guardrails de verdad, lifecycle,
+release y producción del Operational Core. Una dependencia de esas autoridades debe
+respetarse aunque la issue SketchUp tenga prioridad P0.
 
 ## 2. Propuesta de valor
 
@@ -113,7 +119,7 @@ Principios:
 
 | Fase | Prioridad | Resultado | Issue |
 |---|---|---|---:|
-| 0 | P0 | Strategy, ADR y manufacturing contract | [#344](https://github.com/tiagofur/muebleria/issues/344) |
+| 0 | P0 | Strategy, ADR y manufacturing contract, completado por [PR #357](https://github.com/tiagofur/muebleria/pull/357) | [#344](https://github.com/tiagofur/muebleria/issues/344) |
 | 1 | P0 | Extension bootstrap | [#345](https://github.com/tiagofur/muebleria/issues/345) |
 | 1 | P0 | Semantic metadata + round-trip | [#346](https://github.com/tiagofur/muebleria/issues/346) |
 | 2 | P0 | Parametric part relationships + joint-driven machining | [#356](https://github.com/tiagofur/muebleria/issues/356) |
@@ -127,30 +133,76 @@ Principios:
 | 5 | P1 | Golden/E2E manufacturing tests | [#354](https://github.com/tiagofur/muebleria/issues/354) |
 | 6 | P2 | Packaging/licensing/update strategy | [#355](https://github.com/tiagofur/muebleria/issues/355) |
 
+### Semántica de dependencias
+
+| Clasificación | Qué exige |
+|---|---|
+| **Hard prerequisite** | La issue upstream debe estar cerrada con su Definition of Done verificado antes de iniciar implementación dependiente; sólo discovery/planificación puede adelantarse. |
+| **Milestone gate** | No exige cerrar toda la issue upstream. Exige el milestone nombrado, verificable y enlazado antes de iniciar la implementación downstream; sólo discovery/planificación puede adelantarse. |
+| **Authority/reference** | Obliga a respetar el contrato o evidencia vigente, pero no exige cerrar la issue referenciada. |
+| **Field evidence** | Exige evidencia de campo disponible para la decisión concreta; no equivale por sí sola al cierre de la issue que organiza el piloto. |
+
+La única excepción intencional al cierre completo de #347 para el primer vertical slice
+es su milestone `minimum authoritative preflight`. Ninguna mención genérica a “depende
+de #347” debe interpretarse como permiso para elegir silenciosamente entre ese milestone
+y el Definition of Done completo.
+
+### Dependency map normalizado con #290
+
+| Entrega downstream | Upstream | Clasificación | Gate verificable |
+|---|---|---|---|
+| #345 bootstrap | #344 | Hard prerequisite | #344 cerrada por PR #357. |
+| #346 semantic round-trip | #344, #345 | Hard prerequisite | Ambas issues cerradas. |
+| #356 relationships/joints | #344, #346 | Hard prerequisite | Ambas issues cerradas. |
+| #356 relationships/joints | #286, #313 | Authority/reference | Contratos de drilling y diseño→producción respetados. |
+| #347 preflight | #344, #346, #356 | Hard prerequisite | Las tres issues cerradas antes de implementar el pipeline dependiente de #347. |
+| #347 preflight | #300, #301 | Authority/reference | Lifecycle/release y modelo físico respetados, sin exigir el cierre administrativo de esas META. |
+| #349 parametric library | #345, #346, #356 | Hard prerequisite | Las tres issues cerradas. |
+| #349 parametric library | #347 `minimum authoritative preflight` | Milestone gate | El subset corre sobre el fixture de #356 antes de implementar #349; el gabinete de biblioteca debe volver a pasarlo antes de llamarse manufacturable. |
+| #349 parametric library | #309 | Authority/reference | Biblioteca/authoring nativo se mantiene alineado sin compartir UI accidentalmente. |
+| #350 hardware sync | #346, #356 | Hard prerequisite | Ambas issues cerradas. |
+| #350 hardware sync | #347 `minimum authoritative preflight` | Milestone gate | El milestone existe antes de implementar #350; después, host, drilling y colisiones críticas del fixture con hardware deben volver a pasarlo. |
+| #350 hardware sync | #282, #286 | Authority/reference | Semántica de hardware/drilling existente respetada. |
+| #348 PTX validation | #347 | Hard prerequisite | #347 cerrada con el preflight completo. |
+| #348 PTX validation | #306 | Field evidence | Import/readback y operator sign-off del piloto disponibles. |
+| #351 machine profiles | #347, #348 | Hard prerequisite | Ambas issues cerradas. |
+| #351 machine profiles | #111/F132 | Authority/reference | El adapter PTX existente se trata como antecedente, no como claim de compatibilidad. |
+| #352/#353 machine packs | #348, #351 | Hard prerequisite | Ambas issues cerradas. |
+| #352/#353 machine packs | #306 | Field evidence | Dossier y sign-off sanitizados del piloto correspondiente. |
+| #354 golden/E2E | #346–#353 y #356 | Hard prerequisite | Todas las entregas funcionales del rango, incluidas #349/#350, están cerradas. |
+| #354 golden/E2E | #313 | Authority/reference | Contract fixtures diseño→producción respetados. |
+| #355 packaging | #344, #345, #354 | Hard prerequisite | Las tres issues cerradas. |
+
 ## 6. Primer vertical slice demostrable
 
 ```text
 contract approved
-→ machine dossiers collected
+→ initial machine dossiers collected
 → extension skeleton
 → semantic round-trip
 → parametric part relationships / joints
-→ one manufacturable cabinet
+→ #347 minimum authoritative preflight milestone verified
+→ one cabinet passes minimum authoritative preflight
 → hardware placement + machining sync
-→ minimum authoritative preflight
 → commercial demo
+→ #347 full Definition of Done before PTX/machine validation
 ```
 
-El preflight completo sigue siendo P0, pero su implementación total no debe bloquear el
-primer vertical slice si existe un subset mínimo autoritativo que impida producir datos
-ambiguos o inseguros.
+`Initial machine dossiers collected` significa discovery sanitizado suficiente para
+caracterizar el piloto; no significa que #352/#353 estén cerradas. Después de #356 y
+antes de iniciar implementación dependiente de #349/#350, considerar un gabinete
+manufacturable o ejecutar el demo, #347 debe registrar evidencia del milestone
+`minimum authoritative preflight` sobre el fixture de #356.
+El cierre completo de #347 sigue siendo P0 y es hard prerequisite para #348/#351; el
+milestone mínimo no sustituye su Definition of Done.
 
 ### Primer hito comercial
 
-Un gabinete real en SketchUp puede cambiar dimensiones, mover/agregar/eliminar entrepaños
-y mover herrajes; Muebles recalcula correctamente piezas, BOM, cantos y machining sin
-intervención manual sobre coordenadas CNC. Cualquier cambio que afecte una revisión ya
-liberada vuelve stale el output anterior.
+Un gabinete real que ya pasó el `minimum authoritative preflight` puede cambiar
+dimensiones, mover/agregar/eliminar entrepaños y mover herrajes en SketchUp; Muebles
+recalcula correctamente piezas, BOM, cantos y machining sin intervención manual sobre
+coordenadas CNC. Cualquier cambio que afecte una revisión ya liberada vuelve stale el
+output anterior y exige volver a ejecutar el gate.
 
 ## 7. Invariante de relaciones paramétricas
 
@@ -209,6 +261,12 @@ Debe validar al menos identity/revision/fingerprint, catalog references,
 relationships/joints resolubles, dimensiones/espesores, drilling bounds/depth, colisiones
 críticas conocidas y bloqueo seguro ante ambigüedad crítica.
 
+El milestone se considera verificable sólo cuando #347 conserva, para un fixture
+versionado, el request/response correlacionado, los checks ejecutados, el
+`designRevisionId`, el `bomFingerprint`, los issues estructurados y el resultado
+`ready|blocked`. Un resultado `ready` habilita el gabinete demostrable, no crea
+`ProductionRelease`, no declara compatibilidad de máquina y no cierra #347.
+
 ## 9. Machine evidence
 
 La compatibilidad sólo puede afirmarse para una combinación exacta de máquina,
@@ -240,11 +298,12 @@ Client A y Client B permanecen aislados mediante dossiers, profiles y fixtures p
 
 ## 11. Esta semana
 
-- [ ] Aprobar #344 mediante este PR documental.
+- [x] #344 completada por PR #357, con strategy, ADR y contract conceptual publicados.
 - [ ] Recolectar dossiers sanitizados de Client A y Client B.
 - [ ] Congelar un fixture PTX y expected readback sin producción real.
 - [ ] Confirmar machine/controller/software/version de cada piloto.
-- [ ] Preparar acceptance de #345, #346 y #356.
+- [ ] Ejecutar #345 y preparar acceptance de #346/#356 con identity de instancia inequívoca.
+- [ ] Registrar en #347 el milestone verificable `minimum authoritative preflight` antes de #349/#350/demo.
 - [ ] Mantener producción fuera de este slice documental.
 
 ## 12. Definition of Done del programa
