@@ -3538,7 +3538,7 @@
         "Flujos in-app existentes intactos: click en card abre detalle con URL /modules/:id, Volver a lista navega a /modules, abrir/cerrar editor funciona",
         "Tests de comportamiento en ModulesScreen cubren deep-link en mount, sincronización URL→selección y cierre de editor"
       ],
-      "status": "in_progress",
+      "status": "done",
       "references": [
         "docs/design.md#42-patrón-listadetalle",
         "progress/current.md"

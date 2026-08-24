@@ -1,41 +1,52 @@
 # Sesión
 
-**Feature en curso:** F152 — modules_deep_link_routing
-**Inicio:** 2026-08-23 · **Estado:** in_progress
+**Features cerradas:** F152 — modules_deep_link_routing
+**Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
+**Reviews:** `progress/review_F152.md` (APPROVED)
+**Rama:** `feat/f152-modules-deep-link` (pusheada)
 
-## Bug (reproducido en navegador, guest + demo)
+## Resultado
 
-Dos síntomas, misma causa (`useModulesScreenState` con selección bespoke en
-vez del hook canónico `useRoutableEntitySelection`):
+El deep-link `/modules/:id` sobrevive F5/entrada directa y el cierre del
+editor siempre sale de la ruta `/edit`. Causa raíz única:
+`useModulesScreenState` tenía una selección bespoke en vez del hook canónico
+`useRoutableEntitySelection` que ya usan structures/components/customers y
+los catálogos.
 
-1. **F5/deep-link en `/modules/:id` rebota a `/modules`**: el efecto de mount
-   notifica `onSelectionChange(null)` → la shell navega a la lista; y el guard
-   de refs (`lastOpenModuleIdRef` inicializado al valor de mount) impide
-   sembrar `selectedId` desde la URL.
-2. **Cerrar editor in-app desde `/modules/:id/edit` deja la URL pegada en
-   `/edit` con el editor cerrado** (F5 ahí lo reabre): `onEditorClose(restoreId)`
-   usa `onSelectionChange`, que la shell bloquea en rutas `/edit`
-   (`isEntityEditPath`); sólo el flujo F5-directo (restoreId null) salía bien
-   por casualidad vía `onRequestEdit(null)`.
+- **Síntoma 1 (F5/deep-link rebota a `/modules`)**: el efecto de mount
+  notificaba `onSelectionChange(null)` → la shell navegaba a la lista; y el
+  guard de refs (`lastOpenModuleIdRef` inicializado al valor de mount)
+  impedía sembrar `selectedId` desde la URL.
+- **Síntoma 2 (URL pegada en `/edit` tras cerrar editor in-app)**: el flujo
+  bespoke mantenía la selección durante la edición, y `onEditorClose(restoreId)`
+  usaba `onSelectionChange` — que la shell bloquea en rutas `/edit`
+  (`isEntityEditPath`) — en vez de `onRequestEdit(null)`.
 
-Evidencia (dev server :5199, guest):
-- goto `/modules/mod-gab-01` + reload → URL `/modules`, lista visible.
-- detalle → Editar → Volver → URL `/modules/mod-gab-01/edit`, editor cerrado.
+Fix: migración al hook canónico (seed en mount + sync URL→estado sin
+notificar + drop-stale). Durante `/edit` la selección es null y el cierre
+sale vía `onRequestEdit(null)` — paridad exacta con structures.
 
-## Plan
+## Verificación (evidencia)
 
-- Migrar selección de `useModulesScreenState` a `useRoutableEntitySelection`
-  (seed en mount, sync URL→estado sin notificar, drop-stale) — paridad con
-  structures/components/customers/catálogos.
-- El cierre del editor queda alineado a structures: durante `/edit` la
-  selección es null → `onEditorClose(null)` → `onRequestEdit(null)` sale de la
-  ruta `/edit`.
-- Tests de comportamiento en `ModulesScreen.test.tsx`: deep-link en mount,
-  sync URL→selección, cierre de editor sale de /edit.
-- Verificar `pnpm test` + `pnpm typecheck` + navegador (los 3 flujos).
+- `pnpm test` 3.048 tests verdes (ui 1.391, web 306, domain 1.035, storage
+  155, excel 89, mobile 45, desktop 17); `pnpm typecheck` 0 errores.
+- 6 tests nuevos de comportamiento en `ModulesScreen.test.tsx` (F152):
+  deep-link en mount sin notificar, carga async del workspace, la selección
+  sigue la URL, cierre sale de /edit, card click notifica, Volver a la lista
+  notifica.
+- Navegador real (guest + demo, dev :5199): deep-link estable, F5 en detalle
+  sobrevive, detalle→Editar→Volver sale de /edit, F5 en /edit abre editor y
+  Volver sale, flujo in-app card→detalle→lista intacto.
 
-## Decisiones
+## Notas
 
-- Paridad con el patrón canónico en vez de conservar el comportamiento bespoke
-  (mantener selección durante /edit): es exactamente lo que causa el síntoma 2
-  y ninguna otra screen lo hace.
+- PR #342 (ProjectsScreen echo loop) es un síntoma hermano en otra screen;
+  sin solapamiento de archivos.
+- Deep-link con id inexistente muestra la lista con URL estable (mismo
+  comportamiento que el resto de las screens canónicas).
+
+## Siguientes pasos (backlog auditoría)
+
+1. Chevron de affordance en tablas expandibles de catálogo.
+2. Estructuras: Desactivar/Eliminar al overflow "Más".
+3. Continuar revisión: Estructuras, Componentes, catálogos, Clientes, Vitrina.
