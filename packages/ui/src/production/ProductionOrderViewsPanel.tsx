@@ -5,7 +5,12 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module, Project } from '@muebles/domain';
-import { buildProductionElevations } from '@muebles/domain';
+import {
+  buildProductionElevations,
+  listProductionSpaceOptions,
+  projectScopedToProductionSpace,
+  unplacedItemIdsForProduction,
+} from '@muebles/domain';
 import { canUseWebGL } from '../preview3d/webglSupport';
 import {
   DEFAULT_MATERIAL_SURFACE_MODE,
@@ -24,6 +29,7 @@ import {
   FurnitureScene3D,
 } from '../preview3d/FurnitureScene3D';
 import { PageHeader } from '../common';
+import { WorkspaceTabs } from '../common/Tabs';
 import '../common/furniture3dViewer.css';
 
 export type ProductionOrderViewsPanelProps = {
@@ -54,9 +60,47 @@ export function ProductionOrderViewsPanel({
     setUseR3f(canUseWebGL());
   }, []);
 
+  // #256: kitchenLayout top-level only mirrors the ACTIVE space, while
+  // project.items carries the whole obra — resolving 3D against it mixes walls
+  // of one ambiente with a ghost linear tail of the others. With "Toda la
+  // obra", the panel owns ambient tabs and resolves planta + 3D per space via
+  // the domain scope filter (the hub filter already narrows a single space).
+  const spaceOptions = useMemo(
+    () => listProductionSpaceOptions(project),
+    [project],
+  );
+  const [viewsSpaceId, setViewsSpaceId] = useState<string | null>(null);
+  const activeSpaceId = useMemo((): string | undefined => {
+    if (spaceOptions.length === 0) return undefined;
+    const layoutActive = project.kitchenLayout?.activeSpaceId;
+    return (
+      spaceOptions.find((s) => s.id === viewsSpaceId)?.id ??
+      spaceOptions.find((s) => s.id === layoutActive)?.id ??
+      spaceOptions[0]!.id
+    );
+  }, [spaceOptions, viewsSpaceId, project.kitchenLayout?.activeSpaceId]);
+  const activeSpaceName = activeSpaceId
+    ? spaceOptions.find((s) => s.id === activeSpaceId)?.name
+    : undefined;
+
+  const previewProject = useMemo(
+    () =>
+      activeSpaceId
+        ? projectScopedToProductionSpace(project, activeSpaceId)
+        : project,
+    [project, activeSpaceId],
+  );
+
   const preview = useMemo(
-    () => resolveProject3DPreview(project, catalog),
-    [project, catalog],
+    () => resolveProject3DPreview(previewProject, catalog),
+    [previewProject, catalog],
+  );
+
+  // Per-space scoping hides truly-unplaced items from every 3D view; surface
+  // the obra-wide count explicitly instead of rendering a ghost tail (#256).
+  const unplacedAnywhereCount = useMemo(
+    () => (activeSpaceId ? unplacedItemIdsForProduction(project).size : 0),
+    [activeSpaceId, project],
   );
 
   const elevations = useMemo(
@@ -138,6 +182,28 @@ export function ProductionOrderViewsPanel({
           ) : undefined
         }
       />
+      {activeSpaceId ? (
+        <WorkspaceTabs
+          tabs={spaceOptions.map((s) => ({ id: s.id, label: s.name }))}
+          activeTab={activeSpaceId}
+          onTabChange={setViewsSpaceId}
+          ariaLabel="Ambiente de las vistas de producción"
+          idPrefix="prod-vistas-space"
+          testIdPrefix="prod-vistas-space"
+        />
+      ) : null}
+      <div
+        className="prod-vistas__content"
+        role={activeSpaceId ? 'tabpanel' : undefined}
+        id={
+          activeSpaceId ? `prod-vistas-space-panel-${activeSpaceId}` : undefined
+        }
+        aria-labelledby={
+          activeSpaceId
+            ? `prod-vistas-space-tab-${activeSpaceId}`
+            : undefined
+        }
+      >
       <section
         className="prod-vistas__section"
         aria-label="Planta de cocina"
@@ -148,7 +214,14 @@ export function ProductionOrderViewsPanel({
           Solo lectura — códigos y posiciones de la obra aceptada. Sin edición
           de muros ni placements.
         </p>
-        <PresentationKitchenPlanSlide project={project} modules={modules} />
+        <PresentationKitchenPlanSlide
+          project={project}
+          modules={modules}
+          selectedSpaceId={activeSpaceId}
+          onSelectedSpaceIdChange={
+            activeSpaceId ? setViewsSpaceId : undefined
+          }
+        />
       </section>
 
       <section
@@ -200,7 +273,9 @@ export function ProductionOrderViewsPanel({
         {!preview.empty && preview.modules.length > 0 ? (
           <p className="prod-vistas__run-hint" data-testid="prod-vistas-3d-hint">
             {preview.layoutMode === 'kitchen'
-              ? `Según plano (${preview.placedCount} colocad${
+              ? `Según plano${
+                  activeSpaceName ? ` de ${activeSpaceName}` : ''
+                } (${preview.placedCount} colocad${
                   preview.placedCount === 1 ? 'a' : 'as'
                 }${
                   preview.unplacedCount > 0
@@ -210,6 +285,14 @@ export function ProductionOrderViewsPanel({
               : `Corrida lineal (${preview.modules.length} unidad${
                   preview.modules.length === 1 ? '' : 'es'
                 }).`}
+          </p>
+        ) : null}
+
+        {unplacedAnywhereCount > 0 ? (
+          <p className="prod-vistas__hint" data-testid="prod-vistas-3d-unplaced">
+            {unplacedAnywhereCount} unidad
+            {unplacedAnywhereCount === 1 ? '' : 'es'} de la cotización sin
+            colocar en ninguna planta — no aparecen en esta vista 3D.
           </p>
         ) : null}
 
@@ -300,6 +383,8 @@ export function ProductionOrderViewsPanel({
           </p>
         )}
       </section>
+
+      </div>
 
     </div>
   );
