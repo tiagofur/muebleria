@@ -4,11 +4,12 @@ Installable bootstrap for the Granete SketchUp extension. SketchUp owns design
 authoring and interaction; Granete remains the authority for manufacturing
 validation and outputs.
 
-> **Current status:** development candidate. Static and package gates run
-> outside SketchUp. The only host target for this bootstrap is **SketchUp
-> 2026.2 on macOS**; every other version is planned compatibility, not a
-> target and not implied support. No host row is supported until its
-> installation and TestUp smoke are recorded.
+> **Current status:** the only host target for this bootstrap is **SketchUp
+> 2026.2 on macOS**, verified in-host on 2026-08-24 (TestUp CI: 7 tests / 27
+> assertions, 0 failures — install/load, dialog open-close-recreate on CEF
+> 137, AppObserver unload, ports, metadata round-trip, redaction). Every
+> other version is planned compatibility, not a target and not implied
+> support.
 
 ## Quick path
 
@@ -122,7 +123,7 @@ SketchUp operation. It is not a BOM, release, machine, or fabrication contract.
 
 | Host | Embedded Ruby | CEF | Status |
 |---|---:|---:|---|
-| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target** — candidate; pending complete host smoke |
+| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…` |
 | SketchUp 2024/2025 macOS | 3.2.2 | 112/128 | Planned compatibility — not a target, no implied support |
 | SketchUp 2024/2025/2026.2 Windows | 3.2.2 | 112–137 | Planned compatibility — not a target, no implied support |
 
