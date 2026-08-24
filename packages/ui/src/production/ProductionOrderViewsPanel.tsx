@@ -25,6 +25,7 @@ import { PresentationKitchenPlanSlide } from '../projects/components/Presentatio
 import { PaintModeField } from '../preview3d/PaintModeField';
 import { MaterialSurfaceModeField } from '../preview3d/MaterialSurfaceModeField';
 import { ProductionElevationPreview } from './ProductionElevationPreview';
+import { ProductionIslandPreview } from './ProductionIslandPreview';
 import {
   FurnitureScene3D,
 } from '../preview3d/FurnitureScene3D';
@@ -166,15 +167,18 @@ export function ProductionOrderViewsPanel({
             <button
               type="button"
               className="btn"
-              disabled={exportBusy || elevations.walls.length === 0}
+              disabled={
+                exportBusy ||
+                (elevations.walls.length === 0 && elevations.islands.length === 0)
+              }
               onClick={() => {
                 void onExportElevations();
               }}
               data-testid="prod-vistas-export-elevations"
               title={
-                elevations.walls.length === 0
-                  ? 'Sin muros en el layout'
-                  : 'PDF multi-página de elevaciones'
+                elevations.walls.length === 0 && elevations.islands.length === 0
+                  ? 'Sin muros ni islas en el layout'
+                  : 'PDF multi-página de elevaciones y fichas de isla'
               }
             >
               Descargar PDF elevaciones
@@ -251,13 +255,29 @@ export function ProductionOrderViewsPanel({
             Sin colocar: {elevations.unplaced.map((u) => u.label).join(', ')}
           </p>
         ) : null}
-        {elevations.freePlace.length > 0 ? (
-          <p className="prod-vistas__hint" data-testid="prod-elev-free">
-            Libre / isla (no en alzado de muro):{' '}
-            {elevations.freePlace.map((u) => u.label).join(', ')}
-          </p>
-        ) : null}
       </section>
+
+      {elevations.islands.length > 0 ? (
+        <section
+          className="prod-vistas__section"
+          aria-label="Fichas de islas"
+          data-testid="prod-vistas-islands"
+        >
+          <h4 className="prod-hub__section-title">Islas (libres)</h4>
+          <p className="prod-vistas__hint">
+            Ubicación libre en planta — no se proyectan en alzados de muro. Cada
+            isla tiene su ficha con medidas y posición.
+          </p>
+          <div className="prod-vistas__island-list">
+            {elevations.islands.map((island) => (
+              <ProductionIslandPreview
+                key={`${island.spaceId}-${island.itemId}-${island.instanceIndex}`}
+                island={island}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section
         className="prod-vistas__section prod-vistas__section--3d"

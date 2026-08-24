@@ -9,6 +9,7 @@ import {
   type Module,
   type Project,
   type ProductionElevationsResult,
+  type ProductionIslandUnit,
   type ProductionWallElevation,
 } from '@muebles/domain';
 
@@ -33,7 +34,7 @@ function drawText(
   color = rgb(0.1, 0.1, 0.12),
 ): void {
   // pdf-lib WinAnsi cannot encode all unicode; strip risky chars.
-  const safe = text.replace(/[^\x20-\x7EÁÉÍÓÚáéíóúÑñÜü°×]/g, '?');
+  const safe = text.replace(/[^\x20-\x7EÁÉÍÓÚáéíóúÑñÜü°×·]/g, '?');
   try {
     page.drawText(safe, { x, y, size, font, color });
   } catch {
@@ -165,15 +166,127 @@ function drawWallPage(
 }
 
 /**
- * Generate multi-page elevations PDF. Throws if no walls in layout.
+ * Island sheet (#255): one page per free-place unit — simple front elevation
+ * with measures, code and plan position. Islands never project onto wall
+ * elevations, so this is their replacement artifact for the shop.
+ */
+function drawIslandPage(
+  page: PDFPage,
+  island: ProductionIslandUnit,
+  projectName: string,
+  customerName: string | undefined,
+  font: PDFFont,
+  fontBold: PDFFont,
+): void {
+  let y = PAGE_H - MARGIN;
+  drawText(page, 'FICHA DE ISLA — PRODUCCION', MARGIN, y, fontBold, 14, rgb(0.1, 0.25, 0.45));
+  y -= 16;
+  drawText(page, `Proyecto: ${projectName}`, MARGIN, y, fontBold, 10);
+  y -= 12;
+  if (customerName) {
+    drawText(page, `Cliente: ${customerName}`, MARGIN, y, font, 9);
+    y -= 12;
+  }
+  drawText(
+    page,
+    `Isla ${island.label}  ·  ${island.moduleName}  ·  Ambiente: ${island.spaceName}`,
+    MARGIN,
+    y,
+    fontBold,
+    11,
+  );
+  y -= 20;
+
+  // Drawing area — single centered unit
+  const drawLeft = MARGIN + 60;
+  const drawRight = PAGE_W - MARGIN - 120;
+  const drawBottom = MARGIN + 80;
+  const drawTop = y - 10;
+  const drawW = drawRight - drawLeft;
+  const drawH = drawTop - drawBottom;
+
+  const maxZ = Math.max(1600, island.bottomZMm + island.heightMm + 160);
+  const scaleX = Math.min(drawW / Math.max(island.widthMm, 1), 0.5);
+  const scaleY = drawH / maxZ;
+
+  const w = Math.max(island.widthMm * scaleX, 8);
+  const x = drawLeft + (drawW - w) / 2;
+
+  // Floor line
+  page.drawLine({
+    start: { x: drawLeft, y: drawBottom },
+    end: { x: drawRight, y: drawBottom },
+    thickness: 1.5,
+    color: rgb(0.2, 0.2, 0.22),
+  });
+  drawText(page, 'piso', drawLeft, drawBottom - 12, font, 7);
+
+  // Island body (beige — floor unit family, same legend as walls)
+  const by = drawBottom + island.bottomZMm * scaleY;
+  const h = Math.max(island.heightMm * scaleY, 8);
+  page.drawRectangle({
+    x,
+    y: by,
+    width: w,
+    height: h,
+    borderWidth: 1,
+    borderColor: rgb(0.15, 0.2, 0.3),
+    color: rgb(0.93, 0.9, 0.85),
+  });
+
+  const label = island.label.length > 18 ? `${island.label.slice(0, 16)}…` : island.label;
+  if (w > 28) {
+    drawText(page, label, x + 2, by + h / 2 - 3, font, 8);
+  }
+  // Width dimension under unit; height at its right
+  drawText(page, `${island.widthMm}`, x + Math.max(0, w / 2 - 10), by - 10, font, 7);
+  drawText(page, `${island.heightMm}`, x + w + 6, by + h / 2, font, 7);
+  if (island.baseClearanceMm > 0) {
+    drawText(page, `zoclo ${island.baseClearanceMm}`, x + 2, by + 2, font, 6);
+  }
+
+  // Info block
+  let ly = MARGIN + 50;
+  drawText(
+    page,
+    `Medidas: ${island.widthMm} x ${island.heightMm} x ${island.depthMm} mm (ancho x alto x fondo)`,
+    MARGIN,
+    ly,
+    font,
+    8,
+  );
+  ly -= 12;
+  drawText(
+    page,
+    `Posicion en planta: X ${island.freeXMm} mm  ·  Y ${island.freeYMm} mm  ·  rotacion ${island.freeYawDeg}°`,
+    MARGIN,
+    ly,
+    font,
+    8,
+  );
+  ly -= 12;
+  drawText(
+    page,
+    'Ubicacion libre — no se proyecta en alzados de muro.',
+    MARGIN,
+    ly,
+    font,
+    8,
+  );
+}
+
+/**
+ * Generate multi-page elevations PDF: one page per wall, one sheet per
+ * free-place island, and an unplaced appendix. Throws when the layout has
+ * neither walls nor islands.
  */
 export async function wallElevationsPdfExport(
   input: WallElevationsPdfInput,
 ): Promise<Uint8Array> {
   const elevations = buildProductionElevations(input.project, input.modules);
-  if (elevations.walls.length === 0) {
+  if (elevations.walls.length === 0 && elevations.islands.length === 0) {
     throw new Error(
-      'Sin muros en el layout — no hay elevaciones de produccion para exportar',
+      'Sin muros ni islas en el layout — no hay elevaciones de produccion para exportar',
     );
   }
 
@@ -193,11 +306,24 @@ export async function wallElevationsPdfExport(
     );
   }
 
-  // Appendix: unplaced / free
-  if (elevations.unplaced.length > 0 || elevations.freePlace.length > 0) {
+  // #255: islands get their own sheets — included in the production pack.
+  for (const island of elevations.islands) {
+    const page = doc.addPage([PAGE_W, PAGE_H]);
+    drawIslandPage(
+      page,
+      island,
+      input.project.name,
+      input.customerName,
+      font,
+      fontBold,
+    );
+  }
+
+  // Appendix: unplaced (islas ya tienen su hoja propia)
+  if (elevations.unplaced.length > 0) {
     const page = doc.addPage([PAGE_W, PAGE_H]);
     let y = PAGE_H - MARGIN;
-    drawText(page, 'ANEXO — SIN COLOCAR / ISLAS', MARGIN, y, fontBold, 12);
+    drawText(page, 'ANEXO — SIN COLOCAR', MARGIN, y, fontBold, 12);
     y -= 18;
     drawText(
       page,
@@ -208,24 +334,12 @@ export async function wallElevationsPdfExport(
       9,
     );
     y -= 16;
-    if (elevations.unplaced.length > 0) {
-      drawText(page, 'Sin colocar en plano:', MARGIN, y, fontBold, 10);
-      y -= 12;
-      for (const u of elevations.unplaced) {
-        drawText(page, `· ${u.label} (${u.moduleCode})`, MARGIN + 8, y, font, 9);
-        y -= 11;
-        if (y < MARGIN) break;
-      }
-      y -= 8;
-    }
-    if (elevations.freePlace.length > 0) {
-      drawText(page, 'Libre / isla (no en alzado de muro):', MARGIN, y, fontBold, 10);
-      y -= 12;
-      for (const u of elevations.freePlace) {
-        drawText(page, `· ${u.label} (${u.moduleCode})`, MARGIN + 8, y, font, 9);
-        y -= 11;
-        if (y < MARGIN) break;
-      }
+    drawText(page, 'Sin colocar en plano:', MARGIN, y, fontBold, 10);
+    y -= 12;
+    for (const u of elevations.unplaced) {
+      drawText(page, `· ${u.label} (${u.moduleCode})`, MARGIN + 8, y, font, 9);
+      y -= 11;
+      if (y < MARGIN) break;
     }
   }
 

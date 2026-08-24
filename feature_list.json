@@ -3673,6 +3673,35 @@
       "depends_on": [],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F158",
+      "phase": 0,
+      "name": "production_island_elevation_sheet",
+      "title": "#255 Producción: ficha de isla dibujada en Vistas y hojas de isla en PDF (no sólo lista de texto)",
+      "description": "Bug/UX QA #255 (padre #251): las unidades mode:free (islas) aparecían en Vistas sólo como nota de texto (\"Libre / isla…\") y en el PDF de elevaciones como anexo de texto — en taller hace falta verlas dibujadas. La planta 2D ya dibuja islas (posición freeX/freeY, yaw, código — kitchenPlanHelpers categoría 'isla'). Fix: (1) dominio: buildProductionElevations devuelve `islands` rico (dimensiones, freeX/freeY/yaw, baseClearance/bottomZ, ambiente) en reemplazo de `freePlace` texto; (2) UI: sección \"Islas (libres)\" en Vistas con ProductionIslandPreview — alzado simple SVG dibujado con medidas, código y posición en planta, tema 'isla' compartido con la planta; (3) PDF: una hoja A4 por isla en wallElevationsPdfExport (fluye al pack de producción), el anexo queda sólo para sin-colocar; el export se habilita también para obras sólo-islas; (4) los muros siguen sin inventar alzado para free place.",
+      "acceptance": [
+        "Planta con ≥1 isla muestra la pieza en su posición (ya existente — verificar con test del flujo Vistas)",
+        "Sección \"Islas (libres)\" en Vistas con al menos una ficha dibujada por isla (SVG con medidas + código + posición en planta), no sólo texto",
+        "PDF de elevaciones/pack incluye una hoja por isla; el anexo text-only queda sólo para unidades sin colocar",
+        "Export habilitado para obras con islas pero sin muros; sin muros ni islas sigue deshabilitado con razón",
+        "Muros siguen sin inventar alzado falso para free place (wall elevations excluyen free)",
+        "Tests: dominio (islands con dims/posición/ambiente, multi-space, free-only), UI (ficha renderizada), excel (páginas del PDF); suite + typecheck verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/255",
+        "packages/domain/src/productionElevations.ts",
+        "packages/ui/src/production/ProductionOrderViewsPanel.tsx",
+        "packages/ui/src/production/ProductionIslandPreview.tsx",
+        "packages/excel/src/wallElevationsPdfExport.ts",
+        "apps/web/src/exportProductionPack.ts",
+        "docs/operational-ux.md"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F157"
+      ],
+      "created": "2026-08-24"
     }
   ]
 }
