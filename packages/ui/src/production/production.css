@@ -156,8 +156,12 @@
   flex-shrink: 0;
 }
 
-.prod-queue-card__actions .btn {
-  min-height: var(--touch-min);
+/* Targets táctiles sólo en touch/móvil (§4.0): en desktop las acciones de
+   card mantienen su altura compacta (btn--small, referencia eng-project-card). */
+@media (max-width: 767px) {
+  .prod-queue-card__actions .btn {
+    min-height: var(--touch-min);
+  }
 }
 
 @media (max-width: 719px) {
