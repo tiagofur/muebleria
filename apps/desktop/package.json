@@ -1,7 +1,7 @@
 {
   "name": "@muebles/desktop",
   "version": "1.0.0",
-  "description": "Muebles — Sistema de cotización y producción de muebles para talleres de carpintería",
+  "description": "Granete — Sistema de cotización y producción de muebles para talleres de carpintería",
   "author": "Tiago Furtado",
   "private": true,
   "type": "module",
@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.muebles.app",
-    "productName": "Muebles",
+    "productName": "Granete",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -57,7 +57,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Muebles"
+      "shortcutName": "Granete"
     },
     "mac": {
       "target": [

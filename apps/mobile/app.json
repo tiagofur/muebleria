@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Muebles",
+    "name": "Granete",
     "slug": "muebles-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -30,7 +30,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Permitir a Muebles usar Face ID para iniciar sesión rápidamente."
+          "faceIDPermission": "Permitir a Granete usar Face ID para iniciar sesión rápidamente."
         }
       ]
     ]

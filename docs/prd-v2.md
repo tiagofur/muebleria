@@ -2,7 +2,7 @@
 
 **Estado:** CANÓNICO para visión, alcance y modelo operativo actual  
 **Fecha:** 2026-08-24  
-**Producto:** Muebles / Mueblería (nombre de trabajo)  
+**Producto:** Granete (antes Muebles / Mueblería — nombre de trabajo)  
 **Audiencia:** producto, agentes, implementación, QA y talleres piloto
 
 > Este documento reemplaza a `docs/history/prd.md` como **contrato narrativo actual de producto**.
@@ -14,7 +14,7 @@
 
 ## 1. Definición del producto
 
-Muebles es una **plataforma operativa vertical para carpinterías y fabricantes de
+Granete es una **plataforma operativa vertical para carpinterías y fabricantes de
 muebles pequeños y medianos**. Conecta el trabajo comercial, técnico y físico de
 una obra desde la cotización hasta la instalación y la rentabilidad real.
 
@@ -24,7 +24,7 @@ El producto actual incluye y debe integrar coherentemente:
 - clientes, cartera comercial, cotizaciones y pricing;
 - catálogo técnico y comercial de muebles, materiales, cantos y herrajes;
 - Proyectar 2D/3D y ambientes;
-- Muebles for SketchUp como authoring client profesional;
+- Granete for SketchUp como authoring client profesional;
 - estructuras, componentes, agregados y BOM resuelto;
 - ingeniería y documentación de producción;
 - optimización de corte para sierra y CNC nesting;
@@ -110,15 +110,15 @@ compatibles con el BOM técnico.
 Proyectar permanece como la ruta nativa de quick design: debe resolver el trabajo modular
 sin exigir una herramienta CAD externa.
 
-### 4.3 Muebles for SketchUp
+### 4.3 Granete for SketchUp
 
 El diseñador que ya trabaja en SketchUp puede usarlo como ruta de authoring profesional.
 La extensión captura selección, interacción, transforms, parameters y semantic metadata;
 no calcula la manufacturing truth.
 
-> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
-Muebles conserva catálogo, BOM, parts, materials, hardware, drilling, revisions,
+Granete conserva catálogo, BOM, parts, materials, hardware, drilling, revisions,
 preflight, release y machine outputs. Cotizar rápido, Proyectar y SketchUp convergen en
 una misma `Project/Job`.
 
@@ -527,8 +527,8 @@ Integrar herramientas externas es preferible a recrearlas cuando no sea parte de
 | Arquitectura/boundaries | `docs/architecture.md` |
 | UX operacional | `docs/operational-ux.md` + `docs/design.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
-| Programa SketchUp + Muebles | `docs/sketchup-muebles-strategy.md` + issue #290 |
-| Ownership SketchUp/Muebles | `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md` |
+| Programa SketchUp + Granete | `docs/sketchup-muebles-strategy.md` + issue #290 |
+| Ownership SketchUp/Granete | `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md` |
 | Contract conceptual | `docs/sketchup-manufacturing-contract.md` |
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | Permisos ejecutables | `packages/domain/src/rbac.ts` / backend correspondiente |

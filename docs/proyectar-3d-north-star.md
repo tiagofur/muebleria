@@ -6,14 +6,14 @@
 **Relacionado:** `docs/prd-v2.md`, `docs/design.md`, `docs/architecture.md`, `docs/operational-core-v1.md`
 
 > Este documento define **qué tan bueno debe llegar a ser Proyectar** y qué significa
-> competir con herramientas especializadas sin convertir Mueblería en un clon de Promob,
+> competir con herramientas especializadas sin convertir Granete en un clon de Promob,
 > SketchUp o un CAD generalista.
 
 ---
 
 ## 0. Posicionamiento — decisión cerrada
 
-Mueblería **NO quiere ser “la alternativa barata a Promob”**.
+Granete **NO quiere ser “la alternativa barata a Promob”**.
 
 El precio puede ser menor porque el producto, el mercado y la estructura comercial son
 distintos, pero **precio no es el argumento principal de compra**.
@@ -91,7 +91,7 @@ La interfaz moderna de Promob separa explícitamente catálogos de módulos, cat
 materiales, herramientas de inserción, panel de propiedades y ambiente 3D. Sus catálogos
 se organizan jerárquicamente para localizar módulos/materiales con rapidez.
 
-Mueblería adopta las **ideas de interacción que son naturalmente buenas para este trabajo**:
+Granete adopta las **ideas de interacción que son naturalmente buenas para este trabajo**:
 
 - biblioteca persistente de muebles cerca del canvas;
 - biblioteca/materiales accesibles durante diseño;

@@ -46,7 +46,7 @@ describe('OnboardingTourModal', () => {
   it('renders step 1 when isOpen is true', () => {
     render(<OnboardingTourModal isOpen={true} onClose={vi.fn()} />);
     expect(screen.getByTestId('onboarding-tour-modal')).toBeTruthy();
-    expect(screen.getByText(/¡Bienvenido a Muebles!/i)).toBeTruthy();
+    expect(screen.getByText(/¡Bienvenido a Granete!/i)).toBeTruthy();
     expect(screen.getByTestId('onboarding-tour-next')).toBeTruthy();
   });
 
@@ -72,7 +72,7 @@ describe('OnboardingTourModal', () => {
     expect(screen.getByTestId('onboarding-tour-prev')).toBeTruthy();
 
     await user.click(screen.getByTestId('onboarding-tour-prev'));
-    expect(screen.getByText(/¡Bienvenido a Muebles!/i)).toBeTruthy();
+    expect(screen.getByText(/¡Bienvenido a Granete!/i)).toBeTruthy();
   });
 
   it('calls onLoadDemoProject and onClose when clicking Finish', async () => {
@@ -154,7 +154,7 @@ describe('OnboardingTourModal', () => {
     const labelledBy = dialog.getAttribute('aria-labelledby');
     expect(labelledBy).toBeTruthy();
     expect(document.getElementById(labelledBy!)?.textContent).toBe(
-      'Tour de Bienvenida — Muebles App',
+      'Tour de Bienvenida — Granete App',
     );
   });
 

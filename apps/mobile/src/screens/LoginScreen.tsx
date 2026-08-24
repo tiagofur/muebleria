@@ -71,9 +71,9 @@ export function LoginScreen() {
         {/* Brand Header */}
         <View style={styles.brandHeader}>
           <View style={styles.logoBadge}>
-            <Text style={styles.logoText}>M</Text>
+            <Text style={styles.logoText}>G</Text>
           </View>
-          <Text style={styles.appTitle}>Muebles Mobile</Text>
+          <Text style={styles.appTitle}>Granete Mobile</Text>
           <Text style={styles.appSubtitle}>Sistema de Taller, Obra y Cotizaciones</Text>
         </View>
 

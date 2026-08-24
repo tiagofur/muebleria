@@ -26,7 +26,7 @@
 8. **Revisión explícita.** Producción siempre debe poder responder qué revisión/BOM
    está ejecutando.
 9. **Authoring no es manufacturing truth.** Proyectar y SketchUp capturan intención;
-   Muebles resuelve, valida y libera el resultado industrial.
+   Granete resuelve, valida y libera el resultado industrial.
 
 ---
 
@@ -225,13 +225,13 @@ No implementar una feature nueva que profundice CNC/enchape usando únicamente
 
 ### Authoring clients externos
 
-Para Muebles for SketchUp rige:
+Para Granete for SketchUp rige:
 
-> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 La extensión puede capturar interaction state, transforms, parameters, stable IDs y
 semantic metadata. No implementa BOM, drilling rules, nesting, kerf, stale/release gates
-ni postprocessing. Muebles valida el
+ni postprocessing. Granete valida el
 [`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva la
 autoridad descrita en el
 [`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md).
@@ -398,7 +398,7 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - producto: `docs/prd-v2.md`;
 - plan: `docs/operational-core-v1.md`.
 - programa SketchUp: `docs/sketchup-muebles-strategy.md`;
-- boundary SketchUp/Muebles:
+- boundary SketchUp/Granete:
   `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`.
 

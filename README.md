@@ -1,4 +1,4 @@
-# Muebles — Sistema de cotización y producción
+# Granete — Sistema de cotización y producción
 
 Aplicación de escritorio (Electron) y web (React) para talleres de carpintería:
 gestión de catálogos de materiales, definición de módulos reutilizables,

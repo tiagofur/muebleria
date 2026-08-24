@@ -22,7 +22,7 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	slog.Info("Starting Muebles Backend Server...")
+	slog.Info("Starting Granete Backend Server...")
 
 	cfg, err := config.LoadConfig()
 	if err != nil {

@@ -7,7 +7,7 @@
 
 ## 1. Lo que NO decimos
 
-Mueblería no se posiciona como:
+Granete no se posiciona como:
 
 - “Promob barato”;
 - “Promob web”;
@@ -21,7 +21,7 @@ recortada de otro sistema.
 
 ## 2. Lo que somos
 
-> **Mueblería es la plataforma ideal para un segmento de talleres y fabricantes que
+> **Granete es la plataforma ideal para un segmento de talleres y fabricantes que
 > necesita excelente diseño modular 3D y un flujo operacional completo, pero no necesita
 > toda la amplitud de una suite CAD/CAM histórica.**
 
@@ -46,12 +46,12 @@ El precio menor puede ayudar, pero no es el motivo principal por el que debe ele
 
 - **Proyectar 3D** permanece como ruta nativa de quick design para cotizar y diseñar
   muebles modulares sin depender de un CAD externo.
-- **Muebles for SketchUp** ofrece authoring profesional a quienes ya trabajan en
+- **Granete for SketchUp** ofrece authoring profesional a quienes ya trabajan en
   SketchUp.
 
 Ambas convergen en el mismo `Project/Job` y en el mismo dominio:
 
-> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 La estrategia, el boundary y el contract están documentados en
 [`sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md),
@@ -68,7 +68,7 @@ La pregunta comercial no es:
 
 Sino:
 
-> “¿Para este taller y este tipo de trabajo, Mueblería resuelve mejor el día completo?”
+> “¿Para este taller y este tipo de trabajo, Granete resuelve mejor el día completo?”
 
 ### Diseño
 
@@ -88,11 +88,11 @@ Debemos mantener el mismo job hasta compras, embarque, instalación, garantía y
 
 | Cliente dice | Respuesta de posicionamiento |
 |---|---|
-| “Promob tiene más cosas” | Correcto; Mueblería no pretende tener toda su amplitud. Está optimizada para el flujo que este taller realmente usa. |
+| “Promob tiene más cosas” | Correcto; Granete no pretende tener toda su amplitud. Está optimizada para el flujo que este taller realmente usa. |
 | “¿Entonces es una versión barata?” | No. El precio es distinto porque el producto/nicho son distintos. Competimos en facilidad, calidad e integración operacional. |
 | “Yo sólo necesito cocinas/closets” | Ése es precisamente el tipo de trabajo donde Proyectar debe ser excelente. |
-| “Ya diseño en SketchUp” | Puede conservar SketchUp para authoring; Muebles valida BOM, machining, revisions y manufacturing outputs. |
-| “Después tengo que pasar todo a Excel” | El objetivo de Mueblería es que diseño, BOM, materiales y producción permanezcan conectados. |
+| “Ya diseño en SketchUp” | Puede conservar SketchUp para authoring; Granete valida BOM, machining, revisions y manufacturing outputs. |
+| “Después tengo que pasar todo a Excel” | El objetivo de Granete es que diseño, BOM, materiales y producción permanezcan conectados. |
 | “Tengo CNC” | Se integra la preparación CNC dentro del mismo job donde tiene sentido; postprocesadores específicos sólo con hardware validado. |
 | “No tengo CNC” | El mismo sistema sigue sirviendo para corte manual/sierra, etiquetas, armado e instalación. |
 
@@ -118,7 +118,7 @@ Agregarla cuando:
 
 Queremos que un cliente diga:
 
-> “No compré Mueblería porque fuera más barata. La compré porque para mi empresa es más
+> “No compré Granete porque fuera más barata. La compré porque para mi empresa es más
 > fácil, más clara y me acompaña desde la venta hasta la instalación.”
 
 Y que además un usuario de diseño diga:
@@ -129,4 +129,4 @@ Y que además un usuario de diseño diga:
 O, si su authoring ocurre en SketchUp:
 
 > “Puedo seguir diseñando en SketchUp sin perder la verdad de fabricación y la operación
-> completa de Muebles.”
+> completa de Granete.”

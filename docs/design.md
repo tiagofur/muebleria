@@ -1,4 +1,4 @@
-# Design Guide — Muebles App
+# Design Guide — Granete App
 
 > **Estado:** v3.0 — estándar de excelencia UI/UX: ejecución Apple × sistema Material (2026-08-18)
 > **Autores:** Producto + agente de diseño
@@ -55,7 +55,7 @@ firmarían esta pantalla" — ejecutando el producto de un taller.
 
 ### 2.2 La prueba de las 8 horas
 
-El usuario de Muebles pasa la jornada laboral entera dentro de esta app, en un
+El usuario de Granete pasa la jornada laboral entera dentro de esta app, en un
 taller, con prisa, donde los errores cuestan dinero. El bar de calidad se mide
 contra eso — no contra una demo:
 
@@ -207,7 +207,7 @@ y se propaga mediante roles semánticos, nunca mediante hex o mezclas locales.
 | `neutral` | TRABAJO, CONFIG | neutral con sesgo brand | visión transversal y administración |
 
 Apple aporta la jerarquía calma del frame y feedback de interacción; Material 3
-aporta roles, state layers y pares accesibles; Muebles decide la taxonomía y
+aporta roles, state layers y pares accesibles; Granete decide la taxonomía y
 significado de cada área. Si hay conflicto, la prevención de errores del taller
 prevalece; después, Apple guía chrome/jerarquía y Material guía sistema/a11y.
 No se copian skins ni componentes de plataforma.
@@ -614,7 +614,7 @@ Títulos de pantalla = labels de nav. Código/API en inglés; **copy de UI en es
 CTAs canónicos: «Nueva cotización», «Nuevo mueble», «Nuevo material», …
 
 - **Sidebar**: `--surface-sidebar` (oscuro), texto inverse, ítem activo con borde izquierdo + **superficie del color de área al 28%** + ícono en color de área `-300` (v2.1 tonal — el activo tiene que verse); label de sección en color de área `-300` pleno
-- **Brand chrome (issue #53):** `BrandMark` monochrome (tile + paneles) + wordmark «Muebles» — **sin emoji**; mismo mark en Login/Register y favicon web
+- **Brand chrome (issue #53):** `BrandMark` monochrome (tile + paneles) + wordmark «Granete» — **sin emoji**; mismo mark en Login/Register y favicon web
 - **Command palette (issue #54):** `Cmd/Ctrl+K` en el shell — secciones de nav + cotizaciones/muebles recientes; teclado ↑↓ Enter Esc; denso, sin búsqueda de marketing
 - **TopBar**: `--surface-card` con `--shadow-sm`; **NO repite el título de la pantalla** (ver §4.1b); acciones opcionales (`headerActions`, p. ej. **Salir**)
 - **Content**: `--surface-app`, padding `--space-6`

@@ -13,7 +13,7 @@
 
 ## 0. Regla de prioridad
 
-Proyectar es uno de los tres pilares de Mueblería y puede avanzar en paralelo con
+Proyectar es uno de los tres pilares de Granete y puede avanzar en paralelo con
 Operational Core cuando hay capacidad, pero no debe romper prioridades críticas de
 verdad, seguridad, lifecycle o producción.
 

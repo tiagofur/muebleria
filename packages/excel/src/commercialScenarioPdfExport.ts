@@ -58,7 +58,7 @@ export async function commercialScenarioPdfExport(
 
   const doc = await PDFDocument.create();
   doc.setTitle(`Comparativa A/B — ${input.projectName}`);
-  doc.setCreator('muebles');
+  doc.setCreator('Granete');
 
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);

@@ -121,17 +121,17 @@ function createAppMenu() {
     ...(isMac
       ? [
           {
-            label: app.name || 'Muebles',
+            label: app.name || 'Granete',
             submenu: [
-              { role: 'about', label: 'Acerca de Muebles' },
+              { role: 'about', label: 'Acerca de Granete' },
               { type: 'separator' },
               { role: 'services', label: 'Servicios' },
               { type: 'separator' },
-              { role: 'hide', label: 'Ocultar Muebles' },
+              { role: 'hide', label: 'Ocultar Granete' },
               { role: 'hideOthers', label: 'Ocultar otros' },
               { role: 'unhide', label: 'Mostrar todo' },
               { type: 'separator' },
-              { role: 'quit', label: 'Salir de Muebles' },
+              { role: 'quit', label: 'Salir de Granete' },
             ],
           },
         ]
@@ -210,7 +210,7 @@ function createWindow() {
     y: savedState.y,
     minWidth: 390,
     minHeight: 640,
-    title: 'Muebles',
+    title: 'Granete',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

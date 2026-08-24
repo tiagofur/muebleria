@@ -591,7 +591,7 @@ export function AppShell({
       >
         <div className="app-sidebar__brand">
           <BrandMark size={32} className="app-sidebar__brand-mark" />
-          <span className="app-sidebar__brand-text">Muebles</span>
+          <span className="app-sidebar__brand-text">Granete</span>
         </div>
 
         <nav ref={navRef} className="app-sidebar__nav" aria-label="Secciones">

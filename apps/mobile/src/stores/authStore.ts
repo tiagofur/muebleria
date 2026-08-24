@@ -152,7 +152,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Desbloquear Muebles Taller',
+        promptMessage: 'Desbloquear Granete Taller',
         cancelLabel: 'Usar contraseña',
         disableDeviceFallback: false,
       });

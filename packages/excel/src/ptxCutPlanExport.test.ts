@@ -141,7 +141,7 @@ describe('ptxCutPlanExport', () => {
     // [HEADER]
     expect(ptx).toContain('[HEADER]');
     expect(ptx).toContain('VERSION=1.14');
-    expect(ptx).toContain('SYSTEM=MUEBLES_APP');
+    expect(ptx).toContain('SYSTEM=GRANETE_APP');
     expect(ptx).toContain('JOB_NAME=Cocina Moderna 2026');
     expect(ptx).toContain('PROJECT_CODE=PRJ-1042');
     expect(ptx).toContain('CUSTOMER=Juan Perez');

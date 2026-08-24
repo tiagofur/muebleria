@@ -6,7 +6,7 @@
 > [#344](https://github.com/tiagofur/muebleria/issues/344),
 > [#346](https://github.com/tiagofur/muebleria/issues/346),
 > [#356](https://github.com/tiagofur/muebleria/issues/356)  
-> **Invariante:** **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **Invariante:** **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 Este documento define el límite conceptual de intercambio. No es un JSON Schema final,
 un endpoint aprobado ni una promesa de compatibilidad. La implementación debe validar el
@@ -14,7 +14,7 @@ contrato con fixtures y versionarlo sin reinterpretaciones silenciosas.
 
 ## 1. Objetivo
 
-Transportar authoring intent desde SketchUp a Muebles y devolver validation/resolved
+Transportar authoring intent desde SketchUp a Granete y devolver validation/resolved
 feedback sin convertir geometría, names, drilling visible o cálculos Ruby en
 manufacturing truth.
 
@@ -246,7 +246,7 @@ type ParameterValue = string | number | boolean;
 
 `PartRelationshipIntent` expresa intención constructiva, no perforaciones finales. Un
 entrepaño puede relacionarse con dos costados mediante anchors/roles semánticos y un
-`joinerySystemId`; Muebles resuelve el machining correspondiente. Si `shelf-instance-01`
+`joinerySystemId`; Granete resuelve el machining correspondiente. Si `shelf-instance-01`
 y `shelf-instance-02` comparten `componentDefinitionId: 'shelf-definition'`, cada uno
 conserva relationships y machining propios porque anchors y hardware hosts referencian
 sus `componentInstanceId` distintos.
@@ -265,7 +265,7 @@ manufacturing resolution.
 
 ## 6. Relationship/joint resolution
 
-Muebles debe poder producir resultados equivalentes a:
+Granete debe poder producir resultados equivalentes a:
 
 ```ts
 type RelationshipProvenance = {
@@ -322,7 +322,7 @@ Caso canónico:
 ```text
 move shelf
 → relationship anchors change
-→ Muebles resolves joint again
+→ Granete resolves joint again
 → dependent machining changes
 → unrelated machining remains unchanged
 → bomFingerprint changes when manufacturing truth changes
@@ -364,7 +364,7 @@ Política V1:
 - create/update/delete se aplican atómicamente contra `baseSourceRevisionId`; una
   referencia huérfana, base stale o mutación parcial rechaza el request completo;
 - IDs eliminados nunca se reutilizan, aunque se cree después una entity equivalente;
-- `mutationReceipt` devuelve la clasificación create/update/delete decidida por Muebles;
+- `mutationReceipt` devuelve la clasificación create/update/delete decidida por Granete;
 - `authoringSnapshot` puede devolver authoring intent normalizado para persistencia en
   SketchUp; no contiene BOM, drilling ni machine output;
 - `resolvedFeedback` es read-only y está ligado a `ManufacturingIdentity`. SketchUp puede
@@ -389,8 +389,8 @@ type ManufacturingIdentity = {
 };
 ```
 
-- `designRevisionId` pertenece a Muebles.
-- `bomFingerprint` deriva de manufacturing inputs canonicalized por Muebles.
+- `designRevisionId` pertenece a Granete.
+- `bomFingerprint` deriva de manufacturing inputs canonicalized por Granete.
 - Mismo `idempotencyKey` + payload equivalente devuelve el mismo resultado.
 - Mismo key + payload distinto devuelve `IDEMPOTENCY_CONFLICT`.
 - Cambios de dimensions, relationships, joinery, materials o hardware que afecten fabricación crean nueva revision/fingerprint.
@@ -528,7 +528,7 @@ gabinete o ejecutar el demo. Los fixtures posteriores de biblioteca/hardware vue
 pasar el mismo gate. No equivale al cierre completo de #347; #348/#351 requieren el
 Definition of Done completo del preflight.
 
-`ready` no equivale a `ProductionRelease`; sólo Muebles crea la release.
+`ready` no equivale a `ProductionRelease`; sólo Granete crea la release.
 
 ## 12. Manufacturing artifact manifest
 
@@ -708,7 +708,7 @@ ilustrativo y no congela el schema ejecutable final.
 - [ ] Mover/agregar/eliminar un entrepaño recalcula sólo machining dependiente.
 - [ ] Mover una bisagra no altera machining no relacionado.
 - [ ] Derived operations conservan una variante no vacía de provenance.
-- [ ] Muebles resuelve BOM, parts, hardware y drilling.
+- [ ] Granete resuelve BOM, parts, hardware y drilling.
 - [ ] Request/response se correlacionan y create/update/delete son atómicos e idempotentes.
 - [ ] Resolved feedback permanece read-only y separado del authoring snapshot.
 - [ ] Unknown/unsafe schema migration falla antes de mutar el modelo.
@@ -742,7 +742,7 @@ ilustrativo y no congela el schema ejecutable final.
 
 ## References
 
-- [SketchUp + Muebles strategy](sketchup-muebles-strategy.md)
+- [SketchUp + Granete strategy](sketchup-muebles-strategy.md)
 - [ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md)
 - [Architecture](architecture.md)
 - [Project Lifecycle](project-lifecycle.md)

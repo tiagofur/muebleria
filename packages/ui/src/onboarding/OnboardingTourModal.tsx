@@ -51,7 +51,7 @@ type StepData = {
 const STEPS: readonly StepData[] = [
   {
     badge: 'Paso 1 de 3 · Experiencia 3D Instantánea',
-    title: '¡Bienvenido a Muebles! — Tu Taller en 3D',
+    title: '¡Bienvenido a Granete! — Tu Taller en 3D',
     description:
       'Explora el proyecto de demostración "Cocina López": una cocina en L completa (4 bajomesadas, 4 alacenas, isla central y despensa) con ambientación 3D de pisos y muros lista para mostrar a tus clientes.',
     icon: <Sparkles className="onboarding-tour__header-icon" size={20} strokeWidth={1.5} />,
@@ -117,7 +117,7 @@ export function OnboardingTourModal({
     <Modal
       open={isOpen}
       onClose={handleDismiss}
-      title="Tour de Bienvenida — Muebles App"
+      title="Tour de Bienvenida — Granete App"
       size="md"
       dataTestId="onboarding-tour-modal"
       footer={
