@@ -1,45 +1,44 @@
 # Sesión
 
-**Feature cerrada:** F150 — ui_card_click_open (auditoría de paridad UI)
+**Features cerradas:** F150 — ui_card_click_open · F151 — ui_card_hover_actions
 **Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
-**Review:** `progress/review_F150.md` (APPROVED)
+**Reviews:** `progress/review_F150.md` · `progress/review_F151.md` (APPROVED)
 
 ## Resultado
 
-Unificación del patrón de entrada a detalle: **la card abre con click en su
-cuerpo** (como Ingeniería/Cotizaciones) en cola de Órdenes, Instalaciones y
-Embarques. Botones "Abrir orden" / "Abrir instalación" / "Ver detalle"
-eliminados. El título de la card es el control real (`card-open`,
-`common/cardOpen.css`): foco visible, Enter/Espacio, `aria-label` de acción;
-hit-area estirada cubre toda la card (`::after` inset 0); botones de proceso
-(Pack) y links `tel:` quedan por encima (`var(--z-base)`) y no abren. Hover
-alineado al lenguaje de `entity-card` (borde brand + `--shadow-md` +
-`--surface-hover`). `design.md` §4.2 universaliza la regla; §6.7/§6.7c/§6.7d
-actualizadas.
+Paridad del patrón de cards de línea completa con la referencia canónica del
+dueño: **la card de /engineering (`eng-project-card`)**.
+
+- **F150**: la card abre el detalle con click en su cuerpo (título stretched:
+  foco, Enter/Espacio, aria-label) en Órdenes, Instalaciones y Embarques; sin
+  botón "Abrir X". Botones de proceso y `tel:` no disparan la apertura.
+- **F151**: la card descansa **limpia**; las acciones de proceso (Pack, Marcar
+  en producción) se revelan en hover/focus-within, en tamaño compacto
+  (`btn--small`, iconos 14px), siempre visibles en touch (`hover: none`).
+  Hover de card alineado a ingeniería (`--border-strong` + `--shadow-md` +
+  `--surface-hover`). `card-actions-reveal` vive en `common/cardOpen.css`.
+- `design.md` §4.2 universaliza ambas reglas; §6.7/§6.7c/§6.7d actualizadas.
 
 ## Verificación (evidencia)
 
-- `pnpm test` completo verde (suite ui 1385 + web 306 + resto; typecheck 0).
-- Tests de comportamiento nuevos: apertura por teclado y mouse en los 3
-  componentes; Pack y `tel:` no disparan apertura; sin botón dedicado.
-- Guard del design system (tokens/z-index) verde.
-- **Visual con sesión auth del dueño** (tiagofur@gmail.com):
-  - Órdenes: sin "Abrir orden"; Pack primaria visible; click en cuerpo
-    interceptado por `button.card-open` (actionability de Playwright = proof
-    del stretched); trigger navega al hub `/orders/:id`; back regresa; hover
-    de card con borde brand + sombra + título brand + cursor pointer
-    (capturas `/tmp/muebles-review/20-21`).
-  - Instalaciones: sin "Abrir instalación"; trigger navega a
-    `/installations/:id`; cuerpo interceptado (captura 22).
-  - Embarques: sin "Ver detalle"; trigger navega a `/shipments/:id`
-    ("Control de Carga y Despacho de Flete"); cuerpo interceptado (captura 23).
+- `pnpm test` ui 1385 + web 306 verdes; `pnpm typecheck` 0 errores; guard de
+  tokens/z-index del design system verde.
+- Tests de comportamiento: apertura por teclado/mouse, no-apertura desde
+  acciones internas, sin botón dedicado.
+- Visual con auth (capturas /tmp/muebles-review/20-23 y 31-32): reposo limpio,
+  hover con acciones compactas, navegación ida/vuelta en las 3 pantallas,
+  click de cuerpo interceptado por el trigger estirado (actionability proof).
 
-## Siguientes pasos (backlog de la auditoría)
+## Decisiones del dueño registradas
 
-1. Bug routing `/modules/:id` deep-link/F5 rebota a lista (causa:
-   `useModulesScreenState.ts:343`) — candidato F151.
-2. Chevrón/affordance de expansión en tablas de catálogo + acciones de fila
-   visibles sin hover.
-3. Estructuras: Desactivar/Eliminar al overflow "Más" (paridad con Muebles).
-4. Continuar revisión pantalla por pantalla: Estructuras, Componentes,
-   catálogos, Clientes, Vitrina (con datos), Config; luego auth-only restantes.
+- La referencia visual de listas de línea completa es `eng-project-card`.
+- Prefiere acciones reveladas en hover (card limpia) — recalibra el hallazgo
+  de la auditoría sobre "acciones hover-only" en catálogos: el patrón ya era
+  el buscado (con fallback touch); sólo falta el chevron de affordance.
+
+## Siguientes pasos (backlog auditoría)
+
+1. Bug routing `/modules/:id` deep-link/F5 (candidato F152).
+2. Chevron de affordance en tablas expandibles de catálogo.
+3. Estructuras: Desactivar/Eliminar al overflow "Más".
+4. Continuar revisión: Estructuras, Componentes, catálogos, Clientes, Vitrina.

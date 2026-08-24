@@ -675,6 +675,15 @@ debe **verse clicable**: hover con state layer (`--surface-hover` +
 `--border-strong`) y cursor pointer. Las tablas que expanden inline (§4.2.1)
 siguen el mismo principio: la fila abre; su affordance es el chevron.
 
+**Acciones de card en listas de línea completa (F151):** la referencia
+canónica es la card de **Ingeniería** (`eng-project-card`): la card descansa
+**limpia** (sin botones), y las acciones de proceso se **revelan en
+hover/focus-within** (`card-actions-reveal` en `common/cardOpen.css`), en
+tamaño compacto (`btn--small`, iconos 14px). En dispositivos sin hover
+(`@media (hover: none)`) las acciones quedan siempre visibles. Las acciones
+reveladas no abren el detalle y son alcanzables por teclado. Las tablas de
+catálogo ya aplican este patrón en sus filas (`.catalog-table__actions`).
+
 ```
 [Lista]
   └─ click row/card
@@ -1028,7 +1037,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
 - **Patrón:** workspace de fábrica con chrome propio (`.prod-hub__header` — ver §4.1a workspaces)
 - **Contenido:**
-  - Cola: tabs «Para fabricar» (sin claim de corte) / «Ya en producción» (con claim); la card abre la orden con click en su cuerpo (F150: título stretched, sin botón «Abrir orden»); **Pack** es la primaria visible de la card; Marcar en producción secundario. Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
+  - Cola: tabs «Para fabricar» (sin claim de corte) / «Ya en producción» (con claim); la card abre la orden con click en su cuerpo (F150: título stretched, sin botón «Abrir orden») y descansa limpia: **Pack** (primaria compacta `btn--small`) y Marcar en producción se revelan en hover/focus, siempre visibles en touch (F151). Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
   - Hub tabs: **Resumen · Piso · Etiquetas · Herrajes · Documentos** (única pestaña de descargas). **Control de Carga (despacho) migró a Embarques** (`/shipments/:projectId`, `EmbarquesProjectDetail`); las tabs técnicas (Módulos, Despiece, Vistas, Optimización) viven en **Ingeniería** (`EngineeringWorkspace`); generación de documentos = Ingeniería, uso = Fábrica
   - Tab **Piso**: paperless cards + escaneo QR (lector USB, cámara o manual) + avance one-tap (PROD-4.2); filtro por estado de piso con conteos
   - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint); filtro por ambiente en obras multi-ambiente (PROD-4.4)

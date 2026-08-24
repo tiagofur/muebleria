@@ -265,11 +265,11 @@ export function ProductionQueue({
                         ) : null}
                       </p>
                   </div>
-                  <div className="prod-queue-card__actions">
+                  <div className="prod-queue-card__actions card-actions-reveal">
                     {onExportProductionPack ? (
                       <button
                         type="button"
-                        className="btn btn--primary"
+                        className="btn btn--primary btn--small"
                         disabled={exportBusy}
                         title="ZIP con Optimizer, herrajes, etiquetas y docs de taller"
                         onClick={() => {
@@ -278,7 +278,7 @@ export function ProductionQueue({
                         data-testid={`prod-export-pack-${project.id}`}
                       >
                         <FileSpreadsheet
-                          size={16}
+                          size={14}
                           strokeWidth={1.5}
                           aria-hidden
                         />
@@ -290,7 +290,9 @@ export function ProductionQueue({
                       <button
                         type="button"
                         className={
-                          onExportProductionPack ? 'btn' : 'btn btn--primary'
+                          onExportProductionPack
+                            ? 'btn btn--small'
+                            : 'btn btn--primary btn--small'
                         }
                         disabled={exportBusy}
                         onClick={() => {
@@ -299,7 +301,7 @@ export function ProductionQueue({
                         data-testid={`prod-export-opt-${project.id}`}
                       >
                         <FileSpreadsheet
-                          size={16}
+                          size={14}
                           strokeWidth={1.5}
                           aria-hidden
                         />
@@ -309,12 +311,12 @@ export function ProductionQueue({
                     {project.status === 'accepted' && !claimedIds.has(project.id) ? (
                       <button
                         type="button"
-                        className="btn"
+                        className="btn btn--small"
                         onClick={() => onMarkProduced(project.id)}
                         data-testid={`prod-mark-${project.id}`}
                       >
                         <CheckCircle2
-                          size={16}
+                          size={14}
                           strokeWidth={1.5}
                           aria-hidden
                         />

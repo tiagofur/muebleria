@@ -3498,6 +3498,32 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F151",
+      "phase": 0,
+      "name": "ui_card_hover_actions",
+      "title": "Paridad visual con Ingeniería: cards de línea completa limpias en reposo, acciones compactas reveladas en hover (cola de Órdenes)",
+      "description": "Refinamiento del patrón F150 pedido por el dueño tomando la card de /engineering (eng-project-card) como referencia canónica de las listas de línea completa: la card se ve limpia en reposo (sin botones), las acciones de proceso se revelan sólo en hover/focus-within (siempre visibles en touch vía @media hover:none) y los botones de card usan tamaño compacto (btn--small) — el Pack de la cola de Órdenes se veía demasiado alto. Hover de card-open-host se alinea al lenguaje de eng-project-card (shadow-md + border-strong + surface-hover). Las tablas de catálogo ya implementan este patrón (reveal + fallback touch) y no requieren cambios. Verificado visualmente con sesión auth: card en reposo sin botones; en hover aparecen Pack y Marcar en producción compactos (~26px) con borde fuerte + sombra + superficie hover.",
+      "acceptance": [
+        "Cola de Órdenes: card limpia en reposo — Pack/Marcar invisibles hasta hover/focus-within de la card",
+        "En dispositivos touch (hover:none) las acciones quedan siempre visibles",
+        "Botones de acción de card en tamaño compacto (btn--small), Pack sigue siendo la única primaria",
+        "Hover de la card con el lenguaje de eng-project-card (shadow-md + border-strong + surface-hover)",
+        "Las acciones reveladas siguen NO abriendo la orden y son alcanzables por teclado (focus-within)",
+        "design.md actualizado (regla §4.2 + spec §6.7)",
+        "Suite + typecheck verdes; verificación visual con sesión auth"
+      ],
+      "references": [
+        "docs/design.md",
+        "packages/ui/src/engineering/engineering.css",
+        "packages/ui/src/common/cardOpen.css",
+        "packages/ui/src/production/ProductionQueue.tsx",
+        "packages/ui/src/catalogs/catalogs.css"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
     }
   ]
 }

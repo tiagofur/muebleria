@@ -18,11 +18,12 @@
     background var(--duration-fast) var(--ease-out);
 }
 
-/* Affordance: la card se ve clicable en hover (mismo lenguaje que
-   .entity-card — borde brand + elevación un paso + superficie hover). */
+/* Affordance: la card se ve clicable en hover — mismo lenguaje que
+   .eng-project-card (§6 Ingeniería): elevación un paso + borde fuerte +
+   superficie hover. */
 .card-open-host:hover {
   background-color: var(--surface-hover);
-  border-color: var(--border-brand);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
 }
 
@@ -64,4 +65,35 @@
 .card-open-host :is(a, button):not(.card-open) {
   position: relative;
   z-index: var(--z-base);
+}
+
+/*
+ * Acciones de card reveladas en hover (patrón .eng-project-card__start y
+ * .catalog-table__actions): la card descansa limpia; las acciones de proceso
+ * aparecen sólo cuando la card recibe hover o foco por teclado. En
+ * dispositivos sin hover (touch) quedan siempre visibles.
+ */
+.card-actions-reveal > .btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.card-open-host:hover .card-actions-reveal > .btn,
+.card-open-host:focus-within .card-actions-reveal > .btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .card-actions-reveal > .btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-actions-reveal > .btn {
+    transition: none;
+  }
 }
