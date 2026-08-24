@@ -36,6 +36,7 @@ export interface ShelfSupportRule {
   readonly camDepthMm: number;
   readonly dowelDiameterMm: number;
   readonly dowelDepthMm: number;
+  readonly dowelEndDepthMm?: number;
 }
 
 /** Pilot machining for a manually placed hardware item. */
@@ -67,5 +68,6 @@ export const DEFAULT_SHELF_SUPPORT_RULE: ShelfSupportRule = {
   camDiameterMm: 15,
   camDepthMm: 12.5,
   dowelDiameterMm: 8,
-  dowelDepthMm: 30,
+  dowelDepthMm: 12,
+  dowelEndDepthMm: 20,
 };
