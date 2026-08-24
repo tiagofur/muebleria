@@ -265,7 +265,7 @@ function deriveRelationshipOperations(
               xMm: dowelX,
               yMm: halfThickness,
               diameterMm: rule.dowelDiameterMm,
-              depthMm: rule.dowelDepthMm,
+              depthMm: rule.dowelEndDepthMm ?? 20,
               type: 'dowel',
             });
           }

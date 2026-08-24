@@ -1286,3 +1286,8 @@ export {
   type RelationshipMachiningResult,
   type ResolvedRelationshipOperation,
 } from "./sketchupRelationshipMachining";
+
+export {
+  runManufacturingPreflight,
+  type ManufacturingPreflightResult,
+} from "./sketchupPreflight";

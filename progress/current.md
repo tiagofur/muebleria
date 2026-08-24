@@ -1,20 +1,16 @@
 # Sesión
 
-**Feature en curso:** F162 / #356 — parametric part relationships and joint-driven machining (P0)
+**Feature en curso:** #347 — manufacturing preflight (Milestone `minimum authoritative preflight`, P0)
 **Inicio:** 2026-08-24
-**Estado:** Implementación y verificación de F162/#356 completa (ver `progress/implementation_F162.md`). Listo para commit/review.
-**Rama:** `feat/356-parametric-relationships`
+**Estado:** Milestone `minimum authoritative preflight` implementado y verificado (ver `progress/implementation_F163.md`). Desbloquea #349 y #350.
+**Rama:** `feat/347-minimum-authoritative-preflight`
 **Worktree:** `/Users/tiagofur/dev/carpinteria/muebles-worktrees/sketchup-extension-bootstrap`
 
 ## Notas de sesión
 
-- Documentación canónica de arquitectura sincronizada en `docs/architecture/`:
-  - `domain-model.md` (FurnitureDefinition, FurnitureInstance, Components, Library vs Catalog)
-  - `manufacturing-feature-model.md` (ManufacturingFeature con coordenadas locales por pieza/cara y provenance)
-  - `smart-furniture-engine.md` (Motor paramétrico por parámetros y reglas, nunca escalado 3D)
-  - `3d-asset-library.md` (Separación catálogo vs biblioteca de activos)
-- F162 (#356) implementado y verificado con 1073 tests en domain pasando al 100% y typecheck limpio (7/7 workspaces).
-- Siguiente hito en la cadena: #347 (manufacturing preflight — milestone `minimum authoritative preflight` sobre fixture #356).
+- #356 (parametric relationships and joint-driven machining) cerrado mediante PR #380 (merged).
+- Milestone `minimum authoritative preflight` de #347 completado con 40 tests en el suite de SketchUp (1079 en domain) y typecheck 7/7 workspaces limpio.
+- Siguiente paso: PR de milestone #347 y avance hacia #349 (biblioteca paramétrica MVP) / #350 (sincronización de herrajes).
 
 ## Invariante
 
