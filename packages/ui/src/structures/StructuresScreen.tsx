@@ -546,7 +546,7 @@ export function StructuresScreen({
             title="¿Eliminar estructura?"
             onClose={() => setDeleteConfirmId(null)}
             size="sm"
-            data-testid="delete-confirm-modal"
+            dataTestId="delete-confirm-modal"
           >
             <div>
               <p>

@@ -1101,7 +1101,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/structures/StructuresScreen.tsx` (F049)
 - **Patrón actual:** card-detalle + `EntityEditorLayout` (lista → detalle → editor full-page). Shell de detalle: `EngineeringDetailLayout` (`.eng-detail`).
 - **Contenido:** cuerpos reutilizables compuestos de piezas. Cada card muestra código, nombre, dimensiones, revisión (`structure-revision-badge`).
-- **Detalle (wave 2 UI):** chrome sticky con métrica Exterior (A×H×P) + Vista 3D + Editar; body 2-col — primario (dims + instancias de componentes), secundario (presets de medida + historial de revisiones en disclosure).
+- **Detalle (wave 2 UI):** chrome sticky con métrica Exterior (A×H×P) + Vista 3D + Editar (primaria) + **Más** (Desactivar/Reactivar · Eliminar en overflow, §4.1a.2 — misma gramática que Muebles, F155); body 2-col — primario (dims + instancias de componentes), secundario (presets de medida + historial de revisiones en disclosure).
 - **Editor:** full-page workspace con tabs sticky **General → Componentes → Presets** (sin tab Vista 3D suelto: 3D live sticky en Componentes). Badge si body vacío; save salta a Componentes. Presets con labels + validación blur. `structureRevisionPin` congela revisión en cotizaciones cerradas.
 - **RBAC**: `roleCanMutateModules` (admin, ingeniero).
 - **Icono:** `LayoutGrid`

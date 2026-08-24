@@ -6,7 +6,16 @@
 
 import type { ReactNode } from 'react';
 import type { Component, Structure } from '@muebles/domain';
-import { Box, ChevronLeft, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
+import {
+  Box,
+  ChevronLeft,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
+import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { StructureRevisionBadge } from './StructureRevisionBadge';
 
@@ -57,6 +66,41 @@ export function StructureDetailView({
   const presetCount = s.presets?.length ?? 0;
   const historyCount = s.history?.length ?? 0;
   const revision = s.revision ?? 1;
+
+  // Destructivas y administrativas viven en el overflow (§4.1a.2), con la
+  // misma gramática que el detalle de Muebles (ModuleDetailView).
+  const moreItems = [
+    ...(canMutate && s.active !== false && onDeactivate
+      ? [
+          {
+            id: 'deactivate',
+            label: 'Desactivar',
+            icon: <EyeOff size={16} strokeWidth={1.5} aria-hidden />,
+            onSelect: () => onDeactivate(s.id),
+          },
+        ]
+      : []),
+    ...(canMutate && s.active === false && onReactivate
+      ? [
+          {
+            id: 'reactivate',
+            label: 'Reactivar',
+            icon: <Eye size={16} strokeWidth={1.5} aria-hidden />,
+            onSelect: () => onReactivate(s.id),
+          },
+        ]
+      : []),
+    ...(canMutate && onDelete
+      ? [
+          {
+            id: 'delete',
+            label: 'Eliminar',
+            icon: <Trash2 size={16} strokeWidth={1.5} aria-hidden />,
+            onSelect: () => onDelete(s.id),
+          },
+        ]
+      : []),
+  ];
 
   const chrome = (
     <header
@@ -142,38 +186,14 @@ export function StructureDetailView({
               <Pencil size={16} strokeWidth={1.5} aria-hidden />
               Editar
             </button>
-            {s.active !== false && onDeactivate ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => onDeactivate(s.id)}
-                title="Desactivar"
-              >
-                <EyeOff size={16} strokeWidth={1.5} aria-hidden />
-                Desactivar
-              </button>
-            ) : null}
-            {s.active === false && onReactivate ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => onReactivate(s.id)}
-                title="Reactivar"
-              >
-                <Eye size={16} strokeWidth={1.5} aria-hidden />
-                Reactivar
-              </button>
-            ) : null}
-            {onDelete ? (
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => onDelete(s.id)}
-                data-testid="structure-detail-delete"
-              >
-                <Trash2 size={16} strokeWidth={1.5} aria-hidden />
-                Eliminar
-              </button>
+            {moreItems.length > 0 ? (
+              <DropdownMenu
+                ariaLabel="Más acciones de la estructura"
+                triggerLabel="Más"
+                triggerIcon={<MoreHorizontal size={16} strokeWidth={1.5} />}
+                triggerClassName="btn"
+                sections={[{ id: 'main', items: moreItems }]}
+              />
             ) : null}
           </>
         ) : null}

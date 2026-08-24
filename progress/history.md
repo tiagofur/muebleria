@@ -1155,3 +1155,17 @@ en la fila + cabecera accesible «Detalle». design.md §3.7 (icono nuevo) y
 typecheck 0, visual real a 1280 (reposo/expandido con zoom) y 390px (scroll-x
 + fade, sin overflow). Review APPROVED (`progress/review_F154.md`). Rama
 `feat/f154-row-expand-affordance`.
+
+## F155 — structures_overflow_destructive_actions — 2026-08-24
+
+Hallazgo P2 #4 de la auditoría de paridad UI: el detalle de Estructuras
+mostraba Desactivar + Eliminar sueltos en el chrome, mientras Muebles (la
+referencia de la familia) los agrupa en el overflow "Más" (§4.1a.2). Paridad
+exacta con ModuleDetailView: chrome Vista 3D · Editar (única primaria) · Más
+(DropdownMenu con Desactivar/Reactivar según estado + Eliminar), mismos
+handlers y confirmaciones. Fix colateral: el Modal de confirmación de delete
+recibía data-testid crudo en vez de la prop dataTestId (atributo muerto).
+4 tests de comportamiento nuevos; 3.052 tests verdes; typecheck 0; visual
+verificado (chrome + menú abierto, destructivas ausentes del chrome). Review
+APPROVED (`progress/review_F155.md`). Rama `feat/f154-row-expand-affordance`
+(PR #359 junto a F154 por decisión del dueño, commits/reviews separados).

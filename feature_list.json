@@ -3593,6 +3593,33 @@
       "depends_on": [],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F155",
+      "phase": 0,
+      "name": "structures_overflow_destructive_actions",
+      "title": "Paridad UX: Estructuras mueve Desactivar/Eliminar al overflow \"Más\" del chrome (hallazgo P2 #4)",
+      "description": "Hallazgo P2 #4 de progress/ui-parity-audit-2026-08-23.md: gramática de acciones inconsistente en la misma familia — el detalle de Muebles agrupa las destructivas en el overflow \"Más\" (§4.1a.2), pero el detalle de Estructuras muestra Desactivar + Eliminar (btn--danger) directamente en el chrome. Fix: paridad exacta con ModuleDetailView — chrome queda Vista 3D · Editar (primary) · Más (DropdownMenu) con Desactivar/Reactivar + Eliminar como items del menú. Mismos handlers/confirmaciones, sólo cambia el agrupamiento visual.",
+      "acceptance": [
+        "Chrome del detalle de Estructuras: Vista 3D · Editar (única primaria) · Más — sin destructivas visibles",
+        "El menú Más contiene Desactivar (o Reactivar según estado) y Eliminar con los mismos handlers y confirmaciones",
+        "Sin canMutate el menú no aparece (igual que las acciones hoy)",
+        "DropdownMenu accesible: se abre por mouse y teclado, Escape cierra, foco vuelve al trigger (contrato existente del componente)",
+        "Tests de comportamiento del chrome actualizados",
+        "Suite + typecheck verdes"
+      ],
+      "references": [
+        "docs/design.md#41a-esqueleto-único-de-página",
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/structures/components/StructureDetailView.tsx",
+        "packages/ui/src/modules/components/ModuleDetailView.tsx"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F154"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }
