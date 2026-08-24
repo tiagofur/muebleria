@@ -42,6 +42,27 @@ export const cabinetJoineryCatalog: SketchUpJoineryCatalog = {
       widthMm: 570,
       thicknessMm: 18,
     },
+    'definition-door': {
+      componentDefinitionId: 'definition-door',
+      boardLocal: 'door',
+      lengthMm: 716,
+      widthMm: 596,
+      thicknessMm: 18,
+    },
+    'definition-worktop': {
+      componentDefinitionId: 'definition-worktop',
+      boardLocal: 'horizontal',
+      lengthMm: 1200,
+      widthMm: 600,
+      thicknessMm: 25,
+    },
+    'definition-leg-panel': {
+      componentDefinitionId: 'definition-leg-panel',
+      boardLocal: 'lateral',
+      lengthMm: 725,
+      widthMm: 580,
+      thicknessMm: 18,
+    },
   },
   joinerySystems: {
     'minifix-dowel': DEFAULT_SHELF_SUPPORT_RULE,

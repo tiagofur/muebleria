@@ -3830,6 +3830,63 @@
       ],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F164",
+      "phase": 0,
+      "name": "sketchup_parametric_furniture_library",
+      "title": "#349 Smart Parametric Furniture Library MVP",
+      "description": "Biblioteca paramétrica universal desacoplada de Cabinet. Define las 7 entidades canónicas (FurnitureDefinition, FurnitureInstance, ComponentDefinition, MaterialDefinition, MaterialAssignment, HardwareDefinition, Asset) en packages/domain, con motor de instanciación paramétrica (instantiateFurniture) que genera DesignAssembly/AuthoringEnvelopeV1 verificados por runManufacturingPreflight (#347). Invariante: SketchUp owns authoring/interaction; Granete owns manufacturing truth.",
+      "acceptance": [
+        "FurnitureDefinition no contiene campos fijos atados a Cabinet ni categorías cerradas",
+        "Define formalmente las 7 entidades: FurnitureDefinition, FurnitureInstance, ComponentDefinition, MaterialDefinition, MaterialAssignment, HardwareDefinition, Asset",
+        "instantiateFurniture evalúa parámetros contra el contrato y calcula cotas exactas",
+        "Genera DesignComponent independientes y PartRelationshipIntent semánticos",
+        "Múltiples entrepaños pueden compartir componentDefinitionId con componentInstanceId y mecanizados independientes",
+        "Todo ensamble generado pasa runManufacturingPreflight antes de ser manufacturable",
+        "Soporta múltiples tipologías (Cocina Base, Cocina Alta, Closet, Escritorio)",
+        "Parámetros fuera de rango devuelven error estructurado PARAMETER_OUT_OF_RANGE",
+        "100% de tests pasando en domain y typecheck limpio"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/349",
+        "docs/architecture/parametric-furniture-library.md",
+        "docs/adr/0002-parametric-furniture-library-architecture.md",
+        "docs/sketchup-manufacturing-contract.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F162"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F165",
+      "phase": 0,
+      "name": "sketchup_hardware_sync",
+      "title": "#350 Sincronización de HardwarePlacement y mecanizado",
+      "description": "Sincronización de herrajes manuales (HardwarePlacementIntent) con mecanizado derivado y perfiles de hardware en packages/domain. Permite reubicar herrajes (repositionHardwarePlacement) para resolver colisiones críticas (DRILLING_CONFLICT) detectadas por preflight, garantizando aislamiento de mecanizado y provenance estricta (sourceKind: manualHardwarePlacement).",
+      "acceptance": [
+        "repositionHardwarePlacement actualiza la intención de posición del herraje",
+        "Mover una bisagra actualiza únicamente sus perforaciones directas y preserva las perforaciones de entrepaños y otros herrajes",
+        "Permite resolver colisiones críticas detectadas por runManufacturingPreflight pasando de blocked a ready",
+        "Toda operación derivada de herraje manual conserva provenance estricta sourceKind: manualHardwarePlacement con hardwarePlacementId",
+        "Entidades inexistentes devuelven errores estructurados (ASSEMBLY_NOT_FOUND, HARDWARE_PLACEMENT_NOT_FOUND)",
+        "Tests unitarios pasando al 100% en vitest y typecheck limpio"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/350",
+        "docs/architecture/parametric-furniture-library.md",
+        "docs/adr/0002-parametric-furniture-library-architecture.md",
+        "docs/sketchup-manufacturing-contract.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F164"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }

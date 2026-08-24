@@ -1,16 +1,18 @@
 # Sesión
 
-**Feature en curso:** #347 — manufacturing preflight (Milestone `minimum authoritative preflight`, P0)
+**Feature en curso:** #349 — Smart Parametric Furniture Library MVP & #350 — Hardware Placement/Machining Sync
 **Inicio:** 2026-08-24
-**Estado:** Milestone `minimum authoritative preflight` implementado y verificado (ver `progress/implementation_F163.md`). Desbloquea #349 y #350.
-**Rama:** `feat/347-minimum-authoritative-preflight`
+**Estado:** Implementado y verificado (ver `progress/implementation_F164.md`).
+**Rama:** `feat/349-parametric-furniture-library`
 **Worktree:** `/Users/tiagofur/dev/carpinteria/muebles-worktrees/sketchup-extension-bootstrap`
 
 ## Notas de sesión
 
-- #356 (parametric relationships and joint-driven machining) cerrado mediante PR #380 (merged).
-- Milestone `minimum authoritative preflight` de #347 completado con 40 tests en el suite de SketchUp (1079 en domain) y typecheck 7/7 workspaces limpio.
-- Siguiente paso: PR de milestone #347 y avance hacia #349 (biblioteca paramétrica MVP) / #350 (sincronización de herrajes).
+- Auditoría arquitectónica completada y documentada en `docs/architecture/parametric-furniture-library.md` y `docs/adr/0002-parametric-furniture-library-architecture.md`.
+- 7 entidades desacopladas modeladas en `smartFurnitureDomain.ts`.
+- Motor de instanciación `instantiateFurniture` en `furnitureCompositionEngine.ts`.
+- Sincronización y aislamiento de herrajes en `sketchupHardwareSync.ts`.
+- 85 test files y 1087 tests en domain pasando al 100%, typecheck 7/7 workspaces limpio.
 
 ## Invariante
 

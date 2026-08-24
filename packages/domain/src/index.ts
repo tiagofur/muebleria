@@ -1291,3 +1291,16 @@ export {
   runManufacturingPreflight,
   type ManufacturingPreflightResult,
 } from "./sketchupPreflight";
+
+// Smart Parametric Furniture Library (#349, #350, ADR-0002)
+export * from "./smartFurnitureDomain";
+export {
+  instantiateFurniture,
+  type InstantiationOptions,
+  type InstantiationResult,
+} from "./furnitureCompositionEngine";
+export {
+  repositionHardwarePlacement,
+  type RepositionHardwareOptions,
+  type SyncHardwareResult,
+} from "./sketchupHardwareSync";
