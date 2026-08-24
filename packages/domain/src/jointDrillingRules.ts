@@ -99,11 +99,11 @@ function effectiveRules(
   };
 }
 
-function resolveHardwareId(
+/** Resolve a hardware catalog id from a rule's commercial code. */
+export function resolveHardwareId(
   hardware: readonly Hardware[],
   code: string | undefined,
-): string | undefined {
-  if (!code) return undefined;
+): string | undefined {  if (!code) return undefined;
   const target = code.trim().toLowerCase();
   const found = hardware.find((h) => h.code.trim().toLowerCase() === target);
   return found?.id;

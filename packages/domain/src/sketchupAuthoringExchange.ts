@@ -26,8 +26,11 @@ import {
   type EntityTombstone,
   type MutationReceipt,
   type ReadonlyAuthoringSnapshot,
+  type ResolvedManufacturingFeedback,
   type StableEntityId,
 } from './sketchupAuthoringSchema';
+import { deriveRelationshipMachining } from './sketchupRelationshipMachining';
+import type { SketchUpJoineryCatalog } from './sketchupJoineryCatalog';
 import {
   hasErrors,
   validateAuthoringEnvelope,
@@ -67,6 +70,7 @@ export function applyAuthoringEnvelope(
   state: Readonly<AuthoringExchangeState>,
   envelope: AuthoringEnvelopeV1,
   catalog: AuthoringCatalogIndex,
+  joineryCatalog?: SketchUpJoineryCatalog,
 ): { readonly state: Readonly<AuthoringExchangeState>; readonly response: AuthoringRoundTripResponseV1 } {
   // 1. Schema identity and migrations decide before anything mutates.
   const migration = applyRegisteredMigrations(envelope);
@@ -171,11 +175,36 @@ export function applyAuthoringEnvelope(
     for (const placement of assembly.hardwarePlacements ?? []) classify(placement.hardwarePlacementId);
   }
 
+  const authoringSnapshot: ReadonlyAuthoringSnapshot = {
+    projectId: envelope.projectId,
+    sourceRevisionId: envelope.sourceRevisionId,
+    assemblies: [...assemblies.values()],
+  };
+
+  let resolvedFeedback: ResolvedManufacturingFeedback | undefined;
+  if (joineryCatalog !== undefined) {
+    const machining = deriveRelationshipMachining(authoringSnapshot, joineryCatalog);
+    resolvedFeedback = {
+      identity: {
+        projectId: envelope.projectId,
+        designRevisionId: `rev-${envelope.sourceRevisionId}`,
+        sourceRevisionId: envelope.sourceRevisionId,
+        bomFingerprint: machining.bomFingerprint,
+        resolvedAt: envelope.sentAt,
+      },
+      preflightStatus: machining.issues.some((i) => i.severity === 'error') ? 'blocked' : 'ready',
+      derivedHardwarePlacements: machining.derivedHardwarePlacements,
+      derivedMachiningOperations: machining.derivedMachiningOperations,
+      issues: machining.issues,
+    };
+  }
+
   const response = acceptedResponse(
     envelope,
     { createdEntityIds: created, updatedEntityIds: updated, deletedEntityIds: deleted },
     migration,
-    assemblies,
+    authoringSnapshot,
+    resolvedFeedback,
   );
   const nextState: AuthoringExchangeState = {
     projectId: envelope.projectId,
@@ -348,7 +377,8 @@ function acceptedResponse(
   envelope: AuthoringEnvelopeV1,
   receipt: MutationReceipt,
   migration: AppliedSchemaMigration | undefined,
-  assemblies: ReadonlyMap<StableEntityId, DesignAssembly>,
+  authoringSnapshot: ReadonlyAuthoringSnapshot,
+  resolvedFeedback?: ResolvedManufacturingFeedback,
 ): AuthoringRoundTripResponseV1 {
   return {
     schemaId: SKETCHUP_AUTHORING_SCHEMA_ID,
@@ -362,11 +392,8 @@ function acceptedResponse(
     status: 'accepted',
     ...(migration !== undefined ? { migration } : {}),
     mutationReceipt: receipt,
-    authoringSnapshot: {
-      projectId: envelope.projectId,
-      sourceRevisionId: envelope.sourceRevisionId,
-      assemblies: [...assemblies.values()],
-    },
+    authoringSnapshot,
+    ...(resolvedFeedback !== undefined ? { resolvedFeedback } : {}),
     issues: [],
   };
 }

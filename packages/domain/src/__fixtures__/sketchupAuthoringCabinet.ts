@@ -13,7 +13,7 @@ export const CABINET_FIXTURE_SCHEMA_ID = 'granete.sketchup-authoring.v1';
 export const cabinetCatalog: AuthoringCatalogIndex = {
   items: { 'module-base-600': '12' },
   hardware: { 'hinge-softclose-110': true },
-  joinerySystems: { 'minifix-dowel': true },
+  joinerySystems: { 'minifix-dowel': true, 'dowel-only': true },
 };
 
 export const cabinetEnvelope: AuthoringEnvelopeV1 = {
@@ -138,4 +138,17 @@ export const cabinetEnvelope: AuthoringEnvelopeV1 = {
 
 export function cloneCabinetEnvelope(): AuthoringEnvelopeV1 {
   return JSON.parse(JSON.stringify(cabinetEnvelope)) as AuthoringEnvelopeV1;
+}
+
+export type WritableEnvelope<T> = {
+  -readonly [K in keyof T]: T[K] extends readonly (infer U)[] ? WritableEnvelope<U>[] : WritableEnvelope<T[K]>;
+};
+
+/** Deep-writable clone for tests that mutate intent fields before applying. */
+export function mutateCabinetEnvelope(
+  mutate: (envelope: WritableEnvelope<AuthoringEnvelopeV1>) => void,
+): AuthoringEnvelopeV1 {
+  const envelope = JSON.parse(JSON.stringify(cabinetEnvelope)) as WritableEnvelope<AuthoringEnvelopeV1>;
+  mutate(envelope);
+  return envelope as unknown as AuthoringEnvelopeV1;
 }
