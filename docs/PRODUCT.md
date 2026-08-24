@@ -78,13 +78,15 @@ result:
 
 > **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
 
-Muebles alone resolves and validates catalogs, BOM, parts, materials, hardware,
-drilling, revisions, preflight, release and machine outputs. The canonical references
-are:
+Muebles alone resolves and validates catalogs, parametric part relationships/joints,
+BOM, parts, materials, hardware, drilling, revisions, preflight, release and machine
+outputs. Derived drilling is an output of semantic relationships and placements, never an
+independent authoring truth. The canonical references are:
 
 1. `docs/sketchup-muebles-strategy.md`;
 2. `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
-3. `docs/sketchup-manufacturing-contract.md`.
+3. `docs/sketchup-manufacturing-contract.md`;
+4. GitHub issue #356 for parametric relationships and joint-driven machining.
 
 ## Three product pillars
 
@@ -183,6 +185,8 @@ workflow. It must not copy Promob's visual skin or expose internal domain comple
 9. A completed job can compare estimated vs actual cost/margin.
 10. The product remains easier to learn for its target niche than heavyweight horizontal
     ERP/CAD stacks.
+11. Moving/adding/removing a related shelf or moving a hinge recalculates only dependent
+    machining and invalidates released output when manufacturing truth changes.
 
 ## Brand Personality
 
@@ -225,6 +229,8 @@ Tone of UI copy: Spanish, short, concrete, no hype. Agent-facing code stays Engl
     language instead of removing necessary capability.
 12. **Professional 3D for our niche.** We compete on UX quality for modular furniture,
     not on arbitrary CAD breadth.
+13. **Relationships before coordinates.** Constructive intent and stable provenance drive
+    derived machining; CNC coordinates are resolved output.
 
 ## Operational UX
 
@@ -263,6 +269,9 @@ requirements where the environment demands larger targets and reduced precision.
 | Competitive positioning | `docs/proyectar-3d-competitive-position.md` |
 | Proyectar 3D North Star | `docs/proyectar-3d-north-star.md` |
 | Proyectar implementation roadmap | `docs/proyectar-3d-roadmap-vnext.md` |
+| SketchUp + Muebles strategy | `docs/sketchup-muebles-strategy.md` |
+| SketchUp manufacturing contract | `docs/sketchup-manufacturing-contract.md` |
+| Parametric relationships/joints | GitHub #356 |
 | Historical MVP PRD | `docs/history/prd.md` |
 | Operational consolidation plan | `docs/operational-core-v1.md` |
 | Physical piece→furniture flow | `docs/production-flow-v2.md` |
