@@ -4,7 +4,8 @@
 > **Schema:** `muebles.sketchup-authoring.v1`  
 > **Tracking:** [#290](https://github.com/tiagofur/muebleria/issues/290),
 > [#344](https://github.com/tiagofur/muebleria/issues/344),
-> [#346](https://github.com/tiagofur/muebleria/issues/346)  
+> [#346](https://github.com/tiagofur/muebleria/issues/346),
+> [#356](https://github.com/tiagofur/muebleria/issues/356)  
 > **Invariante:** **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
 
 Este documento define el límite conceptual de intercambio. No es un JSON Schema final,
@@ -14,12 +15,14 @@ contrato con fixtures y versionarlo sin reinterpretaciones silenciosas.
 ## 1. Objetivo
 
 Transportar authoring intent desde SketchUp a Muebles y devolver validation/resolved
-feedback sin convertir geometría, names o Ruby calculations en manufacturing truth.
+feedback sin convertir geometría, names, drilling visible o cálculos Ruby en
+manufacturing truth.
 
 ```text
 AuthoringEnvelope
   → schema/identity/catalog validation
-  → Muebles domain resolution
+  → relationship/joint resolution
+  → BOM/parts/hardware/drilling resolution
   → ManufacturingPreflightResult
   → ProductionRelease
   → ManufacturingArtifactManifest
@@ -48,7 +51,7 @@ Reglas:
 - `messageId` identifica el intento de transporte.
 - `idempotencyKey` identifica la mutación lógica y evita duplicados.
 - `sourceRevisionId` cambia cuando cambia authoring intent relevante.
-- `projectId` debe existir o crearse mediante un flujo explícito; no se infiere por file name.
+- `projectId` no se infiere por file name.
 - unknown `schemaVersion` falla de forma segura.
 
 ## 3. Stable IDs
@@ -66,12 +69,13 @@ IDs mínimos:
 - `componentId`;
 - `instanceId`;
 - `catalogItemId`;
+- `relationshipId`;
+- `jointPlacementId` cuando aplique;
 - `hardwarePlacementId`;
 - `sourceRevisionId`.
 
-Un rename, regroup o cambio de display label no cambia identity. Names, SketchUp entity
-indexes, array positions y geometry hashes no son primary keys. Un duplicate intencional
-crea un nuevo `instanceId` y conserva `sourceInstanceId` sólo como provenance opcional.
+Rename, regroup o cambio de display label no cambia identity. Names, SketchUp entity
+indexes, array positions y geometry hashes no son primary keys.
 
 ## 4. Units y coordinate frames
 
@@ -96,12 +100,11 @@ type Transform3D = {
 };
 ```
 
-- SketchUp internal inches se convierten en el boundary; nunca viajan implícitas.
+- SketchUp internal inches se convierten en el boundary.
 - Manufacturing dimensions se expresan en mm.
-- `precisionMm` declara rounding de transporte, no tolerancia de fabricación.
+- `precisionMm` es rounding de transporte, no tolerancia de fabricación.
 - Negative/non-uniform scale requiere normalización o error explícito.
-- Mirror/handedness debe representarse semánticamente; no se deduce sólo del mesh.
-- Muebles valida transform y parámetros antes de resolver parts.
+- Mirror/handedness debe representarse semánticamente.
 
 ## 5. Authoring entities
 
@@ -114,6 +117,7 @@ type DesignAssembly = {
   transform: Transform3D;
   parameters: Readonly<Record<string, ParameterValue>>;
   components?: readonly DesignComponent[];
+  relationships?: readonly PartRelationshipIntent[];
   hardwarePlacements?: readonly HardwarePlacementIntent[];
 };
 
@@ -123,6 +127,22 @@ type DesignComponent = {
   catalogComponentId?: string;
   role: string;
   transform: Transform3D;
+};
+
+type RelationshipAnchor = {
+  componentId: StableEntityId;
+  role: string;
+  face?: string;
+  reference?: string;
+};
+
+type PartRelationshipIntent = {
+  relationshipId: StableEntityId;
+  kind: string;
+  source: RelationshipAnchor;
+  targets: readonly RelationshipAnchor[];
+  joinerySystemId?: string;
+  parameters?: Readonly<Record<string, ParameterValue>>;
 };
 
 type HardwarePlacementIntent = {
@@ -138,15 +158,67 @@ type HardwarePlacementIntent = {
 type ParameterValue = string | number | boolean;
 ```
 
-Estos entities expresan intent. No contienen `ResolvedBoardPart`, final drilling, cut
-order, kerf, toolpath ni machine code como input autoritativo.
+`PartRelationshipIntent` expresa intención constructiva, no perforaciones finales. Un
+entrepaño puede relacionarse con dos costados mediante anchors/roles semánticos y un
+`joinerySystemId`; Muebles resuelve el machining correspondiente.
 
-Display geometry puede viajar en un canal opcional de preview, pero Muebles la ignora
-para BOM y release salvo una regla futura explícita y versionada.
+Estos entities no contienen como input autoritativo:
 
-## 6. Revision, fingerprint e idempotency
+- `ResolvedBoardPart`;
+- derived hardware placements;
+- final drilling;
+- cut order o kerf;
+- toolpath;
+- machine coordinates/code.
 
-Muebles responde con identity industrial:
+Display geometry puede viajar como preview, pero no reemplaza relaciones semánticas ni
+manufacturing resolution.
+
+## 6. Relationship/joint resolution
+
+Muebles debe poder producir resultados equivalentes a:
+
+```ts
+type DerivedOperationProvenance = {
+  relationshipId?: StableEntityId;
+  jointPlacementId?: StableEntityId;
+  hardwarePlacementId?: StableEntityId;
+  catalogRuleId?: string;
+};
+```
+
+Reglas:
+
+- mover una pieza cambia transform/anchors/intención, no agujeros persistidos;
+- agregar una pieza relacionada crea nuevas relationships y sólo sus derived operations;
+- eliminarla elimina o invalida sólo sus relationships y machining derivado;
+- cambiar `joinerySystemId` recalcula machining desde catálogo/reglas;
+- manual y derived hardware placements deben distinguirse;
+- cada derived operation conserva provenance suficiente hacia su origen;
+- relationships inválidas, huérfanas o geométricamente imposibles no generan output fabricable;
+- machining no relacionado permanece estructuralmente equivalente cuando no cambia su source intent.
+
+Caso canónico:
+
+```text
+move shelf
+→ relationship anchors change
+→ Muebles resolves joint again
+→ dependent machining changes
+→ unrelated machining remains unchanged
+→ bomFingerprint changes when manufacturing truth changes
+```
+
+Y para hardware manual:
+
+```text
+move hinge
+→ HardwarePlacement intent changes
+→ hinge machining changes
+→ shelf machining remains unchanged
+```
+
+## 7. Revision, fingerprint e idempotency
 
 ```ts
 type ManufacturingIdentity = {
@@ -160,13 +232,13 @@ type ManufacturingIdentity = {
 
 - `designRevisionId` pertenece a Muebles.
 - `bomFingerprint` deriva de manufacturing inputs canonicalized por Muebles.
-- Repetir el mismo `idempotencyKey` con payload equivalente devuelve el mismo resultado.
-- Reutilizarlo con payload distinto devuelve `IDEMPOTENCY_CONFLICT`.
-- Cambios que afectan manufacturing crean nueva revision/fingerprint.
-- Después de `ProductionRelease`, una revision distinta marca artifacts previos stale.
-- Un artifact nunca mezcla parts/documents de fingerprints distintos.
+- Mismo `idempotencyKey` + payload equivalente devuelve el mismo resultado.
+- Mismo key + payload distinto devuelve `IDEMPOTENCY_CONFLICT`.
+- Cambios de dimensions, relationships, joinery, materials o hardware que afecten fabricación crean nueva revision/fingerprint.
+- Después de `ProductionRelease`, una revisión distinta marca artifacts previos stale.
+- Nunca se sobrescribe silenciosamente output de una revisión liberada.
 
-## 7. Error model
+## 8. Error model
 
 ```ts
 type ContractIssue = {
@@ -180,26 +252,33 @@ type ContractIssue = {
 };
 ```
 
-Ejemplos de `code`:
+Codes conceptuales mínimos:
 
 - `SCHEMA_VERSION_UNSUPPORTED`;
 - `STABLE_ID_DUPLICATE`;
 - `CATALOG_REFERENCE_MISSING`;
 - `CATALOG_REVISION_STALE`;
-- `UNIT_SYSTEM_UNSUPPORTED`;
 - `TRANSFORM_INVALID`;
 - `PARAMETER_OUT_OF_RANGE`;
+- `RELATIONSHIP_INVALID`;
+- `RELATIONSHIP_ORPHANED`;
+- `JOINERY_SYSTEM_UNSUPPORTED`;
 - `HARDWARE_HOST_INVALID`;
 - `DRILLING_CONFLICT`;
 - `REVISION_STALE`;
 - `MACHINE_CAPABILITY_UNSUPPORTED`;
 - `IDEMPOTENCY_CONFLICT`.
 
-`path` usa una ruta estable, por ejemplo
-`assemblies[assemblyId=asm-01].hardwarePlacements[hardwarePlacementId=hp-03]`.
-Ruby/UI presenta el error; no reimplementa su regla.
+`path` usa una ruta estable, por ejemplo:
 
-## 8. Capability negotiation
+```text
+assemblies[assemblyId=asm-01].relationships[relationshipId=rel-shelf-01]
+assemblies[assemblyId=asm-01].hardwarePlacements[hardwarePlacementId=hp-03]
+```
+
+Ruby/UI presenta el error; no reimplementa la regla.
+
+## 9. Capability negotiation
 
 ```ts
 type MachineProfileRef = {
@@ -221,11 +300,10 @@ type CapabilityNegotiation = {
 };
 ```
 
-El profile corresponde a una combinación confirmada de machine, controller, software y
-version. No se infieren capabilities por brand. Unknown/unsupported bloquea el artifact
-afectado salvo override server-authoritative, explícito y auditado.
+Capabilities no se infieren por brand. Unknown/unsupported bloquea el artifact afectado
+salvo override server-authoritative, explícito y auditado.
 
-## 9. Manufacturing preflight
+## 10. Manufacturing preflight
 
 ```ts
 type ManufacturingPreflightResult = {
@@ -243,16 +321,26 @@ Orden conceptual:
 2. identity/idempotency;
 3. units/coordinate frames;
 4. catalog references y parameters;
-5. BOM/parts/material resolution;
-6. hardware/drilling/machining validation;
-7. revision/fingerprint/stale checks;
-8. machine capability negotiation;
-9. lifecycle/approval/release gates.
+5. relationship/joint resolution;
+6. BOM/parts/material resolution;
+7. hardware/drilling/machining validation;
+8. revision/fingerprint/stale checks;
+9. machine capability negotiation;
+10. lifecycle/approval/release gates.
 
-`ready` no equivale a `ProductionRelease`; indica que los checks configurados no
-bloquean el siguiente gate. Sólo Muebles crea la release.
+Para el primer demo, el subset mínimo autoritativo valida al menos:
 
-## 10. Artifact manifest
+- identity/revision/fingerprint;
+- catalog references;
+- relationships/joints resolubles;
+- dimensions/thickness;
+- drilling bounds/depth;
+- critical collisions conocidas;
+- bloqueo seguro ante ambigüedad crítica.
+
+`ready` no equivale a `ProductionRelease`; sólo Muebles crea la release.
+
+## 11. Manufacturing artifact manifest
 
 ```ts
 type ManufacturingArtifactManifest = {
@@ -271,25 +359,19 @@ type ManufacturingArtifactManifest = {
 ```
 
 El manifest demuestra provenance, no compatibilidad física. PTX/CNC requiere además
-import/readback y operator sign-off para la combinación exacta de máquina/software.
+import/readback y operator sign-off para la combinación exacta de machine/software.
 
-## 11. Example payload
+## 12. Example payload
 
 ```json
 {
   "schemaName": "muebles.sketchup-authoring",
   "schemaVersion": "1.0",
   "messageId": "msg-01J6A2",
-  "idempotencyKey": "project-42:source-rev-7",
+  "idempotencyKey": "project-42:source-rev-8",
   "sentAt": "2026-08-24T05:00:00Z",
   "projectId": "project-42",
-  "sourceRevisionId": "source-rev-7",
-  "source": {
-    "client": "muebles-for-sketchup",
-    "clientVersion": "0.1.0",
-    "host": "sketchup",
-    "hostVersion": "2026"
-  },
+  "sourceRevisionId": "source-rev-8",
   "units": { "length": "mm", "angle": "deg", "precisionMm": 0.01 },
   "coordinateSystem": {
     "handedness": "right",
@@ -313,15 +395,21 @@ import/readback y operator sign-off para la combinación exacta de máquina/soft
         "heightMm": 720,
         "depthMm": 590
       },
-      "hardwarePlacements": [
+      "components": [
+        { "componentId": "side-left", "instanceId": "side-left-01", "role": "left-side" },
+        { "componentId": "side-right", "instanceId": "side-right-01", "role": "right-side" },
+        { "componentId": "shelf", "instanceId": "shelf-01", "role": "shelf" }
+      ],
+      "relationships": [
         {
-          "hardwarePlacementId": "hp-hinge-left-01",
-          "catalogHardwareId": "hinge-35-overlay",
-          "hostComponentId": "component-door-left-01",
-          "anchorFace": "front",
-          "offsetMm": [100, 22],
-          "rotationDeg": 0,
-          "handedness": "left"
+          "relationshipId": "rel-shelf-01",
+          "kind": "shelf-support",
+          "source": { "componentId": "shelf", "role": "shelf-edge" },
+          "targets": [
+            { "componentId": "side-left", "role": "inside-face" },
+            { "componentId": "side-right", "role": "inside-face" }
+          ],
+          "joinerySystemId": "minifix-dowel"
         }
       ]
     }
@@ -329,30 +417,24 @@ import/readback y operator sign-off para la combinación exacta de máquina/soft
 }
 ```
 
-El ejemplo es ilustrativo. No autoriza estos field values como API final ni confirma
-compatibilidad con una machine.
+El ejemplo es ilustrativo y no congela el schema ejecutable final.
 
-## 12. Invariants y verification
+## 13. Invariants y verification
 
 - [ ] SketchUp input representa authoring intent, no final manufacturing data.
-- [ ] Muebles resuelve y valida BOM, parts, hardware y drilling.
 - [ ] Stable IDs sobreviven rename y round-trip.
 - [ ] Units y frames siempre son explícitos.
+- [ ] Relationships usan IDs/roles/anchors semánticos, no final CNC coordinates.
+- [ ] Mover/agregar/eliminar un entrepaño recalcula sólo machining dependiente.
+- [ ] Mover una bisagra no altera machining no relacionado.
+- [ ] Derived operations conservan provenance.
+- [ ] Muebles resuelve BOM, parts, hardware y drilling.
 - [ ] Idempotency conflict falla; no duplica.
 - [ ] Todo artifact incluye revision/fingerprint/profile provenance.
 - [ ] Stale revision no produce output silencioso.
 - [ ] Unsupported capability bloquea antes del export.
 - [ ] Contract fixtures prueban parity cuando una regla exista en TS y Go.
 - [ ] Field compatibility requiere import/readback y operator sign-off.
-
-## 13. Security y privacy
-
-- no incluir credentials, tokens, absolute paths, hostnames ni client identity;
-- tokens viajan fuera del business payload y usan secure storage;
-- logs usan opaque IDs y redaction;
-- machine packs usan `client-a`/`client-b` y fixtures sanitizados;
-- payload size, entity count y nesting depth tendrán límites explícitos;
-- no confiar en Ruby/SketchUp como security boundary.
 
 ## 14. Non-goals v1
 
@@ -377,3 +459,4 @@ compatibilidad con una machine.
 - [#348 PTX validation](https://github.com/tiagofur/muebleria/issues/348)
 - [#351 machine profiles](https://github.com/tiagofur/muebleria/issues/351)
 - [#354 golden/E2E tests](https://github.com/tiagofur/muebleria/issues/354)
+- [#356 parametric part relationships](https://github.com/tiagofur/muebleria/issues/356)
