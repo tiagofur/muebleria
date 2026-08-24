@@ -1,51 +1,52 @@
 # Sesión
 
-**Feature cerrada:** F148 — proyectar_usability_benchmark (#314 P3D-8, meta #308)
+**Features cerradas:** F152 — modules_deep_link_routing
 **Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
-**SDD:** https://github.com/tiagofur/muebleria/issues/314#issuecomment-5387642499
+**Reviews:** `progress/review_F152.md` (APPROVED)
+**Rama:** `feat/f152-modules-deep-link` (pusheada)
 
 ## Resultado
 
-Kit de benchmark de usabilidad para #314 (el issue queda ABIERTO hasta las
-sesiones reales). **Telemetría** `usabilityBenchmark.ts` (packages/ui, patrón
-perfTelemetry): tareas canónicas v1 (11 pasos del script con targets
-iniciales), timeline append-only auto+facilitador con contexto de tarea,
-persistencia localStorage que sobrevive recargas (re-adhiere captura de
-clicks), export JSON y `window.__proyectarUsability`. **Costuras** del studio
-instrumentadas (búsqueda/insert/move/command-intent/dimensión/opción/
-materiales tableros+ambiental/ambientes/undo-redo/presentar/BOM/clicks) —
-todas no-op sin sesión. **Panel de facilitador** gateado por flag
-`muebles_usability_benchmark` (ShellView), costo cero sin flag. **Summarizer**
-puro (mediana por tarea, ayudas/errores/retrocesos/clicks, metRatio de
-targets). **Smoke `pnpm smoke:usability`**: script canónico completo con UI
-real (incluye dnd HTML5 sintético para materiales) — regresión permanente de
-script-completable; exporta JSON `source:"proxy"` (data truth). **Protocolo**
-`docs/proyectar-3d-usability-benchmark.md` (métricas operacionalizadas,
-facilitador sin coaching, encuesta post, targets recalibrables, baseline
-proxy). Roadmap §10/AGENTS/verification/design actualizados.
+El deep-link `/modules/:id` sobrevive F5/entrada directa y el cierre del
+editor siempre sale de la ruta `/edit`. Causa raíz única:
+`useModulesScreenState` tenía una selección bespoke en vez del hook canónico
+`useRoutableEntitySelection` que ya usan structures/components/customers y
+los catálogos.
 
-**Hallazgos registrados:** #338 (render loop guest+selección+reload,
-preexistente — aislado con diagnóstico; bloquea recarga in-browser a mitad de
-sesión, persistencia cubierta en unit) y "piso sólo aplica por drag" (dato de
-fricción para sesiones reales, documentado en el protocolo).
+- **Síntoma 1 (F5/deep-link rebota a `/modules`)**: el efecto de mount
+  notificaba `onSelectionChange(null)` → la shell navegaba a la lista; y el
+  guard de refs (`lastOpenModuleIdRef` inicializado al valor de mount)
+  impedía sembrar `selectedId` desde la URL.
+- **Síntoma 2 (URL pegada en `/edit` tras cerrar editor in-app)**: el flujo
+  bespoke mantenía la selección durante la edición, y `onEditorClose(restoreId)`
+  usaba `onSelectionChange` — que la shell bloquea en rutas `/edit`
+  (`isEntityEditPath`) — en vez de `onRequestEdit(null)`.
+
+Fix: migración al hook canónico (seed en mount + sync URL→estado sin
+notificar + drop-stale). Durante `/edit` la selección es null y el cierre
+sale vía `onRequestEdit(null)` — paridad exacta con structures.
 
 ## Verificación (evidencia)
 
-- `pnpm test` 3.019 OK (domain 1.035 · storage 155 · excel 89 · ui 1.381 ·
-  mobile 45 · desktop 17 · web 301); `pnpm typecheck` 0 errores.
-- `pnpm smoke`: studio F141/F143/F144/F145 + **usabilidad nuevo verde (38–56s,
-  11/11 tareas, 74 eventos, JSON proxy exportado)**. `smoke:perf` falló
-  inicialmente SOLO en G2 (drag p95) por **entorno**: falla idéntica en `main`
-  (328 ms) con load 11+ del software del usuario; **verde en el retry con load
-  ~5.8** — 6/6 efectivos (nota: smoke:perf da falsos negativos con máquina
-  cargada; ver `progress/review_F148.md`).
-- Review APPROVED con 1 hallazgo corregido (clicks tras recarga) —
-  `progress/review_F148.md`.
+- `pnpm test` 3.048 tests verdes (ui 1.391, web 306, domain 1.035, storage
+  155, excel 89, mobile 45, desktop 17); `pnpm typecheck` 0 errores.
+- 6 tests nuevos de comportamiento en `ModulesScreen.test.tsx` (F152):
+  deep-link en mount sin notificar, carga async del workspace, la selección
+  sigue la URL, cierre sale de /edit, card click notifica, Volver a la lista
+  notifica.
+- Navegador real (guest + demo, dev :5199): deep-link estable, F5 en detalle
+  sobrevive, detalle→Editar→Volver sale de /edit, F5 en /edit abre editor y
+  Volver sale, flujo in-app card→detalle→lista intacto.
 
-## Siguiente etapa
+## Notas
 
-Ejecutar las **sesiones reales** según `docs/proyectar-3d-usability-benchmark.md`
-(#314 abierto): reclutar 3–5 participantes del taller, facilitador con panel,
-exportar JSONs a `progress/benchmark/sessions/`, analizar con
-`summarizeUsabilitySessions` y recalibrar targets/reordenar #309–#313/#277–#297
-con evidencia. Paralelas candidatas: #338 (fix render loop) y P3D-6b.
+- PR #342 (ProjectsScreen echo loop) es un síntoma hermano en otra screen;
+  sin solapamiento de archivos.
+- Deep-link con id inexistente muestra la lista con URL estable (mismo
+  comportamiento que el resto de las screens canónicas).
+
+## Siguientes pasos (backlog auditoría)
+
+1. Chevron de affordance en tablas expandibles de catálogo.
+2. Estructuras: Desactivar/Eliminar al overflow "Más".
+3. Continuar revisión: Estructuras, Componentes, catálogos, Clientes, Vitrina.

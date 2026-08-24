@@ -37,6 +37,7 @@ import {
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
+  useRoutableEntitySelection,
 } from '../../common';
 import { consumeRequestCreateKey } from '../../common/consumeRequestCreateKey';
 import {
@@ -122,7 +123,16 @@ export function useModulesScreenState({
   const debouncedSearch = useDebouncedValue(search);
   const [categoryFilter, setCategoryFilter] =
     useState<CategoryFilterId>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // F152: canonical URL↔selection sync (same hook as structures/components/
+  // catalogs). Seeds selection from openModuleId on mount so /modules/:id
+  // deep links survive F5; notifies the shell only on user-driven changes.
+  const moduleIds = useMemo(() => modules.map((m) => m.id), [modules]);
+  const { selectedId, setSelectedId } = useRoutableEntitySelection({
+    openEntityId: openModuleId,
+    onSelectionChange,
+    knownIds: moduleIds,
+  });
 
   const draftKey = `module-draft:${openModuleEditId ?? 'idle'}`;
 
@@ -306,43 +316,6 @@ export function useModulesScreenState({
     () => modules.find((m) => m.id === selectedId) ?? null,
     [modules, selectedId],
   );
-
-  useEffect(() => {
-    if (selectedId && !modules.some((m) => m.id === selectedId)) {
-      setSelectedId(null);
-    }
-  }, [modules, selectedId]);
-
-  useEffect(() => {
-    if (openModuleEditId) return;
-    onSelectionChange?.(selectedId);
-  }, [selectedId, onSelectionChange, openModuleEditId]);
-
-  const lastOpenModuleIdRef = useRef<string | null>(openModuleId ?? null);
-  const lastOpenModuleEditIdRef = useRef<string | null>(openModuleEditId ?? null);
-
-  useEffect(() => {
-    const normView = openModuleId ?? null;
-    const normEdit = openModuleEditId ?? null;
-    if (
-      lastOpenModuleIdRef.current === normView &&
-      lastOpenModuleEditIdRef.current === normEdit
-    ) {
-      return;
-    }
-    lastOpenModuleIdRef.current = normView;
-    lastOpenModuleEditIdRef.current = normEdit;
-
-    const editId =
-      openModuleEditId && openModuleEditId !== 'new' ? openModuleEditId : null;
-    const target = normView ?? editId;
-    if (target == null || target === '') {
-      if (!openModuleEditId) setSelectedId(null);
-      return;
-    }
-    if (!modules.some((m) => m.id === target)) return;
-    setSelectedId(target);
-  }, [openModuleId, openModuleEditId, modules]);
 
   const seededModuleEditIdRef = useRef<string | null>(null);
   useEffect(() => {

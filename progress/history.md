@@ -1108,3 +1108,16 @@ drag-only. Verificación: 3.019 tests + typecheck + smoke con usabilidad verde;
 smoke:perf G2 blocked/environment (falla igual en main con load 11+, mejora al
 bajar carga; gate CI determinista verde). Review APPROVED con fix de clicks
 tras recarga (progress/review_F148.md).
+
+## F152 — modules_deep_link_routing — 2026-08-23
+
+Bug de la auditoría UX: deep-link/F5 en `/modules/:id` rebotaba a `/modules` y
+el cierre del editor in-app dejaba la URL pegada en `/modules/:id/edit` con el
+editor cerrado. Causa raíz: selección bespoke en `useModulesScreenState`
+(notificación null en mount + guard de refs que impedía sembrar desde la URL).
+Fix: migración al hook canónico `useRoutableEntitySelection` (paridad con
+structures/components/catálogos); durante `/edit` la selección es null y el
+cierre sale vía `onRequestEdit(null)`. 6 tests de comportamiento nuevos +
+verificación en navegador real (5 flujos). `pnpm test` 3.048 verdes,
+typecheck 0 errores. Review APPROVED (`progress/review_F152.md`). Rama
+`feat/f152-modules-deep-link`.

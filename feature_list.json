@@ -3473,6 +3473,78 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F150",
+      "phase": 0,
+      "name": "ui_card_click_open",
+      "title": "Paridad de listas: la card abre el detalle con click en su cuerpo (stretched link) en Órdenes, Instalaciones y Embarques",
+      "description": "Unificación del patrón de entrada a detalle detectada en la auditoría de paridad UI (progress/ui-parity-audit-2026-08-23.md): Cotizaciones e Ingeniería abren el detalle con click en el ítem (regla de oro design.md §4.2), pero las pantallas de fábrica exigían un botón explícito por card ('Abrir orden' en la cola de Órdenes, 'Abrir instalación' en Instalaciones, botón de apertura en Embarques). Se elimina el botón dedicado y el título de la card pasa a ser el control real de apertura con patrón stretched link: su hit-area cubre toda la card (::after inset 0), los botones de proceso (Pack, etc.) y links (tel:) quedan por encima con z-index y no disparan la apertura. La card gana affordance visible de cliqueabilidad (hover con state layer §3.6.1 + cursor pointer). El foco visible y la activación por teclado (Enter/Espacio) viven en el control del título, que lleva aria-label con acción + obra. design.md se actualiza para universalizar la regla (§4.2) y las specs de las tres pantallas (§6.7, §6.7c, §6.7d). Verificación visual con sesión auth del dueño: en las tres pantallas el botón dedicado desapareció, el click en el cuerpo de la card aterriza en el trigger estirado (interceptado por button.card-open, verificado con actionability de Playwright), el trigger navega al detalle (/orders/:id, /installations/:id, /shipments/:id) y back regresa; hover de card con borde brand + shadow + título brand + cursor pointer confirmado en captura.",
+      "acceptance": [
+        "Click en el cuerpo de la card abre el detalle en cola de Órdenes, Instalaciones y Embarques (mismo handler que usaba el botón); sin botón 'Abrir X' visible",
+        "El control de apertura es el título (stretched): foco visible con --shadow-focus, Enter/Espacio activa, aria-label 'Abrir <contexto>: <obra>'",
+        "Botones de proceso (Pack / Marcar…) y links tel: conservan su comportamiento y NO disparan la apertura",
+        "Hover de card con state layer del sistema + cursor pointer (la card se ve clicable sin botón)",
+        "design.md §4.2 + §6.7/§6.7c/§6.7d actualizados con la regla universal 'click en el ítem → se abre'",
+        "Tests de comportamiento (apertura por teclado y mouse, no-apertura desde acciones internas) + typecheck verdes"
+      ],
+      "references": [
+        "docs/design.md",
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/production/ProductionQueue.tsx",
+        "packages/ui/src/production/InstalacionesScreen.tsx",
+        "packages/ui/src/production/EmbarquesScreen.tsx"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F151",
+      "phase": 0,
+      "name": "ui_card_hover_actions",
+      "title": "Paridad visual con Ingeniería: cards de línea completa limpias en reposo, acciones compactas reveladas en hover (cola de Órdenes)",
+      "description": "Refinamiento del patrón F150 pedido por el dueño tomando la card de /engineering (eng-project-card) como referencia canónica de las listas de línea completa: la card se ve limpia en reposo (sin botones), las acciones de proceso se revelan sólo en hover/focus-within (siempre visibles en touch vía @media hover:none) y los botones de card usan tamaño compacto (btn--small) — el Pack de la cola de Órdenes se veía demasiado alto. Hover de card-open-host se alinea al lenguaje de eng-project-card (shadow-md + border-strong + surface-hover). Las tablas de catálogo ya implementan este patrón (reveal + fallback touch) y no requieren cambios. Verificado visualmente con sesión auth: card en reposo sin botones; en hover aparecen Pack y Marcar en producción compactos (~26px) con borde fuerte + sombra + superficie hover.",
+      "acceptance": [
+        "Cola de Órdenes: card limpia en reposo — Pack/Marcar invisibles hasta hover/focus-within de la card",
+        "En dispositivos touch (hover:none) las acciones quedan siempre visibles",
+        "Botones de acción de card en tamaño compacto (btn--small), Pack sigue siendo la única primaria",
+        "Hover de la card con el lenguaje de eng-project-card (shadow-md + border-strong + surface-hover)",
+        "Las acciones reveladas siguen NO abriendo la orden y son alcanzables por teclado (focus-within)",
+        "design.md actualizado (regla §4.2 + spec §6.7)",
+        "Suite + typecheck verdes; verificación visual con sesión auth"
+      ],
+      "references": [
+        "docs/design.md",
+        "packages/ui/src/engineering/engineering.css",
+        "packages/ui/src/common/cardOpen.css",
+        "packages/ui/src/production/ProductionQueue.tsx",
+        "packages/ui/src/catalogs/catalogs.css"
+      ],
+      "status": "done",
+      "createdAt": "2026-08-23",
+      "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F152",
+      "phase": 0,
+      "name": "modules_deep_link_routing",
+      "title": "Bug routing: deep-link/F5 en /modules/:id rebota a la lista y cierre de editor deja URL en /edit",
+      "description": "Bug de la auditoría UX (backlog F150/F151, candidato F152). Dos síntomas de la misma causa en useModulesScreenState (selección bespoke en vez del hook canónico useRoutableEntitySelection): (1) F5 o entrada directa a /modules/:id notifica onSelectionChange(null) en mount y el guard de refs (lastOpenModuleIdRef inicializado al valor de mount) impide sembrar selectedId desde la URL → la shell navega a /modules y el deep-link se pierde. (2) Al cerrar el editor in-app desde /modules/:id/edit, onEditorClose(restoreId) usa onSelectionChange, que la shell bloquea en rutas /edit (isEntityEditPath) → la URL queda pegada en /edit con el editor cerrado (F5 ahí lo reabre). Fix: migrar la selección de useModulesScreenState a useRoutableEntitySelection (patrón de structures/components/customers/catálogos) — seed en mount + sync URL→estado sin notificar + drop-stale — y alinear el cierre del editor con structures (salir de /edit vía onRequestEdit). Paridad: el resto de las screens entity ya usan el hook canónico; modules era el outlier.",
+      "acceptance": [
+        "F5 o entrada directa a /modules/:id muestra el detalle del mueble (URL estable, sin rebote a /modules)",
+        "El caso async (workspace aún cargando) también resuelve: al llegar los datos se abre el detalle",
+        "Cerrar el editor desde /modules/:id/edit navega siempre fuera de la ruta /edit (a la lista), sin URL pegada",
+        "Flujos in-app existentes intactos: click en card abre detalle con URL /modules/:id, Volver a lista navega a /modules, abrir/cerrar editor funciona",
+        "Tests de comportamiento en ModulesScreen cubren deep-link en mount, sincronización URL→selección y cierre de editor"
+      ],
+      "status": "done",
+      "references": [
+        "docs/design.md#42-patrón-listadetalle",
+        "progress/current.md"
+      ],
+      "depends_on": [],
+      "created": "2026-08-23"
     }
   ]
 }

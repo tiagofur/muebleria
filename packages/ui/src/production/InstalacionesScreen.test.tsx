@@ -4,7 +4,8 @@
  * trabajo del proceso vive en el detalle por obra, no acá).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import type { Customer, Project, ProjectItem } from '@muebles/domain';
 
@@ -138,16 +139,37 @@ describe('InstalacionesScreen (lista de obras)', () => {
     expect(screen.queryByTestId('instalaciones-advance-a')).toBeNull();
   });
 
-  it('opens the per-project detail screen via the callback', () => {
+  it('opens the per-project detail screen via the title trigger (mouse + keyboard)', async () => {
+    const user = userEvent.setup();
     const onOpenProject = vi.fn();
     render(
       <InstalacionesScreen
         projects={projects}
         onOpenProject={onOpenProject}
+        customerFor={() =>
+          makeCustomer({ phone: '+52 55 1234 5678' })
+        }
       />,
     );
-    fireEvent.click(screen.getByTestId('instalaciones-open-p1'));
+    const trigger = screen.getByTestId('instalaciones-open-p1');
+    expect(trigger.getAttribute('aria-label')).toBe('Abrir instalación Obra p1');
+    fireEvent.click(trigger);
     expect(onOpenProject).toHaveBeenCalledWith('p1');
+    onOpenProject.mockClear();
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(onOpenProject).toHaveBeenCalledWith('p1');
+    // Sin botón dedicado: la apertura vive en el cuerpo de la card (stretched).
+    expect(
+      screen.queryByRole('button', { name: 'Abrir instalación' }),
+    ).toBeNull();
+    // El link tel: es contacto directo: no dispara la apertura de la obra.
+    onOpenProject.mockClear();
+    const p1Card = screen.getByTestId('instalaciones-card-p1');
+    fireEvent.click(
+      within(p1Card).getByRole('link', { name: '+52 55 1234 5678' }),
+    );
+    expect(onOpenProject).not.toHaveBeenCalled();
   });
 
   it('renders the destination address and phone as actionable links', () => {

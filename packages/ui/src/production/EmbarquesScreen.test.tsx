@@ -4,6 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import type { Project, ProjectItem } from '@muebles/domain';
 
@@ -90,7 +91,8 @@ describe('EmbarquesScreen', () => {
     );
   });
 
-  it('navigates to detail when clicking Ver detalle', () => {
+  it('opens the loading detail from the card title trigger (mouse + keyboard)', async () => {
+    const user = userEvent.setup();
     const onOpenProject = vi.fn();
     render(
       <EmbarquesScreen
@@ -99,8 +101,18 @@ describe('EmbarquesScreen', () => {
         onOpenProject={onOpenProject}
       />,
     );
-    fireEvent.click(screen.getByTestId('embarques-open-p1'));
+    const trigger = screen.getByTestId('embarques-open-p1');
+    expect(trigger.getAttribute('aria-label')).toBe('Abrir carga Obra p1');
+    fireEvent.click(trigger);
     expect(onOpenProject).toHaveBeenCalledWith('p1');
+    onOpenProject.mockClear();
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(onOpenProject).toHaveBeenCalledWith('p1');
+    // Sin botón dedicado: la apertura vive en el cuerpo de la card (stretched).
+    expect(
+      screen.queryByRole('button', { name: 'Ver detalle' }),
+    ).toBeNull();
   });
 
   it('shows complete badge when 100% loaded', () => {

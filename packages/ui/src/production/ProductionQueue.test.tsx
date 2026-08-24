@@ -123,6 +123,35 @@ describe('ProductionQueue (F038)', () => {
     expect(onMark).toHaveBeenCalledWith('p1');
   });
 
+  it('F150: opens the order from the card title trigger by keyboard; Pack stays independent', async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const onPack = vi.fn();
+    render(
+      <ProductionQueue
+        projects={[project('p1', 'accepted', 'Cocina Ana')]}
+        customerLabelFor={() => 'Ana'}
+        salePriceFor={() => 1000}
+        onOpenOrder={onOpen}
+        onMarkProduced={vi.fn()}
+        onExportProductionPack={onPack}
+      />,
+    );
+    const trigger = screen.getByTestId('prod-open-order-p1');
+    expect(trigger.getAttribute('aria-label')).toBe('Abrir orden Cocina Ana');
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(onOpen).toHaveBeenCalledWith('p1');
+    // Sin botón dedicado: la apertura vive en el cuerpo de la card (stretched).
+    expect(
+      screen.queryByRole('button', { name: 'Abrir orden' }),
+    ).toBeNull();
+    // Pack es una acción de proceso independiente: no abre la orden.
+    await user.click(screen.getByTestId('prod-export-pack-p1'));
+    expect(onPack).toHaveBeenCalledWith('p1');
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
   it('produced tab shows jobs with active claims, no mark button', async () => {
     const user = userEvent.setup();
     render(
