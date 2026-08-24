@@ -3,12 +3,12 @@
  * (ADR-0002 & docs/architecture/parametric-furniture-library.md)
  *
  * Models the 7 decoupled primitives:
- * 1. Asset (3D / visual asset)
+ * 1. Asset (multi-representation 3D/PBR digital asset)
  * 2. MaterialDefinition (raw sheet/board goods in catalog)
  * 3. MaterialAssignment (dynamic role-to-material binding)
  * 4. HardwareDefinition (commercial, technical, visual, drilling hardware)
- * 5. ComponentDefinition (reusable building block)
- * 6. FurnitureDefinition (parametric template)
+ * 5. ComponentDefinition (reusable building block with part derivation rules)
+ * 6. FurnitureDefinition (versioned parametric template)
  * 7. FurnitureInstance (project-level instantiated assembly)
  *
  * Invariant: Granete is not a fixed cabinet catalog. It is an open furniture
@@ -17,12 +17,33 @@
 
 import type { HoleType } from "./partDrilling";
 
-// 1. Asset: Digital 3D & Visual Resource
+// 1. Asset: Digital 3D & Visual Resource with Multi-Representation Support
+export type AssetRepresentationFormat =
+  | "sketchup_component"
+  | "gltf"
+  | "glb"
+  | "obj"
+  | "blender"
+  | "revit_family"
+  | "render_scene"
+  | "thumbnail"
+  | "texture_pbr";
+
+export interface AssetRepresentation {
+  readonly format: AssetRepresentationFormat;
+  readonly uri: string;
+  readonly purpose?: "authoring" | "realtime_3d" | "rendering" | "thumbnail" | "ar";
+  readonly lod?: "lod0" | "lod1" | "lod2" | "preview";
+  readonly byteSize?: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
 export interface Asset {
   readonly assetId: string;
   readonly name: string;
-  readonly format: "sketchup_component" | "gltf" | "glb" | "obj" | "texture_pbr";
+  readonly defaultFormat: AssetRepresentationFormat;
   readonly uri: string;
+  readonly representations?: readonly AssetRepresentation[];
   readonly thumbnailUri?: string;
   readonly visualProperties?: {
     readonly textureUri?: string;
@@ -105,7 +126,7 @@ export interface HardwareDefinition {
   readonly placementRules?: HardwarePlacementRule;
 }
 
-// 5. ComponentDefinition: Reusable Building Block
+// 5. ComponentDefinition: Reusable Building Block with Part Derivation Rules
 export type ComponentCategory =
   | "panel_lateral"
   | "panel_horizontal"
@@ -121,6 +142,23 @@ export type ComponentCategory =
   | "leg"
   | "accessory";
 
+export interface ComponentPartDerivationRule {
+  readonly partRole: string;
+  readonly sizingFormula?: {
+    readonly lengthFormula?: string;
+    readonly widthFormula?: string;
+    readonly thicknessFormula?: string;
+  };
+  readonly edgeBandingRule?: {
+    readonly top?: boolean;
+    readonly bottom?: boolean;
+    readonly left?: boolean;
+    readonly right?: boolean;
+    readonly edgeBandRole?: string;
+  };
+  readonly grainDirection?: "length" | "width" | "none";
+}
+
 export interface ComponentDefinition {
   readonly componentDefinitionId: string;
   readonly code: string;
@@ -130,9 +168,10 @@ export interface ComponentDefinition {
   readonly defaultThicknessMm: number;
   readonly assetId?: string;
   readonly compatibleHardwareCategories?: readonly HardwareCategory[];
+  readonly partDerivationRule?: ComponentPartDerivationRule;
 }
 
-// 6. FurnitureDefinition: Parametric Furniture Template
+// 6. FurnitureDefinition: Versioned Parametric Furniture Template
 export type ParameterType = "number" | "string" | "boolean" | "enum";
 
 export interface FurnitureParameter {
@@ -171,6 +210,9 @@ export interface FurnitureDefinition {
   readonly name: string;
   readonly category: string; // "kitchen_base" | "kitchen_wall" | "closet" | "desk" | "table" | "vanity" | etc.
   readonly version: string; // semver e.g. "1.0.0"
+  readonly revisionId?: string; // e.g. "rev-1"
+  readonly schemaRevision?: number; // e.g. 1
+  readonly definitionHash?: string; // cryptographic content hash
   readonly description?: string;
   readonly assetId?: string;
   readonly parameters: readonly FurnitureParameter[];

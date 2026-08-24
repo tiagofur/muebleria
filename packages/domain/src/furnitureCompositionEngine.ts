@@ -34,6 +34,11 @@ export interface InstantiationOptions {
   readonly translationMm?: readonly [number, number, number];
   readonly rotationQuaternion?: readonly [number, number, number, number];
   readonly materialOverrides?: readonly MaterialAssignment[];
+  readonly authoringClient?: {
+    readonly name: string;
+    readonly version: string;
+    readonly extensionVersion?: string;
+  };
 }
 
 export interface InstantiationResult {
