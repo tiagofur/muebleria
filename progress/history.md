@@ -1201,3 +1201,21 @@ previo intacto. Elevaciones fuera de scope (QA: aceptables por ambiente).
 2 tests nuevos de panel con 2 ambientes; 3.057 tests verdes; typecheck 0.
 Review APPROVED (`progress/review_F157.md`). Rama
 `fix/256-prod-views-multi-space`.
+
+## F158 — production_island_elevation_sheet — 2026-08-24
+
+Fix del QA #255 (padre #251): las islas (mode: free) aparecían en Producción →
+Vistas sólo como nota de texto y en el PDF de elevaciones como anexo
+text-only; en taller hace falta verlas dibujadas. La planta 2D ya las dibujaba
+(categoría 'isla'). Dominio: `buildProductionElevations` devuelve `islands`
+rico (dims, freeX/freeY/yaw, baseClearance/bottomZ, ambiente) reemplazando
+`freePlace`; `hasProductionElevations` admite obras sólo-islas. UI: sección
+"Islas (libres)" con `ProductionIslandPreview` (alzado simple SVG con código,
+cotas, zócalo, posición y ambiente; tema isla compartido con la planta). PDF:
+hoja A4 por isla en `wallElevationsPdfExport` (fluye al pack), anexo sólo
+para sin colocar, sanitizer admite `·`. Gating consistente muros+islas en
+Vistas, Documentos y pack. Muros siguen sin inventar alzado para free.
+7 tests nuevos (incl. primera cobertura del export de elevaciones); 3.064
+tests verdes; typecheck 0. Review APPROVED con hallazgo corregido (Documentos
+gating, `2e77890`) — `progress/review_F158.md`. Rama
+`feat/255-island-elevation-sheet`.

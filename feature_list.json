@@ -3697,11 +3697,12 @@
         "apps/web/src/exportProductionPack.ts",
         "docs/operational-ux.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F157"
       ],
-      "created": "2026-08-24"
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }
