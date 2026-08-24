@@ -3730,6 +3730,38 @@
       ],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F160",
+      "phase": 0,
+      "name": "sketchup_extension_bootstrap",
+      "title": "#345 Bootstrap instalable y verificable de Granete for SketchUp",
+      "description": "Esqueleto instalable de la extensión Granete for SketchUp (antes Muebles; la plataforma se renombra a Granete) generado desde el template oficial de SketchUp y Skippy, endurecido como un cliente externo delgado. Incluye loader raíz literal, lifecycle idempotente conectado al AppObserver real del host (onUnloadExtension), shell local HtmlDialog, puertos reemplazables de transport y auth con defaults fail-closed, metadata semántica namespaced/versionada y undoable, redacción de logs endurecida (paths POSIX/Windows/UNC con espacios, URLs con credenciales, sin sobre-redacción), fixture deliberadamente no fabricable, RBZ determinista, gates Ruby mutation-resistant y documentación de compatibilidad honesta con target acotado a SketchUp 2026.2 macOS. Mantiene el invariante: SketchUp owns authoring/interaction; Granete owns manufacturing truth.",
+      "acceptance": [
+        "El RBZ contiene exactamente granete_for_sketchup.rb y granete_for_sketchup/ en su raíz; el loader sólo registra SketchupExtension y el runtime es idempotente",
+        "UI::HtmlDialog carga recursos locales compatibles con CEF 112 y puede abrirse, cerrarse y recrearse sin callbacks duplicados; heading y mensaje de conexión son coherentes entre sí",
+        "Runtime registra un Sketchup::AppObserver cuyo onUnloadExtension apunta al shutdown real; uncheck no se presenta como unload",
+        "Transport y auth son puertos separados, reemplazables y fail-closed; no hay credenciales, tokens ni URLs sensibles embebidos, y el RBZ carga cero gems de terceros",
+        "Metadata semántica namespaced y versionada persiste sólo identidad/intención opaca mediante operaciones undoable; entityID no se usa como identidad persistente",
+        "Logs y errores redactan bearer tokens, paths privados absolutos (volúmenes POSIX, drives Windows, UNC), URLs/query strings con credenciales y datos de cliente sin triturar mensajes inocuos",
+        "El smoke TestUp prueba la extensión instalada (RBZ) y falla cerrado si no está instalada/habilitada/cargada o si apunta al checkout del repo",
+        "Fixture JSON no fabricable y tests host-independent prueban loader, wiring de main.rb, lifecycle+observer, puertos, metadata, redacción, boundaries y packaging sin fingir evidencia de SketchUp",
+        "Toolchain Ruby 3.2/Bundler y dependencias development quedan bloqueados; RuboCop apunta a SketchUp 2024 y Ruby 3.2",
+        "Rake verifica syntax, lint, unit y boundary; construye un RBZ determinista y lee el paquete para excluir tests, secretos y caches",
+        "README documenta setup, build, instalación, smoke completo (restart/disable/uninstall + TestUp JSON + versiones + SHA), lifecycle real, troubleshooting y matriz con SketchUp 2026.2 macOS como único target",
+        "CI corre el gate Ruby/RBZ en ubuntu/macOS/Windows e init.sh lo ejecuta sin silenciar errores"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/345",
+        "docs/sketchup-muebles-strategy.md",
+        "docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md",
+        "docs/sketchup-manufacturing-contract.md",
+        "docs/architecture.md",
+        "docs/verification.md"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "created": "2026-08-24"
     }
   ]
 }

@@ -1,40 +1,45 @@
 # Sesión
 
-**Feature cerrada:** F159 — elevations_grouped_by_space (issue #254 reabierto)
-**Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
-**Reviews:** `progress/review_F159.md` (APPROVED)
-**Rama:** `feat/254-elevations-grouped-by-space` (pusheada, PR abierto)
+**Feature en curso:** F160 — sketchup_extension_bootstrap (issue #345)
+**Inicio:** 2026-08-24
+**Estado:** in_progress — correcciones round 1 aplicadas; pendiente review round 2 y host smoke
+**Rama:** `codex/345-sketchup-extension-bootstrap`
+**Worktree:** `/Users/tiagofur/dev/carpinteria/muebles-worktrees/sketchup-extension-bootstrap`
 
-## F159 — Resultado
+## Plan de corrección (estado)
 
-#254 (QA #251) fue cerrado en 2026-08-21 aceptando prefijos como agrupado;
-reabierto por decisión del dueño para el agrupado real, barato sobre el
-modelo actual (espacio en muros desde #252, en islas desde F158).
+- [x] Sincronizado con `origin/main` (base `ddb19a0`); #345 reasignado al ID
+  libre F160; ledger/evidencia/historia reconciliados.
+- [x] Rename de marca **Muebles → Granete** en el entregable de la extensión:
+  namespace `Granete::SketchUpExtension`, `granete_for_sketchup.rb`/`,
+  RBZ `granete_for_sketchup.rbz`, dialog, README, ledger. El rename
+  repo-wide (docs, web, backend) queda como issue separado.
+- [x] Cleanup conectado al callback real `AppObserver#onUnloadExtension`
+  (`AppLifecycleObserver` registrado por `Runtime.start`); uncheck documentado
+  como no-unload. TestUp prueba sólo la instalación RBZ (fail-closed por
+  nombre/versión/loaded/path en Plugins, rechaza el checkout).
+- [x] Redaction endurecida (POSIX/Windows/UNC con espacios, URLs con
+  credenciales, mínimo de substitución 4) con tests adversariales;
+  ownership/dependency/wiring guards mutation-resistant (word boundaries,
+  todas las formas de require, wiring test de `main.rb`).
+- [x] SketchUp 2026.2 macOS como único target #345; el resto compatibilidad
+  planificada sin implied support (README + ledger).
+- [x] UI: estado de conexión coherente (heading+mensaje+state inyectados
+  juntos), color tokenizado, CI Ruby/RBZ en ubuntu/macOS/Windows.
+- [x] Historia reestructurada en cinco work units encadenables, gates
+  read-only finales y push `--force-with-lease`.
 
-- **Dominio**: `ProductionWallElevation` gana `spaceId`/`spaceName` y
-  `wallName` vuelve al nombre crudo (sin prefijo — nadie parsea strings);
-  nuevo helper puro `groupProductionElevationsBySpace(result)` → grupos
-  espacio→(muros, islas), espacios vacíos omitidos, mono-ambiente = 1 grupo.
-- **UI**: con multi-ambiente, "Elevaciones por muro" e "Islas (libres)"
-  renderizan un h5 por ambiente con sus fichas debajo; la ficha de isla no
-  repite el ambiente cuando está agrupada (`showSpace=false`). Mono-ambiente:
-  render actual sin headings extra.
-- **PDF**: `wallElevationsPdfExport` itera por grupos — muros e islas de cada
-  ambiente quedan juntos (antes: todos los muros, luego todas las islas);
-  páginas de muro con línea "Ambiente" sólo en multi-ambiente.
+## Invariante
 
-## Verificación (evidencia)
+**SketchUp owns authoring/interaction; Granete owns manufacturing truth.** Ruby no
+calcula BOM, partes resueltas, joints, drilling, nesting, kerf, preflight/release ni
+postprocessing.
 
-- `pnpm test` 3.069 verdes (+5: dominio 2 — grupos juntos/orden y
-  mono/vacío; panel 2 — grupos con headings y mono sin ellos; excel 1 —
-  multi-ambiente 4 páginas). `pnpm typecheck` 0 errores.
-- Fixture learning: el top-level del layout debe espejar el espacio activo
-  (`pruneKitchenLayout` reconstruye el activo desde el top-level) — los
-  fixtures de tests multi-space deben respetar el invariante de la store.
-- Gate §8: justificación de screenshot/responsive en `progress/review_F159.md`.
+## Evidencia pendiente
 
-## Siguientes pasos
-
-- QA #251 del hub Vistas queda cubierto en sus tres hijos (#256, #255, #254).
-  Próxima parada sugerida: continuar auditoría a11y (backlog de
-  `progress/current.md` previo) o #325 multi-org.
+- Review round 2 sobre la rama corregida (round 1: CHANGES_REQUESTED en
+  `progress/review_F160_round1.md`).
+- El líder ejecutará el host smoke en SketchUp 2026.2 macOS (instalación RBZ,
+  open/close/recreate, disable/enable/uninstall + restart, TestUp JSON,
+  versiones y SHA). Hasta entonces no se reclama pass de instalación, unload,
+  render CEF, TestUp ni soporte del host.

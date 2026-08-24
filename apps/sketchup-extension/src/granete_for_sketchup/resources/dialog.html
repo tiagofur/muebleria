@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Granete for SketchUp</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --text-sm: 0.75rem;
+        --text-base: 0.875rem;
+        --text-md: 1rem;
+        --text-xl: 1.375rem;
+        --weight-medium: 500;
+        --weight-semibold: 600;
+        --weight-bold: 700;
+        --leading-normal: 1.5;
+        --brand-50: hsl(245 100% 97%);
+        --brand-500: hsl(245 58% 51%);
+        --brand-600: hsl(245 55% 43%);
+        --brand-800: hsl(245 48% 28%);
+        --surface-app: hsl(220 20% 97%);
+        --surface-card: hsl(0 0% 100%);
+        --surface-hover: hsl(220 14% 95%);
+        --text-primary: hsl(230 18% 12%);
+        --text-secondary: hsl(230 12% 40%);
+        --text-inverse: hsl(0 0% 100%);
+        --text-inverse-soft: hsl(0 0% 100% / 78%);
+        --border-default: hsl(220 14% 86%);
+        --warning-50: hsl(38 100% 96%);
+        --warning-700: hsl(38 80% 32%);
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.25rem;
+        --space-6: 1.5rem;
+        --space-8: 2rem;
+        --radius-sm: 0.25rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --shadow-focus: 0 0 0 0.1875rem hsl(245 58% 51% / 25%);
+        --duration-fast: 150ms;
+        --ease-out: cubic-bezier(0, 0, 0.2, 1);
+        --border-width: 0.0625rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 20rem;
+        min-height: 100vh;
+        background: var(--surface-app);
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: var(--text-base);
+        line-height: var(--leading-normal);
+      }
+
+      .shell {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .brand-bar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-4) var(--space-5);
+        background: var(--brand-800);
+        color: var(--text-inverse);
+      }
+
+      .brand-mark {
+        position: relative;
+        width: var(--space-8);
+        height: var(--space-8);
+        flex: 0 0 var(--space-8);
+        border-radius: var(--radius-md);
+        background: var(--text-inverse);
+      }
+
+      .brand-mark::before,
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        background: var(--brand-600);
+        border-radius: var(--radius-sm);
+      }
+
+      .brand-mark::before {
+        inset: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
+      }
+
+      .brand-mark::after {
+        inset: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+      }
+
+      .brand-label {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.25;
+      }
+
+      .brand-label strong {
+        font-size: var(--text-md);
+        font-weight: var(--weight-bold);
+      }
+
+      .brand-label span {
+        color: var(--text-inverse-soft);
+        font-size: var(--text-sm);
+      }
+
+      main {
+        width: 100%;
+        max-width: 38rem;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6) var(--space-6);
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: var(--space-2);
+        font-size: var(--text-xl);
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+      }
+
+      .lead {
+        max-width: 65ch;
+        margin-bottom: var(--space-6);
+        color: var(--text-secondary);
+      }
+
+      .status {
+        display: flex;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border: var(--border-width) solid var(--border-default);
+        border-radius: var(--radius-lg);
+        background: var(--surface-card);
+      }
+
+      .status-dot {
+        width: var(--space-3);
+        height: var(--space-3);
+        flex: 0 0 var(--space-3);
+        margin-top: var(--space-1);
+        border-radius: 50%;
+        background: var(--warning-700);
+        box-shadow: 0 0 0 var(--space-1) var(--warning-50);
+      }
+
+      .status h2 {
+        margin-bottom: var(--space-1);
+        font-size: var(--text-md);
+        font-weight: var(--weight-semibold);
+      }
+
+      .status p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+      }
+
+      .status[data-state='configured'] .status-dot {
+        background: var(--brand-500);
+        box-shadow: 0 0 0 var(--space-1) var(--brand-50);
+      }
+
+      .boundary {
+        margin: var(--space-6) 0;
+      }
+
+      .boundary h2 {
+        margin-bottom: var(--space-2);
+        font-size: var(--text-md);
+        font-weight: var(--weight-semibold);
+      }
+
+      .boundary ul {
+        margin: 0;
+        padding-left: var(--space-5);
+        color: var(--text-secondary);
+      }
+
+      .boundary li + li {
+        margin-top: var(--space-2);
+      }
+
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      button {
+        min-height: 2.75rem;
+        padding: var(--space-2) var(--space-4);
+        border: var(--border-width) solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--surface-card);
+        color: var(--text-primary);
+        font: inherit;
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+        transition:
+          background-color var(--duration-fast) var(--ease-out),
+          border-color var(--duration-fast) var(--ease-out);
+      }
+
+      button:hover {
+        border-color: var(--brand-500);
+        background: var(--surface-hover);
+      }
+
+      button:focus-visible {
+        outline: none;
+        box-shadow: var(--shadow-focus);
+      }
+
+      button:active {
+        background: var(--brand-50);
+      }
+
+      footer {
+        margin-top: auto;
+        padding: var(--space-3) var(--space-5);
+        border-top: var(--border-width) solid var(--border-default);
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        text-align: center;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        button {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="brand-bar">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-label">
+          <strong>Granete</strong>
+          <span>para SketchUp</span>
+        </span>
+      </header>
+
+      <main>
+        <h1>Diseñá en SketchUp. Validá en Granete.</h1>
+        <p class="lead">
+          Tu modelo sigue siendo el espacio de diseño. Granete conserva la información que define
+          qué puede producirse.
+        </p>
+
+        <section id="connection-card" class="status" aria-labelledby="connection-title">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <h2 id="connection-title">Comprobando conexión</h2>
+            <p id="connection-status" role="status" aria-live="polite">
+              Comprobando el estado de la extensión…
+            </p>
+          </div>
+        </section>
+
+        <section class="boundary" aria-labelledby="boundary-title">
+          <h2 id="boundary-title">Este primer paso incluye</h2>
+          <ul>
+            <li>Una extensión instalable con ciclo de apertura seguro.</li>
+            <li>Un límite explícito entre acceso, transporte y datos del modelo.</li>
+            <li>Metadata de intención que no afirma que el diseño está listo para producir.</li>
+          </ul>
+        </section>
+
+        <div class="actions">
+          <button id="close-dialog" type="button">Cerrar panel</button>
+        </div>
+      </main>
+
+      <footer>Granete for SketchUp · versión 0.1.0</footer>
+    </div>
+
+      <script>
+        (function () {
+          "use strict";
+
+          var statusCard = document.getElementById("connection-card");
+          var headingElement = document.getElementById("connection-title");
+          var statusElement = document.getElementById("connection-status");
+          var closeButton = document.getElementById("close-dialog");
+
+          window.GraneteDialog = {
+            setStatus: function (status) {
+              status = status || {};
+              if (status.heading) {
+                headingElement.textContent = String(status.heading);
+              }
+              if (status.message) {
+                statusElement.textContent = String(status.message);
+              }
+              if (status.state) {
+                statusCard.setAttribute("data-state", String(status.state));
+              }
+            },
+          };
+
+          closeButton.addEventListener("click", function () {
+            if (window.sketchup && window.sketchup.close_dialog) {
+              window.sketchup.close_dialog();
+            }
+          });
+
+          if (window.sketchup && window.sketchup.dialog_ready) {
+            window.sketchup.dialog_ready();
+          }
+        })();
+      </script>
+  </body>
+</html>

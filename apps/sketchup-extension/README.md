@@ -1,0 +1,159 @@
+# Granete for SketchUp
+
+Installable bootstrap for the Granete SketchUp extension. SketchUp owns design
+authoring and interaction; Granete remains the authority for manufacturing
+validation and outputs.
+
+> **Current status:** development candidate. Static and package gates run
+> outside SketchUp. The only host target for this bootstrap is **SketchUp
+> 2026.2 on macOS**; every other version is planned compatibility, not a
+> target and not implied support. No host row is supported until its
+> installation and TestUp smoke are recorded.
+
+## Quick path
+
+The development toolchain is Ruby 3.2.11 with Bundler 4.0.19. On Apple Silicon
+with Homebrew Ruby:
+
+```bash
+export PATH="/opt/homebrew/opt/ruby@3.2/bin:/opt/homebrew/lib/ruby/gems/3.2.0/bin:$PATH"
+ruby --version
+bundle --version
+bundle install
+bundle exec rake verify
+bundle exec rake build
+```
+
+The installable package is `dist/granete_for_sketchup.rbz`. `rake verify`
+checks Ruby syntax, RuboCop and SketchUp rules, standalone tests, architecture
+boundaries, a deterministic build, and package readback.
+
+## Install locally
+
+1. Build a fresh RBZ with `bundle exec rake build`.
+2. Open SketchUp's **Extension Manager**.
+3. Choose **Install Extension** and select
+   `dist/granete_for_sketchup.rbz`.
+4. Restart SketchUp when requested.
+5. Open **Extensions → Abrir Granete**.
+
+The shell is entirely local. It does not load fonts, scripts, styles, or any
+other resource from the web.
+
+## Manual smoke
+
+Use a disposable model. A host row is only supported when **all** of the
+following is recorded: exact host/Ruby/CEF/OS versions, the RBZ SHA-256, and
+the results of every step below plus the TestUp JSON run.
+
+1. Install the RBZ, restart SketchUp, and confirm **Extensions → Abrir
+   Granete** appears exactly once.
+2. Open, close, and reopen **Granete for SketchUp** (dialog must recreate
+   cleanly, no duplicated callbacks).
+3. Confirm the dialog reports the connection as disabled by default.
+4. Disable the extension in the Extension Manager and restart SketchUp: its
+   command must be absent.
+5. Enable it, restart, and confirm one command is present.
+6. Uninstall it and confirm only the two extension items are removed.
+
+Do not report a supported host from source review or package installation
+alone.
+
+## Lifecycle semantics
+
+Unchecking an item in the Extension Manager (or `SketchupExtension#uncheck`)
+does **not** stop already-running Ruby in the current session. The extension
+registers a `Sketchup::AppObserver` whose `onUnloadExtension` routes the
+host's unload notification for this extension to `Runtime.shutdown`: the
+dialog closes and the observer deregisters. A session restart after disable
+is therefore still part of the smoke above.
+
+## In-host TestUp smoke
+
+Install [TestUp 2.5.4](https://github.com/SketchUp/testup-2/releases/tag/2.5.4),
+then build and **install this extension from the RBZ**. The suite tests the
+installed extension only: it fails closed if **Granete for SketchUp** is not
+installed, enabled, and loaded at the expected version from the SketchUp
+Plugins directory, and it refuses to run against the repository checkout. The
+checked-in suite uses only Minitest APIs compatible with the Minitest 5.15
+bundled by TestUp 2.5.4.
+
+macOS example:
+
+```bash
+'/Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp' \
+  -RubyStartupArg \
+  'TestUp:CI:Config: /absolute/path/to/apps/sketchup-extension/testup-ci.yml'
+```
+
+Windows example for a future matrix run:
+
+```powershell
+& 'C:\Program Files\SketchUp\SketchUp 2026\SketchUp\SketchUp.exe' `
+  -RubyStartupArg `
+  'TestUp:CI:Config: C:\absolute\path\to\apps\sketchup-extension\testup-ci.yml'
+```
+
+TestUp emits JSON to stdout. Preserve that output with the host version and
+RBZ SHA-256; never replace unavailable host evidence with a simulated pass.
+
+## Configuration and security boundary
+
+The bootstrap injects two independent ports:
+
+- `Auth::Provider` supplies authorization material when a later integration
+  explicitly configures it.
+- `Transport::Adapter` carries requests when a later integration explicitly
+  configures it.
+
+Both defaults are null implementations and fail closed. The RBZ embeds no
+endpoint, token, credential, customer data, or third-party gem. Logs redact
+bearer tokens, private absolute paths (POSIX volumes, Windows drive roots, UNC
+shares), URLs and query strings carrying credentials, emails, and sensitive
+context fields.
+
+Model metadata uses the namespaced dictionary
+`com.granete.sketchup_extension` and the versioned key
+`bootstrap_intent.v1`. It stores bounded opaque identity and authoring intent,
+is explicitly marked `nonManufacturable`, and is written in one undoable
+SketchUp operation. It is not a BOM, release, machine, or fabrication contract.
+
+## Compatibility evidence
+
+| Host | Embedded Ruby | CEF | Status |
+|---|---:|---:|---|
+| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target** — candidate; pending complete host smoke |
+| SketchUp 2024/2025 macOS | 3.2.2 | 112/128 | Planned compatibility — not a target, no implied support |
+| SketchUp 2024/2025/2026.2 Windows | 3.2.2 | 112–137 | Planned compatibility — not a target, no implied support |
+
+The source floor is SketchUp 2024/Ruby 3.2 and the browser shell is authored
+for CEF 112. Planned-compatibility rows become targets only through an
+explicit decision plus the full evidence checklist above; compatibility
+targets are not support claims.
+
+## Troubleshooting
+
+### Wrong Ruby or Bundler
+
+Run `ruby --version` and `bundle --version`. They must report Ruby 3.2.11 and
+Bundler 4.0.19 for development. On Apple Silicon, export the Homebrew path from
+the quick path before running Bundler.
+
+### Extension is missing after installation
+
+Confirm Extension Manager shows **Granete for SketchUp 0.1.0** as enabled,
+restart SketchUp, and inspect the Ruby Console for a redacted
+`extension_started` message. Rebuild the RBZ rather than copying `src/` into a
+Plugins folder.
+
+### Dialog does not reopen
+
+Close SketchUp, restart it, and repeat the smoke with the Ruby Console visible.
+Keep the redacted event and environment versions; do not include private paths,
+model data, or credentials in a report.
+
+### TestUp does not discover the suite
+
+Use the absolute path to `testup-ci.yml`, keep TestUp 2.5.4 enabled, and verify
+that `%CONFIG_DIR%/test/testup` resolves from that file. The suite class is
+`TC_BootstrapSmoke`.

@@ -1,0 +1,14 @@
+/.bundle/
+/.rubocop_cache/
+/.yardoc/
+/coverage/
+/dist/
+/doc/
+/tmp/
+/vendor/bundle/
+*.log
+*.rbz
+*.run
+*.skb
+AutoSave_*.skp
+Backup of *.layout

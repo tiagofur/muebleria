@@ -1,0 +1,123 @@
+# frozen_string_literal: true
+
+require 'digest'
+require 'fileutils'
+require 'rake/testtask'
+require 'zip'
+
+EXTENSION_ID = 'granete_for_sketchup'
+EXTENSION_ROOT = File.expand_path(__dir__)
+SOURCE_DIR = File.join(EXTENSION_ROOT, 'src')
+DIST_DIR = File.join(EXTENSION_ROOT, 'dist')
+PACKAGE_PATH = File.join(DIST_DIR, "#{EXTENSION_ID}.rbz")
+PACKAGE_TIME = Time.at([ENV.fetch('SOURCE_DATE_EPOCH', '315532800').to_i, 315_532_800].max).utc
+
+def runtime_files
+  [
+    File.join(SOURCE_DIR, "#{EXTENSION_ID}.rb"),
+    *Dir.glob(File.join(SOURCE_DIR, EXTENSION_ID, '**', '*')).select { |path| File.file?(path) }
+  ].sort
+end
+
+def archive_name(path)
+  path.delete_prefix("#{SOURCE_DIR}/")
+end
+
+def unsafe_archive_entry?(name)
+  name.match?(%r{(^|/)(?:__MACOSX|\.rubocop_cache|\.bundle)(?:/|$)}i) ||
+    name.match?(%r{(^|/)(?:\.DS_Store|\.env(?:\..*)?|[^/]*(?:secret|credential|token)[^/]*)$}i) ||
+    name.end_with?('.map')
+end
+
+def build_package
+  FileUtils.mkdir_p(DIST_DIR)
+  FileUtils.rm_f(PACKAGE_PATH)
+
+  Zip::OutputStream.open(PACKAGE_PATH) do |archive|
+    runtime_files.each do |path|
+      entry = Zip::Entry.new('', archive_name(path))
+      entry.time = PACKAGE_TIME
+      archive.put_next_entry(entry)
+      archive.write(File.binread(path))
+    end
+  end
+
+  PACKAGE_PATH
+end
+
+def verify_package(path)
+  entries = Zip::File.open(path) { |archive| archive.entries.reject(&:directory?).map(&:name) }
+  top_level = entries.map { |name| name.split('/').first }.uniq.sort
+  expected = ["#{EXTENSION_ID}.rb", EXTENSION_ID].sort
+
+  raise "Unexpected RBZ roots: #{top_level.inspect}" unless top_level == expected
+  raise 'RBZ entries are not sorted' unless entries == entries.sort
+
+  excluded = entries.any? { |name| name.match?(%r{(^|/)(test|tmp|vendor)/}) }
+  raise 'RBZ contains excluded files' if excluded
+
+  unsafe = entries.any? { |name| unsafe_archive_entry?(name) }
+  raise 'RBZ contains secrets, caches, or development artifacts' if unsafe
+
+  loader = Zip::File.open(path) { |archive| archive.read("#{EXTENSION_ID}.rb") }
+  unless loader.include?('SketchupExtension.new')
+    raise 'Root loader must register SketchupExtension'
+  end
+  unless loader.include?("'#{EXTENSION_ID}/main'")
+    raise 'Root loader must reference support entrypoint without .rb'
+  end
+
+  true
+end
+
+desc 'Check Ruby syntax for runtime, tests, and build tooling'
+task :syntax do
+  runtime_ruby = runtime_files.select { |path| File.extname(path) == '.rb' }
+  files = runtime_ruby + Dir.glob(File.join(EXTENSION_ROOT, 'test', '**', '*.rb')) + [__FILE__]
+  files.sort.each { |path| ruby '-c', path }
+end
+
+desc 'Run RuboCop and SketchUp-specific static analysis'
+task :lint do
+  sh 'bundle', 'exec', 'rubocop'
+end
+
+Rake::TestTask.new(:unit) do |task|
+  task.libs << 'test' << 'test/support'
+  task.pattern = 'test/unit/**/*_test.rb'
+  task.warning = true
+end
+
+Rake::TestTask.new(:boundary) do |task|
+  task.libs << 'test' << 'test/support'
+  task.pattern = 'test/boundary/**/*_test.rb'
+  task.warning = true
+end
+
+namespace :package do
+  desc 'Build a deterministic installable RBZ'
+  task :build do
+    path = build_package
+    puts "Built #{path}"
+  end
+
+  desc 'Read back package structure and prove reproducibility'
+  task :verify do
+    first_digest = Digest::SHA256.file(build_package).hexdigest
+    verify_package(PACKAGE_PATH)
+    second_digest = Digest::SHA256.file(build_package).hexdigest
+    verify_package(PACKAGE_PATH)
+
+    raise 'RBZ build is not deterministic' unless first_digest == second_digest
+
+    puts "Verified #{PACKAGE_PATH} (sha256 #{second_digest})"
+  end
+end
+
+desc 'Build the installable RBZ'
+task build: 'package:build'
+
+desc 'Run syntax, lint, unit, boundary, and package readback gates'
+task verify: %i[syntax lint unit boundary package:verify]
+
+task default: :verify

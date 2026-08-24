@@ -1,0 +1,8 @@
+require_paths:
+- src
+
+require:
+- sketchup-api-stubs
+
+reporters:
+- rubocop
