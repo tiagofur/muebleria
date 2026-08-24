@@ -1139,3 +1139,19 @@ re-oculto — regresión in-browser de la familia de eco (#338/#342/F152).
 Verificación: `pnpm smoke:usability` verde (37s), `pnpm test` 3.041 verdes
 (×2), typecheck 0. Review APPROVED (`progress/review_F153.md`). Rama
 `fix/338-quotes-reload-render-loop`. Issue #338 cerrado con la evidencia.
+
+## F154 — table_expand_chevron_affordance — 2026-08-24
+
+Hallazgo P1 #1 de la auditoría de paridad UI (2026-08-23): las tablas
+expandibles expanden inline pero nada lo anuncia — el usuario no puede
+predecir qué hará el click. Implementado en el componente compartido
+`CatalogTable` (Materiales, Cantos, Herrajes, Acabados, Grupos, Clientes):
+columna estrecha con ChevronRight 16px strokeWidth 1.5 por fila expandible
+(sólo con onRowClick + renderExpandedDetail), rota 90° al expandir con
+`--transition-transform` bajo prefers-reduced-motion: no-preference, color
+muted→secondary en hover/focus de fila, chevron aria-hidden + aria-expanded
+en la fila + cabecera accesible «Detalle». design.md §3.7 (icono nuevo) y
+§6.4 (spec). Verificación: 3.048 tests verdes (7 nuevos de comportamiento),
+typecheck 0, visual real a 1280 (reposo/expandido con zoom) y 390px (scroll-x
++ fade, sin overflow). Review APPROVED (`progress/review_F154.md`). Rama
+`feat/f154-row-expand-affordance`.

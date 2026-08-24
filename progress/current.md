@@ -1,60 +1,43 @@
 # Sesión
 
-**Feature en curso:** F154 — table_expand_chevron_affordance
-**Inicio:** 2026-08-24
-**Rama:** `feat/f154-row-expand-affordance`
+**Features cerradas:** F154 — table_expand_chevron_affordance
+**Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
+**Reviews:** `progress/review_F154.md` (APPROVED)
+**Rama:** `feat/f154-row-expand-affordance` (pusheada)
 
-## Plan
+## Resultado
 
-1. Chevron de affordance en `CatalogTable` (componente compartido por
-   Materiales, Cantos, Herrajes, Acabados, Grupos y Clientes).
-2. CSS con tokens: muted → secondary en hover, rotación 90° con
-   `--transition-transform` bajo `prefers-reduced-motion: no-preference`.
-3. A11y: `aria-expanded` en la fila, chevron `aria-hidden`.
-4. Tests de comportamiento del componente.
-5. design.md §3.7 (icono nuevo) + §6.4 (affordance).
-6. Verificación visual en navegador + suite + typecheck.
+Hallazgo P1 #1 de la auditoría de paridad UI resuelto: las tablas expandibles
+de catálogo ahora anuncian que la fila abre. `CatalogTable` (componente
+compartido por Materiales, Cantos, Herrajes, Acabados, Grupos y Clientes)
+antepone una columna estrecha con chevron por fila expandible:
 
-## Contexto
+- reposo apunta a la derecha; rota 90° al expandir (`--transition-transform`
+  bajo `prefers-reduced-motion: no-preference`, flip directo con reduced);
+- color muted → secondary en hover/focus-within/fila expandida;
+- chevron `aria-hidden` (la fila es el control, que ya expone
+  `aria-expanded`) y cabecera con label accesible «Detalle»;
+- gating correcto: sin `renderExpandedDetail` no hay chevron (no promete
+  expansión inexistente).
 
-Hallazgo P1 #1 de `progress/ui-parity-audit-2026-08-23.md`: la fila expande
-inline pero nada lo anuncia (sin chevron, sin "Ver"); el usuario no puede
-predecir qué hará el click. design.md §4.2 (F150) ya sanciona el lenguaje:
-"la fila abre; su affordance es el chevron" — sólo falta implementarlo.
-
-## Estado
-
-- [x] Implementación
-- [x] Tests
-- [x] Docs
-- [x] Verificación (suite + visual)
-- [ ] Review
+Implementa exactamente lo que design.md §4.2 (F150) sanciona: "la fila abre;
+su affordance es el chevron".
 
 ## Verificación (evidencia)
 
-- `pnpm test` 3.048 tests verdes (ui 1.401 — incluye 7 tests nuevos de
-  CatalogTable: chevron por fila expandible, aria-hidden, aria-expanded
-  true/false por fila, data-expanded en el chevron, ausencia sin
-  renderExpandedDetail, click intacto, label accesible «Detalle» en cabecera);
+- `pnpm test` 3.048 verdes (ui 1.401 con 7 tests nuevos de comportamiento);
   `pnpm typecheck` 0 errores.
-- Visual en navegador (dev :5199, guest, seed demo):
-  - Materiales reposo: chevron muted apuntando a la derecha en cada fila,
-    alineado verticalmente, primera columna estrecha, layout intacto.
-  - Materiales expandido (click en TAB-ARA-BLA): chevron de la fila rota 90°
-    hacia abajo, las demás filas siguen a la derecha, panel de detalle
-    desplegado, sin glitches.
-  - Clientes: 2 filas con chevron (mismo componente compartido).
-- design.md actualizado: §3.7 fila de icono nueva (`ChevronRight` expandir
-  fila) + §6.4 spec del affordance.
+- Visual en navegador (guest, seed demo): Materiales reposo/expandido con
+  zoom (chevron rota 90°, panel intacto), Clientes hereda, 390px sin overflow
+  (scroll-x + fade existentes).
 
-## Archivos
+## Notas
 
-- `packages/ui/src/catalogs/CatalogTable.tsx` — columna expander condicional
-  (onRowClick && renderExpandedDetail), aria-expanded en la fila, chevron
-  ChevronRight 16px aria-hidden, colSpan actualizado.
-- `packages/ui/src/catalogs/catalogs.css` — `__expander*` con tokens; rotación
-  90° bajo `prefers-reduced-motion: no-preference`; muted→secondary en
-  hover/focus-within/expanded de la fila.
-- `packages/ui/src/catalogs/CatalogTable.test.tsx` — 7 tests de comportamiento.
-- `docs/design.md` — §3.7 + §6.4.
-- `feature_list.json` — F154.
+- Los tests de pantalla existentes no asumen índices de celda — sin ajustes.
+
+## Siguientes pasos (backlog auditoría)
+
+1. Estructuras: Desactivar/Eliminar al overflow "Más" (hallazgo P2 #4).
+2. Continuar revisión: Estructuras, Componentes, catálogos, Clientes, Vitrina.
+3. Headings múltiples en Librería (P2 #3) y "Sin foto" en nombre accesible
+   (P3 #5) por pantalla.
