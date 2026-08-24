@@ -1236,3 +1236,25 @@ ambiente juntos — y línea "Ambiente" en páginas de muro sólo multi-ambiente
 (`progress/review_F159.md`). Rama `feat/254-elevations-grouped-by-space`.
 Con esto el QA #251 del hub Vistas queda cubierto en sus tres hijos
 (#256 F157, #255 F158, #254 F159).
+
+## F160 — sketchup_extension_bootstrap — 2026-08-24
+
+#345: bootstrap instalable y verificable de **Granete for SketchUp** (rename
+de marca Muebles→Granete en el entregable; repo-wide queda en #366). Round 1
+del review CHANGES_REQUESTED (colisión F158, sin evidencia host, lifecycle no
+conectado, TestUp contra checkout, redacción con fugas, guards no
+mutation-resistant, entrega sin encadenar): las 8 correcciones aplicadas sobre
+historia reestructurada en 5 work units (PR #365, CI 6/6 con matriz Ruby
+ubuntu/macOS/Windows). Host smoke real en SketchUp Pro 2026.2 macOS 26.6.2 /
+Ruby 3.2.2 / CEF 137 con TestUp CI 2.5.4 contra el RBZ instalado
+(byte-identificado por diff): **7/7, 27 assertions, 0 fallos** — carga limpia,
+diálogo abre/cierra/recrea, AppObserver#onUnloadExtension drivea shutdown,
+puertos fail-closed, metadata undoable round-trip, redacción in-host. El
+smoke encontró 3 bugs reales que los gates locales no podían ver: AppObserver
+es clase (include→TypeError; stub corregido), `Sketchup::Console#puts`
+privado + swap de `$stdout` en TestUp (SafeLogger ahora escribe con fallback
+Kernel.puts), y grupos vacíos purgados por transacciones (fixture con
+geometría; registrado para #346). RBZ final SHA-256 `9b392da4…`;
+`rake verify` 115+421 assertions 0 fallos; `./init.sh` exit 0 real (3.069
+tests TS, Go ok). Review round 2 APPROVED (`progress/review_F160.md`).
+Rama `codex/345-sketchup-extension-bootstrap`.

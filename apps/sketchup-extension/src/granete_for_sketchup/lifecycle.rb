@@ -44,13 +44,14 @@ module Granete
     # SketchUp does not stop already-loaded Ruby when an item is unchecked in
     # the Extension Manager. AppObserver#onUnloadExtension is the host
     # notification surface for user deactivation, so session cleanup hangs off
-    # it instead of pretending uncheck is an unload.
-    class AppLifecycleObserver
-      include ::Sketchup::AppObserver
-
+    # it instead of pretending uncheck is an unload. The host API declares
+    # AppObserver as a class: observers subclass it, including it raises
+    # TypeError at load time.
+    class AppLifecycleObserver < ::Sketchup::AppObserver
       attr_reader :extension_name, :extension_id
 
       def initialize(extension_name:, extension_id:, on_unload:)
+        super()
         @extension_name = extension_name
         @extension_id = extension_id
         @on_unload = on_unload

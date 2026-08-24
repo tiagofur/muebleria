@@ -157,6 +157,58 @@ The package gate requires exactly two top-level archive items:
 vendor/tmp content, caches, secret/credential/token-like paths, environment
 files, macOS archive metadata, and source maps.
 
+## Host evidence (2026-08-24) — SketchUp 2026.2 macOS, PASS
+
+Licensed host, executed by the implementer with the leader's documented
+procedure. The installed extension bytes were verified identical to the RBZ
+before the run (`diff -r` against `dist/granete_for_sketchup.rbz`,
+SHA-256 `9b392da4…`).
+
+| Field | Value |
+|---|---|
+| Host | SketchUp Pro 26.2 (2026.2) macOS, Apple M5 Pro (Mac17,9) |
+| OS | macOS 26.6.2 |
+| Embedded Ruby | 3.2.2 (arm64-darwin, patchlevel 53) |
+| CEF | 137.0.7151.121 (`UI::HtmlDialog::CEF_VERSION` is a String in-host) |
+| Runner | TestUp 2.5.4 (`TestUp2_2.5.4_2026-01-22-4f34cb7.rbz`, SHA-256 `7c86a99d…`) via `-RubyStartupArg TestUp:CI:Config:` |
+| Product under test | Installed RBZ in the SketchUp Plugins folder (not the checkout; enforced by the suite via `Runtime.method(:start).source_location`) |
+| Result | **Success — 7 tests, 27 assertions, 0 failures, 0 errors, 0 skips**; SketchUp exited by itself (`KeepOpen: false`), process exit 0 |
+
+Passing in-host coverage: installed extension registered/enabled/loaded at
+0.1.0; host floor (SketchUp ≥24, Ruby 3.2, CEF ≥112); `Runtime.start`
+idempotent; host observer registered and `onUnloadExtension` drives the real
+shutdown (dialog closed, observer deregistered, redacted
+`extension_stopped` logged); null ports fail closed; `UI::HtmlDialog`
+opens/closes/recreates without duplicate callbacks on real CEF 137;
+non-manufacturable metadata round-trips in an undoable operation on a real
+model; logging redacts in-host.
+
+### Real host bugs found by the smoke and fixed
+
+1. **`include Sketchup::AppObserver` raised `TypeError` at load time** — the
+   host API declares `AppObserver` as a *class* (stubs: `class
+   Sketchup::AppObserver`); observers must subclass it. The unit stub had
+   modeled it as a module, so all local gates stayed green while the
+   extension failed to load in-host. Fixed: `AppLifecycleObserver <
+   ::Sketchup::AppObserver`; the test stub now models a class.
+2. **`SafeLogger` crashed under TestUp** — `Sketchup::Console#puts` is
+   private and TestUp swaps `$stdout` around each test, so sink identity
+   checks are unreliable. Fixed: write-first (`IO#write`/`StringIO#write`)
+   with a `Kernel.puts` fallback that reaches the console at C level.
+3. **Empty groups are purged by model transactions** — a group created with
+   `add_group` and no geometry is invalidated ("reference to deleted
+   Entity") by the next commit/transaction, in any model. The smoke fixture
+   now carries geometry, like any real furniture instance. Recorded because
+   #346 metadata will live on real (non-empty) instances.
+4. **`Sketchup.find_support_file` is not reliable for the user Plugins
+   folder** (returned nil for the installed loader). The suite binds to the
+   loaded bytes via `source_location` instead — stronger evidence anyway.
+
+Manual Extension Manager GUI steps (disable/enable/uninstall via UI) were not
+GUI-automated in this run (automation helper lacked Screen Recording/
+Accessibility grants); load-without-errors and the unload notification path
+are covered by the in-host evidence above.
+
 ## Round-1 review corrections applied
 
 All eight changes requested by `progress/review_F160_round1.md`:
@@ -192,13 +244,14 @@ bundle exec rubocop -A
 The normalizer converged with no offenses. The repository has no configured
 Prettier/Biome normalizer for this package.
 
-Successful gates after the corrections:
+Successful gates after the corrections (final numbers, see host evidence
+below for the in-host run):
 
 | Command | Result |
 |---|---|
 | `bundle exec rake verify` | PASS — syntax + 25-file lint (0 offenses) + 25 unit runs/115 assertions + 3 boundary runs/421 assertions + deterministic readback |
-| `bundle exec rake build` / package readback | PASS — SHA-256 `6d41e6d735834a005378505dd26328d27eae8a1947956ca836d9588c5bf3a42d` |
-| `./init.sh` | run once more before delivery (recorded below after the final history restructure) |
+| `bundle exec rake build` / package readback | PASS — SHA-256 `9b392da4b76eddf73278bb143c0ffdc98f170509eba914eea0fbbb3130be3f59` |
+| `./init.sh` (full harness, real exit code) | PASS — exit 0; typecheck 7 workspaces; 3,069 TS tests / 289 files; Go all packages; Ruby/RBZ gate |
 | `sh -n init.sh` | PASS |
 | `git diff --check` | PASS |
 
@@ -216,7 +269,7 @@ unavailable, not as a visual or host pass.
 
 ## Implementation work units
 
-Delivery is chained and reviewable as five units (history restructured from
+Delivery is chained and reviewable as work units (history restructured from
 the round-0 three-commit layout; tests live with the behavior they verify):
 
 1. scaffold + toolchain (configs, Gemfile/lockfile, Rakefile, CI, init.sh)
@@ -227,33 +280,36 @@ the round-0 three-commit layout; tests live with the behavior they verify):
 4. host smoke + repository gates (TestUp suite, boundary tripwires,
    testup-ci.yml)
 5. docs + evidence (README, ledger F160, progress artifacts, this file)
+6. host-smoke fixes (AppObserver subclass, console-safe logger, faithful
+   stubs) + host-API smoke corrections (source_location binding, CEF string
+   compare, geometry-carrying fixture) — produced by the in-host findings
+7. host evidence + review round 2 + ledger close
 
 No commit contains `Co-Authored-By` or AI attribution.
 
-## Pending host evidence and risks
+## Remaining risks
 
-- **Not run:** licensed SketchUp/TestUp execution. No in-host pass is claimed.
-- **SketchUp 2026.2 macOS (the only target):** candidate only; package
-  installation, open/close/recreate, TestUp JSON, disable/restart,
-  enable/restart, and uninstall evidence remain pending. The leader will run
-  the host smoke; until then no host row is supported.
 - SketchUp 2024/2025 and every Windows row: planned compatibility, not
   targets; no implied support.
-- CEF 112 compatibility has static source evidence only; real rendering
-  remains pending.
+- CEF 112 floor is source-level only (host run used CEF 137); real 2024
+  rendering remains untested.
+- Extension Manager GUI disable/enable/uninstall cycle was not GUI-automated
+  (permission-blocked); load and unload-notification paths are covered
+  in-host (see Host evidence).
 - Auth and transport intentionally remain null; real connection behavior
   belongs to a later integration slice and must preserve these ports and
   redaction.
 - Repo-wide brand rename (docs, web app, backend) is out of scope for this
-  branch and tracked as a separate issue; this branch renames the extension
+  branch and tracked separately (#366); this branch renames the extension
   deliverable only.
 
 ## Reviewer checklist
 
-1. Confirm F160 remains `in_progress`.
-2. Inspect the loader/package topology and runtime dependency allowlist.
+1. Re-run `bundle exec rake verify` from `apps/sketchup-extension`.
+2. Read back `dist/granete_for_sketchup.rbz` and compare its SHA-256
+   (`9b392da4…`).
 3. Confirm Ruby contains no manufacturing resolver or manufacturing truth.
-4. Re-run `bundle exec rake verify` from `apps/sketchup-extension`.
-5. Read back `dist/granete_for_sketchup.rbz` and compare its SHA-256.
-6. Treat the SketchUp 2026.2 macOS row as pending until external smoke
-   evidence exists.
+4. Re-run the host smoke per README (installed RBZ + TestUp CI) and compare
+   against the recorded 7/7.
+5. Treat every non-2026.2-macOS row as unsupported.
+
