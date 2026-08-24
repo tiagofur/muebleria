@@ -1,7 +1,7 @@
 # PRD v2 — Plataforma operativa para talleres de muebles
 
 **Estado:** CANÓNICO para visión, alcance y modelo operativo actual  
-**Fecha:** 2026-08-21  
+**Fecha:** 2026-08-24  
 **Producto:** Muebles / Mueblería (nombre de trabajo)  
 **Audiencia:** producto, agentes, implementación, QA y talleres piloto
 
@@ -24,6 +24,7 @@ El producto actual incluye y debe integrar coherentemente:
 - clientes, cartera comercial, cotizaciones y pricing;
 - catálogo técnico y comercial de muebles, materiales, cantos y herrajes;
 - Proyectar 2D/3D y ambientes;
+- Muebles for SketchUp como authoring client profesional;
 - estructuras, componentes, agregados y BOM resuelto;
 - ingeniería y documentación de producción;
 - optimización de corte para sierra y CNC nesting;
@@ -93,7 +94,7 @@ misma obra y la misma trazabilidad.
 
 ---
 
-## 4. Dos modos comerciales que coexisten
+## 4. Modos comerciales y rutas de autoría que coexisten
 
 ### 4.1 Cotizar rápido
 
@@ -106,7 +107,24 @@ El vendedor/proyectista trabaja espacios, muros, ubicaciones y materiales en 2D/
 El 3D no es decorativo: sus decisiones alimentan el proyecto y deben mantenerse
 compatibles con el BOM técnico.
 
-Ninguno es secundario. Ambos convergen en una misma `Project/Job`.
+Proyectar permanece como la ruta nativa de quick design: debe resolver el trabajo modular
+sin exigir una herramienta CAD externa.
+
+### 4.3 Muebles for SketchUp
+
+El diseñador que ya trabaja en SketchUp puede usarlo como ruta de authoring profesional.
+La extensión captura selección, interacción, transforms, parameters y semantic metadata;
+no calcula la manufacturing truth.
+
+> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+
+Muebles conserva catálogo, BOM, parts, materials, hardware, drilling, revisions,
+preflight, release y machine outputs. Cotizar rápido, Proyectar y SketchUp convergen en
+una misma `Project/Job`.
+
+Ver `docs/sketchup-muebles-strategy.md`,
+`docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md` y
+`docs/sketchup-manufacturing-contract.md`.
 
 ---
 
@@ -509,6 +527,9 @@ Integrar herramientas externas es preferible a recrearlas cuando no sea parte de
 | Arquitectura/boundaries | `docs/architecture.md` |
 | UX operacional | `docs/operational-ux.md` + `docs/design.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
+| Programa SketchUp + Muebles | `docs/sketchup-muebles-strategy.md` + issue #290 |
+| Ownership SketchUp/Muebles | `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md` |
+| Contract conceptual | `docs/sketchup-manufacturing-contract.md` |
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | Permisos ejecutables | `packages/domain/src/rbac.ts` / backend correspondiente |
 | Estado de implementación | código + tests + `feature_list.json` como ledger |

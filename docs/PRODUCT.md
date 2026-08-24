@@ -25,7 +25,8 @@ on:
 - integrated design→BOM→production flow;
 - operational continuity through installation and costing.
 
-See `docs/proyectar-3d-competitive-position.md`.
+See `docs/proyectar-3d-competitive-position.md` and
+`docs/sketchup-muebles-strategy.md`.
 
 ## Users
 
@@ -63,6 +64,28 @@ Sales → Survey/Design → Engineering/Release → Materials → Production
 Its historical core — catalogs, reusable modules, resolved BOM, quote pricing and
 Optimizer output — remains fundamental, but it is no longer the full product boundary.
 
+### Authoring paths, one manufacturing truth
+
+Muebles supports two complementary 3D authoring paths:
+
+- **Proyectar 3D** is the native quick-design path for modular work, quoting and users
+  who should not need an external CAD tool.
+- **Muebles for SketchUp** is the professional authoring path for designers who already
+  work in SketchUp.
+
+Both produce authoring intent for the same `Project/Job`. Neither UI owns the industrial
+result:
+
+> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+
+Muebles alone resolves and validates catalogs, BOM, parts, materials, hardware,
+drilling, revisions, preflight, release and machine outputs. The canonical references
+are:
+
+1. `docs/sketchup-muebles-strategy.md`;
+2. `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
+3. `docs/sketchup-manufacturing-contract.md`.
+
 ## Three product pillars
 
 ### A — Sell
@@ -72,6 +95,8 @@ Customer → Quote → Proyectar → Presentation → Approval
 ```
 
 Proyectar is a core sales/design workspace, not a decorative preview.
+It remains the native quick-design route; the SketchUp integration complements rather
+than replaces it.
 
 ### B — Build
 
