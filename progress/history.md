@@ -1169,3 +1169,17 @@ recibía data-testid crudo en vez de la prop dataTestId (atributo muerto).
 verificado (chrome + menú abierto, destructivas ausentes del chrome). Review
 APPROVED (`progress/review_F155.md`). Rama `feat/f154-row-expand-affordance`
 (PR #359 junto a F154 por decisión del dueño, commits/reviews separados).
+
+## F156 — catalog_image_placeholder_a11y — 2026-08-24
+
+Hallazgo P3 #5 de la auditoría de paridad: el placeholder de CatalogImage
+exponía role=img con aria-label = nombre de la entidad (duplicaba el título
+en el announcement del lector) y el texto "Sin foto" filtraba al nombre
+accesible. Fix: placeholder 100% decorativo (aria-hidden, sin role ni
+aria-label); la imagen real conserva alt. Verificado en navegador post-reload:
+nombre accesible de la card sin "Sin foto" ni duplicación. Verificación
+colateral del hallazgo P2 #3 (headings múltiples en Librería): YA resuelto en
+main — 1 h2 por pantalla (Muebles/Estructuras/Componentes/Agregados), cards
+h3; sin código nuevo. 3 tests nuevos; 3.055 verdes; typecheck 0. Review
+APPROVED (`progress/review_F156.md`). Rama `feat/f154-row-expand-affordance`
+(PR #359 junto a F154/F155 por decisión del dueño).

@@ -3620,6 +3620,32 @@
       ],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F156",
+      "phase": 0,
+      "name": "catalog_image_placeholder_a11y",
+      "title": "Paridad UX: placeholder 'Sin foto' decorativo + verificación P2 #3 headings ya resuelto (hallazgos P3 #5 y P2 #3 de la auditoría)",
+      "description": "Hallazgo P3 #5 de progress/ui-parity-audit-2026-08-23.md: el placeholder de CatalogImage exponía role=img con aria-label = nombre de la entidad (duplicando el título de la card en el announcement del lector de pantalla) y el texto visual 'Sin foto' filtraba al nombre accesible. Fix: el placeholder es 100% decorativo (aria-hidden, sin role=img ni aria-label) — el estado sin foto es metadato visual no esencial y el nombre de la entidad ya vive en el heading de la card/fila. La imagen real conserva su alt. Verificación colateral del hallazgo P2 #3 (headings múltiples en Librería): medido en navegador sobre main — Muebles/Estructuras/Componentes/Agregados tienen exactamente 1 h2 (título de pantalla) y cards en h3; quedó resuelto por los fixes posteriores a la auditoría, sin código nuevo necesario.",
+      "acceptance": [
+        "Placeholder aria-hidden, sin role=img ni aria-label: 'Sin foto' y la duplicación del nombre no entran al nombre accesible de cards/filas",
+        "La imagen real sigue renderizando <img> con alt",
+        "URL insegura sigue cayendo al placeholder decorativo",
+        "P2 #3 verificado en navegador: 1 h2 por pantalla de Librería (evidencia registrada, sin código nuevo)",
+        "Tests de comportamiento del componente + suite + typecheck verdes"
+      ],
+      "references": [
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/common/CatalogImage.tsx",
+        "docs/design.md#42-patrón-listadetalle"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F154",
+        "F155"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }
