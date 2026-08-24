@@ -44,6 +44,8 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Producción pieza→mueble | `docs/production-flow-v2.md` |
 | Lifecycle/eventos | `docs/project-lifecycle.md` |
 | Arquitectura/boundaries | `docs/architecture.md` |
+| Biblioteca Paramétrica Universal | `docs/architecture/parametric-furniture-library.md` |
+| ADR Biblioteca Paramétrica | `docs/adr/0002-parametric-furniture-library-architecture.md` |
 | UX visual | `docs/design.md` |
 | UX operacional | `docs/operational-ux.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |

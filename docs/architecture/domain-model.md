@@ -40,15 +40,15 @@ Project
  |
  +-- FurnitureInstance
        |
-       +-- FurnitureDefinition
+       +-- FurnitureDefinition (template)
        |
-       +-- ComponentInstances
+       +-- ComponentInstances (referencing ComponentDefinition)
        |
-       +-- Materials
+       +-- MaterialAssignments (binding roles to MaterialDefinition)
        |
-       +-- HardwarePlacements
+       +-- HardwarePlacements (referencing HardwareDefinition)
        |
-       +-- ManufacturingFeatures
+       +-- ManufacturingFeatures (resolved operations)
 ```
 
 ---
@@ -162,14 +162,16 @@ Components are not furniture. They are parts that configure furniture.
 
 ---
 
-# Materials
+# MaterialDefinition vs MaterialAssignment
 
-Materials combine commercial, visual and manufacturing information.
+## MaterialDefinition
+
+Represents raw physical materials in the catalog / inventory.
 
 Example:
 
 ```text
-Material:
+MaterialDefinition:
 Egger W1100 ST9
 
 Business:
@@ -186,9 +188,23 @@ Visual:
 Manufacturing:
 - thickness
 - compatible edges
+- sheet dimensions
 ```
 
-A material must work for:
+## MaterialAssignment
+
+Binds a functional role (e.g. `carcass`, `front`, `shelf`, `worktop`) to a `MaterialDefinition` for a given `FurnitureDefinition` or `FurnitureInstance`.
+
+Example:
+
+```text
+MaterialAssignment:
+- role: carcass -> Egger W1100 ST9 (18mm)
+- role: front -> Egger H3303 ST10 (18mm)
+- role: back_panel -> Egger H3303 ST10 (5.5mm)
+```
+
+A material configuration must work for:
 
 - quoting
 - rendering
