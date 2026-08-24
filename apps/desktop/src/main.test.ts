@@ -67,7 +67,7 @@ describe('Electron host files (F032 / #38)', () => {
       };
     };
     expect(pkg.build?.appId).toBe('com.muebles.app');
-    expect(pkg.build?.productName).toBe('Muebles');
+    expect(pkg.build?.productName).toBe('Granete');
     expect(pkg.build?.win).toBeTruthy();
     expect(pkg.build?.mac).toBeTruthy();
     expect(pkg.build?.publish?.provider).toBe('github');

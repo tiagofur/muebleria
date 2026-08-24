@@ -94,9 +94,9 @@ export default function App() {
       <View style={styles.splashContainer}>
         <StatusBar style="light" />
         <View style={styles.logoBadge}>
-          <Text style={styles.logoText}>M</Text>
+          <Text style={styles.logoText}>G</Text>
         </View>
-        <Text style={styles.splashTitle}>Muebles Mobile</Text>
+        <Text style={styles.splashTitle}>Granete Mobile</Text>
         <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
       </View>
     );

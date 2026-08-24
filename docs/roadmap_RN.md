@@ -10,7 +10,7 @@
 
 ## 1. Visión y Propósito de la App Móvil
 
-La aplicación móvil **Muebles Native** no es un clon reducido de la versión web de escritorio. Es una **herramienta de campo, taller y ventas de alta velocidad operativa**, diseñada específicamente para los momentos físicos donde una computadora portátil no es práctica:
+La aplicación móvil **Granete Native** no es un clon reducido de la versión web de escritorio. Es una **herramienta de campo, taller y ventas de alta velocidad operativa**, diseñada específicamente para los momentos físicos donde una computadora portátil no es práctica:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐

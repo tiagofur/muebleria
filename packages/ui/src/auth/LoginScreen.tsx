@@ -45,7 +45,7 @@ export function LoginScreen({
           permitido por el registro product (design.md §6.12 v2.1). */}
       <aside className="login-brand" aria-hidden="true">
         <BrandMark size={64} className="login-brand__mark" />
-        <p className="login-brand__name">Muebles</p>
+        <p className="login-brand__name">Granete</p>
         <p className="login-brand__tagline">
           Cotización y producción para talleres de carpintería.
         </p>
@@ -54,7 +54,7 @@ export function LoginScreen({
       <div className="login-card">
         <header className="login-card__header">
           <BrandMark size={40} className="login-card__mark" />
-          <h2 className="login-card__title">Muebles</h2>
+          <h2 className="login-card__title">Granete</h2>
           <p className="login-card__subtitle">
             Iniciá sesión para sincronizar tus cotizaciones
           </p>

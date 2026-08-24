@@ -316,7 +316,7 @@ export const useQuoterStore = create<QuoterState>((set, get) => ({
     lines.push(`📊 *Superficie Placas:* ~${totals.totalM2} m²`);
     lines.push(`💰 *TOTAL ESTIMADO:* *$${totals.total.toLocaleString('es-AR')}*`);
     lines.push(`-----------------------------------------`);
-    lines.push(`_Presupuesto emitido desde Muebles App Taller. Válido por 15 días._`);
+    lines.push(`_Presupuesto emitido desde Granete App Taller. Válido por 15 días._`);
 
     return lines.join('\n');
   },

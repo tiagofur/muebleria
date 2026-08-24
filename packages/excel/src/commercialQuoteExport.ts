@@ -93,7 +93,7 @@ export async function commercialQuoteExport(
   }
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'muebles';
+  workbook.creator = 'Granete';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet(SHEET_NAME, {

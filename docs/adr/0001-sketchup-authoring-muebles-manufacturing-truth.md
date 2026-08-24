@@ -1,30 +1,30 @@
-# ADR-0001 — SketchUp authoring, Muebles manufacturing truth
+# ADR-0001 — SketchUp authoring, Granete manufacturing truth
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
 - **Decision owners:** Product + Engineering
-- **Program:** [SketchUp + Muebles](../sketchup-muebles-strategy.md)
+- **Program:** [SketchUp + Granete](../sketchup-muebles-strategy.md)
 - **Tracking:** [#290](https://github.com/tiagofur/muebleria/issues/290),
   [#344](https://github.com/tiagofur/muebleria/issues/344),
   [#356](https://github.com/tiagofur/muebleria/issues/356)
 
 ## Decision
 
-> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 La extensión SketchUp captura intención de diseño, interacción, relaciones constructivas
-y contexto visual. Muebles es la única autoridad para catálogo, relaciones/joints
+y contexto visual. Granete es la única autoridad para catálogo, relaciones/joints
 resueltos, BOM, piezas, materiales, hardware, drilling, machining, revisions, preflight,
 release y manufacturing outputs.
 
 Una relación entre piezas puede ser authoring intent; sus perforaciones y operaciones
 derivadas no lo son. SketchUp puede expresar que un entrepaño está unido a dos costados,
-qué anchors/roles participan y qué sistema de unión se solicita. Muebles resuelve los
+qué anchors/roles participan y qué sistema de unión se solicita. Granete resuelve los
 placements y machining derivados con las reglas y catálogo vigentes.
 
 ## Context
 
-Muebles ya posee un núcleo industrial que conecta diseño con BOM, cutting, drilling,
+Granete ya posee un núcleo industrial que conecta diseño con BOM, cutting, drilling,
 production revision y ejecución física. SketchUp ofrece una superficie de autoría 3D
 madura que algunos clientes ya usan.
 
@@ -47,7 +47,7 @@ El programa necesita aprovechar SketchUp sin crear dos autoridades industriales.
 
 ## Boundaries
 
-| Concern | SketchUp extension | Muebles | Machine adapter |
+| Concern | SketchUp extension | Granete | Machine adapter |
 |---|---|---|---|
 | Viewport, selection, drag y transform | Owns | Recibe intent | No participa |
 | Authoring geometry | Owns | Puede inspeccionar/validar | No participa |
@@ -87,7 +87,7 @@ Estos datos pueden mejorar UX, pero no demuestran manufacturabilidad.
 Estos datos describen qué quiso hacer el usuario. No contienen final drilling ni machine
 coordinates como autoridad industrial.
 
-### Muebles-authoritative for manufacturing
+### Granete-authoritative for manufacturing
 
 - catalog entities y revisions;
 - parameter constraints;
@@ -118,9 +118,9 @@ User edits in SketchUp
         ↓
 AuthoringEnvelope
         ↓
-Muebles validates schema + identity + catalog references
+Granete validates schema + identity + catalog references
         ↓
-Muebles resolves relationships/joints + BOM + parts + hardware + drilling
+Granete resolves relationships/joints + BOM + parts + hardware + drilling
         ↓
 ManufacturingPreflightResult
         ↓
@@ -142,7 +142,7 @@ Para una relación constructiva entre piezas, por ejemplo un entrepaño y dos co
 
 ```text
 part transform / relationship anchor changes
-→ Muebles resolves the relationship again
+→ Granete resolves the relationship again
 → dependent placements/machining change
 → unrelated machining remains unchanged
 → bomFingerprint/revision changes when manufacturing truth changes
@@ -198,7 +198,7 @@ legacy, nunca como primary key.
 ### SketchUp exports final parts/cut list
 
 Rechazado porque duplicaría BOM y permitiría fabricar contra reglas distintas de
-Muebles.
+Granete.
 
 ### Persist CNC coordinates as relationship truth
 
@@ -238,7 +238,7 @@ Una implementación conforma con este ADR cuando:
 - [ ] Mover una bisagra modifica su machining dependiente sin alterar machining del entrepaño.
 - [ ] Derived operations conservan provenance hacia relationship/joint/placement de origen.
 - [ ] Repetir el mismo request con el mismo `idempotencyKey` no duplica entidades.
-- [ ] Muebles puede rechazar metadata/relationships ambiguos antes de producir artifacts.
+- [ ] Granete puede rechazar metadata/relationships ambiguos antes de producir artifacts.
 - [ ] Resolved manufacturing data incluye `designRevisionId` y `bomFingerprint`.
 - [ ] Cambios relevantes después de release producen stale state.
 - [ ] Unknown machine capability bloquea; no se infiere por brand.
@@ -248,7 +248,7 @@ Una implementación conforma con este ADR cuando:
 
 ## References
 
-- [SketchUp + Muebles strategy](../sketchup-muebles-strategy.md)
+- [SketchUp + Granete strategy](../sketchup-muebles-strategy.md)
 - [SketchUp Manufacturing Contract](../sketchup-manufacturing-contract.md)
 - [Architecture](../architecture.md)
 - [Project Lifecycle](../project-lifecycle.md)

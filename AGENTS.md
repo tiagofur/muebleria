@@ -7,14 +7,14 @@
 
 ## 0. Proyecto en una mirada
 
-**Muebles** es una plataforma operativa vertical para carpinterías y fabricantes de
+**Granete** es una plataforma operativa vertical para carpinterías y fabricantes de
 muebles pequeños/medianos. Conecta venta, diseño/ingeniería, BOM, materiales,
 producción, logística, instalación, postventa y, como objetivo del Operational Core,
 la rentabilidad real por obra.
 
 ### Posicionamiento de Proyectar
 
-> **Mueblería no es “Promob barato”.** Proyectar debe ser una experiencia 3D de nivel
+> **Granete no es “Promob barato”.** Proyectar debe ser una experiencia 3D de nivel
 > profesional para nuestro nicho modular y diferenciarse por facilidad + continuidad
 > diseño→producción→operación, no por copiar toda la amplitud de un CAD histórico.
 

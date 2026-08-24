@@ -1,4 +1,4 @@
-# Guía de uso — Muebles
+# Guía de uso — Granete
 
 > Manual para el usuario final del taller: vendedores, ingeniería, producción
 > y administración. Paso a paso, sin jerga de código. Para setup técnico ver
@@ -6,9 +6,9 @@
 
 ---
 
-## 1. ¿Qué es Muebles?
+## 1. ¿Qué es Granete?
 
-Muebles es el sistema del taller para **cotizar, diseñar y producir** mobiliario
+Granete es el sistema del taller para **cotizar, diseñar y producir** mobiliario
 a medida: catálogos de materiales y herrajes, muebles reutilizables,
 cotizaciones con grupos de opciones, diseño del ambiente en 3D (Proyectar) y
 export al optimizador de corte.

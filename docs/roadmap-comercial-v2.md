@@ -10,7 +10,7 @@ Este documento es la fuente narrativa de prioridad comercial. Se complementa con
 - `docs/proyectar-3d-north-star.md` — quality bar del editor 3D;
 - `docs/proyectar-3d-roadmap-vnext.md` — ejecución de Proyectar;
 - [`docs/sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md) — programa
-  SketchUp + Muebles y sus límites de fabricación;
+  SketchUp + Granete y sus límites de fabricación;
 - GitHub issues — trabajo futuro;
 - `feature_list.json` — ledger de implementación/historia.
 
@@ -18,7 +18,7 @@ Este documento es la fuente narrativa de prioridad comercial. Se complementa con
 
 ## 0. Posicionamiento
 
-> **Mueblería no es una alternativa barata a Promob.**
+> **Granete no es una alternativa barata a Promob.**
 
 Es una plataforma operativa vertical para un segmento de talleres/fabricantes pequeños y
 medianos que necesita:
@@ -54,14 +54,14 @@ Diferenciadores:
 6. UX específica del taller y fácil de aprender;
 7. menor necesidad de unir cinco herramientas externas para completar el trabajo.
 
-Muebles ofrece **tres modos de entrada y dos rutas de autoría 3D**. Cotizar rápido sigue
+Granete ofrece **tres modos de entrada y dos rutas de autoría 3D**. Cotizar rápido sigue
 disponible sin abrir 3D; para autoría espacial coexisten:
 
 - **Proyectar 3D:** ruta nativa de diseño modular rápido;
-- **Muebles for SketchUp:** ruta de autoría 3D profesional para usuarios de SketchUp.
+- **Granete for SketchUp:** ruta de autoría 3D profesional para usuarios de SketchUp.
 
 Los tres modos de entrada convergen al mismo `Project/Job`. SketchUp y Proyectar capturan
-authoring intent; Muebles conserva la única manufacturing truth para catálogo,
+authoring intent; Granete conserva la única manufacturing truth para catálogo,
 relationships/joints, BOM, parts, hardware, drilling, revisions, preflight y machine
 outputs.
 
@@ -88,8 +88,8 @@ Ver la [estrategia canónica](sketchup-muebles-strategy.md), el
 | D11 | Próxima prioridad operacional | Tras cerrar trabajo activo, Operational Core protege verdad/lifecycle antes de profundidad técnica ilimitada |
 | D12 | Trabajo paralelo | Proyectar y SketchUp pueden avanzar por slices de alto impacto activados por pilotos, sin esperar todo Operational Core, pero nunca desplazan sus guardrails de verdad/lifecycle/release/producción |
 | D13 | Validación | Pilotos/benchmarks reales pueden reordenar features |
-| D14 | SketchUp + Muebles | **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.** Proyectar permanece como ruta nativa rápida; machine compatibility exige evidencia de campo. |
-| D15 | Relationships/joints | Constructive intent usa stable IDs/anchors; Muebles resuelve derived placements/drilling. CNC coordinates nunca son authoring truth primaria. |
+| D14 | SketchUp + Granete | **SketchUp owns authoring/interaction; Granete owns manufacturing truth.** Proyectar permanece como ruta nativa rápida; machine compatibility exige evidencia de campo. |
+| D15 | Relationships/joints | Constructive intent usa stable IDs/anchors; Granete resuelve derived placements/drilling. CNC coordinates nunca son authoring truth primaria. |
 
 ---
 
@@ -113,7 +113,7 @@ Ingeniería → BOM → Materiales → Corte → CNC → Enchape → Armado → 
 Proyecto → Compras → Embarque → Instalación → Warranty → Costing
 ```
 
-La ventaja de Mueblería es que los tres pilares comparten el mismo job y la misma
+La ventaja de Granete es que los tres pilares comparten el mismo job y la misma
 revisión, no que cada módulo tenga más botones.
 
 ---
@@ -498,7 +498,7 @@ Validar mediante #314; recalibrar con evidencia.
 - posicionamiento Proyectar: `docs/proyectar-3d-competitive-position.md`;
 - calidad Proyectar: `docs/proyectar-3d-north-star.md`;
 - ejecución Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
-- programa SketchUp + Muebles: `docs/sketchup-muebles-strategy.md`;
+- programa SketchUp + Granete: `docs/sketchup-muebles-strategy.md`;
 - boundary: `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
 - relationships/joints: #356;

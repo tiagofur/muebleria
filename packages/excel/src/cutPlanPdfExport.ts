@@ -77,7 +77,7 @@ function renderWarehouseCoverPage(
     color: rgb(0.12, 0.16, 0.24),
   });
 
-  page.drawText('MUEBLES · PLAN DE CORTE Y REQUISICIÓN DE ALMACÉN', {
+  page.drawText('GRANETE · PLAN DE CORTE Y REQUISICIÓN DE ALMACÉN', {
     x: MARGIN + 16,
     y: PAGE_HEIGHT - MARGIN - 26,
     size: 14,

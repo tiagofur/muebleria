@@ -1,24 +1,24 @@
-# SketchUp + Muebles — Estrategia de autoría y fabricación
+# SketchUp + Granete — Estrategia de autoría y fabricación
 
 > **Estado:** CANÓNICO  
 > **Fecha:** 2026-08-24  
 > **META:** [#290](https://github.com/tiagofur/muebleria/issues/290)  
-> **Decisión:** **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **Decisión:** **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
-Muebles for SketchUp permite usar SketchUp como superficie profesional de autoría sin
+Granete for SketchUp permite usar SketchUp como superficie profesional de autoría sin
 convertir el modelo, la geometría visible ni Ruby en la fuente de verdad industrial.
-SketchUp captura intención; Muebles resuelve y valida qué se fabrica.
+SketchUp captura intención; Granete resuelve y valida qué se fabrica.
 
 ## 1. Resultado de producto
 
-Muebles mantiene **tres modos de entrada y dos rutas de autoría 3D** que convergen al
+Granete mantiene **tres modos de entrada y dos rutas de autoría 3D** que convergen al
 mismo `Project/Job`:
 
 | Ruta | Uso principal | Resultado |
 |---|---|---|
 | **Cotizar rápido** | catálogo + options sin abrir 3D | quote + BOM preliminar |
 | **Proyectar 3D** | diseño modular nativo y rápido | authoring intent nativo |
-| **Muebles for SketchUp** | autoría 3D profesional | authoring intent externo |
+| **Granete for SketchUp** | autoría 3D profesional | authoring intent externo |
 
 Los tres modos de entrada convergen al mismo núcleo:
 
@@ -48,7 +48,7 @@ respetarse aunque la issue SketchUp tenga prioridad P0.
 
 ## 2. Propuesta de valor
 
-> **SketchUp diseña. Muebles entiende cómo se fabrica.**
+> **SketchUp diseña. Granete entiende cómo se fabrica.**
 
 El moat se concentra en:
 
@@ -65,7 +65,7 @@ El moat se concentra en:
 
 ## 3. Ownership
 
-| Concern | SketchUp extension | Muebles | Machine adapter |
+| Concern | SketchUp extension | Granete | Machine adapter |
 |---|---|---|---|
 | Selección, drag, transform y viewport | **Owns** | Observa intent | No participa |
 | Geometría visual | **Owns** | Valida contexto cuando aplica | No participa |
@@ -92,7 +92,7 @@ Ruby puede validar estructura básica para UX, pero no implementa:
 - postprocessing.
 
 Una perforación derivada de una unión o herraje no es authoring truth independiente.
-SketchUp expresa la intención semántica; Muebles deriva las operaciones y conserva
+SketchUp expresa la intención semántica; Granete deriva las operaciones y conserva
 provenance hacia la relación, joint o placement que las originó.
 
 ## 4. Contrato conceptual
@@ -199,7 +199,7 @@ milestone mínimo no sustituye su Definition of Done.
 ### Primer hito comercial
 
 Un gabinete real que ya pasó el `minimum authoritative preflight` puede cambiar
-dimensiones, mover/agregar/eliminar entrepaños y mover herrajes en SketchUp; Muebles
+dimensiones, mover/agregar/eliminar entrepaños y mover herrajes en SketchUp; Granete
 recalcula correctamente piezas, BOM, cantos y machining sin intervención manual sobre
 coordenadas CNC. Cualquier cambio que afecte una revisión ya liberada vuelve stale el
 output anterior y exige volver a ejecutar el gate.
@@ -219,7 +219,7 @@ Shelf S1
 Si `Shelf S1` se mueve, agrega, elimina o cambia de sistema de unión:
 
 - cambia authoring intent / anchors;
-- Muebles vuelve a resolver la relación;
+- Granete vuelve a resolver la relación;
 - cambia únicamente machining dependiente;
 - machining no relacionado permanece idéntico;
 - `bomFingerprint`/revision cambian cuando cambia manufacturing truth;
@@ -239,7 +239,7 @@ Esto se define en [#356](https://github.com/tiagofur/muebleria/issues/356) y se 
 
 ## 8. Manufacturing preflight
 
-Muebles bloquea antes de fabricar:
+Granete bloquea antes de fabricar:
 
 - schema/version desconocido;
 - IDs duplicados o referencias rotas;

@@ -98,7 +98,7 @@ export function generatePtxString(input: PtxCutPlanExportInput): string {
   // ==========================================
   lines.push('[HEADER]');
   lines.push('VERSION=1.14');
-  lines.push('SYSTEM=MUEBLES_APP');
+  lines.push('SYSTEM=GRANETE_APP');
   lines.push(`JOB_NAME=${projectName || projectCode}`);
   lines.push(`PROJECT_CODE=${projectCode}`);
   lines.push(`CUSTOMER=${customerName}`);

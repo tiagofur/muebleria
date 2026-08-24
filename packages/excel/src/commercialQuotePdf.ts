@@ -253,7 +253,7 @@ export async function commercialQuotePdfExport(
 
   const doc = await PDFDocument.create();
   doc.setTitle(`Cotización — ${input.projectName}`);
-  doc.setCreator('muebles');
+  doc.setCreator('Granete');
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([PAGE_W, PAGE_H]);

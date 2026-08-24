@@ -9,7 +9,7 @@ product
 
 ## Positioning
 
-Muebles is **not** positioned as a cheap Promob alternative.
+Granete is **not** positioned as a cheap Promob alternative.
 
 > It is the ideal operating platform for a segment of small/medium woodworking and
 > furniture businesses that needs excellent modular 3D design plus a complete operating
@@ -53,7 +53,7 @@ Context of use:
 
 ## Product Purpose
 
-Muebles is a **vertical operating platform for small and medium woodworking/furniture
+Granete is a **vertical operating platform for small and medium woodworking/furniture
 businesses**. It connects:
 
 ```text
@@ -66,19 +66,19 @@ Optimizer output — remains fundamental, but it is no longer the full product b
 
 ### Authoring paths, one manufacturing truth
 
-Muebles supports two complementary 3D authoring paths:
+Granete supports two complementary 3D authoring paths:
 
 - **Proyectar 3D** is the native quick-design path for modular work, quoting and users
   who should not need an external CAD tool.
-- **Muebles for SketchUp** is the professional authoring path for designers who already
+- **Granete for SketchUp** is the professional authoring path for designers who already
   work in SketchUp.
 
 Both produce authoring intent for the same `Project/Job`. Neither UI owns the industrial
 result:
 
-> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+> **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
-Muebles alone resolves and validates catalogs, parametric part relationships/joints,
+Granete alone resolves and validates catalogs, parametric part relationships/joints,
 BOM, parts, materials, hardware, drilling, revisions, preflight, release and machine
 outputs. Derived drilling is an output of semantic relationships and placements, never an
 independent authoring truth. The canonical references are:
@@ -269,7 +269,7 @@ requirements where the environment demands larger targets and reduced precision.
 | Competitive positioning | `docs/proyectar-3d-competitive-position.md` |
 | Proyectar 3D North Star | `docs/proyectar-3d-north-star.md` |
 | Proyectar implementation roadmap | `docs/proyectar-3d-roadmap-vnext.md` |
-| SketchUp + Muebles strategy | `docs/sketchup-muebles-strategy.md` |
+| SketchUp + Granete strategy | `docs/sketchup-muebles-strategy.md` |
 | SketchUp manufacturing contract | `docs/sketchup-manufacturing-contract.md` |
 | Parametric relationships/joints | GitHub #356 |
 | Historical MVP PRD | `docs/history/prd.md` |
