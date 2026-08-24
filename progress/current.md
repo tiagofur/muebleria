@@ -3,7 +3,7 @@
 **Features cerradas:** F157 — prod_views_multi_space_scope (issue #256)
 **Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
 **Reviews:** `progress/review_F157.md` (APPROVED)
-**Rama:** `fix/256-prod-views-multi-space` (pusheada, PR abierto)
+**Rama:** `fix/256-prod-views-multi-space` (pusheada, PR #360)
 
 ## F157 — Resultado
 
