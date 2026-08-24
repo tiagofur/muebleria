@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Module, Project } from './types';
 import {
   buildProductionElevations,
+  groupProductionElevationsBySpace,
   hasProductionElevations,
 } from './productionElevations';
 
@@ -258,11 +259,112 @@ describe('buildProductionElevations (PROD-1.1)', () => {
       modules,
     );
     expect(r.walls).toHaveLength(2);
-    expect(r.walls.map((w) => w.wallName).join('|')).toContain('Cocina');
-    expect(r.walls.map((w) => w.wallName).join('|')).toContain('Baño');
+    // #254: el ambiente viaja estructurado; wallName queda crudo (sin prefijo).
+    expect(r.walls.map((w) => w.spaceName).join('|')).toBe('Cocina|Baño');
+    expect(r.walls.map((w) => w.wallName).join('|')).toBe('Muro A|Muro B');
+    expect(r.walls[0]!.wallId).toBe('space-cocina::w1');
     const allCodes = r.walls.flatMap((w) => w.units.map((u) => u.moduleCode));
     expect(allCodes).toContain('GAB-01');
     expect(allCodes).toContain('ALT-01');
     expect(r.unplaced).toHaveLength(0);
+  });
+
+  it('groups walls and islands of the same ambiente together (#254)', () => {
+    // Top-level espeja el espacio activo (cocina), como la store real.
+    const r = buildProductionElevations(
+      baseProject({
+        kitchenLayout: {
+          walls: [{ id: 'w1', lengthMm: 3200, angleDeg: 0, name: 'Muro A' }],
+          placements: [
+            {
+              itemId: 'i1',
+              instanceIndex: 0,
+              wallId: 'w1',
+              offsetMm: 0,
+              elevation: 'floor',
+            },
+            {
+              itemId: 'i2',
+              instanceIndex: 0,
+              wallId: '',
+              offsetMm: 0,
+              elevation: 'floor',
+              mode: 'free',
+              freeXMm: 0,
+              freeYMm: 0,
+            },
+          ],
+          spaces: [
+            {
+              id: 'space-cocina',
+              name: 'Cocina',
+              walls: [{ id: 'w1', lengthMm: 3200, angleDeg: 0, name: 'Muro A' }],
+              placements: [
+                {
+                  itemId: 'i1',
+                  instanceIndex: 0,
+                  wallId: 'w1',
+                  offsetMm: 0,
+                  elevation: 'floor',
+                },
+                {
+                  itemId: 'i2',
+                  instanceIndex: 0,
+                  wallId: '',
+                  offsetMm: 0,
+                  elevation: 'floor',
+                  mode: 'free',
+                  freeXMm: 0,
+                  freeYMm: 0,
+                },
+              ],
+            },
+            {
+              id: 'space-bano',
+              name: 'Baño',
+              walls: [{ id: 'w2', lengthMm: 2000, angleDeg: 0, name: 'Muro B' }],
+              placements: [],
+            },
+          ],
+          activeSpaceId: 'space-cocina',
+        },
+      }),
+      modules,
+    );
+    const groups = groupProductionElevationsBySpace(r);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]!.spaceName).toBe('Cocina');
+    expect(groups[0]!.walls.map((w) => w.wallName)).toEqual(['Muro A']);
+    // La isla de cocina viaja en el grupo de su ambiente, no al final.
+    expect(groups[0]!.islands.map((i) => i.moduleCode)).toEqual(['ALT-01']);
+    expect(groups[1]!.spaceName).toBe('Baño');
+    expect(groups[1]!.walls.map((w) => w.wallName)).toEqual(['Muro B']);
+    expect(groups[1]!.islands).toHaveLength(0);
+  });
+
+  it('mono-ambiente yields a single group; empty layout yields none (#254)', () => {
+    const single = buildProductionElevations(
+      baseProject({
+        kitchenLayout: {
+          walls: [{ id: 'w1', lengthMm: 3000, angleDeg: 0, name: 'Muro A' }],
+          placements: [
+            {
+              itemId: 'i1',
+              instanceIndex: 0,
+              wallId: 'w1',
+              offsetMm: 0,
+              elevation: 'floor',
+            },
+          ],
+        },
+      }),
+      modules,
+    );
+    const singleGroups = groupProductionElevationsBySpace(single);
+    expect(singleGroups).toHaveLength(1);
+    expect(singleGroups[0]!.walls).toHaveLength(1);
+
+    const empty = buildProductionElevations(baseProject(), modules);
+    expect(groupProductionElevationsBySpace(empty)).toHaveLength(0);
   });
 });

@@ -114,6 +114,61 @@ describe('wallElevationsPdfExport (#255 hojas de isla)', () => {
     expect(await pageCount(bytes)).toBe(1);
   });
 
+  it('multi-ambiente: páginas agrupadas — muros e islas del mismo ambiente juntos (#254)', async () => {
+    const cocinaWall = { id: 'w1', lengthMm: 3200, angleDeg: 0, name: 'Muro A' };
+    const cocinaPlacements = [
+      {
+        itemId: 'i1',
+        instanceIndex: 0,
+        wallId: 'w1',
+        offsetMm: 0,
+        elevation: 'floor' as const,
+      },
+      {
+        itemId: 'i2',
+        instanceIndex: 0,
+        wallId: '',
+        offsetMm: 0,
+        elevation: 'floor' as const,
+        mode: 'free' as const,
+        freeXMm: 1000,
+        freeYMm: 500,
+      },
+    ];
+    const project = baseProject({
+      items: [
+        { id: 'i1', moduleId: 'm1', quantity: 1, optionChoices: {} },
+        { id: 'i2', moduleId: 'm2', quantity: 1, optionChoices: {} },
+        { id: 'i3', moduleId: 'm1', quantity: 1, optionChoices: {} },
+      ],
+      kitchenLayout: {
+        // Top-level espeja el espacio activo (cocina), como la store real.
+        walls: [cocinaWall],
+        placements: cocinaPlacements,
+        activeSpaceId: 'space-cocina',
+        spaces: [
+          {
+            id: 'space-cocina',
+            name: 'Cocina',
+            walls: [cocinaWall],
+            placements: cocinaPlacements,
+          },
+          {
+            id: 'space-bano',
+            name: 'Baño',
+            walls: [{ id: 'w2', lengthMm: 2000, angleDeg: 0, name: 'Muro B' }],
+            placements: [],
+          },
+        ],
+      },
+    });
+    const bytes = await wallElevationsPdfExport({ project, modules });
+    // Grupo Cocina (muro + isla) → grupo Baño (muro) → anexo (i3 sin colocar).
+    // El orden por grupos lo garantiza groupProductionElevationsBySpace
+    // (test de dominio); aquí validamos el conteo de páginas resultante.
+    expect(await pageCount(bytes)).toBe(4);
+  });
+
   it('sin muros ni islas rechaza con error explícito', async () => {
     await expect(
       wallElevationsPdfExport({ project: baseProject(), modules }),

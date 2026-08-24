@@ -10,10 +10,16 @@ import { getCategoryTheme } from '../projects/kitchenPlanHelpers';
 
 export type ProductionIslandPreviewProps = {
   readonly island: ProductionIslandUnit;
+  /**
+   * Show the ambiente in the title (default). Grouped rendering (#254)
+   * passes false — the group heading already names the ambiente.
+   */
+  readonly showSpace?: boolean;
 };
 
 export function ProductionIslandPreview({
   island,
+  showSpace = true,
 }: ProductionIslandPreviewProps): ReactNode {
   // Mismo tema 'isla' que la planta 2D — color de categoría, no inventado.
   const theme = getCategoryTheme('isla');
@@ -36,7 +42,9 @@ export function ProductionIslandPreview({
     >
       <h4 className="prod-elev-preview__title">
         Isla {island.label}{' '}
-        <span className="prod-modulos__muted">· {island.spaceName}</span>
+        {showSpace ? (
+          <span className="prod-modulos__muted">· {island.spaceName}</span>
+        ) : null}
       </h4>
       <svg
         width={svgW}

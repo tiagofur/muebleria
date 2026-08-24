@@ -41,6 +41,9 @@ export type ProductionWallElevation = {
   readonly wallId: string;
   readonly wallName: string;
   readonly wallLengthMm: number;
+  /** Ambiente the wall belongs to (#254 grouping). */
+  readonly spaceId: string;
+  readonly spaceName: string;
   /** Units on this wall, sorted by offsetMm. */
   readonly units: readonly ProductionElevationUnit[];
 };
@@ -124,12 +127,19 @@ function unitLabel(
 /**
  * Flatten multi-space layouts so factory elevations cover every ambiente,
  * not only the active space mirrored at top-level. Free placements are
- * returned separately, tagged with their space (#255 island fichas).
+ * returned separately, tagged with their space (#255 island fichas). Wall
+ * ids are space-prefixed (collision-safe); the ambiente travels structured
+ * in spaceId/spaceName — names stay raw so grouped consumers can show
+ * "Cocina › Muro A" without parsing (#254).
  */
 function wallsAndPlacementsForElevations(
   layout: ProjectKitchenLayout,
 ): {
-  readonly walls: readonly KitchenWall[];
+  readonly wallEntries: readonly {
+    readonly wall: KitchenWall;
+    readonly spaceId: string;
+    readonly spaceName: string;
+  }[];
   readonly placements: readonly ProjectItemPlacement[];
   readonly free: readonly {
     readonly placement: ProjectItemPlacement;
@@ -144,7 +154,11 @@ function wallsAndPlacementsForElevations(
     const spaceId = space?.id ?? 'default';
     const spaceName = space?.name?.trim() || 'Planta';
     return {
-      walls: ensured.walls,
+      wallEntries: ensured.walls.map((wall) => ({
+        wall,
+        spaceId,
+        spaceName,
+      })),
       placements: ensured.placements,
       free: ensured.placements
         .filter(isFreePlacement)
@@ -152,7 +166,11 @@ function wallsAndPlacementsForElevations(
     };
   }
 
-  const walls: KitchenWall[] = [];
+  const wallEntries: {
+    wall: KitchenWall;
+    spaceId: string;
+    spaceName: string;
+  }[] = [];
   const placements: ProjectItemPlacement[] = [];
   const free: {
     placement: ProjectItemPlacement;
@@ -162,11 +180,10 @@ function wallsAndPlacementsForElevations(
   for (const space of spaces) {
     const spaceName = space.name?.trim() || 'Ambiente';
     for (const wall of space.walls) {
-      const wallLabel = wall.name?.trim() || `Muro ${wall.lengthMm} mm`;
-      walls.push({
-        ...wall,
-        id: `${space.id}::${wall.id}`,
-        name: `${spaceName} — ${wallLabel}`,
+      wallEntries.push({
+        wall: { ...wall, id: `${space.id}::${wall.id}` },
+        spaceId: space.id,
+        spaceName,
       });
     }
     for (const p of space.placements) {
@@ -180,7 +197,7 @@ function wallsAndPlacementsForElevations(
       }
     }
   }
-  return { walls, placements, free };
+  return { wallEntries, placements, free };
 }
 
 /**
@@ -198,7 +215,7 @@ export function buildProductionElevations(
   );
 
   const {
-    walls: elevWalls,
+    wallEntries: elevWallEntries,
     placements: elevPlacements,
     free: freePlacements,
   } = wallsAndPlacementsForElevations(layout);
@@ -206,7 +223,8 @@ export function buildProductionElevations(
   const wallCabinetsZ = layout.wallCabinetZMm ?? 1400;
   const defaultBaseClearance = layout.baseClearanceMm ?? 100;
 
-  const walls: ProductionWallElevation[] = elevWalls.map((wall) => {
+  const walls: ProductionWallElevation[] = elevWallEntries.map(
+    ({ wall, spaceId, spaceName }) => {
     const wallPlacements = elevPlacements.filter(
       (p) =>
         p.wallId === wall.id &&
@@ -253,6 +271,8 @@ export function buildProductionElevations(
       wallId: wall.id,
       wallName: wall.name?.trim() || `Muro ${wall.lengthMm} mm`,
       wallLengthMm: wall.lengthMm,
+      spaceId,
+      spaceName,
       units,
     };
   });
@@ -328,4 +348,50 @@ export function hasProductionElevations(
   result: ProductionElevationsResult,
 ): boolean {
   return result.walls.length > 0 || result.islands.length > 0;
+}
+
+/** Walls + islands of one ambiente, ready for grouped rendering (#254). */
+export type ProductionElevationSpaceGroup = {
+  readonly spaceId: string;
+  readonly spaceName: string;
+  readonly walls: readonly ProductionWallElevation[];
+  readonly islands: readonly ProductionIslandUnit[];
+};
+
+/**
+ * Group elevations by ambiente (#254): walls and islands of the same space
+ * land together so shop views and PDF pages read as "Cocina › …, Baño › …"
+ * instead of a flat mixed list. Groups appear in wall order first, then
+ * island-only spaces; empty spaces are omitted. Mono-ambiente yields a
+ * single group (consumers may skip the heading when there is only one).
+ */
+export function groupProductionElevationsBySpace(
+  result: ProductionElevationsResult,
+): readonly ProductionElevationSpaceGroup[] {
+  const groups: {
+    spaceId: string;
+    spaceName: string;
+    walls: ProductionWallElevation[];
+    islands: ProductionIslandUnit[];
+  }[] = [];
+  const bySpace = new Map<
+    string,
+    (typeof groups)[number]
+  >();
+  const ensureGroup = (spaceId: string, spaceName: string) => {
+    let group = bySpace.get(spaceId);
+    if (!group) {
+      group = { spaceId, spaceName, walls: [], islands: [] };
+      bySpace.set(spaceId, group);
+      groups.push(group);
+    }
+    return group;
+  };
+  for (const wall of result.walls) {
+    ensureGroup(wall.spaceId, wall.spaceName).walls.push(wall);
+  }
+  for (const island of result.islands) {
+    ensureGroup(island.spaceId, island.spaceName).islands.push(island);
+  }
+  return groups;
 }

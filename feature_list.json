@@ -3703,6 +3703,33 @@
       ],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F159",
+      "phase": 0,
+      "name": "elevations_grouped_by_space",
+      "title": "#254 Producción: elevaciones e islas agrupadas por ambiente en Vistas y PDF (reabierto)",
+      "description": "#254 (QA #251) fue cerrado en 2026-08-21 aceptando prefijos (\"Cocina — Muro A\") como agrupado. Reabierto por decisión del dueño: el modelo ya trae el espacio en muros (#252) e islas (F158), así que el agrupado real es barato. Dominio: ProductionWallElevation gana spaceId/spaceName y wallName vuelve al nombre crudo (sin prefijo); nuevo helper puro groupProductionElevationsBySpace(result) que arma grupos espacio→(muros, islas). UI: con multi-ambiente, las secciones Elevaciones por muro e Islas (libres) de Vistas renderizan un h5 por ambiente con sus fichas debajo (mono-ambiente: render actual sin headings extra). PDF: wallElevationsPdfExport itera por grupos — muros e islas de cada ambiente quedan juntos — y las páginas de muro muestran línea \"Ambiente\" sólo en multi-ambiente (mono sin ruido).",
+      "acceptance": [
+        "OP con 2 ambientes → Vistas muestra grupos/secciones por ambiente (heading por ambiente), no listado plano confuso",
+        "PDF elevaciones: muros e islas de cada ambiente quedan juntos (orden por grupo); encabezado/página por ambiente con muros",
+        "Scope \"Toda la obra\" vs un ambiente (filtro hub PROD-4.4): coherente",
+        "Mono-ambiente: sin headings de grupo ni línea Ambiente en PDF (comportamiento actual intacto)",
+        "Tests domain/UI del agrupado + suite + typecheck verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/254",
+        "packages/domain/src/productionElevations.ts",
+        "packages/ui/src/production/ProductionOrderViewsPanel.tsx",
+        "packages/excel/src/wallElevationsPdfExport.ts",
+        "docs/operational-ux.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F158"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }

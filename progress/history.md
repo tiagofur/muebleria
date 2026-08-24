@@ -1219,3 +1219,20 @@ Vistas, Documentos y pack. Muros siguen sin inventar alzado para free.
 tests verdes; typecheck 0. Review APPROVED con hallazgo corregido (Documentos
 gating, `2e77890`) — `progress/review_F158.md`. Rama
 `feat/255-island-elevation-sheet`.
+
+## F159 — elevations_grouped_by_space — 2026-08-24
+
+#254 (QA #251) había cerrado en 2026-08-21 aceptando prefijos ("Cocina —
+Muro A") como agrupado; reabierto por decisión del dueño para hacer el
+agrupado real, barato sobre el modelo con espacio en muros (#252) e islas
+(F158). Dominio: `ProductionWallElevation` gana `spaceId`/`spaceName` con
+`wallName` crudo (sin prefijo) y nuevo helper puro
+`groupProductionElevationsBySpace` (grupos espacio→(muros, islas), vacíos
+omitidos, mono = 1 grupo). UI: h5 por ambiente dentro de Elevaciones e Islas
+cuando multi-ambiente (ficha de isla sin repetir ambiente agrupada); mono sin
+headings extra. PDF: páginas iteradas por grupos — muros e islas de cada
+ambiente juntos — y línea "Ambiente" en páginas de muro sólo multi-ambiente.
+5 tests nuevos; 3.069 verdes; typecheck 0. Review APPROVED
+(`progress/review_F159.md`). Rama `feat/254-elevations-grouped-by-space`.
+Con esto el QA #251 del hub Vistas queda cubierto en sus tres hijos
+(#256 F157, #255 F158, #254 F159).
