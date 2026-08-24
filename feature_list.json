@@ -3473,6 +3473,30 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F150",
+      "phase": 0,
+      "name": "ui_card_click_open",
+      "title": "Paridad de listas: la card abre el detalle con click en su cuerpo (stretched link) en Órdenes, Instalaciones y Embarques",
+      "description": "Unificación del patrón de entrada a detalle detectada en la auditoría de paridad UI (progress/ui-parity-audit-2026-08-23.md): Cotizaciones e Ingeniería abren el detalle con click en el ítem (regla de oro design.md §4.2), pero las pantallas de fábrica exigían un botón explícito por card ('Abrir orden' en la cola de Órdenes, 'Abrir instalación' en Instalaciones, botón de apertura en Embarques). Se elimina el botón dedicado y el título de la card pasa a ser el control real de apertura con patrón stretched link: su hit-area cubre toda la card (::after inset 0), los botones de proceso (Pack, etc.) y links (tel:) quedan por encima con z-index y no disparan la apertura. La card gana affordance visible de cliqueabilidad (hover con state layer §3.6.1 + cursor pointer). El foco visible y la activación por teclado (Enter/Espacio) viven en el control del título, que lleva aria-label con acción + obra. design.md se actualiza para universalizar la regla (§4.2) y las specs de las tres pantallas (§6.7, §6.7c, §6.7d).",
+      "acceptance": [
+        "Click en el cuerpo de la card abre el detalle en cola de Órdenes, Instalaciones y Embarques (mismo handler que usaba el botón); sin botón 'Abrir X' visible",
+        "El control de apertura es el título (stretched): foco visible con --shadow-focus, Enter/Espacio activa, aria-label 'Abrir <contexto>: <obra>'",
+        "Botones de proceso (Pack / Marcar…) y links tel: conservan su comportamiento y NO disparan la apertura",
+        "Hover de card con state layer del sistema + cursor pointer (la card se ve clicable sin botón)",
+        "design.md §4.2 + §6.7/§6.7c/§6.7d actualizados con la regla universal 'click en el ítem → se abre'",
+        "Tests de comportamiento (apertura por teclado y mouse, no-apertura desde acciones internas) + typecheck verdes"
+      ],
+      "references": [
+        "docs/design.md",
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/production/ProductionQueue.tsx",
+        "packages/ui/src/production/InstalacionesScreen.tsx",
+        "packages/ui/src/production/EmbarquesScreen.tsx"
+      ],
+      "status": "in_progress",
+      "createdAt": "2026-08-23"
     }
   ]
 }

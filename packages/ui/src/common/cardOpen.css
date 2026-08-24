@@ -1,0 +1,57 @@
+/*
+ * Card open trigger (design.md §4.2 — click en el ítem → ver).
+ *
+ * El título de la card es el control real de apertura y su hit-area cubre
+ * toda la card (pseudo ::after estirado). Los controles hermanos (botones
+ * de proceso, links tel:) quedan por encima del área estirada y conservan
+ * su propio comportamiento.
+ *
+ * Uso: la card recibe .card-open-host (sólo cuando existe handler de
+ * apertura) y el título se envuelve en un <button class="card-open">.
+ */
+
+.card-open-host {
+  position: relative;
+  transition: var(--transition-colors);
+}
+
+/* Affordance: la card se ve clicable en hover (state layer §3.6.1). */
+.card-open-host:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.card-open {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.card-open:hover {
+  color: var(--brand-600);
+}
+
+.card-open:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Hit-area estirada: cubre la card completa desde el control del título. */
+.card-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+/* Controles internos por encima del área estirada del trigger. */
+.card-open-host :is(a, button):not(.card-open) {
+  position: relative;
+  z-index: var(--z-base);
+}

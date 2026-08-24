@@ -11,7 +11,7 @@
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { ArrowRight, Truck } from 'lucide-react';
+import { Truck } from 'lucide-react';
 
 import {
   calculateLoadingProgress,
@@ -111,28 +111,32 @@ export function EmbarquesScreen({
           {cards.map((card) => (
             <li
               key={card.projectId}
-              className="ship-board__card"
+              className={`ship-board__card${onOpenProject ? ' card-open-host' : ''}`}
               data-testid={`embarques-card-${card.projectId}`}
             >
               <div className="ship-board__card-header">
                 <div className="ship-board__card-info">
-                  <h3 className="ship-board__card-title">{card.projectName}</h3>
+                  {onOpenProject ? (
+                    <h3 className="ship-board__card-title">
+                      <button
+                        type="button"
+                        className="card-open"
+                        onClick={() => onOpenProject(card.projectId)}
+                        data-testid={`embarques-open-${card.projectId}`}
+                        aria-label={`Abrir carga ${card.projectName}`}
+                      >
+                        {card.projectName}
+                      </button>
+                    </h3>
+                  ) : (
+                    <h3 className="ship-board__card-title">{card.projectName}</h3>
+                  )}
                   {card.customerLabel ? (
                     <p className="ship-board__card-customer">
                       {card.customerLabel}
                     </p>
                   ) : null}
                 </div>
-                {onOpenProject ? (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => onOpenProject(card.projectId)}
-                    data-testid={`embarques-open-${card.projectId}`}
-                  >
-                    Ver detalle <ArrowRight size={14} />
-                  </button>
-                ) : null}
               </div>
 
               {/* Loading progress summary */}

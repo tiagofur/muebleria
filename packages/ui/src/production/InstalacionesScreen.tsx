@@ -119,12 +119,22 @@ export function InstalacionesScreen({
           {cards.map((card) => (
             <li
               key={card.projectId}
-              className="ship-board__card"
+              className="ship-board__card card-open-host"
               data-testid={`instalaciones-card-${card.projectId}`}
             >
               <div className="ship-board__card-header">
                 <div>
-                  <h3 className="ship-board__card-title">{card.projectName}</h3>
+                  <h3 className="ship-board__card-title">
+                    <button
+                      type="button"
+                      className="card-open"
+                      onClick={() => onOpenProject(card.projectId)}
+                      data-testid={`instalaciones-open-${card.projectId}`}
+                      aria-label={`Abrir instalación ${card.projectName}`}
+                    >
+                      {card.projectName}
+                    </button>
+                  </h3>
                   {card.customerLabel ? (
                     <p className="ship-board__card-customer">{card.customerLabel}</p>
                   ) : null}
@@ -144,15 +154,6 @@ export function InstalacionesScreen({
                     </a>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  onClick={() => onOpenProject(card.projectId)}
-                  data-testid={`instalaciones-open-${card.projectId}`}
-                >
-                  <Hammer size={16} strokeWidth={1.5} aria-hidden />
-                  Abrir instalación
-                </button>
               </div>
               <p className="instalaciones-list__summary">
                 <span

@@ -189,11 +189,28 @@ export function ProductionQueue({
             const lastExport = project.production?.lastExportAt;
             const nestingAt = project.nestingImport?.importedAt;
             return (
-              <li key={project.id} className="prod-queue-card">
+              <li
+                key={project.id}
+                className={`prod-queue-card${onOpenOrder ? ' card-open-host' : ''}`}
+              >
                 <div className="prod-queue-card__row">
                   <div className="prod-queue-card__main">
                     <div className="prod-queue-card__top">
-                      <h3 className="prod-queue-card__name">{project.name}</h3>
+                      {onOpenOrder ? (
+                        <h3 className="prod-queue-card__name">
+                          <button
+                            type="button"
+                            className="card-open"
+                            onClick={() => onOpenOrder(project.id)}
+                            data-testid={`prod-open-order-${project.id}`}
+                            aria-label={`Abrir orden ${project.name}`}
+                          >
+                            {project.name}
+                          </button>
+                        </h3>
+                      ) : (
+                        <h3 className="prod-queue-card__name">{project.name}</h3>
+                      )}
                       <StatusBadge status={project.status} />
                     </div>
                     <p
@@ -249,21 +266,10 @@ export function ProductionQueue({
                       </p>
                   </div>
                   <div className="prod-queue-card__actions">
-                    {onOpenOrder ? (
-                      <button
-                        type="button"
-                        className="btn btn--primary"
-                        onClick={() => onOpenOrder(project.id)}
-                        data-testid={`prod-open-order-${project.id}`}
-                      >
-                        <Factory size={16} strokeWidth={1.5} aria-hidden />
-                        Abrir orden
-                      </button>
-                    ) : null}
                     {onExportProductionPack ? (
                       <button
                         type="button"
-                        className={onOpenOrder ? 'btn' : 'btn btn--primary'}
+                        className="btn btn--primary"
                         disabled={exportBusy}
                         title="ZIP con Optimizer, herrajes, etiquetas y docs de taller"
                         onClick={() => {

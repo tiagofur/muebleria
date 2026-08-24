@@ -664,6 +664,17 @@ TODA pantalla del producto usa el mismo esqueleto, en este orden:
 
 **Regla de oro:** click en un ítem de lista → **ver**, no editar de inmediato.
 
+**Regla universal de apertura (F150):** en TODA lista o board, el detalle se
+abre con click en el cuerpo del ítem — sin botón "Abrir X" dedicado. El
+control real es el **título del ítem** (patrón *stretched link*): botón con
+`aria-label` de acción, foco visible y Enter/Espacio; su hit-area cubre toda
+la card (`::after` inset 0, clase compartida `card-open` en
+`common/cardOpen.css`). Controles internos (botones de proceso, links `tel:`)
+quedan por encima del área estirada y conservan su comportamiento. La card
+debe **verse clicable**: hover con state layer (`--surface-hover` +
+`--border-strong`) y cursor pointer. Las tablas que expanden inline (§4.2.1)
+siguen el mismo principio: la fila abre; su affordance es el chevron.
+
 ```
 [Lista]
   └─ click row/card
@@ -1017,7 +1028,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
 - **Patrón:** workspace de fábrica con chrome propio (`.prod-hub__header` — ver §4.1a workspaces)
 - **Contenido:**
-  - Cola: tabs «Para fabricar» (sin claim de corte) / «Ya en producción» (con claim); CTA primario **Abrir orden**; Pack y Marcar en producción secundarios. Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
+  - Cola: tabs «Para fabricar» (sin claim de corte) / «Ya en producción» (con claim); la card abre la orden con click en su cuerpo (F150: título stretched, sin botón «Abrir orden»); **Pack** es la primaria visible de la card; Marcar en producción secundario. Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
   - Hub tabs: **Resumen · Piso · Etiquetas · Herrajes · Documentos** (única pestaña de descargas). **Control de Carga (despacho) migró a Embarques** (`/shipments/:projectId`, `EmbarquesProjectDetail`); las tabs técnicas (Módulos, Despiece, Vistas, Optimización) viven en **Ingeniería** (`EngineeringWorkspace`); generación de documentos = Ingeniería, uso = Fábrica
   - Tab **Piso**: paperless cards + escaneo QR (lector USB, cámara o manual) + avance one-tap (PROD-4.2); filtro por estado de piso con conteos
   - Hub: banner si el diseño cambió tras el último pack (PROD-3.2 OP rev. + fingerprint); filtro por ambiente en obras multi-ambiente (PROD-4.4)
@@ -1058,7 +1069,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Ruta nav:** `shipments` (sección COMPRAS / ALMACÉN) · **Path:** `/shipments`
 - **Path código:** `packages/ui/src/production/EmbarquesScreen.tsx` (CSS compartido `.ship-board__*` con Instalaciones)
 - **Patrón:** board por obra — cards de obra con la sección "Para cargar" (ítems `packaged` → "Marcar Cargado" → `loaded`)
-- **Contenido:** stats en header ("N para cargar"); por obra: nombre + cliente + ítems con qty y estado + botón "Ver control de carga" (linkea al tab despacho del hub Órdenes mientras M2 migra el checklist)
+- **Contenido:** stats en header ("N para cargar"); por obra: nombre + cliente + ítems con qty y estado; la card abre el control de carga con click en su cuerpo (F150: título stretched, al tab despacho del hub Órdenes mientras M2 migra el checklist)
 - **Lo cargado pasa a Instalaciones** (subtítulo lo explica); avance por `handleFloorAdvance` compartido (server aplica scoping + evento F094)
 - **RBAC nav:** `roleCanAccessEmbarquesNav` (admin, gerente_produccion, almacen — no produccion)
 - **Icono:** `Truck`
@@ -1068,7 +1079,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Ruta nav:** `installations` (sección PRODUCCIÓN) · **Path:** `/installations` (lista) · `/installations/:projectId` (detalle)
 - **Path código:** `packages/ui/src/production/InstalacionesScreen.tsx` (lista) + `InstalacionesProjectDetail.tsx` (detalle, mismo `.ship-board__*` + `.instalaciones-detail__*`)
 - **Patrón (regla §4 operational-ux):**
-  - **Home = lista de obras**: card por obra con cliente + dirección/teléfono, badge de estado del job de instalación, resumen `X/Y unidades instaladas · N en camino · visitas/incidencias/punch bloqueantes` y UNA primaria **Abrir instalación** (deep link `/installations/:projectId`). Sin acciones de proceso inline.
+  - **Home = lista de obras**: card por obra con cliente + dirección/teléfono, badge de estado del job de instalación, resumen `X/Y unidades instaladas · N en camino · visitas/incidencias/punch bloqueantes`; la card abre el detalle (deep link `/installations/:projectId`) con click en su cuerpo (F150: título stretched; el link `tel:` es contacto directo y no abre la obra). Sin acciones de proceso inline.
   - **Detalle por obra**: back a la lista, contexto de obra + contacto del cliente, sección "En camino" (ítems `loaded` → "Marcar Instalado") y el panel del subproceso OC-070..OC-074: visitas de campo (programar/iniciar/completar/cancelar), incidencias de campo con transiciones, punch list con evidencia de cierre, y cierre/conformidad con gates que explican cómo resolverse (installed ≠ proyecto cerrado).
 - **RBAC nav:** `roleCanAccessShippingNav` (admin, gerente_produccion, produccion — no almacen). Gestión del job: roles de eventos `installation_*`; cierre/conformidad: gerentes (`client_signed_off`/`project_closed`)
 - **Icono:** `Hammer`
