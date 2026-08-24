@@ -1121,3 +1121,21 @@ cierre sale vía `onRequestEdit(null)`. 6 tests de comportamiento nuevos +
 verificación en navegador real (5 flujos). `pnpm test` 3.048 verdes,
 typecheck 0 errores. Review APPROVED (`progress/review_F152.md`). Rama
 `feat/f152-modules-deep-link`.
+
+## F153 — quotes_reload_render_loop_338 — 2026-08-24
+
+Issue #338 (hallazgo de F148/#314): guest + proyecto seleccionado + reload
+producía un render loop en /quotes (~55 remontajes/s) y los clicks nunca
+aterrizaban. Verificación sobre main actual: **ya arreglado por el PR #342**
+(contrato de selección de useProjectsScreenState, mergeado ~9h después de
+abierto el issue) — repro exacto pasa limpio: deep-link /quotes/:id estable
+tras reload (8 muestras), lista píxel-idéntica entre capturas y click
+post-reload aterriza. El entregable restante del issue era su Meta: la recarga
+in-browser a mitad de sesión del kit de benchmark, bloqueada con una NOTA.
+F153 la desbloquea: el smoke proyectar-usability ahora recarga a mitad del
+script y exige sesión proxy persistida en localStorage (antes sólo unit),
+deep-link al detalle, reapertura del studio con la corrida colocada y panel
+re-oculto — regresión in-browser de la familia de eco (#338/#342/F152).
+Verificación: `pnpm smoke:usability` verde (37s), `pnpm test` 3.041 verdes
+(×2), typecheck 0. Review APPROVED (`progress/review_F153.md`). Rama
+`fix/338-quotes-reload-render-loop`. Issue #338 cerrado con la evidencia.
