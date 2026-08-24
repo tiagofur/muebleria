@@ -603,6 +603,13 @@
   gap: var(--space-6);
 }
 
+/* Tabpanel de ambiente (#256): misma columna/espaciado que la raíz. */
+.prod-vistas__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
 .prod-vistas__section {
   display: flex;
   flex-direction: column;

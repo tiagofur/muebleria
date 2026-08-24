@@ -3646,6 +3646,33 @@
       ],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F157",
+      "phase": 0,
+      "name": "prod_views_multi_space_scope",
+      "title": "#256 Producción Vistas: planta y 3D respetan el scope multi-ambiente (sin cola lineal fantasma en 3D)",
+      "description": "Bug de QA de campo (#256, padre #251): con OP accepted y 2+ ambientes, la planta mostraba un solo ambiente y la vista 3D mezclaba los muros del espacio activo con los ítems de los otros ambientes cayendo a la cola lineal (unplaced tail), porque resolveProject3DPreview lee sólo el kitchenLayout top-level (espejo del espacio activo) mientras project.items trae toda la obra. Fix en ProductionOrderViewsPanel: cuando el layout es multi-ambiente (scope \"Toda la obra\" del hub), el panel toma ownership de unas tabs de ambiente (patrón de ProjectPresentationMode) que controlan la planta (PresentationKitchenPlanSlide controlada) y resuelven la vista 3D por-espacio vía projectScopedToProductionSpace — nunca se mezclan muros de un ambiente con colocaciones de otro, ni se inventa cola lineal de otros espacios. Los ítems sin colocar en ninguna planta se informan con un hint explícito (unplacedItemIdsForProduction) en vez de renderizarse como cola fantasma. Con scope de un ambiente (filtro del hub) el proyecto ya llega scopeado: sin tabs, comportamiento único. Elevaciones quedan fuera (QA #256 las dio por aceptables: por ambiente con prefijos).",
+      "acceptance": [
+        "Scope = un ambiente (filtro hub): planta y 3D muestran sólo ese espacio (muros + placements + free del espacio), sin tabs extra",
+        "Scope = Toda la obra + multi-ambiente: tabs de ambiente en Vistas controlan planta y 3D; la vista 3D del ambiente seleccionado no incluye ítems ni muros de otros espacios",
+        "La vista 3D nunca mezcla muros del espacio activo con cola lineal de otros espacios; el hint de corrida refleja el ambiente (\"Según plano de <ambiente> (N colocadas)\")",
+        "Ítems sin colocar en ninguna planta: hint explícito con conteo en la sección 3D (no aparecen como cola fantasma)",
+        "Proyecto mono-ambiente: sin tabs de ambiente (comportamiento igual al actual)",
+        "Tests de panel con 2 ambientes: tabs, scoping por espacio, ausencia de cola lineal, hint de unplaced, cambio de tab; suite + typecheck verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/256",
+        "packages/ui/src/production/ProductionOrderViewsPanel.tsx",
+        "packages/domain/src/productionScope.ts",
+        "packages/ui/src/projects/components/PresentationKitchenPlanSlide.tsx",
+        "packages/ui/src/preview3d/project3dPreview.ts",
+        "docs/operational-ux.md"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }

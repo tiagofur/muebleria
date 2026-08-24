@@ -1,49 +1,43 @@
 # Sesión
 
-**Features cerradas:** F154 — table_expand_chevron_affordance · F155 — structures_overflow_destructive_actions · F156 — catalog_image_placeholder_a11y
+**Features cerradas:** F157 — prod_views_multi_space_scope (issue #256)
 **Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
-**Reviews:** `progress/review_F154.md`, `progress/review_F155.md`, `progress/review_F156.md` (APPROVED)
-**Rama:** `feat/f154-row-expand-affordance` (pusheada — las tres features viajan en el PR #359 por decisión del dueño, con commits y reviews separados)
+**Reviews:** `progress/review_F157.md` (APPROVED)
+**Rama:** `fix/256-prod-views-multi-space` (pusheada, PR #360)
 
-## F154 — Resultado
+## F157 — Resultado
 
-Hallazgo P1 #1: chevron de affordance en tablas expandibles (`CatalogTable` →
-Materiales, Cantos, Herrajes, Acabados, Grupos, Clientes). Derecha en reposo,
-rota 90° al expandir, muted→secondary en hover, aria-hidden + aria-expanded.
+Bug QA #256 (padre #251): con OP accepted y 2+ ambientes, la planta quedaba
+sin control de ambiente a nivel panel y el 3D mezclaba los muros del espacio
+activo con una cola lineal fantasma de los otros ambientes —
+`resolveProject3DPreview` lee el `kitchenLayout` top-level (espejo del espacio
+activo vía `flattenActiveSpace`) mientras `project.items` trae toda la obra.
 
-## F155 — Resultado
+Fix en `ProductionOrderViewsPanel`:
 
-Hallazgo P2 #4: Estructuras agrupa Desactivar/Eliminar en overflow "Más"
-(paridad con Muebles, §4.1a.2). Fix colateral dataTestId del Modal de delete.
-
-## F156 — Resultado
-
-Hallazgo P3 #5: el placeholder de `CatalogImage` era `role="img"` con
-`aria-label` = nombre de la entidad — duplicaba el título en el announcement
-del lector y el texto "Sin foto" filtraba al nombre accesible. Fix:
-placeholder 100% decorativo (`aria-hidden`, sin role ni aria-label); la
-imagen real conserva su alt.
-
-**Verificación colateral — hallazgo P2 #3 (headings múltiples en Librería)
-ya resuelto en main sin código nuevo:** medido en navegador (guest, seed):
-Muebles 1 h2 + 18 h3 · Estructuras 1 h2 + 14 h3 · Componentes 1 h2 + 24 h3 ·
-Agregados 1 h2 + 1 h3 — exactamente un h2 (título de pantalla) por pantalla,
-cards en h3 (§4.1b). La auditoría lo midió el 2026-08-23 antes de los fixes
-posteriores; se registra como verificado.
+- Con multi-ambiente (scope "Toda la obra"), el panel toma ownership de tabs
+  de ambiente (patrón `ProjectPresentationMode`): controlan la planta
+  (`PresentationKitchenPlanSlide` controlada, sin tabs locales) y resuelven el
+  3D per-espacio vía `projectScopedToProductionSpace` (dominio, PROD-4.4).
+- Nunca se mezclan muros/placements de ambientes distintos ni se inventa cola
+  lineal de otros espacios; la isla free viaja en su espacio.
+- Ítems sin colocar en NINGUNA planta: hint explícito con conteo
+  (`unplacedItemIdsForProduction`) en la sección 3D, no cola fantasma.
+- Hint de corrida ahora nombra el ambiente ("Según plano de Cocina (2
+  colocadas)"); mono-ambiente sin tabs y con copy previo intacto.
+- Elevaciones fuera de scope (QA #256: aceptables por ambiente/prefijos).
+- UI no calcula dominio: todo el scoping delega en `productionScope.ts`.
 
 ## Verificación (evidencia)
 
-- `pnpm test` 3.055 verdes (ui 1.408: 7 F154 + 4 F155 + 3 F156 nuevos);
-  `pnpm typecheck` 0 errores.
-- F156 visual (guest, seed, tras reload): nombre accesible de la card
-  "MOD-GAB-01 Gabinete 1 Puerta 300 x 720 x 590 mm 2 componentes 5 herrajes
-  Costo estimado $842.90 MXN" — sin "Sin foto" y sin duplicación del nombre
-  (antes: el nombre entraba dos veces); placeholder sin role=img.
+- `pnpm test` 3.057 verdes (ui 1.410: 2 tests nuevos de panel con 2 ambientes
+  — scoping por espacio, ausencia de cola lineal/hint, isla free, unplaced,
+  cambio de tab, wiring tabpanel); `pnpm typecheck` 0 errores.
+- Gate §8: delta visual limitado a `WorkspaceTabs` compartido (F109);
+  justificación de responsive/screenshot en `progress/review_F157.md`
+  (sin seed multi-ambiente para smoke browser; re-verificación vía QA #251).
 
-## Siguientes pasos (backlog auditoría)
+## Siguientes pasos
 
-1. Continuar revisión: catálogos (resto), Clientes, Vitrina (con datos).
-2. Auth-only: Órdenes, Producción (estaciones), Embarques, Instalaciones,
-   Almacén, dashboards por rol, Usuarios.
-3. Responsive (390/768) y foco visible por pantalla (cobertura pendiente del
-   audit).
+- #255 (islas en planta/elevación dedicada) es el follow-up natural de #256
+  (mismos archivos del hub Vistas).
