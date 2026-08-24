@@ -1,7 +1,12 @@
 # SketchUp Manufacturing Contract v1
 
 > **Estado:** conceptual, no ejecutable  
-> **Schema compound identifier:** `muebles.sketchup-authoring.v1`
+> **Schema compound identifier:** `granete.sketchup-authoring.v1`  
+> **Namespace:** el schema nace como `granete.*` tras el rename de marca
+> (#366); el issue #346 y versiones previas de este documento decían
+> `muebles.sketchup-authoring.v1`. Nada se publicó bajo ese ID, así que no se
+> debe migración. La implementación executable vive en
+> `packages/domain/src/sketchupAuthoring*.ts`.  
 > **Tracking:** [#290](https://github.com/tiagofur/muebleria/issues/290),
 > [#344](https://github.com/tiagofur/muebleria/issues/344),
 > [#346](https://github.com/tiagofur/muebleria/issues/346),
@@ -32,14 +37,14 @@ AuthoringEnvelope
 
 ```ts
 type SchemaIdentityV1 = {
-  schemaId: 'muebles.sketchup-authoring.v1';
-  schemaName: 'muebles.sketchup-authoring';
+  schemaId: 'granete.sketchup-authoring.v1';
+  schemaName: 'granete.sketchup-authoring';
   schemaVersion: '1.0';
 };
 
 type AuthoringEnvelopeV1 = {
   schemaId: SchemaIdentityV1['schemaId'];
-  schemaName: 'muebles.sketchup-authoring';
+  schemaName: 'granete.sketchup-authoring';
   schemaVersion: '1.0';
   messageId: string;
   idempotencyKey: string;
@@ -56,7 +61,7 @@ type AuthoringEnvelopeV1 = {
 };
 
 type AuthoringSource = {
-  client: 'muebles-for-sketchup';
+  client: 'granete-for-sketchup';
   clientVersion: string;
   host: 'sketchup';
   hostVersion: string;
@@ -74,7 +79,7 @@ type EntityTombstone = {
 
 type AuthoringRoundTripResponseV1 = {
   schemaId: SchemaIdentityV1['schemaId'];
-  schemaName: 'muebles.sketchup-authoring';
+  schemaName: 'granete.sketchup-authoring';
   schemaVersion: '1.0';
   responseMessageId: string;
   inReplyToMessageId: string;
@@ -107,7 +112,7 @@ type AppliedSchemaMigration = {
 Reglas:
 
 - `schemaId` es el compound identifier canónico de la línea major v1 y debe coincidir
-  exactamente con `schemaName: 'muebles.sketchup-authoring'` y el major de
+  exactamente con `schemaName: 'granete.sketchup-authoring'` y el major de
   `schemaVersion: '1.0'`; cualquier combinación inconsistente se rechaza.
 - `schemaName` + `schemaVersion` conservan la identidad estructurada y la versión exacta
   para negociación y migrations; `schemaId` no las reemplaza.
@@ -562,8 +567,8 @@ y operator sign-off para la combinación exacta de machine/software.
 
 ```json
 {
-  "schemaId": "muebles.sketchup-authoring.v1",
-  "schemaName": "muebles.sketchup-authoring",
+  "schemaId": "granete.sketchup-authoring.v1",
+  "schemaName": "granete.sketchup-authoring",
   "schemaVersion": "1.0",
   "messageId": "msg-01J6A2",
   "idempotencyKey": "project-42:source-rev-8",

@@ -1214,3 +1214,44 @@ export {
   type OpsExceptionSeverity,
   type OpsExceptionsOptions,
 } from './opsExceptions';
+
+export {
+  SKETCHUP_AUTHORING_SCHEMA_ID,
+  SKETCHUP_AUTHORING_SCHEMA_NAME,
+  SKETCHUP_AUTHORING_SCHEMA_VERSION,
+  fingerprintEnvelope,
+  roundToPrecisionMm,
+  type AuthoringEnvelopeV1,
+  type AuthoringRoundTripResponseV1,
+  type AuthoringSource,
+  type AppliedSchemaMigration,
+  type ContractIssue,
+  type CoordinateSystem,
+  type DesignAssembly,
+  type DesignComponent,
+  type EntityTombstone,
+  type HardwarePlacementIntent,
+  type MutationReceipt,
+  type ParameterValue,
+  type PartRelationshipIntent,
+  type ReadonlyAuthoringSnapshot,
+  type RelationshipAnchor,
+  type SchemaIdentityV1,
+  type StableEntityId,
+  type Transform3D,
+  type TransformFrame,
+  type UnitSystem,
+} from './sketchupAuthoringSchema';
+export {
+  validateAuthoringEnvelope,
+  hasErrors,
+  type AuthoringCatalogIndex,
+} from './sketchupAuthoringValidation';
+export {
+  EMPTY_AUTHORING_STATE,
+  applyAuthoringEnvelope,
+  envelopeFromSnapshot,
+  type AuthoringExchangeState,
+  type IdempotencyRecord,
+} from './sketchupAuthoringExchange';
+export { applyRegisteredMigrations } from './sketchupAuthoringMigrations';
