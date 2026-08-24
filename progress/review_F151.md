@@ -30,6 +30,14 @@
 - Hover: Pack + Marcar en producción visibles y compactos (~26px); borde
   fuerte + sombra + superficie hover; cursor pointer.
 
+## Addendum (post-review del dueño)
+
+- El dueño reportó Pack aún alto: causa raíz `production.css` imponía
+  `min-height: var(--touch-min)` (44px) incondicional a los botones de la
+  card. Corregido a `@media (max-width: 767px)` (§4.0); desktop queda
+  compacto ~26px (captura 33). Los otros dos touch-min incondicionales
+  (nav de presentación, sector-btn del dashboard) son targets deliberados.
+
 ## Nota
 
 - `card-open-host:hover` pasa de `--border-brand` a `--border-strong`
