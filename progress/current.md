@@ -1,42 +1,60 @@
 # Sesión
 
-**Features cerradas:** F153 — quotes_reload_render_loop_338 (issue #338)
-**Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
-**Reviews:** `progress/review_F153.md` (APPROVED)
-**Rama:** `fix/338-quotes-reload-render-loop` (pusheada)
+**Feature en curso:** F154 — table_expand_chevron_affordance
+**Inicio:** 2026-08-24
+**Rama:** `feat/f154-row-expand-affordance`
 
-## Resultado
+## Plan
 
-**#338 ya estaba arreglado en main por el PR #342** (eco URL↔selección en
-`useProjectsScreenState`; mergeado ~9h después de abierto el issue, por eso
-quedó abierto sin verificar). Repro exacto sobre main, dev :5199 guest:
+1. Chevron de affordance en `CatalogTable` (componente compartido por
+   Materiales, Cantos, Herrajes, Acabados, Grupos y Clientes).
+2. CSS con tokens: muted → secondary en hover, rotación 90° con
+   `--transition-transform` bajo `prefers-reduced-motion: no-preference`.
+3. A11y: `aria-expanded` en la fila, chevron `aria-hidden`.
+4. Tests de comportamiento del componente.
+5. design.md §3.7 (icono nuevo) + §6.4 (affordance).
+6. Verificación visual en navegador + suite + typecheck.
 
-- reload en `/quotes/proj-demo-plantilla` → detalle estable, URL sin rebote
-  (8 muestras/400ms);
-- lista `/quotes` tras reload → capturas píxel-idénticas (cero churn) y click
-  en card aterriza (`/quotes/proj-cocina-lopez-demo`).
+## Contexto
 
-Entregable de F153 — la Meta del issue que seguía bloqueada: la **recarga
-in-browser a mitad de sesión** del smoke de benchmark
-(`proyectar-usability.spec.ts`). El paso nuevo ejercita reload → sidebar →
-deep-link al detalle → sesión proxy persistida en localStorage (antes sólo
-cubierta en unit) → click que aterriza → studio reabierto con la corrida de 3
-colocada → panel re-oculto. Regresión in-browser de la familia de eco
-(#338/#342/F152).
+Hallazgo P1 #1 de `progress/ui-parity-audit-2026-08-23.md`: la fila expande
+inline pero nada lo anuncia (sin chevron, sin "Ver"); el usuario no puede
+predecir qué hará el click. design.md §4.2 (F150) ya sanciona el lenguaje:
+"la fila abre; su affordance es el chevron" — sólo falta implementarlo.
+
+## Estado
+
+- [x] Implementación
+- [x] Tests
+- [x] Docs
+- [x] Verificación (suite + visual)
+- [ ] Review
 
 ## Verificación (evidencia)
 
-- `pnpm smoke:usability` verde (37.0s) con el paso nuevo.
-- `pnpm test` 3.041 verdes (ui 1.394, web 306, domain 1.035, storage 155,
-  excel 89, mobile 45, desktop 17) — corrido 2×; `pnpm typecheck` 0 errores.
+- `pnpm test` 3.048 tests verdes (ui 1.401 — incluye 7 tests nuevos de
+  CatalogTable: chevron por fila expandible, aria-hidden, aria-expanded
+  true/false por fila, data-expanded en el chevron, ausencia sin
+  renderExpandedDetail, click intacto, label accesible «Detalle» en cabecera);
+  `pnpm typecheck` 0 errores.
+- Visual en navegador (dev :5199, guest, seed demo):
+  - Materiales reposo: chevron muted apuntando a la derecha en cada fila,
+    alineado verticalmente, primera columna estrecha, layout intacto.
+  - Materiales expandido (click en TAB-ARA-BLA): chevron de la fila rota 90°
+    hacia abajo, las demás filas siguen a la derecha, panel de detalle
+    desplegado, sin glitches.
+  - Clientes: 2 filas con chevron (mismo componente compartido).
+- design.md actualizado: §3.7 fila de icono nueva (`ChevronRight` expandir
+  fila) + §6.4 spec del affordance.
 
-## Notas
+## Archivos
 
-- `UsabilityBenchmarkPanel.expanded` no persiste: tras reload el panel vuelve
-  expandido y hay que ocultarlo de nuevo (el smoke lo hace).
-
-## Siguientes pasos (backlog auditoría, sin cambios)
-
-1. Chevron de affordance en tablas expandibles de catálogo.
-2. Estructuras: Desactivar/Eliminar al overflow "Más".
-3. Continuar revisión: Estructuras, Componentes, catálogos, Clientes, Vitrina.
+- `packages/ui/src/catalogs/CatalogTable.tsx` — columna expander condicional
+  (onRowClick && renderExpandedDetail), aria-expanded en la fila, chevron
+  ChevronRight 16px aria-hidden, colSpan actualizado.
+- `packages/ui/src/catalogs/catalogs.css` — `__expander*` con tokens; rotación
+  90° bajo `prefers-reduced-motion: no-preference`; muted→secondary en
+  hover/focus-within/expanded de la fila.
+- `packages/ui/src/catalogs/CatalogTable.test.tsx` — 7 tests de comportamiento.
+- `docs/design.md` — §3.7 + §6.4.
+- `feature_list.json` — F154.

@@ -3567,6 +3567,31 @@
       "depends_on": [],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F154",
+      "phase": 0,
+      "name": "table_expand_chevron_affordance",
+      "title": "Paridad UX: chevron de affordance en tablas expandibles de catálogo (hallazgo P1 de la auditoría 2026-08-23)",
+      "description": "Hallazgo P1 #1 de progress/ui-parity-audit-2026-08-23.md: los catálogos/Clientes expanden la fila inline y Librería navega a detalle completo, pero hoy NO hay ningún indicador visual de que la fila expande — el usuario no puede predecir qué hará el click. design.md §4.2 (F150) ya sanciona el lenguaje: 'la fila abre; su affordance es el chevron'. Fix en el componente compartido CatalogTable (Materials, Cantos, Herrajes, Acabados, Grupos y Clientes lo usan): columna chevron delante de la primera celda cuando la fila es expandible (onRowClick + renderExpandedDetail), ChevronRight Lucide 16px strokeWidth 1.5, rota 90° al expandir (--transition-transform bajo prefers-reduced-motion: no-preference; flip directo si reduced), aria-hidden (la fila es el control) + aria-expanded en la fila para lectores de pantalla, color muted que sube a secondary en hover de fila. Sin cambios de comportamiento: click/Enter/Espacio ya abren.",
+      "acceptance": [
+        "Toda tabla expandible (Materiales, Cantos, Herrajes, Acabados, Grupos, Clientes) muestra chevron en reposo apuntando a la derecha y rota 90° con la fila expandida",
+        "El chevron NO aparece cuando la tabla no es expandible (sin renderExpandedDetail)",
+        "La fila expone aria-expanded y el chevron es aria-hidden (no compite con la fila como control)",
+        "Animación con tokens del sistema (--transition-transform) bajo prefers-reduced-motion: no-preference; flip instantáneo con reduced motion",
+        "Colores/espaciados sólo con tokens (muted → secondary en hover de fila)",
+        "design.md actualizado (§3.7 icono nuevo + §6.4 affordance)",
+        "Tests de comportamiento del componente + verificación visual en navegador"
+      ],
+      "references": [
+        "docs/design.md#42-patrón-listadetalle",
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/catalogs/CatalogTable.tsx",
+        "packages/ui/src/catalogs/catalogs.css"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "created": "2026-08-24"
     }
   ]
 }

@@ -1,9 +1,12 @@
 /**
  * Reusable catalog table (presentation only).
- * Hover-revealed row actions; optional expand detail (design.md §4.2 / F020).
+ * Hover-revealed row actions; expand detail rows announce themselves with a
+ * rotating chevron (design.md §4.2/§6.4 — the row opens; its affordance is
+ * the chevron).
  */
 
 import { Fragment, type KeyboardEvent, type ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
 
 export interface CatalogColumn<T> {
   readonly key: string;
@@ -40,7 +43,12 @@ export function CatalogTable<T extends { readonly id: string }>({
     return <p className="catalog-empty">{emptyMessage}</p>;
   }
 
-  const colSpan = columns.length + (getRowActions ? 1 : 0);
+  // Rows only advertise expandability when clicking them reveals the inline
+  // detail; without renderExpandedDetail the chevron would promise the wrong
+  // thing (design.md §4.2).
+  const expandable = Boolean(onRowClick && renderExpandedDetail);
+  const colSpan =
+    columns.length + (expandable ? 1 : 0) + (getRowActions ? 1 : 0);
 
   return (
     <div className="catalog-table-wrap">
@@ -50,6 +58,11 @@ export function CatalogTable<T extends { readonly id: string }>({
       >
         <thead>
           <tr>
+            {expandable ? (
+              <th className="catalog-table__expander-head" scope="col">
+                <span className="visually-hidden">Detalle</span>
+              </th>
+            ) : null}
             {columns.map((col) => (
               <th key={col.key} scope="col">
                 {col.header}
@@ -100,8 +113,23 @@ export function CatalogTable<T extends { readonly id: string }>({
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   onKeyDown={onRowClick ? handleKeyDown : undefined}
                   tabIndex={onRowClick ? 0 : undefined}
+                  aria-expanded={expandable ? expanded : undefined}
                   data-expanded={expanded ? 'true' : undefined}
                 >
+                  {expandable ? (
+                    <td className="catalog-table__expander-cell">
+                      <span
+                        className="catalog-table__expander"
+                        data-expanded={expanded ? 'true' : undefined}
+                      >
+                        <ChevronRight
+                          size={16}
+                          strokeWidth={1.5}
+                          aria-hidden="true"
+                        />
+                      </span>
+                    </td>
+                  ) : null}
                   {columns.map((col) => (
                     <td key={col.key}>{col.render(row)}</td>
                   ))}

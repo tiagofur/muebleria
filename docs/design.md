@@ -427,6 +427,7 @@ pnpm add lucide-react --filter @muebles/ui
 | Favorito (biblioteca Proyectar) | `Star` |
 | Buscar | `Search` |
 | Cerrar modal | `X` |
+| Expandir fila (tablas tabla-expand) | `ChevronRight` |
 | Atrás | `ChevronLeft` |
 | Copiar (clipboard Proyectar) | `ClipboardCopy` |
 | Pegar (clipboard Proyectar) | `ClipboardPaste` |
@@ -999,6 +1000,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Patrón común:** tabla-expand (`.data-table` + `--wrap` + expand de fila + Modal **SM**/ **MD**)
 - **Tabla (issue #56 + Fase 1):** `.data-table-wrap` es scrollport (`overflow: auto` + `max-height`); `th` con `position: sticky; top: 0`, fondo sólido y `border-collapse: separate` para sticky fiable; filas densas vía tokens `--density-table-*`; edge-fade gradients laterales. Desde Fase 1 UI, `catalog-table-wrap` / `users-table-wrap` / `dashboard-owners-wrap` son aliases de `.data-table-wrap` en `common/dataTable.css`.
 - **Expand (wave 5):** `.catalog-row-detail` card inset con defs densas; en actions **Editar** es `btn--primary` small, desactivar/eliminar secundario.
+- **Affordance de expansión (F154):** la fila abre; su affordance es el chevron (§4.2). `CatalogTable` antepone una columna estrecha con `ChevronRight` 16px (`aria-hidden`, decorativo) por fila expandible: reposo apunta a la derecha, rota 90° al expandir (`--transition-transform` bajo `prefers-reduced-motion: no-preference`), color muted que sube a secondary en hover/focus de la fila. La fila expone `aria-expanded`; la cabecera de la columna lleva label accesible «Detalle».
 - **Forms (wave 5):** fieldsets `.catalog-form__section` + título sentence-case (no ALL CAPS). Materiales ya tenía secciones; Cantos (Identidad / Medida y costo), Herrajes (Identidad / Compra), Grupos (Identidad / Miembros) alineados.
 - **Materiales / Cantos / Herrajes:** `CatalogTable`, desactivar/reactivar, badges de activo, imagen (F042), color swatch y `defaultEdgeBandId` (F027)
 - **Grupos de opciones:** pantalla propia con tabla/listado y modal; preview de precio gated por `PricePreviewGate` (tokens de estado, no hex sueltos)
