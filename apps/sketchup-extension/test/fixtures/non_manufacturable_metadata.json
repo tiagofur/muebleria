@@ -1,0 +1,14 @@
+{
+  "namespace": "com.granete.sketchup_extension",
+  "metadataVersion": 1,
+  "kind": "bootstrapIntent",
+  "nonManufacturable": true,
+  "identity": {
+    "projectRef": "project-fixture-opaque",
+    "sourceRevisionRef": "source-revision-fixture-opaque",
+    "instanceRef": "instance-fixture-opaque"
+  },
+  "intent": {
+    "semanticRole": "cabinet-placeholder"
+  }
+}
