@@ -116,7 +116,17 @@ module Granete
 
       def write(level, event, context)
         payload = LogRedactor.call(level: level, event: event, context: context)
-        @sink.puts(JSON.generate(payload))
+        emit("#{JSON.generate(payload)}\n")
+      end
+
+      # Sketchup::Console declares #puts private and TestUp swaps $stdout
+      # around each test, so identity checks are unreliable: write when the
+      # sink supports it, fall back to Kernel#puts (C-level, reaches the
+      # console through the current $stdout) otherwise.
+      def emit(line)
+        @sink.write(line)
+      rescue NoMethodError, IOError
+        Kernel.puts(line)
       end
     end
   end

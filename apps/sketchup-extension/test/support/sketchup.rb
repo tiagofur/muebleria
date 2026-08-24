@@ -38,7 +38,9 @@ def file_loaded(path)
 end
 
 module Sketchup
-  module AppObserver; end
+  # The real host API declares AppObserver as a class (observers subclass it).
+  class AppObserver # rubocop:disable Lint/EmptyClass
+  end
 
   def self.register_extension(extension, enabled)
     SketchupStub.registered_extensions << [extension, enabled]
@@ -64,7 +66,8 @@ module UI
 
   class HtmlDialog
     STYLE_DIALOG = 1
-    CEF_VERSION = 137
+    # The real host reports CEF versions as strings (e.g. "137.0.7151.121").
+    CEF_VERSION = '137.0.7151.121'
 
     class << self
       attr_reader :instances
