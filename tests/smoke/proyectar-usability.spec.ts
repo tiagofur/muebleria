@@ -330,10 +330,34 @@ test.describe('Proyectar usability benchmark — script canónico (#314 P3D-8)',
       .toBe('800');
     await markComplete(page, 'edit-dimension');
 
-    // NOTA: la sesión persiste en localStorage y sobrevive recargas (probado
-    // en unit con simulateUsabilityReloadForTests); la recarga in-browser a
-    // mitad de sesión está bloqueada por #338 (render loop preexistente de
-    // guest+selección+reload, registrado durante F148).
+    // ── Recarga in-browser a mitad de sesión (#338 desbloqueado) ───────────
+    // El loop de #338 (guest + selección + reload → ~55 remontajes/s, clicks
+    // que nunca aterrizaban) lo cerró el contrato de selección del PR #342;
+    // esta recarga es la regresión in-browser de esa familia. La sesión proxy
+    // persiste en localStorage (unit: simulateUsabilityReloadForTests).
+    await page.reload();
+    await page.waitForSelector('.app-sidebar', { timeout: 30_000 });
+    // El deep-link /quotes/:id sobrevive el reload: el detalle abre directo.
+    await page.waitForSelector('[data-testid="project-chrome-projectar"]', {
+      timeout: 20_000,
+    });
+    // La sesión de benchmark sobrevivió: las tareas completadas siguen ahí.
+    const reloadedSession = await session(page);
+    expect(reloadedSession.tasks['edit-dimension']?.completedAt).toBeTruthy();
+    // El click post-reload aterriza (canary original de #338): reabrir el
+    // studio y comprobar que la corrida colocada sobrevivió.
+    await page.click('[data-testid="project-chrome-projectar"]');
+    await page.waitForSelector('[data-testid="spatial-studio-scene"] canvas', {
+      timeout: 45_000,
+    });
+    expect(await countPlacedRows(page)).toBe(runTotal);
+    // El panel del facilitador vuelve expandido tras el reload: ocultarlo
+    // para que no tape la biblioteca durante las tareas que siguen.
+    await page
+      .locator('[data-testid="usability-panel"]')
+      .getByLabel('Ocultar panel del benchmark')
+      .click();
+    await page.waitForSelector('[data-testid="usability-toggle"]');
 
     // ── Tarea 6: añadir cajonera ───────────────────────────────────────────
     await markStart(page, 'add-aggregate');
