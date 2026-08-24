@@ -1267,3 +1267,22 @@ export {
   type ResolvedManufacturingFeedback,
 } from './sketchupAuthoringSchema';
 export { entityKey, type TombstoneableEntityType } from './sketchupAuthoringExchange';
+
+export {
+  DEFAULT_SHELF_SUPPORT_RULE,
+  type BoardLocalKind,
+  type ManualHardwareRule,
+  type ShelfSupportRule,
+  type SketchUpComponentGeometry,
+  type SketchUpJoineryCatalog,
+} from "./sketchupJoineryCatalog";
+export {
+  deriveRelationshipMachining,
+  diffRelationshipMachining,
+  isFingerprintStale,
+  provenanceKey,
+  relationshipBomFingerprint,
+  type RelationshipMachiningDiff,
+  type RelationshipMachiningResult,
+  type ResolvedRelationshipOperation,
+} from "./sketchupRelationshipMachining";

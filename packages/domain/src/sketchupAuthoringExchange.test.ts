@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { cabinetCatalog, cabinetEnvelope, cloneCabinetEnvelope } from './__fixtures__/sketchupAuthoringCabinet';
+import { cabinetJoineryCatalog } from './__fixtures__/sketchupJoineryCatalogFixture';
 import {
   EMPTY_AUTHORING_STATE,
   applyAuthoringEnvelope,
@@ -465,5 +466,23 @@ describe('fingerprintEnvelope', () => {
       e.assemblies[0]!.transform.translationMm = [1300, 0, 0];
     });
     expect(fingerprintEnvelope(different)).not.toBe(fingerprintEnvelope(cabinetEnvelope));
+  });
+});
+
+describe("applyAuthoringEnvelope — joinery catalog and resolvedFeedback", () => {
+  it("attaches read-only resolvedFeedback when joineryCatalog is supplied", () => {
+    const result = applyAuthoringEnvelope(
+      EMPTY_AUTHORING_STATE,
+      cloneCabinetEnvelope(),
+      cabinetCatalog,
+      cabinetJoineryCatalog,
+    );
+
+    expect(result.response.status).toBe("accepted");
+    expect(result.response.resolvedFeedback).toBeDefined();
+    expect(result.response.resolvedFeedback?.preflightStatus).toBe("ready");
+    expect(result.response.resolvedFeedback?.identity.bomFingerprint).toMatch(/^fnv1a-/);
+    expect(result.response.resolvedFeedback?.derivedHardwarePlacements.length).toBeGreaterThan(0);
+    expect(result.response.resolvedFeedback?.derivedMachiningOperations.length).toBeGreaterThan(0);
   });
 });

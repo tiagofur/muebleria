@@ -3794,6 +3794,42 @@
       "depends_on": [],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F162",
+      "phase": 0,
+      "name": "sketchup_parametric_relationships",
+      "title": "#356 Parametric part relationships and joint-driven machining",
+      "description": "Capa de dominio para relaciones constructivas paramétricas entre piezas (shelf-support y herrajes manuales) en packages/domain. Permite que Granete derive hardware placements y machining operations con provenance estricta (relationship/joint/manualHardwarePlacement) en sistemas de coordenadas locales por pieza/cara, calculando bomFingerprint determinístico (FNV-1a), diffing de maquinado y detección de staleness post-release. Invariante: SketchUp owns authoring/interaction; Granete owns manufacturing truth.",
+      "acceptance": [
+        "Existe modelo explícito para relaciones/joints con stable IDs y catálogo de uniones (SketchUpJoineryCatalog)",
+        "Anchors semánticos ligados siempre a componentInstanceId, nunca a componentDefinitionId",
+        "Mover un entrepaño desplaza correctamente el machining derivado en piezas relacionadas",
+        "Agregar un segundo entrepaño con definición compartida genera nuevas operaciones determinísticas sin duplicados",
+        "Eliminar un entrepaño remueve únicamente sus operaciones derivadas sin dejar operaciones huérfanas",
+        "Cambiar joinery system (minifix-dowel -> dowel-only) recalcula machining desde reglas/catálogo",
+        "Mover un herraje manual (bisagra) modifica únicamente su machining dependiente sin alterar el del entrepaño",
+        "Operaciones derivadas conservan exactamente una provenance válida; combinaciones ambiguas son inválidas",
+        "Relaciones inválidas o huérfanas fallan con error estructurado (RELATIONSHIP_INVALID / RELATIONSHIP_ORPHANED)",
+        "Cambios paramétricos alteran bomFingerprint determinístico e invalidan revisiones liberadas previas (isFingerprintStale)",
+        "Integración con applyAuthoringEnvelope para devolver resolvedFeedback read-only cuando se suministra el catálogo de ensambles",
+        "Domain tests determinísticos pasan al 100% y tsc --noEmit pasa con 0 errores"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/356",
+        "docs/sketchup-manufacturing-contract.md",
+        "docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md",
+        "docs/sketchup-muebles-strategy.md",
+        "docs/architecture/smart-furniture-engine.md",
+        "docs/architecture/manufacturing-feature-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F160",
+        "F161"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }
