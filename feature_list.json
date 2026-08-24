@@ -3545,6 +3545,28 @@
       ],
       "depends_on": [],
       "created": "2026-08-23"
+    },
+    {
+      "id": "F153",
+      "phase": 0,
+      "name": "quotes_reload_render_loop_338",
+      "title": "Bug #338: render loop (~55 remontajes/s) en Cotizaciones con guest + proyecto seleccionado + reload",
+      "description": "Issue #338 (hallazgo de F148/#314): al recargar en modo guest con un proyecto seleccionado, la lista de /quotes re-remonteaba indefinidamente y el click en una card nunca aterrizaba. Verificación sobre main actual (post PR #342): el repro exacto pasa limpio — el deep-link /quotes/:id sobrevive el reload con detalle estable (muestreo URL+DOM), la lista es píxel-estática entre capturas y el click post-reload aterriza. Causa raíz era el eco URL↔selección en useProjectsScreenState (publish incondicional de onSelectionChange) que el PR #342 eliminó al adoptar el contrato de useRoutableEntitySelection; #342 se mergeó horas después de abierto #338 y nadie verificó/cerró el issue. Resto pendiente del issue (su Meta): el paso de recarga in-browser a mitad de sesión del smoke de benchmark (proyectar-usability.spec.ts) que estaba bloqueado con un NOTA. Este smoke paso es además la regresión in-browser de la familia de bugs de eco (F152/#342/#338): recarga con selección activa + sesión de benchmark persistida + re-apertura del studio + click que aterriza.",
+      "acceptance": [
+        "Repro de #338 verificado en navegador real (dev server, guest): reload con selección mantiene el detalle con URL estable, sin loop ni parpadeo",
+        "La lista /quotes tras reload es estable y el click en una card aterriza en el detalle (canary original del issue)",
+        "El smoke proyectar-usability incluye la recarga in-browser a mitad de sesión: la sesión proxy persistida sobrevive, el studio se reabre y la tarea siguiente se completa",
+        "Suite + typecheck verdes; issue #338 cerrado con la evidencia"
+      ],
+      "references": [
+        "packages/ui/src/projects/helpers/useProjectsScreenState.ts",
+        "tests/smoke/proyectar-usability.spec.ts",
+        "progress/current.md"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }
