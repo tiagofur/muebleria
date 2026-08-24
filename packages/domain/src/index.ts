@@ -487,10 +487,12 @@ export type { BoardSheetEstimate } from './boardSheetEstimate';
 export {
   buildProductionElevations,
   hasProductionElevations,
+  groupProductionElevationsBySpace,
   type ProductionElevationUnit,
   type ProductionWallElevation,
   type ProductionUnplacedUnit,
   type ProductionIslandUnit,
+  type ProductionElevationSpaceGroup,
   type ProductionElevationsResult,
 } from './productionElevations';
 

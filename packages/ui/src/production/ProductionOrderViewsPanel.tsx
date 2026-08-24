@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Module, Project } from '@muebles/domain';
 import {
   buildProductionElevations,
+  groupProductionElevationsBySpace,
   listProductionSpaceOptions,
   projectScopedToProductionSpace,
   unplacedItemIdsForProduction,
@@ -107,6 +108,28 @@ export function ProductionOrderViewsPanel({
   const elevations = useMemo(
     () => buildProductionElevations(project, modules),
     [project, modules],
+  );
+
+  // #254: elevaciones e islas agrupadas por ambiente cuando la obra es
+  // multi-ambiente (mono-ambiente renderiza plano, sin headings extra).
+  const elevationGroups = useMemo(
+    () => groupProductionElevationsBySpace(elevations),
+    [elevations],
+  );
+  const groupedElevations = elevationGroups.length > 1;
+  const wallGroups = useMemo(
+    () =>
+      groupedElevations
+        ? elevationGroups.filter((g) => g.walls.length > 0)
+        : [],
+    [groupedElevations, elevationGroups],
+  );
+  const islandGroups = useMemo(
+    () =>
+      groupedElevations
+        ? elevationGroups.filter((g) => g.islands.length > 0)
+        : [],
+    [groupedElevations, elevationGroups],
   );
 
   const sceneWalls = useMemo(
@@ -243,6 +266,23 @@ export function ProductionOrderViewsPanel({
             No hay muros en el layout. Definí el plano en cotización (Proyectar)
             para generar elevaciones.
           </p>
+        ) : groupedElevations ? (
+          <div className="prod-vistas__elev-groups" data-testid="prod-elev-groups">
+            {wallGroups.map((group) => (
+              <div
+                key={group.spaceId}
+                className="prod-vistas__elev-group"
+                data-testid={`prod-elev-group-${group.spaceId}`}
+              >
+                <h5 className="prod-vistas__group-title">{group.spaceName}</h5>
+                <div className="prod-vistas__elev-list">
+                  {group.walls.map((wall) => (
+                    <ProductionElevationPreview key={wall.wallId} wall={wall} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="prod-vistas__elev-list">
             {elevations.walls.map((wall) => (
@@ -268,14 +308,37 @@ export function ProductionOrderViewsPanel({
             Ubicación libre en planta — no se proyectan en alzados de muro. Cada
             isla tiene su ficha con medidas y posición.
           </p>
-          <div className="prod-vistas__island-list">
-            {elevations.islands.map((island) => (
-              <ProductionIslandPreview
-                key={`${island.spaceId}-${island.itemId}-${island.instanceIndex}`}
-                island={island}
-              />
-            ))}
-          </div>
+          {groupedElevations ? (
+            <div className="prod-vistas__elev-groups" data-testid="prod-island-groups">
+              {islandGroups.map((group) => (
+                <div
+                  key={group.spaceId}
+                  className="prod-vistas__elev-group"
+                  data-testid={`prod-island-group-${group.spaceId}`}
+                >
+                  <h5 className="prod-vistas__group-title">{group.spaceName}</h5>
+                  <div className="prod-vistas__island-list">
+                    {group.islands.map((island) => (
+                      <ProductionIslandPreview
+                        key={`${island.spaceId}-${island.itemId}-${island.instanceIndex}`}
+                        island={island}
+                        showSpace={false}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="prod-vistas__island-list">
+              {elevations.islands.map((island) => (
+                <ProductionIslandPreview
+                  key={`${island.spaceId}-${island.itemId}-${island.instanceIndex}`}
+                  island={island}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
 

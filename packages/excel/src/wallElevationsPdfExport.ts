@@ -6,6 +6,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import {
   buildProductionElevations,
+  groupProductionElevationsBySpace,
   type Module,
   type Project,
   type ProductionElevationsResult,
@@ -55,6 +56,7 @@ function drawWallPage(
   customerName: string | undefined,
   font: PDFFont,
   fontBold: PDFFont,
+  showAmbiente: boolean,
 ): void {
   let y = PAGE_H - MARGIN;
   drawText(page, 'ELEVACION DE MURO — PRODUCCION', MARGIN, y, fontBold, 14, rgb(0.1, 0.25, 0.45));
@@ -73,7 +75,14 @@ function drawWallPage(
     fontBold,
     11,
   );
-  y -= 20;
+  y -= 14;
+  // #254: el ambiente como línea propia — sólo en obras multi-ambiente
+  // (mono-ambiente no agrega ruido al header).
+  if (showAmbiente) {
+    drawText(page, `Ambiente: ${wall.spaceName}`, MARGIN, y, fontBold, 10, rgb(0.35, 0.35, 0.4));
+    y -= 14;
+  }
+  y -= 6;
 
   // Drawing area
   const drawLeft = MARGIN + 20;
@@ -294,29 +303,37 @@ export async function wallElevationsPdfExport(
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
-  for (const wall of elevations.walls) {
-    const page = doc.addPage([PAGE_W, PAGE_H]);
-    drawWallPage(
-      page,
-      wall,
-      input.project.name,
-      input.customerName,
-      font,
-      fontBold,
-    );
-  }
+  // #254: páginas agrupadas por ambiente — muros e islas de cada espacio
+  // quedan juntos, en vez de todos los muros y después todas las islas.
+  const groups = groupProductionElevationsBySpace(elevations);
+  const multiSpace = groups.length > 1;
 
-  // #255: islands get their own sheets — included in the production pack.
-  for (const island of elevations.islands) {
-    const page = doc.addPage([PAGE_W, PAGE_H]);
-    drawIslandPage(
-      page,
-      island,
-      input.project.name,
-      input.customerName,
-      font,
-      fontBold,
-    );
+  for (const group of groups) {
+    for (const wall of group.walls) {
+      const page = doc.addPage([PAGE_W, PAGE_H]);
+      drawWallPage(
+        page,
+        wall,
+        input.project.name,
+        input.customerName,
+        font,
+        fontBold,
+        multiSpace,
+      );
+    }
+
+    // #255: islands get their own sheets — included in the production pack.
+    for (const island of group.islands) {
+      const page = doc.addPage([PAGE_W, PAGE_H]);
+      drawIslandPage(
+        page,
+        island,
+        input.project.name,
+        input.customerName,
+        font,
+        fontBold,
+      );
+    }
   }
 
   // Appendix: unplaced (islas ya tienen su hoja propia)

@@ -757,6 +757,26 @@
   gap: var(--space-5);
 }
 
+/* Agrupado por ambiente (#254): un grupo = heading + su lista. */
+.prod-vistas__elev-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.prod-vistas__elev-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.prod-vistas__group-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
 .prod-elev-preview {
   display: flex;
   flex-direction: column;

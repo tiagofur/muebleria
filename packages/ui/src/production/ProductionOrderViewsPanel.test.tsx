@@ -269,11 +269,11 @@ describe('ProductionOrderViewsPanel #256 multi-ambiente scope', () => {
       />,
     );
 
-    // La isla (it-d, free en cocina) tiene ficha dibujada con código,
-    // medidas y ambiente — reemplaza la vieja nota "Libre / isla…".
+    // La isla (it-d, free en cocina) tiene ficha dibujada con código y
+    // medidas — reemplaza la vieja nota "Libre / isla…". En modo agrupado
+    // (#254) el ambiente lo aporta el heading del grupo, no la ficha.
     const sheet = screen.getByTestId('prod-island-sheet-it-d-0');
     expect(sheet.textContent).toContain('Isla MOD-B');
-    expect(sheet.textContent).toContain('Cocina');
     expect(sheet.textContent).toContain('400 × 720 × 560 mm');
     expect(sheet.textContent).toContain('X 1200');
     expect(sheet.textContent).toContain('rotación 90');
@@ -291,6 +291,55 @@ describe('ProductionOrderViewsPanel #256 multi-ambiente scope', () => {
     expect(exportBtn.getAttribute('title')).toContain('fichas de isla');
   });
 
+  it('multi-ambiente: elevaciones e islas agrupadas por ambiente (#254)', () => {
+    render(
+      <ProductionOrderViewsPanel
+        project={multiSpaceProject}
+        modules={modules}
+        catalog={catalog}
+      />,
+    );
+
+    // Elevaciones: un grupo por ambiente con heading propio, no listado plano.
+    const groups = screen.getByTestId('prod-elev-groups');
+    const cocinaWalls = within(groups).getByTestId('prod-elev-group-cocina');
+    expect(
+      within(cocinaWalls).getByRole('heading', { name: 'Cocina' }),
+    ).toBeTruthy();
+    expect(cocinaWalls.querySelectorAll('.prod-vistas__elev-list')).toHaveLength(1);
+    const banoWalls = within(groups).getByTestId('prod-elev-group-bano');
+    expect(
+      within(banoWalls).getByRole('heading', { name: 'Baño' }),
+    ).toBeTruthy();
+
+    // Islas: mismo agrupado; la ficha no repite el ambiente (lo da el heading).
+    const islandGroups = screen.getByTestId('prod-island-groups');
+    const cocinaIslands = within(islandGroups).getByTestId(
+      'prod-island-group-cocina',
+    );
+    expect(
+      within(cocinaIslands).getByRole('heading', { name: 'Cocina' }),
+    ).toBeTruthy();
+    const sheet = within(cocinaIslands).getByTestId('prod-island-sheet-it-d-0');
+    expect(sheet.textContent).not.toContain('Cocina');
+    expect(
+      within(islandGroups).queryByTestId('prod-island-group-bano'),
+    ).toBeNull();
+  });
+
+  it('mono-ambiente: sin headings de grupo ni contenedores agrupados (#254)', () => {
+    render(
+      <ProductionOrderViewsPanel
+        project={monoSpaceProject}
+        modules={modules}
+        catalog={catalog}
+      />,
+    );
+
+    expect(screen.queryByTestId('prod-elev-groups')).toBeNull();
+    expect(screen.queryByTestId('prod-island-groups')).toBeNull();
+    expect(screen.queryAllByRole('heading', { level: 5 })).toHaveLength(0);
+  });
   it('obra sólo-islas: export habilitado y ficha dibujada (#255)', () => {
     const islandOnlyProject: Project = {
       ...monoSpaceProject,
