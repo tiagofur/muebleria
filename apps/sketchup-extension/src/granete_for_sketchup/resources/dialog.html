@@ -7,43 +7,64 @@
     <style>
       :root {
         color-scheme: light;
-        --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        --text-sm: 0.75rem;
+        --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --text-xs: 0.6875rem;
+        --text-sm: 0.8125rem;
         --text-base: 0.875rem;
         --text-md: 1rem;
-        --text-xl: 1.375rem;
+        --text-lg: 1.125rem;
+        --text-xl: 1.25rem;
+        
+        --weight-normal: 400;
         --weight-medium: 500;
         --weight-semibold: 600;
         --weight-bold: 700;
-        --leading-normal: 1.5;
+        
         --brand-50: hsl(245 100% 97%);
+        --brand-100: hsl(245 90% 94%);
         --brand-500: hsl(245 58% 51%);
         --brand-600: hsl(245 55% 43%);
         --brand-800: hsl(245 48% 28%);
+        
         --surface-app: hsl(220 20% 97%);
         --surface-card: hsl(0 0% 100%);
-        --surface-hover: hsl(220 14% 95%);
+        --surface-card-subtle: hsl(220 14% 96%);
+        --surface-hover: hsl(220 14% 94%);
+        --surface-active: hsl(220 14% 90%);
+        
         --text-primary: hsl(230 18% 12%);
         --text-secondary: hsl(230 12% 40%);
+        --text-muted: hsl(230 10% 55%);
         --text-inverse: hsl(0 0% 100%);
-        --text-inverse-soft: hsl(0 0% 100% / 78%);
+        --text-inverse-soft: hsl(0 0% 100% / 80%);
+        
         --border-default: hsl(220 14% 86%);
+        --border-focus: var(--brand-500);
+        
+        --success-50: hsl(142 76% 96%);
+        --success-600: hsl(142 70% 36%);
         --warning-50: hsl(38 100% 96%);
         --warning-700: hsl(38 80% 32%);
+        --danger-50: hsl(0 84% 97%);
+        --danger-600: hsl(0 72% 51%);
+        
         --space-1: 0.25rem;
         --space-2: 0.5rem;
         --space-3: 0.75rem;
         --space-4: 1rem;
         --space-5: 1.25rem;
         --space-6: 1.5rem;
-        --space-8: 2rem;
-        --radius-sm: 0.25rem;
+        
+        --radius-sm: 0.375rem;
         --radius-md: 0.5rem;
         --radius-lg: 0.75rem;
-        --shadow-focus: 0 0 0 0.1875rem hsl(245 58% 51% / 25%);
+        
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-focus: 0 0 0 3px hsl(245 58% 51% / 20%);
+        
         --duration-fast: 150ms;
         --ease-out: cubic-bezier(0, 0, 0.2, 1);
-        --border-width: 0.0625rem;
       }
 
       * {
@@ -58,7 +79,8 @@
         color: var(--text-primary);
         font-family: var(--font-sans);
         font-size: var(--text-base);
-        line-height: var(--leading-normal);
+        line-height: 1.45;
+        user-select: none;
       }
 
       .shell {
@@ -67,265 +89,748 @@
         flex-direction: column;
       }
 
+      /* Header */
       .brand-bar {
         display: flex;
         align-items: center;
-        gap: var(--space-3);
-        padding: var(--space-4) var(--space-5);
+        justify-content: space-between;
+        padding: var(--space-3) var(--space-4);
         background: var(--brand-800);
         color: var(--text-inverse);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .brand-group {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
       }
 
       .brand-mark {
-        position: relative;
-        width: var(--space-8);
-        height: var(--space-8);
-        flex: 0 0 var(--space-8);
-        border-radius: var(--radius-md);
-        background: var(--text-inverse);
-      }
-
-      .brand-mark::before,
-      .brand-mark::after {
-        content: "";
-        position: absolute;
-        background: var(--brand-600);
+        width: 1.75rem;
+        height: 1.75rem;
         border-radius: var(--radius-sm);
-      }
-
-      .brand-mark::before {
-        inset: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
-      }
-
-      .brand-mark::after {
-        inset: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+        background: var(--text-inverse);
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: var(--weight-bold);
+        color: var(--brand-800);
+        font-size: var(--text-base);
       }
 
       .brand-label {
         display: flex;
         flex-direction: column;
-        line-height: 1.25;
+        line-height: 1.15;
       }
 
       .brand-label strong {
-        font-size: var(--text-md);
+        font-size: var(--text-base);
         font-weight: var(--weight-bold);
       }
 
       .brand-label span {
         color: var(--text-inverse-soft);
-        font-size: var(--text-sm);
+        font-size: var(--text-xs);
       }
 
-      main {
-        width: 100%;
-        max-width: 38rem;
-        margin: 0 auto;
-        padding: var(--space-8) var(--space-6) var(--space-6);
-      }
-
-      h1,
-      h2,
-      p {
-        margin-top: 0;
-      }
-
-      h1 {
-        margin-bottom: var(--space-2);
-        font-size: var(--text-xl);
-        line-height: 1.25;
-        letter-spacing: -0.02em;
-      }
-
-      .lead {
-        max-width: 65ch;
-        margin-bottom: var(--space-6);
-        color: var(--text-secondary);
-      }
-
-      .status {
+      /* Tabs Navigation */
+      .tabs-nav {
         display: flex;
-        gap: var(--space-3);
-        padding: var(--space-4);
-        border: var(--border-width) solid var(--border-default);
-        border-radius: var(--radius-lg);
         background: var(--surface-card);
+        border-bottom: 1px solid var(--border-default);
+        padding: 0 var(--space-4);
       }
 
-      .status-dot {
-        width: var(--space-3);
-        height: var(--space-3);
-        flex: 0 0 var(--space-3);
-        margin-top: var(--space-1);
-        border-radius: 50%;
-        background: var(--warning-700);
-        box-shadow: 0 0 0 var(--space-1) var(--warning-50);
-      }
-
-      .status h2 {
-        margin-bottom: var(--space-1);
-        font-size: var(--text-md);
-        font-weight: var(--weight-semibold);
-      }
-
-      .status p {
-        margin-bottom: 0;
+      .tab-button {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-3);
+        border: none;
+        background: transparent;
         color: var(--text-secondary);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        transition: color var(--duration-fast), border-color var(--duration-fast);
       }
 
-      .status[data-state='configured'] .status-dot {
-        background: var(--brand-500);
-        box-shadow: 0 0 0 var(--space-1) var(--brand-50);
+      .tab-button:hover {
+        color: var(--text-primary);
       }
 
-      .boundary {
-        margin: var(--space-6) 0;
-      }
-
-      .boundary h2 {
-        margin-bottom: var(--space-2);
-        font-size: var(--text-md);
+      .tab-button.active {
+        color: var(--brand-600);
         font-weight: var(--weight-semibold);
+        border-bottom-color: var(--brand-600);
       }
 
-      .boundary ul {
-        margin: 0;
-        padding-left: var(--space-5);
+      /* Main container */
+      main {
+        flex: 1;
+        padding: var(--space-4);
+        max-width: 32rem;
+        margin: 0 auto;
+        width: 100%;
+      }
+
+      .tab-pane {
+        display: none;
+      }
+
+      .tab-pane.active {
+        display: block;
+      }
+
+      /* Typography */
+      h1 {
+        font-size: var(--text-lg);
+        font-weight: var(--weight-bold);
+        margin: 0 0 var(--space-1);
+      }
+
+      p.subhead {
+        font-size: var(--text-sm);
         color: var(--text-secondary);
+        margin: 0 0 var(--space-4);
       }
 
-      .boundary li + li {
-        margin-top: var(--space-2);
+      /* Cards */
+      .card {
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+        margin-bottom: var(--space-4);
+        box-shadow: var(--shadow-sm);
       }
 
-      .actions {
-        display: flex;
-        justify-content: flex-end;
+      .card-title {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 var(--space-3);
       }
 
-      button {
-        min-height: 2.75rem;
-        padding: var(--space-2) var(--space-4);
-        border: var(--border-width) solid var(--border-default);
+      /* Select dropdown */
+      .select-wrapper {
+        position: relative;
+        margin-bottom: var(--space-4);
+      }
+
+      select, input[type="text"], input[type="number"] {
+        width: 100%;
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border-default);
         border-radius: var(--radius-md);
         background: var(--surface-card);
         color: var(--text-primary);
-        font: inherit;
-        font-weight: var(--weight-medium);
-        cursor: pointer;
-        transition:
-          background-color var(--duration-fast) var(--ease-out),
-          border-color var(--duration-fast) var(--ease-out);
-      }
-
-      button:hover {
-        border-color: var(--brand-500);
-        background: var(--surface-hover);
-      }
-
-      button:focus-visible {
+        font-family: inherit;
+        font-size: var(--text-base);
         outline: none;
+        transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+      }
+
+      select:focus, input:focus {
+        border-color: var(--brand-500);
         box-shadow: var(--shadow-focus);
       }
 
-      button:active {
-        background: var(--brand-50);
+      /* Parameter Form Grid */
+      .param-group {
+        margin-bottom: var(--space-3);
       }
 
-      footer {
-        margin-top: auto;
-        padding: var(--space-3) var(--space-5);
-        border-top: var(--border-width) solid var(--border-default);
-        color: var(--text-secondary);
+      .param-label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-1);
+      }
+
+      .param-label {
         font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--text-primary);
+      }
+
+      .param-value-badge {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        color: var(--brand-600);
+        background: var(--brand-50);
+        padding: 0.125rem 0.375rem;
+        border-radius: var(--radius-sm);
+      }
+
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+      }
+
+      input[type="range"] {
+        flex: 1;
+        accent-color: var(--brand-500);
+        cursor: pointer;
+      }
+
+      .number-input-sm {
+        width: 4.5rem !important;
+        text-align: right;
+        padding: var(--space-1) var(--space-2) !important;
+        font-size: var(--text-sm) !important;
+      }
+
+      /* Stepper */
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      .stepper button {
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--text-md);
+        font-weight: var(--weight-bold);
+      }
+
+      .stepper-value {
+        font-size: var(--text-base);
+        font-weight: var(--weight-semibold);
+        min-width: 2rem;
         text-align: center;
       }
 
-      @media (prefers-reduced-motion: reduce) {
-        button {
-          transition: none;
-        }
+      /* Summary Box */
+      .summary-box {
+        background: var(--surface-card-subtle);
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        margin-top: var(--space-3);
+        display: flex;
+        justify-content: space-around;
+        text-align: center;
+      }
+
+      .summary-item {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .summary-item strong {
+        font-size: var(--text-sm);
+        color: var(--text-primary);
+      }
+
+      .summary-item span {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+      }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        border-radius: var(--radius-md);
+        font-family: inherit;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all var(--duration-fast) var(--ease-out);
+        width: 100%;
+      }
+
+      .btn-primary {
+        background: var(--brand-500);
+        color: var(--text-inverse);
+        box-shadow: 0 1px 3px hsl(245 58% 51% / 30%);
+      }
+
+      .btn-primary:hover {
+        background: var(--brand-600);
+      }
+
+      .btn-primary:active {
+        transform: scale(0.99);
+      }
+
+      .btn-secondary {
+        background: var(--surface-card);
+        border-color: var(--border-default);
+        color: var(--text-primary);
+      }
+
+      .btn-secondary:hover {
+        background: var(--surface-hover);
+      }
+
+      /* Alert Toast */
+      .toast {
+        display: none;
+        padding: var(--space-3) var(--space-4);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        margin-bottom: var(--space-3);
+        animation: fadeIn 200ms ease-out;
+      }
+
+      .toast.success {
+        display: flex;
+        background: var(--success-50);
+        color: var(--success-600);
+        border: 1px solid hsl(142 70% 36% / 20%);
+      }
+
+      .toast.error {
+        display: flex;
+        background: var(--danger-50);
+        color: var(--danger-600);
+        border: 1px solid hsl(0 72% 51% / 20%);
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Status panel */
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-1) var(--space-3);
+        border-radius: 9999px;
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+      }
+
+      .status-pill.configured {
+        background: var(--brand-50);
+        color: var(--brand-600);
+      }
+
+      .status-pill.disabled {
+        background: var(--warning-50);
+        color: var(--warning-700);
+      }
+
+      footer {
+        padding: var(--space-3);
+        text-align: center;
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        border-top: 1px solid var(--border-default);
       }
     </style>
   </head>
   <body>
     <div class="shell">
       <header class="brand-bar">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-label">
-          <strong>Granete</strong>
-          <span>para SketchUp</span>
-        </span>
+        <div class="brand-group">
+          <div class="brand-mark">G</div>
+          <div class="brand-label">
+            <strong>Granete</strong>
+            <span>para SketchUp</span>
+          </div>
+        </div>
+        <div id="connection-pill" class="status-pill disabled">Conexión local</div>
       </header>
 
-      <main>
-        <h1>Diseñá en SketchUp. Validá en Granete.</h1>
-        <p class="lead">
-          Tu modelo sigue siendo el espacio de diseño. Granete conserva la información que define
-          qué puede producirse.
-        </p>
+      <nav class="tabs-nav" role="tablist">
+        <button class="tab-button active" role="tab" data-tab="library">
+          📦 Biblioteca
+        </button>
+        <button class="tab-button" role="tab" data-tab="status">
+          ⚡ Estado
+        </button>
+      </nav>
 
-        <section id="connection-card" class="status" aria-labelledby="connection-title">
-          <span class="status-dot" aria-hidden="true"></span>
-          <div>
-            <h2 id="connection-title">Comprobando conexión</h2>
-            <p id="connection-status" role="status" aria-live="polite">
-              Comprobando el estado de la extensión…
+      <main>
+        <!-- Tab 1: Library -->
+        <section id="pane-library" class="tab-pane active" role="tabpanel">
+          <div id="toast-message" class="toast"></div>
+
+          <div class="card">
+            <div class="card-title">Mueble Paramétrico</div>
+            <div class="select-wrapper">
+              <select id="furniture-select">
+                <option value="">Cargando catálogo…</option>
+              </select>
+            </div>
+            <p id="furniture-desc" class="subhead"></p>
+          </div>
+
+          <div class="card" id="params-card" style="display: none;">
+            <div class="card-title">Parámetros de Autoría</div>
+            <div id="dynamic-params-container"></div>
+
+            <div class="summary-box">
+              <div class="summary-item">
+                <strong id="summary-dims">-- x -- x --</strong>
+                <span>Cotas (mm)</span>
+              </div>
+              <div class="summary-item">
+                <strong id="summary-parts">--</strong>
+                <span>Piezas estimadas</span>
+              </div>
+            </div>
+          </div>
+
+          <button id="btn-insert" class="btn btn-primary" style="display: none;">
+            <span>➕ Insertar en Modelo</span>
+          </button>
+        </section>
+
+        <!-- Tab 2: Status -->
+        <section id="pane-status" class="tab-pane" role="tabpanel">
+          <div class="card">
+            <div class="card-title">Conexión con Granete</div>
+            <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1);">Comprobando…</h2>
+            <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
+            <p class="subhead" style="margin-bottom: 0;">
+              <strong>Invariante:</strong> SketchUp captura intención de autoría; Granete resuelve el mecanizado y valida la manufacturabilidad industrial.
             </p>
           </div>
-        </section>
 
-        <section class="boundary" aria-labelledby="boundary-title">
-          <h2 id="boundary-title">Este primer paso incluye</h2>
-          <ul>
-            <li>Una extensión instalable con ciclo de apertura seguro.</li>
-            <li>Un límite explícito entre acceso, transporte y datos del modelo.</li>
-            <li>Metadata de intención que no afirma que el diseño está listo para producir.</li>
-          </ul>
+          <button id="btn-close" class="btn btn-secondary">Cerrar panel</button>
         </section>
-
-        <div class="actions">
-          <button id="close-dialog" type="button">Cerrar panel</button>
-        </div>
       </main>
 
-      <footer>Granete for SketchUp · versión 0.1.0</footer>
+      <footer>Granete for SketchUp · v0.1.0</footer>
     </div>
 
-      <script>
-        (function () {
-          "use strict";
+    <script>
+      (function () {
+        "use strict";
 
-          var statusCard = document.getElementById("connection-card");
-          var headingElement = document.getElementById("connection-title");
-          var statusElement = document.getElementById("connection-status");
-          var closeButton = document.getElementById("close-dialog");
+        var catalog = [];
+        var activeDefinition = null;
+        var currentParams = {};
 
-          window.GraneteDialog = {
-            setStatus: function (status) {
-              status = status || {};
-              if (status.heading) {
-                headingElement.textContent = String(status.heading);
-              }
-              if (status.message) {
-                statusElement.textContent = String(status.message);
-              }
-              if (status.state) {
-                statusCard.setAttribute("data-state", String(status.state));
-              }
-            },
-          };
+        // DOM elements
+        var furnitureSelect = document.getElementById("furniture-select");
+        var furnitureDesc = document.getElementById("furniture-desc");
+        var paramsCard = document.getElementById("params-card");
+        var paramsContainer = document.getElementById("dynamic-params-container");
+        var btnInsert = document.getElementById("btn-insert");
+        var toast = document.getElementById("toast-message");
+        var summaryDims = document.getElementById("summary-dims");
+        var summaryParts = document.getElementById("summary-parts");
+        var connectionPill = document.getElementById("connection-pill");
+        var connectionHeading = document.getElementById("connection-heading");
+        var connectionDetail = document.getElementById("connection-detail");
+        var btnClose = document.getElementById("btn-close");
 
-          closeButton.addEventListener("click", function () {
-            if (window.sketchup && window.sketchup.close_dialog) {
-              window.sketchup.close_dialog();
+        // Tab navigation
+        var tabButtons = document.querySelectorAll(".tab-button");
+        tabButtons.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            tabButtons.forEach(function (b) { b.classList.remove("active"); });
+            document.querySelectorAll(".tab-pane").forEach(function (p) { p.classList.remove("active"); });
+            btn.classList.add("active");
+            var tabId = btn.getAttribute("data-tab");
+            document.getElementById("pane-" + tabId).classList.add("active");
+          });
+        });
+
+        // Bridge exposed to SketchUp
+        window.GraneteDialog = {
+          setStatus: function (status) {
+            status = status || {};
+            if (status.heading) connectionHeading.textContent = String(status.heading);
+            if (status.message) connectionDetail.textContent = String(status.message);
+            if (status.state === "configured") {
+              connectionPill.textContent = "Conectado";
+              connectionPill.className = "status-pill configured";
+            } else {
+              connectionPill.textContent = "Local";
+              connectionPill.className = "status-pill disabled";
             }
+          },
+
+          setCatalog: function (definitions) {
+            catalog = definitions || [];
+            furnitureSelect.innerHTML = "";
+            if (catalog.length === 0) {
+              furnitureSelect.innerHTML = "<option value=>Sin muebles en catálogo</option>";
+              return;
+            }
+
+            catalog.forEach(function (def) {
+              var opt = document.createElement("option");
+              opt.value = def.furniture_definition_id;
+              opt.textContent = def.name;
+              furnitureSelect.appendChild(opt);
+            });
+
+            selectDefinition(catalog[0].furniture_definition_id);
+          },
+
+          onInsertionResult: function (result) {
+            btnInsert.disabled = false;
+            btnInsert.textContent = "➕ Insertar en Modelo";
+
+            if (result && result.success) {
+              showToast("success", "✓ Mueble " + (result.name || "") + " insertado en el modelo con " + (result.component_count || 0) + " piezas.");
+            } else {
+              showToast("error", "Error: " + ((result && result.error) || "Fallo en la inserción"));
+            }
+          }
+        };
+
+        function showToast(type, message) {
+          toast.className = "toast " + type;
+          toast.textContent = message;
+          setTimeout(function () {
+            toast.className = "toast";
+          }, 4000);
+        }
+
+        function selectDefinition(definitionId) {
+          activeDefinition = catalog.find(function (d) { return d.furniture_definition_id === definitionId; });
+          if (!activeDefinition) {
+            paramsCard.style.display = "none";
+            btnInsert.style.display = "none";
+            return;
+          }
+
+          furnitureDesc.textContent = activeDefinition.description || "";
+          currentParams = {};
+
+          // Render parameter inputs
+          paramsContainer.innerHTML = "";
+          (activeDefinition.parameters || []).forEach(function (p) {
+            currentParams[p.name] = p.defaultValue;
+            var group = document.createElement("div");
+            group.className = "param-group";
+
+            var labelRow = document.createElement("div");
+            labelRow.className = "param-label-row";
+
+            var label = document.createElement("label");
+            label.className = "param-label";
+            label.textContent = p.label;
+            labelRow.appendChild(label);
+
+            var badge = document.createElement("span");
+            badge.className = "param-value-badge";
+            badge.id = "badge-" + p.name;
+            badge.textContent = p.defaultValue + (p.unit === "mm" ? " mm" : "");
+            labelRow.appendChild(badge);
+            group.appendChild(labelRow);
+
+            if (p.type === "number" && p.min !== undefined && p.max !== undefined && p.unit === "mm") {
+              var sliderRow = document.createElement("div");
+              sliderRow.className = "slider-row";
+
+              var slider = document.createElement("input");
+              slider.type = "range";
+              slider.min = p.min;
+              slider.max = p.max;
+              slider.step = p.step || 10;
+              slider.value = p.defaultValue;
+
+              var numInput = document.createElement("input");
+              numInput.type = "number";
+              numInput.className = "number-input-sm";
+              numInput.min = p.min;
+              numInput.max = p.max;
+              numInput.step = p.step || 10;
+              numInput.value = p.defaultValue;
+
+              slider.addEventListener("input", function () {
+                numInput.value = slider.value;
+                onParamChange(p.name, Number(slider.value), p.unit);
+              });
+
+              numInput.addEventListener("change", function () {
+                var val = Math.min(Math.max(Number(numInput.value), p.min), p.max);
+                slider.value = val;
+                numInput.value = val;
+                onParamChange(p.name, val, p.unit);
+              });
+
+              sliderRow.appendChild(slider);
+              sliderRow.appendChild(numInput);
+              group.appendChild(sliderRow);
+            } else if (p.type === "number" && p.min !== undefined && p.max !== undefined) {
+              var stepper = document.createElement("div");
+              stepper.className = "stepper";
+
+              var btnMinus = document.createElement("button");
+              btnMinus.className = "btn btn-secondary";
+              btnMinus.type = "button";
+              btnMinus.textContent = "−";
+
+              var valDisplay = document.createElement("span");
+              valDisplay.className = "stepper-value";
+              valDisplay.textContent = p.defaultValue;
+
+              var btnPlus = document.createElement("button");
+              btnPlus.className = "btn btn-secondary";
+              btnPlus.type = "button";
+              btnPlus.textContent = "+";
+
+              btnMinus.addEventListener("click", function () {
+                var cur = Number(currentParams[p.name] || p.defaultValue);
+                if (cur > p.min) {
+                  cur -= (p.step || 1);
+                  valDisplay.textContent = cur;
+                  onParamChange(p.name, cur, p.unit);
+                }
+              });
+
+              btnPlus.addEventListener("click", function () {
+                var cur = Number(currentParams[p.name] || p.defaultValue);
+                if (cur < p.max) {
+                  cur += (p.step || 1);
+                  valDisplay.textContent = cur;
+                  onParamChange(p.name, cur, p.unit);
+                }
+              });
+
+              stepper.appendChild(btnMinus);
+              stepper.appendChild(valDisplay);
+              stepper.appendChild(btnPlus);
+              group.appendChild(stepper);
+            } else if (p.type === "enum" && p.options) {
+              var select = document.createElement("select");
+              p.options.forEach(function (optVal) {
+                var opt = document.createElement("option");
+                opt.value = optVal;
+                opt.textContent = optVal;
+                if (optVal === p.defaultValue) opt.selected = true;
+                select.appendChild(opt);
+              });
+              select.addEventListener("change", function () {
+                onParamChange(p.name, select.value);
+              });
+              group.appendChild(select);
+            }
+
+            paramsContainer.appendChild(group);
           });
 
-          if (window.sketchup && window.sketchup.dialog_ready) {
-            window.sketchup.dialog_ready();
+          paramsCard.style.display = "block";
+          btnInsert.style.display = "flex";
+          updateSummary();
+        }
+
+        function onParamChange(name, value, unit) {
+          currentParams[name] = value;
+          var badge = document.getElementById("badge-" + name);
+          if (badge) {
+            badge.textContent = value + (unit === "mm" ? " mm" : "");
           }
-        })();
-      </script>
+          updateSummary();
+        }
+
+        function updateSummary() {
+          var w = currentParams.widthMm || currentParams.lengthMm || 600;
+          var h = currentParams.heightMm || 720;
+          var d = currentParams.depthMm || 590;
+          summaryDims.textContent = w + " × " + h + " × " + d + " mm";
+
+          var parts = 2; // 2 laterals
+          if (currentParams.shelfCount) parts += Number(currentParams.shelfCount);
+          if (currentParams.doorCount) parts += Number(currentParams.doorCount);
+          summaryParts.textContent = parts + " piezas";
+        }
+
+        furnitureSelect.addEventListener("change", function () {
+          selectDefinition(furnitureSelect.value);
+        });
+
+        btnInsert.addEventListener("click", function () {
+          if (!activeDefinition) return;
+          btnInsert.disabled = true;
+          btnInsert.textContent = "⏳ Insertando en SketchUp…";
+
+          var payload = {
+            definitionId: activeDefinition.furniture_definition_id,
+            parameters: currentParams
+          };
+
+          if (window.sketchup && window.sketchup.insert_furniture) {
+            window.sketchup.insert_furniture(JSON.stringify(payload));
+          } else {
+            // Mock preview fallback if running outside SketchUp Webview
+            setTimeout(function () {
+              window.GraneteDialog.onInsertionResult({
+                success: true,
+                name: activeDefinition.name,
+                component_count: 4
+              });
+            }, 600);
+          }
+        });
+
+        btnClose.addEventListener("click", function () {
+          if (window.sketchup && window.sketchup.close_dialog) {
+            window.sketchup.close_dialog();
+          }
+        });
+
+        // Signal ready to host
+        if (window.sketchup && window.sketchup.dialog_ready) {
+          window.sketchup.dialog_ready();
+        } else {
+          // Mock bootstrap if tested in regular browser
+          setTimeout(function () {
+            window.GraneteDialog.setStatus({
+              heading: "Conexión simulada (Navegador)",
+              message: "Corriendo fuera de SketchUp en modo previsualización.",
+              state: "configured"
+            });
+            window.GraneteDialog.setCatalog([
+              {
+                furniture_definition_id: "kitchen-base-standard",
+                code: "KITCHEN-BASE-600",
+                name: "Gabinete Base Estándar",
+                category: "kitchen_base",
+                description: "Módulo inferior de cocina con entrepaños y puertas configurables.",
+                parameters: [
+                  { name: "widthMm", label: "Ancho (mm)", type: "number", defaultValue: 600, min: 300, max: 1200, step: 50, unit: "mm" },
+                  { name: "heightMm", label: "Alto (mm)", type: "number", defaultValue: 720, min: 600, max: 900, step: 10, unit: "mm" },
+                  { name: "depthMm", label: "Fondo (mm)", type: "number", defaultValue: 590, min: 300, max: 700, step: 10, unit: "mm" },
+                  { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 1, min: 0, max: 4, step: 1 },
+                  { name: "doorCount", label: "Puertas", type: "number", defaultValue: 1, min: 0, max: 2, step: 1 }
+                ]
+              },
+              {
+                furniture_definition_id: "closet-tower-open",
+                code: "CLOSET-TOWER-800",
+                name: "Torre de Closet / Vestidor",
+                category: "closet",
+                description: "Torre modular para vestidor con entrepaños ajustables.",
+                parameters: [
+                  { name: "widthMm", label: "Ancho (mm)", type: "number", defaultValue: 800, min: 400, max: 1200, step: 50, unit: "mm" },
+                  { name: "heightMm", label: "Alto (mm)", type: "number", defaultValue: 2100, min: 1800, max: 2600, step: 50, unit: "mm" },
+                  { name: "depthMm", label: "Fondo (mm)", type: "number", defaultValue: 500, min: 350, max: 650, step: 10, unit: "mm" },
+                  { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 4, min: 0, max: 8, step: 1 }
+                ]
+              }
+            ]);
+          }, 100);
+        }
+      })();
+    </script>
   </body>
 </html>

@@ -14,14 +14,83 @@ module SketchupStub
     end
   end
 
+
+  class FaceStub
+    def pushpull(distance)
+      true
+    end
+  end
+
+  class GroupStub
+    attr_accessor :name
+    attr_reader :entities, :attributes
+
+    def initialize(name = "")
+      @name = name
+      @entities = EntitiesStub.new
+      @attributes = {}
+    end
+
+    def set_attribute(dictionary, key, value)
+      @attributes[[dictionary, key]] = value
+    end
+
+    def get_attribute(dictionary, key)
+      @attributes[[dictionary, key]]
+    end
+  end
+
+  class EntitiesStub
+    attr_reader :groups, :faces
+
+    def initialize
+      @groups = []
+      @faces = []
+    end
+
+    def add_group
+      group = GroupStub.new
+      @groups << group
+      group
+    end
+
+    def add_face(points)
+      face = FaceStub.new
+      @faces << face
+      face
+    end
+  end
+
+  class ModelStub
+    attr_reader :active_entities, :operations
+
+    def initialize
+      @active_entities = EntitiesStub.new
+      @operations = []
+    end
+
+    def start_operation(name, disable_ui)
+      @operations << [:start, name, disable_ui]
+    end
+
+    def commit_operation
+      @operations << :commit
+    end
+
+    def abort_operation
+      @operations << :abort
+    end
+  end
+
   class << self
-    attr_reader :loaded_files, :menus, :observers, :registered_extensions
+    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model
 
     def reset!
       @loaded_files = {}
       @menus = Hash.new { |hash, key| hash[key] = Menu.new }
       @observers = []
       @registered_extensions = []
+      @active_model = ModelStub.new
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
     end
   end
@@ -56,6 +125,10 @@ module Sketchup
 
   def self.remove_observer(observer)
     SketchupStub.observers.delete(observer)
+  end
+
+  def self.active_model
+    SketchupStub.active_model
   end
 end
 
