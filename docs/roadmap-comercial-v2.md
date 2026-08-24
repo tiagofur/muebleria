@@ -54,12 +54,13 @@ Diferenciadores:
 6. UX específica del taller y fácil de aprender;
 7. menor necesidad de unir cinco herramientas externas para completar el trabajo.
 
-Cotizar rápido sigue disponible sin abrir 3D. Para autoría espacial coexisten dos rutas:
+Muebles ofrece **tres modos de entrada y dos rutas de autoría 3D**. Cotizar rápido sigue
+disponible sin abrir 3D; para autoría espacial coexisten:
 
 - **Proyectar 3D:** ruta nativa de diseño modular rápido;
 - **Muebles for SketchUp:** ruta de autoría 3D profesional para usuarios de SketchUp.
 
-Las tres entradas convergen al mismo `Project/Job`. SketchUp y Proyectar capturan
+Los tres modos de entrada convergen al mismo `Project/Job`. SketchUp y Proyectar capturan
 authoring intent; Muebles conserva la única manufacturing truth para catálogo,
 relationships/joints, BOM, parts, hardware, drilling, revisions, preflight y machine
 outputs.
@@ -85,7 +86,7 @@ Ver la [estrategia canónica](sketchup-muebles-strategy.md), el
 | D9 | Profundidad CAD | UX 3D profesional para muebles modulares; no CAD libre generalista |
 | D10 | Quality bar Proyectar | Matriz ★ del North Star, validada con usuarios reales |
 | D11 | Próxima prioridad operacional | Tras cerrar trabajo activo, Operational Core protege verdad/lifecycle antes de profundidad técnica ilimitada |
-| D12 | Trabajo paralelo | Proyectar puede avanzar por slices de alto impacto sin esperar todo Operational Core, respetando dependencias |
+| D12 | Trabajo paralelo | Proyectar y SketchUp pueden avanzar por slices de alto impacto activados por pilotos, sin esperar todo Operational Core, pero nunca desplazan sus guardrails de verdad/lifecycle/release/producción |
 | D13 | Validación | Pilotos/benchmarks reales pueden reordenar features |
 | D14 | SketchUp + Muebles | **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.** Proyectar permanece como ruta nativa rápida; machine compatibility exige evidencia de campo. |
 | D15 | Relationships/joints | Constructive intent usa stable IDs/anchors; Muebles resuelve derived placements/drilling. CNC coordinates nunca son authoring truth primaria. |
@@ -397,26 +398,41 @@ La activación autoriza contrato, dossiers, validación y trabajo por fases. No 
 afirmar compatibilidad PTX/CNC sin import/readback y operator sign-off, ni mover BOM,
 relationship/joint resolution, drilling o postprocessing a Ruby/SketchUp.
 
+Este es un carril paralelo pilot-driven. Sus prioridades P0/P1/P2 ordenan el programa
+SketchUp, pero no desplazan los guardrails del Operational Core. En especial, #300/#301
+siguen siendo autoridades de lifecycle/release y producción física, y una entrega
+SketchUp no puede fabricar, liberar ni ocultar stale state mientras esos contratos no se
+cumplan. La fase documental #344 ya fue completada por PR #357.
+
 ### Primer vertical slice demostrable
 
 ```text
 contract approved
-→ machine dossiers collected
+→ initial machine dossiers collected
 → extension skeleton
 → semantic round-trip
 → parametric part relationships / joints
-→ one manufacturable cabinet
+→ #347 minimum authoritative preflight milestone verified
+→ one cabinet passes minimum authoritative preflight
 → hardware placement + machining sync
-→ minimum authoritative preflight
 → commercial demo
+→ #347 full Definition of Done before PTX/machine validation
 ```
+
+`Initial machine dossiers collected` es discovery sanitizado, no el cierre de
+#352/#353. El milestone mínimo de #347 corre sobre el fixture de #356 después de cerrar
+relationships/joints y antes de iniciar implementación dependiente de #349/#350,
+considerar un gabinete manufacturable o ejecutar el demo. Los fixtures posteriores
+vuelven a pasar el gate. El cierre completo de #347 es una hard prerequisite distinta
+para #348/#351.
 
 El primer hito mostrable debe probar que mover/agregar/eliminar un entrepaño recalcula
 sólo machining dependiente, mover una bisagra actualiza únicamente su machining y un
 cambio que afecte manufacturing truth actualiza fingerprint/revision y vuelve stale una
 release anterior.
 
-La autoridad para este slice es #356 y los goldens correspondientes viven en #354.
+Las autoridades para este slice son #356 y el milestone mínimo de #347; los goldens
+correspondientes viven en #354.
 
 ---
 
