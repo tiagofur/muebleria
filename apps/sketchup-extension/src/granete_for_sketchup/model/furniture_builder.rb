@@ -83,7 +83,9 @@ module Granete
                 "sourceRevisionRef" => "rev-1"
               },
               "intent" => {
-                "semanticRole" => "furniture-instance"
+                "semanticRole" => "furniture-instance",
+                "furnitureDefinitionId" => definition["furniture_definition_id"],
+                "parameters" => parameters
               }
             }
             @metadata_store.write(main_group, metadata_payload)

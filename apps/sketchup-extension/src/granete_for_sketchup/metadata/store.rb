@@ -15,7 +15,7 @@ module Granete
         KIND = 'bootstrapIntent'
         TOP_LEVEL_KEYS = %w[identity intent kind metadataVersion namespace nonManufacturable].freeze
         IDENTITY_KEYS = %w[instanceRef projectRef sourceRevisionRef].freeze
-        INTENT_KEYS = %w[semanticRole].freeze
+        INTENT_KEYS = %w[semanticRole furnitureDefinitionId parameters].freeze
 
         def initialize(model)
           @model = model
@@ -70,8 +70,16 @@ module Granete
         end
 
         def validate_intent(intent)
-          assert_keys(intent, INTENT_KEYS, 'intent')
+          raise InvalidMetadataError, 'intent must be an object' unless intent.is_a?(Hash)
+          unsupported = intent.keys - INTENT_KEYS
+          raise InvalidMetadataError, "intent contains unsupported fields: #{unsupported.join(', ')}" unless unsupported.empty?
           assert_opaque_string(intent['semanticRole'], 'intent.semanticRole', max_length: 64)
+          if intent.key?('furnitureDefinitionId')
+            assert_opaque_string(intent['furnitureDefinitionId'], 'intent.furnitureDefinitionId', max_length: 128)
+          end
+          if intent.key?('parameters')
+            raise InvalidMetadataError, 'intent.parameters must be an object' unless intent['parameters'].is_a?(Hash)
+          end
         end
 
         def assert_keys(value, expected, path)
