@@ -1,7 +1,7 @@
 # Proyectar 3D — Posicionamiento competitivo
 
 **Estado:** CANÓNICO  
-**Fecha:** 2026-08-21
+**Fecha:** 2026-08-24
 
 ---
 
@@ -42,6 +42,22 @@ El cliente ideal valora:
 
 El precio menor puede ayudar, pero no es el motivo principal por el que debe elegirnos.
 
+### Dos rutas de autoría, una verdad industrial
+
+- **Proyectar 3D** permanece como ruta nativa de quick design para cotizar y diseñar
+  muebles modulares sin depender de un CAD externo.
+- **Muebles for SketchUp** ofrece authoring profesional a quienes ya trabajan en
+  SketchUp.
+
+Ambas convergen en el mismo `Project/Job` y en el mismo dominio:
+
+> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+
+La estrategia, el boundary y el contract están documentados en
+[`sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md),
+[`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md) y
+[`sketchup-manufacturing-contract.md`](sketchup-manufacturing-contract.md).
+
 ---
 
 ## 3. Competencia por outcome
@@ -75,6 +91,7 @@ Debemos mantener el mismo job hasta compras, embarque, instalación, garantía y
 | “Promob tiene más cosas” | Correcto; Mueblería no pretende tener toda su amplitud. Está optimizada para el flujo que este taller realmente usa. |
 | “¿Entonces es una versión barata?” | No. El precio es distinto porque el producto/nicho son distintos. Competimos en facilidad, calidad e integración operacional. |
 | “Yo sólo necesito cocinas/closets” | Ése es precisamente el tipo de trabajo donde Proyectar debe ser excelente. |
+| “Ya diseño en SketchUp” | Puede conservar SketchUp para authoring; Muebles valida BOM, machining, revisions y manufacturing outputs. |
 | “Después tengo que pasar todo a Excel” | El objetivo de Mueblería es que diseño, BOM, materiales y producción permanezcan conectados. |
 | “Tengo CNC” | Se integra la preparación CNC dentro del mismo job donde tiene sentido; postprocesadores específicos sólo con hardware validado. |
 | “No tengo CNC” | El mismo sistema sigue sirviendo para corte manual/sierra, etiquetas, armado e instalación. |
@@ -108,3 +125,8 @@ Y que además un usuario de diseño diga:
 
 > “Para los muebles que hacemos todos los días, Proyectar se siente como una herramienta
 > profesional, no como una versión limitada.”
+
+O, si su authoring ocurre en SketchUp:
+
+> “Puedo seguir diseñando en SketchUp sin perder la verdad de fabricación y la operación
+> completa de Muebles.”

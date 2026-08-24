@@ -3,7 +3,7 @@
 > Los agentes revisores evalúan código contra este archivo.
 > Si un criterio no está aquí, no es un requisito de arquitectura.
 >
-> **Actualizado 2026-08-21:** este contrato conserva la arquitectura original de
+> **Actualizado 2026-08-24:** este contrato conserva la arquitectura original de
 > paquetes y añade ownership por bounded context para el producto operativo actual.
 
 ---
@@ -25,6 +25,8 @@
    dashboards derivan, no fabrican verdad.
 8. **Revisión explícita.** Producción siempre debe poder responder qué revisión/BOM
    está ejecutando.
+9. **Authoring no es manufacturing truth.** Proyectar y SketchUp capturan intención;
+   Muebles resuelve, valida y libera el resultado industrial.
 
 ---
 
@@ -221,6 +223,22 @@ No implementar una feature nueva que profundice CNC/enchape usando únicamente
 | `apps/*` | paquetes anteriores | lógica de dominio nueva inline |
 | backend | domain/server modules propios | decisiones de presentación |
 
+### Authoring clients externos
+
+Para Muebles for SketchUp rige:
+
+> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
+
+La extensión puede capturar interaction state, transforms, parameters, stable IDs y
+semantic metadata. No implementa BOM, drilling rules, nesting, kerf, stale/release gates
+ni postprocessing. Muebles valida el
+[`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva la
+autoridad descrita en el
+[`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md).
+
+Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa reglas
+de ingeniería. Ver la [estrategia del programa](sketchup-muebles-strategy.md).
+
 ---
 
 ## 7. Autoridad TS vs Go
@@ -379,6 +397,10 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - UX: `docs/design.md` + `docs/operational-ux.md`;
 - producto: `docs/prd-v2.md`;
 - plan: `docs/operational-core-v1.md`.
+- programa SketchUp: `docs/sketchup-muebles-strategy.md`;
+- boundary SketchUp/Muebles:
+  `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
+- contract conceptual: `docs/sketchup-manufacturing-contract.md`.
 
 ---
 
@@ -393,4 +415,5 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - no inventar KPIs;
 - no ejecutar producción contra una revisión stale sin override explícito;
 - no duplicar reglas TS/Go sin fixtures de paridad;
+- no mover BOM, drilling, preflight o postprocessing a Ruby/SketchUp;
 - no construir un ERP financiero completo ni CAD libre dentro de este core.
