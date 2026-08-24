@@ -2,13 +2,55 @@
 
 ## Purpose
 
-Define how materials, hardware, components and furniture become reusable digital assets.
+Define how materials, hardware, components and furniture become reusable digital assets for design, rendering and manufacturing.
 
-Today a material or hardware item is mostly business data. The future model adds visual and manufacturing intelligence.
+The asset library is the foundation that allows Muebleria to provide a professional design experience while keeping manufacturing intelligence centralized.
+
+## Catalog vs Library
+
+These concepts must never be mixed.
+
+## Catalog
+
+Answers:
+
+> What can the company offer or sell?
+
+Examples:
+
+```text
+Base Cabinet 800
+Tower Oven Module
+Drawer Unit
+```
+
+A catalog item is a reusable furniture definition or commercial offering.
+
+## Library
+
+Answers:
+
+> What elements build the furniture?
+
+Examples:
+
+```text
+Doors
+Handles
+Boards
+Edges
+Hardware
+Accessories
+Textures
+3D Models
+Manufacturing Rules
+```
+
+A kitchen, closet or room is not a fixed product. It is a composition created from library elements.
 
 ## Asset concept
 
-Every catalog item can reference a digital asset.
+Every reusable element can reference a digital asset.
 
 ```text
 Asset
@@ -16,10 +58,13 @@ Asset
  ├── production data
  ├── geometry data
  ├── rendering data
- └── supplier data
+ ├── supplier data
+ └── compatibility rules
 ```
 
 ## Materials
+
+A material is not only a color and price.
 
 Example:
 
@@ -29,17 +74,20 @@ Egger W1100 ST9
 
 Business:
 - supplier
-- code
+- product code
 - cost
+- sale price
 
 Visual:
 - texture
 - normal map
 - roughness
+- realistic rendering properties
 
 Production:
 - thickness
-- edge compatibility
+- compatible edges
+- machining restrictions
 ```
 
 ## Hardware
@@ -55,6 +103,7 @@ Commercial:
 - brand
 - product code
 - supplier
+- cost
 
 Technical:
 - dimensions
@@ -62,52 +111,55 @@ Technical:
 - installation rules
 
 Visual:
-- SketchUp model
+- SketchUp component
 - GLB model
 - textures
 
 Manufacturing:
 - drilling profile
 - placement rules
+- compatibility
 ```
 
-## Supported formats
+## Components
 
-The asset layer should allow:
+Examples:
 
-- SketchUp components
+```text
+Door Style:
+Roma
+
+Handle:
+Modern Black
+
+Drawer System:
+Blum LEGRABOX
+
+Accessory:
+Waste bin system
+```
+
+Components can be combined with different furniture definitions.
+
+## Asset formats
+
+The asset layer should support:
+
+- SketchUp components for interactive design
 - glTF/GLB for web and future platforms
 - Blender compatible assets
 - Revit compatible assets when required
 
 ## Storage principle
 
-The React application manages assets.
-The plugins consume assets.
+The application manages the asset information.
 
-No plugin should become the source of truth for materials or hardware.
+Plugins consume assets.
 
-## Catalog vs Library
+No plugin should become the source of truth for:
 
-Catalog answers:
-
-"What do we sell?"
-
-Library answers:
-
-"What components build it?"
-
-Example:
-
-```text
-Catalog:
-Modern Kitchen Roma
-
-Library:
-- cabinet definitions
-- boards
-- edges
-- hinges
-- drawers
-- accessories
-```
+- materials
+- hardware
+- prices
+- production rules
+- manufacturing logic
