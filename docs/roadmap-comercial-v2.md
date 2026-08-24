@@ -9,93 +9,61 @@ Este documento es la fuente narrativa de prioridad comercial. Se complementa con
 - `docs/operational-core-v1.md` — consolidación operacional;
 - `docs/proyectar-3d-north-star.md` — quality bar del editor 3D;
 - `docs/proyectar-3d-roadmap-vnext.md` — ejecución de Proyectar;
-- [`docs/sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md) — programa
-  SketchUp + Muebles y sus límites de fabricación;
+- [`docs/sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md) — programa SketchUp + Muebles y sus límites de fabricación;
 - GitHub issues — trabajo futuro;
 - `feature_list.json` — ledger de implementación/historia.
-
----
 
 ## 0. Posicionamiento
 
 > **Mueblería no es una alternativa barata a Promob.**
 
 Es una plataforma operativa vertical para un segmento de talleres/fabricantes pequeños y
-medianos que necesita:
-
-- excelente cotización;
-- excelente diseño modular 3D;
-- BOM confiable;
-- materiales/compras;
-- producción;
-- CNC cuando aplica;
-- instalación;
-- job costing.
+medianos que necesita excelente cotización, diseño modular 3D, BOM confiable,
+materiales/compras, producción, CNC cuando aplica, instalación y job costing.
 
 El precio puede ser menor, pero la razón principal de compra debe ser **calidad,
 facilidad, velocidad e integración del flujo completo**.
-
-Ver `docs/proyectar-3d-competitive-position.md`.
-
----
 
 ## 1. Propuesta de valor
 
 > **Plataforma operativa de muebles: cotizar, proyectar, preparar materiales, producir,
 > instalar y saber si la obra fue rentable.**
 
-Diferenciadores:
-
-1. cotización rápida con BOM real;
-2. Proyectar 2D/3D de nivel profesional para nuestro nicho;
-3. corte/etiquetas/CNC integrados al mismo job;
-4. flujo material→taller→instalación trazable;
-5. rentabilidad por obra;
-6. UX específica del taller y fácil de aprender;
-7. menor necesidad de unir cinco herramientas externas para completar el trabajo.
-
-Cotizar rápido sigue disponible sin abrir 3D. Para autoría espacial coexisten dos rutas:
+Cotizar rápido sigue disponible sin abrir 3D. Para autoría espacial coexisten:
 
 - **Proyectar 3D:** ruta nativa de diseño modular rápido;
-- **Muebles for SketchUp:** ruta de autoría 3D profesional para usuarios de SketchUp.
+- **Muebles for SketchUp:** ruta de autoría 3D profesional.
 
 Las tres entradas convergen al mismo `Project/Job`. SketchUp y Proyectar capturan
-authoring intent; Muebles conserva la única manufacturing truth para catálogo, BOM,
-parts, hardware, drilling, revisions, preflight y machine outputs.
+authoring intent; Muebles conserva la única manufacturing truth para catálogo,
+relationships/joints, BOM, parts, hardware, drilling, revisions, preflight y machine
+outputs.
 
-Ver la [estrategia canónica](sketchup-muebles-strategy.md), el
-[ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md) y el
-[manufacturing contract](sketchup-manufacturing-contract.md).
-
----
+> **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.**
 
 ## 2. Decisiones cerradas
 
 | # | Decisión | Elección |
 |---|---|---|
-| D1 | Biblioteca de módulos en Proyectar | **Biblioteca lateral persistente permitida y deseable** si mejora discoverability/velocidad; no copiar skin/layout exacto de Promob |
-| D2 | Materiales en Proyectar | Biblioteca/material dock accesible dentro del workspace, con grupos/favoritos/recientes y scopes de aplicación |
-| D3 | Inspector | Un inspector contextual estable; evolución del actual, no múltiples paradigmas paralelos |
-| D4 | Posicionamiento | No competir por ser “más barato”; competir por ser ideal para el nicho y por flujo completo |
-| D5 | Fuentes de planificación | Roadmap narrativo + GitHub issues; feature_list como ledger |
-| D6 | Nesting | Nativo permitido; sierra y CNC son estrategias distintas |
-| D7 | CNC de marca | Postprocesador específico sólo con máquina real confirmada |
-| D8 | Granularidad producción | **Corte/CNC/Enchape por pieza; Armado+ por mueble/unidad/bulto** |
-| D9 | Profundidad CAD | UX 3D profesional para muebles modulares; no CAD libre generalista |
-| D10 | Quality bar Proyectar | Matriz ★ del North Star, validada con usuarios reales |
-| D11 | Próxima prioridad operacional | Tras cerrar trabajo activo, Operational Core protege verdad/lifecycle antes de profundidad técnica ilimitada |
-| D12 | Trabajo paralelo | Proyectar puede avanzar por slices de alto impacto sin esperar todo Operational Core, respetando dependencias |
-| D13 | Validación | Pilotos/benchmarks reales pueden reordenar features |
-| D14 | SketchUp + Muebles | **SketchUp owns authoring/interaction; Muebles owns manufacturing truth.** Proyectar permanece como ruta nativa rápida; machine compatibility exige evidencia de campo. |
-
----
+| D1 | Biblioteca de módulos en Proyectar | Biblioteca lateral persistente permitida y deseable |
+| D2 | Materiales en Proyectar | Biblioteca/material dock accesible dentro del workspace |
+| D3 | Inspector | Un inspector contextual estable |
+| D4 | Posicionamiento | No competir por ser “más barato”; competir por flujo completo y calidad |
+| D5 | Nesting | Nativo permitido; sierra y CNC son estrategias distintas |
+| D6 | CNC de marca | Postprocesador específico sólo con máquina real confirmada |
+| D7 | Granularidad producción | Corte/CNC/Enchape por pieza; Armado+ por mueble/unidad/bulto |
+| D8 | Profundidad CAD | UX 3D profesional para muebles modulares; no CAD libre generalista |
+| D9 | Validación | Pilotos/benchmarks reales pueden reordenar features |
+| D10 | SketchUp + Muebles | Proyectar sigue como ruta nativa; SketchUp es authoring profesional |
+| D11 | Manufacturing truth | Muebles resuelve relationships/joints, BOM, machining, preflight y release |
+| D12 | Parametric relationships | Derived drilling nace de intención constructiva; no de coordenadas CNC persistidas |
 
 ## 3. Tres pilares
 
 ### A — Vender
 
 ```text
-Cliente → Cotización → Proyectar → Presentación → Aprobación
+Cliente → Cotización → Proyectar/SketchUp → Presentación → Aprobación
 ```
 
 ### B — Fabricar
@@ -110,257 +78,93 @@ Ingeniería → BOM → Materiales → Corte → CNC → Enchape → Armado → 
 Proyecto → Compras → Embarque → Instalación → Warranty → Costing
 ```
 
-La ventaja de Mueblería es que los tres pilares comparten el mismo job y la misma
-revisión, no que cada módulo tenga más botones.
+La ventaja de Mueblería es que los tres pilares comparten el mismo job y la misma revisión.
 
----
-
-## 4. Estado real a 2026-08-21
-
-El producto ya superó el roadmap MVP original:
-
-- Proyectar/3D avanzado;
-- multi-space/ambientes;
-- herrajes y placements;
-- estructuras/agregados en evolución;
-- production workspace y estaciones;
-- mobile companion;
-- stock + purchase orders;
-- dashboards por área;
-- cut-plan 2D guillotina;
-- CNC nesting + DXF;
-- machining profiles;
-- drilling resolution en trabajo reciente;
-- warranty.
-
-Por eso los roadmaps viejos no deben interpretarse como lista lineal pendiente. Código,
-tests y `feature_list.json` definen lo implementado; este doc define prioridad.
-
----
-
-## 5. Proyectar 3D — nueva North Star
+## 4. Proyectar 3D
 
 Fuente: `docs/proyectar-3d-north-star.md`.
 
-### Meta de calidad
+El editor nativo mantiene su calidad objetivo y no se reemplaza por SketchUp. Los issues
+#308–#314 continúan siendo la autoridad de producto/validación para Proyectar.
 
-| Área | Target |
-|---|---:|
-| Encontrar muebles | ★★★★★ |
-| Insertar/drag | ★★★★★ |
-| Snap | ★★★★★ |
-| Dimensiones | ★★★★★ |
-| Materiales | ★★★★★ |
-| Agregados | ★★★★★ |
-| Herrajes | ★★★★★ |
-| Selección/contexto | ★★★★★ |
-| Undo/redo | ★★★★★ |
-| Mover/copiar/duplicar | ★★★★★ |
-| Multi-select/align | ★★★★★ |
-| Multi-ambiente | ★★★★★ |
-| Presentación | ★★★★☆ |
-| Fotorrealismo | ★★★☆☆ |
-| CAD libre | ★★☆☆☆ |
-| Parametrización ultra-compleja | ★★★☆☆ |
-| Diseño→producción | ★★★★★+ |
+## 5. Operational Core
 
-### Modelo mental
+Operational Core protege lifecycle, release, granularidad física, materiales, QC,
+instalación y job costing. En particular:
 
-```text
-Biblioteca persistente → Canvas 3D → Inspector contextual
-```
+- #300 — lifecycle, `ProductionRelease`, stale detection y change orders;
+- #301 — piezas hasta Enchape, unidades desde Armado;
+- #302 — MRP ligero, compras, QC y retrabajo;
+- #303 — instalación/closeout;
+- #304 — job costing;
+- #305 — UX transversal/survey;
+- #306 — pilotos reales.
 
-### Meta GitHub
+## 6. SketchUp + Muebles — programa activo
 
-#308 coordina el plan.
+El plan histórico del plugin dejó de estar congelado porque existen pilotos/clientes
+concretos y máquinas reales por caracterizar. El programa vigente es #290.
 
-### Nuevos slices
+### Backlog principal
 
-- #309 P3D-0 — workspace + bibliotecas;
-- #310 P3D-1 — selección/manipulación;
-- #311 P3D-4 — environment/multi-space;
-- #312 P3D-6 — performance budget;
-- #313 P3D-7 — contract tests diseño→BOM→producción;
-- #314 P3D-8 — benchmark/validación (no feature).
+- #344 architecture/manufacturing contract;
+- #345 extension bootstrap;
+- #346 semantic metadata + round-trip;
+- #356 parametric part relationships + joint-driven machining;
+- #347 manufacturing preflight;
+- #348 PTX import/readback validation;
+- #349 parametric library MVP;
+- #350 hardware placement/machining sync;
+- #351 machine profiles/postprocessors;
+- #352 Client A machine pack;
+- #353 Client B machine pack;
+- #354 golden/E2E manufacturing tests;
+- #355 packaging/licensing/update strategy.
 
-### Issues existentes reutilizados
-
-- #277 drag insertion;
-- #278 inspector;
-- #279 materiales;
-- #280–#282 herrajes;
-- #266 ambient materials;
-- #260 presentation;
-- #294–#297 agregados.
-
-No duplicar estos issues sólo para adaptar naming.
-
----
-
-## 6. Orden recomendado de Proyectar
-
-Cuando haya capacidad dedicada al editor:
-
-1. #309 biblioteca/workspace;
-2. #277 insertion + #310 manipulation;
-3. #278 inspector + #279 materials;
-4. #294–#297 aggregates + #280–#282 hardware según dependencias;
-5. #311 environment/multi-space;
-6. #260 presentation;
-7. #312 performance hardening transversal;
-8. #313 integration contracts;
-9. #314 validation continua.
-
-Este orden puede cambiar con evidencia de piloto.
-
----
-
-## 7. Operational Core O0 — Guardrails y verdad (P0)
-
-Fuente: `docs/operational-core-v1.md` OC-001–006 / issue #299.
-
-- arreglar `init.sh`;
-- CI remoto;
-- reconciliar roadmap/issues/ledger;
-- roles canónicos;
-- auth DTO seguro;
-- Data Truth Contract.
-
-**Resultado:** “done”, “verde”, “rol” y “KPI real” tienen significado único.
-
----
-
-## 8. Operational Core O1 — Lifecycle + Release (P0)
-
-Issue #300.
-
-- `ProjectEvent[]`;
-- commercial status real;
-- stage derivado;
-- anticipo real;
-- DesignRevision;
-- Approval;
-- ProductionRelease;
-- stale detection;
-- ChangeOrder.
-
-**Resultado:** siempre sabemos qué se vendió, aprobó y fabricó.
-
-Dependencia importante para Proyectar: cambios post-release deben activar stale/release,
-no overwrite silencioso.
-
----
-
-## 9. Operational Core O2 — Producción pieza→mueble (P0)
-
-Issue #301 + `docs/production-flow-v2.md`.
+### Primer vertical slice comercial
 
 ```text
-Corte → CNC → Enchape       (pieza)
-Armado → QC → Pack → Load   (mueble/unidad/bulto)
+contract approved
+→ machine dossiers collected
+→ extension skeleton
+→ semantic round-trip
+→ parametric part relationships / joints
+→ one manufacturable cabinet
+→ hardware placement + machining sync
+→ minimum authoritative preflight
+→ commercial demo
 ```
 
-Esto conecta directamente con drilling/CNC derivado desde Proyectar/Ingeniería.
+El primer hito mostrable no es “plugin instalado”. Debe probar con un gabinete real que:
 
----
+- cambiar dimensiones mantiene coherencia;
+- mover/agregar/eliminar entrepaños actualiza relationships y machining dependiente;
+- mover una bisagra actualiza su machining sin alterar el del entrepaño;
+- piezas/BOM/cantos/drilling se recalculan;
+- el fingerprint cambia cuando cambia manufacturing truth;
+- un output liberado queda stale cuando corresponde.
 
-## 10. Operational Core O3 — Materiales + QC (P1)
+## 7. Machine evidence
 
-Issue #302.
+No se declara soporte por marca genérica. La compatibilidad corresponde a una combinación
+exacta de machine/controller/software/profile version y necesita:
 
-- requirements desde BOM;
-- reservas;
-- shortage;
-- PO/receiving;
-- material-ready con evidencia;
-- QualityIssue;
-- rework/scrap;
-- QC gates.
+1. fixture reproducible;
+2. export;
+3. import en el software receptor;
+4. readback de cantidades/dimensiones/orientación/operaciones;
+5. expected vs actual;
+6. operator sign-off.
 
----
+Client A y Client B se validan independientemente.
 
-## 11. Operational Core O4 — Instalación/closeout (P1)
+## 8. CNC profundo y postprocessors
 
-Issue #303.
+Joint drilling rules, drilling DXF, editor visual de perforaciones y postprocesadores
+siguen siendo válidos cuando demanda real los justifique. Ningún adapter puede redefinir
+BOM, relationship resolution o drilling del core.
 
-- InstallationJob;
-- visitas;
-- crews;
-- field issues;
-- punch list;
-- sign-off/closeout.
-
----
-
-## 12. Operational Core O5 — Job Costing (P1)
-
-Issue #304.
-
-- CostBaseline;
-- TimeEntry;
-- material actual;
-- other actuals;
-- estimate vs actual;
-- actual margin.
-
----
-
-## 13. UX transversal y Survey
-
-Issue #305.
-
-- Site Survey estructurado;
-- Project Workspace transversal;
-- dashboards exception-first;
-- navegación pequeña vs mediana empresa.
-
----
-
-## 14. Pilotos
-
-Issue #306.
-
-No esperar a “terminar todo”. Pilotos validan:
-
-- quote flow;
-- Proyectar;
-- survey;
-- approvals;
-- materials;
-- Cut/CNC/Edge;
-- assembly/QC;
-- shipping/install;
-- costing.
-
-Cuando exista `type:validation`, #306 y #314 deben usarlo.
-
----
-
-## 15. CNC profundo F129–F132
-
-Sigue siendo válido:
-
-- joint drilling rules;
-- drilling DXF;
-- visual drilling editor;
-- postprocesador específico.
-
-Pero no desplaza automáticamente Operational Core o Proyectar UX.
-
-Se prioriza cuando:
-
-1. piloto real lo necesita;
-2. desbloquea venta concreta;
-3. completa cadena usada;
-4. producto asume explícitamente el tradeoff.
-
-Postprocesadores de marca requieren hardware/software confirmados.
-
----
-
-## 16. Lanzamiento/comercial
-
-Packaging, onboarding/demo, pricing/landing/script siguen siendo esenciales.
+## 9. Lanzamiento/comercial
 
 No permitir que features técnicas pospongan indefinidamente:
 
@@ -371,33 +175,18 @@ No permitir que features técnicas pospongan indefinidamente:
 - pricing validado;
 - ventas reales.
 
----
-
-## 17. Features condicionadas
+## 10. Features condicionadas
 
 Por defecto necesitan demanda demostrada:
 
 - render premium backend;
 - acabados extremadamente complejos;
-- postprocesadores de marca;
+- postprocesadores adicionales de marca;
 - CAD libre;
 - marketplace;
 - forecasting/multi-planta avanzado.
 
-### SketchUp — condición comercial activada
-
-El plugin SketchUp dejó de ser una idea genérica congelada porque existen pilotos y
-máquinas concretas por caracterizar. El programa activo es
-[#290](https://github.com/tiagofur/muebleria/issues/290) y se ejecuta mediante
-[`docs/sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md).
-
-La activación autoriza contrato, dossiers, validación y trabajo por fases. No autoriza
-afirmar compatibilidad PTX/CNC sin import/readback y operator sign-off, ni mover BOM,
-drilling o postprocessing a Ruby/SketchUp.
-
----
-
-## 18. Anti-scope
+## 11. Anti-scope
 
 - no “Promob completo”;
 - no “Promob barato” como positioning;
@@ -405,13 +194,12 @@ drilling o postprocessing a Ruby/SketchUp.
 - no contabilidad fiscal/nómina;
 - no ERP horizontal;
 - no CAM universal;
-- no integraciones de máquina sin hardware real;
-- no dashboards con proxies como hechos;
-- no features CAD añadidas sólo para igualar una checklist competitiva.
+- no integraciones de máquina sin hardware/software real;
+- no coordenadas CNC persistidas como truth de joints;
+- no client-specific conditionals dispersos en el core;
+- no dashboards con proxies como hechos.
 
----
-
-## 19. Métricas de éxito
+## 12. Métricas de éxito
 
 ### Proyectar
 
@@ -423,11 +211,8 @@ Targets iniciales de benchmark:
 - duplicar/alinear 3 unidades <30 s;
 - 0 necesidad de conocer internals del BOM.
 
-Validar mediante #314; recalibrar con evidencia.
-
 ### Piloto operacional
 
-- 3–5 talleres reales;
 - al menos una obra venta→producción→instalación;
 - ninguna revisión equivocada por falta de gate;
 - shortages visibles antes de corte;
@@ -435,17 +220,14 @@ Validar mediante #314; recalibrar con evidencia.
 - quote time medido;
 - margen real disponible cuando O5 esté listo.
 
-### 12 meses
+### SketchUp manufacturing bridge
 
-- 15–30 talleres pagando como objetivo orientativo;
-- MRR compatible con pricing validado;
-- quote time <15 min en catálogo conocido;
-- evidencia de reducción de errores/retrabajo;
-- Proyectar percibido como herramienta profesional por usuarios del nicho.
+- un gabinete real completa el vertical slice;
+- shelf move/add/remove produce machining determinístico;
+- hinge move no altera machining no relacionado;
+- PTX/machine support sólo se marca validated con evidence.
 
----
-
-## 20. Cómo se actualiza este roadmap
+## 13. Fuentes
 
 - producto: `docs/prd-v2.md`;
 - posicionamiento Proyectar: `docs/proyectar-3d-competitive-position.md`;
@@ -454,10 +236,11 @@ Validar mediante #314; recalibrar con evidencia.
 - programa SketchUp + Muebles: `docs/sketchup-muebles-strategy.md`;
 - boundary: `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
+- relationships/joints: #356;
 - consolidación operacional: `docs/operational-core-v1.md`;
 - issues: trabajo futuro;
 - ledger: `feature_list.json`;
 - código/tests: verdad implementada.
 
 No crear roadmaps paralelos no referenciados. Cuando una capacidad grande se cierra,
-actualizar las fuentes canónicas, no sólo el JSON.
+actualizar fuentes canónicas, no sólo el JSON.
