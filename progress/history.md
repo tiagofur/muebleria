@@ -1183,3 +1183,21 @@ main — 1 h2 por pantalla (Muebles/Estructuras/Componentes/Agregados), cards
 h3; sin código nuevo. 3 tests nuevos; 3.055 verdes; typecheck 0. Review
 APPROVED (`progress/review_F156.md`). Rama `feat/f154-row-expand-affordance`
 (PR #359 junto a F154/F155 por decisión del dueño).
+
+## F157 — prod_views_multi_space_scope — 2026-08-24
+
+Fix del bug QA #256 (padre #251): con OP accepted y 2+ ambientes, el 3D de
+Vistas mezclaba los muros del espacio activo con una cola lineal fantasma de
+los otros ambientes, porque `resolveProject3DPreview` lee el kitchenLayout
+top-level (espejo del activo) mientras `project.items` trae toda la obra; la
+planta quedaba además sin control de ambiente a nivel panel. Fix:
+`ProductionOrderViewsPanel` toma ownership de tabs de ambiente con el patrón
+de `ProjectPresentationMode` — controlan la planta (controlada, sin tabs
+locales) y resuelven el 3D per-espacio vía `projectScopedToProductionSpace`
+(dominio PROD-4.4, UI no calcula dominio). Sin cola lineal de otros espacios;
+isla free en su espacio; ítems sin colocar en ninguna planta → hint explícito
+con `unplacedItemIdsForProduction`. Mono-ambiente: sin tabs, comportamiento
+previo intacto. Elevaciones fuera de scope (QA: aceptables por ambiente).
+2 tests nuevos de panel con 2 ambientes; 3.057 tests verdes; typecheck 0.
+Review APPROVED (`progress/review_F157.md`). Rama
+`fix/256-prod-views-multi-space`.
