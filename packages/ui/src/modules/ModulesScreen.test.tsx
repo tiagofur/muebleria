@@ -772,3 +772,116 @@ describe('ModulesScreen categories (F025)', () => {
     );
   });
 });
+
+describe('ModulesScreen URL handoff / deep links (F152)', () => {
+  function baseProps(
+    props: Partial<ComponentProps<typeof ModulesScreen>> = {},
+  ): ComponentProps<typeof ModulesScreen> {
+    return {
+      modules,
+      optionGroups,
+      hardware,
+      categories,
+      onCreate: vi.fn(),
+      onUpdate: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+      onEditingChange: vi.fn(),
+      moduleEstimates: { 'mod-1': 202.5, 'mod-2': null },
+      catalogComponents,
+      ...props,
+    };
+  }
+
+  it('deep link /modules/:id opens the detail on mount without notifying the shell', () => {
+    const onSelectionChange = vi.fn();
+    render(<ModulesScreen {...baseProps({ openModuleId: 'mod-1', onSelectionChange })} />);
+
+    const detail = screen.getByTestId('module-detail');
+    expect(within(detail).getByText('Bajo mesada 600')).toBeTruthy();
+    // The URL already points here — mount must not ask the shell to
+    // navigate (the old mount-time null notification clobbered the
+    // deep link and bounced F5 back to /modules).
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('deep link resolves once the workspace finishes loading (auth async load)', async () => {
+    const onSelectionChange = vi.fn();
+    const view = render(
+      <ModulesScreen {...baseProps({ modules: [], openModuleId: 'mod-1', onSelectionChange })} />,
+    );
+    expect(screen.queryByTestId('module-detail')).toBeNull();
+
+    view.rerender(<ModulesScreen {...baseProps({ openModuleId: 'mod-1', onSelectionChange })} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('module-detail')).toBeTruthy();
+    });
+    expect(
+      within(screen.getByTestId('module-detail')).getByText('Bajo mesada 600'),
+    ).toBeTruthy();
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('selection follows the URL: clearing openModuleId returns to the list', () => {
+    const onSelectionChange = vi.fn();
+    const view = render(
+      <ModulesScreen {...baseProps({ openModuleId: 'mod-1', onSelectionChange })} />,
+    );
+    expect(screen.getByTestId('module-detail')).toBeTruthy();
+
+    view.rerender(
+      <ModulesScreen {...baseProps({ openModuleId: null, onSelectionChange })} />,
+    );
+
+    expect(screen.queryByTestId('module-detail')).toBeNull();
+    expect(screen.getByTestId('module-card-mod-1')).toBeTruthy();
+  });
+
+  it('closing the editor on /modules/:id/edit asks the shell to exit the edit route', async () => {
+    const user = userEvent.setup();
+    const onRequestEdit = vi.fn();
+    render(
+      <ModulesScreen
+        {...baseProps({ openModuleEditId: 'mod-1', onRequestEdit })}
+      />,
+    );
+    expect(screen.getByTestId('module-editor-page')).toBeTruthy();
+
+    await user.click(screen.getByTestId('module-editor-back'));
+
+    expect(screen.queryByTestId('module-editor-page')).toBeNull();
+    // The shell blocks selection notifications on /edit routes; the only
+    // way out is onRequestEdit(null) (same contract as structures).
+    expect(onRequestEdit).toHaveBeenCalledWith(null);
+  });
+
+  it('card click still notifies the shell with the module id (in-app flow)', async () => {
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    render(<ModulesScreen {...baseProps({ onSelectionChange })} />);
+
+    await user.click(screen.getByTestId('module-card-mod-1'));
+
+    expect(screen.getByTestId('module-detail')).toBeTruthy();
+    expect(onSelectionChange).toHaveBeenCalledWith('mod-1');
+  });
+
+  it('Volver a la lista notifies the shell with null', async () => {
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    render(
+      <ModulesScreen
+        {...baseProps({ openModuleId: 'mod-1', onSelectionChange })}
+      />,
+    );
+    expect(screen.getByTestId('module-detail')).toBeTruthy();
+
+    await user.click(
+      screen.getByRole('button', { name: /Volver a la lista|^Lista$/i }),
+    );
+
+    expect(screen.queryByTestId('module-detail')).toBeNull();
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
+  });
+});

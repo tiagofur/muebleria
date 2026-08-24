@@ -3524,6 +3524,27 @@
       "status": "done",
       "createdAt": "2026-08-23",
       "completedAt": "2026-08-23"
+    },
+    {
+      "id": "F152",
+      "phase": 0,
+      "name": "modules_deep_link_routing",
+      "title": "Bug routing: deep-link/F5 en /modules/:id rebota a la lista y cierre de editor deja URL en /edit",
+      "description": "Bug de la auditoría UX (backlog F150/F151, candidato F152). Dos síntomas de la misma causa en useModulesScreenState (selección bespoke en vez del hook canónico useRoutableEntitySelection): (1) F5 o entrada directa a /modules/:id notifica onSelectionChange(null) en mount y el guard de refs (lastOpenModuleIdRef inicializado al valor de mount) impide sembrar selectedId desde la URL → la shell navega a /modules y el deep-link se pierde. (2) Al cerrar el editor in-app desde /modules/:id/edit, onEditorClose(restoreId) usa onSelectionChange, que la shell bloquea en rutas /edit (isEntityEditPath) → la URL queda pegada en /edit con el editor cerrado (F5 ahí lo reabre). Fix: migrar la selección de useModulesScreenState a useRoutableEntitySelection (patrón de structures/components/customers/catálogos) — seed en mount + sync URL→estado sin notificar + drop-stale — y alinear el cierre del editor con structures (salir de /edit vía onRequestEdit). Paridad: el resto de las screens entity ya usan el hook canónico; modules era el outlier.",
+      "acceptance": [
+        "F5 o entrada directa a /modules/:id muestra el detalle del mueble (URL estable, sin rebote a /modules)",
+        "El caso async (workspace aún cargando) también resuelve: al llegar los datos se abre el detalle",
+        "Cerrar el editor desde /modules/:id/edit navega siempre fuera de la ruta /edit (a la lista), sin URL pegada",
+        "Flujos in-app existentes intactos: click en card abre detalle con URL /modules/:id, Volver a lista navega a /modules, abrir/cerrar editor funciona",
+        "Tests de comportamiento en ModulesScreen cubren deep-link en mount, sincronización URL→selección y cierre de editor"
+      ],
+      "status": "in_progress",
+      "references": [
+        "docs/design.md#42-patrón-listadetalle",
+        "progress/current.md"
+      ],
+      "depends_on": [],
+      "created": "2026-08-23"
     }
   ]
 }
