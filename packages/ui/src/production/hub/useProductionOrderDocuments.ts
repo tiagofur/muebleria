@@ -138,10 +138,10 @@ export function useProductionOrderDocuments({
       },
       {
         id: 'elevations',
-        label: 'Elevaciones por muro (PDF)',
-        hint: 'Alzados con códigos y medidas',
+        label: 'Elevaciones e islas (PDF)',
+        hint: 'Alzados por muro y fichas de isla con medidas',
         available: elevationsAvailable && Boolean(onExportElevations),
-        reason: 'Sin muros en el layout de cocina',
+        reason: 'Sin muros ni islas en el layout',
         onDownload: onExportElevations,
       },
       {
