@@ -44,6 +44,13 @@ type AuthoringEnvelopeV1 = {
   coordinateSystem: CoordinateSystem;
   assemblies: readonly DesignAssembly[];
 };
+
+type AuthoringSource = {
+  client: 'muebles-for-sketchup';
+  clientVersion: string;
+  host: 'sketchup';
+  hostVersion: string;
+};
 ```
 
 Reglas:
@@ -52,6 +59,7 @@ Reglas:
 - `idempotencyKey` identifica la mutación lógica y evita duplicados.
 - `sourceRevisionId` cambia cuando cambia authoring intent relevante.
 - `projectId` no se infiere por file name.
+- `source` identifica client/host versions para compatibilidad y diagnóstico; no cambia ownership industrial.
 - unknown `schemaVersion` falla de forma segura.
 
 ## 3. Stable IDs
@@ -372,6 +380,12 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
   "sentAt": "2026-08-24T05:00:00Z",
   "projectId": "project-42",
   "sourceRevisionId": "source-rev-8",
+  "source": {
+    "client": "muebles-for-sketchup",
+    "clientVersion": "0.1.0",
+    "host": "sketchup",
+    "hostVersion": "2026"
+  },
   "units": { "length": "mm", "angle": "deg", "precisionMm": 0.01 },
   "coordinateSystem": {
     "handedness": "right",
@@ -396,9 +410,39 @@ import/readback y operator sign-off para la combinación exacta de machine/softw
         "depthMm": 590
       },
       "components": [
-        { "componentId": "side-left", "instanceId": "side-left-01", "role": "left-side" },
-        { "componentId": "side-right", "instanceId": "side-right-01", "role": "right-side" },
-        { "componentId": "shelf", "instanceId": "shelf-01", "role": "shelf" }
+        {
+          "componentId": "side-left",
+          "instanceId": "side-left-01",
+          "role": "left-side",
+          "transform": {
+            "frame": "assembly",
+            "translationMm": [0, 0, 0],
+            "rotationQuaternion": [0, 0, 0, 1],
+            "scale": [1, 1, 1]
+          }
+        },
+        {
+          "componentId": "side-right",
+          "instanceId": "side-right-01",
+          "role": "right-side",
+          "transform": {
+            "frame": "assembly",
+            "translationMm": [582, 0, 0],
+            "rotationQuaternion": [0, 0, 0, 1],
+            "scale": [1, 1, 1]
+          }
+        },
+        {
+          "componentId": "shelf",
+          "instanceId": "shelf-01",
+          "role": "shelf",
+          "transform": {
+            "frame": "assembly",
+            "translationMm": [18, 0, 350],
+            "rotationQuaternion": [0, 0, 0, 1],
+            "scale": [1, 1, 1]
+          }
+        }
       ],
       "relationships": [
         {
@@ -436,7 +480,16 @@ El ejemplo es ilustrativo y no congela el schema ejecutable final.
 - [ ] Contract fixtures prueban parity cuando una regla exista en TS y Go.
 - [ ] Field compatibility requiere import/readback y operator sign-off.
 
-## 14. Non-goals v1
+## 14. Security y privacy
+
+- business payloads no incluyen secrets ni session tokens;
+- logs y fixtures usan IDs opacos y redaction;
+- machine evidence sanitiza datos privados antes de entrar al repo;
+- payload size, entity count y nesting depth tendrán límites explícitos;
+- SketchUp/Ruby no se considera security boundary;
+- auth/token transport se define fuera de este contract de negocio.
+
+## 15. Non-goals v1
 
 - JSON Schema definitivo;
 - endpoint/transport final;
