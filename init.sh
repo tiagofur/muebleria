@@ -6,7 +6,7 @@
 #
 # Modos:
 #   bootstrap — monorepo TS aún no scaffolded; solo valida el harness.
-#   full      — monorepo existe; valida harness + instala deps + typecheck + tests (TS y Go).
+#   full      — monorepo existe; valida harness + instala deps + tests (TS, Go y SketchUp Ruby).
 #
 # Salida: [OK] / [WARN] / [FAIL] por sección. Exit code 0 solo si todo verde.
 
@@ -174,9 +174,78 @@ else
   info "backend-go/go.mod no existe — omitiendo backend Go"
 fi
 
-# ── 6. Resumen ───────────────────────────────────────────────────────────────
+# ── 6. Extensión SketchUp Ruby (si existe) ──────────────────────────────────
 echo ""
-echo "── 6. Resumen ──────────────────────────────────────────"
+echo "── 6. Extensión SketchUp Ruby ──────────────────────────"
+
+SKETCHUP_EXTENSION_DIR="apps/sketchup-extension"
+if [ -f "$SKETCHUP_EXTENSION_DIR/Gemfile" ]; then
+  if [ -x "/opt/homebrew/opt/ruby@3.2/bin/ruby" ]; then
+    export PATH="/opt/homebrew/opt/ruby@3.2/bin:/opt/homebrew/lib/ruby/gems/3.2.0/bin:$PATH"
+  fi
+
+  RUBY_READY=false
+  BUNDLER_READY=false
+  REQUIRED_RUBY=$(tr -d '[:space:]' < "$SKETCHUP_EXTENSION_DIR/.ruby-version")
+  REQUIRED_BUNDLER=$(awk '/^BUNDLED WITH$/{getline; gsub(/[[:space:]]/, ""); print}' \
+    "$SKETCHUP_EXTENSION_DIR/Gemfile.lock")
+
+  if ! command -v ruby >/dev/null 2>&1; then
+    fail "ruby no está instalado — requerido para la extensión SketchUp"
+    EXIT_CODE=1
+  else
+    RUBY_VER=$(ruby -e 'print RUBY_VERSION')
+    if [ "$RUBY_VER" != "$REQUIRED_RUBY" ]; then
+      fail "La extensión requiere Ruby $REQUIRED_RUBY (actual: $RUBY_VER)"
+      EXIT_CODE=1
+    else
+      ok "ruby $RUBY_VER para la extensión SketchUp"
+      RUBY_READY=true
+    fi
+  fi
+
+  if [ "$RUBY_READY" = true ]; then
+    if ! command -v bundle >/dev/null 2>&1; then
+      fail "bundle no está instalado — se requiere Bundler $REQUIRED_BUNDLER"
+      EXIT_CODE=1
+    else
+      BUNDLER_VER=$(bundle --version | awk '{print $NF}')
+      if [ "$BUNDLER_VER" != "$REQUIRED_BUNDLER" ]; then
+        fail "La extensión requiere Bundler $REQUIRED_BUNDLER (actual: $BUNDLER_VER)"
+        EXIT_CODE=1
+      else
+        ok "bundler $BUNDLER_VER"
+        BUNDLER_READY=true
+      fi
+    fi
+  fi
+
+  if [ "$BUNDLER_READY" = true ]; then
+    info "Verificando dependencias Ruby..."
+    if (cd "$SKETCHUP_EXTENSION_DIR" && bundle check 2>&1); then
+      ok "Dependencias Ruby disponibles"
+    elif (cd "$SKETCHUP_EXTENSION_DIR" && bundle install 2>&1); then
+      ok "bundle install completado"
+    else
+      fail "bundle install falló para la extensión SketchUp"
+      EXIT_CODE=1
+    fi
+
+    info "Ejecutando gate Ruby/RBZ..."
+    if (cd "$SKETCHUP_EXTENSION_DIR" && bundle exec rake verify 2>&1); then
+      ok "Gate Ruby/RBZ de SketchUp pasó"
+    else
+      fail "Gate Ruby/RBZ de SketchUp falló"
+      EXIT_CODE=1
+    fi
+  fi
+else
+  info "$SKETCHUP_EXTENSION_DIR/Gemfile no existe — omitiendo extensión SketchUp"
+fi
+
+# ── 7. Resumen ───────────────────────────────────────────────────────────────
+echo ""
+echo "── 7. Resumen ──────────────────────────────────────────"
 
 if [ $EXIT_CODE -eq 0 ]; then
   ok "Entorno listo. Todas las verificaciones pasaron exitosamente."

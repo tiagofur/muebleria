@@ -76,6 +76,34 @@ jobs:
       - name: Run Tests
         run: pnpm test
 
+  sketchup-extension:
+    name: SketchUp Extension (Ruby, ${{ matrix.os }})
+    # Documented runtime targets are macOS and Windows; run the portable
+    # Ruby/RBZ gates on all three families. Licensed SketchUp host smoke
+    # remains a separate manual gate (README §Evidencia).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/sketchup-extension
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2.11'
+          bundler: Gemfile.lock
+          bundler-cache: true
+          working-directory: apps/sketchup-extension
+
+      - name: Verify extension and RBZ package
+        run: bundle exec rake verify
+
   backend-go:
     name: Go Backend Tests
     runs-on: ubuntu-latest

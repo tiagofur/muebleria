@@ -1,0 +1,91 @@
+plugins:
+  - rubocop-sketchup
+
+AllCops:
+  CacheRootDirectory: .rubocop_cache
+  DisplayCopNames: true
+  DisplayStyleGuide: true
+  ExtraDetails: true
+  NewCops: enable
+  SuggestExtensions: false
+  TargetRubyVersion: 3.2
+  SketchUp:
+    SourcePath: src
+    TargetSketchUpVersion: 2024
+    Exclude:
+      - 'vendor/'
+      - 'Gemfile'
+      - 'Rakefile'
+      - 'test/**/*'
+  Exclude:
+    - 'vendor/**/*'
+    - 'tmp/**/*'
+
+Layout/LineLength:
+  Max: 100
+
+# AppObserver callbacks must keep the host's exact camelCase API names.
+Naming/MethodName:
+  AllowedPatterns:
+    - '\Aon[A-Z]'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'Rakefile'
+    - 'test/**/*'
+
+Metrics/ClassLength:
+  Exclude:
+    - 'test/**/*'
+
+Metrics/AbcSize:
+  Exclude:
+    - 'Rakefile'
+    - 'test/**/*'
+
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - 'Rakefile'
+
+Metrics/PerceivedComplexity:
+  Exclude:
+    - 'Rakefile'
+
+Metrics/MethodLength:
+  Max: 20
+
+Style/Documentation:
+  Enabled: false
+
+Naming/PredicateMethod:
+  Exclude:
+    - 'Rakefile'
+
+# TestUp discovers suites by its required TC_Name.rb / TC_Name convention.
+Naming/FileName:
+  Exclude:
+    - 'test/testup/TC_*.rb'
+
+Naming/ClassAndModuleCamelCase:
+  Exclude:
+    - 'test/testup/TC_*.rb'
+
+SketchupDeprecations:
+  Enabled: true
+
+SketchupPerformance:
+  Enabled: true
+
+SketchupRequirements:
+  Enabled: true
+
+# The development project has tooling beside `src`; package:verify enforces the
+# stricter two-item RBZ topology after staging only the loader and support tree.
+SketchupRequirements/FileStructure:
+  Enabled: false
+
+SketchupSuggestions:
+  Enabled: true
+
+SketchupBugs:
+  Enabled: true
