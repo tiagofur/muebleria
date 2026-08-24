@@ -20,7 +20,6 @@
         --weight-bold: 700;
         
         --brand-50: hsl(245 100% 97%);
-        --brand-100: hsl(245 90% 94%);
         --brand-500: hsl(245 58% 51%);
         --brand-600: hsl(245 55% 43%);
         --brand-800: hsl(245 48% 28%);
@@ -45,6 +44,8 @@
         --warning-700: hsl(38 80% 32%);
         --danger-50: hsl(0 84% 97%);
         --danger-600: hsl(0 72% 51%);
+        --neutral-50: hsl(220 14% 94%);
+        --neutral-700: hsl(230 12% 40%);
         
         --space-1: 0.25rem;
         --space-2: 0.5rem;
@@ -190,8 +191,8 @@
       .card-header-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        margin-bottom: var(--space-3);
+        align-items: flex-start;
+        gap: var(--space-2);
       }
 
       .card-title {
@@ -388,6 +389,14 @@
         border: 1px solid hsl(0 72% 51% / 20%);
       }
 
+      /* Distinct status badges for Interactive Validation vs Authoritative Preflight */
+      .badges-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        align-items: flex-end;
+      }
+
       .status-badge {
         display: inline-flex;
         align-items: center;
@@ -398,12 +407,27 @@
         font-weight: var(--weight-semibold);
       }
 
-      .status-badge.ready {
+      .status-badge.valid {
         background: var(--success-50);
         color: var(--success-600);
       }
 
-      .status-badge.warning {
+      .status-badge.invalid {
+        background: var(--danger-50);
+        color: var(--danger-600);
+      }
+
+      .status-badge.pending {
+        background: var(--neutral-50);
+        color: var(--neutral-700);
+      }
+
+      .status-badge.passed {
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+
+      .status-badge.conflict {
         background: var(--warning-50);
         color: var(--warning-700);
       }
@@ -438,7 +462,7 @@
             <span>para SketchUp</span>
           </div>
         </div>
-        <div id="connection-pill" class="status-badge ready">Conectado</div>
+        <div id="connection-pill" class="status-badge valid">Conectado</div>
       </header>
 
       <nav class="tabs-nav" role="tablist">
@@ -506,7 +530,12 @@
                   <h2 id="inspector-furniture-name" style="font-size: var(--text-md); margin: 0;">--</h2>
                   <span id="inspector-instance-id" style="font-size: var(--text-xs); color: var(--text-muted);">--</span>
                 </div>
-                <span id="inspector-preflight-badge" class="status-badge ready">✓ Listo para Fabricar</span>
+                <div class="badges-column">
+                  <!-- Level 1: Interactive validation badge -->
+                  <span id="inspector-interactive-badge" class="status-badge valid">✓ Parámetros Válidos</span>
+                  <!-- Level 2: Authoritative preflight badge (NEVER auto-assumed) -->
+                  <span id="inspector-manufacturing-badge" class="status-badge pending">⏳ Preflight Pendiente</span>
+                </div>
               </div>
             </div>
 
@@ -581,12 +610,12 @@
         var btnInsert = document.getElementById("btn-insert");
 
         // Inspector elements
-        var tabBtnInspector = document.getElementById("tab-btn-inspector");
         var inspectorEmpty = document.getElementById("inspector-empty-state");
         var inspectorActive = document.getElementById("inspector-active-view");
         var inspectorName = document.getElementById("inspector-furniture-name");
         var inspectorId = document.getElementById("inspector-instance-id");
-        var inspectorPreflightBadge = document.getElementById("inspector-preflight-badge");
+        var inspectorInteractiveBadge = document.getElementById("inspector-interactive-badge");
+        var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
         var inspectorParamsContainer = document.getElementById("inspector-params-container");
         var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
         var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
@@ -663,7 +692,6 @@
               return;
             }
 
-            // Populate inspector
             inspectorEmpty.style.display = "none";
             inspectorActive.style.display = "block";
 
@@ -671,11 +699,25 @@
             inspectorName.textContent = instanceData.name || (def ? def.name : "Mueble");
             inspectorId.textContent = "ID: " + (instanceData.instanceId || "--");
 
+            // Interactive validation reset
+            inspectorInteractiveBadge.textContent = "✓ Parámetros Válidos";
+            inspectorInteractiveBadge.className = "status-badge valid";
+
+            // Authoritative preflight reset (must NOT claim ready without real domain preflight)
+            if (instanceData.manufacturingPreflightPassed) {
+              inspectorManufacturingBadge.textContent = "✓ Fabricación Aprobada (#347)";
+              inspectorManufacturingBadge.className = "status-badge passed";
+            } else {
+              inspectorManufacturingBadge.textContent = "⏳ Preflight Pendiente";
+              inspectorManufacturingBadge.className = "status-badge pending";
+            }
+
             inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), instanceData.parameters || {});
 
             renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
               inspectorParams[name] = val;
               updateInspectorSummary();
+              validateInteractiveClient(def, inspectorParams);
             });
 
             updateInspectorSummary();
@@ -718,6 +760,27 @@
           libParamsCard.style.display = "block";
           btnInsert.style.display = "flex";
           updateLibrarySummary();
+        }
+
+        function validateInteractiveClient(def, currentValues) {
+          if (!def || !def.parameters) return;
+          var valid = true;
+          for (var i = 0; i < def.parameters.length; i++) {
+            var p = def.parameters[i];
+            var v = Number(currentValues[p.name]);
+            if (p.type === "number") {
+              if (p.min !== undefined && v < p.min) valid = false;
+              if (p.max !== undefined && v > p.max) valid = false;
+            }
+          }
+
+          if (valid) {
+            inspectorInteractiveBadge.textContent = "✓ Parámetros Válidos";
+            inspectorInteractiveBadge.className = "status-badge valid";
+          } else {
+            inspectorInteractiveBadge.textContent = "⚠️ Parámetro Fuera de Rango";
+            inspectorInteractiveBadge.className = "status-badge invalid";
+          }
         }
 
         function renderParamForm(container, def, currentValues, onChange) {

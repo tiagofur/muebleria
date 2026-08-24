@@ -6,6 +6,9 @@ require "json"
 module Granete
   module SketchUpExtension
     module Model
+      # Pure visual adapter and renderer for SketchUp.
+      # Consumes resolved component layouts from @muebles/domain or generic slot definitions.
+      # Contains ZERO manufacturing rules, zero drilling calculation, and zero category-specific logic.
       class FurnitureBuilder
         DEFAULT_THICKNESS_MM = 18.0
 
@@ -14,7 +17,9 @@ module Granete
           @asset_loader = asset_loader
         end
 
-        def insert_furniture(model, definition, raw_parameters = {})
+        # Inserts a new furniture instance into the model.
+        # Accepts optional resolved_layout (from @muebles/domain resolveFurnitureLayout).
+        def insert_furniture(model, definition, raw_parameters = {}, resolved_layout: nil)
           parameters = normalize_parameters(definition, raw_parameters)
           instance_id = "inst-#{SecureRandom.hex(4)}"
 
@@ -23,7 +28,7 @@ module Granete
           main_group = entities.add_group
           main_group.name = "#{definition['name']} (#{instance_id})"
 
-          component_count = render_furniture_geometry(main_group, instance_id, definition, parameters)
+          component_count = render_layout(main_group, instance_id, definition, parameters, resolved_layout)
 
           write_furniture_metadata(main_group, instance_id, definition, parameters)
 
@@ -44,7 +49,9 @@ module Granete
           }
         end
 
-        def update_furniture(model, group, definition, raw_parameters = {})
+        # In-Place MVP Update: clears inner entities and rebuilds layout preserving group transform and identity.
+        # Future non-MVP architecture will perform differential component reconciliation (diff/patch).
+        def update_furniture(model, group, definition, raw_parameters = {}, resolved_layout: nil)
           parameters = normalize_parameters(definition, raw_parameters)
 
           existing_meta = @metadata_store ? @metadata_store.read(group) : nil
@@ -52,10 +59,10 @@ module Granete
 
           model.start_operation("Editar Mueble #{definition['name']}", true)
 
-          # Clear inner sub-entities preserving group position and rotation
+          # MVP strategy: Clear sub-entities inside group, preserving group.transformation in the model
           group.entities.clear!
 
-          component_count = render_furniture_geometry(group, instance_id, definition, parameters)
+          component_count = render_layout(group, instance_id, definition, parameters, resolved_layout)
 
           write_furniture_metadata(group, instance_id, definition, parameters)
 
@@ -88,59 +95,70 @@ module Granete
           params
         end
 
-        def render_furniture_geometry(main_group, instance_id, definition, parameters)
-          component_count = 0
-          width_mm = (parameters["widthMm"] || 600.0).to_f
+        # Renders the layout. If a resolved layout is provided (from @muebles/domain),
+        # it renders the exact resolved components without any parametric math.
+        # Otherwise, falls back to generic slot bounding boxes.
+        def render_layout(main_group, instance_id, definition, parameters, resolved_layout)
+          if resolved_layout && resolved_layout["components"]
+            render_resolved_components(main_group, instance_id, resolved_layout["components"])
+          else
+            render_generic_parametric_layout(main_group, instance_id, definition, parameters)
+          end
+        end
+
+        def render_resolved_components(main_group, instance_id, components)
+          components.each do |c|
+            slot_id = c["slotId"] || c["role"] || "slot"
+            name = c["name"] || slot_id
+            pos = c.dig("transform", "translationMm") || [0, 0, 0]
+            dims = c["dimensionsMm"] || [100, 100, 18]
+
+            create_hierarchical_component(
+              main_group,
+              instance_id,
+              slot_id,
+              name,
+              pos[0], pos[1], pos[2],
+              dims[0], dims[1], dims[2]
+            )
+          end
+          components.length
+        end
+
+        # Generic fallback layout generator that uses slots rather than hardcoded categories
+        def render_generic_parametric_layout(main_group, instance_id, definition, parameters)
+          width_mm = (parameters["widthMm"] || parameters["lengthMm"] || 600.0).to_f
           height_mm = (parameters["heightMm"] || 720.0).to_f
           depth_mm = (parameters["depthMm"] || 590.0).to_f
           thickness_mm = DEFAULT_THICKNESS_MM
-          category = definition["category"]
+          count = 0
 
-          if %w[kitchen_base kitchen_wall closet].include?(category)
-            # Left panel Component & Part
-            create_hierarchical_component(main_group, instance_id, "left_side", "Lateral Izquierdo", 0, 0, 0, thickness_mm, depth_mm, height_mm)
-            component_count += 1
+          # Structural side panels
+          create_hierarchical_component(main_group, instance_id, "left_side", "Lateral Izquierdo", 0, 0, 0, thickness_mm, depth_mm, height_mm)
+          create_hierarchical_component(main_group, instance_id, "right_side", "Lateral Derecho", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm)
+          count += 2
 
-            # Right panel Component & Part
-            create_hierarchical_component(main_group, instance_id, "right_side", "Lateral Derecho", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm)
-            component_count += 1
-
-            # Shelves
-            shelf_count = (parameters["shelfCount"] || 0).to_i
-            if shelf_count > 0
-              spacing = height_mm / (shelf_count + 1)
-              (1..shelf_count).each do |i|
-                shelf_z = spacing * i
-                create_hierarchical_component(main_group, instance_id, "shelf_#{i}", "Entrepaño #{i}", thickness_mm, 0, shelf_z, width_mm - (2 * thickness_mm), depth_mm, thickness_mm)
-                component_count += 1
-              end
+          # Optional dynamic shelves
+          shelf_count = (parameters["shelfCount"] || 0).to_i
+          if shelf_count > 0
+            spacing = height_mm / (shelf_count + 1)
+            (1..shelf_count).each do |i|
+              create_hierarchical_component(main_group, instance_id, "shelf_#{i}", "Entrepaño #{i}", thickness_mm, 0, spacing * i, width_mm - (2 * thickness_mm), depth_mm, thickness_mm)
+              count += 1
             end
-
-            # Door
-            door_count = (parameters["doorCount"] || 0).to_i
-            if door_count == 1
-              create_hierarchical_component(main_group, instance_id, "door_1", "Puerta", 0, depth_mm, 0, width_mm, thickness_mm, height_mm)
-              component_count += 1
-            end
-          elsif category == "desk"
-            # Worktop
-            create_hierarchical_component(main_group, instance_id, "worktop", "Cubierta", 0, 0, height_mm - thickness_mm, width_mm, depth_mm, thickness_mm)
-            component_count += 1
-
-            # Legs
-            create_hierarchical_component(main_group, instance_id, "leg_left", "Pata Izquierda", 0, 0, 0, thickness_mm, depth_mm, height_mm - thickness_mm)
-            create_hierarchical_component(main_group, instance_id, "leg_right", "Pata Derecha", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm - thickness_mm)
-            component_count += 2
-          else
-            create_hierarchical_component(main_group, instance_id, "body", "Cuerpo", 0, 0, 0, width_mm, depth_mm, height_mm)
-            component_count += 1
           end
 
-          component_count
+          # Optional dynamic door
+          door_count = (parameters["doorCount"] || 0).to_i
+          if door_count == 1
+            create_hierarchical_component(main_group, instance_id, "door_1", "Puerta", 0, depth_mm, 0, width_mm, thickness_mm, height_mm)
+            count += 1
+          end
+
+          count
         end
 
         def create_hierarchical_component(main_group, furniture_instance_id, slot_id, name, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
-          # Level 2: ComponentInstance Group
           comp_group = main_group.entities.add_group
           comp_group.name = name
           comp_id = "comp-#{furniture_instance_id}-#{slot_id}"
@@ -161,7 +179,7 @@ module Granete
             @metadata_store.write(comp_group, comp_meta)
           end
 
-          # Level 3: Part Geometry & PartInstance
+          # Render 3D Part faces
           scale_to_inch = 1.0 / 25.4
           x = x_mm * scale_to_inch
           y = y_mm * scale_to_inch
