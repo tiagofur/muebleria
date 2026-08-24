@@ -13,7 +13,6 @@ module Granete
     class TC_BootstrapSmoke < TestUp::TestCase
       EXPECTED_NAME = 'Granete for SketchUp'
       EXPECTED_VERSION = '0.1.0'
-      EXPECTED_LOADER = 'granete_for_sketchup.rb'
       FIXTURE_PATH = File.join(
         File.expand_path('../..', __dir__),
         'test',
@@ -43,7 +42,8 @@ module Granete
       def test_host_floor_and_runtime_are_available
         assert_operator Sketchup.version.to_i, :>=, 24
         assert_equal %w[3 2], RUBY_VERSION.split('.').first(2)
-        assert_operator UI::HtmlDialog::CEF_VERSION, :>=, 112
+        cef = Gem::Version.new(UI::HtmlDialog::CEF_VERSION.to_s)
+        assert_operator cef, :>=, Gem::Version.new('112.0')
         assert_operator Gem::Version.new(Minitest::VERSION), :>=, Gem::Version.new('5.15.0')
         assert_operator Gem::Version.new(Minitest::VERSION), :<, Gem::Version.new('6.0.0')
         assert_same Runtime.start, Runtime.start
@@ -82,7 +82,11 @@ module Granete
         application.close_dialog
       end
 
+      # The CI startup model invalidates entities around undo operations (host
+      # finding, recorded in the evidence); a fresh model is stable for the
+      # round trip, matching how TestUp's own utilities bootstrap models.
       def test_non_manufacturable_metadata_round_trips_in_model
+        Sketchup.file_new
         model = Sketchup.active_model
         entity = create_fixture_group(model)
         fixture = JSON.parse(File.read(FIXTURE_PATH))
@@ -121,35 +125,36 @@ module Granete
         flunk "Installed version #{extension.version} does not match expected #{EXPECTED_VERSION}"
       end
 
+      # Binds the smoke to the bytes the host actually loaded: source_location
+      # of the running Runtime must come from the installed Plugins folder,
+      # never from this repository checkout. (Sketchup.find_support_file does
+      # not reliably cover the user Plugins folder and is not used.)
       def fail_closed_if_loaded_from_checkout
-        support_file = Sketchup.find_support_file(EXPECTED_LOADER)
-        if support_file.nil?
-          flunk "#{EXPECTED_LOADER} is not installed in the SketchUp Plugins directory"
+        runtime_path = Granete::SketchUpExtension::Runtime.method(:start).source_location&.first
+        flunk 'Installed Granete runtime is not loaded' if runtime_path.nil?
+
+        expanded = File.expand_path(runtime_path)
+        unless expanded.include?("#{File::SEPARATOR}Plugins#{File::SEPARATOR}")
+          flunk "Granete runtime loaded outside the Plugins folder: #{expanded}"
         end
-        return unless File.expand_path(support_file).start_with?(REPOSITORY_ROOT + File::SEPARATOR)
+        return unless expanded.start_with?(REPOSITORY_ROOT + File::SEPARATOR)
 
         flunk 'Host smoke must test the installed RBZ, not the repository checkout'
       end
 
+      # An empty group's definition is purged by the next model transaction,
+      # invalidating the entity (host finding): the fixture carries geometry
+      # like any real furniture instance would.
       def create_fixture_group(model)
-        model.start_operation('Granete Smoke Setup', true)
         group = model.active_entities.add_group
-        model.commit_operation
+        group.entities.add_line([0, 0, 0], [100, 0, 0])
         group
-      rescue StandardError
-        model.abort_operation
-        raise
       end
 
       def remove_fixture_group(model, entity)
         return if model.nil? || entity.nil? || !entity.valid?
 
-        model.start_operation('Granete Smoke Cleanup', true)
         entity.erase!
-        model.commit_operation
-      rescue StandardError
-        model.abort_operation
-        raise
       end
 
       def quiet_logger
