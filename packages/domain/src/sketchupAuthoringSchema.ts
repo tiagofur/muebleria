@@ -164,8 +164,86 @@ export type AuthoringRoundTripResponseV1 = {
   readonly migration?: AppliedSchemaMigration;
   readonly mutationReceipt?: MutationReceipt;
   readonly authoringSnapshot?: ReadonlyAuthoringSnapshot;
+  readonly resolvedFeedback?: ResolvedManufacturingFeedback;
   readonly issues: readonly ContractIssue[];
 };
+
+export type RelationshipProvenance = {
+  readonly sourceKind: 'relationship';
+  readonly relationshipId: StableEntityId;
+  readonly catalogRuleId?: string;
+};
+
+export type JointProvenance = {
+  readonly sourceKind: 'joint';
+  readonly relationshipId: StableEntityId;
+  readonly jointPlacementId: StableEntityId;
+  readonly catalogRuleId?: string;
+};
+
+export type ManualHardwarePlacementProvenance = {
+  readonly sourceKind: 'manualHardwarePlacement';
+  readonly hardwarePlacementId: StableEntityId;
+  readonly catalogRuleId?: string;
+};
+
+export type DerivedOperationProvenance =
+  | RelationshipProvenance
+  | JointProvenance
+  | ManualHardwarePlacementProvenance;
+
+export type DerivedHardwarePlacement = {
+  readonly derivedHardwarePlacementId: StableEntityId;
+  readonly hostComponentInstanceId: StableEntityId;
+  readonly provenance: RelationshipProvenance | JointProvenance;
+};
+
+export type DerivedMachiningOperation = {
+  readonly operationId: StableEntityId;
+  readonly hostComponentInstanceId: StableEntityId;
+  readonly provenance: DerivedOperationProvenance;
+};
+
+export type ManufacturingIdentity = {
+  readonly projectId: string;
+  readonly designRevisionId: string;
+  readonly sourceRevisionId: string;
+  readonly bomFingerprint: string;
+  readonly resolvedAt: string;
+};
+
+/**
+ * Read-only manufacturing feedback attached to a response. Granete produces
+ * it; SketchUp may render or cache it, but it can never re-enter an
+ * AuthoringEnvelopeV1 as authoring truth.
+ */
+export type ResolvedManufacturingFeedback = {
+  readonly identity: ManufacturingIdentity;
+  readonly preflightStatus: 'ready' | 'blocked' | 'warning';
+  readonly derivedHardwarePlacements: readonly DerivedHardwarePlacement[];
+  readonly derivedMachiningOperations: readonly DerivedMachiningOperation[];
+  readonly issues: readonly ContractIssue[];
+};
+
+/**
+ * Exactly one provenance variant must be present: `{}` and ambiguous
+ * relationship/joint/manual combinations are invalid by contract §6.
+ */
+export function isValidDerivedOperationProvenance(
+  provenance: unknown,
+): provenance is DerivedOperationProvenance {
+  if (provenance === null || typeof provenance !== 'object') return false;
+  const record = provenance as Record<string, unknown>;
+  const sourceKind = record.sourceKind;
+  if (sourceKind === 'relationship') return typeof record.relationshipId === 'string';
+  if (sourceKind === 'joint') {
+    return typeof record.relationshipId === 'string' && typeof record.jointPlacementId === 'string';
+  }
+  if (sourceKind === 'manualHardwarePlacement') {
+    return typeof record.hardwarePlacementId === 'string';
+  }
+  return false;
+}
 
 /**
  * Deterministic canonical fingerprint for idempotency comparisons: key order

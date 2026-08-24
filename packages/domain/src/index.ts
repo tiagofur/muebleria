@@ -1255,3 +1255,15 @@ export {
   type IdempotencyRecord,
 } from './sketchupAuthoringExchange';
 export { applyRegisteredMigrations } from './sketchupAuthoringMigrations';
+export {
+  isValidDerivedOperationProvenance,
+  type DerivedHardwarePlacement,
+  type DerivedMachiningOperation,
+  type DerivedOperationProvenance,
+  type JointProvenance,
+  type ManufacturingIdentity,
+  type ManualHardwarePlacementProvenance,
+  type RelationshipProvenance,
+  type ResolvedManufacturingFeedback,
+} from './sketchupAuthoringSchema';
+export { entityKey, type TombstoneableEntityType } from './sketchupAuthoringExchange';

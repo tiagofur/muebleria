@@ -3,6 +3,14 @@
  * to previously accepted state, atomically and idempotently, and produces the
  * correlated round-trip response. Pure domain logic: the caller persists the
  * returned state; this module never resolves manufacturing truth.
+ *
+ * Entity granularity: assemblies, component instances, relationships and
+ * hardware placements all follow the same contract rules — unknown ID creates,
+ * existing ID updates, tombstone deletes, omission without tombstone is a
+ * conflict, and a deleted ID is never reused. The mutation receipt reports
+ * what the sender explicitly mutated: an assembly tombstone reports the
+ * assembly (its sub-entities die with it); sub-entity tombstones report the
+ * sub-entity.
  */
 
 import {
@@ -27,12 +35,14 @@ import {
 } from './sketchupAuthoringValidation';
 import { applyRegisteredMigrations } from './sketchupAuthoringMigrations';
 
+export type TombstoneableEntityType = EntityTombstone['entityType'];
+
 /** Accepted authoring state for one project; persisted by the caller. */
 export type AuthoringExchangeState = {
   readonly projectId: string;
   readonly sourceRevisionId: string;
   readonly assemblies: ReadonlyMap<StableEntityId, DesignAssembly>;
-  readonly deletedAssemblyIds: ReadonlySet<StableEntityId>;
+  readonly deletedEntityKeys: ReadonlySet<string>;
   readonly idempotency: ReadonlyMap<string, IdempotencyRecord>;
 };
 
@@ -45,9 +55,13 @@ export const EMPTY_AUTHORING_STATE: Readonly<AuthoringExchangeState> = {
   projectId: '',
   sourceRevisionId: '',
   assemblies: new Map(),
-  deletedAssemblyIds: new Set(),
+  deletedEntityKeys: new Set(),
   idempotency: new Map(),
 };
+
+export function entityKey(entityType: TombstoneableEntityType, entityId: StableEntityId): string {
+  return `${entityType}:${entityId}`;
+}
 
 export function applyAuthoringEnvelope(
   state: Readonly<AuthoringExchangeState>,
@@ -102,82 +116,171 @@ export function applyAuthoringEnvelope(
     ]);
   }
 
-  // 5. Snapshot completeness: omission never deletes.
-  const snapshotIssues = checkSnapshotCompleteness(state, envelope);
-  if (snapshotIssues.length > 0) {
-    return conflict(state, envelope, snapshotIssues);
+  const previous = indexLiveEntities(state.assemblies.values());
+  const sent = indexLiveEntities(envelope.assemblies);
+  const tombstoned = new Set(
+    envelope.tombstones.map((tombstone) => entityKey(tombstone.entityType, tombstone.entityId)),
+  );
+
+  // 5. Snapshot completeness: omission never deletes, at any granularity.
+  const completenessIssues = checkSnapshotCompleteness(previous, envelope, tombstoned);
+  if (completenessIssues.length > 0) {
+    return conflict(state, envelope, completenessIssues);
   }
 
-  // 6. Tombstone and ID-reuse guards.
-  const tombstoneIssues = checkTombstonesAndReuse(state, envelope);
-  if (tombstoneIssues.length > 0) {
-    return rejected(state, envelope, tombstoneIssues);
+  // 6. Tombstone validity and ID-reuse guards.
+  const guardIssues = checkTombstonesAndReuse(previous, sent, envelope, state.deletedEntityKeys);
+  if (guardIssues.length > 0) {
+    return rejected(state, envelope, guardIssues);
   }
 
   // 7. Atomic apply.
   const assemblies = new Map(state.assemblies);
-  const deletedAssemblyIds = new Set(state.deletedAssemblyIds);
+  const deletedEntityKeys = new Set(state.deletedEntityKeys);
   const created: StableEntityId[] = [];
   const updated: StableEntityId[] = [];
   const deleted: StableEntityId[] = [];
 
   for (const tombstone of envelope.tombstones) {
-    if (tombstone.entityType === 'assembly' && assemblies.delete(tombstone.entityId)) {
-      deletedAssemblyIds.add(tombstone.entityId);
-      deleted.push(tombstone.entityId);
+    const key = entityKey(tombstone.entityType, tombstone.entityId);
+    deletedEntityKeys.add(key);
+    if (tombstone.entityType === 'assembly') {
+      assemblies.delete(tombstone.entityId);
     }
+    deleted.push(tombstone.entityId);
   }
   for (const assembly of envelope.assemblies) {
-    if (assemblies.has(assembly.assemblyId)) {
+    const isUpdate = previous.assemblies.has(assembly.assemblyId);
+    if (isUpdate) {
       updated.push(assembly.assemblyId);
     } else {
       created.push(assembly.assemblyId);
     }
     assemblies.set(assembly.assemblyId, assembly);
+
+    const previousSubEntities = previous.assemblies.get(assembly.assemblyId);
+    const classify = (entityId: StableEntityId): void => {
+      if (previousSubEntities?.all.has(entityId) === true || previous.globalIds.has(entityId)) {
+        updated.push(entityId);
+      } else {
+        created.push(entityId);
+      }
+    };
+    for (const component of assembly.components ?? []) classify(component.componentInstanceId);
+    for (const relationship of assembly.relationships ?? []) classify(relationship.relationshipId);
+    for (const placement of assembly.hardwarePlacements ?? []) classify(placement.hardwarePlacementId);
   }
 
+  const response = acceptedResponse(
+    envelope,
+    { createdEntityIds: created, updatedEntityIds: updated, deletedEntityIds: deleted },
+    migration,
+    assemblies,
+  );
   const nextState: AuthoringExchangeState = {
     projectId: envelope.projectId,
     sourceRevisionId: envelope.sourceRevisionId,
     assemblies,
-    deletedAssemblyIds,
+    deletedEntityKeys,
     idempotency: new Map(state.idempotency).set(envelope.idempotencyKey, {
       payloadFingerprint: fingerprint,
-      response: acceptedResponse(
-        envelope,
-        {
-          createdEntityIds: created,
-          updatedEntityIds: updated,
-          deletedEntityIds: deleted,
-        },
-        migration,
-        assemblies,
-      ),
+      response,
     }),
   };
-  return { state: nextState, response: nextState.idempotency.get(envelope.idempotencyKey)!.response };
+  return { state: nextState, response };
+}
+
+type LiveIndex = {
+  readonly assemblies: ReadonlyMap<StableEntityId, LiveAssemblyIndex>;
+  /** Every stable ID that is live, sub-entities included. */
+  readonly globalIds: ReadonlySet<StableEntityId>;
+};
+
+type LiveAssemblyIndex = {
+  readonly componentInstances: ReadonlySet<StableEntityId>;
+  readonly relationships: ReadonlySet<StableEntityId>;
+  readonly hardwarePlacements: ReadonlySet<StableEntityId>;
+  readonly all: ReadonlySet<StableEntityId>;
+};
+
+function indexLiveEntities(assemblies: Iterable<DesignAssembly>): LiveIndex {
+  const assemblyIndex = new Map<StableEntityId, LiveAssemblyIndex>();
+  const globalIds = new Set<StableEntityId>();
+  for (const assembly of assemblies) {
+    const componentInstances = new Set((assembly.components ?? []).map((c) => c.componentInstanceId));
+    const relationships = new Set((assembly.relationships ?? []).map((r) => r.relationshipId));
+    const hardwarePlacements = new Set(
+      (assembly.hardwarePlacements ?? []).map((p) => p.hardwarePlacementId),
+    );
+    assemblyIndex.set(assembly.assemblyId, {
+      componentInstances,
+      relationships,
+      hardwarePlacements,
+      all: new Set([...componentInstances, ...relationships, ...hardwarePlacements]),
+    });
+    globalIds.add(assembly.assemblyId);
+    for (const id of componentInstances) globalIds.add(id);
+    for (const id of relationships) globalIds.add(id);
+    for (const id of hardwarePlacements) globalIds.add(id);
+  }
+  return { assemblies: assemblyIndex, globalIds };
 }
 
 function checkSnapshotCompleteness(
-  state: Readonly<AuthoringExchangeState>,
+  previous: LiveIndex,
   envelope: AuthoringEnvelopeV1,
+  tombstoned: ReadonlySet<string>,
 ): readonly ContractIssue[] {
   const issues: ContractIssue[] = [];
-  const sent = new Set(envelope.assemblies.map((assembly) => assembly.assemblyId));
-  const tombstoned = new Set(
-    envelope.tombstones
-      .filter((tombstone) => tombstone.entityType === 'assembly')
-      .map((tombstone) => tombstone.entityId),
-  );
+  const sentAssemblies = new Map(envelope.assemblies.map((assembly) => [assembly.assemblyId, assembly]));
 
-  for (const assemblyId of state.assemblies.keys()) {
-    if (!sent.has(assemblyId) && !tombstoned.has(assemblyId)) {
+  for (const [assemblyId, liveIndex] of previous.assemblies) {
+    const sent = sentAssemblies.get(assemblyId);
+    if (sent === undefined) {
+      if (!tombstoned.has(entityKey('assembly', assemblyId))) {
+        issues.push({
+          code: 'SOURCE_REVISION_CONFLICT',
+          message: `assembly ${assemblyId} is missing from the snapshot without a tombstone`,
+          severity: 'error',
+          entityId: assemblyId,
+          remediation: 'Send the full snapshot or tombstone the deleted assembly.',
+        });
+      }
+      continue;
+    }
+    issues.push(
+      ...checkSubEntityCompleteness('componentInstance', assemblyId, liveIndex.componentInstances, sent, tombstoned),
+      ...checkSubEntityCompleteness('relationship', assemblyId, liveIndex.relationships, sent, tombstoned),
+      ...checkSubEntityCompleteness('hardwarePlacement', assemblyId, liveIndex.hardwarePlacements, sent, tombstoned),
+    );
+  }
+  return issues;
+}
+
+function checkSubEntityCompleteness(
+  entityType: TombstoneableEntityType,
+  assemblyId: StableEntityId,
+  previousIds: ReadonlySet<StableEntityId>,
+  sent: DesignAssembly,
+  tombstoned: ReadonlySet<string>,
+): readonly ContractIssue[] {
+  const issues: ContractIssue[] = [];
+  const sentIds: ReadonlySet<StableEntityId> =
+    entityType === 'componentInstance'
+      ? new Set((sent.components ?? []).map((c) => c.componentInstanceId))
+      : entityType === 'relationship'
+        ? new Set((sent.relationships ?? []).map((r) => r.relationshipId))
+        : new Set((sent.hardwarePlacements ?? []).map((p) => p.hardwarePlacementId));
+
+  for (const entityId of previousIds) {
+    if (!sentIds.has(entityId) && !tombstoned.has(entityKey(entityType, entityId))) {
       issues.push({
         code: 'SOURCE_REVISION_CONFLICT',
-        message: `assembly ${assemblyId} is missing from the snapshot without a tombstone`,
+        message: `${entityType} ${entityId} of assembly ${assemblyId} is missing without a tombstone`,
         severity: 'error',
-        entityId: assemblyId,
-        remediation: 'Send the full snapshot or tombstone the deleted assembly.',
+        entityId,
+        path: `assemblies[assemblyId=${assemblyId}]`,
+        remediation: 'Send the entity or tombstone it explicitly.',
       });
     }
   }
@@ -185,33 +288,60 @@ function checkSnapshotCompleteness(
 }
 
 function checkTombstonesAndReuse(
-  state: Readonly<AuthoringExchangeState>,
+  previous: LiveIndex,
+  sent: LiveIndex,
   envelope: AuthoringEnvelopeV1,
+  previousDeletedKeys: ReadonlySet<string>,
 ): readonly ContractIssue[] {
   const issues: ContractIssue[] = [];
 
   for (const tombstone of envelope.tombstones) {
-    if (tombstone.entityType !== 'assembly') continue;
-    if (!state.assemblies.has(tombstone.entityId) && !state.deletedAssemblyIds.has(tombstone.entityId)) {
+    const key = entityKey(tombstone.entityType, tombstone.entityId);
+    const wasLive = previous.globalIds.has(tombstone.entityId);
+    const wasDeleted = previousDeletedKeys.has(key);
+    if (!wasLive && !wasDeleted) {
       issues.push({
         code: 'ENTITY_TOMBSTONE_INVALID',
-        message: `tombstone for unknown assembly ${tombstone.entityId}`,
+        message: `tombstone for unknown ${tombstone.entityType} ${tombstone.entityId}`,
         severity: 'error',
         entityId: tombstone.entityId,
       });
     }
-  }
-  for (const assembly of envelope.assemblies) {
-    if (state.deletedAssemblyIds.has(assembly.assemblyId)) {
+    if (sent.globalIds.has(tombstone.entityId)) {
       issues.push({
-        code: 'STABLE_ID_REUSE',
-        message: `assemblyId ${assembly.assemblyId} was deleted and can never be reused`,
+        code: 'ENTITY_TOMBSTONE_INVALID',
+        message: `${tombstone.entityType} ${tombstone.entityId} is tombstoned and still present in the snapshot`,
         severity: 'error',
-        entityId: assembly.assemblyId,
+        entityId: tombstone.entityId,
+        remediation: 'Remove the entity from the snapshot or drop its tombstone.',
       });
     }
   }
+
+  for (const entityId of sent.globalIds) {
+    if (previousDeletedKeys.has(`assembly:${entityId}`)) {
+      issues.push(reuseIssue('assembly', entityId));
+    }
+    if (previousDeletedKeys.has(`componentInstance:${entityId}`)) {
+      issues.push(reuseIssue('componentInstance', entityId));
+    }
+    if (previousDeletedKeys.has(`relationship:${entityId}`)) {
+      issues.push(reuseIssue('relationship', entityId));
+    }
+    if (previousDeletedKeys.has(`hardwarePlacement:${entityId}`)) {
+      issues.push(reuseIssue('hardwarePlacement', entityId));
+    }
+  }
   return issues;
+}
+
+function reuseIssue(entityType: TombstoneableEntityType, entityId: StableEntityId): ContractIssue {
+  return {
+    code: 'STABLE_ID_REUSE',
+    message: `${entityType} ${entityId} was deleted and can never be reused`,
+    severity: 'error',
+    entityId,
+  };
 }
 
 function acceptedResponse(

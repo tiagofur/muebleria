@@ -10,8 +10,10 @@ import {
 import {
   SKETCHUP_AUTHORING_SCHEMA_ID,
   fingerprintEnvelope,
+  isValidDerivedOperationProvenance,
   type AuthoringEnvelopeV1,
   type AuthoringRoundTripResponseV1,
+  type ResolvedManufacturingFeedback,
 } from './sketchupAuthoringSchema';
 import { validateAuthoringEnvelope } from './sketchupAuthoringValidation';
 import { applyRegisteredMigrations } from './sketchupAuthoringMigrations';
@@ -67,6 +69,17 @@ describe('applyAuthoringEnvelope — schema identity', () => {
   });
 });
 
+const ALL_CABINET_ENTITY_IDS = [
+  'assembly-base-01',
+  'side-left-01',
+  'side-right-01',
+  'shelf-01',
+  'shelf-02',
+  'rel-shelf-01',
+  'rel-shelf-02',
+  'hp-hinge-door-01',
+];
+
 describe('applyAuthoringEnvelope — idempotency and correlation', () => {
   it('replays the same response for the same key and payload', () => {
     const { state } = seedState();
@@ -74,7 +87,7 @@ describe('applyAuthoringEnvelope — idempotency and correlation', () => {
 
     expect(replay.response.status).toBe('accepted');
     expect(replay.state).toBe(state);
-    expect(replay.response.mutationReceipt?.createdEntityIds).toEqual(['assembly-base-01']);
+    expect(replay.response.mutationReceipt?.createdEntityIds).toEqual(ALL_CABINET_ENTITY_IDS);
   });
 
   it('rejects the same key with a different payload as IDEMPOTENCY_CONFLICT', () => {
@@ -100,10 +113,10 @@ describe('applyAuthoringEnvelope — idempotency and correlation', () => {
 });
 
 describe('applyAuthoringEnvelope — atomic mutations', () => {
-  it('accepts a first snapshot as pure creates', () => {
+  it('accepts a first snapshot as pure creates, sub-entities included', () => {
     const { response } = seedState();
     expect(response.mutationReceipt).toEqual({
-      createdEntityIds: ['assembly-base-01'],
+      createdEntityIds: ALL_CABINET_ENTITY_IDS,
       updatedEntityIds: [],
       deletedEntityIds: [],
     });
@@ -124,7 +137,7 @@ describe('applyAuthoringEnvelope — atomic mutations', () => {
     expect(result.response.status).toBe('accepted');
     expect(result.response.mutationReceipt).toEqual({
       createdEntityIds: [],
-      updatedEntityIds: ['assembly-base-01'],
+      updatedEntityIds: ALL_CABINET_ENTITY_IDS,
       deletedEntityIds: [],
     });
     expect(result.response.authoringSnapshot?.assemblies[0]?.assemblyId).toBe('assembly-base-01');
@@ -260,6 +273,139 @@ function reverseAllKeys<T>(value: T): T {
   }
   return value;
 }
+
+describe('applyAuthoringEnvelope — sub-entity tombstones', () => {
+  function envelopeWithoutShelfTwo(): AuthoringEnvelopeV1 {
+    return nextEnvelope(cabinetEnvelope, (e) => {
+      e.messageId = 'msg-shelf2-delete';
+      e.idempotencyKey = 'project-42:source-rev-9';
+      e.baseSourceRevisionId = 'source-rev-8';
+      e.sourceRevisionId = 'source-rev-9';
+      const assembly = e.assemblies[0]!;
+      assembly.components = assembly.components!.filter((c) => c.componentInstanceId !== 'shelf-02');
+      assembly.relationships = assembly.relationships!.filter((r) => r.relationshipId !== 'rel-shelf-02');
+    });
+  }
+
+  it('conflicts when a component is omitted without its tombstone', () => {
+    const { state } = seedState();
+    const result = applyAuthoringEnvelope(state, envelopeWithoutShelfTwo(), cabinetCatalog);
+
+    expect(result.response.status).toBe('conflict');
+    const codes = result.response.issues.map((issue) => `${issue.code}:${issue.entityId}`.toString());
+    expect(codes).toContain('SOURCE_REVISION_CONFLICT:shelf-02');
+    expect(codes).toContain('SOURCE_REVISION_CONFLICT:rel-shelf-02');
+    expect(result.state).toBe(state);
+  });
+
+  it('accepts an explicit sub-entity tombstone and never allows reuse', () => {
+    const { state } = seedState();
+    const deleted = nextEnvelope(envelopeWithoutShelfTwo(), (e) => {
+      e.tombstones = [
+        { entityType: 'componentInstance', entityId: 'shelf-02', deletedAt: '2026-08-24T06:00:00Z' },
+        { entityType: 'relationship', entityId: 'rel-shelf-02', deletedAt: '2026-08-24T06:00:00Z' },
+      ];
+    });
+    const after = applyAuthoringEnvelope(state, deleted, cabinetCatalog);
+    expect(after.response.status).toBe('accepted');
+    expect(after.response.mutationReceipt?.deletedEntityIds).toEqual(['shelf-02', 'rel-shelf-02']);
+    const snapshot = after.response.authoringSnapshot!.assemblies[0]!;
+    expect(snapshot.components?.map((c) => c.componentInstanceId)).not.toContain('shelf-02');
+
+    const resurrected = nextEnvelope(cabinetEnvelope, (e) => {
+      e.messageId = 'msg-shelf2-reuse';
+      e.idempotencyKey = 'project-42:source-rev-10';
+      e.baseSourceRevisionId = 'source-rev-9';
+      e.sourceRevisionId = 'source-rev-10';
+    });
+    const reuse = applyAuthoringEnvelope(after.state as AuthoringExchangeState, resurrected, cabinetCatalog);
+    expect(reuse.response.status).toBe('rejected');
+    expect(reuse.response.issues.map((issue) => issue.code)).toContain('STABLE_ID_REUSE');
+  });
+
+  it('rejects tombstones for unknown entities and tombstones coexisting with the snapshot', () => {
+    const { state } = seedState();
+    const unknown = nextEnvelope(cabinetEnvelope, (e) => {
+      e.messageId = 'msg-tomb-unknown';
+      e.idempotencyKey = 'project-42:source-rev-9';
+      e.baseSourceRevisionId = 'source-rev-8';
+      e.sourceRevisionId = 'source-rev-9';
+      e.tombstones = [
+        { entityType: 'componentInstance', entityId: 'ghost-instance', deletedAt: '2026-08-24T06:00:00Z' },
+      ];
+    });
+    const unknownResult = applyAuthoringEnvelope(state, unknown, cabinetCatalog);
+    expect(unknownResult.response.status).toBe('rejected');
+    expect(unknownResult.response.issues[0]?.code).toBe('ENTITY_TOMBSTONE_INVALID');
+
+    const coexisting = nextEnvelope(cabinetEnvelope, (e) => {
+      e.messageId = 'msg-tomb-coexists';
+      e.idempotencyKey = 'project-42:source-rev-9b';
+      e.baseSourceRevisionId = 'source-rev-8';
+      e.sourceRevisionId = 'source-rev-9b';
+      e.tombstones = [
+        { entityType: 'componentInstance', entityId: 'shelf-01', deletedAt: '2026-08-24T06:00:00Z' },
+      ];
+    });
+    const coexistingResult = applyAuthoringEnvelope(state, coexisting, cabinetCatalog);
+    expect(coexistingResult.response.status).toBe('rejected');
+    expect(
+      coexistingResult.response.issues.some(
+        (issue) => issue.code === 'ENTITY_TOMBSTONE_INVALID' && issue.entityId === 'shelf-01',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('resolved manufacturing feedback — read-only boundary', () => {
+  it('carries provenance with exactly one variant and never re-enters authoring', () => {
+    const feedback: ResolvedManufacturingFeedback = {
+      identity: {
+        projectId: 'project-42',
+        designRevisionId: 'design-rev-1',
+        sourceRevisionId: 'source-rev-8',
+        bomFingerprint: 'fp-1',
+        resolvedAt: '2026-08-24T06:00:00Z',
+      },
+      preflightStatus: 'warning',
+      derivedHardwarePlacements: [
+        {
+          derivedHardwarePlacementId: 'dhp-1',
+          hostComponentInstanceId: 'side-left-01',
+          provenance: { sourceKind: 'relationship', relationshipId: 'rel-shelf-01' },
+        },
+      ],
+      derivedMachiningOperations: [
+        {
+          operationId: 'op-1',
+          hostComponentInstanceId: 'shelf-01',
+          provenance: {
+            sourceKind: 'joint',
+            relationshipId: 'rel-shelf-01',
+            jointPlacementId: 'jp-1',
+          },
+        },
+      ],
+      issues: [],
+    };
+
+    const { response } = seedState();
+    const withFeedback: AuthoringRoundTripResponseV1 = { ...response, resolvedFeedback: feedback };
+    expect(withFeedback.resolvedFeedback?.preflightStatus).toBe('warning');
+    expect(
+      isValidDerivedOperationProvenance(withFeedback.resolvedFeedback!.derivedMachiningOperations[0]!.provenance),
+    ).toBe(true);
+    expect(isValidDerivedOperationProvenance({})).toBe(false);
+    expect(isValidDerivedOperationProvenance({ sourceKind: 'joint', relationshipId: 'r' })).toBe(false);
+
+    // The envelope schema cannot express feedback: feeding it back would need
+    // a field that does not exist on AuthoringEnvelopeV1.
+    const envelopeKeys = Object.keys(cabinetEnvelope);
+    for (const forbidden of ['resolvedFeedback', 'derivedMachiningOperations', 'bomFingerprint']) {
+      expect(envelopeKeys).not.toContain(forbidden);
+    }
+  });
+});
 
 describe('validateAuthoringEnvelope — structured issues', () => {
   it('reports unknown catalog references, stale revisions and unsupported joinery', () => {
