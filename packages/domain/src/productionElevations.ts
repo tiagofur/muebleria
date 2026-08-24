@@ -53,12 +53,38 @@ export type ProductionUnplacedUnit = {
   readonly quantityNote: string;
 };
 
+/**
+ * Free-place / island unit with everything a drawn sheet needs (#255):
+ * dimensions, plan position and the ambiente it belongs to. Islands never
+ * project onto wall elevations — they get their own ficha.
+ */
+export type ProductionIslandUnit = {
+  readonly itemId: string;
+  readonly instanceIndex: number;
+  readonly label: string;
+  readonly moduleCode: string;
+  readonly moduleName: string;
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly depthMm: number;
+  /** Clearance under the island (zócalo/patas), mm. */
+  readonly baseClearanceMm: number;
+  /** Bottom Z of the unit in mm from floor. */
+  readonly bottomZMm: number;
+  /** Plan position (mm) and yaw — where the island sits in planta. */
+  readonly freeXMm: number;
+  readonly freeYMm: number;
+  readonly freeYawDeg: number;
+  readonly spaceId: string;
+  readonly spaceName: string;
+};
+
 export type ProductionElevationsResult = {
   readonly walls: readonly ProductionWallElevation[];
   /** Quote instances not on any wall placement. */
   readonly unplaced: readonly ProductionUnplacedUnit[];
-  /** Free-place / island units (not drawn on wall elevations). */
-  readonly freePlace: readonly ProductionUnplacedUnit[];
+  /** Free-place / island units (drawn as their own sheets, not on walls). */
+  readonly islands: readonly ProductionIslandUnit[];
 };
 
 function dimsForItem(
@@ -97,22 +123,42 @@ function unitLabel(
 
 /**
  * Flatten multi-space layouts so factory elevations cover every ambiente,
- * not only the active space mirrored at top-level.
+ * not only the active space mirrored at top-level. Free placements are
+ * returned separately, tagged with their space (#255 island fichas).
  */
 function wallsAndPlacementsForElevations(
   layout: ProjectKitchenLayout,
 ): {
   readonly walls: readonly KitchenWall[];
   readonly placements: readonly ProjectItemPlacement[];
+  readonly free: readonly {
+    readonly placement: ProjectItemPlacement;
+    readonly spaceId: string;
+    readonly spaceName: string;
+  }[];
 } {
   const ensured = ensureKitchenSpaces(layout);
   const spaces = ensured.spaces ?? [];
   if (spaces.length <= 1) {
-    return { walls: ensured.walls, placements: ensured.placements };
+    const space = spaces[0];
+    const spaceId = space?.id ?? 'default';
+    const spaceName = space?.name?.trim() || 'Planta';
+    return {
+      walls: ensured.walls,
+      placements: ensured.placements,
+      free: ensured.placements
+        .filter(isFreePlacement)
+        .map((placement) => ({ placement, spaceId, spaceName })),
+    };
   }
 
   const walls: KitchenWall[] = [];
   const placements: ProjectItemPlacement[] = [];
+  const free: {
+    placement: ProjectItemPlacement;
+    spaceId: string;
+    spaceName: string;
+  }[] = [];
   for (const space of spaces) {
     const spaceName = space.name?.trim() || 'Ambiente';
     for (const wall of space.walls) {
@@ -125,7 +171,7 @@ function wallsAndPlacementsForElevations(
     }
     for (const p of space.placements) {
       if (isFreePlacement(p)) {
-        placements.push(p);
+        free.push({ placement: p, spaceId: space.id, spaceName });
       } else {
         placements.push({
           ...p,
@@ -134,7 +180,7 @@ function wallsAndPlacementsForElevations(
       }
     }
   }
-  return { walls, placements };
+  return { walls, placements, free };
 }
 
 /**
@@ -151,8 +197,11 @@ export function buildProductionElevations(
     project.items,
   );
 
-  const { walls: elevWalls, placements: elevPlacements } =
-    wallsAndPlacementsForElevations(layout);
+  const {
+    walls: elevWalls,
+    placements: elevPlacements,
+    free: freePlacements,
+  } = wallsAndPlacementsForElevations(layout);
 
   const wallCabinetsZ = layout.wallCabinetZMm ?? 1400;
   const defaultBaseClearance = layout.baseClearanceMm ?? 100;
@@ -213,42 +262,70 @@ export function buildProductionElevations(
       .filter((p) => p.mode === undefined || p.mode === 'wall')
       .map((p) => `${p.itemId}#${p.instanceIndex}`),
   );
-  const freeKeys = new Set(
-    elevPlacements
-      .filter((p) => p.mode === 'free')
-      .map((p) => `${p.itemId}#${p.instanceIndex}`),
+  const freeByKey = new Map(
+    freePlacements.map((f) => [
+      `${f.placement.itemId}#${f.placement.instanceIndex}`,
+      f,
+    ]),
   );
 
   const unplaced: ProductionUnplacedUnit[] = [];
-  const freePlace: ProductionUnplacedUnit[] = [];
+  const islands: ProductionIslandUnit[] = [];
 
   for (const item of project.items) {
     const mod = modules.find((m) => m.id === item.moduleId);
     const qty = Math.max(1, item.quantity);
     for (let i = 0; i < qty; i++) {
       const key = `${item.id}#${i}`;
+      const free = freeByKey.get(key);
+      if (free) {
+        const dims = dimsForItem(item, modules);
+        const { label, moduleCode, moduleName } = unitLabel(mod, item, i);
+        const baseClearance = free.placement.baseClearanceMm ?? defaultBaseClearance;
+        islands.push({
+          itemId: item.id,
+          instanceIndex: i,
+          label,
+          moduleCode,
+          moduleName,
+          widthMm: dims.width,
+          heightMm: dims.height,
+          depthMm: dims.depth,
+          baseClearanceMm: baseClearance,
+          bottomZMm: baseClearance,
+          freeXMm: free.placement.freeXMm ?? 0,
+          freeYMm: free.placement.freeYMm ?? 0,
+          freeYawDeg: free.placement.freeYawDeg ?? 0,
+          spaceId: free.spaceId,
+          spaceName: free.spaceName,
+        });
+        continue;
+      }
+      if (placedKeys.has(key)) continue;
       const { label, moduleCode } = unitLabel(mod, item, i);
-      const entry: ProductionUnplacedUnit = {
+      unplaced.push({
         itemId: item.id,
         instanceIndex: i,
         label,
         moduleCode,
         quantityNote: qty > 1 ? `${i + 1}/${qty}` : '1',
-      };
-      if (freeKeys.has(key)) {
-        freePlace.push(entry);
-      } else if (!placedKeys.has(key)) {
-        unplaced.push(entry);
-      }
+      });
     }
   }
 
-  return { walls, unplaced, freePlace };
+  islands.sort(
+    (a, b) =>
+      a.spaceName.localeCompare(b.spaceName) ||
+      a.freeYMm - b.freeYMm ||
+      a.freeXMm - b.freeXMm,
+  );
+
+  return { walls, unplaced, islands };
 }
 
-/** True when there is at least one wall to draw. */
+/** True when there is at least one drawable elevation sheet (wall or island). */
 export function hasProductionElevations(
   result: ProductionElevationsResult,
 ): boolean {
-  return result.walls.length > 0;
+  return result.walls.length > 0 || result.islands.length > 0;
 }

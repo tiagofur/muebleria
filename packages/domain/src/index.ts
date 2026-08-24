@@ -490,6 +490,7 @@ export {
   type ProductionElevationUnit,
   type ProductionWallElevation,
   type ProductionUnplacedUnit,
+  type ProductionIslandUnit,
   type ProductionElevationsResult,
 } from './productionElevations';
 

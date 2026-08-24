@@ -93,7 +93,7 @@ describe('buildProductionElevations (PROD-1.1)', () => {
     expect(hasProductionElevations(r)).toBe(true);
   });
 
-  it('lists unplaced and free-place separately (no fake wall positions)', () => {
+  it('returns island units with dims, plan position and space (no fake wall positions)', () => {
     const r = buildProductionElevations(
       baseProject({
         kitchenLayout: {
@@ -115,6 +115,8 @@ describe('buildProductionElevations (PROD-1.1)', () => {
               mode: 'free',
               freeXMm: 1000,
               freeYMm: 500,
+              freeYawDeg: 90,
+              baseClearanceMm: 120,
             },
           ],
         },
@@ -122,8 +124,95 @@ describe('buildProductionElevations (PROD-1.1)', () => {
       modules,
     );
     expect(r.walls[0]!.units).toHaveLength(1);
-    expect(r.freePlace.map((u) => u.moduleCode)).toContain('ALT-01');
+    expect(r.islands).toHaveLength(1);
+    const island = r.islands[0]!;
+    expect(island.moduleCode).toBe('ALT-01');
+    expect(island.widthMm).toBe(800);
+    expect(island.heightMm).toBe(720);
+    expect(island.depthMm).toBe(350);
+    expect(island.freeXMm).toBe(1000);
+    expect(island.freeYMm).toBe(500);
+    expect(island.freeYawDeg).toBe(90);
+    expect(island.baseClearanceMm).toBe(120);
+    expect(island.bottomZMm).toBe(120);
+    expect(island.spaceName).toBeTruthy();
     expect(r.unplaced).toHaveLength(0);
+  });
+
+  it('island-only project (no walls) yields islands and drawable sheets', () => {
+    const r = buildProductionElevations(
+      baseProject({
+        kitchenLayout: {
+          walls: [],
+          placements: [
+            {
+              itemId: 'i1',
+              instanceIndex: 0,
+              wallId: '',
+              offsetMm: 0,
+              elevation: 'floor',
+              mode: 'free',
+              freeXMm: 0,
+              freeYMm: 0,
+            },
+          ],
+        },
+      }),
+      modules,
+    );
+    expect(r.walls).toHaveLength(0);
+    expect(r.islands).toHaveLength(1);
+    expect(r.islands[0]!.moduleCode).toBe('GAB-01');
+    expect(hasProductionElevations(r)).toBe(true);
+  });
+
+  it('multi-space islands carry their ambiente name', () => {
+    const banoIsland = {
+      itemId: 'i2',
+      instanceIndex: 0,
+      wallId: '',
+      offsetMm: 0,
+      elevation: 'floor' as const,
+      mode: 'free' as const,
+      freeXMm: 400,
+      freeYMm: 300,
+    };
+    const r = buildProductionElevations(
+      baseProject({
+        kitchenLayout: {
+          walls: [],
+          placements: [banoIsland],
+          activeSpaceId: 'space-bano',
+          spaces: [
+            {
+              id: 'space-cocina',
+              name: 'Cocina',
+              walls: [{ id: 'w1', lengthMm: 3200, angleDeg: 0, name: 'Muro A' }],
+              placements: [
+                {
+                  itemId: 'i1',
+                  instanceIndex: 0,
+                  wallId: 'w1',
+                  offsetMm: 100,
+                  elevation: 'floor',
+                },
+              ],
+            },
+            {
+              id: 'space-bano',
+              name: 'Baño',
+              walls: [],
+              placements: [banoIsland],
+            },
+          ],
+        },
+      }),
+      modules,
+    );
+    expect(r.islands).toHaveLength(1);
+    expect(r.islands[0]!.spaceId).toBe('space-bano');
+    expect(r.islands[0]!.spaceName).toBe('Baño');
+    expect(r.walls[0]!.units).toHaveLength(1);
   });
 
   it('includes walls from every multi-space ambiente (not only active top-level)', () => {

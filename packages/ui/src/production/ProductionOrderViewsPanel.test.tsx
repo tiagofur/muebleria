@@ -199,7 +199,7 @@ describe('ProductionOrderViewsPanel F101 page chrome migration', () => {
     expect(secondarySlot).not.toBeNull();
     const action = within(secondarySlot as HTMLElement).getByRole('button', { name: 'Descargar PDF elevaciones' });
     expect((action as HTMLButtonElement).disabled).toBe(true);
-    expect(action.getAttribute('title')).toBe('Sin muros en el layout');
+    expect(action.getAttribute('title')).toBe('Sin muros ni islas en el layout');
     expect(screen.queryAllByRole('button', { name: 'Descargar PDF elevaciones' })).toHaveLength(1);
     expect(action.className).toBe('btn');
     expect(header.querySelector('.page-header__primary-action')).toBeNull();
@@ -257,6 +257,73 @@ describe('ProductionOrderViewsPanel #256 multi-ambiente scope', () => {
     expect(screen.getByTestId('prod-vistas-3d-hint').textContent).toContain(
       'Según plano de Baño (1 colocada)',
     );
+  });
+
+  it('multi-ambiente: islas dibujadas en sección propia (#255), no nota de texto', () => {
+    render(
+      <ProductionOrderViewsPanel
+        project={multiSpaceProject}
+        modules={modules}
+        catalog={catalog}
+        onExportElevations={vi.fn()}
+      />,
+    );
+
+    // La isla (it-d, free en cocina) tiene ficha dibujada con código,
+    // medidas y ambiente — reemplaza la vieja nota "Libre / isla…".
+    const sheet = screen.getByTestId('prod-island-sheet-it-d-0');
+    expect(sheet.textContent).toContain('Isla MOD-B');
+    expect(sheet.textContent).toContain('Cocina');
+    expect(sheet.textContent).toContain('400 × 720 × 560 mm');
+    expect(sheet.textContent).toContain('X 1200');
+    expect(sheet.textContent).toContain('rotación 90');
+    const section = screen.getByTestId('prod-vistas-islands');
+    expect(
+      within(section).getByRole('heading', { name: /Islas \(libres\)/ }),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('prod-elev-free')).toBeNull();
+
+    // El botón de export queda habilitado (hay muros) y anuncia las fichas.
+    const exportBtn = screen.getByRole('button', {
+      name: 'Descargar PDF elevaciones',
+    });
+    expect((exportBtn as HTMLButtonElement).disabled).toBe(false);
+    expect(exportBtn.getAttribute('title')).toContain('fichas de isla');
+  });
+
+  it('obra sólo-islas: export habilitado y ficha dibujada (#255)', () => {
+    const islandOnlyProject: Project = {
+      ...monoSpaceProject,
+      kitchenLayout: {
+        walls: [],
+        placements: [
+          {
+            itemId: 'it-a', instanceIndex: 0, wallId: '', offsetMm: 0,
+            elevation: 'floor', mode: 'free', freeXMm: 0, freeYMm: 0,
+          },
+        ],
+      },
+    };
+    render(
+      <ProductionOrderViewsPanel
+        project={islandOnlyProject}
+        modules={modules}
+        catalog={catalog}
+        onExportElevations={vi.fn()}
+      />,
+    );
+
+    const exportBtn = screen.getByRole('button', {
+      name: 'Descargar PDF elevaciones',
+    });
+    expect((exportBtn as HTMLButtonElement).disabled).toBe(false);
+    expect(exportBtn.getAttribute('title')).toBe(
+      'PDF multi-página de elevaciones y fichas de isla',
+    );
+    // Ficha de la isla presente; el placeholder de "sin muros" sigue en
+    // elevaciones pero la obra tiene su artefacto dibujado.
+    expect(screen.getByTestId('prod-island-sheet-it-a-0')).toBeTruthy();
+    expect(screen.getByTestId('prod-vistas-islands')).toBeTruthy();
   });
 
   it('mono-ambiente: sin tabs de ambiente, planta sin control y hint sin nombre de espacio', () => {

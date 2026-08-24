@@ -1,43 +1,44 @@
 # Sesión
 
-**Features cerradas:** F157 — prod_views_multi_space_scope (issue #256)
+**Feature cerrada:** F158 — production_island_elevation_sheet (issue #255)
 **Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
-**Reviews:** `progress/review_F157.md` (APPROVED)
-**Rama:** `fix/256-prod-views-multi-space` (pusheada, PR #360)
+**Reviews:** `progress/review_F158.md` (APPROVED, con hallazgo corregido)
+**Rama:** `feat/255-island-elevation-sheet` (pusheada, PR abierto)
 
-## F157 — Resultado
+## F158 — Resultado
 
-Bug QA #256 (padre #251): con OP accepted y 2+ ambientes, la planta quedaba
-sin control de ambiente a nivel panel y el 3D mezclaba los muros del espacio
-activo con una cola lineal fantasma de los otros ambientes —
-`resolveProject3DPreview` lee el `kitchenLayout` top-level (espejo del espacio
-activo vía `flattenActiveSpace`) mientras `project.items` trae toda la obra.
+QA #255 (padre #251): las islas (`mode: free`) aparecían en Vistas sólo como
+nota de texto y en el PDF como anexo text-only. La planta 2D ya las dibujaba.
 
-Fix en `ProductionOrderViewsPanel`:
-
-- Con multi-ambiente (scope "Toda la obra"), el panel toma ownership de tabs
-  de ambiente (patrón `ProjectPresentationMode`): controlan la planta
-  (`PresentationKitchenPlanSlide` controlada, sin tabs locales) y resuelven el
-  3D per-espacio vía `projectScopedToProductionSpace` (dominio, PROD-4.4).
-- Nunca se mezclan muros/placements de ambientes distintos ni se inventa cola
-  lineal de otros espacios; la isla free viaja en su espacio.
-- Ítems sin colocar en NINGUNA planta: hint explícito con conteo
-  (`unplacedItemIdsForProduction`) en la sección 3D, no cola fantasma.
-- Hint de corrida ahora nombra el ambiente ("Según plano de Cocina (2
-  colocadas)"); mono-ambiente sin tabs y con copy previo intacto.
-- Elevaciones fuera de scope (QA #256: aceptables por ambiente/prefijos).
-- UI no calcula dominio: todo el scoping delega en `productionScope.ts`.
+- **Dominio**: `buildProductionElevations` devuelve `islands` rico
+  (dimensiones, freeX/freeY/yaw, baseClearance/bottomZ, ambiente con nombre)
+  en reemplazo de `freePlace`; `hasProductionElevations` admite obras
+  sólo-islas.
+- **UI**: sección "Islas (libres)" en Vistas con `ProductionIslandPreview` —
+  alzado simple SVG con código, cotas ancho/alto, zócalo, posición en planta
+  y ambiente; tema `isla` compartido con la planta (tokens). Reemplaza la
+  nota "Libre / isla…".
+- **PDF**: `wallElevationsPdfExport` genera una hoja A4 por isla (fluye al
+  pack de producción automáticamente); el anexo queda sólo para sin colocar;
+  sanitizer ahora admite `·` (antes se degradaba a `?`).
+- **Gating consistente**: botón de Vistas, fila de Documentos ("Elevaciones
+  e islas (PDF)") y pack habilitados para obras sólo-islas; sin muros ni
+  islas sigue deshabilitado con razón.
+- Muros siguen sin inventar alzado para free place.
 
 ## Verificación (evidencia)
 
-- `pnpm test` 3.057 verdes (ui 1.410: 2 tests nuevos de panel con 2 ambientes
-  — scoping por espacio, ausencia de cola lineal/hint, isla free, unplaced,
-  cambio de tab, wiring tabpanel); `pnpm typecheck` 0 errores.
-- Gate §8: delta visual limitado a `WorkspaceTabs` compartido (F109);
-  justificación de responsive/screenshot en `progress/review_F157.md`
-  (sin seed multi-ambiente para smoke browser; re-verificación vía QA #251).
+- `pnpm test` 3.064 verdes (domain 1.037 · ui 1.412 · excel 92 · +7 tests
+  nuevos: dominio 3 (islands dims/posición/ambiente, multi-space, free-only),
+  panel 2 (ficha dibujada, sólo-islas), excel 3 — primera cobertura del
+  export de elevaciones); `pnpm typecheck` 0 errores.
+- Hallazgo de review corregido en `2e77890` (gating Documentos) con suite
+  re-corrida verde.
+- Gate §8: justificación de screenshot/responsive en `progress/review_F158.md`
+  (componente nuevo sobre patrones visados; re-verificación vía QA #251).
 
 ## Siguientes pasos
 
-- #255 (islas en planta/elevación dedicada) es el follow-up natural de #256
-  (mismos archivos del hub Vistas).
+- La dupla #256/#255 cierra el QA de campo #251 del hub Vistas;
+  revisar qué queda de #251 (elevaciones agrupadas por ambiente en PDF #254
+  si aún hace falta UX).

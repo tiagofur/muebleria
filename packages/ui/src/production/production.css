@@ -751,10 +751,35 @@
   gap: var(--space-5);
 }
 
+.prod-vistas__island-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
 .prod-elev-preview {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.prod-island-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.prod-island-preview__svg {
+  max-width: 100%;
+  background: var(--surface-muted, var(--surface-card));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.prod-island-preview__meta {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .prod-elev-preview__title {

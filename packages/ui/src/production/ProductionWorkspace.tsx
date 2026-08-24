@@ -319,7 +319,9 @@ export function ProductionWorkspace({
         hardwareRows={hardware.rows}
         hardwareError={hardware.error}
         hideHardwareCosts={hideHardwareCosts}
-        elevationsAvailable={elevations.walls.length > 0}
+        elevationsAvailable={
+          elevations.walls.length > 0 || elevations.islands.length > 0
+        }
         onSetFloorStatus={
           onSetFloorStatus
             ? (itemId, status) =>

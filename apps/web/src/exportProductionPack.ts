@@ -135,7 +135,8 @@ export async function buildProductionPackExport(
       project,
       catalog.modules ?? [],
     );
-    if (elevations.walls.length > 0) {
+    // #255: islas también generan hojas — una obra sólo-islas exporta su PDF.
+    if (elevations.walls.length > 0 || elevations.islands.length > 0) {
       try {
         elevationsBuffer = await wallElevationsPdfExport({
           project,
