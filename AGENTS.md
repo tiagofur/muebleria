@@ -46,6 +46,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Arquitectura/boundaries | `docs/architecture.md` |
 | Biblioteca Paramétrica Universal | `docs/architecture/parametric-furniture-library.md` |
 | ADR Biblioteca Paramétrica | `docs/adr/0002-parametric-furniture-library-architecture.md` |
+| Modelo de Interacción SketchUp | `docs/architecture/sketchup-interaction-model.md` |
 | UX visual | `docs/design.md` |
 | UX operacional | `docs/operational-ux.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
