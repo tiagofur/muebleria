@@ -52,15 +52,18 @@ export function CatalogImage({
     );
   }
   return (
+    // Placeholder is visual-only (F154 audit P3 #5): aria-hidden keeps "Sin
+    // foto" and the aria-label out of ancestors' accessible names — the
+    // entity name already lives in the card/row heading, and duplicating it
+    // made screen readers announce it twice.
     <div
       className={`${base} catalog-image--placeholder`}
-      role="img"
-      aria-label={alt || 'Sin imagen'}
+      aria-hidden="true"
       data-testid="catalog-image-placeholder"
     >
-      <Package size={size === 'lg' ? 40 : 24} strokeWidth={1.5} aria-hidden />
+      <Package size={size === 'lg' ? 40 : 24} strokeWidth={1.5} />
       <span className="catalog-image__ph-label">
-        <ImageIcon size={14} strokeWidth={1.5} aria-hidden /> Sin foto
+        <ImageIcon size={14} strokeWidth={1.5} /> Sin foto
       </span>
     </div>
   );

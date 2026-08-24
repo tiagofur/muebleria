@@ -1,42 +1,49 @@
 # Sesión
 
-**Features cerradas:** F153 — quotes_reload_render_loop_338 (issue #338)
+**Features cerradas:** F154 — table_expand_chevron_affordance · F155 — structures_overflow_destructive_actions · F156 — catalog_image_placeholder_a11y
 **Inicio:** 2026-08-24 · **Cierre:** 2026-08-24
-**Reviews:** `progress/review_F153.md` (APPROVED)
-**Rama:** `fix/338-quotes-reload-render-loop` (pusheada)
+**Reviews:** `progress/review_F154.md`, `progress/review_F155.md`, `progress/review_F156.md` (APPROVED)
+**Rama:** `feat/f154-row-expand-affordance` (pusheada — las tres features viajan en el PR #359 por decisión del dueño, con commits y reviews separados)
 
-## Resultado
+## F154 — Resultado
 
-**#338 ya estaba arreglado en main por el PR #342** (eco URL↔selección en
-`useProjectsScreenState`; mergeado ~9h después de abierto el issue, por eso
-quedó abierto sin verificar). Repro exacto sobre main, dev :5199 guest:
+Hallazgo P1 #1: chevron de affordance en tablas expandibles (`CatalogTable` →
+Materiales, Cantos, Herrajes, Acabados, Grupos, Clientes). Derecha en reposo,
+rota 90° al expandir, muted→secondary en hover, aria-hidden + aria-expanded.
 
-- reload en `/quotes/proj-demo-plantilla` → detalle estable, URL sin rebote
-  (8 muestras/400ms);
-- lista `/quotes` tras reload → capturas píxel-idénticas (cero churn) y click
-  en card aterriza (`/quotes/proj-cocina-lopez-demo`).
+## F155 — Resultado
 
-Entregable de F153 — la Meta del issue que seguía bloqueada: la **recarga
-in-browser a mitad de sesión** del smoke de benchmark
-(`proyectar-usability.spec.ts`). El paso nuevo ejercita reload → sidebar →
-deep-link al detalle → sesión proxy persistida en localStorage (antes sólo
-cubierta en unit) → click que aterriza → studio reabierto con la corrida de 3
-colocada → panel re-oculto. Regresión in-browser de la familia de eco
-(#338/#342/F152).
+Hallazgo P2 #4: Estructuras agrupa Desactivar/Eliminar en overflow "Más"
+(paridad con Muebles, §4.1a.2). Fix colateral dataTestId del Modal de delete.
+
+## F156 — Resultado
+
+Hallazgo P3 #5: el placeholder de `CatalogImage` era `role="img"` con
+`aria-label` = nombre de la entidad — duplicaba el título en el announcement
+del lector y el texto "Sin foto" filtraba al nombre accesible. Fix:
+placeholder 100% decorativo (`aria-hidden`, sin role ni aria-label); la
+imagen real conserva su alt.
+
+**Verificación colateral — hallazgo P2 #3 (headings múltiples en Librería)
+ya resuelto en main sin código nuevo:** medido en navegador (guest, seed):
+Muebles 1 h2 + 18 h3 · Estructuras 1 h2 + 14 h3 · Componentes 1 h2 + 24 h3 ·
+Agregados 1 h2 + 1 h3 — exactamente un h2 (título de pantalla) por pantalla,
+cards en h3 (§4.1b). La auditoría lo midió el 2026-08-23 antes de los fixes
+posteriores; se registra como verificado.
 
 ## Verificación (evidencia)
 
-- `pnpm smoke:usability` verde (37.0s) con el paso nuevo.
-- `pnpm test` 3.041 verdes (ui 1.394, web 306, domain 1.035, storage 155,
-  excel 89, mobile 45, desktop 17) — corrido 2×; `pnpm typecheck` 0 errores.
+- `pnpm test` 3.055 verdes (ui 1.408: 7 F154 + 4 F155 + 3 F156 nuevos);
+  `pnpm typecheck` 0 errores.
+- F156 visual (guest, seed, tras reload): nombre accesible de la card
+  "MOD-GAB-01 Gabinete 1 Puerta 300 x 720 x 590 mm 2 componentes 5 herrajes
+  Costo estimado $842.90 MXN" — sin "Sin foto" y sin duplicación del nombre
+  (antes: el nombre entraba dos veces); placeholder sin role=img.
 
-## Notas
+## Siguientes pasos (backlog auditoría)
 
-- `UsabilityBenchmarkPanel.expanded` no persiste: tras reload el panel vuelve
-  expandido y hay que ocultarlo de nuevo (el smoke lo hace).
-
-## Siguientes pasos (backlog auditoría, sin cambios)
-
-1. Chevron de affordance en tablas expandibles de catálogo.
-2. Estructuras: Desactivar/Eliminar al overflow "Más".
-3. Continuar revisión: Estructuras, Componentes, catálogos, Clientes, Vitrina.
+1. Continuar revisión: catálogos (resto), Clientes, Vitrina (con datos).
+2. Auth-only: Órdenes, Producción (estaciones), Embarques, Instalaciones,
+   Almacén, dashboards por rol, Usuarios.
+3. Responsive (390/768) y foco visible por pantalla (cobertura pendiente del
+   audit).

@@ -495,5 +495,126 @@ describe('StructuresScreen', () => {
     fireEvent.click(view3DBtn);
     expect(screen.getByTestId('structure-3d-modal')).toBeTruthy();
   });
+
+  it('F155: detail chrome groups Desactivar/Eliminar behind Más (§4.1a.2)', async () => {
+    const user = userEvent.setup();
+    const onDeactivate = vi.fn();
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        catalogMaterials={[]}
+        catalogEdges={[]}
+        catalogHardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={onDeactivate}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('EST-GAB-720'));
+
+    // Chrome: Vista 3D + Editar (única primaria) + Más; destructivas ocultas.
+    expect(screen.getByTestId('structure-detail-view-3d')).toBeTruthy();
+    expect(screen.getByTestId('structure-detail-edit')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Desactivar$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Eliminar$/i })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(
+      screen.getByRole('menu', { name: 'Más acciones de la estructura' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /^Desactivar$/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /^Eliminar$/i })).toBeTruthy();
+
+    // Desactivar desde el menú llama al mismo handler.
+    await user.click(screen.getByRole('menuitem', { name: /^Desactivar$/i }));
+    expect(onDeactivate).toHaveBeenCalledWith('s1');
+  });
+
+  it('F155: Eliminar desde Más abre la confirmación destructiva', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        catalogMaterials={[]}
+        catalogEdges={[]}
+        catalogHardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={onDelete}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('EST-GAB-720'));
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /^Eliminar$/i }));
+
+    expect(screen.getByTestId('delete-confirm-modal')).toBeTruthy();
+    await user.click(screen.getByTestId('confirm-delete-btn'));
+    expect(onDelete).toHaveBeenCalledWith('s1');
+  });
+
+  it('F155: estructura inactiva ofrece Reactivar (no Desactivar) en Más', async () => {
+    const user = userEvent.setup();
+    const onReactivate = vi.fn();
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        catalogMaterials={[]}
+        catalogEdges={[]}
+        catalogHardware={[]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={onReactivate}
+      />,
+    );
+
+    // Chip "Inactivos" para ver la estructura inactiva y abrir su detalle.
+    fireEvent.click(screen.getByRole('button', { name: /^Inactivos$/i }));
+    fireEvent.click(screen.getByText('EST-ALTO-600'));
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    expect(screen.getByRole('menuitem', { name: /^Reactivar$/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /^Desactivar$/i })).toBeNull();
+
+    await user.click(screen.getByRole('menuitem', { name: /^Reactivar$/i }));
+    expect(onReactivate).toHaveBeenCalledWith('s2');
+  });
+
+  it('F155: sin canMutate no hay menú Más ni Editar en el detalle', () => {
+    render(
+      <StructuresScreen
+        structures={mockStructures}
+        optionGroups={[]}
+        catalogComponents={[mockCatalogComponent]}
+        catalogMaterials={[]}
+        catalogEdges={[]}
+        catalogHardware={[]}
+        canMutate={false}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('EST-GAB-720'));
+    expect(screen.queryByRole('button', { name: /^Más$/i })).toBeNull();
+    expect(screen.queryByTestId('structure-detail-edit')).toBeNull();
+  });
 });
 

@@ -3567,6 +3567,85 @@
       "depends_on": [],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F154",
+      "phase": 0,
+      "name": "table_expand_chevron_affordance",
+      "title": "Paridad UX: chevron de affordance en tablas expandibles de catálogo (hallazgo P1 de la auditoría 2026-08-23)",
+      "description": "Hallazgo P1 #1 de progress/ui-parity-audit-2026-08-23.md: los catálogos/Clientes expanden la fila inline y Librería navega a detalle completo, pero hoy NO hay ningún indicador visual de que la fila expande — el usuario no puede predecir qué hará el click. design.md §4.2 (F150) ya sanciona el lenguaje: 'la fila abre; su affordance es el chevron'. Fix en el componente compartido CatalogTable (Materials, Cantos, Herrajes, Acabados, Grupos y Clientes lo usan): columna chevron delante de la primera celda cuando la fila es expandible (onRowClick + renderExpandedDetail), ChevronRight Lucide 16px strokeWidth 1.5, rota 90° al expandir (--transition-transform bajo prefers-reduced-motion: no-preference; flip directo si reduced), aria-hidden (la fila es el control) + aria-expanded en la fila para lectores de pantalla, color muted que sube a secondary en hover de fila. Sin cambios de comportamiento: click/Enter/Espacio ya abren.",
+      "acceptance": [
+        "Toda tabla expandible (Materiales, Cantos, Herrajes, Acabados, Grupos, Clientes) muestra chevron en reposo apuntando a la derecha y rota 90° con la fila expandida",
+        "El chevron NO aparece cuando la tabla no es expandible (sin renderExpandedDetail)",
+        "La fila expone aria-expanded y el chevron es aria-hidden (no compite con la fila como control)",
+        "Animación con tokens del sistema (--transition-transform) bajo prefers-reduced-motion: no-preference; flip instantáneo con reduced motion",
+        "Colores/espaciados sólo con tokens (muted → secondary en hover de fila)",
+        "design.md actualizado (§3.7 icono nuevo + §6.4 affordance)",
+        "Tests de comportamiento del componente + verificación visual en navegador"
+      ],
+      "references": [
+        "docs/design.md#42-patrón-listadetalle",
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/catalogs/CatalogTable.tsx",
+        "packages/ui/src/catalogs/catalogs.css"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F155",
+      "phase": 0,
+      "name": "structures_overflow_destructive_actions",
+      "title": "Paridad UX: Estructuras mueve Desactivar/Eliminar al overflow \"Más\" del chrome (hallazgo P2 #4)",
+      "description": "Hallazgo P2 #4 de progress/ui-parity-audit-2026-08-23.md: gramática de acciones inconsistente en la misma familia — el detalle de Muebles agrupa las destructivas en el overflow \"Más\" (§4.1a.2), pero el detalle de Estructuras muestra Desactivar + Eliminar (btn--danger) directamente en el chrome. Fix: paridad exacta con ModuleDetailView — chrome queda Vista 3D · Editar (primary) · Más (DropdownMenu) con Desactivar/Reactivar + Eliminar como items del menú. Mismos handlers/confirmaciones, sólo cambia el agrupamiento visual.",
+      "acceptance": [
+        "Chrome del detalle de Estructuras: Vista 3D · Editar (única primaria) · Más — sin destructivas visibles",
+        "El menú Más contiene Desactivar (o Reactivar según estado) y Eliminar con los mismos handlers y confirmaciones",
+        "Sin canMutate el menú no aparece (igual que las acciones hoy)",
+        "DropdownMenu accesible: se abre por mouse y teclado, Escape cierra, foco vuelve al trigger (contrato existente del componente)",
+        "Tests de comportamiento del chrome actualizados",
+        "Suite + typecheck verdes"
+      ],
+      "references": [
+        "docs/design.md#41a-esqueleto-único-de-página",
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/structures/components/StructureDetailView.tsx",
+        "packages/ui/src/modules/components/ModuleDetailView.tsx"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F154"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F156",
+      "phase": 0,
+      "name": "catalog_image_placeholder_a11y",
+      "title": "Paridad UX: placeholder 'Sin foto' decorativo + verificación P2 #3 headings ya resuelto (hallazgos P3 #5 y P2 #3 de la auditoría)",
+      "description": "Hallazgo P3 #5 de progress/ui-parity-audit-2026-08-23.md: el placeholder de CatalogImage exponía role=img con aria-label = nombre de la entidad (duplicando el título de la card en el announcement del lector de pantalla) y el texto visual 'Sin foto' filtraba al nombre accesible. Fix: el placeholder es 100% decorativo (aria-hidden, sin role=img ni aria-label) — el estado sin foto es metadato visual no esencial y el nombre de la entidad ya vive en el heading de la card/fila. La imagen real conserva su alt. Verificación colateral del hallazgo P2 #3 (headings múltiples en Librería): medido en navegador sobre main — Muebles/Estructuras/Componentes/Agregados tienen exactamente 1 h2 (título de pantalla) y cards en h3; quedó resuelto por los fixes posteriores a la auditoría, sin código nuevo necesario.",
+      "acceptance": [
+        "Placeholder aria-hidden, sin role=img ni aria-label: 'Sin foto' y la duplicación del nombre no entran al nombre accesible de cards/filas",
+        "La imagen real sigue renderizando <img> con alt",
+        "URL insegura sigue cayendo al placeholder decorativo",
+        "P2 #3 verificado en navegador: 1 h2 por pantalla de Librería (evidencia registrada, sin código nuevo)",
+        "Tests de comportamiento del componente + suite + typecheck verdes"
+      ],
+      "references": [
+        "progress/ui-parity-audit-2026-08-23.md",
+        "packages/ui/src/common/CatalogImage.tsx",
+        "docs/design.md#42-patrón-listadetalle"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F154",
+        "F155"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }

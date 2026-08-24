@@ -1139,3 +1139,47 @@ re-oculto — regresión in-browser de la familia de eco (#338/#342/F152).
 Verificación: `pnpm smoke:usability` verde (37s), `pnpm test` 3.041 verdes
 (×2), typecheck 0. Review APPROVED (`progress/review_F153.md`). Rama
 `fix/338-quotes-reload-render-loop`. Issue #338 cerrado con la evidencia.
+
+## F154 — table_expand_chevron_affordance — 2026-08-24
+
+Hallazgo P1 #1 de la auditoría de paridad UI (2026-08-23): las tablas
+expandibles expanden inline pero nada lo anuncia — el usuario no puede
+predecir qué hará el click. Implementado en el componente compartido
+`CatalogTable` (Materiales, Cantos, Herrajes, Acabados, Grupos, Clientes):
+columna estrecha con ChevronRight 16px strokeWidth 1.5 por fila expandible
+(sólo con onRowClick + renderExpandedDetail), rota 90° al expandir con
+`--transition-transform` bajo prefers-reduced-motion: no-preference, color
+muted→secondary en hover/focus de fila, chevron aria-hidden + aria-expanded
+en la fila + cabecera accesible «Detalle». design.md §3.7 (icono nuevo) y
+§6.4 (spec). Verificación: 3.048 tests verdes (7 nuevos de comportamiento),
+typecheck 0, visual real a 1280 (reposo/expandido con zoom) y 390px (scroll-x
++ fade, sin overflow). Review APPROVED (`progress/review_F154.md`). Rama
+`feat/f154-row-expand-affordance`.
+
+## F155 — structures_overflow_destructive_actions — 2026-08-24
+
+Hallazgo P2 #4 de la auditoría de paridad UI: el detalle de Estructuras
+mostraba Desactivar + Eliminar sueltos en el chrome, mientras Muebles (la
+referencia de la familia) los agrupa en el overflow "Más" (§4.1a.2). Paridad
+exacta con ModuleDetailView: chrome Vista 3D · Editar (única primaria) · Más
+(DropdownMenu con Desactivar/Reactivar según estado + Eliminar), mismos
+handlers y confirmaciones. Fix colateral: el Modal de confirmación de delete
+recibía data-testid crudo en vez de la prop dataTestId (atributo muerto).
+4 tests de comportamiento nuevos; 3.052 tests verdes; typecheck 0; visual
+verificado (chrome + menú abierto, destructivas ausentes del chrome). Review
+APPROVED (`progress/review_F155.md`). Rama `feat/f154-row-expand-affordance`
+(PR #359 junto a F154 por decisión del dueño, commits/reviews separados).
+
+## F156 — catalog_image_placeholder_a11y — 2026-08-24
+
+Hallazgo P3 #5 de la auditoría de paridad: el placeholder de CatalogImage
+exponía role=img con aria-label = nombre de la entidad (duplicaba el título
+en el announcement del lector) y el texto "Sin foto" filtraba al nombre
+accesible. Fix: placeholder 100% decorativo (aria-hidden, sin role ni
+aria-label); la imagen real conserva alt. Verificado en navegador post-reload:
+nombre accesible de la card sin "Sin foto" ni duplicación. Verificación
+colateral del hallazgo P2 #3 (headings múltiples en Librería): YA resuelto en
+main — 1 h2 por pantalla (Muebles/Estructuras/Componentes/Agregados), cards
+h3; sin código nuevo. 3 tests nuevos; 3.055 verdes; typecheck 0. Review
+APPROVED (`progress/review_F156.md`). Rama `feat/f154-row-expand-affordance`
+(PR #359 junto a F154/F155 por decisión del dueño).

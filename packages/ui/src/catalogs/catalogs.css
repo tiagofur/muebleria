@@ -23,6 +23,41 @@
    and touch targets moved to common/dataTable.css (F1 UI 1c). Feature-scoped
    actions/details stay below. */
 
+/* Expand affordance — the row opens; its affordance is the chevron
+   (design.md §4.2/§6.4). Decorative: the row itself is the control. */
+.catalog-table__expander-head {
+  width: 1%;
+}
+
+.catalog-table__expander-cell {
+  width: 1%;
+  padding-right: 0;
+}
+
+.catalog-table__expander {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: var(--transition-colors);
+}
+
+.catalog-table__row.is-clickable:hover .catalog-table__expander,
+.catalog-table__row:focus-within .catalog-table__expander,
+.catalog-table__row[data-expanded='true'] .catalog-table__expander {
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .catalog-table__expander svg {
+    transition: var(--transition-transform);
+  }
+}
+
+.catalog-table__expander[data-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
 .catalog-table__actions-head {
   width: 1%;
 }
