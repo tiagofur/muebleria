@@ -12,13 +12,18 @@
 
 .card-open-host {
   position: relative;
-  transition: var(--transition-colors);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 
-/* Affordance: la card se ve clicable en hover (state layer §3.6.1). */
+/* Affordance: la card se ve clicable en hover (mismo lenguaje que
+   .entity-card — borde brand + elevación un paso + superficie hover). */
 .card-open-host:hover {
   background-color: var(--surface-hover);
-  border-color: var(--border-strong);
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-md);
 }
 
 .card-open {
@@ -35,6 +40,11 @@
 
 .card-open:hover {
   color: var(--brand-600);
+}
+
+/* Pressed: oscurecimiento un paso del texto del control (§3.6.1). */
+.card-open:active {
+  color: var(--brand-700);
 }
 
 .card-open:focus-visible {
