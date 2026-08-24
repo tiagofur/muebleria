@@ -1,36 +1,24 @@
 # Sesión
 
-**Feature en curso:** F161 — sketchup_semantic_metadata_roundtrip (issue #346)
-**Inicio:** 2026-08-24
-**Estado:** in_progress — slice 1 (contrato ejecutable TS) implementado; pendiente review
-**Rama:** `feat/346-semantic-metadata-roundtrip`
+**Feature en curso:** próxima — #356 parametric part relationships (P0, desbloqueado por F161)
+**Inicio:** —
+**Estado:** F161/#346 cerrado el 2026-08-24 (ver `progress/history.md`,
+`progress/review_F161.md` y `progress/implementation_F161.md`); #346 listo para
+cerrarse al mergearse el PR del slice 2.
+**Rama:** por crear (`feat/356-…`)
 **Worktree:** `/Users/tiagofur/dev/carpinteria/muebles-worktrees/sketchup-extension-bootstrap`
 
-## Decisión de namespace
+## Notas de sesión
 
-El schema nace `granete.sketchup-authoring.v1` (rename #366). El issue #346 y el
-contract decían `muebles.*`; nada se publicó bajo ese ID → no se debe migración.
-Contrato doc actualizado con nota explícita.
-
-## Slice 1 entregado (packages/domain)
-
-- `sketchupAuthoringSchema.ts` — tipos v1 + fingerprint canónico + rounding de transporte.
-- `sketchupAuthoringValidation.ts` — validación estructural/semántica → `ContractIssue[]`
-  (schema identity, units/frames, transforms, catálogo, anchors, tombstones, duplicados).
-- `sketchupAuthoringExchange.ts` — apply atómico full-snapshot-with-tombstones:
-  idempotencia por key+fingerprint, base stale → conflict, omisión → conflicto,
-  STABLE_ID_REUSE, response correlacionada, snapshot read-only, round-trip helper.
-- `sketchupAuthoringMigrations.ts` — registry fail-closed (v1: sin migrations).
-- `__fixtures__/sketchupAuthoringCabinet.ts` — cabinet canónico del contract §13
-  (2 entrepaños compartiendo definition, bisagra manual, catálogo).
-- 18 tests: identity/idempotencia/atomicity/tombstones/reuse/golden round-trip/issues/fingerprint.
-
-## Pendiente
-
-- Review del slice (implementer listo).
-- Slices siguientes: transport endpoint (server authority + persistencia),
-  extensión Ruby exportando el envelope desde metadata SketchUp, resolvedFeedback
-  read-only render, migration real cuando exista v2.
+- F160 (bootstrap Granete for SketchUp) cerrado con host smoke real 7/7 en
+  SketchUp Pro 2026.2 macOS; extensión y TestUp 2.5.4 quedan instalados en
+  `~/Library/Application Support/SketchUp 2026/SketchUp/Plugins`.
+- F161 (semantic metadata round-trip) cerrado: contrato ejecutable
+  `granete.sketchup-authoring.v1` en packages/domain con 22 tests, golden
+  round-trip y review APPROVED.
+- Cadena P0 restante: #356 (relationships/joint-driven machining) → #347
+  (preflight autoritativo) → #348 (PTX + taller, requiere #306).
+- Rename repo-wide Muebles→Granete pendiente en #366.
 
 ## Invariante
 

@@ -1258,3 +1258,25 @@ geometría; registrado para #346). RBZ final SHA-256 `9b392da4…`;
 `rake verify` 115+421 assertions 0 fallos; `./init.sh` exit 0 real (3.069
 tests TS, Go ok). Review round 2 APPROVED (`progress/review_F160.md`).
 Rama `codex/345-sketchup-extension-bootstrap`.
+
+## F161 — sketchup_semantic_metadata_roundtrip — 2026-08-24
+
+#346 en dos slices. Namespace decidido: el schema nace
+`granete.sketchup-authoring.v1` (rename #366; nada publicó `muebles.*`, sin
+migración). Slice 1 (PR #369): contrato ejecutable en packages/domain — tipos
+v1 del manufacturing contract, validación → ContractIssue estructurados con
+paths estables, apply atómico full-snapshot-with-tombstones (idempotencia por
+key+fingerprint canónico, base stale → conflict, response correlacionada),
+migration registry fail-closed, fixture golden del caso canónico (dos
+entrepaños compartiendo componentDefinitionId con instancias/relationships
+independientes + bisagra manual) con round-trip SketchUp→Granete→SketchUp sin
+pérdida semántica. Slice 2: completitud de snapshot y tombstones a nivel
+sub-entidad (componentInstance/relationship/hardwarePlacement; omisión nunca
+borra), STABLE_ID_REUSE a nivel pieza, y el lado read-only —
+ResolvedManufacturingFeedback + provenance de variante única
+(isValidDerivedOperationProvenance) como campo opcional de la response que el
+envelope no puede expresar. 22 tests del contrato; typecheck 0; init.sh exit 0
+real; CI verde. Review APPROVED (`progress/review_F161.md`). Ramas
+`feat/346-semantic-metadata-roundtrip` y
+`feat/346-entity-tombstones-readonly-feedback`. Desbloquea #356 con contrato
+de entrada sin naming conventions.

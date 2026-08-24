@@ -3790,9 +3790,10 @@
         "docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md",
         "docs/sketchup-muebles-strategy.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [],
-      "created": "2026-08-24"
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
     }
   ]
 }
