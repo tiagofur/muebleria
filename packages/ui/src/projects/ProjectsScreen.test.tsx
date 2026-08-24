@@ -182,37 +182,39 @@ function renderScreen(
   const onSelectionChange = vi.fn();
   const onExport = vi.fn();
   const onExportHardware = vi.fn();
-  const result = render(
-    <ProjectsScreen
-      projects={projects}
-      modules={modules}
-      optionGroups={optionGroups}
-      materials={materials}
-      edges={edges}
-      hardware={hardware}
-      customers={customers}
-      onCreate={onCreate}
-      onUpdate={onUpdate}
-      onDelete={onDelete}
-      onDuplicate={onDuplicate}
-      onSaveAsTemplate={onSaveAsTemplate}
-      onCreateFromTemplate={onCreateFromTemplate}
-      onDeleteTemplate={onDeleteTemplate}
-      onAddItem={onAddItem}
-      onUpdateItem={onUpdateItem}
-      onRemoveItem={onRemoveItem}
-      onUpdateProjectLevelChoices={onUpdateProjectLevelChoices}
-      onUpdateMeasureDefaults={onUpdateMeasureDefaults}
-      onSelectionChange={onSelectionChange}
-      breakdown={null}
-      projectEstimates={{ 'prj-1': 202.5, 'prj-2': null }}
-      onExport={onExport}
-      onExportHardware={onExportHardware}
-      {...props}
-    />,
-  );
+  const baseProps: ComponentProps<typeof ProjectsScreen> = {
+    projects,
+    modules,
+    optionGroups,
+    materials,
+    edges,
+    hardware,
+    customers,
+    onCreate,
+    onUpdate,
+    onDelete,
+    onDuplicate,
+    onSaveAsTemplate,
+    onCreateFromTemplate,
+    onDeleteTemplate,
+    onAddItem,
+    onUpdateItem,
+    onRemoveItem,
+    onUpdateProjectLevelChoices,
+    onUpdateMeasureDefaults,
+    onSelectionChange,
+    breakdown: null,
+    projectEstimates: { 'prj-1': 202.5, 'prj-2': null },
+    onExport,
+    onExportHardware,
+  };
+  const result = render(<ProjectsScreen {...baseProps} {...props} />);
+  const rerenderWith = (next: Partial<ComponentProps<typeof ProjectsScreen>>) => {
+    result.rerender(<ProjectsScreen {...baseProps} {...next} />);
+  };
   return {
     ...result,
+    rerenderWith,
     onCreate,
     onUpdate,
     onDelete,
@@ -562,7 +564,59 @@ describe('ProjectsScreen F022', () => {
     const { onSelectionChange } = renderScreen({ openProjectId: 'prj-1' });
     expect(screen.getByTestId('project-detail')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
+    // URL→state restore must not echo back to the shell/router.
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('deep-link restore does not echo to the router (no /quotes ↔ /quotes/:id loop)', async () => {
+    const user = userEvent.setup();
+    const { onSelectionChange } = renderScreen({ openProjectId: 'prj-1' });
+
+    // Mount restore is silent: no initial null publish, no re-publish of the id.
+    expect(screen.getByTestId('project-detail')).toBeTruthy();
+    expect(onSelectionChange).not.toHaveBeenCalled();
+
+    // Local intent still publishes — exactly once per user action.
+    await user.click(
+      screen.getByRole('button', { name: /Volver a la lista|^Lista$/i }),
+    );
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
+
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    expect(onSelectionChange).toHaveBeenCalledTimes(2);
     expect(onSelectionChange).toHaveBeenCalledWith('prj-1');
+  });
+
+  it('keeps deep-linked selection while projects load async (direct refresh / post-login remount)', () => {
+    const { onSelectionChange, rerenderWith } = renderScreen({
+      openProjectId: 'prj-1',
+      projects: [],
+    });
+
+    // Store fetch pending: the screen must not wipe the URL handoff by
+    // publishing null while the list is still empty.
+    expect(onSelectionChange).not.toHaveBeenCalled();
+
+    // Projects arrive after mount; the detail opens without echoing.
+    rerenderWith({ openProjectId: 'prj-1', projects });
+    expect(screen.getByTestId('project-detail')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Cocina Ana' })).toBeTruthy();
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it('clears selection when the open project disappears (deleted elsewhere)', () => {
+    const { onSelectionChange, rerenderWith } = renderScreen({
+      openProjectId: 'prj-1',
+    });
+    expect(screen.getByTestId('project-detail')).toBeTruthy();
+
+    rerenderWith({
+      openProjectId: 'prj-1',
+      projects: projects.filter((p) => p.id !== 'prj-1'),
+    });
+    expect(screen.queryByTestId('project-detail')).toBeNull();
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
   });
 
   it('F029: project-level options block and line override badge', async () => {
