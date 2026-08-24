@@ -1,5 +1,27 @@
 # frozen_string_literal: true
 
+module Geom
+  class Vector3d
+    attr_reader :x, :y, :z
+
+    def initialize(x = 0, y = 0, z = 0)
+      @x = x
+      @y = y
+      @z = z
+    end
+  end
+
+  class Transformation
+    def self.translation(vector)
+      new(vector)
+    end
+
+    def initialize(vector = nil)
+      @vector = vector
+    end
+  end
+end
+
 module SketchupStub
   class Menu
     attr_reader :items
@@ -13,7 +35,6 @@ module SketchupStub
       @items.length
     end
   end
-
 
   class FaceStub
     def pushpull(distance)
@@ -40,6 +61,66 @@ module SketchupStub
     end
   end
 
+  class ComponentDefinitionStub
+    attr_accessor :name
+
+    def initialize(name = "")
+      @name = name
+    end
+  end
+
+  class DefinitionListStub
+    def initialize
+      @definitions = {}
+    end
+
+    def load(path)
+      name = File.basename(path, ".*")
+      @definitions[name] ||= ComponentDefinitionStub.new(name)
+    end
+  end
+
+  class SelectionStub
+    attr_reader :items, :observers
+
+    def initialize
+      @items = []
+      @observers = []
+    end
+
+    def add(entity)
+      @items << entity
+      notify_change
+    end
+
+    def clear
+      @items.clear
+      notify_cleared
+    end
+
+    def first
+      @items.first
+    end
+
+    def add_observer(observer)
+      @observers << observer
+    end
+
+    def remove_observer(observer)
+      @observers.delete(observer)
+    end
+
+    private
+
+    def notify_change
+      @observers.each { |o| o.onSelectionBulkChange(self) if o.respond_to?(:onSelectionBulkChange) }
+    end
+
+    def notify_cleared
+      @observers.each { |o| o.onSelectionCleared(self) if o.respond_to?(:onSelectionCleared) }
+    end
+  end
+
   class EntitiesStub
     attr_reader :groups, :faces
 
@@ -59,13 +140,31 @@ module SketchupStub
       @faces << face
       face
     end
+
+    def add_instance(definition, transform)
+      group = GroupStub.new(definition.name)
+      @groups << group
+      group
+    end
+
+    def clear!
+      @groups.clear
+      @faces.clear
+    end
+
+    def erase_entities(entity)
+      @groups.delete(entity)
+      @faces.delete(entity)
+    end
   end
 
   class ModelStub
-    attr_reader :active_entities, :operations
+    attr_reader :active_entities, :operations, :selection, :definitions
 
     def initialize
       @active_entities = EntitiesStub.new
+      @selection = SelectionStub.new
+      @definitions = DefinitionListStub.new
       @operations = []
     end
 
@@ -107,8 +206,10 @@ def file_loaded(path)
 end
 
 module Sketchup
-  # The real host API declares AppObserver as a class (observers subclass it).
-  class AppObserver # rubocop:disable Lint/EmptyClass
+  class AppObserver
+  end
+
+  class SelectionObserver
   end
 
   def self.register_extension(extension, enabled)
@@ -139,8 +240,7 @@ module UI
 
   class HtmlDialog
     STYLE_DIALOG = 1
-    # The real host reports CEF versions as strings (e.g. "137.0.7151.121").
-    CEF_VERSION = '137.0.7151.121'
+    CEF_VERSION = "137.0.7151.121"
 
     class << self
       attr_reader :instances
@@ -180,8 +280,7 @@ module UI
       @executed_scripts << script
     end
 
-    # Mirrors the exact SketchUp HtmlDialog API name.
-    def set_file(path) # rubocop:disable Naming/AccessorMethodName
+    def set_file(path)
       @file = path
     end
 

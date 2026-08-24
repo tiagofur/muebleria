@@ -9,87 +9,55 @@ module Granete
       class FurnitureBuilder
         DEFAULT_THICKNESS_MM = 18.0
 
-        def initialize(metadata_store: nil)
+        def initialize(metadata_store: nil, asset_loader: nil)
           @metadata_store = metadata_store
+          @asset_loader = asset_loader
         end
 
         def insert_furniture(model, definition, raw_parameters = {})
           parameters = normalize_parameters(definition, raw_parameters)
           instance_id = "inst-#{SecureRandom.hex(4)}"
-          component_count = 0
 
-          model.start_operation("Insertar Mueble #{definition[name]}", true)
+          model.start_operation("Insertar Mueble #{definition['name']}", true)
           entities = model.active_entities
           main_group = entities.add_group
-          main_group.name = "#{definition[name]} (#{instance_id})"
+          main_group.name = "#{definition['name']} (#{instance_id})"
 
-          width_mm = (parameters["widthMm"] || 600.0).to_f
-          height_mm = (parameters["heightMm"] || 720.0).to_f
-          depth_mm = (parameters["depthMm"] || 590.0).to_f
-          thickness_mm = DEFAULT_THICKNESS_MM
+          component_count = render_furniture_geometry(main_group, instance_id, definition, parameters)
 
-          category = definition["category"]
+          write_furniture_metadata(main_group, instance_id, definition, parameters)
 
-          if %w[kitchen_base kitchen_wall closet].include?(category)
-            # Left panel
-            create_panel_box(main_group, "Lateral Izquierdo", 0, 0, 0, thickness_mm, depth_mm, height_mm)
-            component_count += 1
+          model.commit_operation
 
-            # Right panel
-            create_panel_box(main_group, "Lateral Derecho", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm)
-            component_count += 1
+          {
+            "success" => true,
+            "instance_id" => instance_id,
+            "name" => definition["name"],
+            "component_count" => component_count,
+            "parameters" => parameters
+          }
+        rescue StandardError => e
+          model.abort_operation
+          {
+            "success" => false,
+            "error" => e.message
+          }
+        end
 
-            # Shelves
-            shelf_count = (parameters["shelfCount"] || 0).to_i
-            if shelf_count > 0
-              spacing = height_mm / (shelf_count + 1)
-              (1..shelf_count).each do |i|
-                shelf_z = spacing * i
-                create_panel_box(main_group, "Entrepaño #{i}", thickness_mm, 0, shelf_z, width_mm - (2 * thickness_mm), depth_mm, thickness_mm)
-                component_count += 1
-              end
-            end
+        def update_furniture(model, group, definition, raw_parameters = {})
+          parameters = normalize_parameters(definition, raw_parameters)
 
-            # Door
-            door_count = (parameters["doorCount"] || 0).to_i
-            if door_count == 1
-              create_panel_box(main_group, "Puerta", 0, depth_mm, 0, width_mm, thickness_mm, height_mm)
-              component_count += 1
-            end
-          elsif category == "desk"
-            # Worktop
-            create_panel_box(main_group, "Cubierta", 0, 0, height_mm - thickness_mm, width_mm, depth_mm, thickness_mm)
-            component_count += 1
+          existing_meta = @metadata_store ? @metadata_store.read(group) : nil
+          instance_id = existing_meta&.dig("identity", "instanceRef") || "inst-#{SecureRandom.hex(4)}"
 
-            # Legs
-            create_panel_box(main_group, "Pata Izquierda", 0, 0, 0, thickness_mm, depth_mm, height_mm - thickness_mm)
-            create_panel_box(main_group, "Pata Derecha", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm - thickness_mm)
-            component_count += 2
-          else
-            # Generic bounding box
-            create_panel_box(main_group, "Cuerpo", 0, 0, 0, width_mm, depth_mm, height_mm)
-            component_count += 1
-          end
+          model.start_operation("Editar Mueble #{definition['name']}", true)
 
-          if @metadata_store
-            metadata_payload = {
-              "namespace" => "com.granete.sketchup_extension",
-              "metadataVersion" => 1,
-              "kind" => "bootstrapIntent",
-              "nonManufacturable" => true,
-              "identity" => {
-                "instanceRef" => instance_id,
-                "projectRef" => "project-sketchup-active",
-                "sourceRevisionRef" => "rev-1"
-              },
-              "intent" => {
-                "semanticRole" => "furniture-instance",
-                "furnitureDefinitionId" => definition["furniture_definition_id"],
-                "parameters" => parameters
-              }
-            }
-            @metadata_store.write(main_group, metadata_payload)
-          end
+          # Clear inner sub-entities preserving group position and rotation
+          group.entities.clear!
+
+          component_count = render_furniture_geometry(group, instance_id, definition, parameters)
+
+          write_furniture_metadata(group, instance_id, definition, parameters)
 
           model.commit_operation
 
@@ -120,11 +88,80 @@ module Granete
           params
         end
 
-        def create_panel_box(parent_group, name, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
-          sub_group = parent_group.entities.add_group
-          sub_group.name = name
+        def render_furniture_geometry(main_group, instance_id, definition, parameters)
+          component_count = 0
+          width_mm = (parameters["widthMm"] || 600.0).to_f
+          height_mm = (parameters["heightMm"] || 720.0).to_f
+          depth_mm = (parameters["depthMm"] || 590.0).to_f
+          thickness_mm = DEFAULT_THICKNESS_MM
+          category = definition["category"]
 
-          # In SketchUp internal units are inches (1 inch = 25.4 mm)
+          if %w[kitchen_base kitchen_wall closet].include?(category)
+            # Left panel Component & Part
+            create_hierarchical_component(main_group, instance_id, "left_side", "Lateral Izquierdo", 0, 0, 0, thickness_mm, depth_mm, height_mm)
+            component_count += 1
+
+            # Right panel Component & Part
+            create_hierarchical_component(main_group, instance_id, "right_side", "Lateral Derecho", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm)
+            component_count += 1
+
+            # Shelves
+            shelf_count = (parameters["shelfCount"] || 0).to_i
+            if shelf_count > 0
+              spacing = height_mm / (shelf_count + 1)
+              (1..shelf_count).each do |i|
+                shelf_z = spacing * i
+                create_hierarchical_component(main_group, instance_id, "shelf_#{i}", "Entrepaño #{i}", thickness_mm, 0, shelf_z, width_mm - (2 * thickness_mm), depth_mm, thickness_mm)
+                component_count += 1
+              end
+            end
+
+            # Door
+            door_count = (parameters["doorCount"] || 0).to_i
+            if door_count == 1
+              create_hierarchical_component(main_group, instance_id, "door_1", "Puerta", 0, depth_mm, 0, width_mm, thickness_mm, height_mm)
+              component_count += 1
+            end
+          elsif category == "desk"
+            # Worktop
+            create_hierarchical_component(main_group, instance_id, "worktop", "Cubierta", 0, 0, height_mm - thickness_mm, width_mm, depth_mm, thickness_mm)
+            component_count += 1
+
+            # Legs
+            create_hierarchical_component(main_group, instance_id, "leg_left", "Pata Izquierda", 0, 0, 0, thickness_mm, depth_mm, height_mm - thickness_mm)
+            create_hierarchical_component(main_group, instance_id, "leg_right", "Pata Derecha", width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm - thickness_mm)
+            component_count += 2
+          else
+            create_hierarchical_component(main_group, instance_id, "body", "Cuerpo", 0, 0, 0, width_mm, depth_mm, height_mm)
+            component_count += 1
+          end
+
+          component_count
+        end
+
+        def create_hierarchical_component(main_group, furniture_instance_id, slot_id, name, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
+          # Level 2: ComponentInstance Group
+          comp_group = main_group.entities.add_group
+          comp_group.name = name
+          comp_id = "comp-#{furniture_instance_id}-#{slot_id}"
+
+          if @metadata_store
+            comp_meta = {
+              "namespace" => "com.granete.sketchup_extension",
+              "metadataVersion" => 1,
+              "kind" => "componentInstance",
+              "identity" => {
+                "instanceRef" => comp_id,
+                "projectRef" => "project-sketchup-active"
+              },
+              "intent" => {
+                "semanticRole" => slot_id
+              }
+            }
+            @metadata_store.write(comp_group, comp_meta)
+          end
+
+          # Level 3: Part Geometry & PartInstance
           scale_to_inch = 1.0 / 25.4
           x = x_mm * scale_to_inch
           y = y_mm * scale_to_inch
@@ -140,9 +177,30 @@ module Granete
             [x, y + dy, z]
           ]
 
-          face = sub_group.entities.add_face(pts)
+          face = comp_group.entities.add_face(pts)
           face.pushpull(-dz) if face && dz > 0
-          sub_group
+          comp_group
+        end
+
+        def write_furniture_metadata(main_group, instance_id, definition, parameters)
+          return unless @metadata_store
+
+          metadata_payload = {
+            "namespace" => "com.granete.sketchup_extension",
+            "metadataVersion" => 1,
+            "kind" => "furnitureInstance",
+            "identity" => {
+              "instanceRef" => instance_id,
+              "projectRef" => "project-sketchup-active",
+              "sourceRevisionRef" => "rev-1"
+            },
+            "intent" => {
+              "semanticRole" => "furniture-instance",
+              "furnitureDefinitionId" => definition["furniture_definition_id"],
+              "parameters" => parameters
+            }
+          }
+          @metadata_store.write(main_group, metadata_payload)
         end
       end
     end

@@ -235,3 +235,62 @@ export interface FurnitureInstance {
   readonly evaluatedParameters: Readonly<Record<string, string | number | boolean>>;
   readonly materialAssignments: readonly MaterialAssignment[];
 }
+
+// 8. ComponentInstance: Concrete Sub-Assembly / Slot within a FurnitureInstance
+export interface ComponentInstance {
+  readonly componentInstanceId: string;
+  readonly furnitureInstanceId: string;
+  readonly slotId: string;
+  readonly componentDefinitionId: string;
+  readonly role: string;
+  readonly transform: {
+    readonly translationMm: readonly [number, number, number];
+    readonly rotationDeg?: readonly [number, number, number];
+  };
+  readonly dimensionsMm: readonly [number, number, number];
+  readonly materialAssignmentId?: string;
+}
+
+// 9. PartInstance: Concrete Fabricable Industrial Piece Derived from Component
+export interface PartInstance {
+  readonly partInstanceId: string;
+  readonly componentInstanceId: string;
+  readonly furnitureInstanceId: string;
+  readonly role: string;
+  readonly name: string;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly thicknessMm: number;
+  readonly grainDirection: "length" | "width" | "none";
+  readonly materialId: string;
+  readonly edgeBanding?: {
+    readonly top?: string;
+    readonly bottom?: string;
+    readonly left?: string;
+    readonly right?: string;
+  };
+  readonly transform: {
+    readonly translationMm: readonly [number, number, number];
+    readonly rotationDeg?: readonly [number, number, number];
+  };
+}
+
+// 10. InteractiveValidationResult: Lightweight UX Preflight
+export interface InteractiveValidationIssue {
+  readonly code: string;
+  readonly message: string;
+  readonly severity: "error" | "warning" | "info";
+  readonly parameterName?: string;
+}
+
+export interface InteractiveValidationResult {
+  readonly valid: boolean;
+  readonly issues: readonly InteractiveValidationIssue[];
+}
+
+export interface ResolvedFurnitureLayout {
+  readonly furnitureInstance: FurnitureInstance;
+  readonly components: readonly ComponentInstance[];
+  readonly parts: readonly PartInstance[];
+  readonly validation: InteractiveValidationResult;
+}

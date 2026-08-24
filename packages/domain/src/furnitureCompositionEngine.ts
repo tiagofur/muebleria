@@ -270,3 +270,180 @@ function validateParameter(
   }
   return { valid: true, value: String(val) };
 }
+
+import type {
+  FurnitureInstance,
+  ComponentInstance,
+  PartInstance,
+  InteractiveValidationResult,
+  InteractiveValidationIssue,
+  ResolvedFurnitureLayout
+} from "./smartFurnitureDomain";
+
+/**
+ * Lightweight interactive preflight validation for UI forms.
+ */
+export function validateInteractiveParameters(
+  definition: FurnitureDefinition,
+  rawParameters: Record<string, string | number | boolean>
+): InteractiveValidationResult {
+  const issues: InteractiveValidationIssue[] = [];
+
+  for (const param of definition.parameters) {
+    const val = rawParameters[param.name] ?? param.defaultValue;
+
+    if (param.type === "number") {
+      const num = Number(val);
+      if (Number.isNaN(num)) {
+        issues.push({
+          code: "INVALID_NUMBER",
+          message: `El parámetro ${param.label} debe ser un número válido.`,
+          severity: "error",
+          parameterName: param.name
+        });
+        continue;
+      }
+      if (param.min !== undefined && num < param.min) {
+        issues.push({
+          code: "BELOW_MINIMUM",
+          message: `${param.label} (${num} mm) es menor que el mínimo permitido (${param.min} mm).`,
+          severity: "error",
+          parameterName: param.name
+        });
+      }
+      if (param.max !== undefined && num > param.max) {
+        issues.push({
+          code: "ABOVE_MAXIMUM",
+          message: `${param.label} (${num} mm) supera el máximo permitido (${param.max} mm).`,
+          severity: "error",
+          parameterName: param.name
+        });
+      }
+    } else if (param.type === "enum" && param.options) {
+      const str = String(val);
+      if (!param.options.includes(str)) {
+        issues.push({
+          code: "INVALID_ENUM_OPTION",
+          message: `Opción inválida '${str}' para ${param.label}.`,
+          severity: "error",
+          parameterName: param.name
+        });
+      }
+    }
+  }
+
+  return {
+    valid: issues.every((i) => i.severity !== "error"),
+    issues
+  };
+}
+
+/**
+ * Resolves full component and part layout with millimeter precision
+ * for renderer/adapter consumption.
+ */
+export function resolveFurnitureLayout(
+  definition: FurnitureDefinition,
+  rawParameters: Record<string, string | number | boolean>,
+  componentCatalog: Record<string, ComponentDefinition> = {},
+  materialCatalog: Record<string, MaterialDefinition> = {},
+  hardwareCatalog: Record<string, HardwareDefinition> = {},
+  options: InstantiationOptions = { projectId: "project-active" }
+): ResolvedFurnitureLayout {
+  const validation = validateInteractiveParameters(definition, rawParameters);
+  const assemblyId = options.assemblyId ?? `assembly-${definition.furnitureDefinitionId}-1`;
+  const furnitureInstanceId = `inst-${definition.furnitureDefinitionId}-1`;
+
+  const evaluated: Record<string, string | number | boolean> = {};
+  for (const param of definition.parameters) {
+    evaluated[param.name] = rawParameters[param.name] ?? param.defaultValue;
+  }
+
+  const furnitureInstance: FurnitureInstance = {
+    furnitureInstanceId,
+    furnitureDefinitionId: definition.furnitureDefinitionId,
+    definitionVersion: definition.version,
+    name: definition.name,
+    assemblyId,
+    transform: {
+      translationMm: options.translationMm ?? [0, 0, 0],
+      rotationDeg: [0, 0, 0]
+    },
+    evaluatedParameters: evaluated,
+    materialAssignments: definition.defaultMaterialAssignments
+  };
+
+  const width = Number(evaluated.widthMm || evaluated.lengthMm || 600);
+  const height = Number(evaluated.heightMm || 720);
+  const depth = Number(evaluated.depthMm || 590);
+  const thickness = 18;
+
+  const components: ComponentInstance[] = [];
+  const parts: PartInstance[] = [];
+
+  let partIdx = 1;
+  const makePart = (role: string, name: string, x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+    const compId = `comp-${furnitureInstanceId}-${partIdx}`;
+    const partId = `part-${furnitureInstanceId}-${partIdx}`;
+    partIdx++;
+
+    components.push({
+      componentInstanceId: compId,
+      furnitureInstanceId,
+      slotId: role,
+      componentDefinitionId: `def-${role}`,
+      role,
+      transform: { translationMm: [x, y, z] },
+      dimensionsMm: [dx, dy, dz]
+    });
+
+    parts.push({
+      partInstanceId: partId,
+      componentInstanceId: compId,
+      furnitureInstanceId,
+      role,
+      name,
+      lengthMm: Math.max(dx, dy, dz),
+      widthMm: Math.min(Math.max(dx, dy), Math.max(dy, dz)),
+      thicknessMm: Math.min(dx, dy, dz),
+      grainDirection: "length",
+      materialId: "mat-melamine-white-18",
+      transform: { translationMm: [x, y, z] }
+    });
+  };
+
+  if (["kitchen_base", "kitchen_wall", "closet"].includes(definition.category)) {
+    // Left side
+    makePart("left_side", "Lateral Izquierdo", 0, 0, 0, thickness, depth, height);
+    // Right side
+    makePart("right_side", "Lateral Derecho", width - thickness, 0, 0, thickness, depth, height);
+
+    // Shelves
+    const shelfCount = Number(evaluated.shelfCount || 0);
+    if (shelfCount > 0) {
+      const spacing = height / (shelfCount + 1);
+      for (let i = 1; i <= shelfCount; i++) {
+        makePart("shelf", `Entrepaño ${i}`, thickness, 0, spacing * i, width - 2 * thickness, depth, thickness);
+      }
+    }
+
+    // Door
+    const doorCount = Number(evaluated.doorCount || 0);
+    if (doorCount === 1) {
+      makePart("door", "Puerta", 0, depth, 0, width, thickness, height);
+    }
+  } else if (definition.category === "desk") {
+    // Worktop
+    makePart("worktop", "Cubierta", 0, 0, height - thickness, width, depth, thickness);
+    // Legs
+    makePart("leg_left", "Pata Izquierda", 0, 0, 0, thickness, depth, height - thickness);
+    makePart("leg_right", "Pata Derecha", width - thickness, 0, 0, thickness, depth, height - thickness);
+  }
+
+  return {
+    furnitureInstance,
+    components,
+    parts,
+    validation
+  };
+}

@@ -1296,6 +1296,8 @@ export {
 export * from "./smartFurnitureDomain";
 export {
   instantiateFurniture,
+  validateInteractiveParameters,
+  resolveFurnitureLayout,
   type InstantiationOptions,
   type InstantiationResult,
 } from "./furnitureCompositionEngine";

@@ -13,7 +13,6 @@
         --text-base: 0.875rem;
         --text-md: 1rem;
         --text-lg: 1.125rem;
-        --text-xl: 1.25rem;
         
         --weight-normal: 400;
         --weight-medium: 500;
@@ -30,7 +29,6 @@
         --surface-card: hsl(0 0% 100%);
         --surface-card-subtle: hsl(220 14% 96%);
         --surface-hover: hsl(220 14% 94%);
-        --surface-active: hsl(220 14% 90%);
         
         --text-primary: hsl(230 18% 12%);
         --text-secondary: hsl(230 12% 40%);
@@ -53,14 +51,12 @@
         --space-3: 0.75rem;
         --space-4: 1rem;
         --space-5: 1.25rem;
-        --space-6: 1.5rem;
         
         --radius-sm: 0.375rem;
         --radius-md: 0.5rem;
         --radius-lg: 0.75rem;
         
         --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         --shadow-focus: 0 0 0 3px hsl(245 58% 51% / 20%);
         
         --duration-fast: 150ms;
@@ -89,7 +85,6 @@
         flex-direction: column;
       }
 
-      /* Header */
       .brand-bar {
         display: flex;
         align-items: center;
@@ -97,7 +92,6 @@
         padding: var(--space-3) var(--space-4);
         background: var(--brand-800);
         color: var(--text-inverse);
-        box-shadow: var(--shadow-sm);
       }
 
       .brand-group {
@@ -111,7 +105,6 @@
         height: 1.75rem;
         border-radius: var(--radius-sm);
         background: var(--text-inverse);
-        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -136,7 +129,6 @@
         font-size: var(--text-xs);
       }
 
-      /* Tabs Navigation */
       .tabs-nav {
         display: flex;
         background: var(--surface-card);
@@ -170,7 +162,6 @@
         border-bottom-color: var(--brand-600);
       }
 
-      /* Main container */
       main {
         flex: 1;
         padding: var(--space-4);
@@ -187,20 +178,6 @@
         display: block;
       }
 
-      /* Typography */
-      h1 {
-        font-size: var(--text-lg);
-        font-weight: var(--weight-bold);
-        margin: 0 0 var(--space-1);
-      }
-
-      p.subhead {
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-        margin: 0 0 var(--space-4);
-      }
-
-      /* Cards */
       .card {
         background: var(--surface-card);
         border: 1px solid var(--border-default);
@@ -210,19 +187,26 @@
         box-shadow: var(--shadow-sm);
       }
 
+      .card-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-3);
+      }
+
       .card-title {
         font-size: var(--text-sm);
         font-weight: var(--weight-semibold);
         color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        margin: 0 0 var(--space-3);
+        margin: 0;
       }
 
-      /* Select dropdown */
-      .select-wrapper {
-        position: relative;
-        margin-bottom: var(--space-4);
+      p.subhead {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin: 0 0 var(--space-4);
       }
 
       select, input[type="text"], input[type="number"] {
@@ -243,7 +227,6 @@
         box-shadow: var(--shadow-focus);
       }
 
-      /* Parameter Form Grid */
       .param-group {
         margin-bottom: var(--space-3);
       }
@@ -258,7 +241,6 @@
       .param-label {
         font-size: var(--text-sm);
         font-weight: var(--weight-medium);
-        color: var(--text-primary);
       }
 
       .param-value-badge {
@@ -289,7 +271,6 @@
         font-size: var(--text-sm) !important;
       }
 
-      /* Stepper */
       .stepper {
         display: flex;
         align-items: center;
@@ -314,7 +295,6 @@
         text-align: center;
       }
 
-      /* Summary Box */
       .summary-box {
         background: var(--surface-card-subtle);
         border-radius: var(--radius-md);
@@ -340,7 +320,6 @@
         color: var(--text-muted);
       }
 
-      /* Buttons */
       .btn {
         display: inline-flex;
         align-items: center;
@@ -360,15 +339,10 @@
       .btn-primary {
         background: var(--brand-500);
         color: var(--text-inverse);
-        box-shadow: 0 1px 3px hsl(245 58% 51% / 30%);
       }
 
       .btn-primary:hover {
         background: var(--brand-600);
-      }
-
-      .btn-primary:active {
-        transform: scale(0.99);
       }
 
       .btn-secondary {
@@ -381,14 +355,23 @@
         background: var(--surface-hover);
       }
 
-      /* Alert Toast */
+      .btn-danger {
+        background: var(--danger-50);
+        color: var(--danger-600);
+        border-color: hsl(0 72% 51% / 30%);
+        margin-top: var(--space-2);
+      }
+
+      .btn-danger:hover {
+        background: hsl(0 84% 94%);
+      }
+
       .toast {
         display: none;
         padding: var(--space-3) var(--space-4);
         border-radius: var(--radius-md);
         font-size: var(--text-sm);
         margin-bottom: var(--space-3);
-        animation: fadeIn 200ms ease-out;
       }
 
       .toast.success {
@@ -405,30 +388,35 @@
         border: 1px solid hsl(0 72% 51% / 20%);
       }
 
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-4px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-
-      /* Status panel */
-      .status-pill {
+      .status-badge {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-2);
-        padding: var(--space-1) var(--space-3);
+        gap: var(--space-1);
+        padding: 0.125rem 0.5rem;
         border-radius: 9999px;
         font-size: var(--text-xs);
         font-weight: var(--weight-semibold);
       }
 
-      .status-pill.configured {
-        background: var(--brand-50);
-        color: var(--brand-600);
+      .status-badge.ready {
+        background: var(--success-50);
+        color: var(--success-600);
       }
 
-      .status-pill.disabled {
+      .status-badge.warning {
         background: var(--warning-50);
         color: var(--warning-700);
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: var(--space-5) var(--space-4);
+        color: var(--text-secondary);
+      }
+
+      .empty-state-icon {
+        font-size: 2.5rem;
+        margin-bottom: var(--space-2);
       }
 
       footer {
@@ -450,44 +438,47 @@
             <span>para SketchUp</span>
           </div>
         </div>
-        <div id="connection-pill" class="status-pill disabled">Conexión local</div>
+        <div id="connection-pill" class="status-badge ready">Conectado</div>
       </header>
 
       <nav class="tabs-nav" role="tablist">
-        <button class="tab-button active" role="tab" data-tab="library">
+        <button id="tab-btn-library" class="tab-button active" role="tab" data-tab="library">
           📦 Biblioteca
         </button>
-        <button class="tab-button" role="tab" data-tab="status">
+        <button id="tab-btn-inspector" class="tab-button" role="tab" data-tab="inspector">
+          🔍 Inspector
+        </button>
+        <button id="tab-btn-status" class="tab-button" role="tab" data-tab="status">
           ⚡ Estado
         </button>
       </nav>
 
       <main>
-        <!-- Tab 1: Library -->
-        <section id="pane-library" class="tab-pane active" role="tabpanel">
-          <div id="toast-message" class="toast"></div>
+        <div id="toast-message" class="toast"></div>
 
+        <!-- Tab 1: Library (Insertion) -->
+        <section id="pane-library" class="tab-pane active" role="tabpanel">
           <div class="card">
             <div class="card-title">Mueble Paramétrico</div>
-            <div class="select-wrapper">
-              <select id="furniture-select">
+            <div style="margin-top: var(--space-2);">
+              <select id="library-furniture-select">
                 <option value="">Cargando catálogo…</option>
               </select>
             </div>
-            <p id="furniture-desc" class="subhead"></p>
+            <p id="library-furniture-desc" class="subhead" style="margin-top: var(--space-2); margin-bottom: 0;"></p>
           </div>
 
-          <div class="card" id="params-card" style="display: none;">
+          <div class="card" id="library-params-card" style="display: none;">
             <div class="card-title">Parámetros de Autoría</div>
-            <div id="dynamic-params-container"></div>
+            <div id="library-params-container" style="margin-top: var(--space-2);"></div>
 
             <div class="summary-box">
               <div class="summary-item">
-                <strong id="summary-dims">-- x -- x --</strong>
+                <strong id="library-summary-dims">-- × -- × --</strong>
                 <span>Cotas (mm)</span>
               </div>
               <div class="summary-item">
-                <strong id="summary-parts">--</strong>
+                <strong id="library-summary-parts">--</strong>
                 <span>Piezas estimadas</span>
               </div>
             </div>
@@ -498,11 +489,57 @@
           </button>
         </section>
 
-        <!-- Tab 2: Status -->
+        <!-- Tab 2: Contextual Inspector (Editing) -->
+        <section id="pane-inspector" class="tab-pane" role="tabpanel">
+          <div id="inspector-empty-state" class="card empty-state">
+            <div class="empty-state-icon">🖱️</div>
+            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Ningún mueble seleccionado</h2>
+            <p style="margin-bottom: 0; font-size: var(--text-sm);">
+              Haz clic en cualquier mueble de Granete en el viewport 3D para inspeccionar y editar sus propiedades.
+            </p>
+          </div>
+
+          <div id="inspector-active-view" style="display: none;">
+            <div class="card">
+              <div class="card-header-row">
+                <div>
+                  <h2 id="inspector-furniture-name" style="font-size: var(--text-md); margin: 0;">--</h2>
+                  <span id="inspector-instance-id" style="font-size: var(--text-xs); color: var(--text-muted);">--</span>
+                </div>
+                <span id="inspector-preflight-badge" class="status-badge ready">✓ Listo para Fabricar</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">Parámetros del Mueble</div>
+              <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
+
+              <div class="summary-box">
+                <div class="summary-item">
+                  <strong id="inspector-summary-dims">-- × -- × --</strong>
+                  <span>Cotas (mm)</span>
+                </div>
+                <div class="summary-item">
+                  <strong id="inspector-summary-parts">--</strong>
+                  <span>Piezas estimadas</span>
+                </div>
+              </div>
+            </div>
+
+            <button id="btn-update" class="btn btn-primary">
+              <span>💾 Actualizar Mueble</span>
+            </button>
+            <button id="btn-delete" class="btn btn-danger">
+              <span>🗑️ Eliminar Mueble</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Tab 3: Status -->
         <section id="pane-status" class="tab-pane" role="tabpanel">
           <div class="card">
             <div class="card-title">Conexión con Granete</div>
-            <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1);">Comprobando…</h2>
+            <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1); margin-top: var(--space-2);">Comprobando…</h2>
             <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
             <p class="subhead" style="margin-bottom: 0;">
               <strong>Invariante:</strong> SketchUp captura intención de autoría; Granete resuelve el mecanizado y valida la manufacturabilidad industrial.
@@ -521,55 +558,70 @@
         "use strict";
 
         var catalog = [];
-        var activeDefinition = null;
-        var currentParams = {};
+        var activeLibDef = null;
+        var libParams = {};
+
+        var selectedInstance = null;
+        var inspectorParams = {};
 
         // DOM elements
-        var furnitureSelect = document.getElementById("furniture-select");
-        var furnitureDesc = document.getElementById("furniture-desc");
-        var paramsCard = document.getElementById("params-card");
-        var paramsContainer = document.getElementById("dynamic-params-container");
-        var btnInsert = document.getElementById("btn-insert");
         var toast = document.getElementById("toast-message");
-        var summaryDims = document.getElementById("summary-dims");
-        var summaryParts = document.getElementById("summary-parts");
         var connectionPill = document.getElementById("connection-pill");
         var connectionHeading = document.getElementById("connection-heading");
         var connectionDetail = document.getElementById("connection-detail");
         var btnClose = document.getElementById("btn-close");
 
-        // Tab navigation
-        var tabButtons = document.querySelectorAll(".tab-button");
-        tabButtons.forEach(function (btn) {
+        // Library elements
+        var libSelect = document.getElementById("library-furniture-select");
+        var libDesc = document.getElementById("library-furniture-desc");
+        var libParamsCard = document.getElementById("library-params-card");
+        var libParamsContainer = document.getElementById("library-params-container");
+        var libSummaryDims = document.getElementById("library-summary-dims");
+        var libSummaryParts = document.getElementById("library-summary-parts");
+        var btnInsert = document.getElementById("btn-insert");
+
+        // Inspector elements
+        var tabBtnInspector = document.getElementById("tab-btn-inspector");
+        var inspectorEmpty = document.getElementById("inspector-empty-state");
+        var inspectorActive = document.getElementById("inspector-active-view");
+        var inspectorName = document.getElementById("inspector-furniture-name");
+        var inspectorId = document.getElementById("inspector-instance-id");
+        var inspectorPreflightBadge = document.getElementById("inspector-preflight-badge");
+        var inspectorParamsContainer = document.getElementById("inspector-params-container");
+        var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
+        var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
+        var btnUpdate = document.getElementById("btn-update");
+        var btnDelete = document.getElementById("btn-delete");
+
+        // Tabs
+        function switchTab(tabId) {
+          document.querySelectorAll(".tab-button").forEach(function (b) { b.classList.remove("active"); });
+          document.querySelectorAll(".tab-pane").forEach(function (p) { p.classList.remove("active"); });
+          var btn = document.querySelector(".tab-button[data-tab='" + tabId + "']");
+          if (btn) btn.classList.add("active");
+          var pane = document.getElementById("pane-" + tabId);
+          if (pane) pane.classList.add("active");
+        }
+
+        document.querySelectorAll(".tab-button").forEach(function (btn) {
           btn.addEventListener("click", function () {
-            tabButtons.forEach(function (b) { b.classList.remove("active"); });
-            document.querySelectorAll(".tab-pane").forEach(function (p) { p.classList.remove("active"); });
-            btn.classList.add("active");
-            var tabId = btn.getAttribute("data-tab");
-            document.getElementById("pane-" + tabId).classList.add("active");
+            switchTab(btn.getAttribute("data-tab"));
           });
         });
 
-        // Bridge exposed to SketchUp
+        // Bridge exposed to Ruby
         window.GraneteDialog = {
           setStatus: function (status) {
             status = status || {};
             if (status.heading) connectionHeading.textContent = String(status.heading);
             if (status.message) connectionDetail.textContent = String(status.message);
-            if (status.state === "configured") {
-              connectionPill.textContent = "Conectado";
-              connectionPill.className = "status-pill configured";
-            } else {
-              connectionPill.textContent = "Local";
-              connectionPill.className = "status-pill disabled";
-            }
           },
 
           setCatalog: function (definitions) {
             catalog = definitions || [];
-            furnitureSelect.innerHTML = "";
+            libSelect.innerHTML = "";
             if (catalog.length === 0) {
-              furnitureSelect.innerHTML = "<option value=>Sin muebles en catálogo</option>";
+              libSelect.innerHTML = "<option value=''>Sin muebles en catálogo</option>";
               return;
             }
 
@@ -577,21 +629,57 @@
               var opt = document.createElement("option");
               opt.value = def.furniture_definition_id;
               opt.textContent = def.name;
-              furnitureSelect.appendChild(opt);
+              libSelect.appendChild(opt);
             });
 
-            selectDefinition(catalog[0].furniture_definition_id);
+            selectLibraryDefinition(catalog[0].furniture_definition_id);
           },
 
           onInsertionResult: function (result) {
             btnInsert.disabled = false;
             btnInsert.textContent = "➕ Insertar en Modelo";
-
             if (result && result.success) {
-              showToast("success", "✓ Mueble " + (result.name || "") + " insertado en el modelo con " + (result.component_count || 0) + " piezas.");
+              showToast("success", "✓ Mueble " + (result.name || "") + " insertado en el modelo.");
             } else {
               showToast("error", "Error: " + ((result && result.error) || "Fallo en la inserción"));
             }
+          },
+
+          onUpdateResult: function (result) {
+            btnUpdate.disabled = false;
+            btnUpdate.textContent = "💾 Actualizar Mueble";
+            if (result && result.success) {
+              showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place.");
+            } else {
+              showToast("error", "Error: " + ((result && result.error) || "Fallo al actualizar"));
+            }
+          },
+
+          onSelectionChange: function (instanceData) {
+            selectedInstance = instanceData;
+            if (!instanceData || instanceData.type !== "furniture") {
+              inspectorEmpty.style.display = "block";
+              inspectorActive.style.display = "none";
+              return;
+            }
+
+            // Populate inspector
+            inspectorEmpty.style.display = "none";
+            inspectorActive.style.display = "block";
+
+            var def = instanceData.definition || catalog.find(function (d) { return d.furniture_definition_id === instanceData.definitionId; });
+            inspectorName.textContent = instanceData.name || (def ? def.name : "Mueble");
+            inspectorId.textContent = "ID: " + (instanceData.instanceId || "--");
+
+            inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), instanceData.parameters || {});
+
+            renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
+              inspectorParams[name] = val;
+              updateInspectorSummary();
+            });
+
+            updateInspectorSummary();
+            switchTab("inspector");
           }
         };
 
@@ -603,21 +691,41 @@
           }, 4000);
         }
 
-        function selectDefinition(definitionId) {
-          activeDefinition = catalog.find(function (d) { return d.furniture_definition_id === definitionId; });
-          if (!activeDefinition) {
-            paramsCard.style.display = "none";
+        function getDefaultParams(def) {
+          var p = {};
+          (def.parameters || []).forEach(function (param) {
+            p[param.name] = param.defaultValue;
+          });
+          return p;
+        }
+
+        function selectLibraryDefinition(definitionId) {
+          activeLibDef = catalog.find(function (d) { return d.furniture_definition_id === definitionId; });
+          if (!activeLibDef) {
+            libParamsCard.style.display = "none";
             btnInsert.style.display = "none";
             return;
           }
 
-          furnitureDesc.textContent = activeDefinition.description || "";
-          currentParams = {};
+          libDesc.textContent = activeLibDef.description || "";
+          libParams = getDefaultParams(activeLibDef);
 
-          // Render parameter inputs
-          paramsContainer.innerHTML = "";
-          (activeDefinition.parameters || []).forEach(function (p) {
-            currentParams[p.name] = p.defaultValue;
+          renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
+            libParams[name] = val;
+            updateLibrarySummary();
+          });
+
+          libParamsCard.style.display = "block";
+          btnInsert.style.display = "flex";
+          updateLibrarySummary();
+        }
+
+        function renderParamForm(container, def, currentValues, onChange) {
+          container.innerHTML = "";
+          if (!def) return;
+
+          (def.parameters || []).forEach(function (p) {
+            var val = currentValues[p.name] !== undefined ? currentValues[p.name] : p.defaultValue;
             var group = document.createElement("div");
             group.className = "param-group";
 
@@ -631,8 +739,7 @@
 
             var badge = document.createElement("span");
             badge.className = "param-value-badge";
-            badge.id = "badge-" + p.name;
-            badge.textContent = p.defaultValue + (p.unit === "mm" ? " mm" : "");
+            badge.textContent = val + (p.unit === "mm" ? " mm" : "");
             labelRow.appendChild(badge);
             group.appendChild(labelRow);
 
@@ -645,7 +752,7 @@
               slider.min = p.min;
               slider.max = p.max;
               slider.step = p.step || 10;
-              slider.value = p.defaultValue;
+              slider.value = val;
 
               var numInput = document.createElement("input");
               numInput.type = "number";
@@ -653,18 +760,20 @@
               numInput.min = p.min;
               numInput.max = p.max;
               numInput.step = p.step || 10;
-              numInput.value = p.defaultValue;
+              numInput.value = val;
 
               slider.addEventListener("input", function () {
                 numInput.value = slider.value;
-                onParamChange(p.name, Number(slider.value), p.unit);
+                badge.textContent = slider.value + " mm";
+                onChange(p.name, Number(slider.value), p.unit);
               });
 
               numInput.addEventListener("change", function () {
-                var val = Math.min(Math.max(Number(numInput.value), p.min), p.max);
-                slider.value = val;
-                numInput.value = val;
-                onParamChange(p.name, val, p.unit);
+                var v = Math.min(Math.max(Number(numInput.value), p.min), p.max);
+                slider.value = v;
+                numInput.value = v;
+                badge.textContent = v + " mm";
+                onChange(p.name, v, p.unit);
               });
 
               sliderRow.appendChild(slider);
@@ -681,7 +790,7 @@
 
               var valDisplay = document.createElement("span");
               valDisplay.className = "stepper-value";
-              valDisplay.textContent = p.defaultValue;
+              valDisplay.textContent = val;
 
               var btnPlus = document.createElement("button");
               btnPlus.className = "btn btn-secondary";
@@ -689,20 +798,22 @@
               btnPlus.textContent = "+";
 
               btnMinus.addEventListener("click", function () {
-                var cur = Number(currentParams[p.name] || p.defaultValue);
+                var cur = Number(currentValues[p.name] || p.defaultValue);
                 if (cur > p.min) {
                   cur -= (p.step || 1);
                   valDisplay.textContent = cur;
-                  onParamChange(p.name, cur, p.unit);
+                  badge.textContent = cur;
+                  onChange(p.name, cur, p.unit);
                 }
               });
 
               btnPlus.addEventListener("click", function () {
-                var cur = Number(currentParams[p.name] || p.defaultValue);
+                var cur = Number(currentValues[p.name] || p.defaultValue);
                 if (cur < p.max) {
                   cur += (p.step || 1);
                   valDisplay.textContent = cur;
-                  onParamChange(p.name, cur, p.unit);
+                  badge.textContent = cur;
+                  onChange(p.name, cur, p.unit);
                 }
               });
 
@@ -716,69 +827,92 @@
                 var opt = document.createElement("option");
                 opt.value = optVal;
                 opt.textContent = optVal;
-                if (optVal === p.defaultValue) opt.selected = true;
+                if (optVal === val) opt.selected = true;
                 select.appendChild(opt);
               });
               select.addEventListener("change", function () {
-                onParamChange(p.name, select.value);
+                badge.textContent = select.value;
+                onChange(p.name, select.value);
               });
               group.appendChild(select);
             }
 
-            paramsContainer.appendChild(group);
+            container.appendChild(group);
           });
-
-          paramsCard.style.display = "block";
-          btnInsert.style.display = "flex";
-          updateSummary();
         }
 
-        function onParamChange(name, value, unit) {
-          currentParams[name] = value;
-          var badge = document.getElementById("badge-" + name);
-          if (badge) {
-            badge.textContent = value + (unit === "mm" ? " mm" : "");
-          }
-          updateSummary();
+        function updateLibrarySummary() {
+          var w = libParams.widthMm || libParams.lengthMm || 600;
+          var h = libParams.heightMm || 720;
+          var d = libParams.depthMm || 590;
+          libSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
+
+          var parts = 2;
+          if (libParams.shelfCount) parts += Number(libParams.shelfCount);
+          if (libParams.doorCount) parts += Number(libParams.doorCount);
+          libSummaryParts.textContent = parts + " piezas";
         }
 
-        function updateSummary() {
-          var w = currentParams.widthMm || currentParams.lengthMm || 600;
-          var h = currentParams.heightMm || 720;
-          var d = currentParams.depthMm || 590;
-          summaryDims.textContent = w + " × " + h + " × " + d + " mm";
+        function updateInspectorSummary() {
+          var w = inspectorParams.widthMm || inspectorParams.lengthMm || 600;
+          var h = inspectorParams.heightMm || 720;
+          var d = inspectorParams.depthMm || 590;
+          inspectorSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
 
-          var parts = 2; // 2 laterals
-          if (currentParams.shelfCount) parts += Number(currentParams.shelfCount);
-          if (currentParams.doorCount) parts += Number(currentParams.doorCount);
-          summaryParts.textContent = parts + " piezas";
+          var parts = 2;
+          if (inspectorParams.shelfCount) parts += Number(inspectorParams.shelfCount);
+          if (inspectorParams.doorCount) parts += Number(inspectorParams.doorCount);
+          inspectorSummaryParts.textContent = parts + " piezas";
         }
 
-        furnitureSelect.addEventListener("change", function () {
-          selectDefinition(furnitureSelect.value);
+        libSelect.addEventListener("change", function () {
+          selectLibraryDefinition(libSelect.value);
         });
 
         btnInsert.addEventListener("click", function () {
-          if (!activeDefinition) return;
+          if (!activeLibDef) return;
           btnInsert.disabled = true;
           btnInsert.textContent = "⏳ Insertando en SketchUp…";
 
           var payload = {
-            definitionId: activeDefinition.furniture_definition_id,
-            parameters: currentParams
+            definitionId: activeLibDef.furniture_definition_id,
+            parameters: libParams
           };
 
           if (window.sketchup && window.sketchup.insert_furniture) {
             window.sketchup.insert_furniture(JSON.stringify(payload));
           } else {
-            // Mock preview fallback if running outside SketchUp Webview
             setTimeout(function () {
-              window.GraneteDialog.onInsertionResult({
-                success: true,
-                name: activeDefinition.name,
-                component_count: 4
-              });
-            }, 600);
+              window.GraneteDialog.onInsertionResult({ success: true, name: activeLibDef.name });
+            }, 500);
+          }
+        });
+
+        btnUpdate.addEventListener("click", function () {
+          if (!selectedInstance) return;
+          btnUpdate.disabled = true;
+          btnUpdate.textContent = "⏳ Actualizando…";
+
+          var payload = {
+            instanceId: selectedInstance.instanceId,
+            definitionId: selectedInstance.definitionId,
+            parameters: inspectorParams
+          };
+
+          if (window.sketchup && window.sketchup.update_furniture) {
+            window.sketchup.update_furniture(JSON.stringify(payload));
+          } else {
+            setTimeout(function () {
+              window.GraneteDialog.onUpdateResult({ success: true, name: selectedInstance.name });
+            }, 500);
+          }
+        });
+
+        btnDelete.addEventListener("click", function () {
+          if (window.sketchup && window.sketchup.delete_selected_furniture) {
+            window.sketchup.delete_selected_furniture();
+          } else {
+            window.GraneteDialog.onSelectionChange(null);
           }
         });
 
@@ -788,47 +922,8 @@
           }
         });
 
-        // Signal ready to host
         if (window.sketchup && window.sketchup.dialog_ready) {
           window.sketchup.dialog_ready();
-        } else {
-          // Mock bootstrap if tested in regular browser
-          setTimeout(function () {
-            window.GraneteDialog.setStatus({
-              heading: "Conexión simulada (Navegador)",
-              message: "Corriendo fuera de SketchUp en modo previsualización.",
-              state: "configured"
-            });
-            window.GraneteDialog.setCatalog([
-              {
-                furniture_definition_id: "kitchen-base-standard",
-                code: "KITCHEN-BASE-600",
-                name: "Gabinete Base Estándar",
-                category: "kitchen_base",
-                description: "Módulo inferior de cocina con entrepaños y puertas configurables.",
-                parameters: [
-                  { name: "widthMm", label: "Ancho (mm)", type: "number", defaultValue: 600, min: 300, max: 1200, step: 50, unit: "mm" },
-                  { name: "heightMm", label: "Alto (mm)", type: "number", defaultValue: 720, min: 600, max: 900, step: 10, unit: "mm" },
-                  { name: "depthMm", label: "Fondo (mm)", type: "number", defaultValue: 590, min: 300, max: 700, step: 10, unit: "mm" },
-                  { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 1, min: 0, max: 4, step: 1 },
-                  { name: "doorCount", label: "Puertas", type: "number", defaultValue: 1, min: 0, max: 2, step: 1 }
-                ]
-              },
-              {
-                furniture_definition_id: "closet-tower-open",
-                code: "CLOSET-TOWER-800",
-                name: "Torre de Closet / Vestidor",
-                category: "closet",
-                description: "Torre modular para vestidor con entrepaños ajustables.",
-                parameters: [
-                  { name: "widthMm", label: "Ancho (mm)", type: "number", defaultValue: 800, min: 400, max: 1200, step: 50, unit: "mm" },
-                  { name: "heightMm", label: "Alto (mm)", type: "number", defaultValue: 2100, min: 1800, max: 2600, step: 50, unit: "mm" },
-                  { name: "depthMm", label: "Fondo (mm)", type: "number", defaultValue: 500, min: 350, max: 650, step: 10, unit: "mm" },
-                  { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 4, min: 0, max: 8, step: 1 }
-                ]
-              }
-            ]);
-          }, 100);
         }
       })();
     </script>

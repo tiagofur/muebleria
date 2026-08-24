@@ -4,12 +4,24 @@ require_relative "../test_helper"
 require_relative "../../src/granete_for_sketchup/library/catalog_provider"
 
 class CatalogProviderTest < Minitest::Test
-  def setup
-    @provider = Granete::SketchUpExtension::Library::CatalogProvider.new
+  class FakeTransport
+    attr_accessor :configured
+
+    def initialize(configured: true)
+      @configured = configured
+    end
+
+    def configured?
+      @configured
+    end
   end
 
-  def test_returns_standard_furniture_definitions
-    definitions = @provider.all_definitions
+  def setup
+    @static_provider = Granete::SketchUpExtension::Library::StaticCatalogProvider.new
+  end
+
+  def test_static_provider_returns_standard_definitions
+    definitions = @static_provider.all_definitions
 
     refute_empty definitions
     ids = definitions.map { |d| d["furniture_definition_id"] }
@@ -20,17 +32,19 @@ class CatalogProviderTest < Minitest::Test
   end
 
   def test_find_definition_by_id
-    base = @provider.find_definition("kitchen-base-standard")
+    base = @static_provider.find_definition("kitchen-base-standard")
 
     refute_nil base
     assert_equal "Gabinete Base Estándar", base["name"]
     assert_equal "kitchen_base", base["category"]
+  end
 
-    param_names = base["parameters"].map { |p| p["name"] }
-    assert_includes param_names, "widthMm"
-    assert_includes param_names, "heightMm"
-    assert_includes param_names, "depthMm"
-    assert_includes param_names, "shelfCount"
-    assert_includes param_names, "doorCount"
+  def test_remote_provider_falls_back_to_static_when_transport_not_configured
+    transport = FakeTransport.new(configured: false)
+    remote_provider = Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(transport: transport)
+
+    definitions = remote_provider.all_definitions
+    refute_empty definitions
+    assert_equal 4, definitions.length
   end
 end

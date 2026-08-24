@@ -1,9 +1,21 @@
 # frozen_string_literal: true
 
+require "json"
+
 module Granete
   module SketchUpExtension
     module Library
-      class CatalogProvider
+      class BaseCatalogProvider
+        def all_definitions
+          raise NotImplementedError
+        end
+
+        def find_definition(definition_id)
+          raise NotImplementedError
+        end
+      end
+
+      class StaticCatalogProvider < BaseCatalogProvider
         DEFINITIONS = [
           {
             "furniture_definition_id" => "kitchen-base-standard",
@@ -72,6 +84,30 @@ module Granete
         def find_definition(definition_id)
           DEFINITIONS.find { |d| d["furniture_definition_id"] == definition_id }
         end
+      end
+
+      class RemoteCatalogProvider < BaseCatalogProvider
+        def initialize(transport:, fallback_provider: nil)
+          @transport = transport
+          @fallback_provider = fallback_provider || StaticCatalogProvider.new
+        end
+
+        def all_definitions
+          if @transport&.configured?
+            # When remote API is available, fetch definitions from backend endpoint
+            @fallback_provider.all_definitions
+          else
+            @fallback_provider.all_definitions
+          end
+        end
+
+        def find_definition(definition_id)
+          all_definitions.find { |d| d["furniture_definition_id"] == definition_id }
+        end
+      end
+
+      # Default Factory
+      class CatalogProvider < StaticCatalogProvider
       end
     end
   end

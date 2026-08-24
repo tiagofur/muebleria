@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'json'
+require "json"
 
 module Granete
   module SketchUpExtension
@@ -8,14 +8,12 @@ module Granete
       class InvalidMetadataError < StandardError; end
 
       class Store
-        DICTIONARY = 'com.granete.sketchup_extension'
-        ATTRIBUTE_KEY = 'bootstrap_intent.v1'
-        NAMESPACE = 'com.granete.sketchup_extension'
+        DICTIONARY = "com.granete.sketchup_extension"
+        ATTRIBUTE_KEY = "bootstrap_intent.v1"
+        NAMESPACE = "com.granete.sketchup_extension"
         METADATA_VERSION = 1
-        KIND = 'bootstrapIntent'
-        TOP_LEVEL_KEYS = %w[identity intent kind metadataVersion namespace nonManufacturable].freeze
-        IDENTITY_KEYS = %w[instanceRef projectRef sourceRevisionRef].freeze
-        INTENT_KEYS = %w[semanticRole furnitureDefinitionId parameters].freeze
+
+        SUPPORTED_KINDS = %w[bootstrapIntent furnitureInstance componentInstance partInstance].freeze
 
         def initialize(model)
           @model = model
@@ -25,7 +23,7 @@ module Granete
           normalized = validate(payload)
           operation_started = false
 
-          @model.start_operation('Actualizar Intención', true)
+          @model.start_operation("Actualizar Intención", true)
           operation_started = true
           target.set_attribute(DICTIONARY, ATTRIBUTE_KEY, JSON.generate(normalized))
           @model.commit_operation
@@ -49,44 +47,38 @@ module Granete
         def validate(payload)
           normalized = JSON.parse(JSON.generate(payload))
           validate_envelope(normalized)
-          validate_identity(normalized['identity'])
-          validate_intent(normalized['intent'])
+          validate_identity(normalized["identity"]) if normalized.key?("identity")
+          validate_intent(normalized["intent"]) if normalized.key?("intent")
           normalized
         rescue JSON::GeneratorError, TypeError => e
           raise InvalidMetadataError, "Metadata is not JSON-safe: #{e.message}"
         end
 
         def validate_envelope(normalized)
-          assert_keys(normalized, TOP_LEVEL_KEYS, 'metadata')
-          assert_equal(normalized['namespace'], NAMESPACE, 'namespace')
-          assert_equal(normalized['metadataVersion'], METADATA_VERSION, 'metadataVersion')
-          assert_equal(normalized['kind'], KIND, 'kind')
-          assert_equal(normalized['nonManufacturable'], true, 'nonManufacturable')
+          raise InvalidMetadataError, "metadata must be an object" unless normalized.is_a?(Hash)
+          assert_equal(normalized["namespace"], NAMESPACE, "namespace")
+          assert_equal(normalized["metadataVersion"], METADATA_VERSION, "metadataVersion")
+
+          kind = normalized["kind"]
+          unless SUPPORTED_KINDS.include?(kind)
+            raise InvalidMetadataError, "kind '#{kind}' is not supported. Expected one of: #{SUPPORTED_KINDS.join(', ')}"
+          end
         end
 
         def validate_identity(identity)
-          assert_keys(identity, IDENTITY_KEYS, 'identity')
-          IDENTITY_KEYS.each { |key| assert_opaque_string(identity[key], "identity.#{key}") }
+          raise InvalidMetadataError, "identity must be an object" unless identity.is_a?(Hash)
+          identity.each do |k, v|
+            assert_opaque_string(v, "identity.#{k}") if v.is_a?(String)
+          end
         end
 
         def validate_intent(intent)
-          raise InvalidMetadataError, 'intent must be an object' unless intent.is_a?(Hash)
-          unsupported = intent.keys - INTENT_KEYS
-          raise InvalidMetadataError, "intent contains unsupported fields: #{unsupported.join(', ')}" unless unsupported.empty?
-          assert_opaque_string(intent['semanticRole'], 'intent.semanticRole', max_length: 64)
-          if intent.key?('furnitureDefinitionId')
-            assert_opaque_string(intent['furnitureDefinitionId'], 'intent.furnitureDefinitionId', max_length: 128)
+          raise InvalidMetadataError, "intent must be an object" unless intent.is_a?(Hash)
+          assert_opaque_string(intent["semanticRole"], "intent.semanticRole", max_length: 64) if intent.key?("semanticRole")
+          assert_opaque_string(intent["furnitureDefinitionId"], "intent.furnitureDefinitionId", max_length: 128) if intent.key?("furnitureDefinitionId")
+          if intent.key?("parameters") && !intent["parameters"].is_a?(Hash)
+            raise InvalidMetadataError, "intent.parameters must be an object"
           end
-          if intent.key?('parameters')
-            raise InvalidMetadataError, 'intent.parameters must be an object' unless intent['parameters'].is_a?(Hash)
-          end
-        end
-
-        def assert_keys(value, expected, path)
-          raise InvalidMetadataError, "#{path} must be an object" unless value.is_a?(Hash)
-          return if value.keys.sort == expected.sort
-
-          raise InvalidMetadataError, "#{path} contains unsupported fields"
         end
 
         def assert_equal(value, expected, path)

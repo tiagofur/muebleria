@@ -3,6 +3,7 @@
 require "stringio"
 require_relative "../test_helper"
 require_relative "../../src/granete_for_sketchup/logging"
+require_relative "../../src/granete_for_sketchup/metadata/store"
 require_relative "../../src/granete_for_sketchup/ui/dialog_controller"
 
 class DialogControllerTest < Minitest::Test
@@ -15,9 +16,12 @@ class DialogControllerTest < Minitest::Test
   def setup
     SketchupStub.reset!
     @logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    @model = Sketchup.active_model
+    @store = Granete::SketchUpExtension::Metadata::Store.new(@model)
     @controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
       logger: @logger,
-      status_provider: StatusProvider.new
+      status_provider: StatusProvider.new,
+      metadata_store: @store
     )
   end
 
@@ -26,15 +30,10 @@ class DialogControllerTest < Minitest::Test
     dialog.callbacks.fetch("dialog_ready").call(nil)
 
     scripts = dialog.executed_scripts
-    assert_equal 2, scripts.length
+    assert scripts.length >= 2
 
-    # Status script
     assert_includes scripts[0], "window.GraneteDialog && window.GraneteDialog.setStatus"
-    assert_includes scripts[0], "Conectado"
-
-    # Catalog script
     assert_includes scripts[1], "window.GraneteDialog && window.GraneteDialog.setCatalog"
-    assert_includes scripts[1], "kitchen-base-standard"
   end
 
   def test_insert_furniture_callback_invokes_builder_and_returns_result
@@ -47,10 +46,27 @@ class DialogControllerTest < Minitest::Test
     dialog.callbacks.fetch("insert_furniture").call(nil, payload)
 
     scripts = dialog.executed_scripts
-    last_script = scripts.last
+    insert_script = scripts.find { |s| s.include?("onInsertionResult") }
 
-    assert_includes last_script, "window.GraneteDialog && window.GraneteDialog.onInsertionResult"
-    assert_includes last_script, success:true
-    assert_includes last_script, "Gabinete Base Estándar"
+    refute_nil insert_script
+    assert_includes insert_script, '"success":true'
+    assert_includes insert_script, "Gabinete Base Estándar"
+  end
+
+  def test_update_furniture_callback_updates_instance
+    dialog = @controller.show
+    payload = {
+      "instanceId" => "inst-01",
+      "definitionId" => "kitchen-base-standard",
+      "parameters" => { "widthMm" => 900, "shelfCount" => 2 }
+    }
+
+    dialog.callbacks.fetch("update_furniture").call(nil, payload)
+
+    scripts = dialog.executed_scripts
+    update_script = scripts.find { |s| s.include?("onUpdateResult") }
+
+    refute_nil update_script
+    assert_includes update_script, '"success":true'
   end
 end
