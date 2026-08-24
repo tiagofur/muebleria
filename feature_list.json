@@ -3763,6 +3763,36 @@
       "depends_on": [],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F161",
+      "phase": 0,
+      "name": "sketchup_semantic_metadata_roundtrip",
+      "title": "#346 Semantic metadata y round-trip SketchUp ↔ Granete",
+      "description": "Contrato ejecutable del envelope de authoring granete.sketchup-authoring.v1 en packages/domain: stable IDs opacos (assemblyId/componentDefinitionId/componentInstanceId, únicos por proyecto, sin reuse tras delete), transforms mm con frame explícito y quaternion normalizado, catálogo/revisiones/joinery validados con ContractIssue estructurados, relationships con anchors siempre a componentInstanceId, hardware placements con host explícito, política full-snapshot-with-tombstones con apply atómico (base stale → conflict sin mutación parcial, omisión sin tombstone → conflicto, nunca deletes por ausencia), idempotencia por key+fingerprint canónico (mismo payload replaya, distinto → IDEMPOTENCY_CONFLICT), response correlacionada (inReplyTo/idempotencyKey/projectId/sourceRevisionId), migration registry fail-closed, y fixture golden cabinet (dos entrepaños compartiendo definition con instancias/relationships independientes + bisagra manual) probando SketchUp→Granete→SketchUp sin pérdida semántica. Namespace granete.* desde el nacimiento (#366); nada publicó muebles.*.",
+      "acceptance": [
+        "Renombrar un componente no cambia su stable ID (rename = update con mismo assemblyId/componentInstanceId)",
+        "Dos entrepaños comparten componentDefinitionId y conservan componentInstanceId, relationships y machining independientes",
+        "Anchors y hardware hosts referencian siempre componentInstanceId; definiciones nunca son anchor",
+        "assemblyId/componentInstanceId únicos en projectId, sobreviven round-trip y no se reutilizan tras delete (STABLE_ID_REUSE)",
+        "mm y transforms conservan precisión (rounding de transporte precisionMm, fingerprint invariante al ruido)",
+        "Authoring intent separado por construcción de ResolvedBoardPart/drilling/machine output",
+        "Referencias de catálogo desconocidas producen ContractIssue estructurados (CATALOG_REFERENCE_MISSING/REVISION_STALE/JOINERY_SYSTEM_UNSUPPORTED)",
+        "Reimportar el mismo envelope es idempotente (mismo responseMessageId y receipt)",
+        "Response correlaciona responseMessageId/inReplyToMessageId/idempotencyKey/projectId/sourceRevisionId",
+        "Create/update/delete atómicos; base stale → conflict sin mutación parcial; omisión sin tombstone nunca borra",
+        "schemaId = schemaName + major(schemaVersion); mismatch o versión sin migration registrada falla antes de mutar",
+        "Fixture golden: SketchUp → Granete → SketchUp sin pérdida semántica ni confusión definition/instance"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/346",
+        "docs/sketchup-manufacturing-contract.md",
+        "docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md",
+        "docs/sketchup-muebles-strategy.md"
+      ],
+      "status": "in_progress",
+      "depends_on": [],
+      "created": "2026-08-24"
     }
   ]
 }
