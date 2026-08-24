@@ -1,51 +1,32 @@
 # Sesión
 
-**Feature cerrada:** F148 — proyectar_usability_benchmark (#314 P3D-8, meta #308)
-**Inicio:** 2026-08-23 · **Cierre:** 2026-08-23
-**SDD:** https://github.com/tiagofur/muebleria/issues/314#issuecomment-5387642499
+**Feature en curso:** F150 — ui_card_click_open (#auditoría paridad UI)
+**Inicio:** 2026-08-23
 
-## Resultado
+## Contexto
 
-Kit de benchmark de usabilidad para #314 (el issue queda ABIERTO hasta las
-sesiones reales). **Telemetría** `usabilityBenchmark.ts` (packages/ui, patrón
-perfTelemetry): tareas canónicas v1 (11 pasos del script con targets
-iniciales), timeline append-only auto+facilitador con contexto de tarea,
-persistencia localStorage que sobrevive recargas (re-adhiere captura de
-clicks), export JSON y `window.__proyectarUsability`. **Costuras** del studio
-instrumentadas (búsqueda/insert/move/command-intent/dimensión/opción/
-materiales tableros+ambiental/ambientes/undo-redo/presentar/BOM/clicks) —
-todas no-op sin sesión. **Panel de facilitador** gateado por flag
-`muebles_usability_benchmark` (ShellView), costo cero sin flag. **Summarizer**
-puro (mediana por tarea, ayudas/errores/retrocesos/clicks, metRatio de
-targets). **Smoke `pnpm smoke:usability`**: script canónico completo con UI
-real (incluye dnd HTML5 sintético para materiales) — regresión permanente de
-script-completable; exporta JSON `source:"proxy"` (data truth). **Protocolo**
-`docs/proyectar-3d-usability-benchmark.md` (métricas operacionalizadas,
-facilitador sin coaching, encuesta post, targets recalibrables, baseline
-proxy). Roadmap §10/AGENTS/verification/design actualizados.
+Auditoría de paridad UI pantalla por pantalla (excluye 3D) en
+`progress/ui-parity-audit-2026-08-23.md`. El dueño decidió unificar el patrón
+de entrada a detalle: **click en la card abre** (como Ingeniería/Cotizaciones),
+sin botón "Abrir X" dedicado, en Órdenes (cola), Instalaciones y Embarques.
 
-**Hallazgos registrados:** #338 (render loop guest+selección+reload,
-preexistente — aislado con diagnóstico; bloquea recarga in-browser a mitad de
-sesión, persistencia cubierta en unit) y "piso sólo aplica por drag" (dato de
-fricción para sesiones reales, documentado en el protocolo).
+## Plan
 
-## Verificación (evidencia)
+- Patrón stretched link: el título de la card es el control real (foco, Enter,
+  aria-label); hit-area cubre toda la card; acciones internas (Pack, tel:)
+  quedan por encima y no burbujean.
+- Hover affordance con state layer del sistema + cursor pointer.
+- design.md: regla universal §4.2 + specs §6.7/§6.7c/§6.7d.
+- Tests de comportamiento (teclado + mouse + no-apertura desde acciones).
 
-- `pnpm test` 3.019 OK (domain 1.035 · storage 155 · excel 89 · ui 1.381 ·
-  mobile 45 · desktop 17 · web 301); `pnpm typecheck` 0 errores.
-- `pnpm smoke`: studio F141/F143/F144/F145 + **usabilidad nuevo verde (38–56s,
-  11/11 tareas, 74 eventos, JSON proxy exportado)**. `smoke:perf` falló
-  inicialmente SOLO en G2 (drag p95) por **entorno**: falla idéntica en `main`
-  (328 ms) con load 11+ del software del usuario; **verde en el retry con load
-  ~5.8** — 6/6 efectivos (nota: smoke:perf da falsos negativos con máquina
-  cargada; ver `progress/review_F148.md`).
-- Review APPROVED con 1 hallazgo corregido (clicks tras recarga) —
-  `progress/review_F148.md`.
+## Verificación
 
-## Siguiente etapa
+- (pendiente) pnpm test + typecheck.
+- (pendiente) visual con sesión auth — el dueño proveerá credenciales.
 
-Ejecutar las **sesiones reales** según `docs/proyectar-3d-usability-benchmark.md`
-(#314 abierto): reclutar 3–5 participantes del taller, facilitador con panel,
-exportar JSONs a `progress/benchmark/sessions/`, analizar con
-`summarizeUsabilitySessions` y recalibrar targets/reordenar #309–#313/#277–#297
-con evidencia. Paralelas candidatas: #338 (fix render loop) y P3D-6b.
+## Hallazgos previos de la auditoría (no parte de F150)
+
+- Bug routing /modules: deep link/F5 rebota a lista (causa:
+  useModulesScreenState.ts:343 corre antes de hidratar). Candidato F151.
+- Tablas de catálogo: sin affordance de expansión + acciones hover-only.
+- Estructuras: Desactivar/Eliminar visibles sin overflow "Más".
