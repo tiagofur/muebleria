@@ -68,8 +68,9 @@ describe("pilot furniture catalog", () => {
 
   it("models shelves as horizontal reusable components without embedding a rotation", () => {
     const shelf = pilotComponents["component-shelf"];
-    expect(shelf.boardLocal).toBe("horizontal");
-    expect(shelf.category).toBe("shelf");
-    expect("rotationDeg" in shelf).toBe(false);
+    expect(shelf).toBeDefined();
+    expect(shelf!.boardLocal).toBe("horizontal");
+    expect(shelf!.category).toBe("shelf");
+    expect("rotationDeg" in shelf!).toBe(false);
   });
 });
