@@ -13,6 +13,11 @@
       "types": "./src/__fixtures__/plantillaDemo.ts",
       "import": "./src/__fixtures__/plantillaDemo.ts",
       "default": "./src/__fixtures__/plantillaDemo.ts"
+    },
+    "./pilotFurnitureCatalog": {
+      "types": "./src/pilotFurnitureCatalog.ts",
+      "import": "./src/pilotFurnitureCatalog.ts",
+      "default": "./src/pilotFurnitureCatalog.ts"
     }
   },
   "files": [
