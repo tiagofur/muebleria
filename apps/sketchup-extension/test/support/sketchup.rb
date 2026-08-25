@@ -196,7 +196,7 @@ module SketchupStub
   end
 
   class << self
-    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model
+    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model, :toolbars
     attr_accessor :preferences
 
     def reset!
@@ -206,6 +206,7 @@ module SketchupStub
       @registered_extensions = []
       @active_model = ModelStub.new
       @preferences = Hash.new { |hash, key| hash[key] = {} }
+      @toolbars = []
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
     end
 
@@ -270,6 +271,37 @@ end
 module UI
   def self.menu(name)
     SketchupStub.menus[name]
+  end
+
+  class Command
+    attr_accessor :tooltip, :status_bar_text, :small_icon, :large_icon
+
+    def initialize(_title, &block)
+      @block = block
+    end
+
+    def call
+      @block&.call
+    end
+  end
+
+  class Toolbar
+    attr_reader :name, :items
+
+    def initialize(name)
+      @name = name
+      @items = []
+      SketchupStub.toolbars << self
+    end
+
+    def add_item(command)
+      @items << command
+      command
+    end
+
+    def restore
+      true
+    end
   end
 
   class HtmlDialog

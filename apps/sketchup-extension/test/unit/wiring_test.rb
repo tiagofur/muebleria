@@ -27,6 +27,20 @@ class WiringTest < Minitest::Test
     assert Granete::SketchUpExtension::Runtime.application.started?
   end
 
+  def test_toolbar_command_opens_the_dialog_with_packaged_icons
+    toolbars = SketchupStub.toolbars
+    assert_equal 1, toolbars.length
+    command = toolbars.first.items.first
+    refute_nil command
+
+    command.call
+
+    assert_equal 1, UI::HtmlDialog.instances.length, 'toolbar click must open the panel'
+    icon_paths = [command.small_icon, command.large_icon].compact
+    refute_empty icon_paths
+    icon_paths.each { |path| assert File.exist?(path), "icon missing: #{path}" }
+  end
+
   def test_support_entrypoint_is_idempotent_per_session
     load File.join(SOURCE_DIR, 'granete_for_sketchup', 'main.rb')
 

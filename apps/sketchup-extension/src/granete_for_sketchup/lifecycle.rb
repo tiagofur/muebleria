@@ -37,7 +37,25 @@ module Granete
 
       def register_menu
         ::UI.menu('Extensions').add_item('Abrir Granete') { @open_dialog.call }
+        register_toolbar
         @menu_registered = true
+      end
+
+      # A toolbar button keeps the panel one click away: the Extensions menu
+      # auto-nests items under a Granete submenu in SketchUp 2026, which users
+      # routinely miss.
+      def register_toolbar
+        command = ::UI::Command.new('Abrir Granete') { @open_dialog.call }
+        command.tooltip = 'Granete: biblioteca de muebles del taller'
+        command.status_bar_text = 'Abre la biblioteca de muebles del taller'
+        directory = __dir__.dup
+        directory.force_encoding('UTF-8')
+        icons = File.expand_path('resources/icons', directory)
+        command.small_icon = File.join(icons, 'granete_16.png')
+        command.large_icon = File.join(icons, 'granete_24.png')
+        toolbar = ::UI::Toolbar.new('Granete')
+        toolbar.add_item(command)
+        toolbar.restore
       end
     end
 
