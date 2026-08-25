@@ -120,50 +120,60 @@ describe('ModuleLibraryPanel', () => {
     expect(screen.getByTestId('module-library-result-count').textContent).toBe('3 de 3');
   });
 
-  it('navigates categories level by level (one chip row per level)', () => {
+  it('navigates categories level by level using cascading comboboxes', () => {
     render(<Harness />);
-    // Nivel 1: sólo raíces; sin chips de niveles profundos todavía.
-    expect(screen.getByTestId('module-library-chip-cat-cocina')).toBeTruthy();
-    expect(screen.queryByTestId('module-library-chip-cat-bajos')).toBeNull();
+    // Nivel 1: select de categorías principales presente; selects de niveles profundos aún no visibles.
+    expect(screen.getByTestId('module-library-select-l1')).toBeTruthy();
+    expect(screen.queryByTestId('module-library-select-l2')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    // Nivel 2 aparece con los hijos de Cocina; Baño sigue visible en nivel 1.
-    expect(screen.getByTestId('module-library-chip-cat-bajos')).toBeTruthy();
-    expect(screen.queryByTestId('module-library-chip-cat-cajones')).toBeNull();
+    fireEvent.change(screen.getByTestId('module-library-select-l1'), {
+      target: { value: 'cat-cocina' },
+    });
+    // Nivel 2 aparece con los hijos de Cocina.
+    expect(screen.getByTestId('module-library-select-l2')).toBeTruthy();
+    expect(screen.queryByTestId('module-library-select-l3')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
+    fireEvent.change(screen.getByTestId('module-library-select-l2'), {
+      target: { value: 'cat-bajos' },
+    });
     // Nivel 3 (Cajones) aparece — profundidad arbitraria. El filtro de nivel
     // incluye descendientes: m-bajo (en Cajones) ya es visible desde Bajos.
-    expect(screen.getByTestId('module-library-chip-cat-cajones')).toBeTruthy();
+    expect(screen.getByTestId('module-library-select-l3')).toBeTruthy();
     expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
     expect(screen.queryByTestId('module-library-card-m-van')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cajones'));
+    fireEvent.change(screen.getByTestId('module-library-select-l3'), {
+      target: { value: 'cat-cajones' },
+    });
     expect(screen.getByTestId('module-library-card-m-bajo')).toBeTruthy();
   });
 
-  it('chip Todas at level 1 clears the category path', () => {
+  it('selecting Todas las categorías at level 1 clears the category path', () => {
     render(<Harness />);
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
-    fireEvent.click(screen.getByTestId('module-library-level-0-all'));
-    expect(screen.queryByTestId('module-library-chip-cat-bajos')).toBeNull();
+    fireEvent.change(screen.getByTestId('module-library-select-l1'), {
+      target: { value: 'cat-cocina' },
+    });
+    fireEvent.change(screen.getByTestId('module-library-select-l2'), {
+      target: { value: 'cat-bajos' },
+    });
+    fireEvent.change(screen.getByTestId('module-library-select-l1'), {
+      target: { value: '' },
+    });
+    expect(screen.queryByTestId('module-library-select-l2')).toBeNull();
     expect(screen.getByTestId('module-library-card-m-van')).toBeTruthy();
-  });
-
-  it('re-selecting the active chip at a deeper level deselects it', () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
-    expect(screen.queryByTestId('module-library-chip-cat-cajones')).toBeNull();
   });
 
   it('searches inside the active category level by default', () => {
     render(<Harness />);
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cajones'));
+    fireEvent.change(screen.getByTestId('module-library-select-l1'), {
+      target: { value: 'cat-cocina' },
+    });
+    fireEvent.change(screen.getByTestId('module-library-select-l2'), {
+      target: { value: 'cat-bajos' },
+    });
+    fireEvent.change(screen.getByTestId('module-library-select-l3'), {
+      target: { value: 'cat-cajones' },
+    });
     fireEvent.change(screen.getByLabelText('Buscar muebles en la biblioteca'), {
       target: { value: 'bajo' },
     });
@@ -185,22 +195,28 @@ describe('ModuleLibraryPanel', () => {
     expect(screen.getAllByTestId('module-library-card-m-bajo')).toHaveLength(1);
     expect(screen.getByTestId('module-library-result-count').textContent).toBe('1 de 1');
     // Niveles de categoría no aplican a colecciones.
-    expect(screen.queryByTestId('module-library-chip-cat-cocina')).toBeNull();
+    expect(screen.queryByTestId('module-library-select-l1')).toBeNull();
   });
 
   it('persists scope, path and query when the library remounts during studio work', () => {
     const view = render(<Harness />);
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cocina'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-bajos'));
-    fireEvent.click(screen.getByTestId('module-library-chip-cat-cajones'));
+    fireEvent.change(screen.getByTestId('module-library-select-l1'), {
+      target: { value: 'cat-cocina' },
+    });
+    fireEvent.change(screen.getByTestId('module-library-select-l2'), {
+      target: { value: 'cat-bajos' },
+    });
+    fireEvent.change(screen.getByTestId('module-library-select-l3'), {
+      target: { value: 'cat-cajones' },
+    });
     fireEvent.change(screen.getByLabelText('Buscar muebles en la biblioteca'), {
       target: { value: 'bajo' },
     });
     view.unmount();
     render(<Harness />);
     expect(
-      screen.getByTestId('module-library-chip-cat-cajones').className,
-    ).toMatch(/filter--on/);
+      (screen.getByTestId('module-library-select-l3') as HTMLSelectElement).value,
+    ).toBe('cat-cajones');
     expect(
       (screen.getByLabelText('Buscar muebles en la biblioteca') as HTMLInputElement).value,
     ).toBe('bajo');
@@ -217,10 +233,10 @@ describe('ModuleLibraryPanel', () => {
     );
     render(<Harness />);
     // cat-inexistente se descarta; la ruta queda en Cocina (nivel 1 activo).
-    expect(screen.getByTestId('module-library-chip-cat-cocina').className).toMatch(
-      /filter--on/,
+    expect((screen.getByTestId('module-library-select-l1') as HTMLSelectElement).value).toBe(
+      'cat-cocina',
     );
-    expect(screen.queryByTestId('module-library-chip-cat-cajones')).toBeNull();
+    expect(screen.queryByTestId('module-library-select-l3')).toBeNull();
   });
 
   it('click en tarjeta notifica onInsert; drag start notifica dims y MIME', () => {

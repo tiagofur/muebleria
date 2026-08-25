@@ -10,16 +10,14 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Module, ModuleCategory } from '@muebles/domain';
 import {
+  childrenOf,
   defaultMeasurePresetId,
   filterModulesByCategory,
   resolveModuleMeasurePreset,
+  UNCATEGORIZED_FILTER,
 } from '@muebles/domain';
 import { Star } from 'lucide-react';
-import {
-  cascadeLevelLabel,
-  cascadeLevels,
-  sanitizeCategoryPath,
-} from '../../../common/cascadeLevels';
+import { sanitizeCategoryPath } from '../../../common/cascadeLevels';
 import { SearchInput } from '../../../common';
 import {
   encodeLibraryDrag,
@@ -282,33 +280,73 @@ export function ModuleLibraryPanel({
    * Ruta sanitizada: descarta ids que dejaron de existir o que ya no cuelgan
    * del nivel anterior (categorías renombradas/re-migradas del catálogo).
    */
-  const path = useMemo(
-    () => sanitizeCategoryPath(categories, navigation.path),
-    [navigation.path, categories],
+  const path = useMemo(() => {
+    if (navigation.path.length === 1 && navigation.path[0] === UNCATEGORIZED_FILTER) {
+      return navigation.path;
+    }
+    return sanitizeCategoryPath(categories, navigation.path);
+  }, [navigation.path, categories]);
+
+  const selectedL1Id = path[0] ?? '';
+  const selectedL2Id = path[1] ?? '';
+  const selectedL3Id = path[2] ?? '';
+
+  // Level 1 options (roots)
+  const l1Nodes = useMemo(() => childrenOf(categories, undefined), [categories]);
+
+  // Level 2 options (children of selected L1)
+  const l2Nodes = useMemo(
+    () =>
+      selectedL1Id && selectedL1Id !== UNCATEGORIZED_FILTER
+        ? childrenOf(categories, selectedL1Id)
+        : [],
+    [categories, selectedL1Id],
   );
 
-  /**
-   * Renglones de niveles de la cascada: uno por nivel seleccionado + el
-   * siguiente nivel disponible (sólo si tiene hijos). Cada nivel es su
-   * propio renglón de chips — nunca todo mezclado en un control.
-   */
-  const levelRows = useMemo(
-    () =>
-      scope.kind !== 'catalog' || categories.length === 0
-        ? []
-        : cascadeLevels(categories, path),
-    [scope, path, categories],
+  // Level 3 options (children of selected L2)
+  const l3Nodes = useMemo(
+    () => (selectedL2Id ? childrenOf(categories, selectedL2Id) : []),
+    [categories, selectedL2Id],
   );
+
+  // Count uncategorized
+  const uncategorizedCount = useMemo(
+    () => filterModulesByCategory(modules, UNCATEGORIZED_FILTER, categories).length,
+    [modules, categories],
+  );
+
+  // Active filter ID (L3 > L2 > L1 > null)
+  const effectiveFilterId = useMemo(() => {
+    if (selectedL1Id === UNCATEGORIZED_FILTER) return UNCATEGORIZED_FILTER;
+    if (selectedL3Id) return selectedL3Id;
+    if (selectedL2Id) return selectedL2Id;
+    if (selectedL1Id) return selectedL1Id;
+    return null;
+  }, [selectedL1Id, selectedL2Id, selectedL3Id]);
+
+  const handleL1Change = (val: string): void => {
+    setNavigation((current) => ({
+      ...current,
+      path: val ? [val] : [],
+    }));
+  };
+
+  const handleL2Change = (val: string): void => {
+    setNavigation((current) => ({
+      ...current,
+      path: val ? [selectedL1Id, val] : [selectedL1Id],
+    }));
+  };
+
+  const handleL3Change = (val: string): void => {
+    setNavigation((current) => ({
+      ...current,
+      path: val ? [selectedL1Id, selectedL2Id, val] : [selectedL1Id, selectedL2Id],
+    }));
+  };
 
   const selectScope = (next: LibraryScope): void => {
     setNavigation((current) => ({ ...current, scope: next }));
-  };
-
-  const selectLevel = (level: number, categoryId: string | null): void => {
-    setNavigation((current) => ({
-      ...current,
-      path: categoryId === null ? current.path.slice(0, level) : [...current.path.slice(0, level), categoryId],
-    }));
   };
 
   const scopedModules = useMemo(() => {
@@ -316,11 +354,10 @@ export function ModuleLibraryPanel({
       if (scope.collection === 'favorites') return favoriteModules;
       return recentModules;
     }
-    const deepest = path[path.length - 1];
-    return deepest
-      ? filterModulesByCategory(modules, deepest, categories)
+    return effectiveFilterId !== null
+      ? filterModulesByCategory(modules, effectiveFilterId, categories)
       : modules;
-  }, [scope, path, modules, categories, favoriteModules, recentModules]);
+  }, [scope, effectiveFilterId, modules, categories, favoriteModules, recentModules]);
 
   const filtered = useMemo(
     () => searchModules(scopedModules, search, categories),
@@ -397,6 +434,84 @@ export function ModuleLibraryPanel({
             </button>
           ))}
         </div>
+
+        {/* Cascading Category Comboboxes */}
+        {categories.length > 0 && scope.kind === 'catalog' ? (
+          <div className="module-library__filters-box">
+            {/* L1 Category Combobox */}
+            <div className="module-library__filter-row">
+              <select
+                className="select select--sm module-library__select"
+                value={selectedL1Id}
+                onChange={(e) => handleL1Change(e.target.value)}
+                aria-label="Categoría principal"
+                data-testid="module-library-select-l1"
+              >
+                <option value="">Todas las categorías ({modules.length})</option>
+                {l1Nodes.map((cat) => {
+                  const count = filterModulesByCategory(modules, cat.id, categories).length;
+                  return (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name} ({count})
+                    </option>
+                  );
+                })}
+                {uncategorizedCount > 0 ? (
+                  <option value={UNCATEGORIZED_FILTER}>
+                    Sin categoría ({uncategorizedCount})
+                  </option>
+                ) : null}
+              </select>
+            </div>
+
+            {/* L2 Subcategory Combobox (if L1 selected and has children) */}
+            {l2Nodes.length > 0 ? (
+              <div className="module-library__filter-row">
+                <select
+                  className="select select--sm module-library__select"
+                  value={selectedL2Id}
+                  onChange={(e) => handleL2Change(e.target.value)}
+                  aria-label="Subcategoría nivel 2"
+                  data-testid="module-library-select-l2"
+                >
+                  <option value="">Todas las subcategorías</option>
+                  {l2Nodes.map((sub) => {
+                    const count = filterModulesByCategory(modules, sub.id, categories).length;
+                    return (
+                      <option key={sub.id} value={sub.id}>
+                        {sub.name} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : null}
+
+            {/* L3 Subcategory Combobox (if L2 selected and has children) */}
+            {l3Nodes.length > 0 ? (
+              <div className="module-library__filter-row">
+                <select
+                  className="select select--sm module-library__select"
+                  value={selectedL3Id}
+                  onChange={(e) => handleL3Change(e.target.value)}
+                  aria-label="Subcategoría nivel 3"
+                  data-testid="module-library-select-l3"
+                >
+                  <option value="">Todas</option>
+                  {l3Nodes.map((sub3) => {
+                    const count = filterModulesByCategory(modules, sub3.id, categories).length;
+                    return (
+                      <option key={sub3.id} value={sub3.id}>
+                        {sub3.name} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <SearchInput
           value={search}
           onChange={(value) => {
@@ -406,45 +521,6 @@ export function ModuleLibraryPanel({
           placeholder={searchPlaceholder}
           aria-label={searchAriaLabel}
         />
-        {levelRows.map((row, index) => (
-          <div className="module-library__level" key={index}>
-            <span className="module-library__level-label">{cascadeLevelLabel(index)}</span>
-            <div
-              className="module-library__chips"
-              role="group"
-              aria-label={`Filtrar por ${cascadeLevelLabel(index).toLowerCase()}`}
-            >
-              {index === 0 ? (
-                <button
-                  type="button"
-                  className={chipClass(row.selectedId === null)}
-                  aria-pressed={row.selectedId === null}
-                  onClick={() => selectLevel(0, null)}
-                  data-testid="module-library-level-0-all"
-                >
-                  Todas
-                </button>
-              ) : null}
-              {row.options.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  className={chipClass(row.selectedId === category.id)}
-                  aria-pressed={row.selectedId === category.id}
-                  onClick={() =>
-                    selectLevel(
-                      index,
-                      row.selectedId === category.id ? null : category.id,
-                    )
-                  }
-                  data-testid={`module-library-chip-${category.id}`}
-                >
-                  {category.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
         <span
           className="module-library__count"
           data-testid="module-library-result-count"
