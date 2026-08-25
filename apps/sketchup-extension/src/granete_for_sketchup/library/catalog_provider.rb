@@ -104,22 +104,116 @@ module Granete
         end
       end
 
+      # Serves the workshop library from the Granete API when the session is
+      # configured, translating the shared contract shape (camelCase,
+      # contracts/pilotFurnitureCatalog.json) into the internal form consumed
+      # by the dialog and the builder. Falls back to the packaged offline
+      # catalog whenever the remote library is unavailable.
       class RemoteCatalogProvider < BaseCatalogProvider
-        def initialize(transport:, fallback_provider: nil)
+        attr_reader :last_source, :last_license_blocked
+
+        def initialize(transport:, auth_provider: nil, fallback_provider: nil, logger: nil)
           super()
           @transport = transport
+          @auth_provider = auth_provider
           @fallback_provider = fallback_provider || StaticCatalogProvider.new
+          @logger = logger
+          @last_source = 'local'
+          @last_license_blocked = false
+          @cached_contract = nil
         end
 
         def all_definitions
-          if @transport&.configured?
-            # When remote API is available, fetch definitions from backend endpoint
-          end
+          remote = fetch_contract
+          return translate_definitions(remote) if remote
+
           @fallback_provider.all_definitions
+        end
+
+        def all_presets
+          remote = fetch_contract
+          return remote.fetch('presets', []) if remote
+
+          []
         end
 
         def find_definition(definition_id)
           all_definitions.find { |d| d['furniture_definition_id'] == definition_id }
+        end
+
+        # Drops the cached contract so the next read re-fetches with the
+        # current session (used right after login/logout).
+        def reset
+          @cached_contract = nil
+          @last_source = 'local'
+          @last_license_blocked = false
+          nil
+        end
+
+        private
+
+        def fetch_contract
+          return nil unless @transport&.configured? && @auth_provider&.configured?
+          return @cached_contract if @cached_contract
+
+          @auth_provider.refresh_if_needed if @auth_provider.respond_to?(:refresh_if_needed)
+          response = @transport.request({ 'method' => 'GET', 'path' => '/furniture/definitions' },
+                                        authorization_header: @auth_provider.authorization_header)
+          case response['status']
+          when 200
+            body = response['body']
+            return nil unless body.is_a?(Hash) && body['definitions'].is_a?(Hash)
+
+            @last_source = 'remote'
+            @last_license_blocked = false
+            @cached_contract = body
+          when 403
+            @last_source = 'local'
+            @last_license_blocked = true
+            @logger&.info('catalog_license_blocked')
+            nil
+          else
+            @last_source = 'local'
+            @last_license_blocked = false
+            @logger&.info('catalog_remote_unavailable', status: response['status'])
+            nil
+          end
+        rescue Transport::RequestError, Auth::NotConfiguredError => e
+          @last_source = 'local'
+          @last_license_blocked = false
+          @logger&.info('catalog_remote_failed', error: e)
+          nil
+        end
+
+        # Single translation point from the shared contract (camelCase) to the
+        # internal dialog/builder shape (snake_case definition, camelCase
+        # parameters preserved as-is).
+        def translate_definitions(contract)
+          contract.fetch('definitions', {}).map do |_id, definition|
+            {
+              'furniture_definition_id' => definition['furnitureDefinitionId'],
+              'code' => definition['code'],
+              'name' => definition['name'],
+              'category' => definition['category'],
+              'version' => definition['version'],
+              'description' => definition['description'],
+              'parameters' => translate_parameters(definition['parameters'])
+            }
+          end
+        end
+
+        def translate_parameters(parameters)
+          (parameters || []).map do |param|
+            translated = {
+              'name' => param['name'],
+              'label' => param['label'],
+              'type' => param['type'],
+              'defaultValue' => param['defaultValue']
+            }
+            %w[min max step unit].each { |key| translated[key] = param[key] unless param[key].nil? }
+            translated['options'] = param['options'] if param['options']
+            translated
+          end
         end
       end
 

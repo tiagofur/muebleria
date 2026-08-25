@@ -3887,6 +3887,30 @@
       ],
       "created": "2026-08-24",
       "completedAt": "2026-08-24"
+    },
+    {
+      "id": "F166",
+      "phase": 0,
+      "name": "sketchup_session_remote_library_license",
+      "title": "Login de taller, biblioteca remota y licencia en la extensión de SketchUp",
+      "description": "La extensión inicia sesión contra el backend de Granete (token de extensión de 30 días, solo lectura, revocable al instante), carga la biblioteca paramétrica del taller desde GET /api/furniture/definitions (contrato compartido contracts/pilotFurnitureCatalog.json con paridad TS+Go+Ruby) y queda gated por licencia por usuario (license_plan/license_expires_at gestionados por admin). Fallback offline al catálogo local.",
+      "acceptance": [
+        "Login desde la pestaña Estado con email/contraseña/URL del servidor",
+        "Token de extensión 30d con claim client; middleware rechaza mutaciones no-GET",
+        "GET /api/furniture/definitions sirve el contrato piloto verbatim (4 definiciones, 10 presets) con ETag por revisionId",
+        "Sin licencia activa: 403 con explicación y la extensión sirve el catálogo local con bloqueador visible",
+        "Sesión persistida en ~/Library/Application Support/Granete (no en preferencias de SketchUp)",
+        "Test de paridad TS (golden) y Go (embed == contracts) del catálogo compartido"
+      ],
+      "status": "implemented",
+      "evidence": "In-host smoke SketchUp 2026.2/macOS contra backend local: 11/11 pasos OK (login pro, catálogo remoto, insert de definición remota, metadata, sesión persistente, bloqueo por licencia); rake verify 54+3 tests; go test ./... verde; pnpm domain tests 1092+1",
+      "tags": [
+        "sketchup",
+        "auth",
+        "catalog",
+        "licensing",
+        "backend"
+      ]
     }
   ]
 }

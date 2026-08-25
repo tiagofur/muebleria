@@ -21,7 +21,12 @@ class ApplicationTest < Minitest::Test
   def setup
     SketchupStub.reset!
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
-    @application = Granete::SketchUpExtension::Application.new(logger: logger)
+    # Hermetic session: never touch the developer's real session file.
+    session = Granete::SketchUpExtension::Auth::SessionProvider.new(
+      logger: logger,
+      store_path: File.join(Dir.mktmpdir('granete-app-test'), 'session.json')
+    )
+    @application = Granete::SketchUpExtension::Application.new(logger: logger, session_provider: session)
   end
 
   def test_start_is_idempotent_and_registers_one_menu_action
@@ -37,7 +42,8 @@ class ApplicationTest < Minitest::Test
     first_dialog = @application.open_dialog
 
     expected_callbacks = %w[
-      close_dialog delete_selected_furniture dialog_ready get_catalog insert_furniture update_furniture
+      close_dialog delete_selected_furniture dialog_ready get_catalog insert_furniture login logout
+      update_furniture
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)
@@ -60,7 +66,11 @@ class ApplicationTest < Minitest::Test
     application = Granete::SketchUpExtension::Application.new(
       transport: ReadyPort.new,
       auth_provider: ReadyPort.new,
-      logger: logger
+      logger: logger,
+      session_provider: Granete::SketchUpExtension::Auth::SessionProvider.new(
+        logger: logger,
+        store_path: File.join(Dir.mktmpdir('granete-app-test'), 'session.json')
+      )
     )
 
     dialog = application.open_dialog

@@ -12,7 +12,9 @@ module Granete
         identity
         logging
         auth/provider
+        auth/session_provider
         transport/adapter
+        transport/http_adapter
         metadata/store
         library/catalog_provider
         assets/asset_resolver

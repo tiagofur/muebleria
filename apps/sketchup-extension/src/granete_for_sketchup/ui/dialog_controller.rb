@@ -20,11 +20,48 @@ module Granete
         end
       end
 
+      # Login/logout callback handlers, extracted to keep DialogController
+      # within the class-length budget.
+      module SessionBridge
+        def handle_login(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
+          result = if @session
+                     @session.login(payload['email'].to_s, payload['password'].to_s, payload['serverUrl'].to_s)
+                   else
+                     { 'success' => false, 'error' => 'Sesión no disponible en esta compilación.' }
+                   end
+
+          if result['success']
+            @catalog_provider.reset if @catalog_provider.respond_to?(:reset)
+            update_status(dialog)
+            send_catalog(dialog)
+          end
+          execute_bridge(dialog, 'onLoginResult', result)
+          @logger.info('session_login', success: result['success'])
+        rescue StandardError => e
+          @logger.error('session_login_failed', error: e)
+          execute_bridge(dialog, 'onLoginResult', { 'success' => false, 'error' => e.message })
+        end
+
+        def handle_logout(dialog)
+          @session&.logout
+          @catalog_provider.reset if @catalog_provider.respond_to?(:reset)
+          update_status(dialog)
+          send_catalog(dialog)
+          execute_bridge(dialog, 'onLoginResult', { 'success' => true, 'loggedOut' => true })
+          @logger.info('session_logout')
+        rescue StandardError => e
+          @logger.error('session_logout_failed', error: e)
+        end
+      end
+
       class DialogController
+        include SessionBridge
+
         attr_reader :selection_observer
 
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
-                       metadata_store: nil, metadata_store_factory: nil)
+                       metadata_store: nil, metadata_store_factory: nil, session: nil)
           @logger = logger
           @status_provider = status_provider
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
@@ -33,6 +70,7 @@ module Granete
           @metadata_store_factory = metadata_store_factory || ->(model) { Metadata::Store.new(model) }
           @builder_model = nil
           @model_builder = nil
+          @session = session
           @dialog = nil
 
           @selection_observer = Observers::SelectionObserver.new(
@@ -105,6 +143,8 @@ module Granete
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
           dialog.add_action_callback('delete_selected_furniture') { handle_delete(dialog) }
           dialog.add_action_callback('close_dialog') { dialog.close }
+          dialog.add_action_callback('login') { |_c, p| handle_login(dialog, p) }
+          dialog.add_action_callback('logout') { handle_logout(dialog) }
         end
 
         def handle_dialog_ready(dialog)
@@ -123,7 +163,14 @@ module Granete
 
         def send_catalog(dialog)
           definitions = @catalog_provider.all_definitions
-          execute_bridge(dialog, 'setCatalog', definitions)
+          payload = {
+            'definitions' => definitions,
+            'presets' => @catalog_provider.respond_to?(:all_presets) ? @catalog_provider.all_presets : [],
+            'source' => @catalog_provider.respond_to?(:last_source) ? @catalog_provider.last_source : 'local',
+            'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&
+                                @catalog_provider.last_license_blocked
+          }
+          execute_bridge(dialog, 'setCatalog', payload)
         rescue StandardError => e
           @logger.error('dialog_catalog_failed', error: e)
         end

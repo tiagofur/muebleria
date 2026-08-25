@@ -197,6 +197,7 @@ module SketchupStub
 
   class << self
     attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model
+    attr_accessor :preferences
 
     def reset!
       @loaded_files = {}
@@ -204,7 +205,18 @@ module SketchupStub
       @observers = []
       @registered_extensions = []
       @active_model = ModelStub.new
+      @preferences = Hash.new { |hash, key| hash[key] = {} }
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
+    end
+
+    def read_default(namespace, key, default = nil)
+      prefs = @preferences[namespace]
+      prefs.key?(key) ? prefs[key] : default
+    end
+
+    def write_default(namespace, key, value)
+      @preferences[namespace][key] = value
+      value
     end
   end
 
@@ -244,6 +256,14 @@ module Sketchup
 
   def self.active_model
     SketchupStub.active_model
+  end
+
+  def self.read_default(namespace, key, default = nil)
+    SketchupStub.read_default(namespace, key, default)
+  end
+
+  def self.write_default(namespace, key, value)
+    SketchupStub.write_default(namespace, key, value)
   end
 end
 
@@ -311,5 +331,3 @@ module UI
     end
   end
 end
-
-# rubocop:enable all

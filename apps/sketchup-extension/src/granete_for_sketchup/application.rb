@@ -3,20 +3,27 @@
 module Granete
   module SketchUpExtension
     class Application
-      attr_reader :auth_provider, :transport
+      attr_reader :auth_provider, :transport, :session
 
       def initialize(
-        transport: Transport::NullAdapter.new,
-        auth_provider: Auth::NullProvider.new,
-        logger: SafeLogger.new
+        transport: nil,
+        auth_provider: nil,
+        logger: SafeLogger.new,
+        session_provider: nil,
+        catalog_provider: nil
       )
-        @transport = transport
-        @auth_provider = auth_provider
         @logger = logger
+        @session = session_provider || Auth::SessionProvider.new(logger: logger)
+        @transport = transport || @session.transport
+        @auth_provider = auth_provider || @session
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
-          metadata_store_factory: method(:metadata_store)
+          metadata_store_factory: method(:metadata_store),
+          catalog_provider: catalog_provider || Library::RemoteCatalogProvider.new(
+            transport: @transport, auth_provider: @auth_provider, logger: logger
+          ),
+          session: @session
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -53,7 +60,18 @@ module Granete
       private
 
       def connection_status
-        if transport.configured? && auth_provider.configured?
+        session_status = @session.respond_to?(:status) ? @session.status : nil
+        if session_status && session_status['state'] == 'logged_in'
+          license = session_status['license'] || {}
+          {
+            'state' => 'logged_in',
+            'heading' => 'Sesión iniciada',
+            'message' => "Biblioteca del taller conectada (#{license['plan'] || 'sin plan'}).",
+            'server_url' => session_status['server_url'],
+            'user' => session_status['user'],
+            'license' => license
+          }
+        elsif transport.configured? && auth_provider.configured?
           {
             'state' => 'configured',
             'heading' => 'Conexión configurada',

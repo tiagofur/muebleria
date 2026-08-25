@@ -112,7 +112,14 @@ Los componentes 3D (tiradores, bisagras, patas, guías de cajón) no utilizan ru
 
 La extensión implementa un contrato polimórfico para obtener el catálogo de muebles:
 
-- **`StaticCatalogProvider`:** Provee las definiciones locales de respaldo empacadas con la extensión.
-- **`RemoteCatalogProvider`:** Consulta el endpoint REST `GET /api/furniture/definitions` del servidor de Granete utilizando el puerto `Transport::Adapter`.
+- **`StaticCatalogProvider`:** Provee las definiciones locales de respaldo empacadas con la extensión (solo offline; deprecado como fuente).
+- **`RemoteCatalogProvider`:** Consulta el endpoint REST `GET /api/furniture/definitions` del servidor de Granete utilizando los puertos `Transport::Adapter` (HTTP) y `Auth::Provider` (sesión). La respuesta es el artefacto de intercambio compartido `contracts/pilotFurnitureCatalog.json` (fuente de verdad: `@muebles/domain/pilotFurnitureCatalog`), traducido a la forma interna en un único punto del provider. Expone además `all_presets` (modelos listos del taller) y las banderas `last_source`/`last_license_blocked` para la UI.
 
 El cambio entre proveedores locales y remotos es transparente para el diálogo HTML y el controlador de la extensión.
+
+### 6.1 Sesión y licencia (implementado)
+
+- El usuario inicia sesión desde la pestaña **Estado** con su cuenta del taller; el login viaja con `client: sketchup-extension`.
+- El backend emite un **JWT de extensión de 30 días** marcado con claim `client`; el middleware lo restringe a **solo lectura** (GET + refresh) y revalida usuario/rol/activo contra la DB en cada request, así que desactivar el usuario revoca la sesión al instante.
+- La sesión se persiste en `~/Library/Application Support/Granete/sketchup_extension_session.json` (fuera del RBZ; sin credenciales incrustadas). No se usan preferencias de SketchUp para estado estructurado: `read_default` evalúa strings con aspecto de contenedor y corrompe JSON.
+- `GET /api/furniture/definitions` exige **licencia activa por usuario** (`users.license_plan`/`license_expires_at`, gestionada por el admin con `PUT /api/admin/users/{id}/license`); sin licencia la extensión muestra el bloqueador con instrucciones y sirve el catálogo local de respaldo.

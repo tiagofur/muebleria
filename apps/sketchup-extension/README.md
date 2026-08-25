@@ -41,6 +41,27 @@ boundaries, a deterministic build, and package readback.
 The shell is entirely local. It does not load fonts, scripts, styles, or any
 other resource from the web.
 
+## Sesión del taller, biblioteca remota y licencia
+
+La pestaña **Estado** del dialog permite iniciar sesión con la cuenta del
+taller (email, contraseña y URL del servidor Granete). Al iniciar sesión:
+
+- El plugin solicita un **token de extensión de 30 días** (claim
+  `client: sketchetchup-extension`), restringido server-side a solo lectura.
+- Carga la **biblioteca del taller** desde `GET /api/furniture/definitions`
+  (catálogo piloto compartido con `@muebles/domain` vía
+  `contracts/pilotFurnitureCatalog.json`) y muestra sus modelos listos
+  (presets) en la Biblioteca.
+- La sesión se persiste en
+  `~/Library/Application Support/Granete/sketchup_extension_session.json`.
+  Ese archivo es una credencial bearer: no se comparte ni se incluye en
+  reportes. Desactivar el usuario en Granete la revoca de inmediato.
+- Si la licencia del usuario no está activa, la biblioteca remota se bloquea
+  con instrucciones (admin: `PUT /api/admin/users/{id}/license`) y el plugin
+  sirve el catálogo local de respaldo.
+
+Sin sesión o sin servidor, el plugin funciona offline con el catálogo local.
+
 ## Manual smoke
 
 Use a disposable model. A host row is only supported when **all** of the

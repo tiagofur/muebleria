@@ -490,6 +490,21 @@
               </select>
             </div>
             <p id="library-furniture-desc" class="subhead" style="margin-top: var(--space-2); margin-bottom: 0;"></p>
+            <div id="library-source-note" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);"></div>
+          </div>
+
+          <div class="card" id="library-license-blocker" style="display: none; border-left: 3px solid var(--status-pending, #b45309);">
+            <div class="card-title">🔒 Licencia inactiva</div>
+            <p class="subhead" style="margin-bottom: 0;">
+              Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.
+              Pedile al administrador del taller que asigne o renueve tu licencia desde Granete.
+              Mientras tanto podés usar el catálogo local de respaldo.
+            </p>
+          </div>
+
+          <div class="card" id="library-presets-card" style="display: none;">
+            <div class="card-title">Modelos del Taller</div>
+            <div id="library-presets-container" class="presets-row"></div>
           </div>
 
           <div class="card" id="library-params-card" style="display: none;">
@@ -575,6 +590,29 @@
             </p>
           </div>
 
+          <div class="card" id="login-card">
+            <div class="card-title">🔑 Iniciar Sesión en Granete</div>
+            <p class="subhead" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
+              Iniciá sesión con tu cuenta del taller para cargar su biblioteca de muebles.
+            </p>
+            <label class="login-label" for="login-email">Email</label>
+            <input id="login-email" class="login-field" type="text" autocomplete="off" placeholder="vos@taller.com">
+            <label class="login-label" for="login-password">Contraseña</label>
+            <input id="login-password" class="login-field" type="password" autocomplete="off">
+            <label class="login-label" for="login-server">Servidor Granete</label>
+            <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
+            <button id="btn-login" class="btn btn-primary">Iniciar sesión</button>
+          </div>
+
+          <div class="card" id="session-card" style="display: none;">
+            <div class="card-title">👤 Sesión del Taller</div>
+            <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
+            <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
+            <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
+            <div class="kv-row"><span class="k">Licencia</span><span class="v" id="session-license">--</span></div>
+            <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>
+          </div>
+
           <button id="btn-close" class="btn btn-secondary">Cerrar panel</button>
         </section>
       </main>
@@ -587,6 +625,9 @@
         "use strict";
 
         var catalog = [];
+        var catalogPresets = [];
+        var catalogSource = "local";
+        var licenseBlocked = false;
         var activeLibDef = null;
         var libParams = {};
 
@@ -608,6 +649,23 @@
         var libSummaryDims = document.getElementById("library-summary-dims");
         var libSummaryParts = document.getElementById("library-summary-parts");
         var btnInsert = document.getElementById("btn-insert");
+        var libSourceNote = document.getElementById("library-source-note");
+        var libLicenseBlocker = document.getElementById("library-license-blocker");
+        var libPresetsCard = document.getElementById("library-presets-card");
+        var libPresetsContainer = document.getElementById("library-presets-container");
+
+        // Session elements
+        var loginCard = document.getElementById("login-card");
+        var sessionCard = document.getElementById("session-card");
+        var loginEmail = document.getElementById("login-email");
+        var loginPassword = document.getElementById("login-password");
+        var loginServer = document.getElementById("login-server");
+        var btnLogin = document.getElementById("btn-login");
+        var btnLogout = document.getElementById("btn-logout");
+        var sessionUserName = document.getElementById("session-user-name");
+        var sessionUserEmail = document.getElementById("session-user-email");
+        var sessionServer = document.getElementById("session-server");
+        var sessionLicense = document.getElementById("session-license");
 
         // Inspector elements
         var inspectorEmpty = document.getElementById("inspector-empty-state");
@@ -644,10 +702,60 @@
             status = status || {};
             if (status.heading) connectionHeading.textContent = String(status.heading);
             if (status.message) connectionDetail.textContent = String(status.message);
+
+            var state = status.state || "disabled";
+            if (state === "logged_in") {
+              connectionPill.textContent = "Conectado";
+              connectionPill.className = "status-badge valid";
+            } else if (state === "configured") {
+              connectionPill.textContent = "Configurado";
+              connectionPill.className = "status-badge pending";
+            } else {
+              connectionPill.textContent = "Sin sesión";
+              connectionPill.className = "status-badge invalid";
+            }
+
+            var loggedIn = state === "logged_in";
+            loginCard.style.display = loggedIn ? "none" : "block";
+            sessionCard.style.display = loggedIn ? "block" : "none";
+            if (!loginServer.value && status.server_url) loginServer.value = String(status.server_url);
+
+            if (loggedIn) {
+              var user = status.user || {};
+              sessionUserName.textContent = user.name || "--";
+              sessionUserEmail.textContent = user.email || "--";
+              sessionServer.textContent = status.server_url || "--";
+              renderSessionLicense(status.license);
+            }
           },
 
-          setCatalog: function (definitions) {
-            catalog = definitions || [];
+          onLoginResult: function (result) {
+            btnLogin.disabled = false;
+            btnLogin.textContent = "Iniciar sesión";
+            if (result && result.success) {
+              if (result.loggedOut) {
+                showToast("success", "Sesión cerrada.");
+              } else {
+                showToast("success", "✓ Sesión iniciada. Biblioteca del taller cargada.");
+              }
+            } else {
+              showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar sesión"));
+            }
+          },
+
+          setCatalog: function (payload) {
+            if (Object.prototype.toString.call(payload) === "[object Array]") {
+              catalog = payload || [];
+              catalogPresets = [];
+              catalogSource = "local";
+              licenseBlocked = false;
+            } else {
+              payload = payload || {};
+              catalog = payload.definitions || [];
+              catalogPresets = payload.presets || [];
+              catalogSource = payload.source || "local";
+              licenseBlocked = !!payload.licenseBlocked;
+            }
             libSelect.innerHTML = "";
             if (catalog.length === 0) {
               libSelect.innerHTML = "<option value=''>Sin muebles en catálogo</option>";
@@ -660,6 +768,11 @@
               opt.textContent = def.name;
               libSelect.appendChild(opt);
             });
+
+            libLicenseBlocker.style.display = licenseBlocked ? "block" : "none";
+            libSourceNote.textContent = catalogSource === "remote"
+              ? "📚 Biblioteca del taller (servidor Granete)"
+              : "💾 Catálogo local de respaldo (sin conexión)";
 
             selectLibraryDefinition(catalog[0].furniture_definition_id);
           },
@@ -756,10 +869,52 @@
             libParams[name] = val;
             updateLibrarySummary();
           });
+          renderPresetChips();
 
           libParamsCard.style.display = "block";
           btnInsert.style.display = "flex";
           updateLibrarySummary();
+        }
+
+        function renderPresetChips() {
+          libPresetsContainer.innerHTML = "";
+          var mine = catalogPresets.filter(function (preset) {
+            return preset.furnitureDefinitionId === activeLibDef.furniture_definition_id;
+          });
+          libPresetsCard.style.display = mine.length > 0 ? "block" : "none";
+          mine.forEach(function (preset) {
+            var chip = document.createElement("button");
+            chip.className = "preset-chip";
+            chip.textContent = preset.name;
+            chip.addEventListener("click", function () {
+              libParams = Object.assign({}, getDefaultParams(activeLibDef), preset.parameters || {});
+              renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
+                libParams[name] = val;
+                updateLibrarySummary();
+              });
+              libPresetsContainer.querySelectorAll(".preset-chip").forEach(function (c) { c.classList.remove("active"); });
+              chip.classList.add("active");
+              updateLibrarySummary();
+            });
+            libPresetsContainer.appendChild(chip);
+          });
+        }
+
+        function renderSessionLicense(license) {
+          license = license || {};
+          var plan = license.plan || "none";
+          var planLabel = plan === "pro" ? "Pro" : (plan === "trial" ? "Prueba" : "Sin licencia");
+          var status = license.status || "none";
+          if (status === "active") {
+            sessionLicense.textContent = planLabel + (license.expires_at ? " · vence " + String(license.expires_at).slice(0, 10) : "");
+            sessionLicense.style.color = "";
+          } else if (status === "expired") {
+            sessionLicense.textContent = planLabel + " · vencida";
+            sessionLicense.style.color = "#b91c1c";
+          } else {
+            sessionLicense.textContent = "Sin licencia activa";
+            sessionLicense.style.color = "#b45309";
+          }
         }
 
         function validateInteractiveClient(def, currentValues) {
@@ -976,6 +1131,32 @@
             window.sketchup.delete_selected_furniture();
           } else {
             window.GraneteDialog.onSelectionChange(null);
+          }
+        });
+
+        btnLogin.addEventListener("click", function () {
+          var email = loginEmail.value.trim();
+          var password = loginPassword.value;
+          var server = loginServer.value.trim();
+          if (!email || !password || !server) {
+            showToast("error", "Completá email, contraseña y servidor.");
+            return;
+          }
+          btnLogin.disabled = true;
+          btnLogin.textContent = "⏳ Conectando…";
+          loginPassword.value = "";
+          if (window.sketchup && window.sketchup.login) {
+            window.sketchup.login(JSON.stringify({ email: email, password: password, serverUrl: server }));
+          } else {
+            btnLogin.disabled = false;
+            btnLogin.textContent = "Iniciar sesión";
+            showToast("error", "Login no disponible fuera de SketchUp.");
+          }
+        });
+
+        btnLogout.addEventListener("click", function () {
+          if (window.sketchup && window.sketchup.logout) {
+            window.sketchup.logout();
           }
         });
 
