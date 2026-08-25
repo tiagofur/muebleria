@@ -42,9 +42,9 @@ func roleCanApproveSurveyMeasures(role domain.UserRole) bool {
 }
 
 type siteSurveyViewResponse struct {
-	Survey         *domain.SiteSurvey        `json:"survey"`
+	Survey         *domain.SiteSurvey         `json:"survey"`
 	Blockers       []domain.SurveyGateBlocker `json:"blockers"`
-	EventsAppended int                       `json:"events_appended,omitempty"`
+	EventsAppended int                        `json:"events_appended,omitempty"`
 }
 
 func surveyPayload(v interface{}) json.RawMessage {

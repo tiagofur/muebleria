@@ -70,11 +70,11 @@ func TestInstallation_GetReturnsDerivedCloseoutView(t *testing.T) {
 		t.Fatalf("GET installation = %d, body %s", rr.Code, rr.Body.String())
 	}
 	var view struct {
-		Installation   *domain.InstallationJob    `json:"installation"`
-		JobStatus      string                     `json:"job_status"`
-		Units          map[string]interface{}     `json:"units"`
-		CloseoutChecks []domain.CloseoutCheck     `json:"closeout_checks"`
-		CloseoutReady  bool                       `json:"closeout_ready"`
+		Installation   *domain.InstallationJob `json:"installation"`
+		JobStatus      string                  `json:"job_status"`
+		Units          map[string]interface{}  `json:"units"`
+		CloseoutChecks []domain.CloseoutCheck  `json:"closeout_checks"`
+		CloseoutReady  bool                    `json:"closeout_ready"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &view); err != nil {
 		t.Fatalf("decode view: %v", err)

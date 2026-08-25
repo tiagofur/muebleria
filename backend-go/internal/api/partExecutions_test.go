@@ -1,13 +1,13 @@
 package api
 
 import (
-	"time"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -434,7 +434,7 @@ func TestPartExec_QCGateBlocksPackagingWithoutChecklist(t *testing.T) {
 		t.Fatalf("QC gate must block packaging with 409, got %d body=%s", rr.Code, rr.Body.String())
 	}
 	var body struct {
-		Error  string                 `json:"error"`
+		Error  string                  `json:"error"`
 		QCGate domain.UnitQcGateResult `json:"qc_gate"`
 	}
 	_ = json.Unmarshal(rr.Body.Bytes(), &body)

@@ -41,7 +41,6 @@ func (m *photosTestStore) ListShowcasePhotos(_ context.Context, onlyShowcase boo
 	}, nil
 }
 
-
 func (m *photosTestStore) GetProjectPhotoByID(_ context.Context, photoID string) (*domain.ProjectPhoto, error) {
 	if m.singlePhoto != nil && m.singlePhoto.ID == photoID {
 		return m.singlePhoto, nil
@@ -267,4 +266,3 @@ func TestHandleShowcasePhotos(t *testing.T) {
 		t.Errorf("unexpected items: %+v", items)
 	}
 }
-

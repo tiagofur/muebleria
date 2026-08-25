@@ -220,8 +220,8 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 // LicenseDTO is the derived licensing state surfaced to clients (login,
 // refresh, and the SketchUp extension session card).
 type LicenseDTO struct {
-	Plan      string             `json:"plan"`
-	ExpiresAt *time.Time         `json:"expires_at,omitempty"`
+	Plan      string               `json:"plan"`
+	ExpiresAt *time.Time           `json:"expires_at,omitempty"`
 	Status    domain.LicenseStatus `json:"status"`
 }
 

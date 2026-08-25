@@ -41,12 +41,12 @@ func installationByUserID(claims *auth.Claims) *string {
 }
 
 type installationViewResponse struct {
-	Installation   *domain.InstallationJob     `json:"installation"`
+	Installation   *domain.InstallationJob      `json:"installation"`
 	JobStatus      domain.InstallationJobStatus `json:"job_status"`
-	Units          map[string]interface{}      `json:"units"`
-	CloseoutChecks []domain.CloseoutCheck      `json:"closeout_checks"`
-	CloseoutReady  bool                        `json:"closeout_ready"`
-	EventsAppended int                         `json:"events_appended,omitempty"`
+	Units          map[string]interface{}       `json:"units"`
+	CloseoutChecks []domain.CloseoutCheck       `json:"closeout_checks"`
+	CloseoutReady  bool                         `json:"closeout_ready"`
+	EventsAppended int                          `json:"events_appended,omitempty"`
 }
 
 func projectHasInstallationCompleted(project *domain.Project) bool {

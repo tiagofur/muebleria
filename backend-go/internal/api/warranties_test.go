@@ -14,8 +14,8 @@ import (
 
 type warrantiesTestStore struct {
 	stubStore
-	tickets      map[string]*domain.WarrantyTicket
-	photos       map[string][]domain.WarrantyTicketPhoto
+	tickets       map[string]*domain.WarrantyTicket
+	photos        map[string][]domain.WarrantyTicketPhoto
 	createdTicket *domain.WarrantyTicket
 	updatedTicket *domain.WarrantyTicket
 }
@@ -109,9 +109,9 @@ func TestHandleWarrantyTickets_CreateAndList(t *testing.T) {
 				"grain":             1,
 				"L1":                1,
 
-				"L2":                1,
-				"W1":                1,
-				"W2":                1,
+				"L2": 1,
+				"W1": 1,
+				"W2": 1,
 			},
 		},
 	})

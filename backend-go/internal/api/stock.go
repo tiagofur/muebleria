@@ -52,9 +52,9 @@ func (s *Server) HandleStockList(w http.ResponseWriter, r *http.Request) {
 }
 
 type stockUpsertMinRequest struct {
-	Kind      string  `json:"kind"`
-	MaterialID string `json:"material_id"`
-	MinStock  float64 `json:"min_stock"`
+	Kind       string  `json:"kind"`
+	MaterialID string  `json:"material_id"`
+	MinStock   float64 `json:"min_stock"`
 }
 
 // HandleStockUpsertMin handles PUT /api/stock — sets the minimum-stock

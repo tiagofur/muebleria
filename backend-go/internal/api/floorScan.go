@@ -29,17 +29,17 @@ type floorScanRequest struct {
 }
 
 type floorScanResponse struct {
-	ProjectID       string                     `json:"project_id"`
-	ProjectName     string                     `json:"project_name"`
-	ItemID          string                     `json:"item_id"`
-	FactoryCode     string                     `json:"factory_code"`
-	ModuleCode      string                     `json:"module_code"`
-	ModuleName      string                     `json:"module_name"`
-	StatusBefore    string                     `json:"status_before"`
-	StatusAfter     string                     `json:"status_after"`
-	NextStatus      string                     `json:"next_status"`
-	LoadingProgress domain.LoadingProgress      `json:"loading_progress"`
-	Event           *domain.FloorStatusEvent   `json:"event,omitempty"`
+	ProjectID       string                   `json:"project_id"`
+	ProjectName     string                   `json:"project_name"`
+	ItemID          string                   `json:"item_id"`
+	FactoryCode     string                   `json:"factory_code"`
+	ModuleCode      string                   `json:"module_code"`
+	ModuleName      string                   `json:"module_name"`
+	StatusBefore    string                   `json:"status_before"`
+	StatusAfter     string                   `json:"status_after"`
+	NextStatus      string                   `json:"next_status"`
+	LoadingProgress domain.LoadingProgress   `json:"loading_progress"`
+	Event           *domain.FloorStatusEvent `json:"event,omitempty"`
 }
 
 // factoryCodeFor mirrors the TS row builder: first line of a module code
@@ -228,7 +228,8 @@ func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, 
 // recordFloorEvent appends the transition to the audit log with the
 // authenticated actor. Failures are logged but never block the scan —
 // the status write already succeeded.
-func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {	claims := claimsFromRequest(r)
+func (s *Server) recordFloorEvent(r *http.Request, projectID, itemID, from, to string, source domain.FloorEventSource) *domain.FloorStatusEvent {
+	claims := claimsFromRequest(r)
 	ev := domain.FloorStatusEvent{
 		ID:        newFloorEventID(),
 		ProjectID: projectID,

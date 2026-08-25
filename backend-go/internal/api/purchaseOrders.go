@@ -18,9 +18,9 @@ import (
 )
 
 type poItemRequest struct {
-	Kind       string   `json:"kind"`
-	MaterialID string   `json:"material_id"`
-	Quantity   float64  `json:"quantity"`
+	Kind       string  `json:"kind"`
+	MaterialID string  `json:"material_id"`
+	Quantity   float64 `json:"quantity"`
 	// OC-053: unit cost snapshot (job costing) frozen with the line.
 	UnitCost *float64 `json:"unit_cost,omitempty"`
 	// OC-052: the obra this line was bought for (real-need allocation).

@@ -260,8 +260,8 @@ func qualityFixtures() (*stubStore, *Server) {
 		ProductionRevision: "rel-1", Status: domain.ModuleUnitStatusModuleQC,
 	}
 	store := &stubStore{
-		partInstances: []domain.PartInstance{part},
-		moduleUnits:   []domain.ModuleUnitExecution{unit},
+		partInstances:    []domain.PartInstance{part},
+		moduleUnits:      []domain.ModuleUnitExecution{unit},
 		releasedRevision: "rel-1",
 	}
 	return store, &Server{Store: store}

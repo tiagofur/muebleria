@@ -251,8 +251,6 @@ func TestGetProjectLoadingStatus(t *testing.T) {
 	}
 }
 
-
-
 // --- F092: audit trail of floor transitions ---
 
 func TestFloorScan_AdvanceWritesAuditEvent(t *testing.T) {

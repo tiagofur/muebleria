@@ -44,13 +44,13 @@ func roleCanOverrideRelease(role domain.UserRole) bool {
 }
 
 type materialsViewResponse struct {
-	Planning       *domain.MaterialPlanning        `json:"planning"`
-	Availability   []domain.MaterialAvailability   `json:"availability"`
-	Coverage       []domain.ProjectLineCoverage    `json:"coverage"`
-	ReleaseChecks  []domain.MaterialsReleaseCheck  `json:"release_checks"`
-	ReleaseReady   bool                            `json:"release_ready"`
-	Released       bool                            `json:"released"`
-	EventsAppended int                             `json:"events_appended,omitempty"`
+	Planning       *domain.MaterialPlanning       `json:"planning"`
+	Availability   []domain.MaterialAvailability  `json:"availability"`
+	Coverage       []domain.ProjectLineCoverage   `json:"coverage"`
+	ReleaseChecks  []domain.MaterialsReleaseCheck `json:"release_checks"`
+	ReleaseReady   bool                           `json:"release_ready"`
+	Released       bool                           `json:"released"`
+	EventsAppended int                            `json:"events_appended,omitempty"`
 }
 
 func buildMaterialsView(snap *domain.MaterialPlanningSnapshot, planning *domain.MaterialPlanning) materialsViewResponse {
@@ -182,8 +182,8 @@ func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		planning = &domain.MaterialPlanning{
-			ID:          planning.ID,
-			ProjectID:   planning.ProjectID,
+			ID:        planning.ID,
+			ProjectID: planning.ProjectID,
 			Requirements: &domain.MaterialRequirementsSnapshot{
 				ReleaseID:      release.ID,
 				BomFingerprint: release.BOMFingerprint,
@@ -301,12 +301,12 @@ func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) 
 	}
 	view.EventsAppended = len(mutation.Events)
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"planning":       view.Planning,
-		"coverage":       view.Coverage,
-		"release_checks": view.ReleaseChecks,
-		"release_ready":  view.ReleaseReady,
-		"reserved_lines": reservedLines,
-		"short_lines":    shortLines,
+		"planning":        view.Planning,
+		"coverage":        view.Coverage,
+		"release_checks":  view.ReleaseChecks,
+		"release_ready":   view.ReleaseReady,
+		"reserved_lines":  reservedLines,
+		"short_lines":     shortLines,
 		"events_appended": len(mutation.Events),
 	})
 }
@@ -487,9 +487,9 @@ func (s *Server) HandleMaterialsRelease(w http.ResponseWriter, r *http.Request) 
 		view = buildMaterialsViewWithPlanning(snap, next)
 		view.Released = true
 		return &domain.MaterialPlanningMutation{
-			Planning: next,
+			Planning:         next,
 			MaterialsRelease: &domain.MaterialsReleaseStamp{ReleasedBy: byUserID, ReleasedAt: now},
-			Events:   events,
+			Events:           events,
 		}, nil
 	})
 	if err != nil {

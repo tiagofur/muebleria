@@ -42,7 +42,6 @@ func (s *Server) HandleProjectInternalMessages(w http.ResponseWriter, r *http.Re
 			senderName = claims.Email
 		}
 
-
 		var req struct {
 			SenderName  string                            `json:"sender_name,omitempty"`
 			MessageType domain.ProjectInternalMessageType `json:"message_type"`
@@ -193,7 +192,6 @@ func (s *Server) HandleProjectTechnicalWorkflow(w http.ResponseWriter, r *http.R
 		if senderName == "" {
 			senderName = "Sistema"
 		}
-
 
 		autoMsg := domain.ProjectInternalMessage{
 			ProjectID:   projectID,

@@ -444,8 +444,8 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 		}
 		if qcGateBlocked != nil {
 			respondWithJSON(w, http.StatusConflict, map[string]interface{}{
-				"error":    "el gate de QC bloquea el empaquetado de la unidad",
-				"qc_gate":  *qcGateBlocked,
+				"error":   "el gate de QC bloquea el empaquetado de la unidad",
+				"qc_gate": *qcGateBlocked,
 			})
 			return
 		}

@@ -41,17 +41,17 @@ func roleCanManageQuality(role domain.UserRole) bool {
 }
 
 type qualityUnitGateView struct {
-	UnitID    string                 `json:"unit_id"`
-	Status    domain.ModuleUnitStatus `json:"status"`
-	Gate      domain.UnitQcGateResult `json:"gate"`
+	UnitID string                  `json:"unit_id"`
+	Status domain.ModuleUnitStatus `json:"status"`
+	Gate   domain.UnitQcGateResult `json:"gate"`
 }
 
 type qualityViewResponse struct {
-	Quality        *domain.QualityJob `json:"quality"`
-	OpenIssues     int                `json:"open_issues"`
-	ReworkCost     map[string]float64 `json:"rework_cost"`
+	Quality        *domain.QualityJob    `json:"quality"`
+	OpenIssues     int                   `json:"open_issues"`
+	ReworkCost     map[string]float64    `json:"rework_cost"`
 	UnitGates      []qualityUnitGateView `json:"unit_gates"`
-	EventsAppended int                `json:"events_appended,omitempty"`
+	EventsAppended int                   `json:"events_appended,omitempty"`
 }
 
 func buildQualityView(job *domain.QualityJob, units []domain.ModuleUnitExecution) qualityViewResponse {
@@ -92,12 +92,12 @@ func ensureQualityJob(job *domain.QualityJob, projectID string, now time.Time) *
 		return job
 	}
 	return &domain.QualityJob{
-		ID:        domain.NewQualityEntityID("qjob"),
-		ProjectID: projectID,
-		Issues:    []domain.QualityIssue{},
+		ID:            domain.NewQualityEntityID("qjob"),
+		ProjectID:     projectID,
+		Issues:        []domain.QualityIssue{},
 		ReworkActions: []domain.ReworkAction{},
-		UnitQC:    []domain.UnitQcRecord{},
-		CreatedAt: now,
+		UnitQC:        []domain.UnitQcRecord{},
+		CreatedAt:     now,
 	}
 }
 
@@ -436,7 +436,7 @@ func (s *Server) HandleQualityRework(w http.ResponseWriter, r *http.Request) {
 				Payload: qualityPayload(map[string]interface{}{
 					"issue_id": issue.ID, "action": body.Action,
 					"part_instance_id": body.PartInstanceID,
-					"material_cost": materialCost, "labor_minutes": laborMinutes,
+					"material_cost":    materialCost, "labor_minutes": laborMinutes,
 				}),
 			})
 		}
