@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -11,13 +12,15 @@ import (
 
 func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, active, license_plan, license_expires_at,
+		       created_at, updated_at
 		FROM users
 		WHERE email = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, email)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active,
+		&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("user not found")
@@ -35,13 +38,15 @@ func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*doma
 // (cmd/admin) to locate a user — including inactive ones — for password rotation.
 func (s *PostgresStore) GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, active, license_plan, license_expires_at,
+		       created_at, updated_at
 		FROM users
 		WHERE email = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, email)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active,
+		&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("user not found")
@@ -67,13 +72,15 @@ func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id string, passw
 
 func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, active, created_at, updated_at
+		SELECT id, email, password_hash, name, role, active, license_plan, license_expires_at,
+		       created_at, updated_at
 		FROM users
 		WHERE id = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active,
+		&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +102,7 @@ func (s *PostgresStore) CreateUser(ctx context.Context, u *domain.User) error {
 
 func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
 	query := `
-		SELECT id, email, name, role, active, created_at, updated_at
+		SELECT id, email, name, role, active, license_plan, license_expires_at, created_at, updated_at
 		FROM users
 		ORDER BY active ASC, created_at DESC;
 	`
@@ -108,7 +115,8 @@ func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
 	var list []domain.User
 	for rows.Next() {
 		var u domain.User
-		err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+		err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Active,
+			&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -151,6 +159,21 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, u *domain.User) error {
 	result, err := s.Pool.Exec(ctx,
 		`UPDATE users SET name = $1, role = $2, active = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4`,
 		u.Name, u.Role, u.Active, u.ID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
+// SetUserLicense sets the per-user licensing tier and optional expiry.
+// A NULL expiry means the license does not expire (managed manually).
+func (s *PostgresStore) SetUserLicense(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error {
+	result, err := s.Pool.Exec(ctx,
+		`UPDATE users SET license_plan = $1, license_expires_at = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+		plan, expiresAt, id)
 	if err != nil {
 		return err
 	}

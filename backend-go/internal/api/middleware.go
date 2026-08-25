@@ -99,6 +99,16 @@ func AuthMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.
 				claims.Email = u.Email
 			}
 
+			// Extension tokens are read-only: a long-lived SketchUp session token
+			// must not be able to mutate workshop data even if leaked. Refresh
+			// stays open so the extension can renew before expiry.
+			if claims.Client == auth.ExtensionClient &&
+				r.Method != http.MethodGet &&
+				!(r.Method == http.MethodPost && r.URL.Path == "/api/auth/refresh") {
+				respondWithError(w, http.StatusForbidden, "el token de la extensión es de solo lectura")
+				return
+			}
+
 			ctx := context.WithValue(r.Context(), UserContextKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

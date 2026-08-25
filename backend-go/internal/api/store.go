@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -24,6 +25,8 @@ type Store interface {
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	ApproveUser(ctx context.Context, id string) error
 	UpdateUserRole(ctx context.Context, id string, role domain.UserRole) error
+	// SetUserLicense assigns the per-user licensing tier and optional expiry.
+	SetUserLicense(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error
 	RejectUser(ctx context.Context, id string) error
 
 	// Customers

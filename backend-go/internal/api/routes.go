@@ -23,6 +23,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Refresh: requires a still-valid token; re-issues JWT with current DB role.
 	mux.Handle("POST /api/auth/refresh", authMW(http.HandlerFunc(server.HandleRefresh)))
 
+	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
+	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).
+	mux.Handle("GET /api/furniture/definitions", authMW(http.HandlerFunc(server.HandleFurnitureDefinitions)))
+
 	// Clientes
 	mux.Handle("GET /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))
 	mux.Handle("POST /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))
@@ -277,6 +281,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
 	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
+	mux.Handle("PUT /api/admin/users/{id}/license", adminMW(http.HandlerFunc(server.HandleAdminUserLicense)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 	// Sector assignments of any user — admin only (F094: was plain auth,
 	// letting any authenticated user rewrite anyone's station access).

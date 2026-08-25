@@ -67,6 +67,7 @@ type stubStore struct {
 	// Auth test hooks
 	getUserByEmail      *domain.User
 	getUserByEmailErr   error
+	setLicense          func(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error
 	createUserErr       error
 	listUsers           []domain.User
 	createMaterialOK    bool
@@ -231,6 +232,13 @@ func (s *stubStore) ApproveUser(context.Context, string) error {
 }
 func (s *stubStore) UpdateUserRole(context.Context, string, domain.UserRole) error {
 	s.stubNotUsed("UpdateUserRole")
+	return nil
+}
+func (s *stubStore) SetUserLicense(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error {
+	if s.setLicense != nil {
+		return s.setLicense(ctx, id, plan, expiresAt)
+	}
+	s.stubNotUsed("SetUserLicense")
 	return nil
 }
 func (s *stubStore) RejectUser(context.Context, string) error {

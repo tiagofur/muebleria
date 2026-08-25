@@ -21,6 +21,16 @@ const MinPasswordLen = 8
 // (issue #16). Role/active are also re-checked against the DB on every request.
 const AccessTokenTTL = 15 * time.Minute
 
+// ExtensionClient identifies tokens requested by the SketchUp extension login
+// flow. Extension tokens live longer (workshop sessions span days) and are
+// restricted to read-only requests by AuthMiddleware.
+const ExtensionClient = "sketchup-extension"
+
+// ExtensionTokenTTL is the lifetime of tokens issued for the SketchUp
+// extension. Revocation does not wait for expiry: AuthMiddleware re-checks
+// the user (active/role/license) against the DB on every request.
+const ExtensionTokenTTL = 30 * 24 * time.Hour
+
 // DummyHash is a valid bcrypt hash used only to equalize login timing when the
 // user does not exist (issue #19 account enumeration).
 // Generated once for the fixed string "dummy-password-for-timing".
@@ -39,6 +49,7 @@ type Claims struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
 	Role   string `json:"role"`
+	Client string `json:"client,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -78,14 +89,26 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 func GenerateToken(userID string, email string, role string, secret string) (string, error) {
+	return generateToken(userID, email, role, "", AccessTokenTTL, secret)
+}
+
+// GenerateExtensionToken issues a long-lived token carrying the extension
+// client claim. AuthMiddleware restricts these tokens to GET requests (plus
+// /api/auth/refresh) so a leaked extension token cannot mutate workshop data.
+func GenerateExtensionToken(userID string, email string, role string, secret string) (string, error) {
+	return generateToken(userID, email, role, ExtensionClient, ExtensionTokenTTL, secret)
+}
+
+func generateToken(userID string, email string, role string, client string, ttl time.Duration, secret string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		UserID: userID,
 		Email:  email,
 		Role:   role,
+		Client: client,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
-			ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},

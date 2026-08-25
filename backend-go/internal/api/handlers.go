@@ -165,6 +165,10 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// Client marks the requesting product. "sketchup-extension" receives a
+	// long-lived read-only token (auth.ExtensionClient); empty means the web
+	// app and gets the standard short-lived access token.
+	Client string `json:"client"`
 }
 
 // PublicUserDTO is the safe public representation of a user, guaranteeing
@@ -205,9 +209,29 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 	return out
 }
 
+// LicenseDTO is the derived licensing state surfaced to clients (login,
+// refresh, and the SketchUp extension session card).
+type LicenseDTO struct {
+	Plan      string             `json:"plan"`
+	ExpiresAt *time.Time         `json:"expires_at,omitempty"`
+	Status    domain.LicenseStatus `json:"status"`
+}
+
+func ToLicenseDTO(u *domain.User) LicenseDTO {
+	if u == nil {
+		return LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone}
+	}
+	return LicenseDTO{
+		Plan:      string(u.LicensePlan),
+		ExpiresAt: u.LicenseExpiresAt,
+		Status:    domain.LicenseStatusAt(u.LicensePlan, u.LicenseExpiresAt, time.Now()),
+	}
+}
+
 type LoginResponse struct {
-	Token string        `json:"token"`
-	User  PublicUserDTO `json:"user"`
+	Token   string        `json:"token"`
+	User    PublicUserDTO `json:"user"`
+	License LicenseDTO    `json:"license"`
 }
 
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -238,15 +262,21 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	var token string
+	if req.Client == auth.ExtensionClient {
+		token, err = auth.GenerateExtensionToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	} else {
+		token, err = auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	}
 	if err != nil {
 		respondWithInternalError(w, err, "login: generate token")
 		return
 	}
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
-		Token: token,
-		User:  ToPublicUserDTO(u),
+		Token:   token,
+		User:    ToPublicUserDTO(u),
+		License: ToLicenseDTO(u),
 	})
 }
 
@@ -273,15 +303,23 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	// Preserve the token kind: an extension session must keep its read-only
+	// client claim and long TTL across refreshes.
+	var token string
+	if claims.Client == auth.ExtensionClient {
+		token, err = auth.GenerateExtensionToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	} else {
+		token, err = auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+	}
 	if err != nil {
 		respondWithInternalError(w, err, "refresh: generate token")
 		return
 	}
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
-		Token: token,
-		User:  ToPublicUserDTO(u),
+		Token:   token,
+		User:    ToPublicUserDTO(u),
+		License: ToLicenseDTO(u),
 	})
 }
 
@@ -1521,6 +1559,37 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
+}
+
+// HandleAdminUserLicense: PUT /api/admin/users/{id}/license
+// Manually assigns the per-user licensing tier and optional expiry. Expiry is
+// RFC 3339; omitting it (or null) means the license does not expire.
+func (s *Server) HandleAdminUserLicense(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "missing user id")
+		return
+	}
+	var body struct {
+		LicensePlan      domain.LicensePlan `json:"license_plan"`
+		LicenseExpiresAt *time.Time         `json:"license_expires_at"`
+	}
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	if !domain.IsValidLicensePlan(body.LicensePlan) {
+		respondWithError(w, http.StatusBadRequest, "invalid license_plan")
+		return
+	}
+	if err := s.Store.SetUserLicense(r.Context(), id, body.LicensePlan, body.LicenseExpiresAt); err != nil {
+		respondWithInternalError(w, err, "handler")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "license updated"})
 }
 
 // HandleAdminUserReject: DELETE /api/admin/users/{id}

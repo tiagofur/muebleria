@@ -40,6 +40,47 @@ func IsValidUserRole(role UserRole) bool {
 // ErrPendingApproval is returned when a user exists but has not been approved yet.
 var ErrPendingApproval = fmt.Errorf("account pending approval")
 
+// LicensePlan is the per-user licensing tier managed by the workshop admin.
+type LicensePlan string
+
+const (
+	LicensePlanNone  LicensePlan = "none"
+	LicensePlanTrial LicensePlan = "trial"
+	LicensePlanPro   LicensePlan = "pro"
+)
+
+// IsValidLicensePlan reports whether plan is an allowed license tier.
+func IsValidLicensePlan(plan LicensePlan) bool {
+	switch plan {
+	case LicensePlanNone, LicensePlanTrial, LicensePlanPro:
+		return true
+	default:
+		return false
+	}
+}
+
+// LicenseStatus is the derived, point-in-time licensing state of a user.
+type LicenseStatus string
+
+const (
+	LicenseStatusNone    LicenseStatus = "none"
+	LicenseStatusActive  LicenseStatus = "active"
+	LicenseStatusExpired LicenseStatus = "expired"
+)
+
+// LicenseStatusAt derives the licensing state of a user at a point in time.
+// A license is active when the plan is not "none" and the expiry (when set)
+// is in the future. Pure function: callers pass `now` explicitly.
+func LicenseStatusAt(plan LicensePlan, expiresAt *time.Time, now time.Time) LicenseStatus {
+	if plan == LicensePlanNone || plan == "" {
+		return LicenseStatusNone
+	}
+	if expiresAt != nil && !now.Before(*expiresAt) {
+		return LicenseStatusExpired
+	}
+	return LicenseStatusActive
+}
+
 type ProjectStatus string
 
 const (
@@ -50,14 +91,16 @@ const (
 )
 
 type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	Name         string    `json:"name"`
-	Role         UserRole  `json:"role"`
-	Active       bool      `json:"active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string       `json:"id"`
+	Email        string       `json:"email"`
+	PasswordHash string       `json:"-"`
+	Name         string       `json:"name"`
+	Role         UserRole     `json:"role"`
+	Active       bool         `json:"active"`
+	LicensePlan  LicensePlan  `json:"license_plan"`
+	LicenseExpiresAt *time.Time `json:"license_expires_at,omitempty"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
 }
 
 // UserSector maps an operator to one or more production sectors.
