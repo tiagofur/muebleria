@@ -1,6 +1,6 @@
 /**
- * UsersScreen — Admin panel: manage user registrations (approve, role, reject).
- * Only visible when session.user.role === 'admin'.
+ * UsersScreen — Admin panel: manage user registrations (approve, role,
+ * license, reject). Only visible when session.user.role === 'admin'.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -27,6 +27,8 @@ export interface UserRow {
   readonly role: string;
   readonly active: boolean;
   readonly created_at: string;
+  readonly license_plan?: string;
+  readonly license_expires_at?: string | null;
 }
 
 export type UserFilter = 'pending' | 'active' | 'all';
@@ -47,6 +49,29 @@ const ROLES = [
   'produccion',
   'almacen',
 ] as const;
+
+/** Per-user license tiers (F166) — admin assigns plan + optional expiry. */
+const LICENSE_PLANS = ['none', 'trial', 'pro'] as const;
+
+const LICENSE_LABELS: Record<(typeof LICENSE_PLANS)[number], string> = {
+  none: 'Sin licencia',
+  trial: 'Prueba',
+  pro: 'Pro',
+};
+
+type LicenseStatus = 'active' | 'expired' | 'none';
+
+function licenseStatus(plan: string | undefined, expiresAt: string | null | undefined): LicenseStatus {
+  if (!plan || plan === 'none') return 'none';
+  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return 'expired';
+  return 'active';
+}
+
+const LICENSE_STATUS_LABELS: Record<LicenseStatus, string> = {
+  active: 'Activa',
+  expired: 'Vencida',
+  none: '—',
+};
 
 const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   user: 'Sin puesto',
@@ -122,6 +147,28 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
       });
       showToast('✓ Rol actualizado');
       await load();
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const changeLicense = async (
+    id: string,
+    plan: string,
+    expiresAtIso: string | null,
+  ) => {
+    setActionId(id);
+    try {
+      const res = await fetch(`${baseUrl}/admin/users/${id}/license`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ license_plan: plan, license_expires_at: expiresAtIso }),
+      });
+      if (!res.ok) throw new Error('license update failed');
+      showToast('✓ Licencia actualizada');
+      await load();
+    } catch {
+      showToast('No se pudo actualizar la licencia');
     } finally {
       setActionId(null);
     }
@@ -218,6 +265,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                 <th>Nombre</th>
                 <th>Email</th>
                 <th>Rol</th>
+                <th>Licencia</th>
                 <th>Estado</th>
                 <th>Acciones</th>
               </tr>
@@ -244,6 +292,62 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                       </select>
                     ) : (
                       <span className="meta-chip">{u.role}</span>
+                    )}
+                  </td>
+                  <td className="users-license-cell">
+                    {u.active ? (
+                      <>
+                        <select
+                          className="users-role-select"
+                          value={u.license_plan ?? 'none'}
+                          disabled={actionId === u.id}
+                          onChange={(e) =>
+                            void changeLicense(
+                              u.id,
+                              e.target.value,
+                              u.license_expires_at ?? null,
+                            )
+                          }
+                          aria-label={`Licencia de ${u.name}`}
+                        >
+                          {LICENSE_PLANS.map((p) => (
+                            <option key={p} value={p}>
+                              {LICENSE_LABELS[p]}
+                            </option>
+                          ))}
+                        </select>
+                        {(u.license_plan ?? 'none') !== 'none' ? (
+                          <input
+                            type="date"
+                            className="users-license-expiry"
+                            defaultValue={u.license_expires_at ? u.license_expires_at.slice(0, 10) : ''}
+                            disabled={actionId === u.id}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              void changeLicense(
+                                u.id,
+                                u.license_plan ?? 'none',
+                                v ? `${v}T23:59:59Z` : null,
+                              );
+                            }}
+                            aria-label={`Vencimiento de licencia de ${u.name}`}
+                            title="Vencimiento (vacío = sin vencimiento)"
+                          />
+                        ) : null}
+                        <span
+                          className={
+                            licenseStatus(u.license_plan, u.license_expires_at) === 'active'
+                              ? 'status-badge status-badge--active'
+                              : licenseStatus(u.license_plan, u.license_expires_at) === 'expired'
+                                ? 'status-badge status-badge--danger'
+                                : 'meta-chip'
+                          }
+                        >
+                          {LICENSE_STATUS_LABELS[licenseStatus(u.license_plan, u.license_expires_at)]}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="meta-chip">—</span>
                     )}
                   </td>
                   <td>

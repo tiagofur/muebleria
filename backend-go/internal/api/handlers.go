@@ -174,27 +174,35 @@ type LoginRequest struct {
 // PublicUserDTO is the safe public representation of a user, guaranteeing
 // that internal secrets (such as password hashes) are never serialized (OC-005).
 type PublicUserDTO struct {
-	ID        string          `json:"id"`
-	Email     string          `json:"email"`
-	Name      string          `json:"name"`
-	Role      domain.UserRole `json:"role"`
-	Active    bool            `json:"active"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID               string             `json:"id"`
+	Email            string             `json:"email"`
+	Name             string             `json:"name"`
+	Role             domain.UserRole    `json:"role"`
+	Active           bool               `json:"active"`
+	LicensePlan      domain.LicensePlan `json:"license_plan"`
+	LicenseExpiresAt *time.Time         `json:"license_expires_at,omitempty"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 func ToPublicUserDTO(u *domain.User) PublicUserDTO {
 	if u == nil {
 		return PublicUserDTO{}
 	}
+	plan := u.LicensePlan
+	if plan == "" {
+		plan = domain.LicensePlanNone
+	}
 	return PublicUserDTO{
-		ID:        u.ID,
-		Email:     u.Email,
-		Name:      u.Name,
-		Role:      u.Role,
-		Active:    u.Active,
-		CreatedAt: u.CreatedAt,
-		UpdatedAt: u.UpdatedAt,
+		ID:               u.ID,
+		Email:            u.Email,
+		Name:             u.Name,
+		Role:             u.Role,
+		Active:           u.Active,
+		LicensePlan:      plan,
+		LicenseExpiresAt: u.LicenseExpiresAt,
+		CreatedAt:        u.CreatedAt,
+		UpdatedAt:        u.UpdatedAt,
 	}
 }
 

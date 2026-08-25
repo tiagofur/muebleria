@@ -46,3 +46,23 @@ describe('UsersScreen (F026 admin approval)', () => {
     expect(src).not.toMatch(/style=\{\{[^}]*textAlign/);
   });
 });
+
+describe('UsersScreen (F166 license management)', () => {
+  it('exposes per-user license plan and expiry through the admin endpoint', () => {
+    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
+    expect(src).toContain('/license');
+    expect(src).toContain('license_plan');
+    expect(src).toContain('license_expires_at');
+    expect(src).toContain("'none'");
+    expect(src).toContain("'trial'");
+    expect(src).toContain("'pro'");
+    expect(src).toContain('Vencimiento');
+  });
+
+  it('derives license status client-side without claiming server authority', () => {
+    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
+    expect(src).toContain('licenseStatus');
+    expect(src).toContain('Activa');
+    expect(src).toContain('Vencida');
+  });
+});

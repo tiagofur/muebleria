@@ -70,3 +70,20 @@
 
 /* .btn and its modifiers live in common/buttons.css (F0 UI Fase 0).
    Users screen uses .btn--small from the shared system; no overrides needed. */
+
+/* Licencia (F166): plan select + expiry date + status chip inline */
+.users-license-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.users-license-expiry {
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: var(--text-xs);
+  background: var(--surface-card);
+  color: var(--text-primary);
+}
