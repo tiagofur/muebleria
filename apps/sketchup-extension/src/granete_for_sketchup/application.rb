@@ -80,9 +80,10 @@ module Granete
         else
           {
             'state' => 'disabled',
-            'heading' => 'Conexión no configurada',
-            'message' => 'La conexión está desactivada. Configurá acceso y transporte ' \
-                         'antes de enviar información.'
+            'heading' => 'Sin sesión iniciada',
+            'message' => 'Iniciá sesión con tu cuenta del taller más abajo en esta ' \
+                         'pestaña para cargar su biblioteca de muebles. Sin sesión, ' \
+                         'la extensión funciona con el catálogo local de respaldo.'
           }
         end
       end

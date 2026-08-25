@@ -49,8 +49,8 @@ class ApplicationTest < Minitest::Test
     first_dialog.callbacks.fetch('dialog_ready').call(nil)
     status_script = first_dialog.executed_scripts.find { |s| s.include?('setStatus') }
     refute_nil status_script
-    assert_includes status_script, 'La conexión está desactivada'
-    assert_includes status_script, 'Conexión no configurada'
+    assert_includes status_script, 'Sin sesión iniciada'
+    assert_includes status_script, 'Iniciá sesión con tu cuenta del taller'
     assert_includes status_script, '"state":"disabled"'
 
     first_dialog.close
