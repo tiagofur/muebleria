@@ -187,7 +187,12 @@ module Granete
           dy = dy_mm * scale
           dz = dz_mm * scale
 
-          pts = [[x, y, z], [x + dx, y, z], [x + dx, y + dy, z], [x, y + dy, z]]
+          pts = [
+            Geom::Point3d.new(x, y, z),
+            Geom::Point3d.new(x + dx, y, z),
+            Geom::Point3d.new(x + dx, y + dy, z),
+            Geom::Point3d.new(x, y + dy, z)
+          ]
           face = comp_group.entities.add_face(pts)
           face.pushpull(-dz) if face && dz.positive?
         end

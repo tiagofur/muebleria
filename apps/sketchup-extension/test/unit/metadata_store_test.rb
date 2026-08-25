@@ -48,12 +48,14 @@ class MetadataStoreTest < Minitest::Test
     @fixture = JSON.parse(File.read(fixture_path))
   end
 
-  def test_writes_and_reads_versioned_semantic_metadata_in_an_undoable_operation
+  def test_writes_and_reads_versioned_semantic_metadata_without_opening_operations
     written = @store.write(@entity, @fixture)
 
     assert_equal @fixture, written
     assert_equal @fixture, @store.read(@entity)
-    assert_equal [[:start, 'Actualizar Intención', true], :commit], @model.operations
+    # The caller owns the undoable operation; the store must not nest one,
+    # because nested commits invalidate entity references in the real host.
+    assert_empty @model.operations
   end
 
   def test_writes_and_reads_furniture_instance_metadata

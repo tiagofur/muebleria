@@ -3,6 +3,16 @@
 # rubocop:disable all
 
 module Geom
+  class Point3d
+    attr_reader :x, :y, :z
+
+    def initialize(x_pos = 0, y_pos = 0, z_pos = 0)
+      @x = x_pos
+      @y = y_pos
+      @z = z_pos
+    end
+  end
+
   class Vector3d
     attr_reader :x, :y, :z
 
@@ -154,9 +164,11 @@ module SketchupStub
       @faces.clear
     end
 
-    def erase_entities(entity)
-      @groups.delete(entity)
-      @faces.delete(entity)
+    def erase_entities(entities)
+      Array(entities).each do |entity|
+        @groups.delete(entity)
+        @faces.delete(entity)
+      end
     end
   end
 

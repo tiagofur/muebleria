@@ -41,6 +41,11 @@ class FurnitureBuilderTest < Minitest::Test
     refute_nil comp_meta
     assert_equal 'componentInstance', comp_meta['kind']
     assert_equal 'left_side', comp_meta['intent']['semanticRole']
+
+    # One flat undoable gesture per interaction: exactly one start/commit pair,
+    # no nested operations from metadata writes.
+    assert_equal [[:start, 'Insertar Mueble Gabinete Base Estándar', true], :commit],
+                 @model.operations
   end
 
   def test_updates_furniture_in_place_regenerating_components_and_preserving_identity

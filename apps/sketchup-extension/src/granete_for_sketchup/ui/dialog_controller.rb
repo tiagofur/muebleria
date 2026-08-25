@@ -5,20 +5,38 @@ require 'json'
 module Granete
   module SketchUpExtension
     module UserInterface
+      # Resolves the metadata store for whichever model is active at call time,
+      # so observers and builders stay valid when the user switches documents.
+      class ActiveModelMetadataStore
+        def initialize(factory)
+          @factory = factory
+        end
+
+        def read(target)
+          model = Sketchup.respond_to?(:active_model) ? Sketchup.active_model : nil
+          return nil unless model
+
+          @factory.call(model).read(target)
+        end
+      end
+
       class DialogController
         attr_reader :selection_observer
 
-        def initialize(logger:, status_provider:, catalog_provider: nil,
-                       furniture_builder: nil, metadata_store: nil)
+        def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
+                       metadata_store: nil, metadata_store_factory: nil)
           @logger = logger
           @status_provider = status_provider
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
-          @furniture_builder = furniture_builder || Model::FurnitureBuilder.new
+          @furniture_builder = furniture_builder
           @metadata_store = metadata_store
+          @metadata_store_factory = metadata_store_factory || ->(model) { Metadata::Store.new(model) }
+          @builder_model = nil
+          @model_builder = nil
           @dialog = nil
 
           @selection_observer = Observers::SelectionObserver.new(
-            metadata_store: @metadata_store,
+            metadata_store: metadata_store || ActiveModelMetadataStore.new(@metadata_store_factory),
             catalog_provider: @catalog_provider,
             on_selection_change: method(:handle_selection_change)
           )
@@ -46,6 +64,18 @@ module Granete
         end
 
         private
+
+        def furniture_builder_for(model)
+          return @furniture_builder if @furniture_builder
+
+          if @model_builder.nil? || @builder_model != model
+            @builder_model = model
+            @model_builder = Model::FurnitureBuilder.new(
+              metadata_store: @metadata_store_factory.call(model)
+            )
+          end
+          @model_builder
+        end
 
         def build_dialog
           dialog = ::UI::HtmlDialog.new(
@@ -105,8 +135,9 @@ module Granete
           result = if definition.nil?
                      { 'success' => false, 'error' => 'Definición no encontrada' }
                    elsif active_model
-                     @furniture_builder.insert_furniture(active_model, definition,
-                                                         payload['parameters'] || {})
+                     furniture_builder_for(active_model).insert_furniture(
+                       active_model, definition, payload['parameters'] || {}
+                     )
                    else
                      mock_result(definition['name'], payload['parameters'])
                    end
@@ -126,7 +157,7 @@ module Granete
           result = if definition.nil?
                      { 'success' => false, 'error' => 'Definición no encontrada' }
                    elsif active_model&.selection&.first
-                     @furniture_builder.update_furniture(
+                     furniture_builder_for(active_model).update_furniture(
                        active_model, active_model.selection.first, definition, payload['parameters'] || {}
                      )
                    else
@@ -142,9 +173,10 @@ module Granete
         end
 
         def handle_delete(dialog)
-          if active_model&.selection&.first
+          target = active_model&.selection&.first
+          if target
             active_model.start_operation('Eliminar Mueble', true)
-            active_model.active_entities.erase_entities(active_model.selection.first)
+            active_model.active_entities.erase_entities([target])
             active_model.commit_operation
           end
 

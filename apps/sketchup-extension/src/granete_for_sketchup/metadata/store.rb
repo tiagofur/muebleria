@@ -20,18 +20,15 @@ module Granete
           @model = model
         end
 
+        # Writes semantic intent metadata. The caller owns the undoable SketchUp
+        # operation: an inner start_operation/commit issued while entities are
+        # being created in an outer operation invalidates Ruby references to
+        # them in the real host ("reference to deleted Group"), so this method
+        # must never open its own operation.
         def write(target, payload)
           normalized = validate(payload)
-          operation_started = false
-
-          @model.start_operation('Actualizar Intención', true)
-          operation_started = true
           target.set_attribute(DICTIONARY, ATTRIBUTE_KEY, JSON.generate(normalized))
-          @model.commit_operation
           normalized
-        rescue StandardError
-          @model.abort_operation if operation_started
-          raise
         end
 
         def read(target)

@@ -82,4 +82,33 @@ class ApplicationTest < Minitest::Test
     assert_equal 1, SketchupStub.menus['Extensions'].items.length
     refute UI::HtmlDialog.instances.first.visible?
   end
+
+  def test_production_wiring_writes_metadata_and_rehydrates_selection
+    @application.start
+    dialog = @application.open_dialog
+
+    dialog.callbacks.fetch('insert_furniture').call(
+      nil,
+      'definitionId' => 'kitchen-base-standard',
+      'parameters' => { 'widthMm' => 800, 'shelfCount' => 1, 'doorCount' => 1 }
+    )
+
+    model = SketchupStub.active_model
+    group = model.active_entities.groups.first
+    refute_nil group, 'insert must create furniture geometry in the active model'
+
+    raw = group.get_attribute('com.granete.sketchup_extension', 'bootstrap_intent.v1')
+    refute_nil raw, 'production wiring must persist furniture metadata without manual injection'
+    metadata = JSON.parse(raw)
+    assert_equal 'furnitureInstance', metadata['kind']
+    assert_equal 'kitchen-base-standard', metadata.dig('intent', 'furnitureDefinitionId')
+    assert_equal 800, metadata.dig('intent', 'parameters', 'widthMm')
+
+    model.selection.add(group)
+
+    selection_script = dialog.executed_scripts.reverse.find { |s| s.include?('onSelectionChange') }
+    refute_nil selection_script, 'selecting inserted furniture must reach the dialog'
+    assert_includes selection_script, '"type":"furniture"'
+    assert_includes selection_script, '"definitionId":"kitchen-base-standard"'
+  end
 end

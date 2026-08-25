@@ -15,7 +15,8 @@ module Granete
         @logger = logger
         @dialog = UserInterface::DialogController.new(
           logger: logger,
-          status_provider: method(:connection_status)
+          status_provider: method(:connection_status),
+          metadata_store_factory: method(:metadata_store)
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
