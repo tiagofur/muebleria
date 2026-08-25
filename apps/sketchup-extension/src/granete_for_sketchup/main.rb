@@ -14,6 +14,11 @@ module Granete
         auth/provider
         transport/adapter
         metadata/store
+        library/catalog_provider
+        assets/asset_resolver
+        assets/asset_loader
+        model/furniture_builder
+        observers/selection_observer
         ui/dialog_controller
         lifecycle
         application

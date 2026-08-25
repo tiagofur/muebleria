@@ -60,12 +60,8 @@ def verify_package(path)
   raise 'RBZ contains secrets, caches, or development artifacts' if unsafe
 
   loader = Zip::File.open(path) { |archive| archive.read("#{EXTENSION_ID}.rb") }
-  unless loader.include?('SketchupExtension.new')
-    raise 'Root loader must register SketchupExtension'
-  end
-  unless loader.include?("'#{EXTENSION_ID}/main'")
-    raise 'Root loader must reference support entrypoint without .rb'
-  end
+  raise 'Root loader must register SketchupExtension' unless loader.include?('SketchupExtension.new')
+  raise 'Root loader must reference support entrypoint without .rb' unless loader.include?("'#{EXTENSION_ID}/main'")
 
   true
 end

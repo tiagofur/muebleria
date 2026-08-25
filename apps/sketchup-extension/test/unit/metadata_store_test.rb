@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "json"
+require 'json'
 
-require_relative "../test_helper"
-require_relative "../../src/granete_for_sketchup/metadata/store"
+require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/metadata/store'
 
 class MetadataStoreTest < Minitest::Test
   class Model
@@ -44,7 +44,7 @@ class MetadataStoreTest < Minitest::Test
     @model = Model.new
     @entity = Entity.new
     @store = Granete::SketchUpExtension::Metadata::Store.new(@model)
-    fixture_path = File.join(PROJECT_ROOT, "test", "fixtures", "non_manufacturable_metadata.json")
+    fixture_path = File.join(PROJECT_ROOT, 'test', 'fixtures', 'non_manufacturable_metadata.json')
     @fixture = JSON.parse(File.read(fixture_path))
   end
 
@@ -53,51 +53,51 @@ class MetadataStoreTest < Minitest::Test
 
     assert_equal @fixture, written
     assert_equal @fixture, @store.read(@entity)
-    assert_equal [[:start, "Actualizar Intención", true], :commit], @model.operations
+    assert_equal [[:start, 'Actualizar Intención', true], :commit], @model.operations
   end
 
   def test_writes_and_reads_furniture_instance_metadata
     furniture_meta = {
-      "namespace" => "com.granete.sketchup_extension",
-      "metadataVersion" => 1,
-      "kind" => "furnitureInstance",
-      "identity" => {
-        "instanceRef" => "inst-k-01",
-        "projectRef" => "proj-active"
+      'namespace' => 'com.granete.sketchup_extension',
+      'metadataVersion' => 1,
+      'kind' => 'furnitureInstance',
+      'identity' => {
+        'instanceRef' => 'inst-k-01',
+        'projectRef' => 'proj-active'
       },
-      "intent" => {
-        "semanticRole" => "furniture-instance",
-        "furnitureDefinitionId" => "kitchen-base-standard",
-        "parameters" => { "widthMm" => 600, "shelfCount" => 2 }
+      'intent' => {
+        'semanticRole' => 'furniture-instance',
+        'furnitureDefinitionId' => 'kitchen-base-standard',
+        'parameters' => { 'widthMm' => 600, 'shelfCount' => 2 }
       }
     }
 
     written = @store.write(@entity, furniture_meta)
     assert_equal furniture_meta, written
-    assert_equal "furnitureInstance", @store.read(@entity)["kind"]
+    assert_equal 'furnitureInstance', @store.read(@entity)['kind']
   end
 
   def test_writes_and_reads_component_instance_metadata
     comp_meta = {
-      "namespace" => "com.granete.sketchup_extension",
-      "metadataVersion" => 1,
-      "kind" => "componentInstance",
-      "identity" => {
-        "instanceRef" => "comp-k-01-left",
-        "projectRef" => "proj-active"
+      'namespace' => 'com.granete.sketchup_extension',
+      'metadataVersion' => 1,
+      'kind' => 'componentInstance',
+      'identity' => {
+        'instanceRef' => 'comp-k-01-left',
+        'projectRef' => 'proj-active'
       },
-      "intent" => {
-        "semanticRole" => "left_side"
+      'intent' => {
+        'semanticRole' => 'left_side'
       }
     }
 
     written = @store.write(@entity, comp_meta)
     assert_equal comp_meta, written
-    assert_equal "componentInstance", @store.read(@entity)["kind"]
+    assert_equal 'componentInstance', @store.read(@entity)['kind']
   end
 
   def test_rejects_unsupported_kind
-    invalid = @fixture.merge("kind" => "unknownKindX")
+    invalid = @fixture.merge('kind' => 'unknownKindX')
 
     assert_raises(Granete::SketchUpExtension::Metadata::InvalidMetadataError) do
       @store.write(@entity, invalid)
@@ -106,7 +106,7 @@ class MetadataStoreTest < Minitest::Test
 
   def test_does_not_derive_identity_from_host_entity_ids
     refute Entity.method_defined?(:entityID)
-    assert_equal "instance-fixture-opaque",
-                 @store.write(@entity, @fixture).dig("identity", "instanceRef")
+    assert_equal 'instance-fixture-opaque',
+                 @store.write(@entity, @fixture).dig('identity', 'instanceRef')
   end
 end

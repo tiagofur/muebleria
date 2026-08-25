@@ -25,28 +25,30 @@ module Granete
           meta = @metadata_store.read(entity)
           return nil if meta.nil?
 
-          kind = meta["kind"]
+          kind = meta['kind']
           case kind
-          when "furnitureInstance", "bootstrapIntent"
-            def_id = meta.dig("intent", "furnitureDefinitionId")
+          when 'furnitureInstance', 'bootstrapIntent'
+            def_id = meta.dig('intent', 'furnitureDefinitionId')
             definition = @catalog_provider.find_definition(def_id)
             {
-              "type" => "furniture",
-              "instanceId" => meta.dig("identity", "instanceRef"),
-              "definitionId" => def_id,
-              "definition" => definition,
-              "name" => definition ? definition["name"] : (entity.respond_to?(:name) ? entity.name : "Mueble"),
-              "parameters" => meta.dig("intent", "parameters") || {}
+              'type' => 'furniture',
+              'instanceId' => meta.dig('identity', 'instanceRef'),
+              'definitionId' => def_id,
+              'definition' => definition,
+              'name' => if definition
+                          definition['name']
+                        else
+                          (entity.respond_to?(:name) ? entity.name : 'Mueble')
+                        end,
+              'parameters' => meta.dig('intent', 'parameters') || {}
             }
-          when "componentInstance"
+          when 'componentInstance'
             {
-              "type" => "component",
-              "instanceId" => meta.dig("identity", "instanceRef"),
-              "role" => meta.dig("intent", "semanticRole"),
-              "name" => entity.respond_to?(:name) ? entity.name : "Componente"
+              'type' => 'component',
+              'instanceId' => meta.dig('identity', 'instanceRef'),
+              'role' => meta.dig('intent', 'semanticRole'),
+              'name' => entity.respond_to?(:name) ? entity.name : 'Componente'
             }
-          else
-            nil
           end
         end
 

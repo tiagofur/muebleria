@@ -117,9 +117,7 @@ module Granete
       def fail_closed_unless_installed_extension_is_loaded
         extension = self.class.installed_extension
         flunk 'Install the Granete for SketchUp RBZ before running the host smoke' unless extension
-        unless extension.loaded?
-          flunk 'Enable the installed extension and restart SketchUp before the host smoke'
-        end
+        flunk 'Enable the installed extension and restart SketchUp before the host smoke' unless extension.loaded?
         return if extension.version == EXPECTED_VERSION
 
         flunk "Installed version #{extension.version} does not match expected #{EXPECTED_VERSION}"

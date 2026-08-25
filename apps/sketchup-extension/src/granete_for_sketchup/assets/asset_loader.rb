@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "asset_resolver"
-
 module Granete
   module SketchUpExtension
     module Assets

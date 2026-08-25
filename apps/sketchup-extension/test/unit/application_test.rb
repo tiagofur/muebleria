@@ -36,18 +36,22 @@ class ApplicationTest < Minitest::Test
     @application.start
     first_dialog = @application.open_dialog
 
-    assert_equal %w[close_dialog dialog_ready], first_dialog.callbacks.keys.sort
+    expected_callbacks = %w[
+      close_dialog delete_selected_furniture dialog_ready get_catalog insert_furniture update_furniture
+    ]
+    assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)
-    script = first_dialog.executed_scripts.last
-    assert_includes script, 'La conexión está desactivada'
-    assert_includes script, 'Conexión no configurada'
-    assert_includes script, '"state":"disabled"'
+    status_script = first_dialog.executed_scripts.find { |s| s.include?('setStatus') }
+    refute_nil status_script
+    assert_includes status_script, 'La conexión está desactivada'
+    assert_includes status_script, 'Conexión no configurada'
+    assert_includes status_script, '"state":"disabled"'
 
     first_dialog.close
     second_dialog = @application.open_dialog
 
     refute_same first_dialog, second_dialog
-    assert_equal %w[close_dialog dialog_ready], second_dialog.callbacks.keys.sort
+    assert_equal expected_callbacks, second_dialog.callbacks.keys.sort
     assert_equal 2, UI::HtmlDialog.instances.length
   end
 
@@ -61,11 +65,12 @@ class ApplicationTest < Minitest::Test
 
     dialog = application.open_dialog
     dialog.callbacks.fetch('dialog_ready').call(nil)
-    script = dialog.executed_scripts.last
+    status_script = dialog.executed_scripts.find { |s| s.include?('setStatus') }
+    refute_nil status_script
 
-    assert_includes script, 'La conexión está configurada'
-    assert_includes script, 'Conexión configurada'
-    assert_includes script, '"state":"configured"'
+    assert_includes status_script, 'La conexión está configurada'
+    assert_includes status_script, 'Conexión configurada'
+    assert_includes status_script, '"state":"configured"'
   end
 
   def test_shutdown_closes_dialog_without_adding_another_menu_item_on_restart

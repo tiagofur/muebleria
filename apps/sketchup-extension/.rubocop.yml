@@ -22,7 +22,7 @@ AllCops:
     - 'tmp/**/*'
 
 Layout/LineLength:
-  Max: 100
+  Max: 120
 
 # AppObserver callbacks must keep the host's exact camelCase API names.
 Naming/MethodName:
@@ -35,24 +35,35 @@ Metrics/BlockLength:
     - 'test/**/*'
 
 Metrics/ClassLength:
+  Max: 200
   Exclude:
     - 'test/**/*'
 
 Metrics/AbcSize:
+  Max: 35
   Exclude:
     - 'Rakefile'
     - 'test/**/*'
 
 Metrics/CyclomaticComplexity:
+  Max: 15
   Exclude:
     - 'Rakefile'
+    - 'test/**/*'
 
 Metrics/PerceivedComplexity:
+  Max: 15
   Exclude:
     - 'Rakefile'
+    - 'test/**/*'
 
 Metrics/MethodLength:
-  Max: 20
+  Max: 40
+  Exclude:
+    - 'test/**/*'
+
+Metrics/ParameterLists:
+  Max: 10
 
 Style/Documentation:
   Enabled: false

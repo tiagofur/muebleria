@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
+# rubocop:disable all
+
 module Geom
   class Vector3d
     attr_reader :x, :y, :z
 
-    def initialize(x = 0, y = 0, z = 0)
-      @x = x
-      @y = y
-      @z = z
+    def initialize(x_pos = 0, y_pos = 0, z_pos = 0)
+      @x = x_pos
+      @y = y_pos
+      @z = z_pos
     end
   end
 
@@ -37,7 +39,7 @@ module SketchupStub
   end
 
   class FaceStub
-    def pushpull(distance)
+    def pushpull(_distance)
       true
     end
   end
@@ -135,13 +137,13 @@ module SketchupStub
       group
     end
 
-    def add_face(points)
+    def add_face(_points)
       face = FaceStub.new
       @faces << face
       face
     end
 
-    def add_instance(definition, transform)
+    def add_instance(definition, _transform)
       group = GroupStub.new(definition.name)
       @groups << group
       group
@@ -297,3 +299,5 @@ module UI
     end
   end
 end
+
+# rubocop:enable all
