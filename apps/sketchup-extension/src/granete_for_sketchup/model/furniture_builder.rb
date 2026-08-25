@@ -5,6 +5,25 @@ require 'json'
 module Granete
   module SketchUpExtension
     module Model
+      # Paints groups with namespaced SketchUp materials so the workshop's
+      # board choices are visible in the model. No-op when the runtime exposes
+      # no materials API (pure stubs) or the layout carries no color.
+      module MaterialApplier
+        module_function
+
+        def apply(model, group, name, color_hex)
+          return unless color_hex.is_a?(String) && color_hex.start_with?('#')
+          return unless model.respond_to?(:materials)
+
+          materials = model.materials
+          material_name = "Granete · #{name}"
+          material = materials[material_name] if materials.respond_to?(:[])
+          material ||= materials.add(material_name)
+          material.color = color_hex if material.respond_to?(:color=)
+          group.material = material if group.respond_to?(:material=)
+        end
+      end
+
       # Pure visual adapter and renderer for SketchUp.
       # Consumes resolved component layouts from @muebles/domain or generic slot definitions.
       # Contains ZERO manufacturing rules, zero machining calculation, and zero category-specific logic.
@@ -25,8 +44,8 @@ module Granete
           main_group = entities.add_group
           main_group.name = "#{definition['name']} (#{instance_id})"
 
-          component_count = render_layout(main_group, instance_id, definition, parameters, resolved_layout)
-          write_furniture_metadata(main_group, instance_id, definition, parameters)
+          counts = render_layout(model, main_group, instance_id, definition, parameters, resolved_layout)
+          MetadataWriter.write_furniture(@metadata_store, main_group, instance_id, definition, parameters)
 
           model.commit_operation
 
@@ -34,7 +53,9 @@ module Granete
             'success' => true,
             'instance_id' => instance_id,
             'name' => definition['name'],
-            'component_count' => component_count,
+            'component_count' => counts['total'],
+            'board_count' => counts['boards'],
+            'hardware_count' => counts['hardware'],
             'parameters' => parameters
           }
         rescue StandardError => e
@@ -50,8 +71,8 @@ module Granete
           model.start_operation("Editar Mueble #{definition['name']}", true)
           group.entities.clear!
 
-          component_count = render_layout(group, instance_id, definition, parameters, resolved_layout)
-          write_furniture_metadata(group, instance_id, definition, parameters)
+          counts = render_layout(model, group, instance_id, definition, parameters, resolved_layout)
+          MetadataWriter.write_furniture(@metadata_store, group, instance_id, definition, parameters)
 
           model.commit_operation
 
@@ -59,7 +80,9 @@ module Granete
             'success' => true,
             'instance_id' => instance_id,
             'name' => definition['name'],
-            'component_count' => component_count,
+            'component_count' => counts['total'],
+            'board_count' => counts['boards'],
+            'hardware_count' => counts['hardware'],
             'parameters' => parameters
           }
         rescue StandardError => e
@@ -83,27 +106,61 @@ module Granete
           params
         end
 
-        def render_layout(main_group, instance_id, definition, parameters, resolved_layout)
+        def render_layout(model, main_group, instance_id, definition, parameters, resolved_layout)
           if resolved_layout && resolved_layout['components']
-            render_resolved_components(main_group, instance_id, resolved_layout['components'])
+            render_resolved_components(model, main_group, instance_id, resolved_layout['components'],
+                                       resolved_layout['hardware'] || [])
           else
-            render_generic_parametric_layout(main_group, instance_id, definition, parameters)
+            count = render_generic_parametric_layout(main_group, instance_id, definition, parameters)
+            { 'total' => count, 'boards' => count, 'hardware' => 0 }
           end
         end
 
-        def render_resolved_components(main_group, instance_id, components)
+        # Renders the server-resolved composition. Each board and each visible
+        # hardware placement arrives as a pre-baked AABB (translationMm is the
+        # min corner in workshop space) — no composition math happens here.
+        # Components are painted with SketchUp materials when the layout
+        # carries a color (real board choice or role palette).
+        def render_resolved_components(model, main_group, instance_id, components, hardware)
           components.each do |c|
-            slot_id = c['slotId'] || c['role'] || 'slot'
-            name = c['name'] || slot_id
-            pos = c.dig('transform', 'translationMm') || [0, 0, 0]
-            dims = c['dimensionsMm'] || [100, 100, 18]
-
-            create_hierarchical_component(
-              main_group, instance_id, slot_id, name,
-              pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
-            )
+            render_resolved_board(model, main_group, instance_id, c)
           end
-          components.length
+
+          hardware.each_with_index do |h, index|
+            render_resolved_hardware(model, main_group, instance_id, h, index)
+          end
+
+          { 'total' => components.length + hardware.length,
+            'boards' => components.length,
+            'hardware' => hardware.length }
+        end
+
+        def render_resolved_board(model, main_group, instance_id, component)
+          slot_id = component['slotId'] || component['role'] || 'slot'
+          name = component['name'] || slot_id
+          pos = component.dig('transform', 'translationMm') || [0, 0, 0]
+          dims = component['dimensionsMm'] || [100, 100, 18]
+
+          group = create_hierarchical_component(
+            main_group, instance_id, slot_id, name,
+            pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
+          )
+          material_name = component['materialName'] || component['optionRole'] || slot_id
+          MaterialApplier.apply(model, group, material_name, component['materialColorHex'])
+          group
+        end
+
+        def render_resolved_hardware(model, main_group, instance_id, placement, index)
+          name = placement['name'] || 'Herraje'
+          pos = placement.dig('transform', 'translationMm') || [0, 0, 0]
+          dims = placement['dimensionsMm'] || [96, 32, 25]
+
+          group = create_hierarchical_component(
+            main_group, instance_id, "hardware_#{placement['placementId'] || index}", name,
+            pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
+          )
+          MaterialApplier.apply(model, group, name, placement['colorHex'])
+          group
         end
 
         def render_generic_parametric_layout(main_group, instance_id, _definition, parameters)
@@ -160,22 +217,9 @@ module Granete
           comp_group.name = name
           comp_id = "comp-#{furniture_instance_id}-#{slot_id}"
 
-          write_component_metadata(comp_group, comp_id, slot_id)
+          MetadataWriter.write_component(@metadata_store, comp_group, comp_id, slot_id)
           build_box_geometry(comp_group, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
           comp_group
-        end
-
-        def write_component_metadata(comp_group, comp_id, slot_id)
-          return unless @metadata_store
-
-          comp_meta = {
-            'namespace' => 'com.granete.sketchup_extension',
-            'metadataVersion' => 1,
-            'kind' => 'componentInstance',
-            'identity' => { 'instanceRef' => comp_id, 'projectRef' => 'project-sketchup-active' },
-            'intent' => { 'semanticRole' => slot_id }
-          }
-          @metadata_store.write(comp_group, comp_meta)
         end
 
         def build_box_geometry(comp_group, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
@@ -187,6 +231,8 @@ module Granete
           dy = dy_mm * scale
           dz = dz_mm * scale
 
+          # Min-corner semantics: the face sits at the box bottom (z) and the
+          # pull grows upward, so translationMm/pose z is always the AABB min.
           pts = [
             Geom::Point3d.new(x, y, z),
             Geom::Point3d.new(x + dx, y, z),
@@ -194,11 +240,17 @@ module Granete
             Geom::Point3d.new(x, y + dy, z)
           ]
           face = comp_group.entities.add_face(pts)
-          face.pushpull(-dz) if face && dz.positive?
+          face.pushpull(dz) if face && dz.positive?
         end
+      end
 
-        def write_furniture_metadata(main_group, instance_id, definition, parameters)
-          return unless @metadata_store
+      # Writes the semantic metadata dictionaries (furniture + component
+      # levels) through the metadata store.
+      module MetadataWriter
+        module_function
+
+        def write_furniture(store, main_group, instance_id, definition, parameters)
+          return unless store
 
           metadata_payload = {
             'namespace' => 'com.granete.sketchup_extension',
@@ -215,7 +267,20 @@ module Granete
               'parameters' => parameters
             }
           }
-          @metadata_store.write(main_group, metadata_payload)
+          store.write(main_group, metadata_payload)
+        end
+
+        def write_component(store, comp_group, comp_id, slot_id)
+          return unless store
+
+          comp_meta = {
+            'namespace' => 'com.granete.sketchup_extension',
+            'metadataVersion' => 1,
+            'kind' => 'componentInstance',
+            'identity' => { 'instanceRef' => comp_id, 'projectRef' => 'project-sketchup-active' },
+            'intent' => { 'semanticRole' => slot_id }
+          }
+          store.write(comp_group, comp_meta)
         end
       end
     end

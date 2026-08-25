@@ -3,6 +3,7 @@
 require 'stringio'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
+require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
@@ -26,6 +27,22 @@ class DialogControllerTest < Minitest::Test
 
     def logout
       nil
+    end
+  end
+
+  # Session double that also exposes the configured-transport surface the
+  # media payload reads (configured?/status/authorization_header).
+  class MediaEnabledSession < FakeSession
+    def configured?
+      true
+    end
+
+    def status
+      { 'state' => 'logged_in', 'server_url' => 'http://taller.local:8080/api' }
+    end
+
+    def authorization_header
+      'Bearer media-token-123'
     end
   end
 
@@ -70,6 +87,99 @@ class DialogControllerTest < Minitest::Test
     refute_nil insert_script
     assert_includes insert_script, '"success":true'
     assert_includes insert_script, 'Gabinete Base Estándar'
+  end
+
+  # Catalog double whose server resolves layouts (RemoteCatalogProvider shape).
+  class LayoutResolvingCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
+    attr_reader :requested_definition_id, :requested_parameters, :requested_choices
+
+    def resolved_layout(definition_id, parameters = {}, choices = {})
+      @requested_definition_id = definition_id
+      @requested_parameters = parameters
+      @requested_choices = choices
+      { 'components' => [{ 'slotId' => 'puerta', 'name' => 'Puerta',
+                           'transform' => { 'translationMm' => [2, 560, 2] },
+                           'dimensionsMm' => [596, 18, 716] }],
+        'hardware' => [] }
+    end
+  end
+
+  # Builder double capturing the resolved layout kwarg.
+  class BuilderSpy
+    attr_reader :insert_layout, :update_layout
+
+    def insert_furniture(_model, _definition, _parameters = {}, resolved_layout: nil)
+      @insert_layout = resolved_layout
+      { 'success' => true, 'name' => 'Base Una Puerta', 'component_count' => 1,
+        'board_count' => 1, 'hardware_count' => 0 }
+    end
+
+    def update_furniture(_model, _group, _definition, _parameters = {}, resolved_layout: nil)
+      @update_layout = resolved_layout
+      { 'success' => true, 'name' => 'Base Una Puerta', 'component_count' => 1 }
+    end
+  end
+
+  def test_insert_fetches_and_forwards_the_server_resolved_layout
+    catalog = LayoutResolvingCatalog.new
+    builder = BuilderSpy.new
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new,
+      catalog_provider: catalog, furniture_builder: builder, metadata_store: @store
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('insert_furniture').call(
+      nil,
+      'definitionId' => 'kitchen-base-standard',
+      'parameters' => { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 },
+      'materialChoices' => { 'FRENTE' => 'mat-oak' }
+    )
+
+    assert_equal 'kitchen-base-standard', catalog.requested_definition_id
+    assert_equal({ 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 }, catalog.requested_parameters)
+    assert_equal({ 'FRENTE' => 'mat-oak' }, catalog.requested_choices)
+    refute_nil builder.insert_layout
+    slots = builder.insert_layout['components'].map { |c| c['slotId'] }
+    assert_equal ['puerta'], slots
+  end
+
+  def test_update_fetches_and_forwards_the_server_resolved_layout
+    catalog = LayoutResolvingCatalog.new
+    builder = BuilderSpy.new
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new,
+      catalog_provider: catalog, furniture_builder: builder, metadata_store: @store
+    )
+    dialog = controller.show
+    target = Sketchup.active_model.selection
+    target.add(SketchupStub::GroupStub.new('selected'))
+
+    dialog.callbacks.fetch('update_furniture').call(
+      nil,
+      'definitionId' => 'kitchen-base-standard',
+      'parameters' => { 'widthMm' => 900 }
+    )
+
+    assert_equal 'kitchen-base-standard', catalog.requested_definition_id
+    assert_equal({ 'widthMm' => 900 }, catalog.requested_parameters)
+    refute_nil builder.update_layout
+  end
+
+  def test_insert_without_layout_support_passes_nil_to_the_builder
+    builder = BuilderSpy.new
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new,
+      catalog_provider: Granete::SketchUpExtension::Library::StaticCatalogProvider.new,
+      furniture_builder: builder, metadata_store: @store
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('insert_furniture').call(
+      nil, 'definitionId' => 'kitchen-base-standard', 'parameters' => { 'widthMm' => 600 }
+    )
+
+    assert_nil builder.insert_layout
   end
 
   def test_update_furniture_callback_updates_instance
@@ -132,5 +242,40 @@ class DialogControllerTest < Minitest::Test
     assert_equal before + 1, dialog.executed_scripts.length
     assert_includes dialog.executed_scripts.last, 'onLoginResult'
     assert_includes dialog.executed_scripts.last, 'contraseña'
+  end
+
+  def test_catalog_payload_carries_media_origin_and_token_for_session
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      session: MediaEnabledSession.new
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('dialog_ready').call(nil)
+
+    catalog_script = dialog.executed_scripts.find { |s| s.include?('setCatalog') }
+    refute_nil catalog_script
+    # Workshop previews are server-relative; the dialog needs the origin
+    # (without the /api suffix) plus the media token to load them.
+    assert_includes catalog_script, '"media":{'
+    assert_includes catalog_script, '"baseUrl":"http://taller.local:8080"'
+    assert_includes catalog_script, '"token":"media-token-123"'
+  end
+
+  def test_catalog_payload_without_session_omits_media
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('dialog_ready').call(nil)
+
+    catalog_script = dialog.executed_scripts.find { |s| s.include?('setCatalog') }
+    refute_nil catalog_script
+    refute_includes catalog_script, '"media"'
   end
 end

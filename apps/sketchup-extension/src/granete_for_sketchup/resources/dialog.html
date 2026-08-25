@@ -210,7 +210,7 @@
         margin: 0 0 var(--space-4);
       }
 
-      select, input[type="text"], input[type="number"] {
+      select, input[type="text"], input[type="number"], input[type="password"] {
         width: 100%;
         padding: var(--space-2) var(--space-3);
         border: 1px solid var(--border-default);
@@ -226,6 +226,221 @@
       select:focus, input:focus {
         border-color: var(--brand-500);
         box-shadow: var(--shadow-focus);
+      }
+
+      /* Library Browser Search and Filters */
+      .library-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-3);
+      }
+
+      .library-count-badge {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        font-weight: var(--weight-medium);
+      }
+
+      .search-container {
+        position: relative;
+        margin-bottom: var(--space-3);
+      }
+
+      /* Compound selector beats the global input[type="text"] rule that
+         otherwise zeroes the icon padding. */
+      .search-container .search-input {
+        width: 100%;
+        padding: var(--space-2) 2.25rem var(--space-2) 2.25rem;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--surface-card);
+        color: var(--text-primary);
+        font-size: var(--text-sm);
+      }
+
+      .search-icon {
+        position: absolute;
+        left: var(--space-3);
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        pointer-events: none;
+        font-size: var(--text-sm);
+      }
+
+      .search-clear-btn {
+        position: absolute;
+        right: var(--space-2);
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: var(--text-sm);
+        padding: var(--space-1);
+        display: none;
+        line-height: 1;
+        border-radius: var(--radius-sm);
+      }
+
+      .search-clear-btn:hover {
+        color: var(--text-primary);
+      }
+
+      /* Category filter: cascading selects per tree level (web app pattern). */
+      .category-filters-container {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+      }
+
+      .category-filter-label {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--text-secondary);
+      }
+
+      /* Furniture Cards Grid */
+      .furniture-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: var(--space-3);
+        margin-bottom: var(--space-3);
+      }
+
+      @media (max-width: 360px) {
+        .furniture-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .furniture-card {
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+        transition: all var(--duration-fast) var(--ease-out);
+        position: relative;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .furniture-card:hover {
+        border-color: var(--brand-500);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px hsl(220 20% 50% / 12%);
+      }
+
+      .furniture-card:focus-visible {
+        outline: none;
+        border-color: var(--brand-500);
+        box-shadow: var(--shadow-focus);
+      }
+
+      .furniture-card.selected {
+        border-color: var(--brand-500);
+        background: var(--brand-50);
+      }
+
+      .furniture-card-preview {
+        width: 100%;
+        height: 100px;
+        background: var(--surface-card-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        border-bottom: 1px solid var(--border-default);
+      }
+
+      .furniture-card-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .furniture-card-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-2);
+        color: var(--brand-600);
+      }
+
+      .furniture-card-badge {
+        position: absolute;
+        top: var(--space-2);
+        right: var(--space-2);
+        background: hsl(0 0% 100% / 92%);
+        backdrop-filter: blur(4px);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        padding: 0.125rem 0.375rem;
+        color: var(--text-secondary);
+        pointer-events: none;
+      }
+
+      .furniture-card-body {
+        padding: var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        flex: 1;
+      }
+
+      .furniture-card-title {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-primary);
+        margin: 0;
+        line-height: 1.25;
+      }
+
+      .furniture-card-dims {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        font-weight: var(--weight-medium);
+      }
+
+      .furniture-card-code {
+        font-size: 0.65rem;
+        color: var(--text-secondary);
+        font-family: monospace;
+      }
+
+      /* Configurator Back Button */
+      .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+        width: auto;
+      }
+
+      .btn-back:hover {
+        background: var(--surface-hover);
+        border-color: var(--border-focus);
+        color: var(--brand-600);
       }
 
       .param-group {
@@ -253,23 +468,23 @@
         border-radius: var(--radius-sm);
       }
 
-      .slider-row {
+      /* Measure fields: plain text input + unit (no sliders). */
+      .dim-input-row {
         display: flex;
         align-items: center;
-        gap: var(--space-3);
+        gap: var(--space-2);
       }
 
-      input[type="range"] {
+      .dim-input {
         flex: 1;
-        accent-color: var(--brand-500);
-        cursor: pointer;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
       }
 
-      .number-input-sm {
-        width: 4.5rem !important;
-        text-align: right;
-        padding: var(--space-1) var(--space-2) !important;
-        font-size: var(--text-sm) !important;
+      .dim-unit {
+        font-size: var(--text-sm);
+        color: var(--text-muted);
+        min-width: 1.25rem;
       }
 
       .stepper {
@@ -443,6 +658,68 @@
         margin-bottom: var(--space-2);
       }
 
+      /* Workshop presets (chips) + session form */
+      .presets-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+      }
+
+      .preset-chip {
+        padding: var(--space-1) var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: 9999px;
+        background: var(--surface-card);
+        color: var(--text-secondary);
+        font-family: inherit;
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .preset-chip:hover {
+        background: var(--surface-hover);
+      }
+
+      .preset-chip.active {
+        background: var(--brand-50);
+        border-color: var(--brand-500);
+        color: var(--brand-600);
+      }
+
+      .login-label {
+        display: block;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--text-secondary);
+        margin: var(--space-3) 0 var(--space-1);
+      }
+
+      .login-field {
+        width: 100%;
+      }
+
+      .kv-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-1) 0;
+        font-size: var(--text-sm);
+      }
+
+      .kv-row .k {
+        color: var(--text-muted);
+      }
+
+      .kv-row .v {
+        color: var(--text-primary);
+        font-weight: var(--weight-medium);
+        text-align: right;
+        overflow-wrap: anywhere;
+      }
+
       footer {
         padding: var(--space-3);
         text-align: center;
@@ -482,50 +759,123 @@
 
         <!-- Tab 1: Library (Insertion) -->
         <section id="pane-library" class="tab-pane active" role="tabpanel">
-          <div class="card">
-            <div class="card-title">Mueble Paramétrico</div>
-            <div style="margin-top: var(--space-2);">
-              <select id="library-furniture-select">
-                <option value="">Cargando catálogo…</option>
-              </select>
+          <!-- Sub-view 1: Library Browser -->
+          <div id="library-browser-view">
+            <div class="library-header-row">
+              <div class="card-title">Biblioteca de Muebles</div>
+              <span id="library-count-badge" class="library-count-badge">Cargando…</span>
             </div>
-            <p id="library-furniture-desc" class="subhead" style="margin-top: var(--space-2); margin-bottom: 0;"></p>
-            <div id="library-source-note" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);"></div>
+
+            <!-- Search input -->
+            <div class="search-container">
+              <span class="search-icon" aria-hidden="true">🔍</span>
+              <input
+                id="library-search-input"
+                type="text"
+                class="search-input"
+                placeholder="Buscar muebles por nombre, código o categoría…"
+                autocomplete="off"
+                aria-label="Buscar muebles"
+              />
+              <button id="library-search-clear" type="button" class="search-clear-btn" aria-label="Limpiar búsqueda" style="display: none;">✕</button>
+            </div>
+
+            <!-- Category filter: cascading selects per tree level (same logic
+                 as the web app library). -->
+            <div id="library-categories-container" class="category-filters-container">
+              <span class="category-filter-label">Categoría</span>
+              <select id="library-category-l1" class="category-filter-select" aria-label="Filtrar por categoría (nivel 1)"></select>
+              <select id="library-category-l2" class="category-filter-select" style="display: none;" aria-label="Filtrar por categoría (nivel 2)"></select>
+              <select id="library-category-l3" class="category-filter-select" style="display: none;" aria-label="Filtrar por categoría (nivel 3)"></select>
+            </div>
+
+            <!-- License blocker alert if applicable -->
+            <div class="card" id="library-license-blocker" style="display: none; border-left: 3px solid var(--warning-700); margin-bottom: var(--space-3);">
+              <div class="card-title">🔒 Licencia inactiva</div>
+              <p class="subhead" style="margin-bottom: 0;">
+                Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.
+                Pedile al administrador del taller que asigne o renueve tu licencia desde Granete.
+              </p>
+            </div>
+
+            <!-- States -->
+            <div id="library-loading-state" class="card empty-state" style="display: none;">
+              <div class="empty-state-icon">⏳</div>
+              <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Cargando catálogo…</h2>
+              <p style="margin-bottom: 0; font-size: var(--text-sm);">Obteniendo los muebles del taller.</p>
+            </div>
+
+            <div id="library-empty-state" class="card empty-state" style="display: none;">
+              <div id="library-empty-icon" class="empty-state-icon">📦</div>
+              <h2 id="library-empty-title" style="font-size: var(--text-md); margin-bottom: var(--space-1);">Catálogo vacío</h2>
+              <p id="library-empty-msg" style="margin-bottom: var(--space-2); font-size: var(--text-sm);"></p>
+              <button id="btn-library-empty-action" class="btn btn-secondary" style="display: none; width: auto; margin: var(--space-2) auto 0;"></button>
+            </div>
+
+            <div id="library-no-results-state" class="card empty-state" style="display: none;">
+              <div class="empty-state-icon">🔍</div>
+              <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Sin resultados</h2>
+              <p id="library-no-results-msg" style="margin-bottom: var(--space-2); font-size: var(--text-sm);">No se encontraron muebles que coincidan con la búsqueda.</p>
+              <button id="btn-clear-search" class="btn btn-secondary" style="width: auto; margin: var(--space-2) auto 0;">Ver todos los muebles</button>
+            </div>
+
+            <!-- Grid of Furniture Cards -->
+            <div id="library-cards-grid" class="furniture-grid" role="list"></div>
+
+            <div id="library-source-note" class="subhead" style="margin-top: var(--space-3); font-size: var(--text-xs); text-align: center;"></div>
           </div>
 
-          <div class="card" id="library-license-blocker" style="display: none; border-left: 3px solid var(--status-pending, #b45309);">
-            <div class="card-title">🔒 Licencia inactiva</div>
-            <p class="subhead" style="margin-bottom: 0;">
-              Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.
-              Pedile al administrador del taller que asigne o renueve tu licencia desde Granete.
-              Mientras tanto podés usar el catálogo local de respaldo.
-            </p>
-          </div>
+          <!-- Sub-view 2: Configurator (Selected Furniture) -->
+          <div id="library-configurator-view" style="display: none;">
+            <button id="btn-back-to-library" type="button" class="btn-back">
+              <span>← Volver a Biblioteca</span>
+            </button>
 
-          <div class="card" id="library-presets-card" style="display: none;">
-            <div class="card-title">Modelos del Taller</div>
-            <div id="library-presets-container" class="presets-row"></div>
-          </div>
-
-          <div class="card" id="library-params-card" style="display: none;">
-            <div class="card-title">Parámetros de Autoría</div>
-            <div id="library-params-container" style="margin-top: var(--space-2);"></div>
-
-            <div class="summary-box">
-              <div class="summary-item">
-                <strong id="library-summary-dims">-- × -- × --</strong>
-                <span>Cotas (mm)</span>
+            <div class="card" id="library-selected-header">
+              <div class="card-header-row">
+                <div>
+                  <h2 id="library-selected-name" style="font-size: var(--text-md); margin: 0;">--</h2>
+                  <span id="library-selected-code" style="font-size: var(--text-xs); color: var(--text-muted);">--</span>
+                </div>
+                <span id="library-selected-category-badge" class="status-badge valid">Base</span>
               </div>
-              <div class="summary-item">
-                <strong id="library-summary-parts">--</strong>
-                <span>Piezas estimadas</span>
+              <p id="library-furniture-desc" class="subhead" style="margin-top: var(--space-2); margin-bottom: 0;"></p>
+            </div>
+
+            <div class="card" id="library-presets-card" style="display: none;">
+              <div class="card-title">Modelos del Taller</div>
+              <div id="library-presets-container" class="presets-row"></div>
+            </div>
+
+            <div class="card" id="library-params-card">
+              <div class="card-title">Parámetros de Autoría</div>
+              <button id="btn-registered-measures" type="button" class="btn btn-secondary" style="display: none; margin-top: var(--space-2);"></button>
+              <div id="library-params-container" style="margin-top: var(--space-2);"></div>
+
+              <div class="summary-box">
+                <div class="summary-item">
+                  <strong id="library-summary-dims">-- × -- × --</strong>
+                  <span>Cotas (mm)</span>
+                </div>
+                <div class="summary-item">
+                  <strong id="library-summary-parts">--</strong>
+                  <span>Piezas estimadas</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <button id="btn-insert" class="btn btn-primary" style="display: none;">
-            <span>➕ Insertar en Modelo</span>
-          </button>
+            <div class="card" id="library-materials-card" style="display: none;">
+              <div class="card-title">Materiales del Taller</div>
+              <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0 0;">
+                Tableros por rol; el color elegido se aplica al insertar.
+              </p>
+              <div id="library-materials-container" style="margin-top: var(--space-2);"></div>
+            </div>
+
+            <button id="btn-insert" class="btn btn-primary">
+              <span>➕ Insertar en Modelo</span>
+            </button>
+          </div>
         </section>
 
         <!-- Tab 2: Contextual Inspector (Editing) -->
@@ -568,6 +918,11 @@
                   <span>Piezas estimadas</span>
                 </div>
               </div>
+            </div>
+
+            <div class="card" id="inspector-materials-card" style="display: none;">
+              <div class="card-title">Materiales del Taller</div>
+              <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
             </div>
 
             <button id="btn-update" class="btn btn-primary">
@@ -626,12 +981,21 @@
 
         var catalog = [];
         var catalogPresets = [];
-        var catalogSource = "local";
+        var catalogCategories = [];
+        var catalogMaterials = [];
+        var catalogSource = "loading";
         var licenseBlocked = false;
+        var catalogMedia = null;
         var activeLibDef = null;
         var libParams = {};
+        var libMaterialChoices = {};
+
+        var searchQuery = "";
+        var selectedCategory = "ALL";
 
         var selectedInstance = null;
+        var inspectorDef = null;
+        var inspectorMaterialChoices = {};
         var inspectorParams = {};
 
         // DOM elements
@@ -641,18 +1005,47 @@
         var connectionDetail = document.getElementById("connection-detail");
         var btnClose = document.getElementById("btn-close");
 
-        // Library elements
-        var libSelect = document.getElementById("library-furniture-select");
+        // Library Browser elements
+        var libBrowserView = document.getElementById("library-browser-view");
+        var libConfiguratorView = document.getElementById("library-configurator-view");
+        var libCountBadge = document.getElementById("library-count-badge");
+        var libSearchInput = document.getElementById("library-search-input");
+        var libSearchClear = document.getElementById("library-search-clear");
+        var libCategoriesContainer = document.getElementById("library-categories-container");
+        var libCategoryL1 = document.getElementById("library-category-l1");
+        var libCategoryL2 = document.getElementById("library-category-l2");
+        var libCategoryL3 = document.getElementById("library-category-l3");
+        var libCardsGrid = document.getElementById("library-cards-grid");
+        var libLicenseBlocker = document.getElementById("library-license-blocker");
+        var libSourceNote = document.getElementById("library-source-note");
+        var btnRegisteredMeasures = document.getElementById("btn-registered-measures");
+
+        // Library States
+        var libLoadingState = document.getElementById("library-loading-state");
+        var libEmptyState = document.getElementById("library-empty-state");
+        var libEmptyIcon = document.getElementById("library-empty-icon");
+        var libEmptyTitle = document.getElementById("library-empty-title");
+        var libEmptyMsg = document.getElementById("library-empty-msg");
+        var btnEmptyAction = document.getElementById("btn-library-empty-action");
+        var libNoResultsState = document.getElementById("library-no-results-state");
+        var libNoResultsMsg = document.getElementById("library-no-results-msg");
+        var btnClearSearch = document.getElementById("btn-clear-search");
+
+        // Configurator elements
+        var btnBackToLibrary = document.getElementById("btn-back-to-library");
+        var libSelectedName = document.getElementById("library-selected-name");
+        var libSelectedCode = document.getElementById("library-selected-code");
+        var libSelectedCategoryBadge = document.getElementById("library-selected-category-badge");
         var libDesc = document.getElementById("library-furniture-desc");
+        var libPresetsCard = document.getElementById("library-presets-card");
+        var libPresetsContainer = document.getElementById("library-presets-container");
         var libParamsCard = document.getElementById("library-params-card");
         var libParamsContainer = document.getElementById("library-params-container");
+        var libMaterialsCard = document.getElementById("library-materials-card");
+        var libMaterialsContainer = document.getElementById("library-materials-container");
         var libSummaryDims = document.getElementById("library-summary-dims");
         var libSummaryParts = document.getElementById("library-summary-parts");
         var btnInsert = document.getElementById("btn-insert");
-        var libSourceNote = document.getElementById("library-source-note");
-        var libLicenseBlocker = document.getElementById("library-license-blocker");
-        var libPresetsCard = document.getElementById("library-presets-card");
-        var libPresetsContainer = document.getElementById("library-presets-container");
 
         // Session elements
         var loginCard = document.getElementById("login-card");
@@ -675,12 +1068,83 @@
         var inspectorInteractiveBadge = document.getElementById("inspector-interactive-badge");
         var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
         var inspectorParamsContainer = document.getElementById("inspector-params-container");
+        var inspectorMaterialsCard = document.getElementById("inspector-materials-card");
+        var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
         var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
         var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
         var btnUpdate = document.getElementById("btn-update");
         var btnDelete = document.getElementById("btn-delete");
 
-        // Tabs
+        // Category UI mapping dictionary
+        var CATEGORY_LABELS = {
+          "kitchen_base": "Bases",
+          "kitchen_wall": "Alacenas",
+          "closet": "Torres / Closets",
+          "desk": "Escritorios",
+          "base": "Bases",
+          "wall": "Alacenas",
+          "tall": "Torres / Despensas",
+          "drawer": "Cajoneros",
+          "drawers": "Cajoneros",
+          "cajonero": "Cajoneros",
+          "cajoneros": "Cajoneros",
+          "inferior": "Bases",
+          "superior": "Alacenas"
+        };
+
+        function formatCategoryLabel(catKey) {
+          if (!catKey) return "General";
+          if (CATEGORY_LABELS[catKey]) return CATEGORY_LABELS[catKey];
+          return String(catKey)
+            .replace(/[_-]+/g, " ")
+            .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+        }
+
+        function createFurniturePlaceholderSvg() {
+          return '<svg class="furniture-card-svg" viewBox="0 0 80 60" width="68" height="51" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M12 18 L40 6 L68 18 L40 30 Z" fill="currentColor" fill-opacity="0.08" />' +
+            '<path d="M12 18 L12 44 L40 56 L40 30 Z" fill="currentColor" fill-opacity="0.14" />' +
+            '<path d="M68 18 L68 44 L40 56 L40 30 Z" fill="currentColor" fill-opacity="0.05" />' +
+            '<line x1="40" y1="30" x2="40" y2="56" />' +
+            '<line x1="12" y1="18" x2="40" y2="30" />' +
+            '<line x1="40" y1="30" x2="68" y2="18" />' +
+            '<line x1="26" y1="36" x2="26" y2="44" stroke-width="2" />' +
+            '</svg>';
+        }
+
+        // Workshop previews arrive as server-relative paths (/api/media/...).
+        // Resolve them against the authenticated workshop origin and append
+        // the media token accepted by GET /api/media/{name}. Absolute and
+        // data URLs pass through untouched.
+        function resolveMediaUrl(url) {
+          if (!url || typeof url !== "string") return url;
+          if (!catalogMedia || url.indexOf("http") === 0 || url.indexOf("data:") === 0) return url;
+          if (url.charAt(0) !== "/") return url;
+          var sep = url.indexOf("?") >= 0 ? "&" : "?";
+          return catalogMedia.baseUrl + url + sep + "token=" + encodeURIComponent(catalogMedia.token);
+        }
+
+        function getDefinitionDefaultDims(def) {
+          var params = def.parameters || [];
+          var width = 600;
+          var height = 720;
+          var depth = 590;
+
+          for (var i = 0; i < params.length; i++) {
+            var p = params[i];
+            if (p.name === "widthMm" || p.name === "lengthMm" || p.name === "width" || p.name === "length") {
+              width = p.defaultValue !== undefined ? p.defaultValue : width;
+            } else if (p.name === "heightMm" || p.name === "height") {
+              height = p.defaultValue !== undefined ? p.defaultValue : height;
+            } else if (p.name === "depthMm" || p.name === "depth") {
+              depth = p.defaultValue !== undefined ? p.defaultValue : depth;
+            }
+          }
+
+          return width + " × " + height + " × " + depth + " mm";
+        }
+
+        // Tabs navigation
         function switchTab(tabId) {
           document.querySelectorAll(".tab-button").forEach(function (b) { b.classList.remove("active"); });
           document.querySelectorAll(".tab-pane").forEach(function (p) { p.classList.remove("active"); });
@@ -695,6 +1159,486 @@
             switchTab(btn.getAttribute("data-tab"));
           });
         });
+
+        // -------------------------------------------------------------
+        // Modular Library Rendering Functions
+        // -------------------------------------------------------------
+
+        function showLibraryView() {
+          libBrowserView.style.display = "block";
+          libConfiguratorView.style.display = "none";
+          renderLibraryBrowser();
+        }
+
+        function showConfiguratorView(def) {
+          activeLibDef = def;
+          libBrowserView.style.display = "none";
+          libConfiguratorView.style.display = "block";
+
+          libSelectedName.textContent = def.name || "Mueble";
+          libSelectedCode.textContent = def.code ? "Código: " + def.code : "";
+          libSelectedCategoryBadge.textContent = formatCategoryLabel(def.category);
+          libDesc.textContent = def.description || "";
+
+          libParams = getDefaultParams(def);
+          libMaterialChoices = defaultMaterialChoices(def);
+
+          bindLibraryParamForm();
+          renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id) {
+            libMaterialChoices[role] = id;
+          });
+          renderRegisteredMeasuresButton(def);
+          renderPresetChips();
+
+          updateLibrarySummary();
+        }
+
+        function bindLibraryParamForm() {
+          renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
+            libParams[name] = val;
+            updateLibrarySummary();
+          });
+        }
+
+        // -------------------------------------------------------------
+        // Material selection (board option choices by role)
+        // -------------------------------------------------------------
+
+        function materialById(id) {
+          for (var i = 0; i < catalogMaterials.length; i++) {
+            if (catalogMaterials[i].materialId === id) return catalogMaterials[i];
+          }
+          return null;
+        }
+
+        // Material options for a role: the workshop's curated list when the
+        // option group defines one, else every active material.
+        function optionMaterialIds(roleEntry) {
+          var ids = (roleEntry.optionIds || []).filter(function (id) { return !!materialById(id); });
+          if (ids.length > 0) return ids;
+          return catalogMaterials.map(function (m) { return m.materialId; });
+        }
+
+        function defaultMaterialChoices(def) {
+          var choices = {};
+          (def && def.materialRoles ? def.materialRoles : []).forEach(function (r) {
+            var ids = optionMaterialIds(r);
+            if (ids.length > 0) choices[r.role] = ids[0];
+          });
+          return choices;
+        }
+
+        function materialOptionLabel(m) {
+          if (!m) return "--";
+          var label = m.name || m.code || m.materialId;
+          if (m.code && m.name) label += " (" + m.code + ")";
+          if (m.thicknessMm) label += " — " + m.thicknessMm + " mm";
+          return label;
+        }
+
+        function renderMaterialSelectors(card, container, def, choices, onChange) {
+          var roles = (def && def.materialRoles ? def.materialRoles : []).filter(function (r) {
+            return r && r.role && optionMaterialIds(r).length > 0;
+          });
+          card.style.display = roles.length > 0 ? "block" : "none";
+          container.innerHTML = "";
+
+          roles.forEach(function (r) {
+            if (!choices[r.role]) choices[r.role] = optionMaterialIds(r)[0];
+
+            var group = document.createElement("div");
+            group.className = "param-group";
+
+            var label = document.createElement("label");
+            label.className = "param-label";
+            label.textContent = r.label || r.role;
+            group.appendChild(label);
+
+            var select = document.createElement("select");
+            select.className = "dim-input";
+            select.style.width = "100%";
+            select.setAttribute("aria-label", "Material " + (r.label || r.role));
+            optionMaterialIds(r).forEach(function (id) {
+              var opt = document.createElement("option");
+              opt.value = id;
+              opt.textContent = materialOptionLabel(materialById(id));
+              if (id === choices[r.role]) opt.selected = true;
+              select.appendChild(opt);
+            });
+            select.addEventListener("change", function () {
+              onChange(r.role, select.value);
+            });
+            group.appendChild(select);
+            container.appendChild(group);
+          });
+        }
+
+        // Dimension parameters of a definition (mm measures).
+        function registeredMeasureParams(def) {
+          return (def && def.parameters ? def.parameters : []).filter(function (p) {
+            return p.type === "number" && p.unit === "mm" &&
+              (p.name === "widthMm" || p.name === "heightMm" || p.name === "depthMm" || p.name === "lengthMm");
+          });
+        }
+
+        // The button both SHOWS the measures registered on the furniture
+        // record and restores them as the current authoring values.
+        function renderRegisteredMeasuresButton(def) {
+          var dims = registeredMeasureParams(def);
+          if (!activeLibDef || dims.length === 0) {
+            btnRegisteredMeasures.style.display = "none";
+            btnRegisteredMeasures.onclick = null;
+            return;
+          }
+          var values = dims.map(function (p) { return p.defaultValue + " mm"; }).join(" × ");
+          btnRegisteredMeasures.textContent = "📐 Medidas registradas: " + values;
+          btnRegisteredMeasures.style.display = "flex";
+          btnRegisteredMeasures.onclick = function () {
+            registeredMeasureParams(activeLibDef).forEach(function (p) {
+              libParams[p.name] = p.defaultValue;
+            });
+            bindLibraryParamForm();
+            updateLibrarySummary();
+            showToast("success", "Medidas del registro aplicadas: " + values);
+          };
+        }
+
+        function renderLibraryState(stateType, options) {
+          options = options || {};
+          libLoadingState.style.display = stateType === "loading" ? "block" : "none";
+          libEmptyState.style.display = stateType === "empty" ? "block" : "none";
+          libNoResultsState.style.display = stateType === "no-results" ? "block" : "none";
+          libCardsGrid.style.display = stateType === "grid" ? "grid" : "none";
+
+          if (stateType === "empty") {
+            var source = options.source || "local";
+            var blocked = !!options.blocked;
+
+            if (blocked) {
+              libEmptyIcon.textContent = "🔒";
+              libEmptyTitle.textContent = "Licencia inactiva";
+              libEmptyMsg.textContent = "Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.";
+              btnEmptyAction.style.display = "none";
+            } else if (source === "unauthenticated") {
+              libEmptyIcon.textContent = "🔑";
+              libEmptyTitle.textContent = "Sesión requerida";
+              libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca de muebles.";
+              btnEmptyAction.textContent = "Ir a Iniciar Sesión";
+              btnEmptyAction.style.display = "inline-flex";
+              btnEmptyAction.onclick = function () { switchTab("status"); };
+            } else if (source === "error") {
+              libEmptyIcon.textContent = "⚠️";
+              libEmptyTitle.textContent = "Error de conexión";
+              libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
+              btnEmptyAction.textContent = "Revisar Estado";
+              btnEmptyAction.style.display = "inline-flex";
+              btnEmptyAction.onclick = function () { switchTab("status"); };
+            } else {
+              libEmptyIcon.textContent = "📦";
+              libEmptyTitle.textContent = "El taller todavía no tiene muebles";
+              libEmptyMsg.textContent = "Creá muebles en la plataforma Granete para verlos e insertarlos directamente en SketchUp.";
+              btnEmptyAction.style.display = "none";
+            }
+          } else if (stateType === "no-results") {
+            var q = options.query;
+            if (q) {
+              libNoResultsMsg.textContent = 'No se encontraron muebles que coincidan con "' + q + '".';
+            } else {
+              libNoResultsMsg.textContent = "No hay muebles en la categoría seleccionada.";
+            }
+          }
+        }
+
+        // -------------------------------------------------------------
+        // Category cascade (web app library logic): the catalog carries the
+        // workshop category tree (up to 3 levels, e.g. Cocinas › Inferiores ›
+        // Puertas); filtering by a node includes its whole subtree, and
+        // "Sin categoría" buckets modules without a category.
+        // -------------------------------------------------------------
+        var categoryNodeById = {};
+        var categoryChildren = {};
+
+        function buildCategoryIndex() {
+          categoryNodeById = {};
+          categoryChildren = {};
+          catalogCategories.forEach(function (c) {
+            categoryNodeById[c.categoryId] = c;
+            var parent = c.parentId || "";
+            (categoryChildren[parent] = categoryChildren[parent] || []).push(c);
+          });
+          Object.keys(categoryChildren).forEach(function (key) {
+            categoryChildren[key].sort(function (a, b) {
+              var byOrder = (a.sortOrder || 0) - (b.sortOrder || 0);
+              if (byOrder !== 0) return byOrder;
+              return String(a.name).localeCompare(String(b.name), "es");
+            });
+          });
+        }
+
+        function subtreeCategoryIds(rootId) {
+          var ids = {};
+          var stack = [rootId];
+          while (stack.length > 0) {
+            var id = stack.pop();
+            if (ids[id]) continue;
+            ids[id] = true;
+            (categoryChildren[id] || []).forEach(function (child) {
+              stack.push(child.categoryId);
+            });
+          }
+          return ids;
+        }
+
+        function countModulesInSubtree(rootId) {
+          var ids = subtreeCategoryIds(rootId);
+          return catalog.filter(function (d) { return d.categoryId && ids[d.categoryId]; }).length;
+        }
+
+        function categoryPathIdsOf(catId) {
+          if (!catId || catId === "ALL" || catId === "UNCAT" || !categoryNodeById[catId]) return [];
+          var ids = [];
+          var current = catId;
+          while (current && categoryNodeById[current]) {
+            ids.unshift(current);
+            current = categoryNodeById[current].parentId;
+          }
+          return ids;
+        }
+
+        function appendCategoryOption(select, value, label) {
+          var opt = document.createElement("option");
+          opt.value = value;
+          opt.textContent = label;
+          select.appendChild(opt);
+        }
+
+        function fillCascadeLevel(select, parentId, selectedId, allLabel, allValue, onSelect) {
+          var children = categoryChildren[parentId] || [];
+          if (children.length === 0) {
+            select.style.display = "none";
+            select.innerHTML = "";
+            select.onchange = null;
+            return;
+          }
+          select.style.display = "block";
+          select.innerHTML = "";
+          appendCategoryOption(select, allValue, allLabel);
+          children.forEach(function (c) {
+            appendCategoryOption(select, c.categoryId, c.name + " (" + countModulesInSubtree(c.categoryId) + ")");
+          });
+          select.value = selectedId && categoryNodeById[selectedId] ? selectedId : allValue;
+          select.onchange = function () {
+            onSelect(select.value);
+          };
+        }
+
+        function renderCategoryFilters(categories, activeCategory, onSelectCategory) {
+          buildCategoryIndex();
+
+          if (catalogCategories.length === 0) {
+            // Legacy payload without a category tree (e.g. offline catalog):
+            // flat options from the definitions' category strings.
+            var distinct = {};
+            catalog.forEach(function (def) {
+              var cat = def.category || "general";
+              distinct[cat] = true;
+            });
+            var keys = Object.keys(distinct).sort();
+            if (keys.length <= 1) {
+              libCategoriesContainer.style.display = "none";
+              return;
+            }
+            libCategoriesContainer.style.display = "flex";
+            libCategoryL2.style.display = "none";
+            libCategoryL3.style.display = "none";
+            libCategoryL1.innerHTML = "";
+            appendCategoryOption(libCategoryL1, "ALL", "Todas las categorías");
+            keys.forEach(function (key) {
+              appendCategoryOption(libCategoryL1, key, formatCategoryLabel(key));
+            });
+            libCategoryL1.value = activeCategory && distinct[activeCategory] ? activeCategory : "ALL";
+            libCategoryL1.onchange = function () {
+              onSelectCategory(libCategoryL1.value);
+            };
+            return;
+          }
+
+          var roots = categoryChildren[""] || [];
+          var hasUncategorized = catalog.some(function (d) { return !d.categoryId; });
+          if (roots.length === 0 && !hasUncategorized) {
+            libCategoriesContainer.style.display = "none";
+            return;
+          }
+
+          libCategoriesContainer.style.display = "flex";
+          var pathIds = categoryPathIdsOf(activeCategory);
+          var l1Choice = pathIds[0] || null;
+
+          libCategoryL1.innerHTML = "";
+          appendCategoryOption(libCategoryL1, "ALL", "Todas las categorías");
+          if (hasUncategorized) appendCategoryOption(libCategoryL1, "UNCAT", "Sin categoría");
+          roots.forEach(function (c) {
+            appendCategoryOption(libCategoryL1, c.categoryId, c.name + " (" + countModulesInSubtree(c.categoryId) + ")");
+          });
+          libCategoryL1.value = activeCategory === "UNCAT" ? "UNCAT" : (l1Choice || "ALL");
+          libCategoryL1.onchange = function () {
+            onSelectCategory(libCategoryL1.value);
+          };
+
+          var l2Choice = pathIds[1] || null;
+          fillCascadeLevel(libCategoryL2, l1Choice || "", l2Choice, "Todas", l1Choice || "ALL", onSelectCategory);
+
+          var l3Choice = pathIds[2] || null;
+          fillCascadeLevel(libCategoryL3, l2Choice || "", l3Choice, "Todas", l2Choice || l1Choice || "ALL", onSelectCategory);
+        }
+
+        function renderFurnitureCards(definitions, container, onSelectDefinition) {
+          container.innerHTML = "";
+          if (!definitions || definitions.length === 0) return;
+
+          definitions.forEach(function (def) {
+            var card = document.createElement("div");
+            card.className = "furniture-card" + (activeLibDef && activeLibDef.furniture_definition_id === def.furniture_definition_id ? " selected" : "");
+            card.setAttribute("role", "button");
+            card.setAttribute("tabindex", "0");
+            card.setAttribute("aria-label", "Seleccionar " + def.name);
+            card.setAttribute("data-definition-id", def.furniture_definition_id);
+
+            // Preview Area
+            var preview = document.createElement("div");
+            preview.className = "furniture-card-preview";
+
+            var imageUrl = resolveMediaUrl(def.imageUrl || def.thumbnailUrl || def.previewUrl);
+            if (imageUrl) {
+              var img = document.createElement("img");
+              img.src = imageUrl;
+              img.alt = def.name;
+              img.className = "furniture-card-img";
+              img.loading = "lazy";
+              img.onerror = function () {
+                img.style.display = "none";
+                if (img.nextElementSibling) img.nextElementSibling.style.display = "flex";
+              };
+              preview.appendChild(img);
+
+              var fallbackPlaceholder = document.createElement("div");
+              fallbackPlaceholder.className = "furniture-card-placeholder";
+              fallbackPlaceholder.style.display = "none";
+              fallbackPlaceholder.innerHTML = createFurniturePlaceholderSvg();
+              preview.appendChild(fallbackPlaceholder);
+            } else {
+              var placeholder = document.createElement("div");
+              placeholder.className = "furniture-card-placeholder";
+              placeholder.innerHTML = createFurniturePlaceholderSvg();
+              preview.appendChild(placeholder);
+            }
+
+            if (def.category) {
+              var catBadge = document.createElement("span");
+              catBadge.className = "furniture-card-badge";
+              catBadge.textContent = formatCategoryLabel(def.category);
+              preview.appendChild(catBadge);
+            }
+
+            card.appendChild(preview);
+
+            // Card Body
+            var body = document.createElement("div");
+            body.className = "furniture-card-body";
+
+            var title = document.createElement("h3");
+            title.className = "furniture-card-title";
+            title.textContent = def.name;
+            body.appendChild(title);
+
+            var dims = document.createElement("span");
+            dims.className = "furniture-card-dims";
+            dims.textContent = getDefinitionDefaultDims(def);
+            body.appendChild(dims);
+
+            if (def.code) {
+              var code = document.createElement("span");
+              code.className = "furniture-card-code";
+              code.textContent = def.code;
+              body.appendChild(code);
+            }
+
+            card.appendChild(body);
+
+            // Interaction events
+            card.addEventListener("click", function () {
+              onSelectDefinition(def);
+            });
+
+            card.addEventListener("keydown", function (e) {
+              if (e.key === "Enter" || e.key === " " || e.keyCode === 13 || e.keyCode === 32) {
+                e.preventDefault();
+                onSelectDefinition(def);
+              }
+            });
+
+            container.appendChild(card);
+          });
+        }
+
+        function renderLibraryBrowser() {
+          if (catalogSource === "loading" && catalog.length === 0) {
+            libCountBadge.textContent = "Cargando…";
+            renderLibraryState("loading");
+            return;
+          }
+
+          if (catalog.length === 0) {
+            libCountBadge.textContent = "0 muebles";
+            libCategoriesContainer.style.display = "none";
+            renderLibraryState("empty", { source: catalogSource, blocked: licenseBlocked });
+            return;
+          }
+
+          renderCategoryFilters(null, selectedCategory, function (newCat) {
+            selectedCategory = newCat;
+            renderLibraryBrowser();
+          });
+
+          // Filter definitions: subtree-inclusive when the catalog carries a
+          // category tree; exact string match for legacy flat catalogs.
+          var filterIds = null;
+          if (selectedCategory === "UNCAT") {
+            filterIds = "UNCAT";
+          } else if (selectedCategory && selectedCategory !== "ALL" && categoryNodeById[selectedCategory]) {
+            filterIds = subtreeCategoryIds(selectedCategory);
+          }
+
+          var query = searchQuery.trim().toLowerCase();
+          var filtered = catalog.filter(function (def) {
+            if (filterIds === "UNCAT") {
+              if (def.categoryId) return false;
+            } else if (filterIds) {
+              if (!def.categoryId || !filterIds[def.categoryId]) return false;
+            } else if (selectedCategory !== "ALL" && catalogCategories.length === 0) {
+              if ((def.category || "general") !== selectedCategory) return false;
+            }
+            if (!query) return true;
+
+            var nameMatch = (def.name || "").toLowerCase().indexOf(query) !== -1;
+            var codeMatch = (def.code || "").toLowerCase().indexOf(query) !== -1;
+            var catMatch = (def.category || "").toLowerCase().indexOf(query) !== -1;
+            var descMatch = (def.description || "").toLowerCase().indexOf(query) !== -1;
+
+            return nameMatch || codeMatch || catMatch || descMatch;
+          });
+
+          libCountBadge.textContent = filtered.length + (filtered.length === 1 ? " mueble" : " muebles");
+
+          if (filtered.length === 0) {
+            renderLibraryState("no-results", { query: searchQuery, category: selectedCategory });
+          } else {
+            renderLibraryState("grid");
+            renderFurnitureCards(filtered, libCardsGrid, function (def) {
+              showConfiguratorView(def);
+            });
+          }
+        }
 
         // Bridge exposed to Ruby
         window.GraneteDialog = {
@@ -747,41 +1691,50 @@
             if (Object.prototype.toString.call(payload) === "[object Array]") {
               catalog = payload || [];
               catalogPresets = [];
+              catalogCategories = [];
+              catalogMaterials = [];
               catalogSource = "local";
               licenseBlocked = false;
+              catalogMedia = null;
             } else {
               payload = payload || {};
               catalog = payload.definitions || [];
               catalogPresets = payload.presets || [];
+              catalogCategories = payload.categories || [];
+              catalogMaterials = payload.materials || [];
               catalogSource = payload.source || "local";
               licenseBlocked = !!payload.licenseBlocked;
+              catalogMedia = payload.media || null;
             }
-            libSelect.innerHTML = "";
-            if (catalog.length === 0) {
-              libSelect.innerHTML = "<option value=''>Sin muebles en catálogo</option>";
-              return;
-            }
-
-            catalog.forEach(function (def) {
-              var opt = document.createElement("option");
-              opt.value = def.furniture_definition_id;
-              opt.textContent = def.name;
-              libSelect.appendChild(opt);
-            });
 
             libLicenseBlocker.style.display = licenseBlocked ? "block" : "none";
-            libSourceNote.textContent = catalogSource === "remote"
-              ? "📚 Biblioteca del taller (servidor Granete)"
-              : "💾 Catálogo local de respaldo (sin conexión)";
+            libSourceNote.textContent = catalogSourceNote(catalogSource, licenseBlocked, catalog.length);
 
-            selectLibraryDefinition(catalog[0].furniture_definition_id);
+            // If activeLibDef is set and still exists, refresh configurator view, otherwise show library browser
+            if (activeLibDef) {
+              var found = catalog.find(function (d) { return d.furniture_definition_id === activeLibDef.furniture_definition_id; });
+              if (found) {
+                showConfiguratorView(found);
+              } else {
+                showLibraryView();
+              }
+            } else {
+              showLibraryView();
+            }
           },
 
           onInsertionResult: function (result) {
             btnInsert.disabled = false;
             btnInsert.textContent = "➕ Insertar en Modelo";
             if (result && result.success) {
-              showToast("success", "✓ Mueble " + (result.name || "") + " insertado en el modelo.");
+              var detail = "";
+              if (typeof result.component_count === "number" && result.component_count > 0) {
+                detail = " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s");
+                if (typeof result.hardware_count === "number" && result.hardware_count > 0) {
+                  detail += " (" + result.hardware_count + " herraje" + (result.hardware_count === 1 ? "" : "s") + ")";
+                }
+              }
+              showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail + ".");
             } else {
               showToast("error", "Error: " + ((result && result.error) || "Fallo en la inserción"));
             }
@@ -791,7 +1744,10 @@
             btnUpdate.disabled = false;
             btnUpdate.textContent = "💾 Actualizar Mueble";
             if (result && result.success) {
-              showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place.");
+              var detail = typeof result.component_count === "number" && result.component_count > 0
+                ? " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s")
+                : "";
+              showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place" + detail + ".");
             } else {
               showToast("error", "Error: " + ((result && result.error) || "Fallo al actualizar"));
             }
@@ -809,6 +1765,7 @@
             inspectorActive.style.display = "block";
 
             var def = instanceData.definition || catalog.find(function (d) { return d.furniture_definition_id === instanceData.definitionId; });
+            inspectorDef = def || null;
             inspectorName.textContent = instanceData.name || (def ? def.name : "Mueble");
             inspectorId.textContent = "ID: " + (instanceData.instanceId || "--");
 
@@ -826,12 +1783,17 @@
             }
 
             inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), instanceData.parameters || {});
+            inspectorMaterialChoices = defaultMaterialChoices(def);
 
             renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
               inspectorParams[name] = val;
               updateInspectorSummary();
               validateInteractiveClient(def, inspectorParams);
             });
+            renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
+              inspectorMaterialChoices, function (role, id) {
+                inspectorMaterialChoices[role] = id;
+              });
 
             updateInspectorSummary();
             switchTab("inspector");
@@ -846,6 +1808,22 @@
           }, 4000);
         }
 
+        function catalogSourceNote(source, blocked, count) {
+          if (blocked) return "🔒 Tu licencia no está activa; la biblioteca del taller quedó bloqueada.";
+          if (source === "remote") {
+            return count > 0
+              ? "📚 Biblioteca del taller (servidor Granete) — " + count + " mueble" + (count === 1 ? "" : "s")
+              : "El taller todavía no tiene muebles. Creá muebles en Granete y volvé a abrir la biblioteca.";
+          }
+          if (source === "unauthenticated") {
+            return "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca.";
+          }
+          if (source === "error") {
+            return "No se pudo conectar con Granete. Revisá el servidor en la pestaña Estado e iniciá sesión de nuevo.";
+          }
+          return "💾 Catálogo local (modo desarrollo)";
+        }
+
         function getDefaultParams(def) {
           var p = {};
           (def.parameters || []).forEach(function (param) {
@@ -854,44 +1832,24 @@
           return p;
         }
 
-        function selectLibraryDefinition(definitionId) {
-          activeLibDef = catalog.find(function (d) { return d.furniture_definition_id === definitionId; });
-          if (!activeLibDef) {
-            libParamsCard.style.display = "none";
-            btnInsert.style.display = "none";
-            return;
-          }
-
-          libDesc.textContent = activeLibDef.description || "";
-          libParams = getDefaultParams(activeLibDef);
-
-          renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
-            libParams[name] = val;
-            updateLibrarySummary();
-          });
-          renderPresetChips();
-
-          libParamsCard.style.display = "block";
-          btnInsert.style.display = "flex";
-          updateLibrarySummary();
-        }
-
         function renderPresetChips() {
           libPresetsContainer.innerHTML = "";
+          if (!activeLibDef) {
+            libPresetsCard.style.display = "none";
+            return;
+          }
           var mine = catalogPresets.filter(function (preset) {
             return preset.furnitureDefinitionId === activeLibDef.furniture_definition_id;
           });
           libPresetsCard.style.display = mine.length > 0 ? "block" : "none";
           mine.forEach(function (preset) {
             var chip = document.createElement("button");
+            chip.type = "button";
             chip.className = "preset-chip";
             chip.textContent = preset.name;
             chip.addEventListener("click", function () {
               libParams = Object.assign({}, getDefaultParams(activeLibDef), preset.parameters || {});
-              renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
-                libParams[name] = val;
-                updateLibrarySummary();
-              });
+              bindLibraryParamForm();
               libPresetsContainer.querySelectorAll(".preset-chip").forEach(function (c) { c.classList.remove("active"); });
               chip.classList.add("active");
               updateLibrarySummary();
@@ -961,42 +1919,40 @@
             labelRow.appendChild(badge);
             group.appendChild(labelRow);
 
-            if (p.type === "number" && p.min !== undefined && p.max !== undefined && p.unit === "mm") {
-              var sliderRow = document.createElement("div");
-              sliderRow.className = "slider-row";
+            if (p.type === "number" && p.unit === "mm") {
+              // Measures are plain text fields (precise mm entry); the
+              // registered defaults are one click away via the
+              // "medidas registradas" button in the configurator.
+              var dimRow = document.createElement("div");
+              dimRow.className = "dim-input-row";
 
-              var slider = document.createElement("input");
-              slider.type = "range";
-              slider.min = p.min;
-              slider.max = p.max;
-              slider.step = p.step || 10;
-              slider.value = val;
+              var dimInput = document.createElement("input");
+              dimInput.type = "number";
+              dimInput.className = "dim-input";
+              dimInput.inputMode = "numeric";
+              dimInput.value = val;
+              if (p.step) dimInput.step = p.step;
+              if (p.min !== undefined) dimInput.min = p.min;
+              if (p.max !== undefined) dimInput.max = p.max;
+              dimInput.setAttribute("aria-label", p.label);
 
-              var numInput = document.createElement("input");
-              numInput.type = "number";
-              numInput.className = "number-input-sm";
-              numInput.min = p.min;
-              numInput.max = p.max;
-              numInput.step = p.step || 10;
-              numInput.value = val;
+              var dimUnit = document.createElement("span");
+              dimUnit.className = "dim-unit";
+              dimUnit.textContent = "mm";
 
-              slider.addEventListener("input", function () {
-                numInput.value = slider.value;
-                badge.textContent = slider.value + " mm";
-                onChange(p.name, Number(slider.value), p.unit);
-              });
-
-              numInput.addEventListener("change", function () {
-                var v = Math.min(Math.max(Number(numInput.value), p.min), p.max);
-                slider.value = v;
-                numInput.value = v;
+              dimInput.addEventListener("change", function () {
+                var v = Number(dimInput.value);
+                if (isNaN(v)) v = p.defaultValue;
+                if (p.min !== undefined && v < p.min) v = p.min;
+                if (p.max !== undefined && v > p.max) v = p.max;
+                dimInput.value = v;
                 badge.textContent = v + " mm";
                 onChange(p.name, v, p.unit);
               });
 
-              sliderRow.appendChild(slider);
-              sliderRow.appendChild(numInput);
-              group.appendChild(sliderRow);
+              dimRow.appendChild(dimInput);
+              dimRow.appendChild(dimUnit);
+              group.appendChild(dimRow);
             } else if (p.type === "number" && p.min !== undefined && p.max !== undefined) {
               var stepper = document.createElement("div");
               stepper.className = "stepper";
@@ -1016,7 +1972,7 @@
               btnPlus.textContent = "+";
 
               btnMinus.addEventListener("click", function () {
-                var cur = Number(currentValues[p.name] || p.defaultValue);
+                var cur = Number(currentValues[p.name] !== undefined ? currentValues[p.name] : p.defaultValue);
                 if (cur > p.min) {
                   cur -= (p.step || 1);
                   valDisplay.textContent = cur;
@@ -1026,7 +1982,7 @@
               });
 
               btnPlus.addEventListener("click", function () {
-                var cur = Number(currentValues[p.name] || p.defaultValue);
+                var cur = Number(currentValues[p.name] !== undefined ? currentValues[p.name] : p.defaultValue);
                 if (cur < p.max) {
                   cur += (p.step || 1);
                   valDisplay.textContent = cur;
@@ -1059,16 +2015,32 @@
           });
         }
 
+        // Estimated piece count of a definition. Server-resolved catalogs carry
+        // the real composition (estimatedPartCount/estimatedHardwareCount from
+        // the module's structure); the static fallback keeps the old heuristic.
+        function estimatedPartsLabel(def) {
+          if (def && typeof def.estimatedPartCount === "number") {
+            var parts = def.estimatedPartCount;
+            var hw = typeof def.estimatedHardwareCount === "number" ? def.estimatedHardwareCount : 0;
+            return parts + " pieza" + (parts === 1 ? "" : "s") + (hw > 0 ? " + " + hw + " herraje" + (hw === 1 ? "" : "s") : "");
+          }
+          var params = def && def.parameters ? def.parameters : [];
+          var counts = { shelfCount: 0, doorCount: 0 };
+          params.forEach(function (p) {
+            if (p.name === "shelfCount" || p.name === "doorCount") {
+              counts[p.name] = Number(p.defaultValue) || 0;
+            }
+          });
+          var guess = 2 + counts.shelfCount + counts.doorCount;
+          return guess + " piezas";
+        }
+
         function updateLibrarySummary() {
           var w = libParams.widthMm || libParams.lengthMm || 600;
           var h = libParams.heightMm || 720;
           var d = libParams.depthMm || 590;
           libSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-
-          var parts = 2;
-          if (libParams.shelfCount) parts += Number(libParams.shelfCount);
-          if (libParams.doorCount) parts += Number(libParams.doorCount);
-          libSummaryParts.textContent = parts + " piezas";
+          libSummaryParts.textContent = estimatedPartsLabel(activeLibDef);
         }
 
         function updateInspectorSummary() {
@@ -1076,15 +2048,35 @@
           var h = inspectorParams.heightMm || 720;
           var d = inspectorParams.depthMm || 590;
           inspectorSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-
-          var parts = 2;
-          if (inspectorParams.shelfCount) parts += Number(inspectorParams.shelfCount);
-          if (inspectorParams.doorCount) parts += Number(inspectorParams.doorCount);
-          inspectorSummaryParts.textContent = parts + " piezas";
+          inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef);
         }
 
-        libSelect.addEventListener("change", function () {
-          selectLibraryDefinition(libSelect.value);
+        // Search event bindings
+        libSearchInput.addEventListener("input", function () {
+          searchQuery = libSearchInput.value;
+          libSearchClear.style.display = searchQuery ? "block" : "none";
+          renderLibraryBrowser();
+        });
+
+        libSearchClear.addEventListener("click", function () {
+          searchQuery = "";
+          libSearchInput.value = "";
+          libSearchClear.style.display = "none";
+          libSearchInput.focus();
+          renderLibraryBrowser();
+        });
+
+        btnClearSearch.addEventListener("click", function () {
+          searchQuery = "";
+          selectedCategory = "ALL";
+          libSearchInput.value = "";
+          libSearchClear.style.display = "none";
+          renderLibraryBrowser();
+        });
+
+        btnBackToLibrary.addEventListener("click", function () {
+          activeLibDef = null;
+          showLibraryView();
         });
 
         btnInsert.addEventListener("click", function () {
@@ -1094,7 +2086,8 @@
 
           var payload = {
             definitionId: activeLibDef.furniture_definition_id,
-            parameters: libParams
+            parameters: libParams,
+            materialChoices: libMaterialChoices
           };
 
           if (window.sketchup && window.sketchup.insert_furniture) {
@@ -1114,7 +2107,8 @@
           var payload = {
             instanceId: selectedInstance.instanceId,
             definitionId: selectedInstance.definitionId,
-            parameters: inspectorParams
+            parameters: inspectorParams,
+            materialChoices: inspectorMaterialChoices
           };
 
           if (window.sketchup && window.sketchup.update_furniture) {
@@ -1165,6 +2159,9 @@
             window.sketchup.close_dialog();
           }
         });
+
+        // Initialize view
+        showLibraryView();
 
         if (window.sketchup && window.sketchup.dialog_ready) {
           window.sketchup.dialog_ready();

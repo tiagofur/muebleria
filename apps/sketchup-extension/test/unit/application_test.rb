@@ -18,6 +18,55 @@ class ApplicationTest < Minitest::Test
     end
   end
 
+  # Configured transport/auth pair serving a one-definition workshop
+  # contract, so production wiring exercises the remote catalog path
+  # instead of the old silent static fallback.
+  class FakeCatalogTransport
+    def configured?
+      true
+    end
+
+    def request(*)
+      { 'status' => 200, 'body' => WORKSHOP_CONTRACT }
+    end
+  end
+
+  class FakeCatalogAuth
+    def configured?
+      true
+    end
+
+    def authorization_header
+      'Bearer test-session'
+    end
+  end
+
+  WORKSHOP_CONTRACT = {
+    'definitions' => {
+      'kitchen-base-standard' => {
+        'furnitureDefinitionId' => 'kitchen-base-standard',
+        'code' => 'KITCHEN-BASE-600',
+        'name' => 'Gabinete Base Estándar',
+        'category' => 'kitchen_base',
+        'version' => '1.0.0',
+        'description' => 'Módulo inferior de cocina.',
+        'parameters' => [
+          { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number',
+            'defaultValue' => 600, 'min' => 300, 'max' => 1200, 'step' => 50, 'unit' => 'mm' },
+          { 'name' => 'heightMm', 'label' => 'Alto (mm)', 'type' => 'number',
+            'defaultValue' => 720, 'min' => 600, 'max' => 900, 'step' => 10, 'unit' => 'mm' },
+          { 'name' => 'depthMm', 'label' => 'Fondo (mm)', 'type' => 'number',
+            'defaultValue' => 590, 'min' => 300, 'max' => 700, 'step' => 10, 'unit' => 'mm' },
+          { 'name' => 'shelfCount', 'label' => 'Entrepaños', 'type' => 'number',
+            'defaultValue' => 1, 'min' => 0, 'max' => 4, 'step' => 1, 'unit' => 'count' },
+          { 'name' => 'doorCount', 'label' => 'Puertas', 'type' => 'number',
+            'defaultValue' => 1, 'min' => 0, 'max' => 2, 'step' => 1, 'unit' => 'count' }
+        ]
+      }
+    },
+    'presets' => []
+  }.freeze
+
   def setup
     SketchupStub.reset!
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
@@ -94,8 +143,19 @@ class ApplicationTest < Minitest::Test
   end
 
   def test_production_wiring_writes_metadata_and_rehydrates_selection
-    @application.start
-    dialog = @application.open_dialog
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    session = Granete::SketchUpExtension::Auth::SessionProvider.new(
+      logger: logger,
+      store_path: File.join(Dir.mktmpdir('granete-app-test'), 'session.json')
+    )
+    application = Granete::SketchUpExtension::Application.new(
+      logger: logger,
+      session_provider: session,
+      transport: FakeCatalogTransport.new,
+      auth_provider: FakeCatalogAuth.new
+    )
+    application.start
+    dialog = application.open_dialog
 
     dialog.callbacks.fetch('insert_furniture').call(
       nil,

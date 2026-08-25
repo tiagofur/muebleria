@@ -1,7 +1,6 @@
 package api
 
 import (
-	_ "embed"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -10,36 +9,14 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// The embedded catalog is a copy of the shared interchange artifact
-// contracts/pilotFurnitureCatalog.json (source of truth: the TS module
-// @muebles/domain/pilotFurnitureCatalog). Regenerate with:
-//
-//	go generate ./internal/api
-//
-//go:generate cp ../../../contracts/pilotFurnitureCatalog.json ./contracts/pilotFurnitureCatalog.json
-//
-//go:embed contracts/pilotFurnitureCatalog.json
-var pilotFurnitureCatalogJSON []byte
-
-// pilotFurnitureCatalogRevision is extracted once from the embedded payload and
-// used as a weak validator so clients can cache the catalog per revision.
-var pilotFurnitureCatalogRevisionValue = func() string {
-	var envelope struct {
-		RevisionID string `json:"revisionId"`
-	}
-	if err := json.Unmarshal(pilotFurnitureCatalogJSON, &envelope); err != nil || envelope.RevisionID == "" {
-		panic("furniture: embedded pilot catalog is not a valid contract envelope")
-	}
-	return `"` + envelope.RevisionID + `"`
-}()
-
-func pilotFurnitureCatalogRevision() string { return pilotFurnitureCatalogRevisionValue }
-
 // HandleFurnitureDefinitions: GET /api/furniture/definitions
-// Serves the workshop's parametric furniture catalog to authenticated clients
+// Serves the workshop's real furniture catalog to authenticated clients
 // (today: the SketchUp extension). Requires an active per-user license; the
-// response body is the shared contract artifact verbatim so every client sees
-// byte-identical catalog data.
+// response is the shared furniture contract envelope (schemaId, revisionId,
+// definitions, presets) projected from the same module rows the React app
+// edits under /catalog/modules — there is no second furniture list. The
+// deployment is single-workshop, so authentication + license are the
+// ownership boundary of what the caller can see here.
 func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -67,13 +44,72 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	modules, err := s.Store.ListModules(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	categories, err := s.Store.ListCategories(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+
+	// Composition context for the estimated piece counts of each definition.
+	structures, err := s.Store.ListStructures(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	components, err := s.Store.ListComponents(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	agregados, err := s.Store.ListAgregados(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	hardware, err := s.Store.ListHardwares(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	materials, err := s.Store.ListMaterialBoards(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	optionGroups, err := s.Store.ListOptionGroups(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+	composition := domain.Catalog{
+		Structures:   structures,
+		Components:   components,
+		Agregados:    agregados,
+		Hardware:     hardware,
+		Materials:    materials,
+		OptionGroups: optionGroups,
+	}
+
+	catalog := buildWorkshopFurnitureCatalog(modules, categories, composition)
+	catalog.RevisionID = workshopCatalogRevisionID(catalog)
+	body, err := json.Marshal(catalog)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "private, max-age=300")
-	if r.Header.Get("If-None-Match") == pilotFurnitureCatalogRevision() {
+	if r.Header.Get("If-None-Match") == `"`+catalog.RevisionID+`"` {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	w.Header().Set("ETag", pilotFurnitureCatalogRevision())
+	w.Header().Set("ETag", `"`+catalog.RevisionID+`"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(pilotFurnitureCatalogJSON)
+	_, _ = w.Write(body)
 }

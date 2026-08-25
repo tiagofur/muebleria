@@ -26,6 +26,9 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
 	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).
 	mux.Handle("GET /api/furniture/definitions", authMW(http.HandlerFunc(server.HandleFurnitureDefinitions)))
+	// Layout completo resuelto (componentes + herrajes) de una definición a
+	// medidas concretas — la extensión de SketchUp inserta desde aquí.
+	mux.Handle("GET /api/furniture/definitions/{definitionId}/layout", authMW(http.HandlerFunc(server.HandleFurnitureDefinitionLayout)))
 
 	// Clientes
 	mux.Handle("GET /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))

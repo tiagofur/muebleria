@@ -1160,6 +1160,114 @@ func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 	return nil
 }
 
+// ListModules returns the workshop's furniture modules with their measure
+// presets, skipping the heavy per-module children (board parts, hardware
+// lines, component instances). It backs catalog projections such as the
+// SketchUp furniture/definitions endpoint; anything needing the full
+// despiece must use GetFullCatalog or GetModuleByID instead.
+func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error) {
+	query := `
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, category_id,
+		       furniture_type, base_mode, base_clearance_mm, image_url
+		FROM modules
+		ORDER BY name ASC;
+	`
+	rows, err := s.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error query modules: %w", err)
+	}
+	defer rows.Close()
+
+	modules := []domain.Module{}
+	for rows.Next() {
+		var m domain.Module
+		var w, h, d *int
+		var notes *string
+		var categoryID *string
+		var furnitureType *string
+		var baseMode *string
+		var baseClearanceMm *int
+		var imageURL *string
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &w, &h, &d, &notes, &categoryID,
+			&furnitureType, &baseMode, &baseClearanceMm, &imageURL)
+		if err != nil {
+			return nil, err
+		}
+		if w != nil {
+			m.WidthMm = *w
+		}
+		if h != nil {
+			m.HeightMm = *h
+		}
+		if d != nil {
+			m.DepthMm = *d
+		}
+		if notes != nil {
+			m.Notes = *notes
+		}
+		if categoryID != nil {
+			m.CategoryID = *categoryID
+		}
+		if furnitureType != nil {
+			m.FurnitureType = *furnitureType
+		}
+		if baseMode != nil {
+			m.BaseMode = *baseMode
+		}
+		if baseClearanceMm != nil {
+			m.BaseClearanceMm = baseClearanceMm
+		}
+		if imageURL != nil {
+			m.ImageURL = *imageURL
+		}
+		modules = append(modules, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	presetsByModule, err := s.listAllModulePresets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range modules {
+		if presets, ok := presetsByModule[modules[i].ID]; ok {
+			modules[i].Presets = presets
+		} else {
+			modules[i].Presets = []domain.DimensionPreset{}
+		}
+	}
+	return modules, nil
+}
+
+func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]domain.DimensionPreset, error) {
+	query := `
+		SELECT id, module_id, name, width_mm, height_mm, depth_mm
+		FROM module_presets
+		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
+	`
+	rows, err := s.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error query module presets: %w", err)
+	}
+	defer rows.Close()
+
+	byModule := map[string][]domain.DimensionPreset{}
+	for rows.Next() {
+		var moduleID string
+		var name *string
+		var pr domain.DimensionPreset
+		if err := rows.Scan(&pr.ID, &moduleID, &name, &pr.WidthMm, &pr.HeightMm, &pr.DepthMm); err != nil {
+			return nil, err
+		}
+		if name != nil {
+			pr.Name = *name
+		}
+		byModule[moduleID] = append(byModule[moduleID], pr)
+	}
+	return byModule, rows.Err()
+}
+
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
 	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, created_at, updated_at FROM modules WHERE id = $1`
 	row := s.Pool.QueryRow(ctx, query, id)

@@ -112,14 +112,83 @@ Los componentes 3D (tiradores, bisagras, patas, guías de cajón) no utilizan ru
 
 La extensión implementa un contrato polimórfico para obtener el catálogo de muebles:
 
-- **`StaticCatalogProvider`:** Provee las definiciones locales de respaldo empacadas con la extensión (solo offline; deprecado como fuente).
-- **`RemoteCatalogProvider`:** Consulta el endpoint REST `GET /api/furniture/definitions` del servidor de Granete utilizando los puertos `Transport::Adapter` (HTTP) y `Auth::Provider` (sesión). La respuesta es el artefacto de intercambio compartido `contracts/pilotFurnitureCatalog.json` (fuente de verdad: `@muebles/domain/pilotFurnitureCatalog`), traducido a la forma interna en un único punto del provider. Expone además `all_presets` (modelos listos del taller) y las banderas `last_source`/`last_license_blocked` para la UI.
+- **`StaticCatalogProvider`:** Definiciones locales empaquetadas con la extensión. Sólo desarrollo/tests o fallback **explícito** (inyectado al construir el provider); nunca se usa en producción como sustituto silencioso del catálogo remoto.
+- **`RemoteCatalogProvider`:** Consulta el endpoint REST `GET /api/furniture/definitions` del servidor de Granete utilizando los puertos `Transport::Adapter` (HTTP) y `Auth::Provider` (sesión). La respuesta es el **catálogo real del taller autenticado**: el backend proyecta los mismos `modules` que la app React edita bajo `/api/catalog/modules` al envelope compartido de furniture (forma `contracts/pilotFurnitureCatalog.json`; adaptador `internal/api/furniture_catalog.go`). Se traduce a la forma interna en un único punto del provider. Expone además `all_presets` (medidas comerciales de cada mueble) y `last_source` (`remote|unauthenticated|license_blocked|error|local`) + `last_license_blocked` para que la UI distinga cargado/vacío/error/sin sesión/licencia bloqueada.
 
-El cambio entre proveedores locales y remotos es transparente para el diálogo HTML y el controlador de la extensión.
+El cambio entre proveedores locales y remotos es transparente para el diálogo HTML y el controlador de la extensión. Cuando el catálogo remoto no está disponible, el provider devuelve un catálogo vacío y reporta el motivo — **no** sustituye muebles genéricos.
 
 ### 6.1 Sesión y licencia (implementado)
 
 - El usuario inicia sesión desde la pestaña **Estado** con su cuenta del taller; el login viaja con `client: sketchup-extension`.
 - El backend emite un **JWT de extensión de 30 días** marcado con claim `client`; el middleware lo restringe a **solo lectura** (GET + refresh) y revalida usuario/rol/activo contra la DB en cada request, así que desactivar el usuario revoca la sesión al instante.
 - La sesión se persiste en `~/Library/Application Support/Granete/sketchup_extension_session.json` (fuera del RBZ; sin credenciales incrustadas). No se usan preferencias de SketchUp para estado estructurado: `read_default` evalúa strings con aspecto de contenedor y corrompe JSON.
-- `GET /api/furniture/definitions` exige **licencia activa por usuario** (`users.license_plan`/`license_expires_at`, gestionada por el admin con `PUT /api/admin/users/{id}/license`); sin licencia la extensión muestra el bloqueador con instrucciones y sirve el catálogo local de respaldo.
+- `GET /api/furniture/definitions` exige **licencia activa por usuario** (`users.license_plan`/`license_expires_at`, gestionada por el admin con `PUT /api/admin/users/{id}/license`); sin licencia la extensión muestra el bloqueador con instrucciones y la biblioteca queda vacía (sin catálogo de respaldo).
+
+### 6.2 Layout resuelto — inserción de la composición completa (implementado)
+
+La identidad de un mueble no alcanza para materializarlo: el catálogo de
+definiciones proyecta identidad/parámetros, y la **composición real**
+(estructura + componentes del módulo + agregados + herrajes visibles) se
+resuelve en el servidor en el momento de la inserción:
+
+```text
+Mueble creado en Granete React (Module + Structure + Components + Agregados)
+        ↓  GET /api/furniture/definitions/{definitionId}/layout?widthMm=&heightMm=&depthMm=
+Resolved Furniture Layout (backend Go, engine/layout.go)
+        • components[]: cada tablero con slotId, nombre, AABB (translationMm =
+          min corner en marco taller X=ancho/Y=fondo/Z=alto, dimensionsMm),
+          L/W/T y color por rol (misma paleta que el preview 3D web)
+        • hardware[]: cada herraje con preview shape/size/projection/color
+          resuelto a caja world-space anclada a la cara de su tablero host
+        ↓  RemoteCatalogProvider#resolved_layout (nil ⇒ fallback genérico)
+FurnitureBuilder.render_resolved_components (adaptador visual puro)
+        ↓
+FurnitureInstance completa en SketchUp (jerarquía de 3 niveles + metadata)
+```
+
+Reglas del contrato:
+
+- **La resolución vive en Go** (`internal/domain/engine/layout.go`), espejo
+  server-side de la semántica TS canónica (`engine/bom.ts` expansión espacial,
+  `spatialPlacement.ts` poses por defecto, `spatialAnchor.ts` convención
+  min-corner, `agregados.ts` unidades de sub-espacio, `hardwarePlacement.ts`
+  anclas de cara). Ruby **nunca** compone: sólo transforma cajas pre-horneadas.
+- Las fórmulas evalúan con `W/H/D`, `PW/PH/PD`, `T`, `B` (zoclo), `HW` y `i`
+  (índice de copia), igual que TS.
+- `widthMm/heightMm/depthMm` de query sobreescriben las cotas del módulo (el
+  diálogo las edita libremente); 404 definición desconocida, 400 medidas
+  inválidas, 422 composición no resoluble (error explícito), 403 sin licencia.
+- Módulos legados (sin estructura, `BoardParts` planos) se apilan por índice:
+  completitud visual sin inventar posiciones.
+- El mismo endpoint alimenta `estimatedPartCount`/`estimatedHardwareCount` de
+  cada definición en `GET /api/furniture/definitions` (contador "piezas" real
+  del diálogo; nunca más el guess `2 + entrepaños + puertas`).
+- Herrajes **cost-only** (sin `previewShape` válido) no se materializan —
+  paridad con `resolveHardwarePlacement` (VH-09).
+
+### 6.3 Elección de materiales por rol (option choices, implementado)
+
+El plugin permite elegir el tablero por rol antes de insertar, con el mismo
+modelo de elecciones que la app web (`OptionChoices = { [optionGroupCode]:
+materialId }`; el `optionRole` de cada componente ES el código del grupo):
+
+- **Catálogo** (`GET /api/furniture/definitions`): el envelope agrega
+  `materials` (tableros activos con `materialId/code/name/previewColor/
+  imageUrl/thicknessMm/grain`) y cada definición lleva `materialRoles:
+  [{role, label, optionIds}]` — roles presentes en su composición; `optionIds`
+  = la lista curada del `OptionGroup(code==role, kind="board")` si existe, o
+  todos los materiales activos como fallback. El `revisionId` (y ETag) cubre
+  también `materials`.
+- **Selector** (dialog): una lista por rol en configurador e inspector
+  (`renderMaterialSelectors`), default = primera opción; viaja al backend en
+  el payload de insert/update como `materialChoices: {ROL: materialId}`.
+- **Resolución**: el Ruby lo reenvía como `?choice.ROL=<materialId>` — el
+  token de extensión es **read-only (GET)**, así que las elecciones viajan en
+  el query string. Con elección válida, cada tablero resuelto lleva
+  `materialId/materialCode/materialName/materialColorHex` reales; elección
+  desconocida o inactiva → **422 explícito** (nunca fallback silencioso); rol
+  sin elección → paleta por rol.
+- **Visual**: el builder pinta cada grupo con materiales de SketchUp
+  namespaced (`Granete · <nombre>`, color desde `materialColorHex` /
+  `colorHex` de herrajes) vía `Model::MaterialApplier` — mismo color que el
+  preview 3D de la app web.

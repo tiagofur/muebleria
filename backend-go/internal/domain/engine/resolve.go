@@ -443,9 +443,13 @@ type formulaDims struct {
 	W, H, D    int
 	PW, PH, PD int
 	T, I       int
+	// B is the plinth/toe-kick height (zoclo) in mm; 0 when the module has none.
+	B int
+	// HW is the hardware preview size for hardware relative-position formulas.
+	HW int
 }
 
-// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/i (TS parity).
+// evaluatePartFormula evaluates simple math with W/H/D/PW/PH/PD/T/B/HW/i (TS parity).
 func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	trimmed := strings.TrimSpace(formula)
 	if trimmed == "" {
@@ -455,7 +459,7 @@ func evaluatePartFormula(formula string, dims formulaDims) (int, error) {
 	for _, r := range clean {
 		// Allow '.' for decimal literals (e.g. "1.5", "W * 1.5") — parser already handles them.
 		if unicode.IsDigit(r) || r == '.' || r == 'W' || r == 'H' || r == 'D' ||
-			r == 'P' || r == 'T' || r == 'L' || r == 'i' ||
+			r == 'P' || r == 'T' || r == 'B' || r == 'L' || r == 'i' ||
 			r == '+' || r == '-' || r == '*' || r == '/' || r == '(' || r == ')' {
 			continue
 		}
@@ -591,6 +595,11 @@ func (p *formulaParser) parseFactor() (float64, error) {
 		p.i += 2
 		return float64(p.parentD()), nil
 	}
+	// HW is the hardware preview size (hardware relative-position formulas).
+	if strings.HasPrefix(p.s[p.i:], "HW") {
+		p.i += 2
+		return float64(p.dims.HW), nil
+	}
 	if p.s[p.i] == 'W' {
 		p.i++
 		return float64(p.dims.W), nil
@@ -606,6 +615,10 @@ func (p *formulaParser) parseFactor() (float64, error) {
 	if p.s[p.i] == 'T' {
 		p.i++
 		return float64(p.dims.T), nil
+	}
+	if p.s[p.i] == 'B' {
+		p.i++
+		return float64(p.dims.B), nil
 	}
 	if p.s[p.i] == 'i' {
 		p.i++

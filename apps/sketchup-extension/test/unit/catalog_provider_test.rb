@@ -39,12 +39,12 @@ class CatalogProviderTest < Minitest::Test
     assert_equal 'kitchen_base', base['category']
   end
 
-  def test_remote_provider_falls_back_to_static_when_transport_not_configured
+  def test_remote_provider_without_session_is_empty_not_static
     transport = FakeTransport.new(configured: false)
     remote_provider = Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(transport: transport)
 
     definitions = remote_provider.all_definitions
-    refute_empty definitions
-    assert_equal 4, definitions.length
+    assert_empty definitions
+    assert_equal 'unauthenticated', remote_provider.last_source
   end
 end

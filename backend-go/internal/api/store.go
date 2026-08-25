@@ -102,6 +102,9 @@ type Store interface {
 	DeleteCategory(ctx context.Context, id string) error
 
 	// Catalog: modules + full catalog
+	// ListModules returns modules with their measure presets only (catalog
+	// projections like the SketchUp furniture definitions endpoint).
+	ListModules(ctx context.Context) ([]domain.Module, error)
 	GetFullCatalog(ctx context.Context) (domain.Catalog, error)
 	GetModuleByID(ctx context.Context, id string) (*domain.Module, error)
 	CreateModule(ctx context.Context, m *domain.Module) error
@@ -199,7 +202,6 @@ type Store interface {
 	DeleteProjectPhoto(ctx context.Context, photoID string) error
 	ListShowcasePhotos(ctx context.Context, onlyShowcase bool) ([]domain.ShowcasePhotoItem, error)
 
-
 	// Project internal messages & technical workflow (CRM Phase 2)
 	ListProjectInternalMessages(ctx context.Context, projectID string) ([]domain.ProjectInternalMessage, error)
 	CreateProjectInternalMessage(ctx context.Context, msg *domain.ProjectInternalMessage) error
@@ -270,4 +272,3 @@ type Store interface {
 	ResolveDamageReport(ctx context.Context, id string) error
 	GetTodayDamageCount(ctx context.Context) (int, error)
 }
-

@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -69,9 +68,28 @@ func TestFurnitureDefinitionsRequiresActiveLicense(t *testing.T) {
 	}
 }
 
-func TestFurnitureDefinitionsServesContractVerbatim(t *testing.T) {
+func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanPro}
+	modules := []domain.Module{
+		{
+			ID: "11111111-1111-1111-1111-111111111111", Code: "MOD-BASE-600", Name: "Base Cocina 600",
+			WidthMm: 600, HeightMm: 720, DepthMm: 560, CategoryID: "cat-base", Notes: "Módulo inferior del taller.",
+			Presets: []domain.DimensionPreset{
+				{ID: "preset-a", Name: "600 × 720", WidthMm: 600, HeightMm: 720, DepthMm: 560},
+				{ID: "preset-b", Name: "900 × 720", WidthMm: 900, HeightMm: 720, DepthMm: 560},
+			},
+		},
+		{
+			ID: "22222222-2222-2222-2222-222222222222", Code: "MOD-ALTO-400", Name: "Alacena 400",
+			WidthMm: 400, HeightMm: 900, DepthMm: 350,
+		},
+	}
 	server := licenseTestServer(t, u)
+	server.Store = &stubStore{
+		getUserByEmail: u,
+		listModules:    modules,
+		listCategories: []domain.ModuleCategory{{ID: "cat-base", Name: "Cocinas"}},
+	}
 	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
@@ -86,48 +104,135 @@ func TestFurnitureDefinitionsServesContractVerbatim(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Fatalf("content-type = %q", got)
 	}
-	if etag := rec.Header().Get("ETag"); etag != `"pilot-rev-1"` {
-		t.Fatalf("etag = %q", etag)
-	}
 
-	var served map[string]any
+	var served workshopFurnitureCatalog
 	if err := json.Unmarshal(rec.Body.Bytes(), &served); err != nil {
 		t.Fatalf("decode served: %v", err)
 	}
-	if served["schemaId"] != "granete.pilotFurnitureCatalog.v1" {
-		t.Fatalf("schemaId = %v", served["schemaId"])
+	if served.SchemaID != workshopFurnitureSchemaID {
+		t.Fatalf("schemaId = %q", served.SchemaID)
 	}
-	defs, _ := served["definitions"].(map[string]any)
-	presets, _ := served["presets"].([]any)
-	if len(defs) != 4 || len(presets) != 10 {
-		t.Fatalf("expected 4 definitions / 10 presets, got %d/%d", len(defs), len(presets))
+	// Only the workshop's own modules: no generic/pilot furniture may leak in.
+	if len(served.Definitions) != 2 || len(served.Presets) != 2 {
+		t.Fatalf("expected 2 definitions / 2 presets (workshop rows only), got %d/%d",
+			len(served.Definitions), len(served.Presets))
+	}
+
+	base := served.Definitions["11111111-1111-1111-1111-111111111111"]
+	if base.FurnitureDefinitionID != "11111111-1111-1111-1111-111111111111" || base.Code != "MOD-BASE-600" ||
+		base.Name != "Base Cocina 600" || base.Category != "Cocinas" || base.Description != "Módulo inferior del taller." {
+		t.Fatalf("module identity not preserved: %+v", base)
+	}
+	if len(base.Parameters) != 3 {
+		t.Fatalf("expected width/height/depth parameters, got %d", len(base.Parameters))
+	}
+	width := parameterByName(base.Parameters, "widthMm")
+	if width == nil || width.DefaultValue != 600 || width.Min != 600 || width.Max != 900 || width.Unit != "mm" {
+		t.Fatalf("widthMm parameter not derived from module + presets: %+v", width)
+	}
+	// Modules without a catalog category fall into an explicit bucket.
+	wall := served.Definitions["22222222-2222-2222-2222-222222222222"]
+	if wall.Category != workshopUncategorizedLabel {
+		t.Fatalf("uncategorized module category = %q, want %q", wall.Category, workshopUncategorizedLabel)
+	}
+
+	preset := served.Presets[0]
+	if preset.PresetID != "preset-a" || preset.FurnitureDefinitionID != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("preset identity not preserved: %+v", preset)
+	}
+	if preset.Parameters["widthMm"] != 600 || preset.Parameters["heightMm"] != 720 || preset.Parameters["depthMm"] != 560 {
+		t.Fatalf("preset parameters not preserved: %+v", preset.Parameters)
+	}
+
+	if etag := rec.Header().Get("ETag"); etag == "" || etag == `"pilot-rev-1"` {
+		t.Fatalf("etag must be content-derived, got %q", etag)
 	}
 }
 
-// TestFurnitureContractMatchesSharedArtifact is the Go side of the contract
-// parity gate: the embedded copy must be byte-identical to
-// contracts/pilotFurnitureCatalog.json (TS-side golden test lives in
-// packages/domain). Tolerates both internal/api and backend-root working dirs.
-func TestFurnitureContractMatchesSharedArtifact(t *testing.T) {
-	candidates := []string{
-		filepath.Join("..", "..", "..", "contracts", "pilotFurnitureCatalog.json"),
-		filepath.Join("..", "contracts", "pilotFurnitureCatalog.json"),
+func TestFurnitureDefinitionsEmptyWorkshop(t *testing.T) {
+	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanTrial}
+	server := licenseTestServer(t, u)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+
+	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var shared []byte
-	var found string
-	for _, c := range candidates {
-		if b, err := os.ReadFile(c); err == nil {
-			shared = b
-			found = c
-			break
+	var served workshopFurnitureCatalog
+	if err := json.Unmarshal(rec.Body.Bytes(), &served); err != nil {
+		t.Fatalf("decode served: %v", err)
+	}
+	// An empty workshop is a valid catalog: 200 + empty, never generic filler.
+	if len(served.Definitions) != 0 || len(served.Presets) != 0 {
+		t.Fatalf("expected empty catalog for workshop without furniture, got %d definitions", len(served.Definitions))
+	}
+}
+
+func TestFurnitureDefinitionsStoreErrorIs500(t *testing.T) {
+	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanPro}
+	server := licenseTestServer(t, u)
+	server.Store = &stubStore{getUserByEmail: u, listModulesErr: errors.New("db down")}
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+
+	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestFurnitureDefinitionsCachesPerContentRevision(t *testing.T) {
+	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanPro}
+	modules := []domain.Module{{ID: "m1", Code: "M1", Name: "Módulo 1", WidthMm: 600, HeightMm: 720, DepthMm: 500}}
+	server := licenseTestServer(t, u)
+	server.Store = &stubStore{getUserByEmail: u, listModules: modules}
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+
+	get := func(ifNoneMatch string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		if ifNoneMatch != "" {
+			req.Header.Set("If-None-Match", ifNoneMatch)
+		}
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if got := get(""); got != http.StatusOK {
+		t.Fatalf("first fetch status = %d", got)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	handler.ServeHTTP(rec, req)
+	etag := rec.Header().Get("ETag")
+
+	if got := get(etag); got != http.StatusNotModified {
+		t.Fatalf("revalidation with current etag = %d, want 304 (etag %q)", got, etag)
+	}
+	if got := get(`"stale-rev"`); got != http.StatusOK {
+		t.Fatalf("revalidation with stale etag = %d, want 200", got)
+	}
+}
+
+func parameterByName(params []workshopFurnitureParameter, name string) *workshopFurnitureParameter {
+	for i := range params {
+		if params[i].Name == name {
+			return &params[i]
 		}
 	}
-	if shared == nil {
-		t.Skip("shared contract artifact not found relative to test working dir")
-	}
-	if !bytes.Equal(bytes.TrimSpace(shared), bytes.TrimSpace(pilotFurnitureCatalogJSON)) {
-		t.Fatalf("embedded catalog drifted from %s — run `go generate ./internal/api`", found)
-	}
+	return nil
 }
 
 func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
@@ -246,6 +351,7 @@ func TestAdminUserLicenseEndpoint(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodPut, "/api/admin/users/u1/license", bytes.NewReader(body2))
 	req2.SetPathValue("id", "u1")
 	server.HandleAdminUserLicense(rec2, req2)
+
 	if rec2.Code != http.StatusBadRequest {
 		t.Fatalf("invalid plan status = %d", rec2.Code)
 	}

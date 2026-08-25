@@ -3911,6 +3911,32 @@
         "licensing",
         "backend"
       ]
+    },
+    {
+      "id": "F167",
+      "phase": 0,
+      "name": "sketchup_real_furniture_insertion_materials",
+      "title": "Inserción de muebles reales completos con elección de materiales en SketchUp",
+      "description": "Al insertar un mueble real del taller en SketchUp se materializa su composición completa: el backend resuelve server-side la estructura, los componentes del módulo, los agregados y los herrajes visibles (GET /api/furniture/definitions/{id}/layout), y Ruby sólo transforma cajas pre-horneadas. El catálogo de definiciones expone los conteos reales estimados y los roles de material con sus opciones curadas por el taller; el diálogo permite elegir tablero por rol (option choices, misma semántica que la app web) y el layout resuelto aplica material/color real a cada componente.",
+      "acceptance": [
+        "GET /api/furniture/definitions/{id}/layout?widthMm&heightMm&depthMm resuelve la composición real (estructura + componentes + agregados con unidades verticales/horizontales + herrajes visibles) con AABBs pre-horneadas en marco taller; 404/400/422/403 explícitos",
+        "Las fórmulas espaciales evalúan con W/H/D, PW/PH/PD, T, B (zoclo), HW e i con paridad exacta con engine TS (bom.ts/spatialPlacement/spatialAnchor/agregados/hardwarePlacement)",
+        "El catálogo lleva estimatedPartCount/estimatedHardwareCount por definición (mismo resolver que la inserción) y el diálogo muestra piezas reales, no 2+entrepaños+puertas",
+        "Herrajes con preview shape se materializan anclados a la cara de su tablero host; cost-only no se renderizan (paridad VH-09)",
+        "Elección de materiales por rol: envelope materials + materialRoles (grupo curado kind=board o todos los activos como fallback), selectores por rol en configurador e inspector, choices viajan como choice.ROL en query (token read-only)",
+        "Layout con elección válida lleva materialId/Code/Name/ColorHex reales; elección desconocida/inactiva → 422 explícito; rol sin elección → paleta por rol",
+        "El builder pinta cada componente con materiales de SketchUp namespaced (Granete · nombre) con el color resuelto; conteos board/hardware/total en el resultado y toasts del diálogo",
+        "Una definición remota cuya composición no resuelve falla con error accionable; módulos legados apilan todas sus piezas"
+      ],
+      "status": "implemented",
+      "evidence": "go test ./... verde (engine layout: composición completa, herrajes world-space, agregados, overrides de cotas, elecciones de material 422; api: endpoint auth/licencia/404/400/422, conteos y materialRoles del catálogo); bundle exec rake verde (rubocop + 97 unit + boundary 687 assertions: layout con choices, materials passthrough, reenvío de materialChoices, pintura de materiales); pnpm vitest ModuleLibraryPanel 11/11.",
+      "tags": [
+        "sketchup",
+        "backend",
+        "catalog",
+        "materials",
+        "insertion"
+      ]
     }
   ]
 }

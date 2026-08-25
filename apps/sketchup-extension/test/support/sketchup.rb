@@ -54,12 +54,44 @@ module SketchupStub
     end
   end
 
+  class MaterialStub
+    attr_accessor :color
+
+    def initialize(name)
+      @name = name
+      @color = nil
+    end
+
+    def name
+      @name
+    end
+  end
+
+  class MaterialsStub
+    attr_reader :materials
+
+    def initialize
+      @materials = {}
+    end
+
+    def [](name)
+      @materials[name]
+    end
+
+    def add(name)
+      material = MaterialStub.new(name)
+      @materials[name] = material
+      material
+    end
+  end
+
   class GroupStub
-    attr_accessor :name
+    attr_accessor :name, :material
     attr_reader :entities, :attributes
 
     def initialize(name = "")
       @name = name
+      @material = nil
       @entities = EntitiesStub.new
       @attributes = {}
     end
@@ -173,12 +205,13 @@ module SketchupStub
   end
 
   class ModelStub
-    attr_reader :active_entities, :operations, :selection, :definitions
+    attr_reader :active_entities, :selection, :definitions, :materials, :operations
 
     def initialize
       @active_entities = EntitiesStub.new
       @selection = SelectionStub.new
       @definitions = DefinitionListStub.new
+      @materials = MaterialsStub.new
       @operations = []
     end
 

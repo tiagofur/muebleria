@@ -76,6 +76,18 @@ type stubStore struct {
 	workshopSettings *domain.WorkshopSettings
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
 	catalogOverride *domain.Catalog
+	// Workshop furniture modules served by ListModules (SketchUp catalog).
+	listModules    []domain.Module
+	listModulesErr error
+	// Module categories for the workshop catalog projection.
+	listCategories []domain.ModuleCategory
+	// Composition lists for the furniture catalog/layout endpoints
+	// (estimated piece counts + resolved layouts for SketchUp).
+	listStructures   []domain.Structure
+	listComponents   []domain.Component
+	listAgregados    []domain.Agregado
+	listHardwares    []domain.Hardware
+	listOptionGroups []domain.OptionGroup
 	// #110: project templates hooks.
 	listProjectTemplates []domain.ProjectTemplate
 	lastCreatedTemplate  *domain.ProjectTemplate
@@ -101,7 +113,7 @@ type stubStore struct {
 	floorEventsList   []domain.FloorStatusEvent
 	userSectorsList   []domain.UserSector
 	// Installation job (OC-070..074): in-memory state + audit write log.
-	installationJob               *domain.InstallationJob
+	installationJob           *domain.InstallationJob
 	materialPlanning          *domain.MaterialPlanning
 	materialStock             []domain.MaterialStock
 	purchaseOrders            []domain.PurchaseOrder
@@ -119,8 +131,8 @@ type stubStore struct {
 	costingEvents         []domain.ProjectEvent
 	costingProjectMissing bool
 	// Structured site survey (OC-040/OC-041, #305).
-	siteSurvey       *domain.SiteSurvey
-	siteSurveyEvents []domain.ProjectEvent
+	siteSurvey                    *domain.SiteSurvey
+	siteSurveyEvents              []domain.ProjectEvent
 	installationUnits             []domain.ModuleUnitExecution
 	installationItems             []domain.ProjectItem
 	installationHasStartedEvent   bool
@@ -373,7 +385,9 @@ func (s *stubStore) DeactivateEdgeBand(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListHardwares(context.Context) ([]domain.Hardware, error) {
-	s.stubNotUsed("ListHardwares")
+	if s.listHardwares != nil {
+		return s.listHardwares, nil
+	}
 	return nil, nil
 }
 func (s *stubStore) GetHardwareByID(context.Context, string) (*domain.Hardware, error) {
@@ -394,7 +408,9 @@ func (s *stubStore) DeactivateHardware(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListOptionGroups(context.Context) ([]domain.OptionGroup, error) {
-	s.stubNotUsed("ListOptionGroups")
+	if s.listOptionGroups != nil {
+		return s.listOptionGroups, nil
+	}
 	return nil, nil
 }
 func (s *stubStore) GetOptionGroupByID(context.Context, string) (*domain.OptionGroup, error) {
@@ -414,7 +430,9 @@ func (s *stubStore) DeleteOptionGroup(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListCategories(context.Context) ([]domain.ModuleCategory, error) {
-	s.stubNotUsed("ListCategories")
+	if s.listCategories != nil {
+		return s.listCategories, nil
+	}
 	return nil, nil
 }
 func (s *stubStore) GetCategoryByID(context.Context, string) (*domain.ModuleCategory, error) {
@@ -433,6 +451,10 @@ func (s *stubStore) DeleteCategory(context.Context, string) error {
 	s.stubNotUsed("DeleteCategory")
 	return nil
 }
+func (s *stubStore) ListModules(context.Context) ([]domain.Module, error) {
+	return s.listModules, s.listModulesErr
+}
+
 func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
 	// #108: HandleProjectByID now loads the catalog to pin structure revisions
 	// when a quote is closed. Tests that need to exercise pinning inject a
@@ -558,11 +580,11 @@ func (s *stubStore) MutateProjectQuality(
 	mutate func(*domain.QualitySnapshot) (*domain.QualityMutation, error),
 ) (*domain.QualityMutation, error) {
 	snap := &domain.QualitySnapshot{
-		Quality:        s.qualityJob,
-		Parts:          append([]domain.PartInstance(nil), s.partInstances...),
-		Units:          append([]domain.ModuleUnitExecution(nil), s.moduleUnits...),
-		ItemStatuses:   map[string]string{},
-		ItemQuantities: map[string]int{},
+		Quality:          s.qualityJob,
+		Parts:            append([]domain.PartInstance(nil), s.partInstances...),
+		Units:            append([]domain.ModuleUnitExecution(nil), s.moduleUnits...),
+		ItemStatuses:     map[string]string{},
+		ItemQuantities:   map[string]int{},
 		ReleasedRevision: s.releasedRevision,
 	}
 	mutation, err := mutate(snap)
@@ -652,6 +674,9 @@ func (s *stubStore) DeleteModule(_ context.Context, id string) error {
 	return nil
 }
 func (s *stubStore) ListStructures(context.Context) ([]domain.Structure, error) {
+	if s.listStructures != nil {
+		return s.listStructures, nil
+	}
 	return []domain.Structure{}, nil
 }
 func (s *stubStore) GetStructureByID(context.Context, string) (*domain.Structure, error) {
@@ -671,6 +696,9 @@ func (s *stubStore) DeleteStructure(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListAgregados(context.Context) ([]domain.Agregado, error) {
+	if s.listAgregados != nil {
+		return s.listAgregados, nil
+	}
 	return []domain.Agregado{}, nil
 }
 func (s *stubStore) GetAgregadoByID(context.Context, string) (*domain.Agregado, error) {
@@ -694,7 +722,9 @@ func (s *stubStore) DeactivateAgregado(context.Context, string) error {
 	return nil
 }
 func (s *stubStore) ListComponents(context.Context) ([]domain.Component, error) {
-	s.stubNotUsed("ListComponents")
+	if s.listComponents != nil {
+		return s.listComponents, nil
+	}
 	return nil, nil
 }
 func (s *stubStore) GetComponentByID(context.Context, string) (*domain.Component, error) {

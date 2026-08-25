@@ -8,21 +8,26 @@ require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 class RemoteCatalogProviderTest < Minitest::Test
   class FakeTransport
     attr_accessor :response
+    attr_reader :authorization_header, :last_payload, :requests
 
-    def initialize(response = nil)
+    def initialize(response = nil, error: nil)
       @response = response
+      @error = error
+      @requests = 0
     end
 
     def configured?
-      !@response.nil?
+      !@response.nil? || !@error.nil?
     end
 
-    def request(_payload, authorization_header: nil)
+    def request(payload, authorization_header: nil)
+      @requests += 1
+      @last_payload = payload
       @authorization_header = authorization_header
+      raise @error if @error
+
       @response
     end
-
-    attr_reader :authorization_header
   end
 
   class FakeAuth
@@ -37,7 +42,7 @@ class RemoteCatalogProviderTest < Minitest::Test
     end
 
     def authorization_header
-      'Bearer test'
+      'Bearer test-session-token'
     end
 
     def refresh_if_needed
@@ -46,33 +51,33 @@ class RemoteCatalogProviderTest < Minitest::Test
   end
 
   CONTRACT = {
-    'schemaId' => 'granete.pilotFurnitureCatalog.v1',
+    'schemaId' => 'granete.workshopFurnitureCatalog.v1',
     'definitions' => {
-      'furniture-base-door' => {
-        'furnitureDefinitionId' => 'furniture-base-door',
+      '11111111-1111-1111-1111-111111111111' => {
+        'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
         'code' => 'BASE-600',
         'name' => 'Módulo Base',
-        'category' => 'kitchen_base',
+        'category' => 'inferior',
         'version' => '1.0.0',
         'description' => 'Módulo inferior.',
         'parameters' => [
           { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number',
-            'defaultValue' => 600, 'min' => 300, 'max' => 1200, 'step' => 50, 'unit' => 'mm',
+            'defaultValue' => 600, 'min' => 450, 'max' => 900, 'step' => 10, 'unit' => 'mm',
             'category' => 'dimension' }
         ]
       },
-      'furniture-wall-door' => {
-        'furnitureDefinitionId' => 'furniture-wall-door',
+      '22222222-2222-2222-2222-222222222222' => {
+        'furnitureDefinitionId' => '22222222-2222-2222-2222-222222222222',
         'code' => 'WALL-600',
         'name' => 'Módulo Alto',
-        'category' => 'kitchen_wall',
+        'category' => 'superior',
         'version' => '1.0.0',
         'parameters' => []
       }
     },
     'presets' => [
-      { 'presetId' => 'base-1-door-left', 'name' => 'Base 1 puerta izq.',
-        'furnitureDefinitionId' => 'furniture-base-door', 'parameters' => { 'widthMm' => 600 } }
+      { 'presetId' => 'preset-a', 'name' => 'Base 1 puerta izq.',
+        'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111', 'parameters' => { 'widthMm' => 600 } }
     ]
   }.freeze
 
@@ -89,43 +94,95 @@ class RemoteCatalogProviderTest < Minitest::Test
     refute provider.last_license_blocked
     assert_equal 2, definitions.length
     base = definitions.first
-    assert_equal 'furniture-base-door', base['furniture_definition_id']
+    assert_equal '11111111-1111-1111-1111-111111111111', base['furniture_definition_id']
     assert_equal 'Módulo Base', base['name']
-    assert_equal 'kitchen_base', base['category']
+    assert_equal 'inferior', base['category']
     param = base['parameters'].first
     assert_equal 'widthMm', param['name']
     assert_equal 600, param['defaultValue']
-    assert_equal 300, param['min']
+    assert_equal 450, param['min']
     assert_equal 'mm', param['unit']
-    assert_equal 'furniture-base-door', provider.find_definition('furniture-base-door')['furniture_definition_id']
+    assert_equal '11111111-1111-1111-1111-111111111111',
+                 provider.find_definition('11111111-1111-1111-1111-111111111111')['furniture_definition_id']
     assert_equal 1, provider.all_presets.length
   end
 
-  def test_license_blocked_falls_back_and_flags
+  def test_fetches_workshop_catalog_with_session_authorization
+    transport = FakeTransport.new({ 'status' => 200, 'body' => CONTRACT })
+    provider = build_provider(transport: transport)
+
+    provider.all_definitions
+
+    assert_equal 1, transport.requests
+    assert_equal 'GET', transport.last_payload['method']
+    assert_equal '/furniture/definitions', transport.last_payload['path']
+    # Workshop scoping is enforced server-side; the provider must forward the
+    # authenticated session on every catalog read.
+    assert_equal 'Bearer test-session-token', transport.authorization_header
+  end
+
+  def test_workshop_without_furniture_is_an_empty_remote_catalog
+    provider = build_provider(status: 200, body: { 'definitions' => {}, 'presets' => [] })
+
+    assert_equal [], provider.all_definitions
+    assert_equal [], provider.all_presets
+    assert_equal 'remote', provider.last_source
+  end
+
+  def test_license_blocked_returns_empty_catalog_and_flags
     provider = build_provider(status: 403, body: { 'error' => 'tu licencia no está activa' })
 
     definitions = provider.all_definitions
 
-    assert_equal 'local', provider.last_source
+    assert_equal [], definitions
+    assert_equal 'license_blocked', provider.last_source
     assert provider.last_license_blocked
-    assert_equal 4, definitions.length
   end
 
-  def test_remote_failure_falls_back_silently
+  def test_remote_error_returns_empty_catalog_without_local_fallback
     provider = build_provider(status: 500, body: { 'error' => 'boom' })
 
-    assert_equal 4, provider.all_definitions.length
-    assert_equal 'local', provider.last_source
+    assert_equal [], provider.all_definitions
+    assert_equal [], provider.all_presets
+    assert_equal 'error', provider.last_source
     refute provider.last_license_blocked
   end
 
-  def test_unconfigured_session_uses_offline_catalog
+  def test_invalid_session_returns_empty_catalog
+    provider = build_provider(status: 401, body: { 'error' => 'invalid token' })
+
+    assert_equal [], provider.all_definitions
+    assert_equal 'unauthenticated', provider.last_source
+  end
+
+  def test_transport_failure_returns_empty_catalog
+    transport = FakeTransport.new(nil, error: Granete::SketchUpExtension::Transport::RequestError.new('down'))
+    provider = build_provider(transport: transport)
+
+    assert_equal [], provider.all_definitions
+    assert_equal 'error', provider.last_source
+  end
+
+  def test_unconfigured_session_returns_empty_catalog
     provider = Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(
       transport: FakeTransport.new(nil), auth_provider: FakeAuth.new(configured: false)
     )
 
-    assert_equal 4, provider.all_definitions.length
+    assert_equal [], provider.all_definitions
+    assert_equal 'unauthenticated', provider.last_source
+  end
+
+  def test_explicit_fallback_provider_is_served_when_remote_fails
+    static = Granete::SketchUpExtension::Library::StaticCatalogProvider.new
+    provider = Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(
+      transport: FakeTransport.new({ 'status' => 500, 'body' => {} }),
+      auth_provider: FakeAuth.new, fallback_provider: static
+    )
+
+    definitions = provider.all_definitions
+
     assert_equal 'local', provider.last_source
+    assert_equal static.all_definitions.length, definitions.length
   end
 
   def test_reset_forces_refetch_after_login
@@ -133,17 +190,131 @@ class RemoteCatalogProviderTest < Minitest::Test
     provider.all_definitions
 
     provider.reset
-    assert_equal 'local', provider.last_source
+    assert_equal 'unauthenticated', provider.last_source
 
     definitions = provider.all_definitions
     assert_equal 'remote', provider.last_source
     assert_equal 2, definitions.length
   end
 
+  LAYOUT = {
+    'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
+    'definitionName' => 'Módulo Base',
+    'dimensionsMm' => [600, 720, 560],
+    'components' => [
+      { 'componentInstanceId' => 'st-side-l', 'slotId' => 'lateral_izquierdo', 'name' => 'Lateral',
+        'kind' => 'board', 'transform' => { 'translationMm' => [0, 0, 0] }, 'dimensionsMm' => [18, 560, 684] },
+      { 'componentInstanceId' => 'mod-door', 'slotId' => 'puerta', 'name' => 'Puerta',
+        'kind' => 'board', 'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716] }
+    ],
+    'hardware' => [
+      { 'placementId' => 'mod-door-hw-0', 'hardwareId' => 'hw-handle', 'name' => 'Manija 160',
+        'shape' => 'bar-pull', 'transform' => { 'translationMm' => [542, 578, 282] }, 'dimensionsMm' => [32, 25, 160] }
+    ]
+  }.freeze
+
+  def test_resolved_layout_fetches_the_server_resolution_with_parameters
+    transport = FakeTransport.new({ 'status' => 200, 'body' => LAYOUT })
+    provider = build_provider(transport: transport)
+
+    layout = provider.resolved_layout('11111111-1111-1111-1111-111111111111',
+                                      'widthMm' => 900, 'heightMm' => 720, 'doorSwing' => 'left')
+
+    assert_equal LAYOUT, layout
+    assert_equal 'GET', transport.last_payload['method']
+    assert_equal '/furniture/definitions/11111111-1111-1111-1111-111111111111/layout?widthMm=900&heightMm=720',
+                 transport.last_payload['path']
+    assert_equal 'Bearer test-session-token', transport.authorization_header
+  end
+
+  def test_resolved_layout_sends_board_choices_as_query_params
+    transport = FakeTransport.new({ 'status' => 200, 'body' => LAYOUT })
+    provider = build_provider(transport: transport)
+
+    provider.resolved_layout('abc', { 'widthMm' => 600 },
+                             'FRENTE' => 'mat-oak', 'LATERAL' => 'mat-white')
+
+    assert_equal '/furniture/definitions/abc/layout?widthMm=600&choice.FRENTE=mat-oak&choice.LATERAL=mat-white',
+                 transport.last_payload['path']
+  end
+
+  def test_resolved_layout_without_dimension_parameters_hits_the_bare_path
+    transport = FakeTransport.new({ 'status' => 200, 'body' => LAYOUT })
+    provider = build_provider(transport: transport)
+
+    provider.resolved_layout('abc', {})
+
+    assert_equal '/furniture/definitions/abc/layout', transport.last_payload['path']
+  end
+
+  def test_resolved_layout_returns_nil_on_remote_failures
+    [401, 403, 500].each do |status|
+      provider = build_provider(status: status, body: { 'error' => 'boom' })
+      assert_nil provider.resolved_layout('abc', {}), "status #{status} must not resolve a layout"
+    end
+
+    transport = FakeTransport.new(nil, error: Granete::SketchUpExtension::Transport::RequestError.new('down'))
+    provider = build_provider(transport: transport)
+    assert_nil provider.resolved_layout('abc', {})
+  end
+
+  def test_resolved_layout_rejects_bodies_without_components
+    provider = build_provider(status: 200, body: { 'error' => 'unexpected' })
+    assert_nil provider.resolved_layout('abc', {})
+  end
+
+  def test_resolved_layout_never_falls_back_to_a_local_guess
+    static = Granete::SketchUpExtension::Library::StaticCatalogProvider.new
+    provider = Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(
+      transport: FakeTransport.new({ 'status' => 500, 'body' => {} }),
+      auth_provider: FakeAuth.new, fallback_provider: static
+    )
+
+    # Granete owns resolution truth: a failed resolution is nil (generic
+    # authoring path), never a locally composed layout.
+    assert_nil provider.resolved_layout('kitchen-base-standard', {})
+  end
+
+  def test_static_providers_do_not_resolve_layouts
+    assert_nil Granete::SketchUpExtension::Library::StaticCatalogProvider.new.resolved_layout('x', {})
+  end
+
+  def test_definitions_carry_estimated_composition_counts
+    contract = JSON.parse(JSON.generate(CONTRACT))
+    contract['definitions']['11111111-1111-1111-1111-111111111111']['estimatedPartCount'] = 9
+    contract['definitions']['11111111-1111-1111-1111-111111111111']['estimatedHardwareCount'] = 2
+    contract['definitions']['11111111-1111-1111-1111-111111111111']['materialRoles'] = [
+      { 'role' => 'FRENTE', 'label' => 'Frente / Puertas', 'optionIds' => %w[mat-oak] }
+    ]
+    contract['materials'] = [
+      { 'materialId' => 'mat-oak', 'code' => 'ROBLE-CLARO', 'name' => 'Roble Claro',
+        'previewColor' => '#c4a574', 'thicknessMm' => 18, 'grain' => true }
+    ]
+    provider = build_provider(status: 200, body: contract)
+
+    base = provider.find_definition('11111111-1111-1111-1111-111111111111')
+
+    assert_equal 9, base['estimatedPartCount']
+    assert_equal 2, base['estimatedHardwareCount']
+    assert_equal [{ 'role' => 'FRENTE', 'label' => 'Frente / Puertas', 'optionIds' => %w[mat-oak] }],
+                 base['materialRoles']
+    wall = provider.find_definition('22222222-2222-2222-2222-222222222222')
+    refute_includes wall, 'estimatedPartCount', 'absent server counts must stay absent'
+
+    materials = provider.all_materials
+    assert_equal 1, materials.length
+    assert_equal 'mat-oak', materials.first['materialId']
+    assert_equal '#c4a574', materials.first['previewColor']
+  end
+
+  def test_static_providers_serve_no_materials
+    assert_equal [], Granete::SketchUpExtension::Library::StaticCatalogProvider.new.all_materials
+  end
+
   private
 
-  def build_provider(status:, body:)
-    transport = FakeTransport.new({ 'status' => status, 'body' => body })
+  def build_provider(status: nil, body: nil, transport: nil)
+    transport ||= FakeTransport.new({ 'status' => status, 'body' => body })
     Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(
       transport: transport, auth_provider: FakeAuth.new
     )

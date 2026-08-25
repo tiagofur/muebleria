@@ -55,8 +55,80 @@ module Granete
         end
       end
 
+      # Insert/update callback handlers, extracted to keep DialogController
+      # within the class-length budget. Both resolve the furniture's real
+      # composition server-side before touching the model.
+      module FurnitureBridge
+        def handle_insert(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
+          definition = @catalog_provider.find_definition(payload['definitionId'])
+
+          result = if definition.nil?
+                     { 'success' => false, 'error' => 'Definición no encontrada' }
+                   elsif active_model
+                     furniture_builder_for(active_model).insert_furniture(
+                       active_model, definition, payload['parameters'] || {},
+                       resolved_layout: resolve_layout_for(definition, payload['parameters'],
+                                                           payload['materialChoices'])
+                     )
+                   else
+                     mock_result(definition['name'], payload['parameters'])
+                   end
+
+          execute_bridge(dialog, 'onInsertionResult', result)
+          @logger.info('furniture_inserted', definition_id: payload['definitionId'],
+                                             success: result['success'],
+                                             components: result['component_count'])
+        rescue StandardError => e
+          @logger.error('furniture_insert_failed', error: e)
+          execute_bridge(dialog, 'onInsertionResult', { 'success' => false, 'error' => e.message })
+        end
+
+        def handle_update(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
+          definition = @catalog_provider.find_definition(payload['definitionId'])
+
+          result = if definition.nil?
+                     { 'success' => false, 'error' => 'Definición no encontrada' }
+                   elsif active_model&.selection&.first
+                     furniture_builder_for(active_model).update_furniture(
+                       active_model, active_model.selection.first, definition, payload['parameters'] || {},
+                       resolved_layout: resolve_layout_for(definition, payload['parameters'],
+                                                           payload['materialChoices'])
+                     )
+                   else
+                     mock_result(definition['name'], payload['parameters'], payload['instanceId'])
+                   end
+
+          execute_bridge(dialog, 'onUpdateResult', result)
+          @logger.info('furniture_updated', definition_id: payload['definitionId'],
+                                            success: result['success'],
+                                            components: result['component_count'])
+        rescue StandardError => e
+          @logger.error('furniture_update_failed', error: e)
+          execute_bridge(dialog, 'onUpdateResult', { 'success' => false, 'error' => e.message })
+        end
+
+        # Fetches the server-resolved composition for a definition at the
+        # dialog's current parameters and board choices (role → material id).
+        # Granete resolves the real furniture (boards + hardware); nil falls
+        # back to the generic authoring path (offline/static catalogs).
+        def resolve_layout_for(definition, parameters, material_choices = nil)
+          return nil unless @catalog_provider.respond_to?(:resolved_layout)
+
+          @catalog_provider.resolved_layout(definition['furniture_definition_id'],
+                                            parameters || {}, material_choices || {})
+        end
+
+        def mock_result(name, params, instance_id = 'mock-inst-01')
+          { 'success' => true, 'instance_id' => instance_id, 'name' => name,
+            'parameters' => params }
+        end
+      end
+
       class DialogController
         include SessionBridge
+        include FurnitureBridge
 
         attr_reader :selection_observer
 
@@ -166,57 +238,36 @@ module Granete
           payload = {
             'definitions' => definitions,
             'presets' => @catalog_provider.respond_to?(:all_presets) ? @catalog_provider.all_presets : [],
+            'categories' => @catalog_provider.respond_to?(:all_categories) ? @catalog_provider.all_categories : [],
+            'materials' => @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : [],
             'source' => @catalog_provider.respond_to?(:last_source) ? @catalog_provider.last_source : 'local',
             'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&
                                 @catalog_provider.last_license_blocked
           }
+          media = build_media_payload
+          payload['media'] = media if media
           execute_bridge(dialog, 'setCatalog', payload)
         rescue StandardError => e
           @logger.error('dialog_catalog_failed', error: e)
         end
 
-        def handle_insert(dialog, payload_json)
-          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
-          definition = @catalog_provider.find_definition(payload['definitionId'])
+        # The workshop catalog references module previews with server-relative
+        # paths (/api/media/...); the webview needs the origin plus the media
+        # token (GET media accepts ?token=) to render them.
+        def build_media_payload
+          return nil unless @session.respond_to?(:configured?) && @session.configured?
 
-          result = if definition.nil?
-                     { 'success' => false, 'error' => 'Definición no encontrada' }
-                   elsif active_model
-                     furniture_builder_for(active_model).insert_furniture(
-                       active_model, definition, payload['parameters'] || {}
-                     )
-                   else
-                     mock_result(definition['name'], payload['parameters'])
-                   end
+          server_url = @session.respond_to?(:status) ? @session.status['server_url'].to_s : ''
+          base = server_url.sub(%r{/api/?\z}, '').sub(%r{/+\z}, '')
+          return nil if base.empty?
 
-          execute_bridge(dialog, 'onInsertionResult', result)
-          @logger.info('furniture_inserted', definition_id: payload['definitionId'],
-                                             success: result['success'])
-        rescue StandardError => e
-          @logger.error('furniture_insert_failed', error: e)
-          execute_bridge(dialog, 'onInsertionResult', { 'success' => false, 'error' => e.message })
-        end
+          token = @session.authorization_header.to_s.sub(/\ABearer\s+/, '')
+          return nil if token.empty?
 
-        def handle_update(dialog, payload_json)
-          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
-          definition = @catalog_provider.find_definition(payload['definitionId'])
-
-          result = if definition.nil?
-                     { 'success' => false, 'error' => 'Definición no encontrada' }
-                   elsif active_model&.selection&.first
-                     furniture_builder_for(active_model).update_furniture(
-                       active_model, active_model.selection.first, definition, payload['parameters'] || {}
-                     )
-                   else
-                     mock_result(definition['name'], payload['parameters'], payload['instanceId'])
-                   end
-
-          execute_bridge(dialog, 'onUpdateResult', result)
-          @logger.info('furniture_updated', definition_id: payload['definitionId'],
-                                            success: result['success'])
-        rescue StandardError => e
-          @logger.error('furniture_update_failed', error: e)
-          execute_bridge(dialog, 'onUpdateResult', { 'success' => false, 'error' => e.message })
+          { 'baseUrl' => base, 'token' => token }
+        rescue Auth::NotConfiguredError, StandardError => e
+          @logger.error('dialog_media_payload_failed', error: e)
+          nil
         end
 
         def handle_delete(dialog)
@@ -259,11 +310,6 @@ module Granete
         def execute_bridge(dialog, method, payload)
           script = "window.GraneteDialog && window.GraneteDialog.#{method}(#{JSON.generate(payload)})"
           dialog.execute_script(script)
-        end
-
-        def mock_result(name, params, instance_id = 'mock-inst-01')
-          { 'success' => true, 'instance_id' => instance_id, 'name' => name,
-            'parameters' => params }
         end
 
         def resource_path
