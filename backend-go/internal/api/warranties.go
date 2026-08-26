@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // generateTicketNumber creates a readable ticket code like GAR-20260815-A1B2
@@ -314,7 +315,10 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 				respondWithError(w, http.StatusServiceUnavailable, "almacenamiento de medios no configurado")
 				return
 			}
-			if err := os.MkdirAll(s.MediaDir, 0o750); err != nil {
+			// Partitioned layout (ADR-0004): photos land under the caller's
+			// organization subdirectory (same as HandleMediaUpload).
+			orgDir := filepath.Join(s.MediaDir, storage.OrgFromCtx(r.Context()))
+			if err := os.MkdirAll(orgDir, 0o750); err != nil {
 				respondWithInternalError(w, err, "media mkdir")
 				return
 			}
@@ -361,7 +365,7 @@ func (s *Server) HandleWarrantyTicketPhotos(w http.ResponseWriter, r *http.Reque
 				return
 			}
 			filename := id + ext
-			destPath := filepath.Join(s.MediaDir, filename)
+			destPath := filepath.Join(orgDir, filename)
 
 			if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(s.MediaDir)+string(os.PathSeparator)) &&
 				filepath.Clean(destPath) != filepath.Clean(s.MediaDir) {
@@ -458,7 +462,7 @@ func (s *Server) HandleWarrantyTicketPhotoDelete(w http.ResponseWriter, r *http.
 	}
 
 	if targetURL != "" {
-		deleteMediaFileByURL(s.MediaDir, targetURL)
+		deleteMediaFileByURL(r.Context(), s.MediaDir, targetURL)
 	}
 
 	respondWithJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

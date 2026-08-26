@@ -7,16 +7,17 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // HandleFurnitureDefinitions: GET /api/furniture/definitions
 // Serves the workshop's real furniture catalog to authenticated clients
-// (today: the SketchUp extension). Requires an active per-user license; the
-// response is the shared furniture contract envelope (schemaId, revisionId,
-// definitions, presets) projected from the same module rows the React app
-// edits under /catalog/modules — there is no second furniture list. The
-// deployment is single-workshop, so authentication + license are the
-// ownership boundary of what the caller can see here.
+// (today: the SketchUp extension). Requires the scoped organization's license
+// to be active; the response is the shared furniture contract envelope
+// (schemaId, revisionId, definitions, presets) projected from the same module
+// rows the React app edits under /catalog/modules — there is no second
+// furniture list. The deployment is single-workshop, so authentication +
+// license are the ownership boundary of what the caller can see here.
 func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -35,12 +36,18 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	status := domain.LicenseStatusAt(u.LicensePlan, u.LicenseExpiresAt, time.Now())
-	if status != domain.LicenseStatusActive {
+	// The license belongs to the workshop (organization), not the user: load
+	// the scoped organization and gate on its plan/expiry (ADR-0004).
+	org, err := s.Store.GetOrganizationByID(r.Context(), storage.OrgFromCtx(r.Context()))
+	if err != nil {
+		respondWithInternalError(w, err, "load organization license")
+		return
+	}
+	if org == nil || domain.LicenseStatusAt(org.LicensePlan, org.LicenseExpiresAt, time.Now()) != domain.LicenseStatusActive {
 		// Blockers must explain how to resolve them: point the user at the
 		// workshop admin instead of a bare 403.
 		respondWithError(w, http.StatusForbidden,
-			"tu licencia no está activa. Pedile al administrador del taller que asigne o renueve tu licencia (plan y vencimiento) para usar la biblioteca de Granete.")
+			"la licencia del taller no está activa. Pedile al administrador del taller que la renueve (plan y vencimiento) para usar la biblioteca de Granete.")
 		return
 	}
 

@@ -777,10 +777,10 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if prevImage != m.ImageURL {
-			deleteMediaFileByURL(s.MediaDir, prevImage)
+			deleteMediaFileByURL(r.Context(), s.MediaDir, prevImage)
 		}
 		if prevTexture != m.PreviewTextureURL {
-			deleteMediaFileByURL(s.MediaDir, prevTexture)
+			deleteMediaFileByURL(r.Context(), s.MediaDir, prevTexture)
 		}
 		respondWithJSON(w, http.StatusOK, m)
 
@@ -1252,7 +1252,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if prevImage != h.ImageURL {
-			deleteMediaFileByURL(s.MediaDir, prevImage)
+			deleteMediaFileByURL(r.Context(), s.MediaDir, prevImage)
 		}
 		respondWithJSON(w, http.StatusOK, h)
 
@@ -1459,7 +1459,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if prevImage != m.ImageURL {
-			deleteMediaFileByURL(s.MediaDir, prevImage)
+			deleteMediaFileByURL(r.Context(), s.MediaDir, prevImage)
 		}
 		respondWithJSON(w, http.StatusOK, m)
 
@@ -1486,7 +1486,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		deleteMediaFileByURL(s.MediaDir, prevImage)
+		deleteMediaFileByURL(r.Context(), s.MediaDir, prevImage)
 		respondWithJSON(w, http.StatusOK, map[string]string{"message": "module deleted"})
 
 	default:

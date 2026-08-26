@@ -39,8 +39,8 @@ func (s *PostgresStore) MutateProjectInstallation(
 
 	var installationRaw, unitsRaw []byte
 	err = tx.QueryRow(ctx, `
-		SELECT installation, module_units FROM projects WHERE id = $1 FOR UPDATE;
-	`, projectID).Scan(&installationRaw, &unitsRaw)
+		SELECT installation, module_units FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE;
+	`, projectID, OrgFromCtx(ctx)).Scan(&installationRaw, &unitsRaw)
 	if err != nil {
 		return nil, ErrInstallationProjectNotFound
 	}
@@ -61,8 +61,8 @@ func (s *PostgresStore) MutateProjectInstallation(
 
 	rows, err := tx.Query(ctx, `
 		SELECT id, COALESCE(floor_status, 'pending')
-		FROM project_items WHERE project_id = $1;
-	`, projectID)
+		FROM project_items WHERE project_id = $1 AND organization_id = $2;
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading items for installation gates: %w", err)
 	}
@@ -97,8 +97,8 @@ func (s *PostgresStore) MutateProjectInstallation(
 	if _, err := tx.Exec(ctx, `
 		UPDATE projects
 		SET installation = $2, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1;
-	`, projectID, jsonbStructArg(mutation.Job)); err != nil {
+		WHERE id = $1 AND organization_id = $3;
+	`, projectID, jsonbStructArg(mutation.Job), OrgFromCtx(ctx)); err != nil {
 		return nil, fmt.Errorf("error persisting installation: %w", err)
 	}
 

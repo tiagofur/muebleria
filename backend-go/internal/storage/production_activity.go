@@ -23,13 +23,13 @@ func (s *PostgresStore) InsertProductionActivity(ctx context.Context, act domain
 		INSERT INTO production_activities (
 			id, project_id, project_name, item_id, module_code, module_name,
 			sector, type, operator_id, operator_name, machine_id, machine_name,
-			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at, organization_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 	`,
 		act.ID, act.ProjectID, act.ProjectName, nullableActivityItemID(act.ItemID), act.ModuleCode, act.ModuleName,
 		string(act.Sector), string(act.Type), act.OperatorID, act.OperatorName,
 		act.MachineID, act.MachineName, act.StartedAt, act.FinishedAt,
-		act.DurationMillis, act.PiecesCount, act.Notes, act.StatusBefore, act.CreatedAt,
+		act.DurationMillis, act.PiecesCount, act.Notes, act.StatusBefore, act.CreatedAt, OrgFromCtx(ctx),
 	)
 	return err
 }
@@ -39,13 +39,13 @@ func (s *PostgresStore) InsertDamageReport(ctx context.Context, dmg domain.Damag
 		INSERT INTO damage_reports (
 			id, project_id, project_name, item_id, sector, damage_type,
 			description, photo_url, reported_by, reported_by_name, reported_at,
-			needs_replace, resolved, resolved_at, created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			needs_replace, resolved, resolved_at, created_at, organization_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 	`,
 		dmg.ID, dmg.ProjectID, dmg.ProjectName, dmg.ItemID,
 		string(dmg.Sector), string(dmg.DamageType),
 		dmg.Description, dmg.PhotoURL, dmg.ReportedBy, dmg.ReportedByName,
-		dmg.ReportedAt, dmg.NeedsReplace, dmg.Resolved, dmg.ResolvedAt, dmg.ReportedAt,
+		dmg.ReportedAt, dmg.NeedsReplace, dmg.Resolved, dmg.ResolvedAt, dmg.ReportedAt, OrgFromCtx(ctx),
 	)
 	return err
 }
@@ -58,9 +58,9 @@ func (s *PostgresStore) GetActiveActivitiesBySector(ctx context.Context, sector 
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
-		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL
+		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND organization_id = $2
 		ORDER BY created_at DESC
-	`, string(sector))
+	`, string(sector), OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -74,9 +74,9 @@ func (s *PostgresStore) GetActiveActivitiesByOperator(ctx context.Context, opera
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
-		WHERE operator_id = $1 AND type = 'claim' AND finished_at IS NULL
+		WHERE operator_id = $1 AND type = 'claim' AND finished_at IS NULL AND organization_id = $2
 		ORDER BY created_at DESC
-	`, operatorID)
+	`, operatorID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +90,8 @@ func (s *PostgresStore) GetActiveActivityByID(ctx context.Context, id string) (*
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
-		WHERE id = $1
-	`, id)
+		WHERE id = $1 AND organization_id = $2
+	`, id, OrgFromCtx(ctx))
 	act, err := scanOneActivity(row)
 	if err != nil {
 		return nil, err
@@ -104,8 +104,8 @@ func (s *PostgresStore) FinishProductionActivity(ctx context.Context, id string,
 	_, err := s.Pool.Exec(ctx, `
 		UPDATE production_activities
 		SET finished_at = $1, pieces_count = $2, notes = $3, type = 'finish'
-		WHERE id = $4 AND finished_at IS NULL
-	`, now, piecesCount, notes, id)
+		WHERE id = $4 AND finished_at IS NULL AND organization_id = $5
+	`, now, piecesCount, notes, id, OrgFromCtx(ctx))
 	return err
 }
 
@@ -118,10 +118,10 @@ func (s *PostgresStore) ListProductionActivitiesByProject(ctx context.Context, p
 			sector, type, operator_id, operator_name, machine_id, machine_name,
 			started_at, finished_at, duration_ms, pieces_count, notes, status_before, created_at
 		FROM production_activities
-		WHERE project_id = $1
+		WHERE project_id = $1 AND organization_id = $3
 		ORDER BY created_at DESC
 		LIMIT $2
-	`, projectID, limit)
+	`, projectID, limit, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +137,8 @@ func (s *PostgresStore) GetDamageReportByID(ctx context.Context, id string) (*do
 			description, photo_url, reported_by, reported_by_name, reported_at,
 			needs_replace, resolved, resolved_at, created_at
 		FROM damage_reports
-		WHERE id = $1
-	`, id)
+		WHERE id = $1 AND organization_id = $2
+	`, id, OrgFromCtx(ctx))
 	return scanOneDamage(row)
 }
 
@@ -148,9 +148,9 @@ func (s *PostgresStore) ListDamageReportsByProject(ctx context.Context, projectI
 			description, photo_url, reported_by, reported_by_name, reported_at,
 			needs_replace, resolved, resolved_at, created_at
 		FROM damage_reports
-		WHERE project_id = $1
+		WHERE project_id = $1 AND organization_id = $2
 		ORDER BY reported_at DESC
-	`, projectID)
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -163,8 +163,8 @@ func (s *PostgresStore) ResolveDamageReport(ctx context.Context, id string) erro
 	_, err := s.Pool.Exec(ctx, `
 		UPDATE damage_reports
 		SET resolved = true, resolved_at = $1
-		WHERE id = $2 AND resolved = false
-	`, now, id)
+		WHERE id = $2 AND resolved = false AND organization_id = $3
+	`, now, id, OrgFromCtx(ctx))
 	return err
 }
 
@@ -172,8 +172,8 @@ func (s *PostgresStore) GetTodayDamageCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM damage_reports
-		WHERE DATE(reported_at) = CURRENT_DATE
-	`).Scan(&count)
+		WHERE DATE(reported_at) = CURRENT_DATE AND organization_id = $1
+	`, OrgFromCtx(ctx)).Scan(&count)
 	return count, err
 }
 
@@ -185,12 +185,13 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 	}
 
 	dash := &domain.SectorDashboard{Sector: sector}
+	orgID := OrgFromCtx(ctx)
 
 	// Active operators count
 	err := s.Pool.QueryRow(ctx, `
 		SELECT COUNT(DISTINCT operator_id) FROM production_activities
-		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL
-	`, string(sector)).Scan(&dash.ActiveOperators)
+		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND organization_id = $2
+	`, string(sector), orgID).Scan(&dash.ActiveOperators)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -206,7 +207,8 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 			JOIN projects p ON p.id = pi.project_id
 			WHERE p.status IN ('accepted', 'produced')
 			  AND COALESCE(NULLIF(pi.floor_status, ''), 'pending') = $1
-		`, prev).Scan(&dash.QueueLength)
+			  AND p.organization_id = $2
+		`, prev, orgID).Scan(&dash.QueueLength)
 		if err != nil && err != pgx.ErrNoRows {
 			return nil, err
 		}
@@ -215,8 +217,8 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 	// Items in progress (active claims)
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM production_activities
-		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND started_at IS NOT NULL
-	`, string(sector)).Scan(&dash.ItemsInProgress)
+		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND started_at IS NOT NULL AND organization_id = $2
+	`, string(sector), orgID).Scan(&dash.ItemsInProgress)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -224,8 +226,8 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 	// Items completed today
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM production_activities
-		WHERE sector = $1 AND type = 'finish' AND created_at >= $2
-	`, string(sector), since).Scan(&dash.ItemsCompletedToday)
+		WHERE sector = $1 AND type = 'finish' AND created_at >= $2 AND organization_id = $3
+	`, string(sector), since, orgID).Scan(&dash.ItemsCompletedToday)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -233,8 +235,8 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 	// Average time per item
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COALESCE(AVG(duration_ms), 0) FROM production_activities
-		WHERE sector = $1 AND type = 'finish' AND duration_ms > 0 AND created_at >= $2
-	`, string(sector), since).Scan(&dash.AvgTimeMinutes)
+		WHERE sector = $1 AND type = 'finish' AND duration_ms > 0 AND created_at >= $2 AND organization_id = $3
+	`, string(sector), since, orgID).Scan(&dash.AvgTimeMinutes)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -245,9 +247,9 @@ func (s *PostgresStore) GetSectorMetrics(ctx context.Context, sector domain.Prod
 		SELECT id, project_id, project_name, COALESCE(item_id, ''), module_code, operator_id, operator_name,
 			machine_id, machine_name, started_at
 		FROM production_activities
-		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND started_at IS NOT NULL
+		WHERE sector = $1 AND type = 'claim' AND finished_at IS NULL AND started_at IS NOT NULL AND organization_id = $2
 		ORDER BY started_at ASC
-	`, string(sector))
+	`, string(sector), orgID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -276,12 +278,13 @@ func (s *PostgresStore) GetOperatorMetrics(ctx context.Context, operatorID, sinc
 	}
 
 	met := &domain.OperatorMetrics{OperatorID: operatorID}
+	orgID := OrgFromCtx(ctx)
 
 	// Jobs completed
 	err := s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM production_activities
-		WHERE operator_id = $1 AND type = 'finish' AND created_at >= $2
-	`, operatorID, since).Scan(&met.JobsCompleted)
+		WHERE operator_id = $1 AND type = 'finish' AND created_at >= $2 AND organization_id = $3
+	`, operatorID, since, orgID).Scan(&met.JobsCompleted)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -289,8 +292,8 @@ func (s *PostgresStore) GetOperatorMetrics(ctx context.Context, operatorID, sinc
 	// Total pieces
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(pieces_count), 0) FROM production_activities
-		WHERE operator_id = $1 AND type = 'finish' AND created_at >= $2
-	`, operatorID, since).Scan(&met.TotalPieces)
+		WHERE operator_id = $1 AND type = 'finish' AND created_at >= $2 AND organization_id = $3
+	`, operatorID, since, orgID).Scan(&met.TotalPieces)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -298,8 +301,8 @@ func (s *PostgresStore) GetOperatorMetrics(ctx context.Context, operatorID, sinc
 	// Total time
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(duration_ms), 0) FROM production_activities
-		WHERE operator_id = $1 AND type = 'finish' AND created_at >= $2
-	`, operatorID, since).Scan(&met.TotalTimeMin)
+		WHERE operator_id = $1 AND type = 'finish' AND created_at >= $2 AND organization_id = $3
+	`, operatorID, since, orgID).Scan(&met.TotalTimeMin)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -313,8 +316,8 @@ func (s *PostgresStore) GetOperatorMetrics(ctx context.Context, operatorID, sinc
 	// Damages reported by this operator
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM damage_reports
-		WHERE reported_by = $1 AND created_at >= $2
-	`, operatorID, since).Scan(&met.DamagesCount)
+		WHERE reported_by = $1 AND created_at >= $2 AND organization_id = $3
+	`, operatorID, since, orgID).Scan(&met.DamagesCount)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -324,14 +327,15 @@ func (s *PostgresStore) GetOperatorMetrics(ctx context.Context, operatorID, sinc
 
 func (s *PostgresStore) GetDashboardMetrics(ctx context.Context) (*domain.DashboardMetrics, error) {
 	dash := &domain.DashboardMetrics{}
+	orgID := OrgFromCtx(ctx)
 
 	since := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
 
 	// Today completed
 	err := s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM production_activities
-		WHERE type = 'finish' AND created_at >= $1
-	`, since).Scan(&dash.TodayCompleted)
+		WHERE type = 'finish' AND created_at >= $1 AND organization_id = $2
+	`, since, orgID).Scan(&dash.TodayCompleted)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -339,8 +343,8 @@ func (s *PostgresStore) GetDashboardMetrics(ctx context.Context) (*domain.Dashbo
 	// Today damages
 	err = s.Pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM damage_reports
-		WHERE created_at >= $1
-	`, since).Scan(&dash.TodayDamages)
+		WHERE created_at >= $1 AND organization_id = $2
+	`, since, orgID).Scan(&dash.TodayDamages)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}
@@ -351,9 +355,9 @@ func (s *PostgresStore) GetDashboardMetrics(ctx context.Context) (*domain.Dashbo
 		SELECT COALESCE(NULLIF(pi.floor_status, ''), 'pending') AS st, COUNT(*)
 		FROM project_items pi
 		JOIN projects p ON p.id = pi.project_id
-		WHERE p.status IN ('accepted', 'produced')
+		WHERE p.status IN ('accepted', 'produced') AND p.organization_id = $1
 		GROUP BY 1;
-	`)
+	`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -379,8 +383,8 @@ func (s *PostgresStore) GetDashboardMetrics(ctx context.Context) (*domain.Dashbo
 	// accepted + produced projects (projects with zero items still count:
 	// they are in the factory even before cutting starts).
 	err = s.Pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM projects WHERE status IN ('accepted', 'produced');
-	`).Scan(&dash.TotalProjects)
+		SELECT COUNT(*) FROM projects WHERE status IN ('accepted', 'produced') AND organization_id = $1;
+	`, orgID).Scan(&dash.TotalProjects)
 	if err != nil && err != pgx.ErrNoRows {
 		return nil, err
 	}

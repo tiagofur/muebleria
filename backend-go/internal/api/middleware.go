@@ -11,6 +11,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 	"golang.org/x/time/rate"
 )
 
@@ -147,6 +148,10 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 			}
 
 			ctx := context.WithValue(r.Context(), UserContextKey, claims)
+			// Propagate the organization scope to the storage layer so reads
+			// and writes are filtered without changing handler signatures
+			// (ADR-0004 row-level isolation).
+			ctx = storage.WithOrgCtx(ctx, claims.OrgID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

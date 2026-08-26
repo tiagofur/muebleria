@@ -18,8 +18,9 @@ func (s *PostgresStore) ListSuppliers(ctx context.Context) ([]domain.Supplier, e
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, name, contact_name, email, phone, notes, active, created_at, updated_at
 		FROM suppliers
+		WHERE organization_id = $1
 		ORDER BY name
-	`)
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +43,9 @@ func (s *PostgresStore) ListSuppliers(ctx context.Context) ([]domain.Supplier, e
 
 func (s *PostgresStore) CreateSupplier(ctx context.Context, sp domain.Supplier) error {
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO suppliers (id, name, contact_name, email, phone, notes, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, sp.ID, sp.Name, sp.ContactName, sp.Email, sp.Phone, sp.Notes, sp.Active)
+		INSERT INTO suppliers (id, name, contact_name, email, phone, notes, active, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, sp.ID, sp.Name, sp.ContactName, sp.Email, sp.Phone, sp.Notes, sp.Active, OrgFromCtx(ctx))
 	return err
 }
 
@@ -52,15 +53,16 @@ func (s *PostgresStore) UpdateSupplier(ctx context.Context, sp domain.Supplier) 
 	_, err := s.Pool.Exec(ctx, `
 		UPDATE suppliers SET name = $2, contact_name = $3, email = $4, phone = $5,
 			notes = $6, active = $7, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1
-	`, sp.ID, sp.Name, sp.ContactName, sp.Email, sp.Phone, sp.Notes, sp.Active)
+		WHERE id = $1 AND organization_id = $8
+	`, sp.ID, sp.Name, sp.ContactName, sp.Email, sp.Phone, sp.Notes, sp.Active, OrgFromCtx(ctx))
 	return err
 }
 
 func (s *PostgresStore) DeactivateSupplier(ctx context.Context, id string) error {
 	_, err := s.Pool.Exec(ctx, `
-		UPDATE suppliers SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1
-	`, id)
+		UPDATE suppliers SET active = false, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND organization_id = $2
+	`, id, OrgFromCtx(ctx))
 	return err
 }
 
@@ -87,8 +89,8 @@ func scanPurchaseOrderRow(rows pgx.Rows) (domain.PurchaseOrder, error) {
 
 func (s *PostgresStore) ListPurchaseOrders(ctx context.Context) ([]domain.PurchaseOrder, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT `+poColumns+` FROM purchase_orders ORDER BY created_at DESC
-	`)
+		SELECT `+poColumns+` FROM purchase_orders WHERE organization_id = $1 ORDER BY created_at DESC
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +114,8 @@ func (s *PostgresStore) ListPurchaseOrders(ctx context.Context) ([]domain.Purcha
 
 func (s *PostgresStore) GetPurchaseOrderByID(ctx context.Context, id string) (*domain.PurchaseOrder, error) {
 	po, err := scanPurchaseOrder(s.Pool.QueryRow(ctx, `
-		SELECT `+poColumns+` FROM purchase_orders WHERE id = $1
-	`, id))
+		SELECT `+poColumns+` FROM purchase_orders WHERE id = $1 AND organization_id = $2
+	`, id, OrgFromCtx(ctx)))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -131,9 +133,9 @@ func (s *PostgresStore) GetPurchaseOrderByID(ctx context.Context, id string) (*d
 func (s *PostgresStore) listPOItems(ctx context.Context, poID string) ([]domain.PurchaseOrderItem, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id::text
-		FROM purchase_order_items WHERE po_id = $1
+		FROM purchase_order_items WHERE po_id = $1 AND organization_id = $2
 		ORDER BY kind, material_id
-	`, poID)
+	`, poID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -174,37 +176,44 @@ func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOr
 
 	if create {
 		if po.Number == "" || strings.HasPrefix(po.Number, "OC-PO-") {
+			// Per-organization numbering (ADR-0004): each taller numbers its own
+			// OC-#### series from its own rows; uniqueness is enforced by
+			// purchase_orders_org_number_unique.
 			var seq int64
-			if err := tx.QueryRow(ctx, `SELECT nextval('purchase_order_number_seq')`).Scan(&seq); err != nil {
-				// Fallback if sequence not found
+			if err := tx.QueryRow(ctx, `
+				SELECT COALESCE(MAX((regexp_replace(number, '^OC-', ''))::bigint), 0) + 1
+				FROM purchase_orders
+				WHERE organization_id = $1 AND number ~ '^OC-[0-9]{1,18}$'
+			`, OrgFromCtx(ctx)).Scan(&seq); err != nil {
+				// Fallback if the max lookup fails
 				seq = time.Now().UnixMilli() % 10000
 			}
 			po.Number = fmt.Sprintf("OC-%04d", seq)
 		}
 		_, err = tx.Exec(ctx, `
-			INSERT INTO purchase_orders (id, number, supplier_id, status, notes, required_by, expected_at, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8)
-		`, po.ID, po.Number, po.SupplierID, domain.POBorrador, po.Notes, po.RequiredBy, po.ExpectedAt, po.CreatedBy)
+			INSERT INTO purchase_orders (id, number, supplier_id, status, notes, required_by, expected_at, created_by, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9)
+		`, po.ID, po.Number, po.SupplierID, domain.POBorrador, po.Notes, po.RequiredBy, po.ExpectedAt, po.CreatedBy, OrgFromCtx(ctx))
 	} else {
 		_, err = tx.Exec(ctx, `
 			UPDATE purchase_orders SET supplier_id = $2, notes = $3, required_by = $4::date, expected_at = $5::date, updated_at = CURRENT_TIMESTAMP
-			WHERE id = $1 AND status = 'borrador'
-		`, po.ID, po.SupplierID, po.Notes, po.RequiredBy, po.ExpectedAt)
+			WHERE id = $1 AND status = 'borrador' AND organization_id = $6
+		`, po.ID, po.SupplierID, po.Notes, po.RequiredBy, po.ExpectedAt, OrgFromCtx(ctx))
 	}
 	if err != nil {
 		return err
 	}
 
 	if !create {
-		if _, err := tx.Exec(ctx, `DELETE FROM purchase_order_items WHERE po_id = $1`, po.ID); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM purchase_order_items WHERE po_id = $1 AND organization_id = $2`, po.ID, OrgFromCtx(ctx)); err != nil {
 			return err
 		}
 	}
 	for _, it := range po.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id)
-			VALUES ($1, $2, $3, $4, 0, $5, $6)
-		`, po.ID, it.Kind, it.MaterialID, it.Quantity, it.UnitCost, it.AllocatedProjectID); err != nil {
+			INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id, organization_id)
+			VALUES ($1, $2, $3, $4, 0, $5, $6, $7)
+		`, po.ID, it.Kind, it.MaterialID, it.Quantity, it.UnitCost, it.AllocatedProjectID, OrgFromCtx(ctx)); err != nil {
 			return err
 		}
 	}
@@ -215,9 +224,9 @@ func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOr
 func (s *PostgresStore) EmitPurchaseOrder(ctx context.Context, id string) (domain.PurchaseOrder, error) {
 	po, err := scanPurchaseOrder(s.Pool.QueryRow(ctx, `
 		UPDATE purchase_orders SET status = 'emitida', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status = 'borrador'
+		WHERE id = $1 AND status = 'borrador' AND organization_id = $2
 		RETURNING `+poColumns+`
-	`, id))
+	`, id, OrgFromCtx(ctx)))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return po, pgx.ErrNoRows
@@ -236,9 +245,9 @@ func (s *PostgresStore) EmitPurchaseOrder(ctx context.Context, id string) (domai
 func (s *PostgresStore) CancelPurchaseOrder(ctx context.Context, id string) (domain.PurchaseOrder, error) {
 	po, err := scanPurchaseOrder(s.Pool.QueryRow(ctx, `
 		UPDATE purchase_orders SET status = 'cancelada', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status IN ('borrador','emitida')
+		WHERE id = $1 AND status IN ('borrador','emitida') AND organization_id = $2
 		RETURNING `+poColumns+`
-	`, id))
+	`, id, OrgFromCtx(ctx)))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return po, pgx.ErrNoRows
@@ -266,8 +275,8 @@ func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lin
 
 	// Lock the PO row so reception serializes (no double counting).
 	po, err := scanPurchaseOrder(tx.QueryRow(ctx, `
-		SELECT `+poColumns+` FROM purchase_orders WHERE id = $1 FOR UPDATE
-	`, id))
+		SELECT `+poColumns+` FROM purchase_orders WHERE id = $1 AND organization_id = $2 FOR UPDATE
+	`, id, OrgFromCtx(ctx)))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.PurchaseOrder{}, pgx.ErrNoRows
@@ -323,8 +332,8 @@ func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lin
 	for _, it := range updated {
 		if _, err := tx.Exec(ctx, `
 			UPDATE purchase_order_items SET received_quantity = $4
-			WHERE po_id = $1 AND kind = $2 AND material_id = $3
-		`, id, it.Kind, it.MaterialID, it.ReceivedQuantity); err != nil {
+			WHERE po_id = $1 AND kind = $2 AND material_id = $3 AND organization_id = $5
+		`, id, it.Kind, it.MaterialID, it.ReceivedQuantity, OrgFromCtx(ctx)); err != nil {
 			return domain.PurchaseOrder{}, err
 		}
 	}
@@ -360,8 +369,8 @@ func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lin
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE purchase_orders SET status = $2, received_at = $3, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1
-	`, id, status, receivedAt); err != nil {
+		WHERE id = $1 AND organization_id = $4
+	`, id, status, receivedAt, OrgFromCtx(ctx)); err != nil {
 		return domain.PurchaseOrder{}, err
 	}
 
@@ -377,9 +386,9 @@ func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lin
 func (s *PostgresStore) listPOItemsTx(ctx context.Context, tx pgx.Tx, poID string) ([]domain.PurchaseOrderItem, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id::text
-		FROM purchase_order_items WHERE po_id = $1
+		FROM purchase_order_items WHERE po_id = $1 AND organization_id = $2
 		ORDER BY kind, material_id
-	`, poID)
+	`, poID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}

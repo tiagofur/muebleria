@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // HandleShowcasePhotos handles GET /api/showcase/photos
@@ -98,7 +99,10 @@ func (s *Server) HandleProjectPhotos(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusServiceUnavailable, "almacenamiento de medios no configurado")
 			return
 		}
-		if err := os.MkdirAll(s.MediaDir, 0o750); err != nil {
+		// Partitioned layout (ADR-0004): photos land under the caller's
+		// organization subdirectory (same as HandleMediaUpload).
+		orgDir := filepath.Join(s.MediaDir, storage.OrgFromCtx(r.Context()))
+		if err := os.MkdirAll(orgDir, 0o750); err != nil {
 			respondWithInternalError(w, err, "media mkdir")
 			return
 		}
@@ -145,7 +149,7 @@ func (s *Server) HandleProjectPhotos(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filename := id + ext
-		destPath := filepath.Join(s.MediaDir, filename)
+		destPath := filepath.Join(orgDir, filename)
 
 		if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(s.MediaDir)+string(os.PathSeparator)) &&
 			filepath.Clean(destPath) != filepath.Clean(s.MediaDir) {
@@ -251,7 +255,7 @@ func (s *Server) HandleProjectPhotoByID(w http.ResponseWriter, r *http.Request) 
 		if strings.HasPrefix(existing.URL, "/api/media/") && strings.TrimSpace(s.MediaDir) != "" {
 			filename := strings.TrimPrefix(existing.URL, "/api/media/")
 			if !strings.Contains(filename, "/") && !strings.Contains(filename, "\\") && !strings.Contains(filename, "..") {
-				path := filepath.Join(s.MediaDir, filename)
+				path := filepath.Join(s.MediaDir, storage.OrgFromCtx(r.Context()), filename)
 				_ = os.Remove(path)
 			}
 		}

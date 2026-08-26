@@ -15,9 +15,9 @@ func (s *PostgresStore) ListProjectInternalMessages(ctx context.Context, project
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, project_id, sender_id, sender_name, message_type, content, is_resolved, attachments, created_at
 		FROM project_internal_messages
-		WHERE project_id = $1
+		WHERE project_id = $1 AND organization_id = $2
 		ORDER BY created_at ASC;
-	`, projectID)
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list project internal messages: %w", err)
 	}
@@ -76,10 +76,10 @@ func (s *PostgresStore) CreateProjectInternalMessage(ctx context.Context, msg *d
 	}
 
 	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO project_internal_messages (project_id, sender_id, sender_name, message_type, content, is_resolved, attachments)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO project_internal_messages (project_id, sender_id, sender_name, message_type, content, is_resolved, attachments, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at;
-	`, msg.ProjectID, senderIDParam, msg.SenderName, string(msg.MessageType), msg.Content, msg.IsResolved, attachmentsJSON).Scan(
+	`, msg.ProjectID, senderIDParam, msg.SenderName, string(msg.MessageType), msg.Content, msg.IsResolved, attachmentsJSON, OrgFromCtx(ctx)).Scan(
 		&msg.ID,
 		&msg.CreatedAt,
 	)
@@ -114,8 +114,8 @@ func (s *PostgresStore) UpdateProjectTechnicalWorkflow(
 		    survey_completed_at = $3,
 		    installation_scheduled_date = $4,
 		    updated_at = $5
-		WHERE id = $6;
-	`, engineerID, status, surveyTime, installDate, now, projectID)
+		WHERE id = $6 AND organization_id = $7;
+	`, engineerID, status, surveyTime, installDate, now, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("update project technical workflow: %w", err)
 	}

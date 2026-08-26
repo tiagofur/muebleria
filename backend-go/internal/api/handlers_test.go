@@ -263,7 +263,22 @@ func (s *stubStore) RejectUser(context.Context, string) error {
 
 // --- Organizations / memberships / security audit (ADR-0004) ---
 
-func (s *stubStore) GetOrganizationByID(context.Context, string) (*domain.Organization, error) {
+// GetOrganizationByID mirrors the stub's single-user world onto the scoped
+// organization: the furniture license gate moved from the user to the
+// organization (ADR-0004), so legacy license tests keep their intent when the
+// org carries the same plan/expiry as the configured user.
+func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Organization, error) {
+	if s.getUserByEmail != nil {
+		return &domain.Organization{
+			ID:               storage.InitialOrganizationID,
+			Name:             "Taller Test",
+			Slug:             "taller-test",
+			Type:             domain.OrganizationTypeFactory,
+			LicensePlan:      s.getUserByEmail.LicensePlan,
+			LicenseExpiresAt: s.getUserByEmail.LicenseExpiresAt,
+			Active:           true,
+		}, nil
+	}
 	return nil, errors.New("organization not found")
 }
 
@@ -2053,9 +2068,14 @@ func TestHandleProjectTemplateByIDDelete(t *testing.T) {
 
 // writeMediaFile plants a fake media file on disk so we can assert it gets
 // deleted by the handler after the corresponding DB row is updated/deleted.
+// Files live under the initial organization's subdirectory (partitioned media
+// layout, ADR-0004): the unscoped test context falls back to it.
 func writeMediaFile(t *testing.T, dir, name string) string {
 	t.Helper()
-	p := filepath.Join(dir, name)
+	p := filepath.Join(dir, storage.InitialOrganizationID, name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		t.Fatalf("plant %s: %v", p, err)
+	}
 	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
 		t.Fatalf("plant %s: %v", p, err)
 	}

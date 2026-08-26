@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/png"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func TestMediaUploadAndGet(t *testing.T) {
@@ -57,7 +59,9 @@ func TestMediaUploadAndGet(t *testing.T) {
 	if name == "" {
 		t.Fatalf("no filename in %s", raw)
 	}
-	if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+	// Partitioned layout (ADR-0004): the unscoped test context falls back to
+	// the initial organization, so the file lands under <MediaDir>/<org>/.
+	if _, err := os.Stat(filepath.Join(dir, storage.InitialOrganizationID, name)); err != nil {
 		t.Fatalf("file not on disk: %v", err)
 	}
 
@@ -120,15 +124,21 @@ func TestMediaFilenameFromURL(t *testing.T) {
 
 func TestDeleteMediaFileByURL(t *testing.T) {
 	dir := t.TempDir()
+	// Partitioned layout (ADR-0004): an unscoped context falls back to the
+	// initial organization, so files live under <mediaDir>/<org>/.
+	ctx := context.Background()
 
 	// Create a real file to delete.
-	existing := filepath.Join(dir, "real.jpg")
+	existing := filepath.Join(dir, storage.InitialOrganizationID, "real.jpg")
+	if err := os.MkdirAll(filepath.Dir(existing), 0o750); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(existing, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("removes existing file", func(t *testing.T) {
-		got := deleteMediaFileByURL(dir, "/api/media/real.jpg")
+		got := deleteMediaFileByURL(ctx, dir, "/api/media/real.jpg")
 		if !got {
 			t.Fatal("expected deleteMediaFileByURL to return true")
 		}
@@ -138,21 +148,21 @@ func TestDeleteMediaFileByURL(t *testing.T) {
 	})
 
 	t.Run("missing file is no-op", func(t *testing.T) {
-		got := deleteMediaFileByURL(dir, "/api/media/never-existed.png")
+		got := deleteMediaFileByURL(ctx, dir, "/api/media/never-existed.png")
 		if got {
 			t.Error("expected false for missing file")
 		}
 	})
 
 	t.Run("empty url is no-op", func(t *testing.T) {
-		got := deleteMediaFileByURL(dir, "")
+		got := deleteMediaFileByURL(ctx, dir, "")
 		if got {
 			t.Error("expected false for empty url")
 		}
 	})
 
 	t.Run("external url is no-op", func(t *testing.T) {
-		got := deleteMediaFileByURL(dir, "https://cdn.example.com/x.png")
+		got := deleteMediaFileByURL(ctx, dir, "https://cdn.example.com/x.png")
 		if got {
 			t.Error("expected false for external url")
 		}
@@ -165,7 +175,7 @@ func TestDeleteMediaFileByURL(t *testing.T) {
 		_ = os.WriteFile(target, []byte("secret"), 0o600)
 		t.Cleanup(func() { _ = os.Remove(target) })
 
-		got := deleteMediaFileByURL(dir, "/api/media/../"+filepath.Base(target))
+		got := deleteMediaFileByURL(ctx, dir, "/api/media/../"+filepath.Base(target))
 		if got {
 			t.Error("expected false for path escape")
 		}
@@ -175,7 +185,7 @@ func TestDeleteMediaFileByURL(t *testing.T) {
 	})
 
 	t.Run("empty media dir is no-op", func(t *testing.T) {
-		got := deleteMediaFileByURL("", "/api/media/real.jpg")
+		got := deleteMediaFileByURL(ctx, "", "/api/media/real.jpg")
 		if got {
 			t.Error("expected false when mediaDir is empty")
 		}

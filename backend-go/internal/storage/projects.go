@@ -21,9 +21,9 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 	rows, err := s.Pool.Query(ctx, `
 		SELECT component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
-		WHERE module_id = $1
+		WHERE module_id = $1 AND organization_id = $2
 		ORDER BY created_at ASC;
-	`, moduleID)
+	`, moduleID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +188,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	cat.Agregados = agrs
 
 	// Cargar módulos y su despiece
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados FROM modules ORDER BY name ASC`
-	rows, err := s.Pool.Query(ctx, query)
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados FROM modules WHERE organization_id = $1 ORDER BY name ASC`
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
 	}
@@ -264,9 +264,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		partsQuery := `
 			SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2
 			FROM board_parts
-			WHERE module_id = $1;
+			WHERE module_id = $1 AND organization_id = $2;
 		`
-		pRows, err := s.Pool.Query(ctx, partsQuery, m.ID)
+		pRows, err := s.Pool.Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
 		if err != nil {
 			return cat, err
 		}
@@ -297,9 +297,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		hwQuery := `
 			SELECT id, quantity, description_override, option_role, hardware_id
 			FROM hardware_lines
-			WHERE module_id = $1;
+			WHERE module_id = $1 AND organization_id = $2;
 		`
-		hRows, err := s.Pool.Query(ctx, hwQuery, m.ID)
+		hRows, err := s.Pool.Query(ctx, hwQuery, m.ID, OrgFromCtx(ctx))
 		if err != nil {
 			return cat, err
 		}
@@ -357,9 +357,10 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 	query := `
 		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, created_at, updated_at
 		FROM projects
+		WHERE organization_id = $1
 		ORDER BY updated_at DESC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -480,9 +481,9 @@ func (s *PostgresStore) loadProjectLevelChoices(ctx context.Context, projectID s
 	query := `
 		SELECT option_group_code, choice_entity_id
 		FROM project_level_choices
-		WHERE project_id = $1;
+		WHERE project_id = $1 AND organization_id = $2;
 	`
-	rows, err := s.Pool.Query(ctx, query, projectID)
+	rows, err := s.Pool.Query(ctx, query, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		// Table may not exist yet on old DBs mid-migrate — treat as empty.
 		return map[string]string{}, nil
@@ -500,7 +501,7 @@ func (s *PostgresStore) loadProjectLevelChoices(ctx context.Context, projectID s
 
 // replaceProjectLevelChoicesTx rewrites project-level option defaults.
 func replaceProjectLevelChoicesTx(ctx context.Context, tx pgx.Tx, projectID string, choices map[string]string) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM project_level_choices WHERE project_id = $1`, projectID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_level_choices WHERE project_id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error clearing project level choices: %w", err)
 	}
 	for code, cid := range choices {
@@ -508,9 +509,9 @@ func replaceProjectLevelChoicesTx(ctx context.Context, tx pgx.Tx, projectID stri
 			continue
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id)
-			VALUES ($1, $2, $3)
-		`, projectID, code, cid); err != nil {
+			INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id)
+			VALUES ($1, $2, $3, $4)
+		`, projectID, code, cid, OrgFromCtx(ctx)); err != nil {
 			return fmt.Errorf("error inserting project level choice: %w", err)
 		}
 	}
@@ -522,10 +523,10 @@ func (s *PostgresStore) loadModulePresets(ctx context.Context, moduleID string) 
 	q := `
 		SELECT id, name, width_mm, height_mm, depth_mm
 		FROM module_presets
-		WHERE module_id = $1
+		WHERE module_id = $1 AND organization_id = $2
 		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
 	`
-	rows, err := s.Pool.Query(ctx, q, moduleID)
+	rows, err := s.Pool.Query(ctx, q, moduleID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query module presets: %w", err)
 	}
@@ -543,21 +544,21 @@ func (s *PostgresStore) loadModulePresets(ctx context.Context, moduleID string) 
 }
 
 func insertModulePresetsTx(ctx context.Context, tx pgx.Tx, moduleID string, presets []domain.DimensionPreset) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM module_presets WHERE module_id = $1`, moduleID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM module_presets WHERE module_id = $1 AND organization_id = $2`, moduleID, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error clearing module presets: %w", err)
 	}
 	for _, pr := range presets {
 		var err error
 		if pr.ID != "" && isValidUUID(pr.ID) {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm)
-				VALUES ($1, $2, $3, $4, $5, $6)
-			`, pr.ID, moduleID, pr.Name, pr.WidthMm, pr.HeightMm, pr.DepthMm)
+				INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, pr.ID, moduleID, pr.Name, pr.WidthMm, pr.HeightMm, pr.DepthMm, OrgFromCtx(ctx))
 		} else {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO module_presets (module_id, name, width_mm, height_mm, depth_mm)
-				VALUES ($1, $2, $3, $4, $5)
-			`, moduleID, pr.Name, pr.WidthMm, pr.HeightMm, pr.DepthMm)
+				INSERT INTO module_presets (module_id, name, width_mm, height_mm, depth_mm, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`, moduleID, pr.Name, pr.WidthMm, pr.HeightMm, pr.DepthMm, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting module preset: %w", err)
@@ -571,9 +572,9 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 	itemQuery := `
 		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims
 		FROM project_items
-		WHERE project_id = $1;
+		WHERE project_id = $1 AND organization_id = $2;
 	`
-	rows, err := s.Pool.Query(ctx, itemQuery, projectID)
+	rows, err := s.Pool.Query(ctx, itemQuery, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -611,9 +612,9 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		choicesQuery := `
 			SELECT option_group_code, choice_entity_id
 			FROM project_item_choices
-			WHERE project_item_id = $1;
+			WHERE project_item_id = $1 AND organization_id = $2;
 		`
-		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID)
+		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID, OrgFromCtx(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -636,7 +637,7 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 // replaceProjectItemsTx deletes existing items and inserts the payload set.
 // Uses client-provided item ids when present so FE ids stay stable.
 func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, items []domain.ProjectItem) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM project_items WHERE project_id = $1`, projectID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_items WHERE project_id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error clearing project items: %w", err)
 	}
 	for i := range items {
@@ -652,24 +653,24 @@ func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, ite
 		}
 		if item.ID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg, customDimsArg)
+				INSERT INTO project_items (id, project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			`, item.ID, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg, customDimsArg, OrgFromCtx(ctx))
 		} else {
 			err = tx.QueryRow(ctx, `
-				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 				RETURNING id
-			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg, customDimsArg).Scan(&item.ID)
+			`, projectID, item.ModuleID, item.Quantity, measureArg, pinArg, baseModeArg, floorArg, customDimsArg, OrgFromCtx(ctx)).Scan(&item.ID)
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting project item: %w", err)
 		}
 		for gcode, cid := range item.OptionChoices {
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id)
-				VALUES ($1, $2, $3)
-			`, item.ID, gcode, cid); err != nil {
+				INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+				VALUES ($1, $2, $3, $4)
+			`, item.ID, gcode, cid, OrgFromCtx(ctx)); err != nil {
 				return fmt.Errorf("error inserting project item choice: %w", err)
 			}
 		}
@@ -703,9 +704,9 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	query := `
 		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, site_survey, created_at, updated_at
 		FROM projects
-		WHERE id = $1;
+		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id)
+	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var p domain.Project
 	var createdBy *string
 	var ownerID *string
@@ -868,10 +869,10 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	snapQuery := `
 		SELECT captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price
 		FROM quote_snapshots
-		WHERE project_id = $1;
+		WHERE project_id = $1 AND organization_id = $2;
 	`
 	var snapshot domain.QuotePriceSnapshot
-	err = s.Pool.QueryRow(ctx, snapQuery, p.ID).Scan(
+	err = s.Pool.QueryRow(ctx, snapQuery, p.ID, OrgFromCtx(ctx)).Scan(
 		&snapshot.CapturedAt,
 		&snapshot.Breakdown.MaterialsCost,
 		&snapshot.Breakdown.EdgeTotal,
@@ -951,19 +952,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits)).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx)).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits)).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx)).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -994,11 +995,11 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO project_items (project_id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id;
 	`
-	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin), item.BaseMode, nullIfEmpty(item.FloorStatus)).Scan(&item.ID)
+	err = tx.QueryRow(ctx, query, projectID, item.ModuleID, item.Quantity, nullIfEmpty(item.MeasurePresetID), structurePinArg(item.StructureRevisionPin), item.BaseMode, nullIfEmpty(item.FloorStatus), OrgFromCtx(ctx)).Scan(&item.ID)
 	if err != nil {
 		return err
 	}
@@ -1006,17 +1007,17 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	// Insertar choices
 	for gcode, cid := range item.OptionChoices {
 		choiceQuery := `
-			INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id)
-			VALUES ($1, $2, $3);
+			INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+			VALUES ($1, $2, $3, $4);
 		`
-		_, err = tx.Exec(ctx, choiceQuery, item.ID, gcode, cid)
+		_, err = tx.Exec(ctx, choiceQuery, item.ID, gcode, cid, OrgFromCtx(ctx))
 		if err != nil {
 			return err
 		}
 	}
 
 	// Actualizar project updatedAt
-	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, projectID)
+	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1031,12 +1032,12 @@ func (s *PostgresStore) RemoveProjectItem(ctx context.Context, projectID string,
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, `DELETE FROM project_items WHERE id = $1 AND project_id = $2`, itemID, projectID)
+	_, err = tx.Exec(ctx, `DELETE FROM project_items WHERE id = $1 AND project_id = $2 AND organization_id = $3`, itemID, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, projectID)
+	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1069,9 +1070,9 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		    owner_user_id = $9, assigned_engineer_id = $10, technical_status = $11, survey_completed_at = $12, installation_scheduled_date = $13,
 		    kitchen_layout = $14, plan_edit_session = $15, installation_checklist = $16, nesting_import = $17, measure_defaults = $18, engineering_log = $19, cut_plan = $20,
 		    design_revisions = $21, approvals = $22, production_release = $23, change_orders = $24, part_instances = $25, module_units = $26, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $27;
+		WHERE id = $27 AND organization_id = $28;
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id)
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1099,40 +1100,40 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	// Closed statuses freeze prices (quoted/accepted/produced — F036).
 	if engine.IsProjectClosed(p.Status) {
 		// Eliminar snapshot previo
-		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx)); err != nil {
 			return fmt.Errorf("delete previous quote snapshot: %w", err)
 		}
 
 		if p.PriceSnapshot != nil {
 			snapQuery := `
-				INSERT INTO quote_snapshots (project_id, captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				INSERT INTO quote_snapshots (project_id, captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				RETURNING id;
 			`
 			var snapID string
 			err = tx.QueryRow(ctx, snapQuery, id, p.PriceSnapshot.CapturedAt,
 				p.PriceSnapshot.Breakdown.MaterialsCost, p.PriceSnapshot.Breakdown.EdgeTotal, p.PriceSnapshot.Breakdown.HardwareTotal,
 				p.PriceSnapshot.Breakdown.DirectCost, p.PriceSnapshot.Breakdown.LaborModular, p.PriceSnapshot.Breakdown.LaborFixedCost,
-				p.PriceSnapshot.Breakdown.MarginFactor, p.PriceSnapshot.Breakdown.SalePrice).Scan(&snapID)
+				p.PriceSnapshot.Breakdown.MarginFactor, p.PriceSnapshot.Breakdown.SalePrice, OrgFromCtx(ctx)).Scan(&snapID)
 			if err != nil {
 				return err
 			}
 
 			// Insertar precios unitarios congelados
 			for mid, val := range p.PriceSnapshot.MaterialCostPerM2 {
-				_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value) VALUES ($1, 'material', $2, $3)`, snapID, mid, val)
+				_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES ($1, 'material', $2, $3, $4)`, snapID, mid, val, OrgFromCtx(ctx))
 				if err != nil {
 					return err
 				}
 			}
 			for eid, val := range p.PriceSnapshot.EdgeCostPerMl {
-				_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value) VALUES ($1, 'edge', $2, $3)`, snapID, eid, val)
+				_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES ($1, 'edge', $2, $3, $4)`, snapID, eid, val, OrgFromCtx(ctx))
 				if err != nil {
 					return err
 				}
 			}
 			for hid, val := range p.PriceSnapshot.HardwareCostPerUnit {
-				_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value) VALUES ($1, 'hardware', $2, $3)`, snapID, hid, val)
+				_, err = tx.Exec(ctx, `INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES ($1, 'hardware', $2, $3, $4)`, snapID, hid, val, OrgFromCtx(ctx))
 				if err != nil {
 					return err
 				}
@@ -1140,7 +1141,7 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		}
 	} else {
 		// Si vuelve a borrador, eliminar snapshot (descongelar)
-		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx)); err != nil {
 			return fmt.Errorf("delete quote snapshot: %w", err)
 		}
 	}
@@ -1149,8 +1150,8 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 }
 
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
-	query := `DELETE FROM projects WHERE id = $1;`
-	tag, err := s.Pool.Exec(ctx, query, id)
+	query := `DELETE FROM projects WHERE id = $1 AND organization_id = $2;`
+	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1170,9 +1171,10 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, category_id,
 		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados
 		FROM modules
+		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query modules: %w", err)
 	}
@@ -1265,9 +1267,10 @@ func (s *PostgresStore) listAllModuleComponents(ctx context.Context) (map[string
 	query := `
 		SELECT module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
+		WHERE organization_id = $1
 		ORDER BY created_at ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query all module components: %w", err)
 	}
@@ -1318,9 +1321,10 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 	query := `
 		SELECT id, module_id, name, width_mm, height_mm, depth_mm
 		FROM module_presets
+		WHERE organization_id = $1
 		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query module presets: %w", err)
 	}
@@ -1343,8 +1347,8 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, created_at, updated_at FROM modules WHERE id = $1`
-	row := s.Pool.QueryRow(ctx, query, id)
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, created_at, updated_at FROM modules WHERE id = $1 AND organization_id = $2`
+	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var m domain.Module
 	var w, h, d *int
 	var notes *string
@@ -1409,8 +1413,8 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	m.Presets = presets
 
 	// BoardParts
-	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1`
-	pRows, err := s.Pool.Query(ctx, partsQuery, m.ID)
+	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1 AND organization_id = $2`
+	pRows, err := s.Pool.Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -1436,8 +1440,8 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 
 	// HardwareLines
-	hwQuery := `SELECT id, quantity, description_override, option_role, hardware_id FROM hardware_lines WHERE module_id = $1`
-	hRows, err := s.Pool.Query(ctx, hwQuery, m.ID)
+	hwQuery := `SELECT id, quantity, description_override, option_role, hardware_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`
+	hRows, err := s.Pool.Query(ctx, hwQuery, m.ID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -1498,20 +1502,20 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 
 	if idToInsert != "" {
 		queryInsert = `
-			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 			RETURNING created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON).
+		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, OrgFromCtx(ctx)).
 			Scan(&m.CreatedAt, &m.UpdatedAt)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
-			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			RETURNING id, created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON).
+		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, OrgFromCtx(ctx)).
 			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	}
 
@@ -1541,17 +1545,17 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		}
 		if partID == "" {
 			partQuery := `
-				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx)).Scan(&p.ID)
 		} else {
 			partQuery := `
-				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+			_, err = tx.Exec(ctx, partQuery, partID, m.ID, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)
@@ -1571,17 +1575,17 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		}
 		if hlID == "" {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, hwLineQuery, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID).Scan(&hl.ID)
+			err = tx.QueryRow(ctx, hwLineQuery, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx)).Scan(&hl.ID)
 		} else {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id)
-				VALUES ($1, $2, $3, $4, $5, $6);
+				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7);
 			`
-			_, err = tx.Exec(ctx, hwLineQuery, hlID, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID)
+			_, err = tx.Exec(ctx, hwLineQuery, hlID, m.ID, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting hardware line: %w", err)
@@ -1601,7 +1605,7 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 // replaceModuleComponentsTx deletes and re-inserts the module-level component
 // instances for a module (full replace semantics, like board parts/hardware).
 func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, components []domain.ComponentInstance) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM module_components WHERE module_id = $1`, moduleID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM module_components WHERE module_id = $1 AND organization_id = $2`, moduleID, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error clearing module components: %w", err)
 	}
 	for _, c := range components {
@@ -1616,10 +1620,10 @@ func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, 
 		}
 		overridesJSON := componentInstanceOverridesJSON(c.Overrides)
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO module_components (module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides)
-			VALUES ($1, $2, $3, $4, $5, $6, $7);
+			INSERT INTO module_components (module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 		`, moduleID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride),
-			lengthFormula, widthFormula, overridesJSON); err != nil {
+			lengthFormula, widthFormula, overridesJSON, OrgFromCtx(ctx)); err != nil {
 			return fmt.Errorf("error inserting module component: %w", err)
 		}
 	}
@@ -1653,10 +1657,10 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	query := `
 		UPDATE modules
 		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $15
+		WHERE id = $15 AND organization_id = $16
 		RETURNING updated_at;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, id).Scan(&m.UpdatedAt)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, id, OrgFromCtx(ctx)).Scan(&m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("module not found")
@@ -1665,11 +1669,11 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	}
 
 	// Limpiar piezas y herrajes anteriores
-	_, err = tx.Exec(ctx, `DELETE FROM board_parts WHERE module_id = $1`, id)
+	_, err = tx.Exec(ctx, `DELETE FROM board_parts WHERE module_id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error deleting board parts: %w", err)
 	}
-	_, err = tx.Exec(ctx, `DELETE FROM hardware_lines WHERE module_id = $1`, id)
+	_, err = tx.Exec(ctx, `DELETE FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error deleting hardware lines: %w", err)
 	}
@@ -1695,17 +1699,17 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 		}
 		if partID == "" {
 			partQuery := `
-				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				INSERT INTO board_parts (module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2).Scan(&p.ID)
+			err = tx.QueryRow(ctx, partQuery, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx)).Scan(&p.ID)
 		} else {
 			partQuery := `
-				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+				INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 			`
-			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2)
+			_, err = tx.Exec(ctx, partQuery, partID, id, p.Code, p.Description, p.Quantity, p.LengthMm, p.WidthMm, p.OptionRole, l1, l2, w1, w2, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting board part: %w", err)
@@ -1724,17 +1728,17 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 		}
 		if hlID == "" {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO hardware_lines (module_id, quantity, description_override, option_role, hardware_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING id;
 			`
-			err = tx.QueryRow(ctx, hwLineQuery, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID).Scan(&hl.ID)
+			err = tx.QueryRow(ctx, hwLineQuery, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx)).Scan(&hl.ID)
 		} else {
 			hwLineQuery := `
-				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id)
-				VALUES ($1, $2, $3, $4, $5, $6);
+				INSERT INTO hardware_lines (id, module_id, quantity, description_override, option_role, hardware_id, organization_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7);
 			`
-			_, err = tx.Exec(ctx, hwLineQuery, hlID, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID)
+			_, err = tx.Exec(ctx, hwLineQuery, hlID, id, hl.Quantity, hl.DescriptionOverride, hl.OptionRole, hwID, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting hardware line: %w", err)
@@ -1759,15 +1763,15 @@ func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
 	// error instead.
 	var inUse int
 	if err := s.Pool.QueryRow(ctx,
-		`SELECT count(*) FROM project_items WHERE module_id = $1;`, id,
+		`SELECT count(*) FROM project_items WHERE module_id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx),
 	).Scan(&inUse); err != nil {
 		return err
 	}
 	if inUse > 0 {
 		return fmt.Errorf("module in use by %d cotización(es)", inUse)
 	}
-	query := `DELETE FROM modules WHERE id = $1;`
-	tag, err := s.Pool.Exec(ctx, query, id)
+	query := `DELETE FROM modules WHERE id = $1 AND organization_id = $2;`
+	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1794,8 +1798,8 @@ func (s *PostgresStore) SetProjectItemFloorStatus(ctx context.Context, projectID
 	tag, err := s.Pool.Exec(ctx, `
 		UPDATE project_items
 		SET floor_status = $1
-		WHERE id = $2 AND project_id = $3;
-	`, status, itemID, projectID)
+		WHERE id = $2 AND project_id = $3 AND organization_id = $4;
+	`, status, itemID, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error updating floor status: %w", err)
 	}
@@ -1803,8 +1807,8 @@ func (s *PostgresStore) SetProjectItemFloorStatus(ctx context.Context, projectID
 		return fmt.Errorf("project item not found")
 	}
 	if _, err := s.Pool.Exec(ctx, `
-		UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;
-	`, projectID); err != nil {
+		UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2;
+	`, projectID, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error touching project updated_at: %w", err)
 	}
 	return nil
@@ -1836,12 +1840,12 @@ func (s *PostgresStore) InsertFloorEvent(ctx context.Context, ev domain.FloorSta
 	}
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO project_item_floor_events
-			(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''))
+			(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), $11)
 		ON CONFLICT (id) DO NOTHING;
 	`, ev.ID, ev.ProjectID, ev.ItemID, domain.NormalizeItemFloorStatus(ev.From),
 		domain.NormalizeItemFloorStatus(ev.To), at, byUser, ev.ByName,
-		string(domain.NormalizeFloorEventSource(string(ev.Source))), ev.Note)
+		string(domain.NormalizeFloorEventSource(string(ev.Source))), ev.Note, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error inserting floor event: %w", err)
 	}
@@ -1853,9 +1857,9 @@ func (s *PostgresStore) ListFloorEvents(ctx context.Context, projectID string) (
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note
 		FROM project_item_floor_events
-		WHERE project_id = $1
+		WHERE project_id = $1 AND organization_id = $2
 		ORDER BY at ASC, id ASC;
-	`, projectID)
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error listing floor events: %w", err)
 	}
@@ -1901,12 +1905,12 @@ func upsertFloorEventsTx(ctx context.Context, tx pgx.Tx, projectID string, event
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO project_item_floor_events
-				(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''))
+				(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), $11)
 			ON CONFLICT (id) DO NOTHING;
 		`, ev.ID, projectID, ev.ItemID, domain.NormalizeItemFloorStatus(ev.From),
 			domain.NormalizeItemFloorStatus(ev.To), at, byUser, ev.ByName,
-			string(domain.NormalizeFloorEventSource(string(ev.Source))), ev.Note); err != nil {
+			string(domain.NormalizeFloorEventSource(string(ev.Source))), ev.Note, OrgFromCtx(ctx)); err != nil {
 			return fmt.Errorf("error upserting floor event: %w", err)
 		}
 	}
@@ -1947,9 +1951,9 @@ func (s *PostgresStore) ListProjectEvents(ctx context.Context, projectID string)
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, project_id, type, at, by_user_id, source, note, payload, created_at
 		FROM project_events
-		WHERE project_id = $1
+		WHERE project_id = $1 AND organization_id = $2
 		ORDER BY at ASC, id ASC;
-	`, projectID)
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error listing project events: %w", err)
 	}
@@ -1988,10 +1992,10 @@ func (s *PostgresStore) InsertProjectEvent(ctx context.Context, ev domain.Projec
 	source := domain.NormalizeProjectEventSource(string(ev.Source))
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO project_events
-			(id, project_id, type, at, by_user_id, source, note, payload)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
+			(id, project_id, type, at, by_user_id, source, note, payload, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9)
 		ON CONFLICT (id) DO NOTHING;
-	`, ev.ID, ev.ProjectID, ev.Type, at, ev.ByUserID, string(source), ev.Note, nullKitchenLayout(ev.Payload))
+	`, ev.ID, ev.ProjectID, ev.Type, at, ev.ByUserID, string(source), ev.Note, nullKitchenLayout(ev.Payload), OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error inserting project event: %w", err)
 	}
@@ -2011,10 +2015,10 @@ func upsertProjectEventsTx(ctx context.Context, tx pgx.Tx, projectID string, eve
 		source := domain.NormalizeProjectEventSource(string(ev.Source))
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO project_events
-				(id, project_id, type, at, by_user_id, source, note, payload)
-			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
+				(id, project_id, type, at, by_user_id, source, note, payload, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9)
 			ON CONFLICT (id) DO NOTHING;
-		`, ev.ID, projectID, ev.Type, at, ev.ByUserID, string(source), ev.Note, nullKitchenLayout(ev.Payload)); err != nil {
+		`, ev.ID, projectID, ev.Type, at, ev.ByUserID, string(source), ev.Note, nullKitchenLayout(ev.Payload), OrgFromCtx(ctx)); err != nil {
 			return fmt.Errorf("error upserting project event: %w", err)
 		}
 	}

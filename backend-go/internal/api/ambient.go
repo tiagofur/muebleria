@@ -94,7 +94,7 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if prevTexture != m.PreviewTextureURL {
-			deleteMediaFileByURL(s.MediaDir, prevTexture)
+			deleteMediaFileByURL(r.Context(), s.MediaDir, prevTexture)
 		}
 		respondWithJSON(w, http.StatusOK, m)
 

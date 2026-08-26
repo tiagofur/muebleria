@@ -17,9 +17,10 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 		       x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
 		       notes, active, created_at, updated_at
 		FROM components
+		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query components: %w", err)
 	}
@@ -72,13 +73,13 @@ func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domai
 		       default_edges, option_roles, length_formula, width_formula,
 		       x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
 		       notes, active, created_at, updated_at
-		FROM components WHERE id = $1;
+		FROM components WHERE id = $1 AND organization_id = $2;
 	`
 	var c domain.Component
 	var notes *string
 	var lengthFormula, widthFormula *string
 	var xFormula, yFormula, zFormula *string
-	err := s.Pool.QueryRow(ctx, query, id).Scan(
+	err := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
 		&c.ID, &c.Code, &c.Name, &c.Placement, &c.GeometryKind,
 		&c.LengthMm, &c.WidthMm, &c.ThicknessMm,
 		&c.DefaultEdges, &c.OptionRoles, &lengthFormula, &widthFormula,
@@ -117,27 +118,27 @@ func (s *PostgresStore) CreateComponent(ctx context.Context, c *domain.Component
 
 	if c.ID != "" {
 		err = s.Pool.QueryRow(ctx, `
-			INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+			INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 			RETURNING created_at, updated_at;
 		`, c.ID, c.Code, c.Name, c.Placement, c.GeometryKind,
 			c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
 			c.OptionRoles, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 			nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 			c.RotateX, c.RotateY, c.RotateZ,
-			nullIfEmpty(c.Notes), c.Active,
+			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
 		).Scan(&c.CreatedAt, &c.UpdatedAt)
 	} else {
 		err = s.Pool.QueryRow(ctx, `
-			INSERT INTO components (code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+			INSERT INTO components (code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 			RETURNING id, created_at, updated_at;
 		`, c.Code, c.Name, c.Placement, c.GeometryKind,
 			c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
 			c.OptionRoles, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 			nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 			c.RotateX, c.RotateY, c.RotateZ,
-			nullIfEmpty(c.Notes), c.Active,
+			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
 		).Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 	}
 	if err != nil {
@@ -161,13 +162,13 @@ func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domai
 		    rotate_x = $15, rotate_y = $16, rotate_z = $17,
 		    notes = $18, active = $19,
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $20;
+		WHERE id = $20 AND organization_id = $21;
 	`, c.Code, c.Name, c.Placement, c.GeometryKind,
 		c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
 		c.OptionRoles, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 		nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 		c.RotateX, c.RotateY, c.RotateZ,
-		nullIfEmpty(c.Notes), c.Active, id)
+		nullIfEmpty(c.Notes), c.Active, id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error updating component: %w", err)
 	}
@@ -179,7 +180,7 @@ func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domai
 }
 
 func (s *PostgresStore) DeleteComponent(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM components WHERE id = $1;`, id)
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM components WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

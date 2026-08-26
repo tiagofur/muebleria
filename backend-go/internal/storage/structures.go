@@ -201,9 +201,10 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
 		FROM structures
+		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query structures: %w", err)
 	}
@@ -269,14 +270,14 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domain.Structure, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
-		FROM structures WHERE id = $1;
+		FROM structures WHERE id = $1 AND organization_id = $2;
 	`
 	var st domain.Structure
 	var w, h, d *int
 	var notes *string
 	var agrsRaw []byte
 	var jointRulesRaw []byte
-	err := s.Pool.QueryRow(ctx, query, id).Scan(
+	err := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
 		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt,
 	)
 	if err != nil {
@@ -383,16 +384,16 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 
 	if st.ID != "" {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 			RETURNING created_at, updated_at;
-		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON)).Scan(&st.CreatedAt, &st.UpdatedAt)
+		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON), OrgFromCtx(ctx)).Scan(&st.CreatedAt, &st.UpdatedAt)
 	} else {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 			RETURNING id, created_at, updated_at;
-		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON)).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
+		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON), OrgFromCtx(ctx)).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
 	}
 	if err != nil {
 		return fmt.Errorf("error inserting structure: %w", err)
@@ -402,9 +403,9 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 	for _, c := range st.Components {
 		overridesJSON := fullComponentInstanceOverridesJSON(c.Overrides)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override, overrides)
-			VALUES ($1,$2,$3,$4,$5);
-		`, st.ID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride), overridesJSON)
+			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override, overrides, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6);
+		`, st.ID, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride), overridesJSON, OrgFromCtx(ctx))
 		if err != nil {
 			return fmt.Errorf("error inserting structure component: %w", err)
 		}
@@ -417,14 +418,14 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 		}
 		if presetID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm)
-				VALUES ($1,$2,$3,$4,$5,$6);
-			`, presetID, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm, organization_id)
+				VALUES ($1,$2,$3,$4,$5,$6,$7);
+			`, presetID, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm, OrgFromCtx(ctx))
 		} else {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm)
-				VALUES ($1,$2,$3,$4,$5);
-			`, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm, organization_id)
+				VALUES ($1,$2,$3,$4,$5,$6);
+			`, st.ID, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error inserting structure preset: %w", err)
@@ -451,8 +452,8 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	var prevAgrsRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, revision, agregados
-		FROM structures WHERE id = $1;
-	`, id).Scan(&prev.ID, &prev.Code, &prev.Name, &pw, &ph, &pd, &prev.Revision, &prevAgrsRaw)
+		FROM structures WHERE id = $1 AND organization_id = $2;
+	`, id, OrgFromCtx(ctx)).Scan(&prev.ID, &prev.Code, &prev.Name, &pw, &ph, &pd, &prev.Revision, &prevAgrsRaw)
 	if err != nil {
 		return fmt.Errorf("structure not found: %w", err)
 	}
@@ -493,10 +494,10 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	// retry of the same edit ever lands (defensive; should not happen since
 	// revision always increments).
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO structure_revisions (structure_id, revision, snapshot)
-		VALUES ($1, $2, $3)
+		INSERT INTO structure_revisions (structure_id, revision, snapshot, organization_id)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (structure_id, revision) DO NOTHING;
-	`, id, prevRevision, snapshotJSON); err != nil {
+	`, id, prevRevision, snapshotJSON, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error inserting structure revision snapshot: %w", err)
 	}
 
@@ -520,8 +521,8 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	tag, err := tx.Exec(ctx, `
 		UPDATE structures
 		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, agregados = $9, joint_drilling_rules = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11;
-	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, nullableJSON(jointRulesJSON), id)
+		WHERE id = $11 AND organization_id = $12;
+	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, nullableJSON(jointRulesJSON), id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error updating structure: %w", err)
 	}
@@ -540,9 +541,9 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 	for _, c := range st.Components {
 		overridesJSON := fullComponentInstanceOverridesJSON(c.Overrides)
 		_, err = tx.Exec(ctx, `
-			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override, overrides)
-			VALUES ($1,$2,$3,$4,$5);
-		`, id, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride), overridesJSON)
+			INSERT INTO structure_components (structure_id, component_id, quantity, placement_override, overrides, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6);
+		`, id, c.ComponentID, c.Quantity, placementOverrideArg(c.PlacementOverride), overridesJSON, OrgFromCtx(ctx))
 		if err != nil {
 			return fmt.Errorf("error replacing structure component: %w", err)
 		}
@@ -555,14 +556,14 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 		}
 		if presetID != "" {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm)
-				VALUES ($1,$2,$3,$4,$5,$6);
-			`, presetID, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+				INSERT INTO structure_presets (id, structure_id, name, width_mm, height_mm, depth_mm, organization_id)
+				VALUES ($1,$2,$3,$4,$5,$6,$7);
+			`, presetID, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm, OrgFromCtx(ctx))
 		} else {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm)
-				VALUES ($1,$2,$3,$4,$5);
-			`, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm)
+				INSERT INTO structure_presets (structure_id, name, width_mm, height_mm, depth_mm, organization_id)
+				VALUES ($1,$2,$3,$4,$5,$6);
+			`, id, nullIfEmpty(pr.Name), pr.WidthMm, pr.HeightMm, pr.DepthMm, OrgFromCtx(ctx))
 		}
 		if err != nil {
 			return fmt.Errorf("error replacing structure presets: %w", err)
@@ -575,7 +576,7 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 }
 
 func (s *PostgresStore) DeleteStructure(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM structures WHERE id = $1;`, id)
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM structures WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

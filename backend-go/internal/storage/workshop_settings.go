@@ -8,36 +8,48 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// GetWorkshopSettings returns the single taller settings row (creates defaults if missing).
+// GetWorkshopSettings returns the taller settings row for the current
+// organization (creates defaults if missing).
 func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.WorkshopSettings, error) {
 	var ws domain.WorkshopSettings
+	// default_cut_strategy / nav_mode are nullable TEXT (000064/000076): scan
+	// through pointers so NULL rows resolve to the normalize fallbacks instead
+	// of failing the read.
+	var cutStrategy, navMode *string
 	err := s.Pool.QueryRow(ctx, `
 		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode
 		FROM workshop_settings
-		WHERE id = 1
-	`).Scan(
+		WHERE organization_id = $1
+	`, OrgFromCtx(ctx)).Scan(
 		&ws.DefaultMarginFactor,
 		&ws.DefaultLaborFixedCost,
 		&ws.DefaultCurrency,
 		&ws.VendedorCanViewCosts,
-		&ws.DefaultCutStrategy,
-		&ws.NavMode,
+		&cutStrategy,
+		&navMode,
 	)
 	if err != nil {
 		// Table empty or not migrated yet — safe defaults (COST-01: hide costs).
 		return domain.DefaultWorkshopSettings(), nil
 	}
+	if cutStrategy != nil {
+		ws.DefaultCutStrategy = *cutStrategy
+	}
+	if navMode != nil {
+		ws.NavMode = *navMode
+	}
 	return normalizeWorkshopSettings(ws), nil
 }
 
-// UpsertWorkshopSettings writes the single taller settings row.
+// UpsertWorkshopSettings writes the taller settings row for the current
+// organization (id comes from the sequence default).
 func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error) {
 	ws = normalizeWorkshopSettings(ws)
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO workshop_settings (
-			id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode, updated_at
-		) VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
-		ON CONFLICT (id) DO UPDATE SET
+			organization_id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		ON CONFLICT (organization_id) DO UPDATE SET
 			default_margin_factor = EXCLUDED.default_margin_factor,
 			default_labor_fixed_cost = EXCLUDED.default_labor_fixed_cost,
 			default_currency = EXCLUDED.default_currency,
@@ -46,6 +58,7 @@ func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.Wo
 			nav_mode = EXCLUDED.nav_mode,
 			updated_at = NOW()
 	`,
+		OrgFromCtx(ctx),
 		ws.DefaultMarginFactor,
 		ws.DefaultLaborFixedCost,
 		ws.DefaultCurrency,

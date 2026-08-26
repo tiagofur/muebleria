@@ -10,6 +10,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // HandleFurnitureDefinitionLayout: GET /api/furniture/definitions/{definitionId}/layout
@@ -24,8 +25,8 @@ import (
 //
 // Query parameters widthMm/heightMm/depthMm override the module's own
 // dimensions (the SketchUp dialog edits them freely); each is optional and
-// must be > 0 when present. Auth + active per-user license gate exactly like
-// GET /api/furniture/definitions.
+// must be > 0 when present. Auth + active workshop (organization) license
+// gate exactly like GET /api/furniture/definitions.
 func (s *Server) HandleFurnitureDefinitionLayout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -44,10 +45,17 @@ func (s *Server) HandleFurnitureDefinitionLayout(w http.ResponseWriter, r *http.
 		return
 	}
 
-	status := domain.LicenseStatusAt(u.LicensePlan, u.LicenseExpiresAt, time.Now())
-	if status != domain.LicenseStatusActive {
+	// The license belongs to the workshop (organization), not the user: load
+	// the scoped organization and gate on its plan/expiry (ADR-0004), exactly
+	// like GET /api/furniture/definitions.
+	org, err := s.Store.GetOrganizationByID(r.Context(), storage.OrgFromCtx(r.Context()))
+	if err != nil {
+		respondWithInternalError(w, err, "load organization license")
+		return
+	}
+	if org == nil || domain.LicenseStatusAt(org.LicensePlan, org.LicenseExpiresAt, time.Now()) != domain.LicenseStatusActive {
 		respondWithError(w, http.StatusForbidden,
-			"tu licencia no está activa. Pedile al administrador del taller que asigne o renueve tu licencia (plan y vencimiento) para usar la biblioteca de Granete.")
+			"la licencia del taller no está activa. Pedile al administrador del taller que la renueve (plan y vencimiento) para usar la biblioteca de Granete.")
 		return
 	}
 

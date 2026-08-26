@@ -38,8 +38,8 @@ func (s *PostgresStore) MutateProjectQuality(
 	var qualityRaw, partsRaw, unitsRaw, releaseRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT quality, part_instances, module_units, production_release
-		FROM projects WHERE id = $1 FOR UPDATE;
-	`, projectID).Scan(&qualityRaw, &partsRaw, &unitsRaw, &releaseRaw)
+		FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE;
+	`, projectID, OrgFromCtx(ctx)).Scan(&qualityRaw, &partsRaw, &unitsRaw, &releaseRaw)
 	if err != nil {
 		return nil, ErrQualityProjectNotFound
 	}
@@ -70,8 +70,8 @@ func (s *PostgresStore) MutateProjectQuality(
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, COALESCE(floor_status, 'pending'), COALESCE(quantity, 1) FROM project_items WHERE project_id = $1;
-	`, projectID)
+		SELECT id, COALESCE(floor_status, 'pending'), COALESCE(quantity, 1) FROM project_items WHERE project_id = $1 AND organization_id = $2;
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading item floor statuses for quality: %w", err)
 	}
@@ -97,8 +97,8 @@ func (s *PostgresStore) MutateProjectQuality(
 	if _, err := tx.Exec(ctx, `
 		UPDATE projects
 		SET quality = $2, part_instances = $3, module_units = $4, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1;
-	`, projectID, jsonbStructArg(mutation.Quality), jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units)); err != nil {
+		WHERE id = $1 AND organization_id = $5;
+	`, projectID, jsonbStructArg(mutation.Quality), jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units), OrgFromCtx(ctx)); err != nil {
 		return nil, fmt.Errorf("error persisting quality: %w", err)
 	}
 
@@ -107,8 +107,8 @@ func (s *PostgresStore) MutateProjectQuality(
 			continue
 		}
 		if _, err := tx.Exec(ctx, `
-			UPDATE project_items SET floor_status = $3 WHERE id = $1 AND project_id = $2;
-		`, itemID, projectID, status); err != nil {
+			UPDATE project_items SET floor_status = $3 WHERE id = $1 AND project_id = $2 AND organization_id = $4;
+		`, itemID, projectID, status, OrgFromCtx(ctx)); err != nil {
 			return nil, fmt.Errorf("error persisting derived floor status for item %s: %w", itemID, err)
 		}
 	}
