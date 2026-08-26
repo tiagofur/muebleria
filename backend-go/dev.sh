@@ -40,8 +40,8 @@ case "$SUBCMD" in
     ;;
   build)
     echo "▶ Compilando backend Go..."
-    go build -o /tmp/muebles-server ./cmd/server
-    echo "✓ Binario en /tmp/muebles-server"
+    go build -o /tmp/granete-server ./cmd/server
+    echo "✓ Binario en /tmp/granete-server"
     ;;
   admin)
     shift

@@ -346,7 +346,7 @@ function registerIpc() {
     if (!zpl.trim()) return { ok: false, error: 'No hay etiquetas para imprimir' };
     try {
       if (process.platform === 'win32') {
-        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'muebles-zpl-'));
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'granete-zpl-'));
         const file = path.join(dir, 'labels.zpl');
         await fs.writeFile(file, zpl, 'utf8');
         try {

@@ -13,7 +13,7 @@ import { JSONFileStorage } from './jsonFileStorage';
 import { SCHEMA_VERSION, createSeedWorkspace } from './seed';
 
 async function tempWorkspacePath(name = 'workspace.json'): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'muebles-storage-'));
+  const dir = await mkdtemp(join(tmpdir(), 'granete-storage-'));
   return join(dir, name);
 }
 

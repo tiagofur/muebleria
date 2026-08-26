@@ -22,7 +22,7 @@
     "dist:linux": "pnpm --filter @granete/web build && pnpm prepackage && electron-builder --linux"
   },
   "build": {
-    "appId": "com.muebles.app",
+    "appId": "com.granete.app",
     "productName": "Granete",
     "directories": {
       "output": "dist",
