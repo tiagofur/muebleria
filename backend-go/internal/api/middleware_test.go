@@ -30,8 +30,9 @@ func errorBody(t *testing.T, rr *httptest.ResponseRecorder) string {
 
 // staticUsers implements UserLookup for middleware tests.
 type staticUsers struct {
-	byID map[string]*domain.User
-	err  error
+	byID        map[string]*domain.User
+	err         error
+	memberships map[string]*domain.MembershipWithOrg
 }
 
 func (s *staticUsers) GetUserByID(_ context.Context, id string) (*domain.User, error) {
@@ -43,6 +44,19 @@ func (s *staticUsers) GetUserByID(_ context.Context, id string) (*domain.User, e
 		return nil, errors.New("user not found")
 	}
 	return u, nil
+}
+
+// membershipsByUser keyed by "userID:orgID" lets middleware tests simulate
+// live membership state (revocation, role changes, suspended organizations).
+func (s *staticUsers) GetActiveMembership(_ context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
+	if s.memberships == nil {
+		return nil, errors.New("membership not found")
+	}
+	m, ok := s.memberships[userID+":"+organizationID]
+	if !ok {
+		return nil, errors.New("membership not found")
+	}
+	return m, nil
 }
 
 func TestCORSMiddleware(t *testing.T) {
@@ -140,7 +154,7 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 
 	// Case 4: Valid Token + active user in DB → 200.
-	token, err := auth.GenerateToken("user-1", "user@test.com", "admin", secret)
+	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +182,7 @@ func TestAuthMiddleware_RejectsDeactivatedUser(t *testing.T) {
 	}}
 	handler := AuthMiddleware(secret, users)(okHandler())
 
-	token, err := auth.GenerateToken("user-1", "user@test.com", "admin", secret)
+	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +211,7 @@ func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 		w.Write([]byte("admin-ok"))
 	}))
 
-	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", "admin", secret)
+	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +236,7 @@ func TestAdminMiddleware(t *testing.T) {
 	}))
 
 	// Non-admin role → 403 JSON.
-	userToken, err := auth.GenerateToken("u-1", "user@test.com", "user", secret)
+	userToken, err := auth.GenerateToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +252,7 @@ func TestAdminMiddleware(t *testing.T) {
 	}
 
 	// Admin role → 200.
-	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", "admin", secret)
+	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,5 +343,151 @@ func TestClientIP(t *testing.T) {
 	req3.RemoteAddr = "192.0.2.50:54321"
 	if got := clientIP(req3); got != "192.0.2.50" {
 		t.Errorf("RemoteAddr: got %q, want 192.0.2.50", got)
+	}
+}
+
+// --- Multi-org auth context (ADR-0004 / #325) ---
+
+func orgScopedToken(t *testing.T, secret, userID, orgID string, roles []domain.UserRole) string {
+	t.Helper()
+	strRoles := make([]string, len(roles))
+	for i, r := range roles {
+		strRoles[i] = string(r)
+	}
+	token, err := auth.GenerateToken(userID, "u@test.com", auth.TokenContext{
+		Roles: strRoles, OrgID: orgID,
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
+}
+
+func memEntry(userID, orgID string, roles []domain.UserRole, orgActive bool) *domain.MembershipWithOrg {
+	return &domain.MembershipWithOrg{
+		Membership: domain.Membership{
+			OrganizationID: orgID, UserID: userID, Roles: roles, Active: true,
+		},
+		Organization: domain.Organization{
+			ID: orgID, Name: "T", Slug: "t", Active: orgActive,
+			LicensePlan: domain.LicensePlanNone,
+		},
+	}
+}
+
+// TestAuthMiddleware_RevokedMembershipCutsAccess locks ADR-0004: a still-valid
+// JWT whose membership was deactivated must not grant access on the next request.
+func TestAuthMiddleware_RevokedMembershipCutsAccess(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"u-1": {ID: "u-1", Email: "u@test.com", Role: domain.RoleAdmin, Active: true},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{
+			"u-1:org-1": memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, true),
+		},
+	}
+	handler := AuthMiddleware(secret, users)(okHandler())
+
+	token := orgScopedToken(t, secret, "u-1", "org-1", []domain.UserRole{domain.RoleAdmin})
+	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("active membership: expected 200, got %d", rr.Code)
+	}
+
+	// Membership deactivated → access cut immediately.
+	users.memberships["u-1:org-1"].Active = false
+	req = httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked membership: expected 401, got %d", rr.Code)
+	}
+}
+
+// TestAuthMiddleware_SuspendedOrganizationCutsAccess: org suspension cuts
+// access even with an active membership.
+func TestAuthMiddleware_SuspendedOrganizationCutsAccess(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"u-1": {ID: "u-1", Email: "u@test.com", Role: domain.RoleAdmin, Active: true},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{
+			"u-1:org-1": memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, false),
+		},
+	}
+	handler := AuthMiddleware(secret, users)(okHandler())
+
+	token := orgScopedToken(t, secret, "u-1", "org-1", []domain.UserRole{domain.RoleAdmin})
+	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("suspended organization: expected 401, got %d", rr.Code)
+	}
+}
+
+// TestAuthMiddleware_OrgTokenUsesLiveMembershipRoles: the token may carry
+// stale roles; AdminMiddleware must see the membership's live roles instead.
+func TestAuthMiddleware_OrgTokenUsesLiveMembershipRoles(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"a-1": {ID: "a-1", Email: "was-admin@test.com", Role: domain.RoleAdmin, Active: true},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{
+			// Token says admin, membership now says vendedor.
+			"a-1:org-1": memEntry("a-1", "org-1", []domain.UserRole{domain.RoleVendedor}, true),
+		},
+	}
+	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	token := orgScopedToken(t, secret, "a-1", "org-1", []domain.UserRole{domain.RoleAdmin})
+	req := httptest.NewRequest("GET", "/api/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("demoted membership: expected 403, got %d", rr.Code)
+	}
+}
+
+// TestAuthMiddleware_MultiRoleMembershipUsesPrimaryRole: transitional
+// single-role view is Roles[0]; the F170b sweep replaces it with the union.
+func TestAuthMiddleware_MultiRoleMembershipUsesPrimaryRole(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"m-1": {ID: "m-1", Email: "multi@test.com", Role: domain.RoleUser, Active: true},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{
+			"m-1:org-1": memEntry("m-1", "org-1", []domain.UserRole{domain.RoleVendedor, domain.RoleIngeniero}, true),
+		},
+	}
+	var seenRole string
+	handler := AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims := r.Context().Value(UserContextKey).(*auth.Claims)
+		seenRole = claims.Role
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	token := orgScopedToken(t, secret, "m-1", "org-1", []domain.UserRole{domain.RoleVendedor})
+	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if seenRole != string(domain.RoleVendedor) {
+		t.Fatalf("primary role = %q, want %q", seenRole, domain.RoleVendedor)
 	}
 }

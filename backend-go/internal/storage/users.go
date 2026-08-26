@@ -12,14 +12,14 @@ import (
 
 func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, active, license_plan, license_expires_at,
+		SELECT id, email, password_hash, name, role, active, platform_admin, license_plan, license_expires_at,
 		       created_at, updated_at
 		FROM users
 		WHERE email = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, email)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active,
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.PlatformAdmin,
 		&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -38,14 +38,14 @@ func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*doma
 // (cmd/admin) to locate a user — including inactive ones — for password rotation.
 func (s *PostgresStore) GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, active, license_plan, license_expires_at,
+		SELECT id, email, password_hash, name, role, active, platform_admin, license_plan, license_expires_at,
 		       created_at, updated_at
 		FROM users
 		WHERE email = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, email)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active,
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.PlatformAdmin,
 		&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -72,14 +72,14 @@ func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id string, passw
 
 func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, name, role, active, license_plan, license_expires_at,
+		SELECT id, email, password_hash, name, role, active, platform_admin, license_plan, license_expires_at,
 		       created_at, updated_at
 		FROM users
 		WHERE id = $1;
 	`
 	row := s.Pool.QueryRow(ctx, query, id)
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active,
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Active, &u.PlatformAdmin,
 		&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (s *PostgresStore) CreateUser(ctx context.Context, u *domain.User) error {
 
 func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
 	query := `
-		SELECT id, email, name, role, active, license_plan, license_expires_at, created_at, updated_at
+		SELECT id, email, name, role, active, platform_admin, license_plan, license_expires_at, created_at, updated_at
 		FROM users
 		ORDER BY active ASC, created_at DESC;
 	`
@@ -115,7 +115,7 @@ func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
 	var list []domain.User
 	for rows.Next() {
 		var u domain.User
-		err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Active,
+		err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Active, &u.PlatformAdmin,
 			&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, err
@@ -130,7 +130,16 @@ func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
 
 // ApproveUser activates a pending user account.
 func (s *PostgresStore) ApproveUser(ctx context.Context, id string) error {
-	result, err := s.Pool.Exec(ctx,
+	// Approval also grants the membership that lets the user log in: while a
+	// single organization exists, approvals target it explicitly (ADR-0004
+	// transitional bridge; the F172 team screen assigns per organization).
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx,
 		`UPDATE users SET active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, id)
 	if err != nil {
 		return err
@@ -138,12 +147,27 @@ func (s *PostgresStore) ApproveUser(ctx context.Context, id string) error {
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("user not found")
 	}
-	return nil
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO memberships (organization_id, user_id, roles)
+		VALUES ($1, $2, ARRAY['user']::text[])
+		ON CONFLICT (user_id, organization_id) DO NOTHING`,
+		InitialOrganizationID, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
-// UpdateUserRole changes the role of a user.
+// UpdateUserRole changes the role of a user. users.role is deprecated
+// (memberships are the source of truth, ADR-0004): both are updated in the
+// same transaction so middleware resolution stays consistent.
 func (s *PostgresStore) UpdateUserRole(ctx context.Context, id string, role domain.UserRole) error {
-	result, err := s.Pool.Exec(ctx,
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx,
 		`UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, role, id)
 	if err != nil {
 		return err
@@ -151,7 +175,12 @@ func (s *PostgresStore) UpdateUserRole(ctx context.Context, id string, role doma
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("user not found")
 	}
-	return nil
+	if _, err := tx.Exec(ctx, `
+		UPDATE memberships SET roles = ARRAY[$1]::text[], updated_at = CURRENT_TIMESTAMP
+		WHERE user_id = $2`, string(role), id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // UpdateUser updates a user's name, role, and active status.

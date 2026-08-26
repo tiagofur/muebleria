@@ -22,6 +22,9 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Refresh: requires a still-valid token; re-issues JWT with current DB role.
 	mux.Handle("POST /api/auth/refresh", authMW(http.HandlerFunc(server.HandleRefresh)))
+	// Select-org: swaps an authenticated token for one scoped to a chosen
+	// organization (multi-membership users, ADR-0004).
+	mux.Handle("POST /api/auth/select-org", authMW(http.HandlerFunc(server.HandleSelectOrg)))
 
 	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
 	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).

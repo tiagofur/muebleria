@@ -15,6 +15,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // stubStore is a minimal Store for handler unit tests. Only the methods under
@@ -70,6 +71,8 @@ type stubStore struct {
 	setLicense          func(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error
 	createUserErr       error
 	listUsers           []domain.User
+	// Multi-org memberships by user (ADR-0004) for login/select-org tests.
+	membershipsByUser   map[string][]domain.MembershipWithOrg
 	createMaterialOK    bool
 	deleteProjectCalled bool
 	// F044 workshop settings (nil → defaults, flag false)
@@ -255,6 +258,58 @@ func (s *stubStore) SetUserLicense(ctx context.Context, id string, plan domain.L
 }
 func (s *stubStore) RejectUser(context.Context, string) error {
 	s.stubNotUsed("RejectUser")
+	return nil
+}
+
+// --- Organizations / memberships / security audit (ADR-0004) ---
+
+func (s *stubStore) GetOrganizationByID(context.Context, string) (*domain.Organization, error) {
+	return nil, errors.New("organization not found")
+}
+
+func (s *stubStore) GetOrganizationBySlug(context.Context, string) (*domain.Organization, error) {
+	return nil, errors.New("organization not found")
+}
+
+func (s *stubStore) ListOrganizations(context.Context) ([]domain.Organization, error) {
+	return nil, nil
+}
+
+func (s *stubStore) CreateOrganization(context.Context, *domain.Organization) error {
+	return nil
+}
+
+func (s *stubStore) ListMembershipsByUser(_ context.Context, userID string) ([]domain.MembershipWithOrg, error) {
+	if s.membershipsByUser != nil {
+		return s.membershipsByUser[userID], nil
+	}
+	return nil, nil
+}
+
+func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
+	if s.membershipsByUser != nil {
+		for _, m := range s.membershipsByUser[userID] {
+			if m.OrganizationID == organizationID {
+				return &m, nil
+			}
+		}
+	}
+	return nil, errors.New("membership not found")
+}
+
+func (s *stubStore) EnsureMembership(context.Context, string, string, []domain.UserRole) error {
+	return nil
+}
+
+func (s *stubStore) SetMembershipRoles(context.Context, string, []domain.UserRole) error {
+	return nil
+}
+
+func (s *stubStore) SetPlatformAdmin(context.Context, string, bool) error {
+	return nil
+}
+
+func (s *stubStore) InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error {
 	return nil
 }
 func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Store is the subset of storage operations the HTTP handlers depend on.
@@ -28,6 +29,18 @@ type Store interface {
 	// SetUserLicense assigns the per-user licensing tier and optional expiry.
 	SetUserLicense(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error
 	RejectUser(ctx context.Context, id string) error
+
+	// Organizations / memberships / security audit (ADR-0004)
+	GetOrganizationByID(ctx context.Context, id string) (*domain.Organization, error)
+	GetOrganizationBySlug(ctx context.Context, slug string) (*domain.Organization, error)
+	ListOrganizations(ctx context.Context) ([]domain.Organization, error)
+	CreateOrganization(ctx context.Context, o *domain.Organization) error
+	ListMembershipsByUser(ctx context.Context, userID string) ([]domain.MembershipWithOrg, error)
+	GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error)
+	EnsureMembership(ctx context.Context, organizationID, userID string, roles []domain.UserRole) error
+	SetMembershipRoles(ctx context.Context, userID string, roles []domain.UserRole) error
+	SetPlatformAdmin(ctx context.Context, userID string, admin bool) error
+	InsertSecurityAuditEvent(ctx context.Context, ev storage.SecurityAuditEvent) error
 
 	// Customers
 	ListCustomers(ctx context.Context) ([]domain.Customer, error)

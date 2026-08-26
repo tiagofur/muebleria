@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // actorCanViewCosts resolves COST-01/COST-02 for the request actor (F039 + F044).
@@ -169,6 +171,9 @@ type LoginRequest struct {
 	// long-lived read-only token (auth.ExtensionClient); empty means the web
 	// app and gets the standard short-lived access token.
 	Client string `json:"client"`
+	// Org is an optional organization hint (slug): pre-selects that membership
+	// instead of asking the user to choose (ADR-0004 §6).
+	Org string `json:"org"`
 }
 
 // PublicUserDTO is the safe public representation of a user, guaranteeing
@@ -179,6 +184,7 @@ type PublicUserDTO struct {
 	Name             string             `json:"name"`
 	Role             domain.UserRole    `json:"role"`
 	Active           bool               `json:"active"`
+	PlatformAdmin    bool               `json:"platform_admin"`
 	LicensePlan      domain.LicensePlan `json:"license_plan"`
 	LicenseExpiresAt *time.Time         `json:"license_expires_at,omitempty"`
 	CreatedAt        time.Time          `json:"created_at"`
@@ -199,6 +205,7 @@ func ToPublicUserDTO(u *domain.User) PublicUserDTO {
 		Name:             u.Name,
 		Role:             u.Role,
 		Active:           u.Active,
+		PlatformAdmin:    u.PlatformAdmin,
 		LicensePlan:      plan,
 		LicenseExpiresAt: u.LicenseExpiresAt,
 		CreatedAt:        u.CreatedAt,
@@ -237,9 +244,71 @@ func ToLicenseDTO(u *domain.User) LicenseDTO {
 }
 
 type LoginResponse struct {
-	Token   string        `json:"token"`
+	Token   string        `json:"token,omitempty"`
 	User    PublicUserDTO `json:"user"`
 	License LicenseDTO    `json:"license"`
+	// Organization is the active organization when the token is org-scoped.
+	Organization *OrgSummaryDTO `json:"organization,omitempty"`
+	// Memberships lists the user's selectable organizations.
+	Memberships []MembershipDTO `json:"memberships,omitempty"`
+	// SelectionRequired is true when the user belongs to several
+	// organizations and must call /api/auth/select-org before working.
+	SelectionRequired bool `json:"selection_required,omitempty"`
+}
+
+// OrgSummaryDTO is the organization projection clients need (selector, banner).
+type OrgSummaryDTO struct {
+	ID       string                  `json:"id"`
+	Name     string                  `json:"name"`
+	Slug     string                  `json:"slug"`
+	Type     domain.OrganizationType `json:"type"`
+	License  LicenseDTO              `json:"license"`
+}
+
+type MembershipDTO struct {
+	OrganizationID string                  `json:"organization_id"`
+	Roles          []domain.UserRole      `json:"roles"`
+	Organization   OrgSummaryDTO          `json:"organization"`
+}
+
+func toOrgSummaryDTO(o domain.Organization) OrgSummaryDTO {
+	return OrgSummaryDTO{
+		ID:   o.ID,
+		Name: o.Name,
+		Slug: o.Slug,
+		Type: o.Type,
+		License: LicenseDTO{
+			Plan:      string(o.LicensePlan),
+			ExpiresAt: o.LicenseExpiresAt,
+			Status:    domain.LicenseStatusAt(o.LicensePlan, o.LicenseExpiresAt, time.Now()),
+		},
+	}
+}
+
+func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
+	out := make([]MembershipDTO, 0, len(list))
+	for _, m := range list {
+		out = append(out, MembershipDTO{
+			OrganizationID: m.OrganizationID,
+			Roles:          m.Roles,
+			Organization:   toOrgSummaryDTO(m.Organization),
+		})
+	}
+	return out
+}
+
+func (s *Server) audit(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) {
+	// Best-effort: an audit write failure must not fail the request; it is
+	// logged server-side instead.
+	if err := s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+		EventType:      eventType,
+		ActorUserID:    actorUserID,
+		OrganizationID: organizationID,
+		IP:             ip,
+		Details:        details,
+	}); err != nil {
+		slog.Warn("security audit write failed", "event_type", eventType, "error", err)
+	}
 }
 
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -258,33 +327,167 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// keeps response timing closer to the password-check path.
 	const invalidCreds = "invalid email or password"
 
+	failLogin := func(userID string) {
+		s.audit(r.Context(), "login_failed", userID, "", clientIP(r), map[string]interface{}{
+			"client": req.Client,
+		})
+		respondWithError(w, http.StatusUnauthorized, invalidCreds)
+	}
+
 	u, err := s.Store.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		_ = auth.CheckPasswordHash(req.Password, auth.DummyHash)
-		respondWithError(w, http.StatusUnauthorized, invalidCreds)
+		failLogin("")
 		return
 	}
 
 	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) || !u.Active {
-		respondWithError(w, http.StatusUnauthorized, invalidCreds)
+		failLogin(u.ID)
 		return
+	}
+
+	memberships, err := s.Store.ListMembershipsByUser(r.Context(), u.ID)
+	if err != nil {
+		respondWithInternalError(w, err, "login: memberships")
+		return
+	}
+
+	// Resolve the active organization: explicit slug hint wins, then the
+	// single membership, then a selection is required. Platform staff without
+	// any membership gets an org-less console token.
+	var chosen *domain.MembershipWithOrg
+	if req.Org != "" {
+		for i := range memberships {
+			if memberships[i].Organization.Slug == req.Org {
+				chosen = &memberships[i]
+				break
+			}
+		}
+		if chosen == nil {
+			failLogin(u.ID)
+			return
+		}
+	} else if len(memberships) == 1 {
+		chosen = &memberships[0]
+	}
+
+	if chosen == nil && len(memberships) > 1 {
+		// Multi-organization user without a hint: no token yet, the client
+		// must POST /api/auth/select-org with the chosen organization.
+		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
+			"client": req.Client, "selection_required": true,
+		})
+		respondWithJSON(w, http.StatusOK, LoginResponse{
+			User:             ToPublicUserDTO(u),
+			License:          LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone},
+			Memberships:      toMembershipDTOs(memberships),
+			SelectionRequired: true,
+		})
+		return
+	}
+
+	if chosen == nil && !u.PlatformAdmin {
+		// No membership and not platform staff: nothing to log in to.
+		s.audit(r.Context(), "login_failed", u.ID, "", clientIP(r), map[string]interface{}{
+			"client": req.Client, "reason": "no_membership",
+		})
+		respondWithError(w, http.StatusForbidden, "tu cuenta no pertenece a ningún taller todavía. Pedile al administrador que te asigne.")
+		return
+	}
+
+	tc := auth.TokenContext{PlatformAdmin: u.PlatformAdmin}
+	var orgDTO *OrgSummaryDTO
+	var license LicenseDTO
+	if chosen != nil {
+		roles := make([]string, len(chosen.Roles))
+		for i, rl := range chosen.Roles {
+			roles[i] = string(rl)
+		}
+		tc.Roles = roles
+		tc.OrgID = chosen.OrganizationID
+		sum := toOrgSummaryDTO(chosen.Organization)
+		orgDTO = &sum
+		license = sum.License
+	} else {
+		license = LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone}
 	}
 
 	var token string
 	if req.Client == auth.ExtensionClient {
-		token, err = auth.GenerateExtensionToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+		// The extension always works inside the user's (single) organization.
+		token, err = auth.GenerateExtensionToken(u.ID, u.Email, tc, s.JWTSecret)
 	} else {
-		token, err = auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+		token, err = auth.GenerateToken(u.ID, u.Email, tc, s.JWTSecret)
 	}
 	if err != nil {
 		respondWithInternalError(w, err, "login: generate token")
 		return
 	}
 
+	s.audit(r.Context(), "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
+		"client": req.Client,
+	})
+
 	respondWithJSON(w, http.StatusOK, LoginResponse{
-		Token:   token,
-		User:    ToPublicUserDTO(u),
-		License: ToLicenseDTO(u),
+		Token:        token,
+		User:         ToPublicUserDTO(u),
+		License:      license,
+		Organization: orgDTO,
+		Memberships:  toMembershipDTOs(memberships),
+	})
+}
+
+// HandleSelectOrg: POST /api/auth/select-org {organization_id}
+// Exchanges an authenticated (usually org-less) token for one scoped to the
+// chosen organization, after re-validating the live membership.
+func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
+	if !ok || claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	var body struct {
+		OrganizationID string `json:"organization_id"`
+	}
+	if !decodeJSONBody(w, r, &body) || body.OrganizationID == "" {
+		respondWithError(w, http.StatusBadRequest, "missing organization_id")
+		return
+	}
+
+	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, body.OrganizationID)
+	if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
+		respondWithError(w, http.StatusForbidden, "no tenés membresía activa en ese taller")
+		return
+	}
+
+	roles := make([]string, len(m.Roles))
+	for i, rl := range m.Roles {
+		roles[i] = string(rl)
+	}
+	tc := auth.TokenContext{Roles: roles, OrgID: m.OrganizationID, PlatformAdmin: claims.PlatformAdmin}
+	token, err := auth.GenerateToken(claims.UserID, claims.Email, tc, s.JWTSecret)
+	if err != nil {
+		respondWithInternalError(w, err, "select-org: generate token")
+		return
+	}
+
+	s.audit(r.Context(), "organization_selected", claims.UserID, m.OrganizationID, clientIP(r), nil)
+
+	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || u == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	org := toOrgSummaryDTO(m.Organization)
+	respondWithJSON(w, http.StatusOK, LoginResponse{
+		Token:        token,
+		User:         ToPublicUserDTO(u),
+		License:      org.License,
+		Organization: &org,
 	})
 }
 
@@ -311,24 +514,42 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Preserve the token kind: an extension session must keep its read-only
-	// client claim and long TTL across refreshes.
+	// Preserve the token kind (extension keeps read-only client + long TTL)
+	// and the live organization scope; the middleware already refreshed the
+	// membership roles into claims.
+	tc := auth.TokenContext{
+		Roles:         claims.Roles,
+		OrgID:         claims.OrgID,
+		PlatformAdmin: claims.PlatformAdmin,
+	}
 	var token string
 	if claims.Client == auth.ExtensionClient {
-		token, err = auth.GenerateExtensionToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+		token, err = auth.GenerateExtensionToken(u.ID, u.Email, tc, s.JWTSecret)
 	} else {
-		token, err = auth.GenerateToken(u.ID, u.Email, string(u.Role), s.JWTSecret)
+		token, err = auth.GenerateToken(u.ID, u.Email, tc, s.JWTSecret)
 	}
 	if err != nil {
 		respondWithInternalError(w, err, "refresh: generate token")
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, LoginResponse{
-		Token:   token,
-		User:    ToPublicUserDTO(u),
-		License: ToLicenseDTO(u),
-	})
+	resp := LoginResponse{
+		Token: token,
+		User:  ToPublicUserDTO(u),
+		License: LicenseDTO{
+			Plan:      string(domain.LicensePlanNone),
+			Status:    domain.LicenseStatusNone,
+		},
+	}
+	if claims.OrgID != "" {
+		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
+			org := toOrgSummaryDTO(m.Organization)
+			resp.Organization = &org
+			resp.License = org.License
+		}
+	}
+
+	respondWithJSON(w, http.StatusOK, resp)
 }
 
 // --- CUSTOMERS ---

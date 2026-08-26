@@ -1,0 +1,175 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/tiagofur/muebles-backend/internal/auth"
+	"github.com/tiagofur/muebles-backend/internal/domain"
+)
+
+// F170 / #325: login with organization context — membership resolution,
+// selection_required for multi-membership users and the select-org exchange.
+
+func orgTestMembership(userID, orgID, slug string, roles []domain.UserRole) domain.MembershipWithOrg {
+	return domain.MembershipWithOrg{
+		Membership: domain.Membership{
+			OrganizationID: orgID, UserID: userID, Roles: roles, Active: true,
+		},
+		Organization: domain.Organization{
+			ID: orgID, Name: "Taller " + slug, Slug: slug, Type: domain.OrganizationTypeFactory,
+			Active: true, LicensePlan: domain.LicensePlanTrial,
+		},
+	}
+}
+
+func loginTestServer(t *testing.T) (*Server, *stubStore) {
+	t.Helper()
+	hash, err := auth.HashPassword("secret123")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	u := &domain.User{
+		ID: "u1", Email: "u@example.com", Name: "U", Role: domain.RoleVendedor,
+		Active: true, PasswordHash: hash,
+	}
+	st := &stubStore{
+		getUserByEmail: u,
+		membershipsByUser: map[string][]domain.MembershipWithOrg{
+			"u1": {
+				orgTestMembership("u1", "org-1", "taller-uno", []domain.UserRole{domain.RoleVendedor}),
+				orgTestMembership("u1", "org-2", "taller-dos", []domain.UserRole{domain.RoleAdmin}),
+			},
+		},
+	}
+	return &Server{Store: st, JWTSecret: "unit-test-secret-0123456789abcdef"}, st
+}
+
+func doLogin(t *testing.T, s *Server, payload map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(payload)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
+	s.HandleLogin(rec, req)
+	return rec
+}
+
+func TestLogin_MultiMembershipRequiresSelection(t *testing.T) {
+	server, _ := loginTestServer(t)
+	rec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "secret123"})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Token            string         `json:"token"`
+		SelectionRequired bool          `json:"selection_required"`
+		Memberships      []MembershipDTO `json:"memberships"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.SelectionRequired {
+		t.Fatal("multi-membership login must require selection")
+	}
+	if resp.Token != "" {
+		t.Fatal("no token before the organization is selected")
+	}
+	if len(resp.Memberships) != 2 {
+		t.Fatalf("memberships = %d, want 2", len(resp.Memberships))
+	}
+}
+
+func TestLogin_OrgHintPreSelectsMembership(t *testing.T) {
+	server, _ := loginTestServer(t)
+	rec := doLogin(t, server, map[string]string{
+		"email": "u@example.com", "password": "secret123", "org": "taller-dos",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp LoginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Token == "" || resp.Organization == nil || resp.Organization.Slug != "taller-dos" {
+		t.Fatalf("expected org-scoped token for taller-dos, got %+v", resp.Organization)
+	}
+	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.OrgID != "org-2" || claims.Role != string(domain.RoleAdmin) {
+		t.Fatalf("claims org/role = %s/%s, want org-2/admin", claims.OrgID, claims.Role)
+	}
+}
+
+func TestLogin_NoMembershipNoPlatform(t *testing.T) {
+	server, st := loginTestServer(t)
+	st.membershipsByUser = nil
+	rec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "secret123"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSelectOrg_IssuesScopedToken(t *testing.T) {
+	server, _ := loginTestServer(t)
+
+	// Org-less token (as issued to platform staff / multi-membership users).
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp LoginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.OrgID != "org-1" || claims.Role != string(domain.RoleVendedor) {
+		t.Fatalf("claims = org %s role %s, want org-1/vendedor", claims.OrgID, claims.Role)
+	}
+}
+
+func TestSelectOrg_RejectsForeignOrganization(t *testing.T) {
+	server, _ := loginTestServer(t)
+	token, _ := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+
+	body, _ := json.Marshal(map[string]string{"organization_id": "org-x"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("foreign org: expected 403, got %d", rec.Code)
+	}
+}
+
+func TestLogin_FailureIsAudited(t *testing.T) {
+	server, st := loginTestServer(t)
+	rec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "wrong"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	// The audit write is best-effort in the handler; the stub records nothing,
+	// so this locks the response contract only (uniform 401, no enumeration).
+	if rec.Body.String() == "" {
+		t.Fatal("expected error body")
+	}
+	_ = st
+}

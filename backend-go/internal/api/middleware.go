@@ -23,6 +23,13 @@ type UserLookup interface {
 	GetUserByID(ctx context.Context, id string) (*domain.User, error)
 }
 
+// MembershipLookup adds the organization context resolution used to keep the
+// live membership roles / organization state in every request (ADR-0004).
+type MembershipLookup interface {
+	UserLookup
+	GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error)
+}
+
 // CORSMiddleware only allows origins present in the allowlist. The matched
 // origin is reflected per request; non-matching origins get no Allow-Origin
 // header at all. The wildcard "*" is intentionally never used so that
@@ -57,9 +64,11 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 }
 
 // AuthMiddleware validates the Bearer JWT, re-loads the user from the DB to
-// refresh role/active (issue #16), and puts claims in the request context.
-// Failure responses are JSON and never leak parser/DB errors to the client.
-func AuthMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.Handler {
+// refresh active/platform flags, re-resolves the live membership when the
+// token carries an organization scope (issue #16 pattern, ADR-0004) and puts
+// claims in the request context. Failure responses are JSON and never leak
+// parser/DB errors to the client.
+func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -87,16 +96,44 @@ func AuthMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.
 				return
 			}
 
-			// Re-read role and active flag from DB so demotion / deactivation take
-			// effect immediately instead of waiting for token expiry (issue #16).
+			// Re-read active/platform flags from DB so deactivation and staff
+			// changes take effect immediately instead of waiting for token
+			// expiry (issue #16). users.role is deprecated: memberships are
+			// the source of truth for roles (ADR-0004).
 			if users != nil {
 				u, err := users.GetUserByID(r.Context(), claims.UserID)
 				if err != nil || u == nil || !u.Active {
 					respondWithError(w, http.StatusUnauthorized, "invalid token")
 					return
 				}
-				claims.Role = string(u.Role)
 				claims.Email = u.Email
+				claims.PlatformAdmin = u.PlatformAdmin
+
+				// Live organization scope: the token names the organization,
+				// but membership roles and the organization's active flag are
+				// re-read from the DB — a revoked membership or a suspended
+				// organization cuts access on the next request, not at expiry.
+				if claims.OrgID != "" {
+					m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
+					if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
+						respondWithError(w, http.StatusUnauthorized, "invalid token")
+						return
+					}
+					roles := make([]string, len(m.Roles))
+					for i, r := range m.Roles {
+						roles[i] = string(r)
+					}
+					claims.Roles = roles
+					claims.Role = auth.PrimaryRole(roles)
+				} else {
+					// TRANSITIONAL (until the F170b RBAC union sweep): org-less
+					// tokens keep the deprecated users.role as single-role view
+					// so existing single-organization flows and clients keep
+					// working. Login only issues org-less tokens to platform
+					// staff without a membership.
+					claims.Roles = []string{string(u.Role)}
+					claims.Role = string(u.Role)
+				}
 			}
 
 			// Extension tokens are read-only: a long-lived SketchUp session token
@@ -116,7 +153,7 @@ func AuthMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.
 }
 
 // AdminMiddleware wraps AuthMiddleware and requires the live DB role to be admin.
-func AdminMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http.Handler {
+func AdminMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler) http.Handler {
 	authMW := AuthMiddleware(jwtSecret, users)
 	return func(next http.Handler) http.Handler {
 		return authMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +168,7 @@ func AdminMiddleware(jwtSecret string, users UserLookup) func(http.Handler) http
 }
 
 // RoleMiddleware wraps AuthMiddleware and requires the live DB role to be one of the allowed roles.
-func RoleMiddleware(jwtSecret string, users UserLookup, allowedRoles ...domain.UserRole) func(http.Handler) http.Handler {
+func RoleMiddleware(jwtSecret string, users MembershipLookup, allowedRoles ...domain.UserRole) func(http.Handler) http.Handler {
 	authMW := AuthMiddleware(jwtSecret, users)
 	roleSet := make(map[string]struct{}, len(allowedRoles))
 	for _, r := range allowedRoles {

@@ -95,8 +95,11 @@ type User struct {
 	Email        string       `json:"email"`
 	PasswordHash string       `json:"-"`
 	Name         string       `json:"name"`
+	// Role is deprecated: memberships are the source of truth (ADR-0004).
+	// Kept synchronized by the approval/role bridges until F170b removes it.
 	Role         UserRole     `json:"role"`
 	Active       bool         `json:"active"`
+	PlatformAdmin bool        `json:"platform_admin"`
 	LicensePlan  LicensePlan  `json:"license_plan"`
 	LicenseExpiresAt *time.Time `json:"license_expires_at,omitempty"`
 	CreatedAt    time.Time    `json:"created_at"`
