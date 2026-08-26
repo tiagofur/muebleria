@@ -155,6 +155,22 @@ Resolve component relationships
 Recalculate manufacturing impact
 ```
 
+## Material-aware resolution
+
+For board components, the selected `MaterialBoard` participates in resolution before
+geometry is evaluated:
+
+```text
+selected MaterialBoard -> effective T -> geometry -> pose/anchors/AABB -> DTO/render
+```
+
+Components share a finish through their material-binding role, currently
+`Component.optionRoles[0]`. Changing that role triggers a full re-resolution and atomic
+client rebuild; it is never a paint-only update. Nominal component thickness is only a
+fallback when no material binding applies. The canonical contract and current TS/Go/Ruby
+gap matrix live in `material-aware-furniture-resolution.md`
+([#401](https://github.com/tiagofur/muebleria/issues/401)).
+
 ## Example
 
 ```text
@@ -200,4 +216,5 @@ This document is the umbrella view. The detailed, authoritative specs are:
 - Digital assets (materials, hardware, components): `3d-asset-library.md`
 - Semantic machining features: `manufacturing-feature-model.md`
 - SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`
+- Effective thickness and finish propagation: `material-aware-furniture-resolution.md` + #401–#405
 - Program tracking: #290 (meta), #347 (preflight), #349/#350 (library + hardware sync)

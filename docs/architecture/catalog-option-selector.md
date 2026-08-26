@@ -3,7 +3,7 @@
 > **Estado:** CANONICAL  
 > **Fecha:** 2026-08-25  
 > **Bounded Contexts:** Engineering, Design / Proyectar 3D, Catalog & Libraries, SketchUp Integration  
-> **Documentos Relacionados:** [docs/architecture/parametric-furniture-library.md](parametric-furniture-library.md), [docs/architecture/sketchup-interaction-model.md](sketchup-interaction-model.md), [docs/architecture/domain-model.md](domain-model.md), [docs/proyectar-3d-north-star.md](../proyectar-3d-north-star.md), [docs/sketchup-manufacturing-contract.md](../sketchup-manufacturing-contract.md)  
+> **Documentos Relacionados:** [docs/architecture/parametric-furniture-library.md](parametric-furniture-library.md), [docs/architecture/sketchup-interaction-model.md](sketchup-interaction-model.md), [docs/architecture/domain-model.md](domain-model.md), [docs/proyectar-3d-north-star.md](../proyectar-3d-north-star.md), [docs/sketchup-manufacturing-contract.md](../sketchup-manufacturing-contract.md), [docs/architecture/material-aware-furniture-resolution.md](material-aware-furniture-resolution.md)
 > **Invariante Central:** **No a los ComboBox gigantes. La selección de catálogo en Granete escala mediante un navegador visual jerárquico por columnas (Miller Columns), desacoplado de la manufactura y uniforme entre la Web 3D y SketchUp.**
 
 ---
@@ -174,6 +174,13 @@ export function effectiveOptionChoices(
 > - Los valores explícitos a nivel de ítem (`itemChoices`) actúan como overrides.
 > - Para **restablecer (reset) un override** y volver a heredar el default de proyecto, se elimina la clave de `itemChoices` (o se asigna vacía/espacio en blanco).
 
+> **Binding de tablero actual:** `Component.optionRoles` persiste como array, pero el
+> único material-binding role es `optionRoles[0]`. La UI no debe prometer semántica
+> multi-role por recorrer todo el array: un segundo grupo `kind="board"` es ambiguo y
+> debe impedirse/diagnosticarse hasta una evolución explícita. Ver
+> [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md) y
+> [#403](https://github.com/tiagofur/muebleria/issues/403).
+
 #### Acabados de Herrajes (`hardwareFinishes.ts`)
 Definido en `packages/domain/src/hardwareFinishes.ts`:
 ```typescript
@@ -286,31 +293,36 @@ El selector visual es un capturador de opciones. No ejecuta por sí solo todo el
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────┐
-│ 2. Furniture / Composition Resolution                    │
-│    Resolución de slots, jerarquía, holguras y relaciones │
+│ 2. Material Binding + Effective Thickness                │
+│    primary optionRole -> MaterialBoard -> effective T     │
 └────────────────────────────┬─────────────────────────────┘
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────┐
-│ 3. Resolved Parts                                        │
-│    Piezas con cotas finales (L/W/T) y roles asignados    │
+│ 3. Furniture / Composition Resolution                    │
+│    fórmulas geométricas -> pose -> anchors -> AABB        │
 └────────────────────────────┬─────────────────────────────┘
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────┐
-│ 4. BOM (resolveBom)                                      │
-│    Asignación de tableros, tapacantos y conteo de herraje│
+│ 4. Resolved Parts / Layout DTO                           │
+│    piezas con L/W/T, transform y material coherentes     │
 └────────────────────────────┬─────────────────────────────┘
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────┐
-│ 5. Manufacturing Features & Machining                    │
-│    Perforaciones CNC, ranurado, nesting y optimización   │
+│ 5. BOM + Manufacturing Features                          │
+│    costos, tapacantos, herrajes, CNC, nesting            │
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **`resolveBom()`**: Se encarga de mapear piezas y líneas de herraje con sus materiales concretos calculando costos y consumo de tablero/tapacanto/herraje.
-- **Geometría y Holguras**: Pertenecen a la capa de composición y motor de mueble paramétrico (`smartFurnitureDomain.ts` / layout resolution).
+- **Binding + espesor efectivo**: La elección de `MaterialBoard` debe resolverse
+  antes de geometría; el espesor nominal sólo es fallback cuando no existe binding
+  aplicable.
+- **`resolveBom()`**: Consume piezas ya coherentes con su material para calcular
+  costos y consumo de tablero/tapacanto/herraje.
+- **Geometría y Holguras**: Pertenecen a la capa de composición y motor de mueble
+  paramétrico; usan el `T` efectivo, no el nominal tardío.
 - **Mecanizados y Perforaciones**: Pertenecen a la derivación de manufactura (`projectDrilling.ts` / `machining`).
 
 ---

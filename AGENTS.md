@@ -47,6 +47,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Biblioteca Paramétrica Universal | `docs/architecture/parametric-furniture-library.md` |
 | ADR Biblioteca Paramétrica | `docs/adr/0002-parametric-furniture-library-architecture.md` |
 | Motor de muebles inteligentes (umbrella) | `docs/architecture/smart-furniture-engine.md` |
+| Espesor efectivo y propagación por material role | `docs/architecture/material-aware-furniture-resolution.md` |
 | Modelo de dominio semántico | `docs/architecture/domain-model.md` |
 | Biblioteca de assets 3D | `docs/architecture/3d-asset-library.md` |
 | Features de manufactura semánticas | `docs/architecture/manufacturing-feature-model.md` |
@@ -150,6 +151,9 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 - **Server authority para seguridad/concurrencia/stock/workflow persistente** cuando
   aplique; TS para dominio interactivo/puro según `docs/architecture.md`.
 - **Si una regla vive en TS y Go**, planear contract fixture de paridad.
+- **Material antes que geometría:** para tableros, resolver `MaterialBoard` y `T`
+  antes de fórmulas/poses; ver
+  `docs/architecture/material-aware-furniture-resolution.md`.
 - **Código/identificadores en inglés; copy UI en español**.
 - **pnpm only** para monorepo JS.
 - **No `.env` en git.**

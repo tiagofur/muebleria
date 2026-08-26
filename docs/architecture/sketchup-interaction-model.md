@@ -4,6 +4,7 @@
 > **Fecha:** 2026-08-24  
 > **ADR Relacionado:** [ADR-0001](../adr/0001-sketchup-manufacturing-ownership.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md)  
 > **Documento de Estrategia:** [sketchup-granete-strategy.md](../sketchup-granete-strategy.md)  
+> **Resolución Material-Aware:** [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md)
 > **Invariante Central:** **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 ---
@@ -21,7 +22,7 @@ Biblioteca de Muebles  ──(Inserción)──►  Canvas 3D (SketchUp Viewport
 1. **Biblioteca (Catalog):** El diseñador explora definiciones de muebles paramétricos (`FurnitureDefinition`), configura cotas iniciales con validación interactiva ligera y solicita la inserción en el modelo.
 2. **Canvas 3D (Viewport de SketchUp):** La extensión actúa como **renderer/adaptador**, creando entidades geométricas agrupadas en el espacio 3D e inyectando metadata semántica inmutable.
 3. **Inspector Contextual:** Al hacer clic o seleccionar una entidad en el canvas, un `SelectionObserver` detecta la metadata y rehidrata dinámicamente el panel HTML con los parámetros activos del mueble, permitiendo edición en vivo.
-4. **Edición Paramétrica In-Place:** Al modificar parámetros en el inspector, `@granete/domain` recalcula la estructura y Ruby actualiza la geometría interna del grupo **sin alterar su posición ni rotación global en el espacio**.
+4. **Edición Paramétrica In-Place:** Al modificar parámetros o acabados en el inspector, Granete (`@granete/domain` / backend) vuelve a resolver la estructura completa y Ruby consume el DTO para reconstruir la geometría interna del grupo **sin alterar su identidad, posición ni rotación global**. El orden material → espesor → geometría se define en [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md).
 
 ---
 
@@ -124,7 +125,7 @@ El cambio entre proveedores locales y remotos es transparente para el diálogo H
 - La sesión se persiste en `~/Library/Application Support/Granete/sketchup_extension_session.json` (fuera del RBZ; sin credenciales incrustadas). No se usan preferencias de SketchUp para estado estructurado: `read_default` evalúa strings con aspecto de contenedor y corrompe JSON.
 - `GET /api/furniture/definitions` exige **licencia activa por usuario** (`users.license_plan`/`license_expires_at`, gestionada por el admin con `PUT /api/admin/users/{id}/license`); sin licencia la extensión muestra el bloqueador con instrucciones y la biblioteca queda vacía (sin catálogo de respaldo).
 
-### 6.2 Layout resuelto — inserción de la composición completa (implementado)
+### 6.2 Layout resuelto — inserción implementada, paridad material pendiente
 
 La identidad de un mueble no alcanza para materializarlo: el catálogo de
 definiciones proyecta identidad/parámetros, y la **composición real**
@@ -148,13 +149,13 @@ FurnitureInstance completa en SketchUp (jerarquía de 3 niveles + metadata)
 
 Reglas del contrato:
 
-- **La resolución vive en Go** (`internal/domain/engine/layout.go`), espejo
-  server-side de la semántica TS canónica (`engine/bom.ts` expansión espacial,
-  `spatialPlacement.ts` poses por defecto, `spatialAnchor.ts` convención
-  min-corner, `agregados.ts` unidades de sub-espacio, `hardwarePlacement.ts`
-  anclas de cara). Ruby **nunca** compone: sólo transforma cajas pre-horneadas.
-- Las fórmulas evalúan con `W/H/D`, `PW/PH/PD`, `T`, `B` (zoclo), `HW` y `i`
-  (índice de copia), igual que TS.
+- **La resolución del endpoint vive en Go** (`internal/domain/engine/layout.go`) y
+  Ruby **nunca** compone: sólo transforma cajas pre-horneadas. La paridad con la
+  semántica TS es un contrato verificable, no una afirmación sobre el estado actual.
+- Las fórmulas admiten `W/H/D`, `PW/PH/PD`, `T`, `B` (zoclo), `HW` e `i`. Hoy Go
+  usa el espesor nominal del componente antes de adjuntar el material; [#402](https://github.com/tiagofur/muebleria/issues/402)
+  debe hacer que el `MaterialBoard` seleccionado determine `T` antes de fórmulas,
+  poses, anchors y AABB, según [el contrato material-aware](material-aware-furniture-resolution.md).
 - `widthMm/heightMm/depthMm` de query sobreescriben las cotas del módulo (el
   diálogo las edita libremente); 404 definición desconocida, 400 medidas
   inválidas, 422 composición no resoluble (error explícito), 403 sin licencia.
@@ -166,7 +167,7 @@ Reglas del contrato:
 - Herrajes **cost-only** (sin `previewShape` válido) no se materializan —
   paridad con `resolveHardwarePlacement` (VH-09).
 
-### 6.3 Elección de materiales por rol (option choices, implementado)
+### 6.3 Elección de materiales por rol (captura implementada, deuda P0)
 
 El plugin permite elegir el tablero por rol antes de insertar, con el mismo
 modelo de elecciones que la app web (`OptionChoices = { [optionGroupCode]:
@@ -182,13 +183,25 @@ materialId }`; el `optionRole` de cada componente ES el código del grupo):
 - **Selector** (dialog): una lista por rol en configurador e inspector
   (`renderMaterialSelectors`), default = primera opción; viaja al backend en
   el payload de insert/update como `materialChoices: {ROL: materialId}`.
-- **Resolución**: el Ruby lo reenvía como `?choice.ROL=<materialId>` — el
-  token de extensión es **read-only (GET)**, así que las elecciones viajan en
-  el query string. Con elección válida, cada tablero resuelto lleva
-  `materialId/materialCode/materialName/materialColorHex` reales; elección
-  desconocida o inactiva → **422 explícito** (nunca fallback silencioso); rol
-  sin elección → paleta por rol.
+- **Resolución**: Ruby reenvía `?choice.ROL=<materialId>` — el token de
+  extensión es **read-only (GET)**. El DTO ya lleva identidad/visual reales y
+  una elección desconocida o inactiva produce **422**; sin embargo, hasta #402
+  Go adjunta el material después de calcular geometría con espesor nominal.
+  Además, Go hace lookup directo mientras TS permite `ZOCLO`, `PUERTA*` y
+  `FRENTE_CAJON` como fallbacks de `FRENTE`;
+  [#403](https://github.com/tiagofur/muebleria/issues/403) cierra ese drift.
 - **Visual**: el builder pinta cada grupo con materiales de SketchUp
   namespaced (`Granete · <nombre>`, color desde `materialColorHex` /
   `colorHex` de herrajes) vía `Model::MaterialApplier` — mismo color que el
   preview 3D de la app web.
+
+
+### 6.4 Actualización de acabado y atomicidad
+
+El cambio de un material role solicita primero un layout completo y sólo después llama
+al builder. `FurnitureBuilder#update_furniture` conserva `instanceRef`, ejecuta
+`clear! + rebuild + metadata` dentro de una operación y aborta ante excepción. Esto es
+la base correcta, pero el rollback real, la preservación del transform exterior y la
+propagación a todos los componentes normales/agregados deben probarse en
+[#404](https://github.com/tiagofur/muebleria/issues/404). Un layout genérico/offline es
+preview no autoritativo y nunca manufacturing truth.
