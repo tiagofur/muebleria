@@ -1280,3 +1280,24 @@ real; CI verde. Review APPROVED (`progress/review_F161.md`). Ramas
 `feat/346-semantic-metadata-roundtrip` y
 `feat/346-entity-tombstones-readonly-feedback`. Desbloquea #356 con contrato
 de entrada sin naming conventions.
+
+## F168 — sketchup_manufacturing_preflight_full_dod — 2026-08-26
+
+#347 cerrado con Definition of Done completo sobre
+`runManufacturingPreflight` (4º parámetro opcional
+`PreflightPolicyContext {release?, machineProfile?, overrides?}`, server-side,
+nunca en el envelope — sin bypass desde SketchUp): capability negotiation §10
+(requiredCapabilities derivadas de verdad resuelta + machineNegotiation que
+bloquea ante capability ausente/versión distinta/constraint omitido/límite
+insuficiente; capabilities nunca se infieren), stale check §8
+(REVISION_STALE bloqueante con ambos fingerprints), overrides
+server-authoritative auditados (sólo degradan
+MACHINE_CAPABILITY_UNSUPPORTED/REVISION_STALE a warning con registro
+who/when/why; ambigüedad crítica siempre bloquea) y error model §9 completo
+(code/message/entityId/path/severity/remediation en todos los errores de
+validación, machining y preflight). Contract doc §11 documenta los policy
+inputs. Ledger: F163 registrado retroactivamente (evidencia preexistente) +
+F168. 19 tests preflight + domain 1106 + web 306 + typecheck 7/7 + go ok.
+Review APPROVED (`progress/review_F168.md`). Rama `main` (commits 6a9fd2b,
+e01bd52). Desbloquea #348/#351 (ambas requieren field evidence/machine
+dossiers).
