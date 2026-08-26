@@ -250,3 +250,25 @@ resuelto: apiClient/main.tsx con contenido P2 + imports @granete.
 **Estado:** PR #408 (475 archivos). Pendiente Parte 4: app IDs
 com.muebles.app → com.granete.app (desktop+mobile), slug Expo, documentar IDs
 técnicos que quedan (module path Go, DB local, ~/.muebles-media).
+
+## #366 Parte 4 — App IDs com.granete.app + IDs técnicos documentados (2026-08-26)
+
+**Qué:** appId desktop y bundle ID/package mobile → `com.granete.app`; slug
+Expo → `granete-mobile` (sin builds distribuidas con el ID viejo, cambio a
+costo cero). Prefijos temporales: `granete-zpl-`, `granete-storage-`,
+`/tmp/granete-server`.
+
+**Decisión clave — scheme QR `muebles://` SE MANTIENE:** es formato impreso en
+etiquetas físicas (`PIECE_LABEL_QR_SCHEME`, F091, compatibilidad eterna con QRs
+ya impresos). Igual que `muebles.drilling-data.v1`. Documentado en la sección
+nueva "Identificadores técnicos legacy (#366)" de `docs/conventions.md`
+(module path Go, DB/container, `~/.muebles-media`, scheme QR, schema exports,
+repo remoto — qué queda y por qué).
+
+**Nota de proceso:** la rama se cortó de un main local desactualizado (pre-
+merge #408); corregido con merge de origin/main (auto-merge limpio — líneas
+distintas). Verificación post-combinación con filtros @granete/*.
+
+**Verificación:** desktop 17 tests, storage 161 (rama con P2 incluida tras el
+merge), typecheck por correr en el paso final. Con esto cierra el plan de 4
+partes de #366 (P1 #400, P2 #406, P3 #408 merged; P4 este PR).
