@@ -133,3 +133,29 @@ la cobertura completa, la prueba negativa y la re-verificación de los fixtures 
 **Siguiente:** implementar el DoD completo de #347 (machine capability checks,
 severity/remediation hacia contexto SketchUp, stale post-release, override
 auditable server-authoritative) — #348/#351 siguen bloqueadas hasta ese cierre.
+
+## #347 Definition of Done completo — F168 (2026-08-26)
+
+**Qué:** `runManufacturingPreflight` ganó su 4º parámetro opcional
+`PreflightPolicyContext {release?, machineProfile?, overrides?}` — contexto
+server-side que nunca viaja en el envelope (sin bypass desde SketchUp):
+
+- **Capability negotiation (§10):** `requiredCapabilities` derivadas de la verdad
+  resuelta (`granete.drilling` desde agujeros, `granete.panel-geometry` desde
+  geometría de catálogo) + `machineNegotiation` que bloquea con
+  `MACHINE_CAPABILITY_UNSUPPORTED` ante capability ausente, versión distinta,
+  constraint omitido o límite insuficiente. Capabilities nunca se infieren.
+- **Stale (§8):** `policy.release` con fingerprint distinto → `REVISION_STALE`
+  bloqueante con ambos fingerprints en details.
+- **Override auditable:** degrada sólo stale/capability a warning con registro
+  who/when/why en `issue.details.override`; colisiones y ambigüedad crítica
+  siempre bloquean (test con override forjado en runtime).
+- **Error model (§9) completo:** todos los errores llevan code, message,
+  entityId, path, severity y remediation (también en validación y machining).
+- Tipos §10 (`MachineProfileRef`, `MachineCapability`, `CapabilityNegotiation`)
+  en el schema del contrato; §11 del contract doc documenta los policy inputs.
+- Ledger: **F163 registrado retroactivamente** (la evidencia existía pero faltaba
+  la entrada) + **F168** nuevo.
+
+**Verificación:** preflight 19/19 (6 milestone + 13 DoD), domain 87 files/1106
+tests, typecheck 7/7, `go test ./...` ok. Evidence: `progress/implementation_F168.md`.
