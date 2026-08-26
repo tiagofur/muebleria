@@ -4002,10 +4002,9 @@
       "acceptance": [
         "Migraciones up/down crean organizations/memberships/invitations/security_audit_events sin romper el arranque del server con datos existentes",
         "Backfill: toda fila de negocio existente queda con organization_id NOT NULL apuntando a la organización inicial; membresía por usuario preservando rol; licencia en org; workshop_settings por org",
-        "memberships.roles validado contra contracts/roles.json (roles canónicos), multi-rol permitido",
-        "users.role deja de ser leído por el código server (deprecado, no eliminado)",
-        "Script/migración de media particiona MEDIA_DIR/<org_id>/ y el server sirve media bajo ese layout",
-        "go test ./... verde incluyendo tests de migración/backfill sobre DB seed"
+        "memberships.roles validado contra los roles canónicos (CHECK <@), multi-rol permitido; códigos de catálogo únicos por (organization_id, code)",
+        "DEFAULT transitional a la org inicial en organization_id hasta que F170 scope las escrituras explícitamente y lo quite (documentado en las migraciones)",
+        "go test ./... verde incluyendo tests de migración/backfill sobre DB fresca con schema legacy (000001-000079) + verificación de down migrations + re-aplicación tras rollback"
       ],
       "references": [
         "https://github.com/tiagofur/muebleria/issues/325",
@@ -4034,7 +4033,8 @@
         "rbac TS/Go con roles[] (unión) y paridad via contracts/roles.json rota CI al divergir",
         "Extensión SketchUp opera scoped a la org del usuario y la licencia se verifica contra organizations",
         "cmd/admin permite crear platform_admin, organización y asignar membresías",
-        "pnpm test + pnpm typecheck + go test ./... verdes"
+        "pnpm test + pnpm typecheck + go test ./... verdes",
+        "Media particionada en MEDIA_DIR/<org_id>/ (URLs almacenadas no cambian; archivos existentes se mueven a la org inicial)"
       ],
       "references": [
         "https://github.com/tiagofur/muebleria/issues/325",
