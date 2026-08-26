@@ -170,7 +170,11 @@ export function LoginScreen({
               Solicitar acceso
             </button>
           </p>
-        ) : null}
+        ) : (
+          <p className="login-register-link">
+            El acceso a talleres se realiza mediante invitación del administrador.
+          </p>
+        )}
       </div>
     </div>
   );

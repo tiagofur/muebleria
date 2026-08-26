@@ -1,0 +1,72 @@
+/**
+ * AcceptInvitationScreen styles — landing for invited workshop members (F172 / #326).
+ */
+
+.accept-invitation-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-50);
+  padding: var(--space-4);
+  font-family: var(--font-sans);
+}
+
+.accept-invitation-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.accept-invitation-card__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.accept-invitation-card__title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.accept-invitation-card__subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: var(--leading-normal);
+}
+
+.accept-invitation-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.accept-invitation-alert {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.accept-invitation-alert--error {
+  background: var(--danger-50);
+  color: var(--danger-700);
+  border: 1px solid var(--border-default);
+}
+
+.accept-invitation-alert--info {
+  background: var(--brand-50);
+  color: var(--brand-900);
+  border: 1px solid var(--brand-200);
+}
