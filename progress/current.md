@@ -1,49 +1,53 @@
 # Sesión
 
-**Feature en curso:** F170 — #325 auth con contexto de organización — F170a completo (commit 94a8674); **F170b pendiente** (ver abajo)
-**Rama:** `feat/325-multi-organization-core` (base: `feat/366-granete-app-ids-p4`)
+**Feature en curso:** F170/F171 — #325 multi-org: aislamiento cross-org COMPLETO (commit faebd7f + create-org); queda SOLO el sweep RBAC roles[] unión
+**Rama:** `feat/325-multi-organization-core` (PR #419)
+**Pendiente de revisión formal (reviewer):** F169, F170a/b — implementación y evidencia completas
 
-## Estado de la ola multi-org (2026-08-26)
+## Estado de la ola multi-org (2026-08-27, sesión 2)
 
-Completado y verificado (`go test ./...` verde):
+Completado y verificado (`go test ./...` 8/8 paquetes verde):
 
-- **F169 (commit 428df6c):** migraciones 000080–000085 — organizations,
-  memberships (roles[] multi-rol), invitations, security_audit_events,
-  users.platform_admin; backfill determinista a org inicial
-  (`00000000-0000-0000-0000-000000000001`, slug `inicial`, licencia más fuerte
-  sube a la org); organization_id en 47 tablas con UNIQUE por org para códigos
-  de catálogo/numeradores; workshop_settings por org; user_sectors scopeado.
-  **DEFAULT transitional** a la org inicial en organization_id (documentado).
-  Tests: backfill desde schema legacy, down migrations reversibles,
-  códigos repetidos entre orgs, DB fresca.
-- **F170a (commit 94a8674):** JWT v2 con org/roles[]/platform_admin (invalida
-  tokens previos, re-login único); login resuelve membresías (hint ?org=slug,
-  auto-select single, selection_required + `/api/auth/select-org` para multi);
-  AuthMiddleware re-valida membresía/org viva por request (revocación y
-  suspensión cortan de inmediato); auditoría login_success/login_failed;
-  cmd/admin create-platform-admin + grant-membership; puentes approve/role →
-  membership. Tokens sin org caen a users.role (transicional).
+- **F169 (428df6c):** schema multi-org (000080–000085) + backfill org inicial.
+- **F170a (94a8674):** JWT v2 con org/roles[]/platform_admin, login con
+  membresías, select-org, re-validación viva (revocación/suspensión cortan),
+  auditoría login, CLI platform-admin/grant-membership.
+- **F170b (faebd7f):** **aislamiento cross-org real** — OrgScope por contexto
+  (middleware → `storage.OrgFromCtx`), ~180 queries scopeadas en storage
+  (SELECT/INSERT/UPDATE/DELETE + generadores de numeración por org;
+  cross-org = mismo not-found → 404 sin confirmar existencia),
+  workshop_settings por org, media particionado `MEDIA_DIR/<org_id>/`
+  (archivos dev migrados), licencia furniture por org.
+- **create-org CLI:** `admin create-org --name --slug [--type] [--admin-email]
+  [--license]` con audit (smoke testeado en dev). Catalog cloning → F172.
+- **F171 parcial (faebd7f):** tests aislamiento dos orgs en la misma DB
+  (customers/projects/catálogo/settings: listas excluyen, get cross-org
+  not-found, escritura cross-org no muta, settings por org distintos).
 
-## F170b — siguiente sesión (en orden)
+## Notas técnicas
 
-1. **Sweep RBAC roles[] (unión):** `RoleCanX(role)` → semántica unión sobre
-   `claims.Roles` en rbac.go + rbac.ts (133 call sites en 22 archivos api;
-   paridad con fixtures en `contracts/roles.json`). Multi-rol queda
-   bloqueado hasta esto (middleware ya lleva roles[] en el token).
-2. **Scoping ruta por ruta:** leer/escribir con `claims.OrgID` en
-   storage/handlers; cross-org → 404. Con esto `cmd/admin create-org` +
-   clonación de catálogo base puede habilitarse (F172 usa lo mismo).
-3. **Media por org:** `MEDIA_DIR/<org_id>/` (URLs guardadas no cambian;
-   mover archivos existentes a org inicial) + licencia de furniture.go
-   contra organizations.
-4. **Quitar DEFAULT transitional** de organization_id (fail-loud) tras (2).
-5. F171: tests de aislamiento cross-org + paridad roles[].
+- DEFAULT transitional de organization_id SE MANTIENE a propósito: seed.go y
+  CLI escriben sin scope → fallback org inicial es correcto; los requests
+  autenticados escriben org explícita. Quitarlo cuando seed.go sea org-aware.
+- `security_audit_events.organization_id` es ON DELETE CASCADE: borrar una org
+  borra sus eventos. Para F172 considerar SET NULL (preservar historial).
+- Docker daemon de la máquina se cayó a mitad de sesión y fue reiniciado
+ (Docker Desktop); si tests de storage fallan por conexión, verificar docker.
 
-Después: F172 (#326 consola plataforma + equipo + sesión de soporte con
-banner), F173 (#327 columnas ownership), F174 (#412 deployment VPS).
+## Siguiente sesión (en orden)
 
-Decisiones: `docs/adr/0004-multi-organization-tenancy.md`. Ledger F169–F174 en
-`feature_list.json`.
+1. **Sweep RBAC roles[] unión (F170 tail):** `anyRole(roles, fn)` Go+TS +
+   call sites (133 en api, web consumers) + fixtures paridad
+   `contracts/roles.json`. Es lo único que falta de F170. Los agentes
+   subordinados tienen límite de uso hasta ~02:13 — hacer inline o esperar.
+2. **F172 (#326):** consola plataforma (`/api/platform/*`), equipo del taller
+   (`/api/org/*`), invitaciones por link, sesión de soporte (razón + banner +
+   audit + actor real), clonación de catálogo base con remap de UUIDs
+   (¡incluye ids dentro de JSONB: modules.agregados, agregados.components!),
+   web: selector org login + UsersScreen → Equipo.
+3. **F173 (#327)** y **F174 (#412)** después.
+
+Decisiones: `docs/adr/0004-multi-organization-tenancy.md`.
 
 ## Notas de sesión
 
