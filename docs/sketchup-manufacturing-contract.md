@@ -535,6 +535,19 @@ Definition of Done completo del preflight.
 
 `ready` no equivale a `ProductionRelease`; sólo Granete crea la release.
 
+### Policy inputs del preflight (server-side)
+
+Los inputs de política del gate — estado de release para stale check (§8),
+machine profile para capability negotiation (§10) y overrides — son contexto
+que Granete inyecta al ejecutar el preflight. Nunca viajan dentro del
+`AuthoringEnvelopeV1`: SketchUp no puede bypassar stale, capabilities ni
+auto-aplicarse un override. Un override server-authoritative es explícito y
+auditado: sólo puede degradar `MACHINE_CAPABILITY_UNSUPPORTED` o
+`REVISION_STALE` a warning dejando el registro de aprobación (who/when/why) en
+`issue.details.override`; la ambigüedad crítica (colisiones, referencias
+huérfanas, schema/catálogo/drilling inválidos) siempre bloquea con cero output
+fabricable.
+
 ## 12. Manufacturing artifact manifest
 
 ```ts

@@ -101,6 +101,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Use a relationship kind the manufacturing catalog resolves (v1: shelf-support).',
     });
     return;
   }
@@ -114,6 +115,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Register a default joinery system for this relationship kind in the catalog.',
     });
     return;
   }
@@ -125,6 +127,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Request a joinery system that exists in the active catalog.',
     });
     return;
   }
@@ -142,6 +145,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Ensure the component definition exists in the active joinery catalog.',
     });
     return;
   }
@@ -163,6 +167,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Ensure the component definition exists in the active joinery catalog.',
     });
     return;
   }
@@ -178,6 +183,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Move the shelf so its height lies strictly inside the side panel span.',
       details: { shelfZ, sideLength },
     });
     return;
@@ -196,6 +202,7 @@ function deriveRelationshipOperations(
       severity: 'error',
       entityId: relationship.relationshipId,
       path,
+      remediation: 'Widen the shelf beyond twice the end margin or relax the joinery rule spacing.',
     });
     return;
   }
@@ -299,6 +306,7 @@ function deriveManualPlacement(
       severity: 'error',
       entityId: placement.hardwarePlacementId,
       path,
+      remediation: 'Choose a hardware item with a machining rule in the active catalog.',
     });
     return;
   }
@@ -310,6 +318,7 @@ function deriveManualPlacement(
       severity: 'error',
       entityId: placement.hardwarePlacementId,
       path,
+      remediation: 'Host the placement on a component instance that exists in the assembly.',
     });
     return;
   }
@@ -397,6 +406,7 @@ function orphaned(
     severity: 'error',
     entityId: relationshipId,
     path,
+    remediation: 'Anchor the relationship to a component instance present in the snapshot.',
   };
 }
 

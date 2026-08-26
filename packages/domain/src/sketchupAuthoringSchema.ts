@@ -131,6 +131,26 @@ export type ContractIssue = {
   readonly details?: Readonly<Record<string, unknown>>;
 };
 
+// --- Capability negotiation (contract §10) ---
+
+export type MachineProfileRef = {
+  readonly machineProfileId: string;
+  readonly machineProfileRevisionId: string;
+};
+
+export type MachineCapability = {
+  readonly capabilityId: string;
+  readonly version: string;
+  readonly constraints: Readonly<Record<string, unknown>>;
+};
+
+export type CapabilityNegotiation = {
+  readonly machineProfile: MachineProfileRef;
+  readonly required: readonly MachineCapability[];
+  readonly supported: readonly MachineCapability[];
+  readonly unsupported: readonly ContractIssue[];
+};
+
 export type MutationReceipt = {
   readonly createdEntityIds: readonly StableEntityId[];
   readonly updatedEntityIds: readonly StableEntityId[];

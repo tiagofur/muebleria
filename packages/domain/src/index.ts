@@ -1288,9 +1288,20 @@ export {
 } from "./sketchupRelationshipMachining";
 
 export {
+  DRILLING_CAPABILITY_ID,
+  PANEL_GEOMETRY_CAPABILITY_ID,
   runManufacturingPreflight,
+  type MachineProfile,
   type ManufacturingPreflightResult,
+  type PreflightOverride,
+  type PreflightPolicyContext,
+  type ReleaseState,
 } from "./sketchupPreflight";
+export {
+  type CapabilityNegotiation,
+  type MachineCapability,
+  type MachineProfileRef,
+} from './sketchupAuthoringSchema';
 
 // Smart Parametric Furniture Library (#349, #350, ADR-0002)
 export * from "./smartFurnitureDomain";

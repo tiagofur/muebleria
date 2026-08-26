@@ -1,7 +1,7 @@
 # Sesión
 
-**Feature en curso:** housekeeping GitHub + #379 (alineación docs arquitectura) + registro milestone #347 — completadas 2026-08-26
-**Siguiente activa:** #347 — manufacturing preflight, Definition of Done completo (milestone mínimo ya registrado y verificado)
+**Feature en curso:** F168 — #347 manufacturing preflight, Definition of Done completo — implementado y verificado 2026-08-26 (ver `progress/implementation_F168.md`)
+**Siguiente activa:** #348 — validación PTX con import/readback (requiere field evidence #306)
 **Rama:** `main`
 
 ## Notas de sesión

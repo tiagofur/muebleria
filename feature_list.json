@@ -3832,6 +3832,32 @@
       "completedAt": "2026-08-24"
     },
     {
+      "id": "F163",
+      "phase": 0,
+      "name": "sketchup_minimum_authoritative_preflight",
+      "title": "#347 Milestone minimum authoritative preflight",
+      "description": "Subset autoritativo del gate de manufactura en packages/domain (sketchupPreflight.ts): runManufacturingPreflight valida envelope estructural, catálogo, derivación de mecanizado, cotas físicas, límites de panel, profundidad de agujeros y colisiones críticas DRILLING_CONFLICT en la misma cara. Ante errores: status blocked con cero output fabricable (derivedHardwarePlacements/derivedMachiningOperations vacíos). Registrado retroactivamente en el ledger: la evidencia existía (progress/implementation_F163.md, verificado 2026-08-26 con tests en verde) pero la entrada faltaba en feature_list.json.",
+      "acceptance": [
+        "Happy path del fixture de gabinete: status ready, issues vacíos, bomFingerprint FNV-1a determinístico",
+        "Prueba negativa: colisión bisagra/entrepaño bloquea con cero output fabricable",
+        "Relación fuera de cotas, profundidad > espesor, componente faltante y ancla huérfana bloquean",
+        "El resultado identifica projectId, designRevisionId y bomFingerprint",
+        "Tests del preflight en verde + typecheck limpio"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/347",
+        "docs/sketchup-manufacturing-contract.md",
+        "progress/implementation_F163.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F161",
+        "F162"
+      ],
+      "created": "2026-08-24",
+      "completedAt": "2026-08-24"
+    },
+    {
       "id": "F164",
       "phase": 0,
       "name": "sketchup_parametric_furniture_library",
@@ -3937,6 +3963,35 @@
         "materials",
         "insertion"
       ]
+    },
+    {
+      "id": "F168",
+      "phase": 0,
+      "name": "sketchup_manufacturing_preflight_full_dod",
+      "title": "#347 Manufacturing preflight autoritativo — Definition of Done completo",
+      "description": "Completa el DoD de #347 sobre runManufacturingPreflight: negotiation de machine capabilities (contract §10) con requiredCapabilities derivadas de la verdad de manufactura (granete.drilling desde agujeros resueltos, granete.panel-geometry desde geometría de catálogo) y machineNegotiation con issues MACHINE_CAPABILITY_UNSUPPORTED cuando la máquina no declara la capability, declara versión distinta, omite un constraint requerido o su límite numérico no cubre el requerimiento — capabilities nunca se infieren. Stale check (§8): policy.release con fingerprint liberado distinto al actual produce REVISION_STALE bloqueante con ambos fingerprints en details. Overrides server-authoritative explícitos y auditados (§10): sólo pueden degradar MACHINE_CAPABILITY_UNSUPPORTED o REVISION_STALE a warning dejando registro who/when/why en issue.details.override; la ambigüedad crítica siempre bloquea (test con override forjado en runtime). Todos los errores ahora llevan code, message, entityId, path, severity y remediation (meta-test). Inputs de política son contexto server-side: nunca viajan en el AuthoringEnvelopeV1, sin bypass desde SketchUp.",
+      "acceptance": [
+        "requiredCapabilities determinísticas derivadas de agujeros y geometría resueltos, no de claims de authoring",
+        "Máquina/perfil incompatible bloquea antes de exportar con MACHINE_CAPABILITY_UNSUPPORTED y cero output",
+        "Capability ausente, versión distinta, constraint omitido o límite insuficiente bloquean (no inferencia)",
+        "Cambio post-release marca outputs stale vía REVISION_STALE con fingerprints en details",
+        "Override auditable degrada sólo stale/capability a warning; nunca colisiones ni ambigüedad crítica",
+        "Todo error lleva code, message, entityId, path, severity y remediation",
+        "Mismos fixtures producen mismo fingerprint y capabilities (test de determinismo)",
+        "19 tests del preflight + suite domain completa en verde, typecheck de workspaces limpio"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/347",
+        "docs/sketchup-manufacturing-contract.md",
+        "docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md",
+        "progress/implementation_F168.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F163"
+      ],
+      "created": "2026-08-26",
+      "completedAt": "2026-08-26"
     }
   ]
 }
