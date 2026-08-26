@@ -168,3 +168,13 @@ To protect project durability and manufacturing reproducibility:
    ├── if blocked (errors / collisions): status 'blocked', ZERO fabricable output released
    └── if ready (clean / warnings): status 'ready', deterministic bomFingerprint generated & read-only feedback attached
 ```
+
+---
+
+## Related documents
+
+Umbrella views of the same architecture (overview-level, defer to this spec on
+detail): `smart-furniture-engine.md`, `domain-model.md`, `3d-asset-library.md`,
+`manufacturing-feature-model.md`.
+
+Interaction contract with the SketchUp client: `sketchup-interaction-model.md`.

@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Define the canonical domain model for Muebleria and Granete integrations.
+Define the canonical domain model for Granete and its 3D integrations.
 
 This document establishes the semantic objects that connect:
 
 - React business application
 - Backend manufacturing engine
-- Granete Library
+- Parametric furniture library
 - SketchUp plugin
 - Future Blender, Revit and other 3D integrations
 
@@ -18,7 +18,7 @@ The goal is not to build a closed catalog of furniture products. The goal is to 
 
 # Core Principle
 
-Muebleria is not a fixed furniture catalog.
+Granete is not a fixed furniture catalog.
 
 A factory should be able to create any combination of:
 
@@ -420,3 +420,13 @@ The system should think:
 Not:
 
 "A 3D model has some extra information attached."
+
+---
+
+# Canonical references
+
+- Umbrella engine view: `smart-furniture-engine.md`
+- Detailed library spec (7 entities, versioning, instantiation + preflight pipeline): `parametric-furniture-library.md` + `docs/adr/0002-parametric-furniture-library-architecture.md`
+- Digital assets: `3d-asset-library.md`
+- Semantic machining features: `manufacturing-feature-model.md`
+- SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`

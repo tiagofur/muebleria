@@ -4,7 +4,7 @@
 
 Define how materials, hardware, components and furniture become reusable digital assets for design, rendering and manufacturing.
 
-The asset library is the foundation that allows Muebleria to provide a professional design experience while keeping manufacturing intelligence centralized.
+The asset library is the foundation that allows Granete to provide a professional design experience while keeping manufacturing intelligence centralized.
 
 ## Catalog vs Library
 
@@ -163,3 +163,10 @@ No plugin should become the source of truth for:
 - prices
 - production rules
 - manufacturing logic
+
+## Canonical references
+
+- Umbrella engine view: `smart-furniture-engine.md`
+- Entity model for `Asset`, `MaterialDefinition`, `MaterialAssignment`, `HardwareDefinition`: `parametric-furniture-library.md` + `docs/adr/0002-parametric-furniture-library-architecture.md`
+- How materials are chosen per role in the web app and the SketchUp plugin: `catalog-option-selector.md`
+- Asset caching/download behavior in the SketchUp client: `sketchup-interaction-model.md`

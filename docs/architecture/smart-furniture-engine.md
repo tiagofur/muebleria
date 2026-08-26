@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the architecture for intelligent furniture objects across Muebleria, Granete for SketchUp and future 3D integrations.
+Define the architecture for intelligent furniture objects across Granete (React app + backend), Granete for SketchUp and future 3D integrations.
 
 The goal is not to create a closed furniture catalog or a simple 3D drawing system. The goal is to create an open parametric furniture design and manufacturing platform inspired by professional systems such as Promob, Cabinet Vision, Gabster and similar CAD/CAM solutions.
 
@@ -10,7 +10,7 @@ The platform must allow factories to create any furniture composition using inde
 
 ## Core principle
 
-**SketchUp owns authoring and interaction. Muebleria owns manufacturing truth.**
+**SketchUp owns authoring and interaction. Granete owns manufacturing truth.**
 
 SketchUp can:
 
@@ -21,7 +21,7 @@ SketchUp can:
 - capture design intent
 - provide an interactive design environment
 
-Muebleria must own:
+Granete must own:
 
 - catalog resolution
 - component compatibility
@@ -36,7 +36,7 @@ Plugins are clients of the smart furniture model, never owners of manufacturing 
 
 ## Product philosophy
 
-Muebleria is not a fixed kitchen/closet catalog.
+Granete is not a fixed kitchen/closet catalog.
 
 It does not work like:
 
@@ -190,3 +190,14 @@ The same semantic model should support:
 - AR applications
 
 The platform must maintain one manufacturing model with multiple visualization clients.
+
+## Canonical references
+
+This document is the umbrella view. The detailed, authoritative specs are:
+
+- Library spec (7 domain entities, instantiation pipeline, preflight gate): `parametric-furniture-library.md` + `docs/adr/0002-parametric-furniture-library-architecture.md`
+- Semantic domain objects: `domain-model.md`
+- Digital assets (materials, hardware, components): `3d-asset-library.md`
+- Semantic machining features: `manufacturing-feature-model.md`
+- SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`
+- Program tracking: #290 (meta), #347 (preflight), #349/#350 (library + hardware sync)

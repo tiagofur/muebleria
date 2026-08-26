@@ -94,7 +94,7 @@ Blum drawer systems can generate:
 - positioning rules
 - required clearances
 
-The plugin stores design intent. Muebleria resolves manufacturing results.
+The plugin stores design intent. Granete resolves manufacturing results.
 
 ## Relationship-driven machining
 
@@ -153,3 +153,10 @@ Before production:
 - validate material compatibility
 - validate machine capabilities
 - generate deterministic output
+
+## Canonical references
+
+- Authoring ↔ manufacturing truth contract: `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`
+- Physical production rule (cut/CNC/edge work parts; assembly converges): `docs/production-flow-v2.md`
+- Preflight gate inside the instantiation pipeline: `parametric-furniture-library.md` (§5) and `smart-furniture-engine.md`
+- Issues: #356 (parametric relationships / joint-driven machining), #347 (authoritative manufacturing preflight)
