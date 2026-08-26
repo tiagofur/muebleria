@@ -31,6 +31,12 @@ A factory should be able to create any combination of:
 
 The system must support professional workflows similar to cabinet design and manufacturing platforms while maintaining a clear separation of responsibilities.
 
+For project lifecycle identity and quote/design/release versioning, the additional canonical invariant is:
+
+> **Project owns `FurnitureInstance` identity. QuoteRevision owns commercial truth. DesignRevision owns spatial/design truth. Granete owns manufacturing truth.**
+
+See `project-design-digital-thread.md` and ADR-0003. This document defines the furniture semantics; the digital-thread document defines how the same physical instance survives commercial/design/manufacturing revisions.
+
 ---
 
 # Domain Hierarchy
@@ -50,6 +56,8 @@ Project
        |
        +-- ManufacturingFeatures (resolved operations)
 ```
+
+`FurnitureInstance` is the stable business identity of one intended physical furniture unit. `QuoteLine`, `DesignRevisionItem`, SketchUp entities and production rows reference this identity; none replaces it.
 
 ---
 
@@ -119,6 +127,56 @@ Hardware: Blum LEGRABOX
 ```
 
 A FurnitureInstance can be modified independently without changing the original definition.
+
+## Stable identity rules
+
+- One physical unit that may be positioned/configured independently receives one `furnitureInstanceId`.
+- A commercial line with `quantity > 1` may map to multiple FurnitureInstances.
+- Changing dimensions/material/options normally preserves the FurnitureInstance identity; the changed values are captured by a new commercial/design snapshot.
+- Copying/duplicating a managed instance creates a new FurnitureInstance identity with provenance; two active physical units must not share the same ID.
+- A FurnitureInstance may exist before 3D design, before quote inclusion (design-first), or without a production release.
+- Do not introduce an equivalent second identity such as `ProjectFurniture`, `QuotedFurniture` or `SketchUpFurniture`.
+
+## Identity vs snapshots
+
+`FurnitureInstance` is identity, not historical snapshot storage. Revision-owned values belong to the revision that asserted them:
+
+```text
+FurnitureInstance FI-100
+├── QuoteRevision Q4 snapshot: width 600
+├── DesignRevision R7 snapshot: width 600
+├── DesignRevision R8 snapshot: width 650
+└── QuoteRevision Q5 snapshot: width 650
+```
+
+A quote/design change therefore does not require deleting/recreating FI-100.
+
+---
+
+# Project commercial/design representations
+
+The same `FurnitureInstance` may be represented by different bounded contexts:
+
+```text
+Project
+├── FurnitureInstance
+├── Quote
+│   └── QuoteRevision
+│       └── QuoteLine
+│           └── references FurnitureInstance(s)
+├── Design
+│   └── DesignRevision
+│       └── DesignRevisionItem
+│           └── references FurnitureInstance
+└── ProductionRelease
+    └── pins an exact approved DesignRevision/manufacturing fingerprint
+```
+
+`QuoteLine.quantity` is commercial grouping, not physical identity. `Design` is authoring-client agnostic; do not create `SketchUpProject` as a business aggregate.
+
+Published DesignRevisions and accepted QuoteRevisions are immutable. Reconciliation compares them by FurnitureInstance and never silently mutates either side.
+
+The full contract, lifecycle, manifest, concurrency rules and implementation phases are normative in `project-design-digital-thread.md`.
 
 ---
 
@@ -381,15 +439,19 @@ Owns:
 
 Does not own:
 
+- business furniture identity creation rules outside the Project API contract
 - BOM rules
 - CNC logic
 - drilling rules
 - manufacturing truth
 
+It stores/replays the authoritative `furnitureInstanceId` assigned to the Project. SketchUp `persistent_id` is only a technical locator inside a model and is never the business identity.
+
 ## Backend
 
 Owns:
 
+- project identity mutations and cross-client concurrency
 - validation
 - manufacturing resolution
 - production data
@@ -407,7 +469,7 @@ This domain model enables:
 - Web 3D viewer
 - Augmented reality applications
 
-All integrations consume the same semantic furniture model.
+All integrations consume the same semantic furniture model and Project-level FurnitureInstance identity.
 
 ---
 
@@ -415,7 +477,7 @@ All integrations consume the same semantic furniture model.
 
 The system should think:
 
-"A furniture object knows what it is, what it contains, how it looks, and how it is manufactured."
+"A furniture object knows what it is, what it contains, how it looks, and how it is manufactured — and the Project preserves which physical furniture unit it is across quote, design and production revisions."
 
 Not:
 
@@ -425,6 +487,7 @@ Not:
 
 # Canonical references
 
+- Project identity, Quote ↔ Design reconciliation, versioned 3D artifacts and release binding: `project-design-digital-thread.md` + `docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md`
 - Umbrella engine view: `smart-furniture-engine.md`
 - Detailed library spec (7 entities, versioning, instantiation + preflight pipeline): `parametric-furniture-library.md` + `docs/adr/0002-parametric-furniture-library-architecture.md`
 - Digital assets: `3d-asset-library.md`

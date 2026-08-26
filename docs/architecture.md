@@ -3,8 +3,8 @@
 > Los agentes revisores evalúan código contra este archivo.
 > Si un criterio no está aquí, no es un requisito de arquitectura.
 >
-> **Actualizado 2026-08-24:** este contrato conserva la arquitectura original de
-> paquetes y añade ownership por bounded context para el producto operativo actual.
+> **Actualizado 2026-08-26:** este contrato conserva la arquitectura original de
+> paquetes y añade ownership explícito del digital thread Quote ↔ Project Furniture ↔ Design Revision ↔ Production Release.
 
 ---
 
@@ -27,6 +27,18 @@
    está ejecutando.
 9. **Authoring no es manufacturing truth.** Proyectar y SketchUp capturan intención;
    Granete resuelve, valida y libera el resultado industrial.
+10. **Project owns physical furniture identity.** `FurnitureInstance` es la identidad
+   estable de una unidad física a través de cotización, diseño y manufactura. `QuoteLine`,
+   `DesignRevisionItem`, entidades SketchUp y filas productivas la referencian; no la
+   sustituyen.
+11. **Historial comercial y diseño son inmutables al publicarse/aceptarse.** Cambios
+   crean nuevas revisiones; reconciliation detecta diferencias y nunca sincroniza
+   silenciosamente.
+12. **Release exacto.** `ProductionRelease` fija una `DesignRevision` y fingerprint/
+   revisión de manufactura exactos; nunca consume `latest` implícitamente.
+
+Fuente normativa de 10–12: `docs/architecture/project-design-digital-thread.md` +
+`docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md`.
 
 ---
 
@@ -58,23 +70,43 @@ Propietario de:
 
 - customer/prospect;
 - opportunity/quote;
+- `QuoteRevision` y snapshot comercial;
 - commercial status;
-- pricing/snapshot;
+- pricing;
 - ownership comercial.
 
-No es propietario de execution física.
+No es propietario de identidad física ni execution física. `QuoteLine.quantity` es
+agrupación comercial y puede mapear a múltiples `FurnitureInstance`.
 
 ### Projects
 
 Propietario transversal de:
 
 - Project/Job;
+- identidad estable `FurnitureInstance`;
+- `Design` y lifecycle de diseños de proyecto;
 - lifecycle events;
-- versions/revisions;
+- coordinación de versions/revisions;
 - approvals;
 - change orders;
 - archivos/timeline;
 - stage derivado.
+
+No crear una identidad paralela tipo `ProjectFurniture`: reutilizar `FurnitureInstance`.
+
+### Design / Authoring
+
+Responsabilidad conceptual compartida por clientes de autoría, con persistencia de
+revisiones coordinada por Projects:
+
+- working copy en el cliente;
+- `DesignRevision` publicada e inmutable;
+- `DesignRevisionItem` como snapshot semántico por `FurnitureInstance`;
+- transform/room/parameter/material intent;
+- preview + artifact metadata;
+- semantic manifest.
+
+`Design` es agnóstico al cliente. No crear `SketchUpProject` como aggregate empresarial.
 
 ### Survey
 
@@ -90,9 +122,11 @@ Propietario de:
 Propietario de:
 
 - estructuras/componentes/agregados;
-- BOM;
+- resolved BOM;
 - production revision/release;
+- manufacturing fingerprint;
 - machining/perforaciones;
+- authoritative manufacturing preflight;
 - documentación técnica;
 - cut-plan inputs.
 
@@ -168,13 +202,15 @@ Propietario de:
 ## 4. Flujo de datos principal
 
 ```text
-Sales / Quote
+Sales / QuoteRevision
+      ↓ references
+Project + FurnitureInstance identities
+      ↓ represented by
+Design + immutable DesignRevision
+      ↓ reconciliation / approval
+Resolved BOM + Manufacturing Fingerprint
       ↓
-Project + Design Revision
-      ↓
-Resolved BOM
-      ↓
-Approval + Production Release
+Production Release pinned to exact DesignRevision
       ↓
  ┌───────────────┬─────────────────┐
  ↓               ↓                 ↓
@@ -192,6 +228,9 @@ Materials Ready  Logistics
                  ↓
                Warranty
 ```
+
+Quote-first y design-first deben converger al mismo `Project`/`FurnitureInstance`, no a
+dos modelos de identidad distintos.
 
 ---
 
@@ -230,11 +269,19 @@ Para Granete for SketchUp rige:
 > **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 La extensión puede capturar interaction state, transforms, parameters, stable IDs y
-semantic metadata. No implementa BOM, drilling rules, nesting, kerf, stale/release gates
-ni postprocessing. Granete valida el
+semantic metadata. Debe conservar el `furnitureInstanceId` del Project. No puede usar
+`persistent_id`, posición, definition name o geometry hash como business identity.
+
+La extensión no implementa BOM, drilling rules, nesting, kerf, stale/release gates ni
+postprocessing. Granete valida el
 [`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva la
 autoridad descrita en el
 [`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md).
+
+El binding Project/Design, versionado de `.skp`, semantic manifest, duplicate identity
+handling y reconciliation se rigen por
+[`Project Design Digital Thread`](architecture/project-design-digital-thread.md) y
+[`ADR-0003`](adr/0003-project-owned-furniture-identity-and-versioned-design.md).
 
 Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa reglas
 de ingeniería. Ver la [estrategia del programa](sketchup-muebles-strategy.md).
@@ -251,10 +298,12 @@ costosa a medida que crece el dominio.
 Preferentemente Go/backend para:
 
 - auth/permisos efectivos;
+- creación/duplicación cross-client de identidad Project `FurnitureInstance`;
 - lifecycle mutations compartidas;
+- revision numbering/concurrency;
+- publish/finalize de revisiones;
 - stock/reservations/PO/receipts;
 - auditoría;
-- concurrencia;
 - execution física multiusuario;
 - job costing persistente;
 - gates que deben ser imposibles de saltar desde otro cliente.
@@ -268,6 +317,7 @@ Preferentemente TS para:
 - BOM preview;
 - optimización/cut plan;
 - machining calculations puras;
+- reconciliation/fingerprint pure logic cuando no dependa de seguridad/concurrencia;
 - preparación de DTOs/export;
 - validaciones puras reutilizables.
 
@@ -287,9 +337,19 @@ No declarar “paridad” sólo por inspección manual.
 
 Persistir eventos append-only para acciones relevantes.
 
+Para el digital thread deben poder auditarse, al menos cuando se implementen:
+
+- `furniture_instance_created` / `duplicated` / `removed`;
+- `design_created`;
+- `design_revision_published` / `approved`;
+- `production_release_created`.
+
 ### Estados derivados
 
 `ProjectStage`, KPIs y summaries deben derivarse de fuentes reales cuando sea posible.
+
+Estados como `quoted_not_modeled` o `modeled_not_quoted` deben derivarse de la comparación
+de revisiones cuando sea posible, no guardarse como otro estado mutable sin necesidad.
 
 ### No mezclar
 
@@ -297,6 +357,7 @@ Mantener dimensiones diferentes separadas:
 
 - Commercial status;
 - Project stage;
+- Design/reconciliation state;
 - Part execution;
 - Module/unit execution;
 - Quality/installation sub-workflows.
@@ -334,6 +395,7 @@ Los adapters de salida sólo serializan una revisión coherente.
 Todo output físico relevante debe poder identificar, directa o indirectamente:
 
 - project/job;
+- `designRevisionId` cuando el output proviene de diseño aprobado;
 - production revision;
 - BOM fingerprint o equivalente;
 - pieza/unidad cuando corresponda.
@@ -356,8 +418,10 @@ URLs firmadas, tokens específicos de media o fetch autenticado cuando sea viabl
 
 ### RBAC
 
-Aplicar least privilege. Ingeniería autoriza/libera; Producción registra hechos físicos;
-supervisores corrigen mediante override auditado.
+Aplicar least privilege. Para Design preferir capabilities (`design:view/create/edit/
+publish/approve`) en vez de checks dispersos por nombres de rol. Ingeniería autoriza/
+libera; Producción registra hechos físicos; supervisores corrigen mediante override
+auditado.
 
 ---
 
@@ -374,6 +438,9 @@ El sistema soporta arquitectura multiusuario Go + Postgres con:
 La frase histórica “Etapa 2 futura” deja de usarse: el backend es parte activa de la
 arquitectura actual.
 
+Los artefactos 3D pesados (`.skp`, previews y similares) deben modelarse como file/object
+storage con metadata relacional, no como verdad de dominio embebida en el archivo binario.
+
 ---
 
 ## 13. Errores de dominio
@@ -383,8 +450,12 @@ estructurados cuando el flujo necesita manejar múltiples issues.
 
 UI muestra mensaje localizado; nunca stack traces.
 
-Errores operacionales persistentes (QC, shortage, field issue, stale revision) no deben
-existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando aplique.
+Errores operacionales persistentes (QC, shortage, field issue, stale revision, design
+revision conflict) no deben existir sólo como excepciones/toasts: se convierten en
+entidades/trabajo o resultado estructurado cuando aplique.
+
+Una working copy cuyo `baseRevisionId` ya no coincide con la revisión actual debe fallar
+cerrado con conflicto explícito; nunca overwrite silencioso.
 
 ---
 
@@ -401,7 +472,11 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - boundary SketchUp/Granete:
   `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
-- selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`.
+- selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`;
+- furniture semantics: `docs/architecture/domain-model.md`;
+- Quote ↔ Project Furniture ↔ Design ↔ Production digital thread:
+  `docs/architecture/project-design-digital-thread.md`;
+- decisión de identidad/versionado: `docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md`.
 
 ---
 
@@ -417,4 +492,9 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - no ejecutar producción contra una revisión stale sin override explícito;
 - no duplicar reglas TS/Go sin fixtures de paridad;
 - no mover BOM, drilling, preflight o postprocessing a Ruby/SketchUp;
+- no usar `QuoteLine`, `DesignRevisionItem`, `SketchUp persistent_id` o geometría como identidad física del mueble;
+- no crear `ProjectFurniture` si representa el mismo concepto que `FurnitureInstance`;
+- no sobrescribir `DesignRevision` publicada ni `QuoteRevision` aceptada;
+- no sincronizar Quote ↔ Design silenciosamente; usar reconciliation explícita;
+- no liberar `latest design`; pin exact `designRevisionId`;
 - no construir un ERP financiero completo ni CAD libre dentro de este core.
