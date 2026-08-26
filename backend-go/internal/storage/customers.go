@@ -11,9 +11,9 @@ func (s *PostgresStore) GetCustomerByID(ctx context.Context, id string) (*domain
 	query := `
 		SELECT id, name, email, phone, address, notes, active, owner_user_id, created_at, updated_at
 		FROM customers
-		WHERE id = $1;
+		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id)
+	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.Customer
 	var email, phone, address, notes, ownerID *string
 	err := row.Scan(&c.ID, &c.Name, &email, &phone, &address, &notes, &c.Active, &ownerID, &c.CreatedAt, &c.UpdatedAt)
@@ -45,11 +45,11 @@ func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) 
 	}
 	if c.ID != "" {
 		query := `
-			INSERT INTO customers (id, name, email, phone, address, notes, active, owner_user_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO customers (id, name, email, phone, address, notes, active, owner_user_id, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, c.ID, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner).
+		err := s.Pool.QueryRow(ctx, query, c.ID, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
 			Scan(&c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating customer: %w", err)
@@ -57,11 +57,11 @@ func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) 
 		return nil
 	}
 	query := `
-		INSERT INTO customers (name, email, phone, address, notes, active, owner_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO customers (name, email, phone, address, notes, active, owner_user_id, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner).
+	err := s.Pool.QueryRow(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
 		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating customer: %w", err)
@@ -78,9 +78,9 @@ func (s *PostgresStore) UpdateCustomer(ctx context.Context, id string, c *domain
 		UPDATE customers
 		SET name = $1, email = $2, phone = $3, address = $4, notes = $5, active = $6,
 		    owner_user_id = $7, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $8;
+		WHERE id = $8 AND organization_id = $9;
 	`
-	result, err := s.Pool.Exec(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, id)
+	result, err := s.Pool.Exec(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error updating customer: %w", err)
 	}
@@ -95,9 +95,10 @@ func (s *PostgresStore) ListCustomers(ctx context.Context) ([]domain.Customer, e
 	query := `
 		SELECT id, name, email, phone, address, notes, active, owner_user_id, created_at, updated_at
 		FROM customers
+		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +139,9 @@ func (s *PostgresStore) DeactivateCustomer(ctx context.Context, id string) error
 	query := `
 		UPDATE customers
 		SET active = false, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1;
+		WHERE id = $1 AND organization_id = $2;
 	`
-	tag, err := s.Pool.Exec(ctx, query, id)
+	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

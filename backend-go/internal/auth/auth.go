@@ -21,6 +21,10 @@ const MinPasswordLen = 8
 // (issue #16). Role/active are also re-checked against the DB on every request.
 const AccessTokenTTL = 15 * time.Minute
 
+// SupportTokenTTL bounds platform support sessions ("entrar a taller"):
+// short-lived by design, independent of the web/extension token kinds.
+const SupportTokenTTL = 2 * time.Hour
+
 // ExtensionClient identifies tokens requested by the SketchUp extension login
 // flow. Extension tokens live longer (workshop sessions span days) and are
 // restricted to read-only requests by AuthMiddleware.
@@ -45,12 +49,37 @@ func init() {
 	DummyHash = string(h)
 }
 
+// TokenVersion identifies the claims layout. Tokens with any other version
+// are rejected: the multi-org claims (org context, roles[], platform_admin)
+// are a one-time breaking change and every client re-logs in once (ADR-0004 §6).
+const TokenVersion = 2
+
 type Claims struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
-	Role   string `json:"role"`
-	Client string `json:"client,omitempty"`
+	// Role is the transitional single-role view of Roles[0] for the active
+	// organization. The RBAC union sweep (F170b) replaces single-role checks.
+	Role string `json:"role"`
+	// Roles are the actor's roles in the active organization (membership).
+	Roles []string `json:"roles,omitempty"`
+	// OrgID is the active organization scope; empty means a platform-level
+	// token (console / org selection), never business data access.
+	OrgID string `json:"org_id,omitempty"`
+	// PlatformAdmin marks platform staff (console + audited support sessions).
+	PlatformAdmin bool `json:"platform_admin,omitempty"`
+	Client        string `json:"client,omitempty"`
+	// Support marks a platform support session into Support.OrgID: effective
+	// admin of that organization, real actor = the platform admin (ADR-0005 §5).
+	Support       *SupportClaims `json:"support,omitempty"`
+	Ver           int            `json:"ver"`
 	jwt.RegisteredClaims
+}
+
+// SupportClaims carries the support-session context (org + session id).
+type SupportClaims struct {
+	OrgID     string `json:"org_id"`
+	SessionID string `json:"session_id"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // ValidatePassword enforces the registration password policy (issue #19):
@@ -88,24 +117,73 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func GenerateToken(userID string, email string, role string, secret string) (string, error) {
-	return generateToken(userID, email, role, "", AccessTokenTTL, secret)
+// TokenContext is the organization scope embedded in a token: the active
+// membership's roles plus the platform staff flag.
+type TokenContext struct {
+	Roles         []string
+	OrgID         string
+	PlatformAdmin bool
+}
+
+// GenerateSupportToken issues the short-lived support-session token: org
+// context with effective admin role. The middleware re-validates the session
+// row on every request, so logout/expiry cut access immediately.
+func GenerateSupportToken(userID string, email string, sc SupportClaims, secret string) (string, error) {
+	now := time.Now()
+	claims := &Claims{
+		UserID: userID,
+		Email:  email,
+		Role:   "admin",
+		Roles:  []string{"admin"},
+		OrgID:  sc.OrgID,
+		Support: &sc,
+		Ver:    TokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(now.Add(SupportTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+	return tokenString, nil
+}
+
+func GenerateToken(userID string, email string, tc TokenContext, secret string) (string, error) {
+	return generateToken(userID, email, tc, "", AccessTokenTTL, secret)
 }
 
 // GenerateExtensionToken issues a long-lived token carrying the extension
 // client claim. AuthMiddleware restricts these tokens to GET requests (plus
 // /api/auth/refresh) so a leaked extension token cannot mutate workshop data.
-func GenerateExtensionToken(userID string, email string, role string, secret string) (string, error) {
-	return generateToken(userID, email, role, ExtensionClient, ExtensionTokenTTL, secret)
+func GenerateExtensionToken(userID string, email string, tc TokenContext, secret string) (string, error) {
+	return generateToken(userID, email, tc, ExtensionClient, ExtensionTokenTTL, secret)
 }
 
-func generateToken(userID string, email string, role string, client string, ttl time.Duration, secret string) (string, error) {
+// PrimaryRole resolves the transitional single role: the first role of the
+// active membership's set. Callers must pass a non-empty validated set.
+func PrimaryRole(roles []string) string {
+	if len(roles) == 0 {
+		return ""
+	}
+	return roles[0]
+}
+
+func generateToken(userID string, email string, tc TokenContext, client string, ttl time.Duration, secret string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		Role:   role,
-		Client: client,
+		UserID:        userID,
+		Email:         email,
+		Role:          PrimaryRole(tc.Roles),
+		Roles:         tc.Roles,
+		OrgID:         tc.OrgID,
+		PlatformAdmin: tc.PlatformAdmin,
+		Client:        client,
+		Ver:           TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
@@ -137,6 +215,9 @@ func ValidateToken(tokenStr string, secret string) (*Claims, error) {
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
 		return nil, errors.New("invalid token claims")
+	}
+	if claims.Ver != TokenVersion {
+		return nil, fmt.Errorf("unsupported token version")
 	}
 
 	return claims, nil

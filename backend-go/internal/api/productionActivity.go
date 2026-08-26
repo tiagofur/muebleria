@@ -80,9 +80,9 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para reclamar trabajos") {
 		return
 	}
@@ -104,9 +104,9 @@ func (s *Server) HandleProductionClaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// For operadores, verify they have access to this sector
-	if domain.RoleIsScopedBySector(role) {
+	if domain.RolesAllScopedBySector(roles) {
 		actorID := actorID(claims)
-		if !s.userCanWorkSector(r.Context(), role, actorID, sector) {
+		if !s.rolesCanWorkSector(r.Context(), roles, actorID, sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
 		}
@@ -200,9 +200,9 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para finalizar trabajos") {
 		return
 	}
@@ -215,14 +215,14 @@ func (s *Server) HandleProductionFinish(w http.ResponseWriter, r *http.Request) 
 
 	// Verify the caller is the operator who claimed it (or admin)
 	actorID := actorID(claims)
-	if activity.OperatorID != actorID && role != "admin" {
+	if activity.OperatorID != actorID && !domain.AnyRole(roles, func(rr domain.UserRole) bool { return rr == domain.RoleAdmin }) {
 		respondWithError(w, http.StatusForbidden, "solo el operador que reclamó puede finalizar")
 		return
 	}
 
 	// For operadores, verify they have access to this sector
-	if domain.RoleIsScopedBySector(role) {
-		if !s.userCanWorkSector(r.Context(), role, actorID, activity.Sector) {
+	if domain.RolesAllScopedBySector(roles) {
+		if !s.rolesCanWorkSector(r.Context(), roles, actorID, activity.Sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
 		}
@@ -316,9 +316,9 @@ func (s *Server) HandleProductionDamage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para reportar daños") {
 		return
 	}
@@ -334,10 +334,10 @@ func (s *Server) HandleProductionDamage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// For operadores, verify they have access to this sector
-	if domain.RoleIsScopedBySector(role) {
+	if domain.RolesAllScopedBySector(roles) {
 		actorID := actorID(claims)
 		sector := domain.ProductionSector(body.Sector)
-		if !s.userCanWorkSector(r.Context(), role, actorID, sector) {
+		if !s.rolesCanWorkSector(r.Context(), roles, actorID, sector) {
 			respondWithError(w, http.StatusForbidden, "no tenés acceso a este sector")
 			return
 		}
@@ -388,9 +388,9 @@ func (s *Server) HandleProductionDashboard(w http.ResponseWriter, r *http.Reques
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanAccessProductionDashboard(role),
+		domain.AnyRole(roles, domain.RoleCanAccessProductionDashboard),
 		"no tenés permiso para ver el dashboard de producción") {
 		return
 	}
@@ -413,16 +413,16 @@ func (s *Server) HandleProductionActiveJobs(w http.ResponseWriter, r *http.Reque
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanAccessProductionDashboard(role) || domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanAccessProductionDashboard) || domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para ver trabajos activos") {
 		return
 	}
 
 	// Determine which sectors to query
 	var sectors []domain.ProductionSector
-	if domain.RoleIsScopedBySector(role) {
+	if domain.RolesAllScopedBySector(roles) {
 		// Operadores only see their assigned sectors
 		actorID := actorID(claims)
 		userSectors, err := s.Store.ListUserSectors(r.Context(), actorID)
@@ -489,11 +489,11 @@ func (s *Server) HandleProductionDamageResolve(w http.ResponseWriter, r *http.Re
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	// F094 — resolving damage (refabrication decision) is a production
 	// supervisor call, not an operator one.
 	if !requirePermission(w,
-		domain.RoleCanManageProductionStaff(role),
+		domain.AnyRole(roles, domain.RoleCanManageProductionStaff),
 		"no tenés permiso para resolver daños") {
 		return
 	}
@@ -572,9 +572,9 @@ func (s *Server) HandleOperatorsBySector(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	role := actorRole(claimsFromRequest(r))
+	roles := actorRoles(claimsFromRequest(r))
 	if !requirePermission(w,
-		domain.RoleCanManageProductionStaff(role),
+		domain.AnyRole(roles, domain.RoleCanManageProductionStaff),
 		"no tenés permiso para ver operadores por sector") {
 		return
 	}
@@ -658,6 +658,16 @@ func (s *Server) userHasSectorAccess(ctx context.Context, userID string, sector 
 	}
 	for _, us := range sectors {
 		if domain.ProductionSector(us.Sector) == sector {
+			return true
+		}
+	}
+	return false
+}
+
+// rolesCanWorkSector: multi-role union over userCanWorkSector.
+func (s *Server) rolesCanWorkSector(ctx context.Context, roles []domain.UserRole, userID string, sector domain.ProductionSector) bool {
+	for _, role := range roles {
+		if s.userCanWorkSector(ctx, role, userID, sector) {
 			return true
 		}
 	}

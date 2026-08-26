@@ -221,3 +221,93 @@ describe('registerRequest', () => {
     ).rejects.toThrow('Ese email ya está registrado');
   });
 });
+
+describe('selectOrgRequest', () => {
+  it('POSTs organization_id to /auth/select-org with Bearer token', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          token: 'jwt-org-scoped',
+          user: { id: '1', email: 'a@b.com', name: 'Ana', role: 'admin', active: true },
+          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const result = await (await import('./session')).selectOrgRequest('token-123', 'org-1', {
+      baseUrl: 'http://localhost:8080/api',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.token).toBe('jwt-org-scoped');
+    expect(result.organization?.id).toBe('org-1');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:8080/api/auth/select-org',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-123',
+        }),
+        body: JSON.stringify({ organization_id: 'org-1' }),
+      }),
+    );
+  });
+});
+
+describe('meRequest', () => {
+  it('GETs /auth/me with Bearer token without double /api', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          user: { id: '1', email: 'a@b.com', name: 'Ana', role: 'admin', active: true },
+          roles: ['admin'],
+          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const result = await (await import('./session')).meRequest('token-123', {
+      baseUrl: 'http://localhost:8080/api',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.user.id).toBe('1');
+    expect(result.organization?.id).toBe('org-1');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:8080/api/auth/me',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-123',
+        }),
+      }),
+    );
+  });
+});
+
+describe('endSupportRequest', () => {
+  it('DELETEs /platform/support-sessions/{id} with Bearer token', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ ended: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await (await import('./session')).endSupportRequest('token-123', 'session-999', {
+      baseUrl: 'http://localhost:8080/api',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:8080/api/platform/support-sessions/session-999',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-123',
+        }),
+      }),
+    );
+  });
+});

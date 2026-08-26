@@ -26,7 +26,7 @@ func layoutStubServer(t *testing.T) (*Server, string) {
 		listAgregados:   catalog.Agregados,
 		listHardwares:   catalog.Hardware,
 	}
-	token, err := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 		listComponents:     catalog.Components,
 		listHardwares:      catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
@@ -300,7 +300,7 @@ func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 				OptionIDs: []string{"hw-x"}},
 		},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
@@ -358,7 +358,7 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 		listComponents: catalog.Components,
 		listHardwares:  catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)

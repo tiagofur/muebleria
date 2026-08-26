@@ -105,7 +105,7 @@ func (s *Server) HandleProjectMaterials(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManagePlanning(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanManagePlanning),
 		"no tenés permiso para ver la planificación de materiales") {
 		return
 	}
@@ -136,8 +136,8 @@ type deriveMaterialsRequest struct {
 func (s *Server) HandleMaterialsDerive(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
-	if !requirePermission(w, roleCanManagePlanning(role),
+	roles := actorRoles(claims)
+	if !requirePermission(w, domain.AnyRole(roles, roleCanManagePlanning),
 		"no tenés permiso para derivar requerimientos") {
 		return
 	}
@@ -231,8 +231,8 @@ type reserveMaterialsRequest struct {
 func (s *Server) HandleMaterialsReserve(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
-	if !requirePermission(w, roleCanManagePlanning(role),
+	roles := actorRoles(claims)
+	if !requirePermission(w, domain.AnyRole(roles, roleCanManagePlanning),
 		"no tenés permiso para reservar material") {
 		return
 	}
@@ -330,7 +330,7 @@ type consumeMaterialsRequest struct {
 func (s *Server) HandleMaterialsConsume(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManagePlanning(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanManagePlanning),
 		"no tenés permiso para despachar material reservado") {
 		return
 	}
@@ -384,8 +384,8 @@ func (s *Server) HandleMaterialsConsume(w http.ResponseWriter, r *http.Request) 
 func (s *Server) HandleMaterialsRelease(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
-	if !requirePermission(w, domain.RoleCanAppendProjectEvent(role, "materials_ready"),
+	roles := actorRoles(claims)
+	if !requirePermission(w, domain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.RoleCanAppendProjectEvent(rr, "materials_ready") }),
 		"no tenés permiso para liberar material") {
 		return
 	}
@@ -414,7 +414,7 @@ func (s *Server) HandleMaterialsRelease(w http.ResponseWriter, r *http.Request) 
 				gateBlocked = true
 				return nil, fmt.Errorf("MATERIALS_GATE")
 			}
-			if !roleCanOverrideRelease(role) {
+			if !domain.AnyRole(roles, roleCanOverrideRelease) {
 				return nil, fmt.Errorf("FORBIDDEN:no tenés permiso para liberar material con faltantes (override)")
 			}
 		}

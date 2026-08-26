@@ -81,7 +81,8 @@ export type AppNavId =
   | 'finishes'
   | 'optionGroups'
   | 'settings'
-  | 'users';
+  | 'users'
+  | 'platform';
 
 export type AppShellSessionUser = {
   readonly email: string;
@@ -172,6 +173,12 @@ type NavSectionDef = {
 const ADMIN_USERS_NAV: NavItemDef = {
   id: 'users',
   label: 'Usuarios',
+  icon: ShieldCheck,
+};
+
+const PLATFORM_NAV: NavItemDef = {
+  id: 'platform',
+  label: 'Plataforma',
   icon: ShieldCheck,
 };
 
@@ -309,6 +316,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
 ] as const;
 
 export function labelForNavId(id: AppNavId): string {
+  if (id === 'platform') return PLATFORM_NAV.label;
   if (id === 'users') return ADMIN_USERS_NAV.label;
   for (const section of APP_NAV_SECTIONS) {
     const item = section.items.find((i) => i.id === id);
@@ -325,7 +333,7 @@ export function sectionLabelForNavId(id: AppNavId): string {
   for (const section of APP_NAV_SECTIONS) {
     if (section.items.some((i) => i.id === id)) return section.label;
   }
-  return id === 'users' ? 'CONFIG' : 'Muebles';
+  return (id === 'users' || id === 'platform') ? 'CONFIG' : 'Muebles';
 }
 
 /**
@@ -359,14 +367,17 @@ export function areaContextForNavId(id: AppNavId): AppAreaContext {
   return areaIdForNavId(id) ?? 'neutral';
 }
 
+/** Configuration options for resolving sidebar navigation. */
 export type ResolveNavOptions = {
-  /** @deprecated use allowedNavIds — still appends Usuarios when true and no allowlist */
+  /** If true, includes the admin users panel in the CONFIG section. */
   readonly showAdminUsers?: boolean;
-  /** When set, only these nav ids appear (F035 role matrix). Guest = omit. */
-  readonly allowedNavIds?: ReadonlySet<string> | readonly string[];
+  /** Allowlist of nav section ids (from RBAC). Null/undefined = unrestricted. */
+  readonly allowedNavIds?: ReadonlySet<string> | readonly string[] | null;
   /**
-   * OC-092 small-workshop surface: keeps these ids (+ settings/users) on top
-   * of the RBAC allowlist. Advanced capabilities live inside each job.
+   * Small-workshop simplified navigation (OC-092 / F106): reduces the
+   * sidebar to the core job destinations (Inicio, Cotizaciones, Órdenes,
+   * Almacén, Instalaciones, Ajustes). Catalogs, library and dashboards stay
+   * accessible via in-screen navigation and departmental mode.
    */
   readonly navMode?: 'simplified' | 'departmental';
 };
@@ -408,6 +419,8 @@ export function resolveNavSections(
       ? allowed.has('users')
       : Boolean(options.showAdminUsers);
 
+  const includePlatform = allowed != null && allowed.has('platform');
+
   let sections: readonly NavSectionDef[] = APP_NAV_SECTIONS;
 
   if (options.navMode === 'simplified') {
@@ -426,14 +439,20 @@ export function resolveNavSections(
 
   sections = sections.filter((section) => section.items.length > 0);
 
-  if (!includeUsers) return sections;
+  if (!includeUsers && !includePlatform) return sections;
 
   return sections.map((section) => {
     if (section.id !== 'config') return section;
-    if (section.items.some((i) => i.id === 'users')) return section;
+    let items = [...section.items];
+    if (includeUsers && !items.some((i) => i.id === 'users')) {
+      items.push(ADMIN_USERS_NAV);
+    }
+    if (includePlatform && !items.some((i) => i.id === 'platform')) {
+      items.push(PLATFORM_NAV);
+    }
     return {
       ...section,
-      items: [...section.items, ADMIN_USERS_NAV],
+      items,
     };
   });
 }

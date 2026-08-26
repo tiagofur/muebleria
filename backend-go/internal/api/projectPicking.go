@@ -29,7 +29,7 @@ func (s *Server) HandlePickingList(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	if !requirePermission(w, domain.RoleCanAccessPurchasingNav(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanAccessPurchasingNav),
 		"no tenés permiso para ver las listas de picking") {
 		return
 	}
@@ -56,7 +56,7 @@ func (s *Server) HandlePickingUpsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, domain.RoleCanMarkPicking(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMarkPicking),
 		"no tenés permiso para marcar despachos") {
 		return
 	}

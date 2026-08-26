@@ -47,8 +47,8 @@ func (s *PostgresStore) MutateProjectCosting(
 	var costingRaw, productionReleaseRaw, qualityRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT costing, production_release, quality
-		FROM projects WHERE id = $1 FOR UPDATE;
-	`, projectID).Scan(&costingRaw, &productionReleaseRaw, &qualityRaw)
+		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
+	`, projectID, OrgFromCtx(ctx)).Scan(&costingRaw, &productionReleaseRaw, &qualityRaw)
 	if err != nil {
 		return nil, ErrJobCostingProjectNotFound
 	}
@@ -94,8 +94,8 @@ func (s *PostgresStore) MutateProjectCosting(
 			UPDATE projects
 			SET costing = $2,
 			    updated_at = CURRENT_TIMESTAMP
-			WHERE id = $1;
-		`, projectID, jsonbStructArg(mutation.Costing)); err != nil {
+			WHERE id = $1 AND (organization_id = $3 OR sales_organization_id = $3 OR manufacturing_organization_id = $3);
+		`, projectID, jsonbStructArg(mutation.Costing), OrgFromCtx(ctx)); err != nil {
 			return nil, fmt.Errorf("error persisting costing: %w", err)
 		}
 	}
@@ -107,6 +107,7 @@ func (s *PostgresStore) MutateProjectCosting(
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("error committing job costing tx: %w", err)
 	}
+
 	return mutation, nil
 }
 
@@ -175,10 +176,10 @@ func loadJobConsumptionTx(ctx context.Context, tx querier, projectID string) ([]
 	rows, err := tx.Query(ctx, `
 		SELECT kind, material_id, SUM(-delta) AS consumed
 		FROM stock_movements
-		WHERE project_id = $1 AND delta < 0
+		WHERE project_id = $1 AND delta < 0 AND organization_id = $2
 		GROUP BY kind, material_id
 		ORDER BY kind, material_id;
-	`, projectID)
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading job consumption: %w", err)
 	}
@@ -243,8 +244,9 @@ func loadLatestReceivedPOUnitCostsTx(ctx context.Context, tx querier) (map[strin
 		WHERE poi.unit_cost IS NOT NULL
 		  AND poi.received_quantity > 0
 		  AND po.status <> 'cancelada'
+		  AND po.organization_id = $1
 		ORDER BY poi.material_id, po.received_at DESC NULLS LAST, po.created_at DESC;
-	`)
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading PO unit costs: %w", err)
 	}
@@ -271,7 +273,8 @@ func loadLatestReceivedPOUnitCostsTx(ctx context.Context, tx querier) (map[strin
 // herrajes→cost_per_unit) — the proxy valuation fallback (OC-082).
 func loadCatalogUnitCostsTx(ctx context.Context, tx querier) (map[string]float64, error) {
 	costs := map[string]float64{}
-	boardRows, err := tx.Query(ctx, `SELECT id, cost_per_m2 FROM material_boards;`)
+	orgID := OrgFromCtx(ctx)
+	boardRows, err := tx.Query(ctx, `SELECT id, cost_per_m2 FROM material_boards WHERE organization_id = $1;`, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("error loading board costs: %w", err)
 	}
@@ -284,7 +287,7 @@ func loadCatalogUnitCostsTx(ctx context.Context, tx querier) (map[string]float64
 	}
 	boardRows.Close()
 
-	edgeRows, err := tx.Query(ctx, `SELECT id, cost_per_ml FROM edge_bands;`)
+	edgeRows, err := tx.Query(ctx, `SELECT id, cost_per_ml FROM edge_bands WHERE organization_id = $1;`, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("error loading edge costs: %w", err)
 	}
@@ -297,7 +300,7 @@ func loadCatalogUnitCostsTx(ctx context.Context, tx querier) (map[string]float64
 	}
 	edgeRows.Close()
 
-	hardwareRows, err := tx.Query(ctx, `SELECT id, cost_per_unit FROM hardwares;`)
+	hardwareRows, err := tx.Query(ctx, `SELECT id, cost_per_unit FROM hardwares WHERE organization_id = $1;`, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("error loading hardware costs: %w", err)
 	}

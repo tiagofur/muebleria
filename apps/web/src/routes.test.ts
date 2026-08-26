@@ -203,5 +203,12 @@ describe('plant board route (F093)', () => {
       // A null role under auth is blocked everywhere except home-ish basics.
       expect(navBlockedForSession('auth', null, 'orders')).toBe(true);
     });
+
+    it('platform nav is allowed only for platform_admin under auth', () => {
+      expect(navBlockedForSession('guest', null, 'platform', true)).toBe(true);
+      expect(navBlockedForSession('auth', 'admin', 'platform', false)).toBe(true);
+      expect(navBlockedForSession('auth', 'admin', 'platform', true)).toBe(false);
+      expect(navBlockedForSession('auth', 'user', 'platform', true)).toBe(false);
+    });
   });
 });

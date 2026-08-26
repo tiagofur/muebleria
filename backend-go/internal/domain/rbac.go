@@ -384,3 +384,18 @@ func RoleCanAppendProjectEvent(role UserRole, eventType string) bool {
 	}
 	return false
 }
+
+// RolesAllScopedBySector reports whether every role is sector-scoped, i.e.
+// the multi-role actor has no supervisor-style role that bypasses sector
+// assignment checks (ADR-0005 union semantics).
+func RolesAllScopedBySector(roles []UserRole) bool {
+	if len(roles) == 0 {
+		return false
+	}
+	for _, r := range roles {
+		if !RoleIsScopedBySector(r) {
+			return false
+		}
+	}
+	return true
+}

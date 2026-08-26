@@ -1,8 +1,60 @@
 # Sesión
 
-**Feature en curso:** F168 — #347 manufacturing preflight, Definition of Done completo — implementado y verificado 2026-08-26 (ver `progress/implementation_F168.md`)
-**Siguiente activa:** #348 — validación PTX con import/readback (requiere field evidence #306)
-**Rama:** `main`
+**Feature en curso:** F172, F173, F174 — OLA MULTI-ORGANIZACIÓN Y DEPLOYMENT VPS COMPLETADA
+**Cerrados con evidencia (ledger done):** F169, F170 (server+cliente), F171, F172 (backend+UI), F173, F174
+**Rama:** `feat/325-multi-organization-core` (PR #419)
+
+## Resumen de la Ola Multi-Organización (F172 UI, F173, F174)
+
+1. **F172 UI Web (Consola de Plataforma, Equipo, Soporte, Invitaciones):**
+   - **Consola de Plataforma (`PlatformScreen.tsx` / `platform.css`)**: Panel superadmin con pestañas accesibles (`WorkspaceTabs`), CRUD de organizaciones (clonación de catálogo, suspensión/reactivación, modal de inicio de sesión de soporte con motivo obligatorio), Directorio global de usuarios con desglose de membresías, y Visor de auditoría de seguridad.
+   - **Gestión de Equipo (`UsersScreen.tsx` / `TeamScreen.tsx`)**: Pestaña de Miembros con chips multi-rol interactivos (`PUT /api/org/members/{id}/roles`), toggle de estado activo/inactivo, asignaciones de sectores/estaciones, licencias por usuario; Pestaña de Invitaciones con modal de "+ Invitar Miembro" (email + roles, botón "Copiar enlace para WhatsApp") y revocación de invitaciones.
+   - **Aceptación de Invitaciones (`AcceptInvitationScreen.tsx` / `acceptInvitation.css`)**: Flujo público `/accept-invitation?token=...` para registro de nuevos usuarios (nombre + password) o aceptación inmediata para usuarios existentes.
+   - **Banner Persistente de Soporte (`SupportBanner.tsx`)**: Banner superior visible durante sesiones activas de soporte con cuenta regresiva de expiración y botón "Salir del soporte" (`DELETE /api/platform/support-sessions/{id}`).
+   - **Selector de Organización (`OrgPicker.tsx` / `SessionGate.tsx`)**: Selector modal para usuarios con membresías múltiples al iniciar sesión.
+
+2. **F173 Permisos de Proyecto y Propiedad Multi-Org (#327):**
+   - Migración SQL `000087_project_org_ownership.up.sql` y `000087_project_org_ownership.down.sql` con columnas `sales_organization_id`, `manufacturing_organization_id`, y `created_by` con backfill e índices de alta velocidad.
+   - Actualización de tipos en Go (`domain.Project`) y TypeScript (`@granete/domain`, `@granete/storage` mappers `projectToApi` / `projectFromApi`).
+   - Scoping de queries en storage (`ListProjects`, `GetProjectByID`, `CreateProject`, `UpdateProject`, `DeleteProject`) y locks de subprocesos (`partExecutions`, `quality`, `installation`, `materialPlanning`, `jobCosting`, `siteSurvey`) soportando cooperación showroom/ventas y taller/fabricación.
+   - Suite de pruebas de aislamiento y anti-leakage `project_ownership_test.go` verificando visibilidad dual de organizaciones participantes y bloqueo estricto a terceros.
+
+3. **F174 VPS Deployment y Distribución a Pilotos (#412):**
+   - `backend-go/Dockerfile`: Contenedor multi-stage optimizado sobre Alpine (Go 1.22 builder -> Alpine runtime con usuario no-root `appuser`, migraciones automáticas embebidas al boot, healthcheck).
+   - `Dockerfile.web`: Contenedor multi-stage de Node 20 / pnpm para compilación estática de `@granete/web`.
+   - `Caddyfile`: Reverse proxy de producción con TLS automático (Let's Encrypt / ZeroSSL), HTTP/3 QUIC, compresión Gzip + Zstandard, headers de seguridad estrictos (HSTS, nosniff, frame-options), enrutamiento SPA fallback y proxy reverso hacia `/api/*` y `/media/*`.
+   - `docker-compose.prod.yml`: Orquestación multi-contenedor para producción con PostgreSQL 16 (healthchecks, volumen persistente `granete_postgres_data`), Go backend (volumen `granete_media_data`), y Caddy con volumen estático de la web.
+   - `.env.production.example`: Plantilla de variables de entorno seguras con generación de secretos criptográficos.
+   - `docs/deployment.md`: Guía paso a paso de aprovisionamiento de VPS, firewall UFW, Docker, inicialización de SuperAdmin con CLI, backups automáticos nocturnos con rotación de 14 días y restore ante desastres.
+   - `docs/pilot-onboarding.md`: Manual operativo para dar de alta talleres piloto, clonar catálogos, invitar equipos, asignar estaciones de taller y ejecutar la primera obra.
+
+## Verificación Monorepo
+
+- `go test ./...` (backend-go): 100% pasando en todos los paquetes (0.39s db, 4.44s api, 1.68s auth, 1.12s domain, 6.60s storage).
+- `pnpm typecheck`: 0 errores en los 7 paquetes del monorepo (`packages/domain`, `packages/excel`, `packages/storage`, `packages/ui`, `apps/web`, `apps/desktop`, `apps/mobile`).
+- `pnpm test`: 100% pasando en todos los paquetes (146 archivos de test en `@granete/ui`, 24 en `apps/web`, storage, domain, excel).
+
+
+## Siguiente: F172 UI
+
+1. Backend `/api/platform/*` (solo platform_admin): orgs CRUD/suspensión,
+   licencias, usuarios global, audit viewer, support-session (razón + token
+   corto 1-2h + banner + actor real + audit start/end).
+2. Backend `/api/org/*` (admin membership): equipo, invitaciones link/código,
+   roles[] + sectores, settings, audit de su org.
+3. Clonación catálogo base: remap UUIDs incl. ids embebidos en JSONB
+   (modules.agregados, agregados.components, structures.joint_drilling_rules,
+   structure_revisions.snapshot).
+4. Web: consola plataforma (NAV_PATHS), Equipo (evolución UsersScreen con
+   chips multi-rol), selector org login, banner soporte.
+2. **F172 (#326):** consola plataforma (`/api/platform/*`), equipo del taller
+   (`/api/org/*`), invitaciones por link, sesión de soporte (razón + banner +
+   audit + actor real), clonación de catálogo base con remap de UUIDs
+   (¡incluye ids dentro de JSONB: modules.agregados, agregados.components!),
+   web: selector org login + UsersScreen → Equipo.
+3. **F173 (#327)** y **F174 (#412)** después.
+
+Decisiones: `docs/adr/0005-multi-organization-tenancy.md`.
 
 ## Notas de sesión
 

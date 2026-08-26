@@ -16,9 +16,10 @@ func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, e
 	query := `
 		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
 		FROM agregados
+		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +43,9 @@ func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain
 	query := `
 		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, created_at, updated_at
 		FROM agregados
-		WHERE id = $1;
+		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id)
+	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	a, err := scanAgregado(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -73,12 +74,12 @@ func (s *PostgresStore) CreateAgregado(ctx context.Context, a *domain.Agregado) 
 	}
 
 	query := `
-		INSERT INTO agregados (id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+		INSERT INTO agregados (id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 	`
 	_, err = s.Pool.Exec(ctx, query,
 		a.ID, a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
-		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active,
+		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, OrgFromCtx(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("error creating agregado: %w", err)
@@ -106,11 +107,11 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 	query := `
 		UPDATE agregados
 		SET code = $1, name = $2, description = $3, notes = $4, width_mm = $5, height_mm = $6, depth_mm = $7, components = $8, hardware_lines = $9, active = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11;
+		WHERE id = $11 AND organization_id = $12;
 	`
 	tag, err := s.Pool.Exec(ctx, query,
 		a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
-		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, id,
+		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, id, OrgFromCtx(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("error updating agregado: %w", err)
@@ -123,8 +124,8 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 }
 
 func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string) error {
-	query := `UPDATE agregados SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1;`
-	tag, err := s.Pool.Exec(ctx, query, id)
+	query := `UPDATE agregados SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2;`
+	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -154,7 +155,7 @@ func (s *PostgresStore) DeleteAgregado(ctx context.Context, id string) error {
 		return fmt.Errorf("agregado in use by %d módulo(s)/estructura(s)", inUse)
 	}
 
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1;`, id)
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

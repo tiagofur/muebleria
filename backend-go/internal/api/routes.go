@@ -22,6 +22,32 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Refresh: requires a still-valid token; re-issues JWT with current DB role.
 	mux.Handle("POST /api/auth/refresh", authMW(http.HandlerFunc(server.HandleRefresh)))
+	// Select-org: swaps an authenticated token for one scoped to a chosen
+	// organization (multi-membership users, ADR-0004).
+	mux.Handle("POST /api/auth/select-org", authMW(http.HandlerFunc(server.HandleSelectOrg)))
+	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))
+
+	// Platform console (ADR-0005 §5 / #326): org lifecycle, licenses, users,
+	// audit and audited support sessions. Platform staff only.
+	platformMW := PlatformAdminMiddleware(server.JWTSecret, server.Store)
+	mux.Handle("GET /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformListOrganizations)))
+	mux.Handle("POST /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformCreateOrganization)))
+	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
+	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
+	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
+	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(http.HandlerFunc(server.HandlePlatformStartSupportSession)))
+	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
+
+	// Org team management (#326): active-org admin (or support session).
+	mux.Handle("GET /api/org/team", authMW(http.HandlerFunc(server.HandleOrgTeam)))
+	mux.Handle("PUT /api/org/members/{userId}/roles", authMW(http.HandlerFunc(server.HandleOrgMemberRoles)))
+	mux.Handle("PUT /api/org/members/{userId}/active", authMW(http.HandlerFunc(server.HandleOrgMemberActive)))
+	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
+	mux.Handle("POST /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgCreateInvitation)))
+	mux.Handle("DELETE /api/org/invitations/{id}", authMW(http.HandlerFunc(server.HandleOrgRevokeInvitation)))
+
+	// Public invitation acceptance (rate limited like login/register).
+	mux.Handle("POST /api/auth/accept-invitation", authRL(http.HandlerFunc(server.HandleAcceptInvitation)))
 
 	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
 	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).

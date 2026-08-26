@@ -22,9 +22,10 @@ func (s *PostgresStore) ListProjectTemplates(ctx context.Context) ([]domain.Proj
 		       project_level_choices, measure_defaults, kitchen_layout,
 		       installation_checklist, items, notes, created_at, updated_at
 		FROM project_templates
+		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +49,9 @@ func (s *PostgresStore) GetProjectTemplateByID(ctx context.Context, id string) (
 		       project_level_choices, measure_defaults, kitchen_layout,
 		       installation_checklist, items, notes, created_at, updated_at
 		FROM project_templates
-		WHERE id = $1;
+		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id)
+	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	t, err := scanProjectTemplate(row)
 	if err != nil {
 		return nil, err
@@ -67,8 +68,8 @@ func (s *PostgresStore) CreateProjectTemplate(ctx context.Context, t domain.Proj
 	query := `
 		INSERT INTO project_templates (id, name, currency, margin_factor, labor_fixed_cost,
 		                               project_level_choices, measure_defaults, kitchen_layout,
-		                               installation_checklist, items, notes, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		                               installation_checklist, items, notes, created_at, updated_at, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING created_at, updated_at;
 	`
 	err = s.Pool.QueryRow(ctx, query,
@@ -80,6 +81,7 @@ func (s *PostgresStore) CreateProjectTemplate(ctx context.Context, t domain.Proj
 		itemsJSON,
 		nullableString(t.Notes),
 		t.CreatedAt, t.UpdatedAt,
+		OrgFromCtx(ctx),
 	).Scan(&t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create project template: %w", err)
@@ -98,7 +100,7 @@ func (s *PostgresStore) UpdateProjectTemplate(ctx context.Context, id string, t 
 		SET name = $1, currency = $2, margin_factor = $3, labor_fixed_cost = $4,
 		    project_level_choices = $5, measure_defaults = $6, kitchen_layout = $7,
 		    installation_checklist = $8, items = $9, notes = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11
+		WHERE id = $11 AND organization_id = $12
 		RETURNING updated_at;
 	`
 	err = s.Pool.QueryRow(ctx, query,
@@ -110,6 +112,7 @@ func (s *PostgresStore) UpdateProjectTemplate(ctx context.Context, id string, t 
 		itemsJSON,
 		nullableString(t.Notes),
 		id,
+		OrgFromCtx(ctx),
 	).Scan(&t.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("update project template: %w", err)
@@ -119,7 +122,7 @@ func (s *PostgresStore) UpdateProjectTemplate(ctx context.Context, id string, t 
 
 // DeleteProjectTemplate removes a template by id.
 func (s *PostgresStore) DeleteProjectTemplate(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM project_templates WHERE id = $1`, id)
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM project_templates WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

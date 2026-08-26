@@ -16,8 +16,9 @@ func (s *PostgresStore) ListStock(ctx context.Context) ([]domain.MaterialStock, 
 	rows, err := s.Pool.Query(ctx, `
 		SELECT kind, material_id, quantity, min_stock, updated_at
 		FROM material_stock
+		WHERE organization_id = $1
 		ORDER BY kind, material_id
-	`)
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -43,13 +44,13 @@ func (s *PostgresStore) ListStock(ctx context.Context) ([]domain.MaterialStock, 
 func (s *PostgresStore) UpsertStockMin(ctx context.Context, kind domain.StockMaterialKind, materialID string, minStock float64) (domain.MaterialStock, error) {
 	var st domain.MaterialStock
 	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO material_stock (kind, material_id, quantity, min_stock)
-		VALUES ($1, $2, 0, $3)
+		INSERT INTO material_stock (kind, material_id, quantity, min_stock, organization_id)
+		VALUES ($1, $2, 0, $3, $4)
 		ON CONFLICT (kind, material_id) DO UPDATE SET
 			min_stock = EXCLUDED.min_stock,
 			updated_at = CURRENT_TIMESTAMP
 		RETURNING kind, material_id, quantity, min_stock, updated_at
-	`, kind, materialID, minStock).Scan(&st.Kind, &st.MaterialID, &st.Quantity, &st.MinStock, &st.UpdatedAt)
+	`, kind, materialID, minStock, OrgFromCtx(ctx)).Scan(&st.Kind, &st.MaterialID, &st.Quantity, &st.MinStock, &st.UpdatedAt)
 	return st, err
 }
 
@@ -58,8 +59,8 @@ func (s *PostgresStore) GetStockMovementByID(ctx context.Context, id string) (*d
 	row := s.Pool.QueryRow(ctx, `
 		SELECT id, kind, material_id, type, delta, balance_after,
 		       project_id, note, reverts_id, by_user_id, by_name, at
-		FROM stock_movements WHERE id = $1
-	`, id)
+		FROM stock_movements WHERE id = $1 AND organization_id = $2
+	`, id, OrgFromCtx(ctx))
 	var m domain.StockMovement
 	if err := row.Scan(&m.ID, &m.Kind, &m.MaterialID, &m.Type, &m.Delta, &m.BalanceAfter,
 		&m.ProjectID, &m.Note, &m.RevertsID, &m.ByUserID, &m.ByName, &m.At); err != nil {
@@ -76,8 +77,8 @@ func (s *PostgresStore) GetStockMovementByRevertsID(ctx context.Context, reverts
 	row := s.Pool.QueryRow(ctx, `
 		SELECT id, kind, material_id, type, delta, balance_after,
 		       project_id, note, reverts_id, by_user_id, by_name, at
-		FROM stock_movements WHERE reverts_id = $1
-	`, revertsID)
+		FROM stock_movements WHERE reverts_id = $1 AND organization_id = $2
+	`, revertsID, OrgFromCtx(ctx))
 	var m domain.StockMovement
 	if err := row.Scan(&m.ID, &m.Kind, &m.MaterialID, &m.Type, &m.Delta, &m.BalanceAfter,
 		&m.ProjectID, &m.Note, &m.RevertsID, &m.ByUserID, &m.ByName, &m.At); err != nil {
@@ -121,8 +122,8 @@ func recordStockMovementTx(ctx context.Context, tx pgx.Tx, mov domain.StockMovem
 	exists := true
 	err := tx.QueryRow(ctx, `
 		SELECT quantity FROM material_stock
-		WHERE kind = $1 AND material_id = $2 FOR UPDATE
-	`, mov.Kind, mov.MaterialID).Scan(&current)
+		WHERE kind = $1 AND material_id = $2 AND organization_id = $3 FOR UPDATE
+	`, mov.Kind, mov.MaterialID, OrgFromCtx(ctx)).Scan(&current)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			exists = false
@@ -145,14 +146,14 @@ func recordStockMovementTx(ctx context.Context, tx pgx.Tx, mov domain.StockMovem
 
 	if !exists {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO material_stock (kind, material_id, quantity, min_stock)
-			VALUES ($1, $2, $3, 0)
-		`, mov.Kind, mov.MaterialID, balance)
+			INSERT INTO material_stock (kind, material_id, quantity, min_stock, organization_id)
+			VALUES ($1, $2, $3, 0, $4)
+		`, mov.Kind, mov.MaterialID, balance, OrgFromCtx(ctx))
 	} else {
 		_, err = tx.Exec(ctx, `
 			UPDATE material_stock SET quantity = $3, updated_at = CURRENT_TIMESTAMP
-			WHERE kind = $1 AND material_id = $2
-		`, mov.Kind, mov.MaterialID, balance)
+			WHERE kind = $1 AND material_id = $2 AND organization_id = $4
+		`, mov.Kind, mov.MaterialID, balance, OrgFromCtx(ctx))
 	}
 	if err != nil {
 		return mov, err
@@ -161,12 +162,12 @@ func recordStockMovementTx(ctx context.Context, tx pgx.Tx, mov domain.StockMovem
 	var saved domain.StockMovement
 	err = tx.QueryRow(ctx, `
 		INSERT INTO stock_movements (kind, material_id, type, delta, balance_after,
-		                             project_id, note, reverts_id, by_user_id, by_name)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		                             project_id, note, reverts_id, by_user_id, by_name, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, kind, material_id, type, delta, balance_after,
 		          project_id, note, reverts_id, by_user_id, by_name, at
 	`, mov.Kind, mov.MaterialID, mov.Type, mov.Delta, balance,
-		mov.ProjectID, mov.Note, mov.RevertsID, mov.ByUserID, mov.ByName,
+		mov.ProjectID, mov.Note, mov.RevertsID, mov.ByUserID, mov.ByName, OrgFromCtx(ctx),
 	).Scan(&saved.ID, &saved.Kind, &saved.MaterialID, &saved.Type, &saved.Delta, &saved.BalanceAfter,
 		&saved.ProjectID, &saved.Note, &saved.RevertsID, &saved.ByUserID, &saved.ByName, &saved.At)
 	return saved, err
@@ -180,8 +181,8 @@ func (s *PostgresStore) ListStockMovements(ctx context.Context, kind domain.Stoc
 		       project_id, note, reverts_id, by_user_id, by_name, at
 		FROM stock_movements
 	`
-	whereClauses := []string{}
-	args := []any{}
+	whereClauses := []string{"organization_id = $1"}
+	args := []any{OrgFromCtx(ctx)}
 	if kind != "" {
 		args = append(args, kind)
 		whereClauses = append(whereClauses, fmt.Sprintf("kind = $%d", len(args)))

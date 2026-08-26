@@ -35,6 +35,13 @@ import {
   storeAuthToken,
   storeAuthUser,
   writeSessionMode,
+  selectOrgRequest,
+  meRequest,
+  endSupportRequest,
+  parseAuthResponse,
+  type MembershipChoice,
+  type OrgSummary,
+  type SupportInfo,
 } from '../session';
 
 /**
@@ -105,6 +112,12 @@ export interface WorkspaceState {
   // --- Guest → auth import (F118 S3) ---
   /** True right after login when meaningful guest work exists locally. */
   readonly pendingGuestImport: boolean;
+  readonly pendingOrgSelection: readonly MembershipChoice[] | null;
+  readonly orgSelectionLoading: boolean;
+  readonly orgSelectionError: string | null;
+  readonly activeOrg: OrgSummary | null;
+  readonly supportInfo: SupportInfo | null;
+  readonly supportExiting: boolean;
   readonly guestImportLoading: boolean;
   readonly guestImportError: string | null;
 
@@ -116,11 +129,16 @@ export interface WorkspaceState {
   readonly clearAuthErrors: () => void;
   readonly enterAsGuest: () => void;
   readonly login: (email: string, password: string) => Promise<void>;
+  readonly loginWithAuthPayload: (payload: unknown) => void;
   readonly register: (
     name: string,
     email: string,
     password: string,
   ) => Promise<void>;
+  readonly selectOrg: (organizationId: string) => Promise<void>;
+  readonly hydrateSessionInfo: () => Promise<void>;
+  readonly enterSupportSession: (token: string, orgId: string) => Promise<void>;
+  readonly exitSupport: () => Promise<void>;
   readonly logout: () => void;
   /** Logout with an "expired" reason so LoginScreen can explain it. */
   readonly markSessionExpired: () => void;
@@ -198,6 +216,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
         registerLoading: false,
         registerError: null,
         sessionEndReason: null,
+        pendingOrgSelection: null,
+        orgSelectionLoading: false,
+        orgSelectionError: null,
+        activeOrg: null,
+        supportInfo: null,
+        supportExiting: false,
 
         // --- Workspace lifecycle ---
         workspace: null,
@@ -231,6 +255,11 @@ export function createWorkspaceStore(options?: InternalOptions) {
             workspaceLoadError: null,
             assignableOwners: [],
             pendingGuestImport: false,
+          pendingOrgSelection: null,
+          orgSelectionLoading: false,
+          orgSelectionError: null,
+          activeOrg: null,
+          supportInfo: null,
             guestImportLoading: false,
             guestImportError: null,
           });
@@ -239,18 +268,29 @@ export function createWorkspaceStore(options?: InternalOptions) {
         login: async (email, password) => {
           set({ loginLoading: true, loginError: null });
           try {
-            const { token, user } = await loginRequest(email, password, {
+            const result = await loginRequest(email, password, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
-            storeAuthToken(token);
-            storeAuthUser(user);
+            storeAuthToken(result.token);
+            storeAuthUser(result.user);
             writeSessionMode('auth');
+            if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
+              // Multi-taller: el token sin org sólo sirve para elegir taller.
+              set({
+                loginLoading: false,
+                loginError: null,
+                pendingOrgSelection: result.memberships,
+              });
+              return;
+            }
             set({
               session: 'auth',
               loginLoading: false,
               loginError: null,
               sessionEndReason: null,
+              pendingOrgSelection: null,
+              activeOrg: result.organization ?? null,
               // Reset workspace so AppContent reloads for the new session.
               workspace: null,
               workspaceSeq: get().workspaceSeq + 1,
@@ -269,6 +309,28 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
         },
 
+        loginWithAuthPayload: (payload: unknown) => {
+          const result = parseAuthResponse(payload);
+          storeAuthToken(result.token);
+          storeAuthUser(result.user);
+          writeSessionMode('auth');
+          if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
+            set({
+              pendingOrgSelection: result.memberships,
+            });
+            return;
+          }
+          set({
+            session: 'auth',
+            activeOrg: result.organization ?? null,
+            pendingOrgSelection: null,
+            workspace: null,
+            workspaceSeq: get().workspaceSeq + 1,
+            workspaceLoadError: null,
+            assignableOwners: [],
+          });
+        },
+
         register: async (name, email, password) => {
           set({ registerLoading: true, registerError: null });
           try {
@@ -285,6 +347,92 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
         },
 
+        selectOrg: async (organizationId: string) => {
+          const token = readAuthToken();
+          if (!token) {
+            set({ pendingOrgSelection: null, orgSelectionLoading: false });
+            return;
+          }
+          set({ orgSelectionLoading: true, orgSelectionError: null });
+          try {
+            const result = await selectOrgRequest(token, organizationId, {
+              baseUrl: deps.baseUrl,
+              fetchImpl: deps.fetchImpl,
+            });
+            storeAuthToken(result.token);
+            storeAuthUser(result.user);
+            set({
+              session: 'auth',
+              orgSelectionLoading: false,
+              orgSelectionError: null,
+              pendingOrgSelection: null,
+              activeOrg: result.organization ?? null,
+              supportInfo: null,
+              sessionEndReason: null,
+              workspace: null,
+              workspaceSeq: get().workspaceSeq + 1,
+              workspaceLoadError: null,
+              assignableOwners: [],
+            });
+          } catch (err) {
+            set({
+              orgSelectionLoading: false,
+              orgSelectionError:
+                err instanceof Error ? err.message : 'No se pudo entrar al taller',
+            });
+          }
+        },
+
+        enterSupportSession: async (token: string) => {
+          storeAuthToken(token);
+          writeSessionMode('auth');
+          set({
+            session: 'auth',
+            workspace: null,
+            workspaceSeq: get().workspaceSeq + 1,
+            workspaceLoadError: null,
+            assignableOwners: [],
+          });
+          await get().hydrateSessionInfo();
+        },
+
+        exitSupport: async () => {
+          const token = readAuthToken();
+          const support = get().supportInfo;
+          if (!token || !support) {
+            get().logout();
+            return;
+          }
+          set({ supportExiting: true });
+          try {
+            await endSupportRequest(token, support.session_id, {
+              baseUrl: deps.baseUrl,
+              fetchImpl: deps.fetchImpl,
+            });
+          } catch {
+            // El backend igual corta por expiración; continuar al logout.
+          }
+          set({ supportExiting: false });
+          get().logout();
+        },
+
+        hydrateSessionInfo: async () => {
+          const token = readAuthToken();
+          if (!token) return;
+          try {
+            const me = await meRequest(token, {
+              baseUrl: deps.baseUrl,
+              fetchImpl: deps.fetchImpl,
+            });
+            if (me.user) {
+              storeAuthUser(me.user);
+            }
+            set({ activeOrg: me.organization ?? null, supportInfo: me.support ?? null });
+          } catch {
+            // best-effort: la sesión se valida igual en cada request
+          }
+        },
+
         logout: () => {
           clearSession();
           set({
@@ -293,6 +441,10 @@ export function createWorkspaceStore(options?: InternalOptions) {
             loginError: null,
             registerError: null,
             sessionEndReason: null,
+            pendingOrgSelection: null,
+            orgSelectionError: null,
+            activeOrg: null,
+            supportInfo: null,
             loginLoading: false,
             registerLoading: false,
             workspace: null,

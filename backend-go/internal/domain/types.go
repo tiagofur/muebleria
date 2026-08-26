@@ -95,8 +95,11 @@ type User struct {
 	Email        string       `json:"email"`
 	PasswordHash string       `json:"-"`
 	Name         string       `json:"name"`
+	// Role is deprecated: memberships are the source of truth (ADR-0004).
+	// Kept synchronized by the approval/role bridges until F170b removes it.
 	Role         UserRole     `json:"role"`
 	Active       bool         `json:"active"`
+	PlatformAdmin bool        `json:"platform_admin"`
 	LicensePlan  LicensePlan  `json:"license_plan"`
 	LicenseExpiresAt *time.Time `json:"license_expires_at,omitempty"`
 	CreatedAt    time.Time    `json:"created_at"`
@@ -597,10 +600,13 @@ type ProjectItem struct {
 }
 
 type Project struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	CustomerID string `json:"customer_id"`
-	CreatedBy  string `json:"created_by,omitempty"`
+	ID                          string `json:"id"`
+	Name                        string `json:"name"`
+	CustomerID                  string `json:"customer_id"`
+	OrganizationID              string `json:"organization_id,omitempty"`
+	SalesOrganizationID         string `json:"sales_organization_id,omitempty"`
+	ManufacturingOrganizationID string `json:"manufacturing_organization_id,omitempty"`
+	CreatedBy                   string `json:"created_by,omitempty"`
 	// OwnerUserID is the portfolio owner (F034). May differ from CreatedBy after reassignment.
 	OwnerUserID string `json:"owner_user_id,omitempty"`
 	// AssignedEngineerID is the technical / production engineer in charge (CRM Phase 2).

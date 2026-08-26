@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -44,6 +45,12 @@ func main() {
 		runResetPassword(os.Args[2:])
 	case "set-license":
 		runSetLicense(os.Args[2:])
+	case "create-platform-admin":
+		runCreatePlatformAdmin(os.Args[2:])
+	case "grant-membership":
+		runGrantMembership(os.Args[2:])
+	case "create-org":
+		runCreateOrg(os.Args[2:])
 	case "seed":
 		runSeed(os.Args[2:])
 	case "clean-media":
@@ -62,6 +69,10 @@ func usage() {
   admin create         --email <email> [--name <name>]
   admin reset-password --email <email>
   admin set-license    --email <email> [--plan <trial|active|none>]
+  admin create-platform-admin --email <email>
+  admin grant-membership --email <email> [--org <slug>] --role <rol>
+  admin create-org --name <nombre> --slug <slug> [--type factory|store|dealer]
+                   [--admin-email <email>] [--license trial|pro|none]
   admin seed
   admin clean-media [--apply]
 
@@ -107,6 +118,9 @@ func runCreate(args []string) {
 	if existing, err := store.GetUserByEmailAnyState(ctx, *email); err == nil && existing != nil {
 		log.Printf("User %q already exists (active=%v); updating license...", *email, existing.Active)
 		_, _ = store.Pool.Exec(ctx, `UPDATE users SET license_plan = $1 WHERE email = $2`, domain.LicensePlanTrial, *email)
+		if err := store.EnsureMembership(ctx, storage.InitialOrganizationID, existing.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
+			fatal(fmt.Errorf("ensuring admin membership: %w", err))
+		}
 		return
 	} else if err != nil && !strings.Contains(err.Error(), "not found") {
 		fatal(fmt.Errorf("checking existing user: %w", err))
@@ -129,7 +143,94 @@ func runCreate(args []string) {
 		fatal(fmt.Errorf("creating admin user: %w", err))
 	}
 
+	// The login contract requires a membership (ADR-0004): grant admin of the
+	// initial organization so the new admin can actually sign in.
+	if err := store.EnsureMembership(ctx, storage.InitialOrganizationID, u.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
+		fatal(fmt.Errorf("granting admin membership: %w", err))
+	}
+
 	log.Printf("Admin user created: %s", *email)
+}
+
+// runCreatePlatformAdmin flips the platform staff flag on an existing user
+// (ADR-0004 §5): console access + audited support sessions, never business
+// data by default.
+func runCreatePlatformAdmin(args []string) {
+	fs := flag.NewFlagSet("create-platform-admin", flag.ExitOnError)
+	email := fs.String("email", "", "user email (required)")
+	_ = fs.Parse(args)
+
+	if err := validateEmail(*email); err != nil {
+		fatal(err)
+	}
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+	u, err := store.GetUserByEmailAnyState(ctx, *email)
+	if err != nil {
+		fatal(fmt.Errorf("locating user: %w", err))
+	}
+	if err := store.SetPlatformAdmin(ctx, u.ID, true); err != nil {
+		fatal(fmt.Errorf("setting platform_admin: %w", err))
+	}
+	if err := store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+		EventType:    "platform_admin_granted",
+		TargetUserID: u.ID,
+		Details:      map[string]interface{}{"source": "cmd/admin"},
+	}); err != nil {
+		fatal(fmt.Errorf("auditing platform_admin grant: %w", err))
+	}
+	log.Printf("User %s is now platform admin", *email)
+}
+
+// runGrantMembership assigns (or ensures) a membership with one role in an
+// existing organization (default: the initial one, slug "inicial").
+func runGrantMembership(args []string) {
+	fs := flag.NewFlagSet("grant-membership", flag.ExitOnError)
+	email := fs.String("email", "", "user email (required)")
+	orgSlug := fs.String("org", "inicial", "organization slug")
+	role := fs.String("role", "", "canonical role (required)")
+	_ = fs.Parse(args)
+
+	if err := validateEmail(*email); err != nil {
+		fatal(err)
+	}
+	if !domain.IsValidUserRole(domain.UserRole(*role)) {
+		fatal(fmt.Errorf("invalid role %q (canonical: admin,user,vendedor,gerente_ventas,gerente_produccion,ingeniero,produccion,almacen)", *role))
+	}
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+	u, err := store.GetUserByEmailAnyState(ctx, *email)
+	if err != nil {
+		fatal(fmt.Errorf("locating user: %w", err))
+	}
+	org, err := store.GetOrganizationBySlug(ctx, *orgSlug)
+	if err != nil {
+		fatal(fmt.Errorf("locating organization %q: %w", *orgSlug, err))
+	}
+	if err := store.EnsureMembership(ctx, org.ID, u.ID, []domain.UserRole{domain.UserRole(*role)}); err != nil {
+		fatal(fmt.Errorf("granting membership: %w", err))
+	}
+	if err := store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+		EventType:      "membership_granted",
+		TargetUserID:   u.ID,
+		OrganizationID: org.ID,
+		Details:        map[string]interface{}{"roles": []string{*role}, "source": "cmd/admin"},
+	}); err != nil {
+		fatal(fmt.Errorf("auditing membership grant: %w", err))
+	}
+	log.Printf("Membership granted: %s → %s [%s]", *email, org.Name, *role)
 }
 
 func runSetLicense(args []string) {
@@ -471,4 +572,84 @@ func mediaFilenameFromURL(raw string) string {
 		return ""
 	}
 	return name
+}
+
+
+// slugPattern matches the URL-safe slug enforced by the organizations table.
+var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$`)
+
+// runCreateOrg provisions a new organization (taller). Catalog cloning from a
+// base organization lands with the F172 platform console; pilots start with
+// an empty catalog or a documented SQL import until then.
+func runCreateOrg(args []string) {
+	fs := flag.NewFlagSet("create-org", flag.ExitOnError)
+	name := fs.String("name", "", "organization display name (required)")
+	slug := fs.String("slug", "", "URL-safe slug (required)")
+	orgType := fs.String("type", string(domain.OrganizationTypeFactory), "factory|store|dealer")
+	adminEmail := fs.String("admin-email", "", "existing user email to grant admin membership")
+	license := fs.String("license", string(domain.LicensePlanNone), "trial|pro|none")
+	_ = fs.Parse(args)
+
+	if *name == "" || *slug == "" {
+		fatal(fmt.Errorf("--name and --slug are required"))
+	}
+	if !slugPattern.MatchString(*slug) {
+		fatal(fmt.Errorf("invalid slug %q: lowercase letters, digits and single dashes, 3-64 chars", *slug))
+	}
+	if !domain.IsValidOrganizationType(domain.OrganizationType(*orgType)) {
+		fatal(fmt.Errorf("invalid organization type %q", *orgType))
+	}
+	if !domain.IsValidLicensePlan(domain.LicensePlan(*license)) {
+		fatal(fmt.Errorf("invalid license %q (trial|pro|none)", *license))
+	}
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+	org := &domain.Organization{
+		Name: *name, Slug: *slug,
+		Type: domain.OrganizationType(*orgType),
+		LicensePlan: domain.LicensePlan(*license),
+		Active: true,
+	}
+	if err := store.CreateOrganization(ctx, org); err != nil {
+		fatal(fmt.Errorf("creating organization: %w", err))
+	}
+	if err := store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+		EventType:      "organization_created",
+		OrganizationID: org.ID,
+		Details:        map[string]interface{}{"name": *name, "slug": *slug, "type": *orgType, "source": "cmd/admin"},
+	}); err != nil {
+		fatal(fmt.Errorf("auditing organization creation: %w", err))
+	}
+
+	if *adminEmail != "" {
+		u, err := store.GetUserByEmailAnyState(ctx, *adminEmail)
+		if err != nil {
+			fatal(fmt.Errorf("locating admin user: %w", err))
+		}
+		if err := store.EnsureMembership(ctx, org.ID, u.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
+			fatal(fmt.Errorf("granting admin membership: %w", err))
+		}
+		if err := store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+			EventType:      "membership_granted",
+			TargetUserID:   u.ID,
+			OrganizationID: org.ID,
+			Details:        map[string]interface{}{"roles": []string{"admin"}, "source": "cmd/admin create-org"},
+		}); err != nil {
+			fatal(fmt.Errorf("auditing membership grant: %w", err))
+		}
+	}
+
+	log.Printf("Organization created: %s (slug=%s id=%s license=%s)", *name, *slug, org.ID, *license)
+	if *adminEmail == "" {
+		log.Printf("No admin assigned: use 'admin grant-membership --email <email> --org %s --role admin'", *slug)
+	} else {
+		log.Printf("Admin membership granted to %s", *adminEmail)
+	}
+	log.Printf("NOTE: the catalog starts empty; base-catalog cloning arrives with the platform console (F172).")
 }

@@ -107,11 +107,11 @@ func validPOItems(items []poItemRequest) bool {
 // HandlePurchaseOrders handles GET (list) / POST (create) /api/purchase-orders.
 func (s *Server) HandlePurchaseOrders(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessPurchasingNav(role),
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessPurchasingNav),
 			"no tenés permiso para ver órdenes de compra") {
 			return
 		}
@@ -123,7 +123,7 @@ func (s *Server) HandlePurchaseOrders(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanManagePurchasing(role),
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanManagePurchasing),
 			"no tenés permiso para crear órdenes de compra") {
 			return
 		}
@@ -176,7 +176,7 @@ func (s *Server) HandlePurchaseOrders(w http.ResponseWriter, r *http.Request) {
 // HandlePurchaseOrderByID handles GET (read) / PUT (edit borrador).
 func (s *Server) HandlePurchaseOrderByID(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	id := r.PathValue("id")
 	if id == "" {
 		respondWithError(w, http.StatusBadRequest, "falta id")
@@ -185,7 +185,7 @@ func (s *Server) HandlePurchaseOrderByID(w http.ResponseWriter, r *http.Request)
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessPurchasingNav(role),
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessPurchasingNav),
 			"no tenés permiso para ver órdenes de compra") {
 			return
 		}
@@ -197,7 +197,7 @@ func (s *Server) HandlePurchaseOrderByID(w http.ResponseWriter, r *http.Request)
 		respondWithJSON(w, http.StatusOK, po)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanManagePurchasing(role),
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanManagePurchasing),
 			"no tenés permiso para editar órdenes de compra") {
 			return
 		}
@@ -244,7 +244,7 @@ func (s *Server) HandlePurchaseOrderEmit(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	if !requirePermission(w, domain.RoleCanManagePurchasing(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanManagePurchasing),
 		"no tenés permiso para emitir órdenes de compra") {
 		return
 	}
@@ -272,7 +272,7 @@ func (s *Server) HandlePurchaseOrderCancel(w http.ResponseWriter, r *http.Reques
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	if !requirePermission(w, domain.RoleCanManagePurchasing(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanManagePurchasing),
 		"no tenés permiso para cancelar órdenes de compra") {
 		return
 	}
@@ -306,7 +306,7 @@ func (s *Server) HandlePurchaseOrderReceive(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, domain.RoleCanManagePurchasing(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanManagePurchasing),
 		"no tenés permiso para recibir órdenes de compra") {
 		return
 	}

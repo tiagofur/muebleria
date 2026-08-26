@@ -1,0 +1,102 @@
+name: granete-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: granete-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-granete_prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-granete_prod}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-granete_prod} -d ${POSTGRES_DB:-granete_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal_net
+
+  backend:
+    build:
+      context: ./backend-go
+      dockerfile: Dockerfile
+    container_name: granete-backend
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-granete_prod}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-granete_prod}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?Error: JWT_SECRET must be set in .env}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${DOMAIN:-localhost}}
+      MEDIA_DIR: /data/media
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-0.5}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10}
+    volumes:
+      - media_data:/data/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - internal_net
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: granete-web
+    restart: unless-stopped
+    volumes:
+      - web_dist:/srv
+    networks:
+      - internal_net
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: granete-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 QUIC
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - web_dist:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      web:
+        condition: service_started
+    networks:
+      - internal_net
+      - public_net
+
+volumes:
+  postgres_data:
+    name: granete_postgres_data
+  media_data:
+    name: granete_media_data
+  web_dist:
+    name: granete_web_dist
+  caddy_data:
+    name: granete_caddy_data
+  caddy_config:
+    name: granete_caddy_config
+
+networks:
+  internal_net:
+    internal: true
+  public_net:
+    driver: bridge

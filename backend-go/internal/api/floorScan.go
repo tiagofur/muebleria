@@ -62,13 +62,13 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	// Station work gate (F094): supervisors (mark/export roles) plus the
 	// scoped operators (claim roles) — the per-sector scope check below
 	// constrains operators to their assigned stations.
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role) ||
-			domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanMarkProduced) || domain.AnyRole(roles, domain.RoleCanExportProduction) ||
+			domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para avanzar el piso de fábrica") {
 		return
 	}
@@ -166,7 +166,7 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 
 	// F094 — station separation: scoped operators only advance their sectors.
 	if after != before {
-		if !s.actorCanAdvanceStation(w, r, role, actorID(claims), after) {
+		if !s.actorCanAdvanceStation(w, r, roles, actorID(claims), after) {
 			return
 		}
 		if err := s.Store.SetProjectItemFloorStatus(r.Context(), projectID, match.item.ID, after); err != nil {
@@ -203,8 +203,22 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 // operators (produccion/almacen) may only move items into statuses produced
 // by THEIR assigned sectors. Responds 403 and returns false when denied;
 // sector-list read failures fall open to the role-only check (logged).
-func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, role domain.UserRole, userID, targetStatus string) bool {
-	if !domain.RoleIsScopedBySector(role) {
+func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, roles []domain.UserRole, userID, targetStatus string) bool {
+	// Multi-role union (ADR-0005): the actor may advance when any of their
+	// roles allows it — unscoped roles directly, sector-scoped roles through
+	// their assigned sectors.
+	if len(roles) == 0 {
+		respondWithError(w, http.StatusForbidden, "no tenés permiso para avanzar estaciones")
+		return false
+	}
+	anyUnscoped := false
+	for _, role := range roles {
+		if !domain.RoleIsScopedBySector(role) {
+			anyUnscoped = true
+			break
+		}
+	}
+	if anyUnscoped {
 		return true
 	}
 	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
@@ -216,8 +230,10 @@ func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, 
 	for _, us := range sectors {
 		names = append(names, us.Sector)
 	}
-	if domain.RoleCanAdvanceStation(role, targetStatus, names) {
-		return true
+	for _, role := range roles {
+		if domain.RoleCanAdvanceStation(role, targetStatus, names) {
+			return true
+		}
 	}
 	sector := domain.SectorForFloorStatus(targetStatus)
 	respondWithError(w, http.StatusForbidden,
@@ -349,11 +365,11 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 		return
 	}
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	// Station work gate (F094) — same as floor-scan; scope enforced below.
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role) ||
-			domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanMarkProduced) || domain.AnyRole(roles, domain.RoleCanExportProduction) ||
+			domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para modificar el piso de fábrica") {
 		return
 	}
@@ -407,7 +423,7 @@ func (s *Server) HandleProjectItemFloorStatus(w http.ResponseWriter, r *http.Req
 
 	// F094 — station separation (same rule as floor-scan).
 	if targetStatus != before {
-		if !s.actorCanAdvanceStation(w, r, role, actorID(claims), targetStatus) {
+		if !s.actorCanAdvanceStation(w, r, roles, actorID(claims), targetStatus) {
 			return
 		}
 	}

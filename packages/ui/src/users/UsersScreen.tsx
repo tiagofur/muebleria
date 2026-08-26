@@ -1,6 +1,9 @@
 /**
- * UsersScreen — Admin panel: manage user registrations (approve, role,
- * license, reject). Only visible when session.user.role === 'admin'.
+ * UsersScreen / TeamScreen — Panel de administración de Equipo del taller
+ * (F026 / F035 / F166 / F172 #326).
+ * Permite gestionar miembros del taller con roles múltiples (unión RBAC),
+ * asignación de sectores de planta, invitaciones por enlace directo/WhatsApp
+ * y aprobaciones pendientes.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -13,8 +16,15 @@ import {
   Trash2,
   Users,
   MapPin,
+  Mail,
+  UserPlus,
+  Copy,
+  Check,
+  Clock,
+  Send,
+  XCircle,
 } from 'lucide-react';
-import { ConfirmDialog, EmptyState, PageHeader, PageLoading, StatusChips } from '../common';
+import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
@@ -22,16 +32,26 @@ import type { ProductRole } from '@granete/domain';
 
 export interface UserRow {
   readonly id: string;
+  readonly user_id?: string;
   readonly name: string;
   readonly email: string;
-  readonly role: string;
+  readonly role?: string;
+  readonly roles?: readonly string[];
   readonly active: boolean;
   readonly created_at: string;
   readonly license_plan?: string;
   readonly license_expires_at?: string | null;
 }
 
-export type UserFilter = 'pending' | 'active' | 'all';
+export interface OrgInvitationRow {
+  readonly id: string;
+  readonly email: string;
+  readonly roles: readonly string[];
+  readonly created_at: string;
+  readonly expires_at: string;
+}
+
+export type UserFilter = 'all' | 'active' | 'pending' | 'invitations';
 
 export interface UsersScreenProps {
   readonly baseUrl: string;
@@ -39,7 +59,7 @@ export interface UsersScreenProps {
 }
 
 /** Product roles (F035) — admin assigns puesto from panel. */
-const ROLES = [
+const ROLES: readonly ProductRole[] = [
   'user',
   'admin',
   'vendedor',
@@ -86,14 +106,32 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
 
 export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [filter, setFilter] = useState<UserFilter>('pending');
+  const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
+  const [filter, setFilter] = useState<UserFilter>('active');
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Station sector assignment
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUserName, setSelectedUserName] = useState<string>('');
   const [selectedUserRole, setSelectedUserRole] = useState<string>('');
+
+  // Multi-role edit modal
+  const [roleEditUser, setRoleEditUser] = useState<UserRow | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<ProductRole[]>([]);
+
+  // Invitation creation modal
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRoles, setInviteRoles] = useState<ProductRole[]>(['vendedor']);
+  const [createdInviteLink, setCreatedInviteLink] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+
   const [rejectingUser, setRejectingUser] = useState<UserRow | null>(null);
+
   const headers = useMemo(
     () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
     [token],
@@ -107,16 +145,45 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${baseUrl}/admin/users`, { headers });
-      if (!res.ok) throw new Error('Error loading users');
-      const data = (await res.json()) as UserRow[];
-      setUsers(data);
+      // First try /api/org/team (F172)
+      let teamLoaded = false;
+      try {
+        const res = await fetch(`${baseUrl}/org/team`, { headers });
+        if (res.ok) {
+          const data = (await res.json()) as UserRow[];
+          setUsers(data);
+          teamLoaded = true;
+        }
+      } catch {
+        // fallback
+      }
+
+      if (!teamLoaded) {
+        const res = await fetch(`${baseUrl}/admin/users`, { headers });
+        if (res.ok) {
+          const data = (await res.json()) as UserRow[];
+          setUsers(data);
+        }
+      }
+
+      // Load invitations
+      try {
+        const resInv = await fetch(`${baseUrl}/org/invitations`, { headers });
+        if (resInv.ok) {
+          const dataInv = (await resInv.json()) as OrgInvitationRow[];
+          setInvitations(dataInv);
+        }
+      } catch {
+        // ignore
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void load(); }, [baseUrl, token]);
+  useEffect(() => {
+    void load();
+  }, [baseUrl, token]);
 
   const filtered = useMemo(() => {
     if (filter === 'pending') return users.filter((u) => !u.active);
@@ -152,23 +219,61 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
     }
   };
 
-  const changeLicense = async (
-    id: string,
-    plan: string,
-    expiresAtIso: string | null,
-  ) => {
-    setActionId(id);
+  const saveMultiRoles = async (userId: string, roles: ProductRole[]) => {
+    setActionId(userId);
     try {
-      const res = await fetch(`${baseUrl}/admin/users/${id}/license`, {
+      const res = await fetch(`${baseUrl}/org/members/${userId}/roles`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({ license_plan: plan, license_expires_at: expiresAtIso }),
+        body: JSON.stringify({ roles }),
       });
-      if (!res.ok) throw new Error('license update failed');
-      showToast('✓ Licencia actualizada');
+      if (!res.ok) {
+        // Fallback to legacy single-role endpoint if org endpoint not found
+        const singleRole = roles[0] || 'user';
+        await changeRole(userId, singleRole);
+        return;
+      }
+      showToast('✓ Roles del miembro actualizados');
+      setRoleEditUser(null);
+      await load();
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const toggleMemberActive = async (userId: string, active: boolean) => {
+    setActionId(userId);
+    try {
+      const res = await fetch(`${baseUrl}/org/members/${userId}/active`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        throw new Error('Error al actualizar estado');
+      }
+      showToast(active ? '✓ Miembro reactivado' : '✓ Miembro desactivado');
       await load();
     } catch {
-      showToast('No se pudo actualizar la licencia');
+      showToast('No se pudo actualizar el estado del miembro');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const updateLicense = async (id: string, plan: string, expiresAt: string | null) => {
+    setActionId(id);
+    try {
+      await fetch(`${baseUrl}/admin/users/${id}/license`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          license_plan: plan,
+          license_expires_at: expiresAt || null,
+        }),
+      });
+      showToast('✓ Licencia actualizada');
+      await load();
     } finally {
       setActionId(null);
     }
@@ -178,137 +283,304 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
     setActionId(id);
     try {
       await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
-      showToast('↓ Usuario eliminado');
+      showToast('✓ Usuario rechazado');
       await load();
+    } finally {
+      setActionId(null);
+      setRejectingUser(null);
+    }
+  };
+
+  const handleCreateInvitation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || inviteRoles.length === 0) {
+      setInviteError('Email y al menos un rol son requeridos');
+      return;
+    }
+    setInviteLoading(true);
+    setInviteError(null);
+    try {
+      const res = await fetch(`${baseUrl}/org/invitations`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          roles: inviteRoles,
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || 'Error al crear invitación');
+      }
+      const data = (await res.json()) as { accept_url?: string; invitation_token?: string };
+      const fullUrl = `${window.location.origin}${data.accept_url || `/accept-invitation?token=${data.invitation_token}`}`;
+      setCreatedInviteLink(fullUrl);
+      showToast('✓ Invitación creada');
+      await load();
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Error al crear invitación');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleRevokeInvitation = async (id: string) => {
+    setActionId(id);
+    try {
+      const res = await fetch(`${baseUrl}/org/invitations/${id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        showToast('✓ Invitación revocada');
+        await load();
+      }
     } finally {
       setActionId(null);
     }
   };
 
-  return (
-    <div className="catalog-layout">
-      {toast ? (
-        <div className="users-toast" role="status">
-          {toast}
-        </div>
-      ) : null}
+  const handleCopyInviteLink = () => {
+    if (!createdInviteLink) return;
+    void navigator.clipboard.writeText(createdInviteLink);
+    setCopiedLink(true);
+    showToast('✓ Enlace copiado al portapapeles');
+    setTimeout(() => setCopiedLink(false), 3000);
+  };
 
+  const roleChips = (u: UserRow) => {
+    const rolesList = (u.roles && u.roles.length > 0) ? u.roles : u.role ? [u.role] : ['user'];
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)', alignItems: 'center' }}>
+        {rolesList.map((r) => (
+          <span key={r} className="meta-chip">
+            {ROLE_LABELS[r as ProductRole] || r}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="catalogs-page">
       <PageHeader
         title="Usuarios"
-        subtitle={
-          <>
-            Aprobación de registros y puestos del taller
-            {pendingCount > 0 ? (
-              <span className="users-badge">{pendingCount} pendiente{pendingCount > 1 ? 's' : ''}</span>
-            ) : null}
-          </>
+        subtitle="Equipo del taller, asignación de roles múltiples, puestos de planta e invitaciones"
+        icon={<Users size={20} strokeWidth={1.5} />}
+        primaryAction={
+          <button
+            type="button"
+            className="btn btn--primary btn--small"
+            onClick={() => {
+              setInviteEmail('');
+              setInviteRoles(['vendedor']);
+              setCreatedInviteLink(null);
+              setInviteError(null);
+              setShowInviteModal(true);
+            }}
+          >
+            <UserPlus size={15} /> Invitar Miembro
+          </button>
         }
-        icon={<ShieldCheck size={16} strokeWidth={1.5} />}
         secondaryActions={
           <button
             type="button"
-            className="btn btn--ghost btn--small"
-            onClick={load}
-            disabled={loading}
-            title="Recargar"
+            className="btn btn--secondary btn--small"
             aria-label="Recargar usuarios"
+            onClick={() => void load()}
+            disabled={loading}
           >
-            <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
+            <RefreshCw size={14} /> Actualizar
           </button>
         }
       />
 
-      {/* Filtros */}
-      <div className="catalog-page__filters">
-        <StatusChips
-          value={filter}
-          onChange={setFilter}
+      {toast && (
+        <div role="status" aria-live="polite" className="users-toast">
+          {toast}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <StatusChips<UserFilter>
           options={[
-            { value: 'pending' as const, label: pendingCount > 0 ? `Pendientes (${pendingCount})` : 'Pendientes' },
-            { value: 'active' as const, label: 'Aprobados' },
-            { value: 'all' as const, label: 'Todos' },
+            { value: 'active', label: `Miembros activos (${users.filter((u) => u.active).length})` },
+            { value: 'invitations', label: `Invitaciones pendientes (${invitations.length})` },
+            { value: 'all', label: `Todos los usuarios (${users.length})` },
+            ...(pendingCount > 0
+              ? [{ value: 'pending' as const, label: `Pendientes de aprobación (${pendingCount})` }]
+              : []),
           ]}
-          aria-label="Filtrar usuarios"
+          value={filter}
+          onChange={(f) => setFilter(f)}
         />
       </div>
 
       {loading ? (
-        <PageLoading label="Cargando usuarios…" data-testid="users-loading" />
-      ) : users.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Sin usuarios"
-          description="Todavía no hay cuentas registradas en el sistema."
-        />
+        <div data-testid="users-loading">
+          <PageLoading label="Cargando equipo..." />
+        </div>
+      ) : filter === 'invitations' ? (
+        /* INVITATIONS VIEW */
+        invitations.length === 0 ? (
+          <EmptyState
+            title="Sin invitaciones pendientes"
+            description="No hay invitaciones abiertas. Podés invitar a nuevos miembros con el botón 'Invitar Miembro'."
+            actionLabel="Invitar Miembro"
+            onAction={() => {
+              setInviteEmail('');
+              setInviteRoles(['vendedor']);
+              setCreatedInviteLink(null);
+              setInviteError(null);
+              setShowInviteModal(true);
+            }}
+          />
+        ) : (
+          <div className="users-table-wrap">
+            <table className="users-table">
+              <thead>
+                <tr>
+                  <th>Email invitado</th>
+                  <th>Roles asignados</th>
+                  <th>Creada</th>
+                  <th>Vencimiento</th>
+                  <th className="users-table__align-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invitations.map((inv) => (
+                  <tr key={inv.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <Mail size={14} style={{ color: 'var(--text-muted)' }} />
+                        <span style={{ fontWeight: 600 }}>{inv.email}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                        {inv.roles.map((r) => (
+                          <span key={r} className="meta-chip">
+                            {ROLE_LABELS[r as ProductRole] || r}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                      {new Date(inv.created_at).toLocaleDateString()}
+                    </td>
+                    <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                      {new Date(inv.expires_at).toLocaleDateString()}
+                    </td>
+                    <td className="users-table__align-right">
+                      <button
+                        type="button"
+                        className="btn btn--secondary btn--small"
+                        onClick={() => void handleRevokeInvitation(inv.id)}
+                        disabled={actionId === inv.id}
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        <XCircle size={13} /> Revocar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <EmptyState
-          variant="no-results"
-          icon={SearchX}
-          title={
-            filter === 'pending'
-              ? 'Sin solicitudes pendientes'
-              : 'Sin usuarios en esta categoría'
-          }
+          title="No hay miembros que coincidan con el filtro"
           description={
             filter === 'pending'
-              ? 'Todos los usuarios han sido procesados.'
-              : 'Probá con otro filtro de estado.'
+              ? 'No hay registros pendientes de aprobación.'
+              : 'No hay usuarios en este estado.'
           }
-          actionLabel="Ver todos"
-          onAction={() => setFilter('all')}
         />
       ) : (
         <div className="users-table-wrap">
           <table className="users-table">
             <thead>
               <tr>
-                <th>Nombre</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Licencia</th>
+                <th>Miembro</th>
+                <th>Roles en el taller</th>
                 <th>Estado</th>
-                <th>Acciones</th>
+                <th>Estación / Puesto</th>
+                <th>Licencia</th>
+                <th className="users-table__align-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
-                <tr key={u.id} className={!u.active ? 'users-table__row--pending' : ''}>
-                  <td className="users-table__name">{u.name}</td>
-                  <td className="users-table__email">{u.email}</td>
-                  <td>
-                    {u.active ? (
-                      <select
-                        className="users-role-select"
-                        value={u.role}
-                        disabled={actionId === u.id}
-                        onChange={(e) => void changeRole(u.id, e.target.value)}
-                        aria-label={`Rol de ${u.name}`}
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {ROLE_LABELS[r]}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="meta-chip">{u.role}</span>
-                    )}
-                  </td>
-                  <td className="users-license-cell">
-                    {u.active ? (
-                      <>
+              {filtered.map((u) => {
+                const isWorking = actionId === (u.user_id || u.id);
+                const pRole = (u.roles?.[0] || u.role || 'user') as ProductRole;
+                const canAssignSectors =
+                  (u.roles && u.roles.some((r) => r === 'produccion' || r === 'almacen')) ||
+                  pRole === 'produccion' ||
+                  pRole === 'almacen';
+
+                return (
+                  <tr key={u.user_id || u.id}>
+                    <td>
+                      <div className="users-table__name">{u.name || 'Sin nombre'}</div>
+                      <div className="users-table__email">{u.email}</div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        {roleChips(u)}
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--small"
+                          onClick={() => {
+                            setRoleEditUser(u);
+                            const initialRoles = (u.roles && u.roles.length > 0)
+                              ? (u.roles as ProductRole[])
+                              : u.role
+                                ? [u.role as ProductRole]
+                                : ['user' as ProductRole];
+                            setSelectedRoles(initialRoles);
+                          }}
+                          disabled={isWorking}
+                          title="Modificar roles"
+                          style={{ padding: '2px 6px' }}
+                        >
+                          <Settings2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`status-badge ${u.active ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {u.active ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td>
+                      {canAssignSectors ? (
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--small"
+                          onClick={() => {
+                            setSelectedUserId(u.user_id || u.id);
+                            setSelectedUserName(u.name || u.email);
+                            setSelectedUserRole(pRole);
+                          }}
+                          disabled={isWorking}
+                        >
+                          <MapPin size={13} /> Estaciones
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="users-license-cell">
                         <select
                           className="users-role-select"
-                          value={u.license_plan ?? 'none'}
-                          disabled={actionId === u.id}
+                          value={u.license_plan || 'none'}
+                          disabled={isWorking}
                           onChange={(e) =>
-                            void changeLicense(
-                              u.id,
-                              e.target.value,
-                              u.license_expires_at ?? null,
-                            )
+                            void updateLicense(u.user_id || u.id, e.target.value, u.license_expires_at || null)
                           }
-                          aria-label={`Licencia de ${u.name}`}
+                          aria-label={`Plan de licencia de ${u.name}`}
                         >
                           {LICENSE_PLANS.map((p) => (
                             <option key={p} value={p}>
@@ -316,111 +588,60 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                             </option>
                           ))}
                         </select>
-                        {(u.license_plan ?? 'none') !== 'none' ? (
-                          <input
-                            type="date"
-                            className="users-license-expiry"
-                            defaultValue={u.license_expires_at ? u.license_expires_at.slice(0, 10) : ''}
-                            disabled={actionId === u.id}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              void changeLicense(
-                                u.id,
-                                u.license_plan ?? 'none',
-                                v ? `${v}T23:59:59Z` : null,
-                              );
-                            }}
-                            aria-label={`Vencimiento de licencia de ${u.name}`}
-                            title="Vencimiento (vacío = sin vencimiento)"
-                          />
-                        ) : null}
                         <span
-                          className={
+                          className={`status-badge ${
                             licenseStatus(u.license_plan, u.license_expires_at) === 'active'
-                              ? 'status-badge status-badge--active'
-                              : licenseStatus(u.license_plan, u.license_expires_at) === 'expired'
-                                ? 'status-badge status-badge--danger'
-                                : 'meta-chip'
-                          }
+                              ? 'status-badge--active'
+                              : 'status-badge--open'
+                          }`}
                         >
                           {LICENSE_STATUS_LABELS[licenseStatus(u.license_plan, u.license_expires_at)]}
                         </span>
-                      </>
-                    ) : (
-                      <span className="meta-chip">—</span>
-                    )}
-                  </td>
-                  <td>
-                    {u.active ? (
-                      <span className="status-badge status-badge--active">
-                        <CheckCircle2 size={13} strokeWidth={1.5} />
-                        Activo
-                      </span>
-                    ) : (
-                      <span className="status-badge status-badge--open">
-                        <MinusCircle size={13} strokeWidth={1.5} />
-                        Pendiente
-                      </span>
-                    )}
-                  </td>
-                  <td className="users-table__actions">
-                    {!u.active && (
-                      <button
-                        type="button"
-                        className="btn btn--success btn--small"
-                        disabled={actionId === u.id}
-                        onClick={() => void approve(u.id)}
-                        title="Aprobar"
-                      >
-                        <CheckCircle2 size={15} strokeWidth={1.5} />
-                        Aprobar
-                      </button>
-                    )}
-                    {u.active && (u.role === 'produccion' || u.role === 'almacen') && (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--small"
-                        onClick={() => {
-                          setSelectedUserId(u.id);
-                          setSelectedUserName(u.name);
-                          setSelectedUserRole(u.role);
-                        }}
-                        title="Asignar sectores"
-                        aria-label={`Asignar sectores de ${u.name}`}
-                      >
-                        <MapPin size={15} strokeWidth={1.5} aria-hidden />
-                      </button>
-                    )}
-                    {u.active && (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--small"
-                        disabled
-                        title="Gestionar rol con el selector de la izquierda"
-                        aria-label="Gestión de rol no disponible"
-                      >
-                        <Settings2 size={15} strokeWidth={1.5} aria-hidden />
-                      </button>
-                    )}
-                    {!u.active && (
-                      <button
-                        type="button"
-                        className="btn btn--danger btn--small"
-                        disabled={actionId === u.id}
-                        onClick={() => setRejectingUser(u)}
-                        title="Rechazar"
-                      >
-                        <Trash2 size={15} strokeWidth={1.5} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      </div>
+                    </td>
+                    <td className="users-table__align-right">
+                      <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
+                        {!u.active ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn--primary btn--small"
+                              onClick={() => void approve(u.user_id || u.id)}
+                              disabled={isWorking}
+                            >
+                              <CheckCircle2 size={13} /> Aprobar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--secondary btn--small"
+                              onClick={() => setRejectingUser(u)}
+                              disabled={isWorking}
+                              style={{ color: 'var(--danger)' }}
+                            >
+                              <Trash2 size={13} /> Rechazar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--small"
+                            onClick={() => void toggleMemberActive(u.user_id || u.id, false)}
+                            disabled={isWorking}
+                          >
+                            <MinusCircle size={13} /> Desactivar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
+      {/* SECTOR ASSIGNMENT MODAL */}
       {selectedUserId && (
         <SectorAssignment
           baseUrl={baseUrl}
@@ -428,30 +649,231 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
           userId={selectedUserId}
           userName={selectedUserName}
           role={selectedUserRole as ProductRole}
-          onClose={() => {
-            setSelectedUserId(null);
-            setSelectedUserName('');
-            setSelectedUserRole('');
-            void load();
-          }}
+          onClose={() => setSelectedUserId(null)}
         />
       )}
 
-      <ConfirmDialog
-        open={rejectingUser !== null}
-        onClose={() => setRejectingUser(null)}
-        title="Eliminar usuario pendiente"
-        message={
-          rejectingUser
-            ? `Se elimina el registro de ${rejectingUser.email}. Podrá solicitar acceso de nuevo.`
-            : ''
-        }
-        confirmLabel="Eliminar"
-        onConfirm={() => {
-          if (rejectingUser) void reject(rejectingUser.id);
-        }}
-        dataTestId="users-reject-confirm"
-      />
+      {/* MULTI-ROLE EDIT MODAL */}
+      <Modal
+        open={roleEditUser !== null}
+        onClose={() => setRoleEditUser(null)}
+        title={`Roles de ${roleEditUser?.name || 'Miembro'}`}
+        size="sm"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+            Seleccioná uno o varios roles para este usuario. Las capacidades se combinan por unión de permisos (ADR-0005).
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-2)' }}>
+            {ROLES.map((r) => {
+              const isChecked = selectedRoles.includes(r);
+              return (
+                <label
+                  key={r}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    background: isChecked ? 'var(--brand-50)' : 'var(--surface-muted)',
+                    border: `1px solid ${isChecked ? 'var(--brand-300)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--text-sm)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedRoles([...selectedRoles, r]);
+                      } else {
+                        setSelectedRoles(selectedRoles.filter((x) => x !== r));
+                      }
+                    }}
+                  />
+                  <span style={{ fontWeight: isChecked ? 600 : 400 }}>{ROLE_LABELS[r]}</span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+            <button type="button" className="btn btn--secondary" onClick={() => setRoleEditUser(null)}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={selectedRoles.length === 0}
+              onClick={() => {
+                if (roleEditUser) {
+                  void saveMultiRoles(roleEditUser.user_id || roleEditUser.id, selectedRoles);
+                }
+              }}
+            >
+              Guardar Roles
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* INVITE MEMBER MODAL */}
+      <Modal
+        open={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        title="Invitar Miembro al Taller"
+        size="md"
+      >
+        {createdInviteLink ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div
+              style={{
+                background: 'hsl(140 60% 95%)',
+                color: 'hsl(140 80% 25%)',
+                border: '1px solid hsl(140 50% 80%)',
+                padding: 'var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
+              ✓ Invitación generada exitosamente.
+            </div>
+
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+              Copiá el enlace y envíaselo al miembro por WhatsApp o email para que cree su contraseña y acceda:
+            </p>
+
+            <div
+              style={{
+                background: 'var(--surface-muted)',
+                padding: 'var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border)',
+                wordBreak: 'break-all',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-xs)',
+              }}
+            >
+              {createdInviteLink}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={handleCopyInviteLink}
+              >
+                {copiedLink ? <Check size={16} /> : <Copy size={16} />}
+                {copiedLink ? '¡Enlace copiado!' : 'Copiar enlace para WhatsApp'}
+              </button>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => setShowInviteModal(false)}
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleCreateInvitation} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            {inviteError && (
+              <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', margin: 0 }}>
+                {inviteError}
+              </p>
+            )}
+
+            <div>
+              <label className="label" htmlFor="inv-email">
+                Email del colaborador *
+              </label>
+              <input
+                id="inv-email"
+                type="email"
+                className="input"
+                required
+                placeholder="colaborador@taller.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="label">Roles a asignar *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+                {ROLES.filter((r) => r !== 'user').map((r) => {
+                  const isChecked = inviteRoles.includes(r);
+                  return (
+                    <label
+                      key={r}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-2)',
+                        padding: 'var(--space-2) var(--space-3)',
+                        background: isChecked ? 'var(--brand-50)' : 'var(--surface-muted)',
+                        border: `1px solid ${isChecked ? 'var(--brand-300)' : 'var(--border)'}`,
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        fontSize: 'var(--text-sm)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setInviteRoles([...inviteRoles, r]);
+                          } else {
+                            setInviteRoles(inviteRoles.filter((x) => x !== r));
+                          }
+                        }}
+                      />
+                      <span>{ROLE_LABELS[r]}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => setShowInviteModal(false)}
+                disabled={inviteLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="btn btn--primary"
+                disabled={inviteLoading || !inviteEmail.trim() || inviteRoles.length === 0}
+              >
+                {inviteLoading ? 'Generando...' : 'Generar Invitación'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* REJECT CONFIRM DIALOG */}
+      {rejectingUser && (
+        <ConfirmDialog
+          open={rejectingUser !== null}
+          title="Rechazar usuario"
+          message={`¿Rechazar y eliminar la cuenta de ${rejectingUser.name || rejectingUser.email}?`}
+          confirmLabel="Rechazar y eliminar"
+          tone="danger"
+          onConfirm={() => void reject(rejectingUser.user_id || rejectingUser.id)}
+          onClose={() => setRejectingUser(null)}
+        />
+      )}
     </div>
   );
 }
+
+export { UsersScreen as TeamScreen };

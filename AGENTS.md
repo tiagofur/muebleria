@@ -49,6 +49,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Motor de muebles inteligentes (umbrella) | `docs/architecture/smart-furniture-engine.md` |
 | Espesor efectivo y propagación por material role | `docs/architecture/material-aware-furniture-resolution.md` |
 | Modelo nativo de entidades SketchUp | `docs/architecture/sketchup-native-entity-model.md` + `docs/adr/0004-sketchup-native-component-entity-model.md` |
+| Multi-organización/tenancy | `docs/adr/0005-multi-organization-tenancy.md` + `docs/multi-organization-distribution-model.md` |
 | Modelo de dominio semántico | `docs/architecture/domain-model.md` |
 | Biblioteca de assets 3D | `docs/architecture/3d-asset-library.md` |
 | Features de manufactura semánticas | `docs/architecture/manufacturing-feature-model.md` |

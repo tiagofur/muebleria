@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/rand"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 const maxMediaBytes = 3 << 20 // 3 MiB
@@ -29,15 +31,19 @@ func (s *Server) HandleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	role := actorRole(claimsFromRequest(r))
-	if !requirePermission(w, domain.RoleCanMutateCatalog(role), "no tenés permiso para subir imágenes") {
+	roles := actorRoles(claimsFromRequest(r))
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCatalog), "no tenés permiso para subir imágenes") {
 		return
 	}
 	if strings.TrimSpace(s.MediaDir) == "" {
 		respondWithError(w, http.StatusServiceUnavailable, "almacenamiento de medios no configurado")
 		return
 	}
-	if err := os.MkdirAll(s.MediaDir, 0o750); err != nil {
+	// Partitioned layout (ADR-0004): each organization writes under its own
+	// subdirectory. The org segment is resolved server-side from the request
+	// scope (a UUID), never from user input.
+	orgDir := filepath.Join(s.MediaDir, storage.OrgFromCtx(r.Context()))
+	if err := os.MkdirAll(orgDir, 0o750); err != nil {
 		respondWithInternalError(w, err, "media mkdir")
 		return
 	}
@@ -85,7 +91,7 @@ func (s *Server) HandleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filename := id + ext
-	destPath := filepath.Join(s.MediaDir, filename)
+	destPath := filepath.Join(orgDir, filename)
 	// Prevent path escape
 	if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(s.MediaDir)+string(os.PathSeparator)) &&
 		filepath.Clean(destPath) != filepath.Clean(s.MediaDir) {
@@ -132,7 +138,9 @@ func (s *Server) HandleMediaGet(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, "not found")
 		return
 	}
-	path := filepath.Join(s.MediaDir, name)
+	// Partitioned layout (ADR-0004): the file lives under the caller's
+	// organization subdirectory — cross-org reads see "not found".
+	path := filepath.Join(s.MediaDir, storage.OrgFromCtx(r.Context()), name)
 	cleanRoot := filepath.Clean(s.MediaDir)
 	if !strings.HasPrefix(filepath.Clean(path), cleanRoot+string(os.PathSeparator)) {
 		respondWithError(w, http.StatusBadRequest, "ruta inválida")
@@ -210,14 +218,16 @@ func mediaFilenameFromURL(raw string) string {
 // not propagate — losing a catalog image is annoying, failing a successful DB
 // commit because we could not delete a stale file is worse.
 //
-// Returns true when a file was actually removed, false otherwise (no URL,
-// unknown host/path, not found, or error).
-func deleteMediaFileByURL(mediaDir, url string) bool {
+// The file is looked up under the caller's organization subdirectory (the
+// partitioned layout of HandleMediaUpload). Returns true when a file was
+// actually removed, false otherwise (no URL, unknown host/path, not found, or
+// error).
+func deleteMediaFileByURL(ctx context.Context, mediaDir, url string) bool {
 	name := mediaFilenameFromURL(url)
 	if name == "" || strings.TrimSpace(mediaDir) == "" {
 		return false
 	}
-	path := filepath.Join(mediaDir, name)
+	path := filepath.Join(mediaDir, storage.OrgFromCtx(ctx), name)
 	cleanRoot := filepath.Clean(mediaDir)
 	if !strings.HasPrefix(filepath.Clean(path), cleanRoot+string(os.PathSeparator)) {
 		// Path escape attempt — refuse, do not log the raw value.

@@ -1088,6 +1088,9 @@ export interface Project {
   readonly id: string;
   readonly name: string;
   readonly customerId: string;
+  readonly organizationId?: string;
+  readonly salesOrganizationId?: string;
+  readonly manufacturingOrganizationId?: string;
   readonly createdBy?: string;
   /**
    * Portfolio owner user id (F034 / OWN-*). May differ from createdBy after reassignment.

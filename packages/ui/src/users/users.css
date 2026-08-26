@@ -87,3 +87,8 @@
   background: var(--surface-card);
   color: var(--text-primary);
 }
+
+.users-table__align-right {
+  text-align: right;
+}
+

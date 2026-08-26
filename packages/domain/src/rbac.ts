@@ -677,3 +677,64 @@ export function roleCanAppendProjectEvent(
   if (!allowed) return false;
   return allowed.includes(role as UserRole);
 }
+
+/**
+ * Multi-role union semantics (ADR-0005): a membership may carry several
+ * canonical roles and the effective permissions are the union — mirrored in
+ * backend-go/internal/domain/rbac.go (AnyRole). Fail-closed on empty sets.
+ */
+export function anyRole(
+  roles: readonly (string | null | undefined)[],
+  can: (role: string) => boolean,
+): boolean {
+  for (const role of roles) {
+    if (role != null && can(role)) return true;
+  }
+  return false;
+}
+
+/** Union of the nav sections each role may open (guest = all). */
+export function navIdsForRoles(
+  roles: readonly (string | null | undefined)[],
+): ReadonlySet<string> {
+  const hasNull = roles.length === 0 || roles.some((r) => r == null);
+  if (hasNull) {
+    // guest / local mode — full tool (same set as navIdsForRole(null)).
+    return navIdsForRole(null);
+  }
+  const out = new Set<string>();
+  for (const role of roles) {
+    for (const id of navIdsForRole(role)) out.add(id);
+  }
+  return out;
+}
+
+/** Nav access for a multi-role actor (union). */
+export function rolesCanAccessNav(
+  roles: readonly (string | null | undefined)[],
+  navId: string,
+): boolean {
+  return navIdsForRoles(roles).has(navId);
+}
+
+/**
+ * Sector gates apply only when EVERY role is sector-scoped: a supervisor-style
+ * role in the set bypasses the gate (mirrors domain.RolesAllScopedBySector).
+ */
+export function rolesAllScopedBySector(
+  roles: readonly (string | null | undefined)[],
+): boolean {
+  const nonNull = roles.filter((r): r is string => r != null);
+  if (nonNull.length === 0) return false;
+  return nonNull.every((r) => roleIsScopedBySector(r));
+}
+
+/** The actor's effective role set: explicit multi-role or the single role. */
+export function rolesOfUser(user: {
+  role: string | null | undefined;
+  roles?: readonly (string | null | undefined)[] | null;
+}): readonly string[] {
+  const explicit = (user.roles ?? []).filter((r): r is string => r != null);
+  if (explicit.length > 0) return explicit;
+  return user.role != null ? [user.role] : [];
+}

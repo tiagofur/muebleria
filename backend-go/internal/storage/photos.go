@@ -15,9 +15,9 @@ func (s *PostgresStore) ListProjectPhotos(ctx context.Context, projectID string)
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, created_at, updated_at
 		FROM project_photos
-		WHERE project_id = $1
+		WHERE project_id = $1 AND organization_id = $2
 		ORDER BY created_at DESC;
-	`, projectID)
+	`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list project photos: %w", err)
 	}
@@ -68,8 +68,8 @@ func (s *PostgresStore) GetProjectPhotoByID(ctx context.Context, photoID string)
 	err := s.Pool.QueryRow(ctx, `
 		SELECT id, project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, created_at, updated_at
 		FROM project_photos
-		WHERE id = $1;
-	`, photoID).Scan(
+		WHERE id = $1 AND organization_id = $2;
+	`, photoID, OrgFromCtx(ctx)).Scan(
 		&p.ID,
 		&p.ProjectID,
 		&p.Stage,
@@ -116,10 +116,10 @@ func (s *PostgresStore) CreateProjectPhoto(ctx context.Context, photo *domain.Pr
 	}
 
 	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO project_photos (project_id, stage, url, thumbnail_url, caption, is_showcase, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO project_photos (project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at;
-	`, photo.ProjectID, string(photo.Stage), photo.URL, thumbParam, captionParam, photo.IsShowcase, createdByParam).Scan(
+	`, photo.ProjectID, string(photo.Stage), photo.URL, thumbParam, captionParam, photo.IsShowcase, createdByParam, OrgFromCtx(ctx)).Scan(
 		&photo.ID,
 		&photo.CreatedAt,
 		&photo.UpdatedAt,
@@ -139,9 +139,9 @@ func (s *PostgresStore) UpdateProjectPhoto(ctx context.Context, photoID string, 
 	err := s.Pool.QueryRow(ctx, `
 		UPDATE project_photos
 		SET caption = $1, is_showcase = $2, stage = $3, updated_at = $4
-		WHERE id = $5
+		WHERE id = $5 AND organization_id = $6
 		RETURNING id, project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, created_at, updated_at;
-	`, caption, isShowcase, string(stage), now, photoID).Scan(
+	`, caption, isShowcase, string(stage), now, photoID, OrgFromCtx(ctx)).Scan(
 		&p.ID,
 		&p.ProjectID,
 		&p.Stage,
@@ -175,8 +175,8 @@ func (s *PostgresStore) UpdateProjectPhoto(ctx context.Context, photoID string, 
 func (s *PostgresStore) DeleteProjectPhoto(ctx context.Context, photoID string) error {
 	ct, err := s.Pool.Exec(ctx, `
 		DELETE FROM project_photos
-		WHERE id = $1;
-	`, photoID)
+		WHERE id = $1 AND organization_id = $2;
+	`, photoID, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("delete project photo: %w", err)
 	}
@@ -197,13 +197,13 @@ func (s *PostgresStore) ListShowcasePhotos(ctx context.Context, onlyShowcase boo
 		LEFT JOIN customers c ON c.id = p.customer_id
 	`
 	if onlyShowcase {
-		query += ` WHERE pp.is_showcase = true `
+		query += ` WHERE pp.is_showcase = true AND pp.organization_id = $1 `
 	} else {
-		query += ` WHERE pp.is_showcase = true OR pp.stage = 'installed' `
+		query += ` WHERE (pp.is_showcase = true OR pp.stage = 'installed') AND pp.organization_id = $1 `
 	}
 	query += ` ORDER BY pp.is_showcase DESC, pp.created_at DESC;`
 
-	rows, err := s.Pool.Query(ctx, query)
+	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list showcase photos: %w", err)
 	}

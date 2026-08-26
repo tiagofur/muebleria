@@ -15,6 +15,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // stubStore is a minimal Store for handler unit tests. Only the methods under
@@ -70,6 +71,8 @@ type stubStore struct {
 	setLicense          func(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error
 	createUserErr       error
 	listUsers           []domain.User
+	// Multi-org memberships by user (ADR-0004) for login/select-org tests.
+	membershipsByUser   map[string][]domain.MembershipWithOrg
 	createMaterialOK    bool
 	deleteProjectCalled bool
 	// F044 workshop settings (nil → defaults, flag false)
@@ -255,6 +258,73 @@ func (s *stubStore) SetUserLicense(ctx context.Context, id string, plan domain.L
 }
 func (s *stubStore) RejectUser(context.Context, string) error {
 	s.stubNotUsed("RejectUser")
+	return nil
+}
+
+// --- Organizations / memberships / security audit (ADR-0004) ---
+
+// GetOrganizationByID mirrors the stub's single-user world onto the scoped
+// organization: the furniture license gate moved from the user to the
+// organization (ADR-0004), so legacy license tests keep their intent when the
+// org carries the same plan/expiry as the configured user.
+func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Organization, error) {
+	if s.getUserByEmail != nil {
+		return &domain.Organization{
+			ID:               storage.InitialOrganizationID,
+			Name:             "Taller Test",
+			Slug:             "taller-test",
+			Type:             domain.OrganizationTypeFactory,
+			LicensePlan:      s.getUserByEmail.LicensePlan,
+			LicenseExpiresAt: s.getUserByEmail.LicenseExpiresAt,
+			Active:           true,
+		}, nil
+	}
+	return nil, errors.New("organization not found")
+}
+
+func (s *stubStore) GetOrganizationBySlug(context.Context, string) (*domain.Organization, error) {
+	return nil, errors.New("organization not found")
+}
+
+func (s *stubStore) ListOrganizations(context.Context) ([]domain.Organization, error) {
+	return nil, nil
+}
+
+func (s *stubStore) CreateOrganization(context.Context, *domain.Organization) error {
+	return nil
+}
+
+func (s *stubStore) ListMembershipsByUser(_ context.Context, userID string) ([]domain.MembershipWithOrg, error) {
+	if s.membershipsByUser != nil {
+		return s.membershipsByUser[userID], nil
+	}
+	return nil, nil
+}
+
+func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
+	if s.membershipsByUser != nil {
+		for _, m := range s.membershipsByUser[userID] {
+			if m.OrganizationID == organizationID {
+				return &m, nil
+			}
+		}
+	}
+	return nil, errors.New("membership not found")
+}
+
+func (s *stubStore) EnsureMembership(context.Context, string, string, []domain.UserRole) error {
+	return nil
+}
+
+func (s *stubStore) SetMembershipRoles(context.Context, string, []domain.UserRole) error {
+	return nil
+}
+
+func (s *stubStore) SetPlatformAdmin(context.Context, string, bool) error {
+	return nil
+}
+
+func (s *stubStore) InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error {
 	return nil
 }
 func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {
@@ -1998,9 +2068,14 @@ func TestHandleProjectTemplateByIDDelete(t *testing.T) {
 
 // writeMediaFile plants a fake media file on disk so we can assert it gets
 // deleted by the handler after the corresponding DB row is updated/deleted.
+// Files live under the initial organization's subdirectory (partitioned media
+// layout, ADR-0004): the unscoped test context falls back to it.
 func writeMediaFile(t *testing.T, dir, name string) string {
 	t.Helper()
-	p := filepath.Join(dir, name)
+	p := filepath.Join(dir, storage.InitialOrganizationID, name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		t.Fatalf("plant %s: %v", p, err)
+	}
 	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
 		t.Fatalf("plant %s: %v", p, err)
 	}
@@ -2269,4 +2344,47 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 	if !strings.Contains(raw, `"role":"produccion"`) {
 		t.Errorf("missing role in JSON: %s", raw)
 	}
+}
+
+// --- F172 stubs: platform / org team / invitations / support sessions ---
+
+func (s *stubStore) UpdateOrganization(context.Context, *domain.Organization) error { return nil }
+func (s *stubStore) CloneCatalog(context.Context, string, string) error            { return nil }
+func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration) (*domain.SupportSession, error) {
+	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte"}, nil
+}
+func (s *stubStore) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
+	return nil, errors.New("support session not found")
+}
+func (s *stubStore) EndSupportSession(context.Context, string, string, string) (bool, error) {
+	return true, nil
+}
+func (s *stubStore) ListOrgTeam(context.Context, string) ([]storage.OrgTeamMember, error) {
+	return nil, nil
+}
+func (s *stubStore) UpdateMembershipRolesByOrg(context.Context, string, string, []domain.UserRole) error {
+	return nil
+}
+func (s *stubStore) SetMembershipActive(context.Context, string, string, bool) error {
+	return nil
+}
+func (s *stubStore) CreateInvitation(_ context.Context, _ string, _ string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
+	return &storage.Invitation{ID: "inv-1", Email: "new@taller.test", Roles: roles}, nil
+}
+func (s *stubStore) ListInvitations(context.Context, string) ([]storage.Invitation, error) {
+	return nil, nil
+}
+func (s *stubStore) RevokeInvitation(context.Context, string, string) error { return nil }
+func (s *stubStore) GetOpenInvitationByToken(context.Context, string) (*storage.OpenInvitation, error) {
+	return nil, errors.New("invitation not found")
+}
+func (s *stubStore) AcceptInvitationTx(context.Context, string, string) error { return nil }
+func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+func (s *stubStore) GetUserByEmailAnyState(_ context.Context, email string) (*domain.User, error) {
+	if s.getUserByEmail != nil && s.getUserByEmail.Email == email {
+		return s.getUserByEmail, nil
+	}
+	return nil, errors.New("user not found")
 }

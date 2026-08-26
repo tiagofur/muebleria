@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -87,7 +88,7 @@ func TestJWTTokenLifecycle(t *testing.T) {
 	email := "test@example.com"
 	role := "vendedor"
 
-	token, err := GenerateToken(userID, email, role, secret)
+	token, err := GenerateToken(userID, email, TokenContext{Roles: []string{role}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,4 +121,27 @@ func TestJWTTokenLifecycle(t *testing.T) {
 	if err == nil {
 		t.Error("expected token validation to fail with incorrect secret key")
 	}
+}
+
+// TestValidateToken_RejectsWrongVersion locks the one-time token invalidation
+// of the multi-org claims (ADR-0004 §6): any token without Ver == TokenVersion
+// is refused and the client must re-login.
+func TestValidateToken_RejectsWrongVersion(t *testing.T) {
+	secret := "test-secret-key-12345"
+	claims := &Claims{
+		UserID: "u", Email: "e@x.com", Role: "admin", Ver: 1,
+	}
+	token, err := jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateToken(token, secret); err == nil {
+		t.Fatal("v1 token must be rejected")
+	}
+}
+
+// jwtNewSigned signs arbitrary claims for version-rejection tests.
+func jwtNewSigned(claims *Claims, secret string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }

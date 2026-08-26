@@ -9,5 +9,14 @@
     "produccion",
     "almacen"
   ],
-  "rejectedRoles": ["disenador", "carpintero", "supervisor"]
+  "rejectedRoles": [
+    "disenador",
+    "carpintero",
+    "supervisor"
+  ],
+  "multiRole": {
+    "supported": true,
+    "semantics": "union",
+    "adr": "docs/adr/0005-multi-organization-tenancy.md"
+  }
 }

@@ -13,9 +13,9 @@ func (s *PostgresStore) ListUserSectors(ctx context.Context, userID string) ([]d
 	rows, err := s.Pool.Query(ctx, `
 		SELECT user_id, sector, sub_sector, created_at
 		FROM user_sectors
-		WHERE user_id = $1
+		WHERE user_id = $1 AND organization_id = $2
 		ORDER BY sector, sub_sector
-	`, userID)
+	`, userID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -31,18 +31,19 @@ func (s *PostgresStore) SetUserSectors(ctx context.Context, userID string, secto
 	}
 	defer tx.Rollback(ctx)
 
-	// Delete existing
-	if _, err := tx.Exec(ctx, `DELETE FROM user_sectors WHERE user_id = $1`, userID); err != nil {
+	// Delete existing (only the active organization's assignments — the same
+	// operator may work in other talleres).
+	if _, err := tx.Exec(ctx, `DELETE FROM user_sectors WHERE user_id = $1 AND organization_id = $2`, userID, OrgFromCtx(ctx)); err != nil {
 		return err
 	}
 
 	// Insert new
 	for _, sec := range sectors {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO user_sectors (user_id, sector, sub_sector)
-			VALUES ($1, $2, $3)
+			INSERT INTO user_sectors (user_id, sector, sub_sector, organization_id)
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (user_id, sector, sub_sector) DO NOTHING
-		`, userID, sec.Sector, sec.SubSector); err != nil {
+		`, userID, sec.Sector, sec.SubSector, OrgFromCtx(ctx)); err != nil {
 			return err
 		}
 	}
@@ -56,9 +57,9 @@ func (s *PostgresStore) GetUsersBySector(ctx context.Context, sector string) ([]
 		SELECT u.id, u.email, u.name, u.role, u.active, u.created_at, u.updated_at
 		FROM users u
 		INNER JOIN user_sectors us ON us.user_id = u.id
-		WHERE us.sector = $1 AND u.active = true
+		WHERE us.sector = $1 AND u.active = true AND us.organization_id = $2
 		ORDER BY u.name
-	`, sector)
+	`, sector, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}

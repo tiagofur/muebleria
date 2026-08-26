@@ -41,7 +41,7 @@ func TestFurnitureDefinitionsRequiresActiveLicense(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			server := licenseTestServer(t, tc.user)
-			token, err := auth.GenerateToken(tc.user.ID, "u@example.com", "user", furnitureTestSecret)
+			token, err := auth.GenerateToken(tc.user.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 			if err != nil {
 				t.Fatalf("generate token: %v", err)
 			}
@@ -90,7 +90,7 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 		listModules:    modules,
 		listCategories: []domain.ModuleCategory{{ID: "cat-base", Name: "Cocinas"}},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	rec := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 func TestFurnitureDefinitionsEmptyWorkshop(t *testing.T) {
 	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanTrial}
 	server := licenseTestServer(t, u)
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	rec := httptest.NewRecorder()
@@ -177,7 +177,7 @@ func TestFurnitureDefinitionsStoreErrorIs500(t *testing.T) {
 	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanPro}
 	server := licenseTestServer(t, u)
 	server.Store = &stubStore{getUserByEmail: u, listModulesErr: errors.New("db down")}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	rec := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestFurnitureDefinitionsCachesPerContentRevision(t *testing.T) {
 	modules := []domain.Module{{ID: "m1", Code: "M1", Name: "Módulo 1", WidthMm: 600, HeightMm: 720, DepthMm: 500}}
 	server := licenseTestServer(t, u)
 	server.Store = &stubStore{getUserByEmail: u, listModules: modules}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", "user", furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 
 	get := func(ifNoneMatch string) int {
@@ -245,7 +245,22 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 		PasswordHash: hash, LicensePlan: domain.LicensePlanTrial,
 	}
 	server := &Server{
-		Store:     &stubStore{getUserByEmail: u},
+		Store: &stubStore{
+			getUserByEmail: u,
+			membershipsByUser: map[string][]domain.MembershipWithOrg{
+				"u1": {{
+					Membership: domain.Membership{
+						OrganizationID: "org-1", UserID: "u1",
+						Roles: []domain.UserRole{domain.RoleUser}, Active: true,
+					},
+					Organization: domain.Organization{
+						ID: "org-1", Name: "T", Slug: "t",
+						Type: domain.OrganizationTypeFactory,
+						LicensePlan: domain.LicensePlanTrial, Active: true,
+					},
+				}},
+			},
+		},
 		JWTSecret: furnitureTestSecret,
 	}
 
@@ -286,7 +301,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 func TestExtensionTokenIsReadOnly(t *testing.T) {
 	u := &domain.User{ID: "u1", Active: true, Role: domain.RoleAdmin, LicensePlan: domain.LicensePlanPro}
 	server := licenseTestServer(t, u)
-	token, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", "admin", furnitureTestSecret)
+	token, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -309,7 +324,7 @@ func TestExtensionTokenIsReadOnly(t *testing.T) {
 	}
 
 	// Web tokens keep full access.
-	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", "admin", furnitureTestSecret)
+	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}}, furnitureTestSecret)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/projects/1", nil)
 	req.Header.Set("Authorization", "Bearer "+webToken)

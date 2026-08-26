@@ -39,8 +39,8 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 	var planningRaw, productionReleaseRaw, materialsReleaseRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT material_planning, production_release, materials_release
-		FROM projects WHERE id = $1 FOR UPDATE;
-	`, projectID).Scan(&planningRaw, &productionReleaseRaw, &materialsReleaseRaw)
+		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
+	`, projectID, OrgFromCtx(ctx)).Scan(&planningRaw, &productionReleaseRaw, &materialsReleaseRaw)
 	if err != nil {
 		return nil, ErrMaterialPlanningProjectNotFound
 	}
@@ -64,8 +64,8 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 	// Every project's planning — availability/reservations are warehouse-wide.
 	planningRows, err := tx.Query(ctx, `
 		SELECT material_planning FROM projects
-		WHERE material_planning IS NOT NULL AND material_planning::text <> 'null';
-	`)
+		WHERE material_planning IS NOT NULL AND material_planning::text <> 'null' AND organization_id = $1;
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading plannings: %w", err)
 	}
@@ -87,8 +87,8 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 
 	// Stock balances for the availability math.
 	stockRows, err := tx.Query(ctx, `
-		SELECT kind, material_id, quantity, min_stock FROM material_stock;
-	`)
+		SELECT kind, material_id, quantity, min_stock FROM material_stock WHERE organization_id = $1;
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading stock for planning: %w", err)
 	}
@@ -105,8 +105,8 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 	}
 
 	poRows, err := tx.Query(ctx, `
-		SELECT ` + poColumns + ` FROM purchase_orders;
-	`)
+		SELECT ` + poColumns + ` FROM purchase_orders WHERE organization_id = $1;
+	`, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error loading purchase orders for planning: %w", err)
 	}
@@ -167,8 +167,8 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 		SET material_planning = $2,
 		    materials_release = COALESCE($3, materials_release),
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1;
-	`, projectID, jsonbStructArg(mutation.Planning), jsonbStructArg(mutation.MaterialsRelease)); err != nil {
+		WHERE id = $1 AND (organization_id = $4 OR sales_organization_id = $4 OR manufacturing_organization_id = $4);
+	`, projectID, jsonbStructArg(mutation.Planning), jsonbStructArg(mutation.MaterialsRelease), OrgFromCtx(ctx)); err != nil {
 		return nil, fmt.Errorf("error persisting material planning: %w", err)
 	}
 

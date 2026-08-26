@@ -112,6 +112,8 @@ class SessionProviderTest < Minitest::Test
     @provider.login('a@b.c', 'secret123', 'http://taller.local:8080/api')
 
     assert File.exist?(@store_path)
+    return if /mswin|mingw|cygwin/.match?(RUBY_PLATFORM)
+
     mode = File.stat(@store_path).mode & 0o777
     assert_equal 0o600, mode, 'Stored session file must be chmod 0600 (owner only)'
   end

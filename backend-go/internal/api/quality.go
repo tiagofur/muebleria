@@ -108,7 +108,7 @@ func (s *Server) HandleProjectQuality(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projectID := r.PathValue("id")
-	if !requirePermission(w, roleCanManageQuality(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), roleCanManageQuality),
 		"no tenés permiso para ver la calidad de la obra") {
 		return
 	}
@@ -135,7 +135,7 @@ type reportQualityIssueRequest struct {
 func (s *Server) HandleQualityIssue(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManageQuality(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), roleCanManageQuality),
 		"no tenés permiso para reportar problemas de calidad") {
 		return
 	}
@@ -207,7 +207,7 @@ func (s *Server) HandleQualityIssueTransition(w http.ResponseWriter, r *http.Req
 	projectID := r.PathValue("id")
 	issueID := r.PathValue("issueId")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManageQuality(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), roleCanManageQuality),
 		"no tenés permiso para gestionar problemas de calidad") {
 		return
 	}
@@ -298,7 +298,7 @@ type reworkRequest struct {
 func (s *Server) HandleQualityRework(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManageQuality(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), roleCanManageQuality),
 		"no tenés permiso para registrar retrabajos") {
 		return
 	}
@@ -494,7 +494,7 @@ func (s *Server) HandleQualityUnitQc(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	unitID := r.PathValue("unitId")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManageQuality(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), roleCanManageQuality),
 		"no tenés permiso para registrar QC de unidades") {
 		return
 	}
@@ -597,7 +597,7 @@ func (s *Server) HandleQualityUnitQcOverride(w http.ResponseWriter, r *http.Requ
 	projectID := r.PathValue("id")
 	unitID := r.PathValue("unitId")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, domain.RoleCanSuperviseFloor(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanSuperviseFloor),
 		"sólo supervisión puede habilitar packaging sin QC aprobado") {
 		return
 	}
