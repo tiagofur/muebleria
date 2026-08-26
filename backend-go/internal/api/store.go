@@ -41,6 +41,25 @@ type Store interface {
 	SetMembershipRoles(ctx context.Context, userID string, roles []domain.UserRole) error
 	SetPlatformAdmin(ctx context.Context, userID string, admin bool) error
 	InsertSecurityAuditEvent(ctx context.Context, ev storage.SecurityAuditEvent) error
+	UpdateOrganization(ctx context.Context, o *domain.Organization) error
+	CloneCatalog(ctx context.Context, srcOrg, dstOrg string) error
+
+	// Support sessions (ADR-0005 §5)
+	StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration) (*domain.SupportSession, error)
+	GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error)
+	EndSupportSession(ctx context.Context, sessionID, adminUserID, via string) (bool, error)
+
+	// Org team & invitations (#326)
+	ListOrgTeam(ctx context.Context, organizationID string) ([]storage.OrgTeamMember, error)
+	UpdateMembershipRolesByOrg(ctx context.Context, organizationID, userID string, roles []domain.UserRole) error
+	SetMembershipActive(ctx context.Context, organizationID, userID string, active bool) error
+	CreateInvitation(ctx context.Context, organizationID, email string, roles []domain.UserRole, tokenHash string, expiresAt time.Time, invitedBy string) (*storage.Invitation, error)
+	ListInvitations(ctx context.Context, organizationID string) ([]storage.Invitation, error)
+	RevokeInvitation(ctx context.Context, organizationID, id string) error
+	GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*storage.OpenInvitation, error)
+	AcceptInvitationTx(ctx context.Context, invitationID, userID string) error
+	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]map[string]interface{}, error)
+	GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error)
 
 	// Customers
 	ListCustomers(ctx context.Context) ([]domain.Customer, error)

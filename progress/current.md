@@ -1,6 +1,6 @@
 # Sesión
 
-**Feature en curso:** F172 (#326) consola plataforma + equipo + soporte auditado + clonación catálogo
+**Feature en curso:** F172 (#326) — BACKEND COMPLETO (ver "Sesión 4"); falta UI web (consola, banner soporte, Equipo, selector org)
 **Cerrados con evidencia (ledger done, commits 428df6c..474f0ce):** F169, F170 (server+cliente), F171
 **Rama:** `feat/325-multi-organization-core` (PR #419)
 **Pendiente de revisión formal (reviewer):** F169, F170a/b — implementación y evidencia completas
@@ -56,7 +56,40 @@ Completado y verificado (`go test ./...` 8/8 paquetes verde):
 - Paridad: rbacUnion.test.ts (7) espejo de rbac_union_test.go.
 - Verificación: pnpm typecheck 7/7; web 306 + domain 1106 verde.
 
-## Siguiente: F172 (#326)
+## Sesión 4 (2026-08-27): F172 backend COMPLETO (8/8 go test verde)
+
+- Migración 000086 `support_sessions` (reason ≥4 chars, TTL, ended_via).
+- **Sesión de soporte "entrar a taller"**: `POST /api/platform/organizations/{id}/support-session`
+  {reason} → token corto 2h con claims.Support{org,session,reason}; middleware
+  re-valida la fila por request (logout/expiry cortan YA); actor real =
+  platform_admin; effective admin del taller; audit start/end.
+  `DELETE /api/platform/support-sessions/{id}` = logout. Forged support claim
+  sin platform_admin → 401 (testeado).
+- **`/api/platform/*`** (PlatformAdminMiddleware): GET/POST organizations
+  (POST con `clone_catalog_from` opcional), PATCH {id} (nombre/licencia/
+  suspender con audit), GET {id}/audit, GET users con memberships.
+- **`/api/org/*`** (admin del taller o soporte): GET team, PUT members/{id}/roles
+  (valida RolesAllowedInOrg por tipo: store/dealer sólo comerciales), PUT
+  members/{id}/active, GET/POST/DELETE invitations (token 32B, sha256 guardado,
+  14d, link mostrado UNA vez para pasar por WhatsApp), todo auditado.
+- **`POST /api/auth/accept-invitation`** (rate-limited): usuario existente
+  valida password; nuevo usuario nace activo (la invitación ES la aprobación);
+  AcceptInvitationTx atómico (marca aceptada + upsert membership); responde
+  LoginResponse (auto-select si única membresía).
+- **CloneCatalog**: 20 tablas con remap UUIDs vía temp maps + JSONB
+  (`modules.agregados`→agregado_id, `agregados.components`→componentId,
+  `hardware_lines`→hardware_id; joint_drilling_rules/overrides copy;
+  structure_revisions history NO se clona — revisión vigente sí). Guard:
+  destino no-vacío rechazado. Test integración verifica FK+JSONB+piezas.
+- Dominio: AllowedRolesForOrgType/RoleAllowedInOrg/RolesAllowedInOrg.
+
+**Pendiente F172 (próxima sesión): UI web** — consola plataforma (NAV_PATHS),
+pantalla Equipo (evolución UsersScreen, chips multi-rol), selector org en
+login (selection_required ya viene del backend), banner persistente de
+soporte (claims.Support → GET /api/auth/me o similar para pintarlo), pantalla
+accept-invitation (token por query). Leer docs/design.md antes (protocolo UI).
+
+## Siguiente: F172 UI
 
 1. Backend `/api/platform/*` (solo platform_admin): orgs CRUD/suspensión,
    licencias, usuarios global, audit viewer, support-session (razón + token

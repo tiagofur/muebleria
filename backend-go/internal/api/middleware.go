@@ -29,6 +29,9 @@ type UserLookup interface {
 type MembershipLookup interface {
 	UserLookup
 	GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error)
+	// GetOpenSupportSession resolves a platform support session that is still
+	// open and unexpired (ADR-0005 §5).
+	GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error)
 }
 
 // CORSMiddleware only allows origins present in the allowlist. The matched
@@ -114,7 +117,25 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 				// but membership roles and the organization's active flag are
 				// re-read from the DB — a revoked membership or a suspended
 				// organization cuts access on the next request, not at expiry.
-				if claims.OrgID != "" {
+				if claims.Support != nil {
+					// Support session: platform staff acting as admin of one
+					// organization. The session row is re-validated per
+					// request — logout/expiry cut access immediately. The
+					// actor stays the platform admin (UserID/Email claims).
+					if !claims.PlatformAdmin {
+						respondWithError(w, http.StatusUnauthorized, "invalid token")
+						return
+					}
+					ss, err := users.GetOpenSupportSession(r.Context(), claims.Support.SessionID)
+					if err != nil || ss == nil ||
+						ss.OrganizationID != claims.OrgID ||
+						ss.PlatformAdminUserID != claims.UserID {
+						respondWithError(w, http.StatusUnauthorized, "invalid token")
+						return
+					}
+					claims.Roles = []string{string(domain.RoleAdmin)}
+					claims.Role = string(domain.RoleAdmin)
+				} else if claims.OrgID != "" {
 					m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
 					if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
 						respondWithError(w, http.StatusUnauthorized, "invalid token")

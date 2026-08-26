@@ -46,6 +46,10 @@ func (s *staticUsers) GetUserByID(_ context.Context, id string) (*domain.User, e
 	return u, nil
 }
 
+func (s *staticUsers) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
+	return nil, errors.New("support session not found")
+}
+
 // membershipsByUser keyed by "userID:orgID" lets middleware tests simulate
 // live membership state (revocation, role changes, suspended organizations).
 func (s *staticUsers) GetActiveMembership(_ context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
@@ -523,5 +527,92 @@ func TestRoleMiddleware_MultiRoleTokenPassesUnion(t *testing.T) {
 	handler403.ServeHTTP(rr, req)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("sin admin en el set no pasa gate admin, got %d", rr.Code)
+	}
+}
+
+// --- Support sessions (ADR-0005 §5 / #326) ---
+
+type supportSessionUsers struct {
+	staticUsers
+	openSession *domain.SupportSession
+}
+
+func (s *supportSessionUsers) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
+	if s.openSession == nil {
+		return nil, errors.New("support session not found")
+	}
+	return s.openSession, nil
+}
+
+// TestAuthMiddleware_SupportSessionActsAsOrgAdmin: the platform admin's
+// support token carries an effective admin membership of the target org while
+// the actor stays the platform admin; ending the session cuts access at the
+// next request.
+func TestAuthMiddleware_SupportSessionActsAsOrgAdmin(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &supportSessionUsers{
+		staticUsers: staticUsers{
+			byID: map[string]*domain.User{
+				"pa-1": {ID: "pa-1", Email: "soporte@granete.test", Role: domain.RoleUser, Active: true, PlatformAdmin: true},
+			},
+		},
+		openSession: &domain.SupportSession{
+			ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-9", Reason: "ayuda catálogo",
+		},
+	}
+	var seenRole string
+	handler := AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims := r.Context().Value(UserContextKey).(*auth.Claims)
+		seenRole = claims.Role
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	token, err := auth.GenerateSupportToken("pa-1", "soporte@granete.test", auth.SupportClaims{
+		OrgID: "org-9", SessionID: "ss-1", Reason: "ayuda catálogo",
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || seenRole != string(domain.RoleAdmin) {
+		t.Fatalf("support session: esperaba 200 como admin del taller, got %d role=%s", rr.Code, seenRole)
+	}
+
+	// Logout (session ended) → 401 en el request siguiente.
+	users.openSession = nil
+	req = httptest.NewRequest("GET", "/api/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("ended support session: esperaba 401, got %d", rr.Code)
+	}
+}
+
+// TestAuthMiddleware_SupportTokenRequiresPlatformAdmin: a regular user
+// forging a support claim gets 401.
+func TestAuthMiddleware_SupportTokenRequiresPlatformAdmin(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &supportSessionUsers{
+		staticUsers: staticUsers{
+			byID: map[string]*domain.User{
+				"u-1": {ID: "u-1", Email: "u@test.com", Role: domain.RoleVendedor, Active: true},
+			},
+		},
+		openSession: &domain.SupportSession{ID: "ss-x", PlatformAdminUserID: "u-1", OrganizationID: "org-9"},
+	}
+	handler := AuthMiddleware(secret, users)(okHandler())
+	token, _ := auth.GenerateSupportToken("u-1", "u@test.com", auth.SupportClaims{
+		OrgID: "org-9", SessionID: "ss-x",
+	}, secret)
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("forged support claim: esperaba 401, got %d", rr.Code)
 	}
 }

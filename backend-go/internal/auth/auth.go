@@ -21,6 +21,10 @@ const MinPasswordLen = 8
 // (issue #16). Role/active are also re-checked against the DB on every request.
 const AccessTokenTTL = 15 * time.Minute
 
+// SupportTokenTTL bounds platform support sessions ("entrar a taller"):
+// short-lived by design, independent of the web/extension token kinds.
+const SupportTokenTTL = 2 * time.Hour
+
 // ExtensionClient identifies tokens requested by the SketchUp extension login
 // flow. Extension tokens live longer (workshop sessions span days) and are
 // restricted to read-only requests by AuthMiddleware.
@@ -64,8 +68,18 @@ type Claims struct {
 	// PlatformAdmin marks platform staff (console + audited support sessions).
 	PlatformAdmin bool `json:"platform_admin,omitempty"`
 	Client        string `json:"client,omitempty"`
-	Ver           int    `json:"ver"`
+	// Support marks a platform support session into Support.OrgID: effective
+	// admin of that organization, real actor = the platform admin (ADR-0005 §5).
+	Support       *SupportClaims `json:"support,omitempty"`
+	Ver           int            `json:"ver"`
 	jwt.RegisteredClaims
+}
+
+// SupportClaims carries the support-session context (org + session id).
+type SupportClaims struct {
+	OrgID     string `json:"org_id"`
+	SessionID string `json:"session_id"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // ValidatePassword enforces the registration password policy (issue #19):
@@ -109,6 +123,34 @@ type TokenContext struct {
 	Roles         []string
 	OrgID         string
 	PlatformAdmin bool
+}
+
+// GenerateSupportToken issues the short-lived support-session token: org
+// context with effective admin role. The middleware re-validates the session
+// row on every request, so logout/expiry cut access immediately.
+func GenerateSupportToken(userID string, email string, sc SupportClaims, secret string) (string, error) {
+	now := time.Now()
+	claims := &Claims{
+		UserID: userID,
+		Email:  email,
+		Role:   "admin",
+		Roles:  []string{"admin"},
+		OrgID:  sc.OrgID,
+		Support: &sc,
+		Ver:    TokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(now.Add(SupportTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+	return tokenString, nil
 }
 
 func GenerateToken(userID string, email string, tc TokenContext, secret string) (string, error) {

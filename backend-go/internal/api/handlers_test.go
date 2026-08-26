@@ -2345,3 +2345,46 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 		t.Errorf("missing role in JSON: %s", raw)
 	}
 }
+
+// --- F172 stubs: platform / org team / invitations / support sessions ---
+
+func (s *stubStore) UpdateOrganization(context.Context, *domain.Organization) error { return nil }
+func (s *stubStore) CloneCatalog(context.Context, string, string) error            { return nil }
+func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration) (*domain.SupportSession, error) {
+	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte"}, nil
+}
+func (s *stubStore) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
+	return nil, errors.New("support session not found")
+}
+func (s *stubStore) EndSupportSession(context.Context, string, string, string) (bool, error) {
+	return true, nil
+}
+func (s *stubStore) ListOrgTeam(context.Context, string) ([]storage.OrgTeamMember, error) {
+	return nil, nil
+}
+func (s *stubStore) UpdateMembershipRolesByOrg(context.Context, string, string, []domain.UserRole) error {
+	return nil
+}
+func (s *stubStore) SetMembershipActive(context.Context, string, string, bool) error {
+	return nil
+}
+func (s *stubStore) CreateInvitation(_ context.Context, _ string, _ string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
+	return &storage.Invitation{ID: "inv-1", Email: "new@taller.test", Roles: roles}, nil
+}
+func (s *stubStore) ListInvitations(context.Context, string) ([]storage.Invitation, error) {
+	return nil, nil
+}
+func (s *stubStore) RevokeInvitation(context.Context, string, string) error { return nil }
+func (s *stubStore) GetOpenInvitationByToken(context.Context, string) (*storage.OpenInvitation, error) {
+	return nil, errors.New("invitation not found")
+}
+func (s *stubStore) AcceptInvitationTx(context.Context, string, string) error { return nil }
+func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+func (s *stubStore) GetUserByEmailAnyState(_ context.Context, email string) (*domain.User, error) {
+	if s.getUserByEmail != nil && s.getUserByEmail.Email == email {
+		return s.getUserByEmail, nil
+	}
+	return nil, errors.New("user not found")
+}
