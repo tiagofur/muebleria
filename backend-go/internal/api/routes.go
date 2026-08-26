@@ -25,6 +25,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Select-org: swaps an authenticated token for one scoped to a chosen
 	// organization (multi-membership users, ADR-0004).
 	mux.Handle("POST /api/auth/select-org", authMW(http.HandlerFunc(server.HandleSelectOrg)))
+	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))
 
 	// Platform console (ADR-0005 §5 / #326): org lifecycle, licenses, users,
 	// audit and audited support sessions. Platform staff only.

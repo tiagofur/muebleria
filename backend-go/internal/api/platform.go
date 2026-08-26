@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -45,6 +46,41 @@ func randomToken32() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+// PlatformOrgDTO represents an organization projection for the superadmin platform console.
+type PlatformOrgDTO struct {
+	ID               string                  `json:"id"`
+	Name             string                  `json:"name"`
+	Slug             string                  `json:"slug"`
+	Type             domain.OrganizationType `json:"type"`
+	LicensePlan      string                  `json:"license_plan"`
+	LicenseExpiresAt *time.Time              `json:"license_expires_at"`
+	Active           bool                    `json:"active"`
+	CreatedAt        time.Time               `json:"created_at"`
+	UpdatedAt        time.Time               `json:"updated_at"`
+	MemberCount      int                     `json:"member_count"`
+	License          LicenseDTO              `json:"license"`
+}
+
+func toPlatformOrgDTO(o domain.Organization, memberCount int) PlatformOrgDTO {
+	return PlatformOrgDTO{
+		ID:               o.ID,
+		Name:             o.Name,
+		Slug:             o.Slug,
+		Type:             o.Type,
+		LicensePlan:      string(o.LicensePlan),
+		LicenseExpiresAt: o.LicenseExpiresAt,
+		Active:           o.Active,
+		CreatedAt:        o.CreatedAt,
+		UpdatedAt:        o.UpdatedAt,
+		MemberCount:      memberCount,
+		License: LicenseDTO{
+			Plan:      string(o.LicensePlan),
+			ExpiresAt: o.LicenseExpiresAt,
+			Status:    domain.LicenseStatusAt(o.LicensePlan, o.LicenseExpiresAt, time.Now()),
+		},
+	}
+}
+
 // GET /api/platform/organizations
 func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.Request) {
 	list, err := s.Store.ListOrganizations(r.Context())
@@ -52,21 +88,23 @@ func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.
 		respondWithInternalError(w, err, "platform orgs")
 		return
 	}
-	out := make([]OrgSummaryDTO, 0, len(list))
+	out := make([]PlatformOrgDTO, 0, len(list))
 	for _, o := range list {
-		out = append(out, toOrgSummaryDTO(o))
+		members, _ := s.Store.ListOrgTeam(r.Context(), o.ID)
+		out = append(out, toPlatformOrgDTO(o, len(members)))
 	}
 	respondWithJSON(w, http.StatusOK, out)
 }
 
-// POST /api/platform/organizations {name, slug, type?, license_plan?, clone_catalog_from?}
+// POST /api/platform/organizations {name, slug, type?, license_plan?, license_expires_at?, clone_catalog_from?}
 func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name               string `json:"name"`
-		Slug               string `json:"slug"`
-		Type               string `json:"type"`
-		LicensePlan        string `json:"license_plan"`
-		CloneCatalogFrom   string `json:"clone_catalog_from"`
+		Name             string     `json:"name"`
+		Slug             string     `json:"slug"`
+		Type             string     `json:"type"`
+		LicensePlan      string     `json:"license_plan"`
+		LicenseExpiresAt *time.Time `json:"license_expires_at"`
+		CloneCatalogFrom string     `json:"clone_catalog_from"`
 	}
 	if !decodeJSONBody(w, r, &body) || strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Slug) == "" {
 		respondWithError(w, http.StatusBadRequest, "name y slug son obligatorios")
@@ -90,8 +128,14 @@ func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http
 	}
 	claims := claimsFromRequest(r)
 
-	org := &domain.Organization{Name: strings.TrimSpace(body.Name), Slug: strings.TrimSpace(body.Slug),
-		Type: orgType, LicensePlan: plan, Active: true}
+	org := &domain.Organization{
+		Name:             strings.TrimSpace(body.Name),
+		Slug:             strings.TrimSpace(body.Slug),
+		Type:             orgType,
+		LicensePlan:      plan,
+		LicenseExpiresAt: body.LicenseExpiresAt,
+		Active:           true,
+	}
 	if err := s.Store.CreateOrganization(r.Context(), org); err != nil {
 		respondWithInternalError(w, err, "platform create org")
 		return
@@ -104,12 +148,12 @@ func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http
 		if err != nil {
 			srcOrg, err = s.Store.GetOrganizationBySlug(r.Context(), src)
 		}
-		if err != nil || srcOrg == nil || srcOrg.ID == org.ID {
-			respondWithError(w, http.StatusBadRequest, "clone_catalog_from no resolve a una organización válida")
+		if err != nil || srcOrg == nil {
+			respondWithError(w, http.StatusBadRequest, "organización origen de clonación no encontrada")
 			return
 		}
 		if err := s.Store.CloneCatalog(r.Context(), srcOrg.ID, org.ID); err != nil {
-			respondWithInternalError(w, err, "platform clone catalog")
+			respondWithInternalError(w, err, "clone base catalog")
 			return
 		}
 	}
@@ -117,20 +161,14 @@ func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http
 	s.audit(r.Context(), "organization_created", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 		"name": org.Name, "slug": org.Slug, "type": string(org.Type), "source": "platform console",
 	})
-	sum := toOrgSummaryDTO(*org)
-	respondWithJSON(w, http.StatusCreated, sum)
+	respondWithJSON(w, http.StatusCreated, toPlatformOrgDTO(*org, 0))
 }
 
 // PATCH /api/platform/organizations/{id} {name?, license_plan?, license_expires_at?, active?}
 func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var body struct {
-		Name              *string    `json:"name"`
-		LicensePlan       *string    `json:"license_plan"`
-		LicenseExpiresAt  *time.Time `json:"license_expires_at"`
-		Active            *bool      `json:"active"`
-	}
-	if !decodeJSONBody(w, r, &body) {
+	var raw map[string]json.RawMessage
+	if !decodeJSONBody(w, r, &raw) {
 		return
 	}
 	org, err := s.Store.GetOrganizationByID(r.Context(), id)
@@ -140,41 +178,85 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 	}
 	claims := claimsFromRequest(r)
 
-	if body.Name != nil && strings.TrimSpace(*body.Name) != "" {
-		org.Name = strings.TrimSpace(*body.Name)
+	if rawName, ok := raw["name"]; ok {
+		var name string
+		if err := json.Unmarshal(rawName, &name); err != nil {
+			respondWithError(w, http.StatusBadRequest, "name inválido")
+			return
+		}
+		if strings.TrimSpace(name) == "" {
+			respondWithError(w, http.StatusBadRequest, "el nombre no puede estar vacío")
+			return
+		}
+		org.Name = strings.TrimSpace(name)
 	}
-	if body.LicensePlan != nil {
-		plan := domain.LicensePlan(*body.LicensePlan)
+
+	var planChanged bool
+	if rawPlan, ok := raw["license_plan"]; ok {
+		var planStr string
+		if err := json.Unmarshal(rawPlan, &planStr); err != nil {
+			respondWithError(w, http.StatusBadRequest, "license_plan inválido")
+			return
+		}
+		plan := domain.LicensePlan(planStr)
 		if !domain.IsValidLicensePlan(plan) {
 			respondWithError(w, http.StatusBadRequest, "license_plan inválido")
 			return
 		}
+		if org.LicensePlan != plan {
+			planChanged = true
+		}
 		org.LicensePlan = plan
 	}
-	if body.LicenseExpiresAt != nil {
-		org.LicenseExpiresAt = body.LicenseExpiresAt
+
+	var expiryChanged bool
+	if rawExpiry, ok := raw["license_expires_at"]; ok {
+		expiryChanged = true
+		if string(rawExpiry) == "null" || string(rawExpiry) == `""` {
+			org.LicenseExpiresAt = nil
+		} else {
+			var t time.Time
+			if err := json.Unmarshal(rawExpiry, &t); err != nil {
+				respondWithError(w, http.StatusBadRequest, "license_expires_at inválido (formato ISO 8601 requerido)")
+				return
+			}
+			org.LicenseExpiresAt = &t
+		}
 	}
-	if body.Active != nil {
-		org.Active = *body.Active
+
+	var activeChanged bool
+	if rawActive, ok := raw["active"]; ok {
+		var active bool
+		if err := json.Unmarshal(rawActive, &active); err != nil {
+			respondWithError(w, http.StatusBadRequest, "active inválido")
+			return
+		}
+		if org.Active != active {
+			activeChanged = true
+		}
+		org.Active = active
 	}
+
 	if err := s.Store.UpdateOrganization(r.Context(), org); err != nil {
 		respondWithInternalError(w, err, "platform update org")
 		return
 	}
 
-	if body.Active != nil {
+	if activeChanged {
 		event := "organization_suspended"
-		if *body.Active {
+		if org.Active {
 			event = "organization_reactivated"
 		}
 		s.audit(r.Context(), event, claims.UserID, org.ID, clientIP(r), nil)
 	}
-	if body.LicensePlan != nil || body.LicenseExpiresAt != nil {
+	if planChanged || expiryChanged {
 		s.audit(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
-			"license_plan": string(org.LicensePlan),
+			"license_plan":       string(org.LicensePlan),
+			"license_expires_at": org.LicenseExpiresAt,
 		})
 	}
-	respondWithJSON(w, http.StatusOK, toOrgSummaryDTO(*org))
+	members, _ := s.Store.ListOrgTeam(r.Context(), org.ID)
+	respondWithJSON(w, http.StatusOK, toPlatformOrgDTO(*org, len(members)))
 }
 
 // GET /api/platform/organizations/{id}/audit?limit=

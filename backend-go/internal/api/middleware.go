@@ -148,13 +148,18 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 					claims.Roles = roles
 					claims.Role = auth.PrimaryRole(roles)
 				} else {
-					// TRANSITIONAL (until the F170b RBAC union sweep): org-less
-					// tokens keep the deprecated users.role as single-role view
-					// so existing single-organization flows and clients keep
-					// working. Login only issues org-less tokens to platform
-					// staff without a membership.
-					claims.Roles = []string{string(u.Role)}
-					claims.Role = string(u.Role)
+					// Org-less tokens carry NO business scope. Platform staff
+					// keep a single-role view of users.role for the console
+					// (transitional until F172 UI); everyone else gets zero
+					// roles — org selection is required before any data
+					// access (fail-closed, ADR-0005).
+					if claims.PlatformAdmin {
+						claims.Roles = []string{string(u.Role)}
+						claims.Role = string(u.Role)
+					} else {
+						claims.Roles = nil
+						claims.Role = ""
+					}
 				}
 			}
 

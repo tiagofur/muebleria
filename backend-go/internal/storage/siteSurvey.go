@@ -37,7 +37,7 @@ func (s *PostgresStore) MutateProjectSurvey(
 	var surveyRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT site_survey
-		FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE;
+		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
 	`, projectID, OrgFromCtx(ctx)).Scan(&surveyRaw)
 	if err != nil {
 		return nil, ErrSiteSurveyProjectNotFound
@@ -65,7 +65,7 @@ func (s *PostgresStore) MutateProjectSurvey(
 			UPDATE projects
 			SET site_survey = $2,
 			    updated_at = CURRENT_TIMESTAMP
-			WHERE id = $1 AND organization_id = $3;
+			WHERE id = $1 AND (organization_id = $3 OR sales_organization_id = $3 OR manufacturing_organization_id = $3);
 		`, projectID, jsonbStructArg(mutation.Survey), OrgFromCtx(ctx)); err != nil {
 			return nil, fmt.Errorf("error persisting site survey: %w", err)
 		}

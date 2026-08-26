@@ -47,7 +47,7 @@ func (s *PostgresStore) MutateProjectCosting(
 	var costingRaw, productionReleaseRaw, qualityRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT costing, production_release, quality
-		FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE;
+		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
 	`, projectID, OrgFromCtx(ctx)).Scan(&costingRaw, &productionReleaseRaw, &qualityRaw)
 	if err != nil {
 		return nil, ErrJobCostingProjectNotFound
@@ -94,7 +94,7 @@ func (s *PostgresStore) MutateProjectCosting(
 			UPDATE projects
 			SET costing = $2,
 			    updated_at = CURRENT_TIMESTAMP
-			WHERE id = $1 AND organization_id = $3;
+			WHERE id = $1 AND (organization_id = $3 OR sales_organization_id = $3 OR manufacturing_organization_id = $3);
 		`, projectID, jsonbStructArg(mutation.Costing), OrgFromCtx(ctx)); err != nil {
 			return nil, fmt.Errorf("error persisting costing: %w", err)
 		}
@@ -107,6 +107,7 @@ func (s *PostgresStore) MutateProjectCosting(
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("error committing job costing tx: %w", err)
 	}
+
 	return mutation, nil
 }
 
@@ -117,8 +118,8 @@ func loadQuoteSnapshotTx(ctx context.Context, tx querier, projectID string) (*do
 	err := tx.QueryRow(ctx, `
 		SELECT captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price
 		FROM quote_snapshots
-		WHERE project_id = $1 AND organization_id = $2;
-	`, projectID, OrgFromCtx(ctx)).Scan(
+		WHERE project_id = $1;
+	`, projectID).Scan(
 		&snapshot.CapturedAt,
 		&snapshot.Breakdown.MaterialsCost,
 		&snapshot.Breakdown.EdgeTotal,

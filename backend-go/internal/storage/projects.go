@@ -355,9 +355,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
 		FROM projects
-		WHERE organization_id = $1
+		WHERE organization_id = $1 OR sales_organization_id = $1 OR manufacturing_organization_id = $1
 		ORDER BY updated_at DESC;
 	`
 	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
@@ -389,9 +389,19 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		var approvals []byte
 		var productionRelease []byte
 		var changeOrders []byte
-		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &p.CreatedAt, &p.UpdatedAt)
+		var orgID, salesOrgID, mfgOrgID *string
+		err := rows.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, err
+		}
+		if orgID != nil {
+			p.OrganizationID = *orgID
+		}
+		if salesOrgID != nil {
+			p.SalesOrganizationID = *salesOrgID
+		}
+		if mfgOrgID != nil {
+			p.ManufacturingOrganizationID = *mfgOrgID
 		}
 		if createdBy != nil {
 			p.CreatedBy = *createdBy
@@ -481,9 +491,9 @@ func (s *PostgresStore) loadProjectLevelChoices(ctx context.Context, projectID s
 	query := `
 		SELECT option_group_code, choice_entity_id
 		FROM project_level_choices
-		WHERE project_id = $1 AND organization_id = $2;
+		WHERE project_id = $1;
 	`
-	rows, err := s.Pool.Query(ctx, query, projectID, OrgFromCtx(ctx))
+	rows, err := s.Pool.Query(ctx, query, projectID)
 	if err != nil {
 		// Table may not exist yet on old DBs mid-migrate — treat as empty.
 		return map[string]string{}, nil
@@ -501,7 +511,7 @@ func (s *PostgresStore) loadProjectLevelChoices(ctx context.Context, projectID s
 
 // replaceProjectLevelChoicesTx rewrites project-level option defaults.
 func replaceProjectLevelChoicesTx(ctx context.Context, tx pgx.Tx, projectID string, choices map[string]string) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM project_level_choices WHERE project_id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx)); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_level_choices WHERE project_id = $1`, projectID); err != nil {
 		return fmt.Errorf("error clearing project level choices: %w", err)
 	}
 	for code, cid := range choices {
@@ -572,9 +582,9 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 	itemQuery := `
 		SELECT id, module_id, quantity, measure_preset_id, structure_revision_pin, base_mode, floor_status, custom_dims
 		FROM project_items
-		WHERE project_id = $1 AND organization_id = $2;
+		WHERE project_id = $1;
 	`
-	rows, err := s.Pool.Query(ctx, itemQuery, projectID, OrgFromCtx(ctx))
+	rows, err := s.Pool.Query(ctx, itemQuery, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -612,9 +622,9 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		choicesQuery := `
 			SELECT option_group_code, choice_entity_id
 			FROM project_item_choices
-			WHERE project_item_id = $1 AND organization_id = $2;
+			WHERE project_item_id = $1;
 		`
-		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID, OrgFromCtx(ctx))
+		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -637,7 +647,7 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 // replaceProjectItemsTx deletes existing items and inserts the payload set.
 // Uses client-provided item ids when present so FE ids stay stable.
 func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, items []domain.ProjectItem) error {
-	if _, err := tx.Exec(ctx, `DELETE FROM project_items WHERE project_id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx)); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_items WHERE project_id = $1`, projectID); err != nil {
 		return fmt.Errorf("error clearing project items: %w", err)
 	}
 	for i := range items {
@@ -702,9 +712,9 @@ func structurePinArg(pin *int) interface{} {
 
 func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
 	query := `
-		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, site_survey, created_at, updated_at
+		SELECT id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, installation, material_planning, quality, costing, site_survey, organization_id, sales_organization_id, manufacturing_organization_id, created_at, updated_at
 		FROM projects
-		WHERE id = $1 AND organization_id = $2;
+		WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2);
 	`
 	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var p domain.Project
@@ -735,9 +745,19 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 	var quality []byte
 	var costing []byte
 	var siteSurvey []byte
-	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &installation, &materialPlanning, &quality, &costing, &siteSurvey, &p.CreatedAt, &p.UpdatedAt)
+	var orgID, salesOrgID, mfgOrgID *string
+	err := row.Scan(&p.ID, &p.Name, &p.CustomerID, &createdBy, &ownerID, &engineerID, &techStatus, &surveyCompletedAt, &installDate, &p.Currency, &p.MarginFactor, &p.LaborFixedCost, &p.Status, &commercialStatus, &notes, &kitchenLayout, &planEditSession, &installationChecklist, &nestingImport, &measureDefaults, &engineeringLog, &materialsRelease, &cutPlan, &designRevisions, &approvals, &productionRelease, &changeOrders, &partInstances, &moduleUnits, &installation, &materialPlanning, &quality, &costing, &siteSurvey, &orgID, &salesOrgID, &mfgOrgID, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
+	}
+	if orgID != nil {
+		p.OrganizationID = *orgID
+	}
+	if salesOrgID != nil {
+		p.SalesOrganizationID = *salesOrgID
+	}
+	if mfgOrgID != nil {
+		p.ManufacturingOrganizationID = *mfgOrgID
 	}
 	if createdBy != nil {
 		p.CreatedBy = *createdBy
@@ -941,6 +961,18 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 		techStatus = "pending_assignment"
 	}
 
+	salesOrg := p.SalesOrganizationID
+	if salesOrg == "" {
+		salesOrg = OrgFromCtx(ctx)
+	}
+	mfgOrg := p.ManufacturingOrganizationID
+	if mfgOrg == "" {
+		mfgOrg = OrgFromCtx(ctx)
+	}
+	p.SalesOrganizationID = salesOrg
+	p.ManufacturingOrganizationID = mfgOrg
+	p.OrganizationID = OrgFromCtx(ctx)
+
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -952,19 +984,19 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	// kept the one it minted, and later calls (calculate, update) 404'd.
 	if p.ID != "" {
 		query := `
-			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+			INSERT INTO projects (id, name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id, sales_organization_id, manufacturing_organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
 			RETURNING created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx)).
+		err = tx.QueryRow(ctx, query, p.ID, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx), salesOrg, mfgOrg).
 			Scan(&p.CreatedAt, &p.UpdatedAt)
 	} else {
 		query := `
-			INSERT INTO projects (name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+			INSERT INTO projects (name, customer_id, created_by, owner_user_id, assigned_engineer_id, technical_status, survey_completed_at, installation_scheduled_date, currency, margin_factor, labor_fixed_cost, status, commercial_status, notes, kitchen_layout, plan_edit_session, installation_checklist, nesting_import, measure_defaults, engineering_log, materials_release, cut_plan, design_revisions, approvals, production_release, change_orders, part_instances, module_units, organization_id, sales_organization_id, manufacturing_organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
 			RETURNING id, created_at, updated_at;
 		`
-		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx)).
+		err = tx.QueryRow(ctx, query, p.Name, p.CustomerID, createdBy, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.MaterialsRelease), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), OrgFromCtx(ctx), salesOrg, mfgOrg).
 			Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	}
 	if err != nil {
@@ -1017,7 +1049,7 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 	}
 
 	// Actualizar project updatedAt
-	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx))
+	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2)`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1032,12 +1064,12 @@ func (s *PostgresStore) RemoveProjectItem(ctx context.Context, projectID string,
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, `DELETE FROM project_items WHERE id = $1 AND project_id = $2 AND organization_id = $3`, itemID, projectID, OrgFromCtx(ctx))
+	_, err = tx.Exec(ctx, `DELETE FROM project_items WHERE id = $1 AND project_id = $2`, itemID, projectID)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`, projectID, OrgFromCtx(ctx))
+	_, err = tx.Exec(ctx, `UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2)`, projectID, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1064,15 +1096,24 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	if techStatus == "" {
 		techStatus = "pending_assignment"
 	}
+	salesOrg := p.SalesOrganizationID
+	if salesOrg == "" {
+		salesOrg = OrgFromCtx(ctx)
+	}
+	mfgOrg := p.ManufacturingOrganizationID
+	if mfgOrg == "" {
+		mfgOrg = OrgFromCtx(ctx)
+	}
 	query := `
 		UPDATE projects
 		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, commercial_status = $7, notes = $8,
 		    owner_user_id = $9, assigned_engineer_id = $10, technical_status = $11, survey_completed_at = $12, installation_scheduled_date = $13,
 		    kitchen_layout = $14, plan_edit_session = $15, installation_checklist = $16, nesting_import = $17, measure_defaults = $18, engineering_log = $19, cut_plan = $20,
-		    design_revisions = $21, approvals = $22, production_release = $23, change_orders = $24, part_instances = $25, module_units = $26, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $27 AND organization_id = $28;
+		    design_revisions = $21, approvals = $22, production_release = $23, change_orders = $24, part_instances = $25, module_units = $26,
+		    sales_organization_id = $27, manufacturing_organization_id = $28, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $29 AND (organization_id = $30 OR sales_organization_id = $30 OR manufacturing_organization_id = $30);
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id, OrgFromCtx(ctx))
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), salesOrg, mfgOrg, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1100,7 +1141,7 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	// Closed statuses freeze prices (quoted/accepted/produced — F036).
 	if engine.IsProjectClosed(p.Status) {
 		// Eliminar snapshot previo
-		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx)); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {
 			return fmt.Errorf("delete previous quote snapshot: %w", err)
 		}
 
@@ -1141,7 +1182,7 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 		}
 	} else {
 		// Si vuelve a borrador, eliminar snapshot (descongelar)
-		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx)); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM quote_snapshots WHERE project_id = $1`, id); err != nil {
 			return fmt.Errorf("delete quote snapshot: %w", err)
 		}
 	}
@@ -1150,7 +1191,7 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 }
 
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
-	query := `DELETE FROM projects WHERE id = $1 AND organization_id = $2;`
+	query := `DELETE FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2);`
 	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
@@ -1857,9 +1898,9 @@ func (s *PostgresStore) ListFloorEvents(ctx context.Context, projectID string) (
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note
 		FROM project_item_floor_events
-		WHERE project_id = $1 AND organization_id = $2
+		WHERE project_id = $1
 		ORDER BY at ASC, id ASC;
-	`, projectID, OrgFromCtx(ctx))
+	`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("error listing floor events: %w", err)
 	}
@@ -1951,9 +1992,9 @@ func (s *PostgresStore) ListProjectEvents(ctx context.Context, projectID string)
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, project_id, type, at, by_user_id, source, note, payload, created_at
 		FROM project_events
-		WHERE project_id = $1 AND organization_id = $2
+		WHERE project_id = $1
 		ORDER BY at ASC, id ASC;
-	`, projectID, OrgFromCtx(ctx))
+	`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("error listing project events: %w", err)
 	}

@@ -39,7 +39,7 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 	var planningRaw, productionReleaseRaw, materialsReleaseRaw []byte
 	err = tx.QueryRow(ctx, `
 		SELECT material_planning, production_release, materials_release
-		FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE;
+		FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
 	`, projectID, OrgFromCtx(ctx)).Scan(&planningRaw, &productionReleaseRaw, &materialsReleaseRaw)
 	if err != nil {
 		return nil, ErrMaterialPlanningProjectNotFound
@@ -167,7 +167,7 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 		SET material_planning = $2,
 		    materials_release = COALESCE($3, materials_release),
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND organization_id = $4;
+		WHERE id = $1 AND (organization_id = $4 OR sales_organization_id = $4 OR manufacturing_organization_id = $4);
 	`, projectID, jsonbStructArg(mutation.Planning), jsonbStructArg(mutation.MaterialsRelease), OrgFromCtx(ctx)); err != nil {
 		return nil, fmt.Errorf("error persisting material planning: %w", err)
 	}

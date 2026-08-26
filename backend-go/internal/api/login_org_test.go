@@ -75,8 +75,17 @@ func TestLogin_MultiMembershipRequiresSelection(t *testing.T) {
 	if !resp.SelectionRequired {
 		t.Fatal("multi-membership login must require selection")
 	}
-	if resp.Token != "" {
-		t.Fatal("no token before the organization is selected")
+	// The org-less token is issued ONLY to complete select-org; it must not
+	// carry any organization scope.
+	if resp.Token == "" {
+		t.Fatal("org-less token must be issued for the selection step")
+	}
+	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.OrgID != "" {
+		t.Fatalf("selection token must be org-less, got org %s", claims.OrgID)
 	}
 	if len(resp.Memberships) != 2 {
 		t.Fatalf("memberships = %d, want 2", len(resp.Memberships))

@@ -232,7 +232,9 @@ func TestAdminMiddleware(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{byID: map[string]*domain.User{
 		"u-1": {ID: "u-1", Email: "user@test.com", Role: domain.RoleUser, Active: true},
-		"a-1": {ID: "a-1", Email: "admin@test.com", Role: domain.RoleAdmin, Active: true},
+		// Org-less admin view is a platform-staff privilege (ADR-0005);
+		// regular admins act inside their organization.
+		"a-1": {ID: "a-1", Email: "admin@test.com", Role: domain.RoleAdmin, Active: true, PlatformAdmin: true},
 	}}
 	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

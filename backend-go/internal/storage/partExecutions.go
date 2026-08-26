@@ -40,7 +40,7 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 
 	var partsRaw, unitsRaw, qualityRaw []byte
 	err = tx.QueryRow(ctx, `
-		SELECT part_instances, module_units, quality FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE;
+		SELECT part_instances, module_units, quality FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2) FOR UPDATE;
 	`, projectID, OrgFromCtx(ctx)).Scan(&partsRaw, &unitsRaw, &qualityRaw)
 	if err != nil {
 		return nil, ErrPartExecutionsNotFound
@@ -65,8 +65,8 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	}
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, COALESCE(floor_status, 'pending'), COALESCE(quantity, 1) FROM project_items WHERE project_id = $1 AND organization_id = $2;
-	`, projectID, OrgFromCtx(ctx))
+		SELECT id, COALESCE(floor_status, 'pending'), COALESCE(quantity, 1) FROM project_items WHERE project_id = $1;
+	`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("error loading item floor statuses: %w", err)
 	}
@@ -94,7 +94,7 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 		SET part_instances = $2, module_units = $3,
 		    quality = COALESCE($4, quality),
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND organization_id = $5;
+		WHERE id = $1 AND (organization_id = $5 OR sales_organization_id = $5 OR manufacturing_organization_id = $5);
 	`, projectID, jsonbSliceArg(mutation.Parts), jsonbSliceArg(mutation.Units), jsonbStructArg(mutation.Quality), OrgFromCtx(ctx)); err != nil {
 		return nil, fmt.Errorf("error persisting part executions: %w", err)
 	}
@@ -104,9 +104,9 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 			continue
 		}
 		if _, err := tx.Exec(ctx, `
-			UPDATE project_items SET floor_status = $3 WHERE id = $1 AND project_id = $2 AND organization_id = $4;
-		`, itemID, projectID, status, OrgFromCtx(ctx)); err != nil {
-			return nil, fmt.Errorf("error persisting derived floor status for item %s: %w", itemID, err)
+			UPDATE project_items SET floor_status = $2 WHERE id = $1;
+		`, itemID, status); err != nil {
+			return nil, fmt.Errorf("error updating item floor status %s: %w", itemID, err)
 		}
 	}
 

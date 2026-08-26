@@ -376,15 +376,24 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if chosen == nil && len(memberships) > 1 {
-		// Multi-organization user without a hint: no token yet, the client
-		// must POST /api/auth/select-org with the chosen organization.
+		// Multi-organization user without a hint: an org-less token is issued
+		// ONLY to complete /api/auth/select-org (it carries no business scope
+		// — the middleware denies data access to org-less non-staff tokens).
+		orgless, err := auth.GenerateToken(u.ID, u.Email, auth.TokenContext{
+			PlatformAdmin: u.PlatformAdmin,
+		}, s.JWTSecret)
+		if err != nil {
+			respondWithInternalError(w, err, "login: generate orgless token")
+			return
+		}
 		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
 			"client": req.Client, "selection_required": true,
 		})
 		respondWithJSON(w, http.StatusOK, LoginResponse{
-			User:             ToPublicUserDTO(u),
-			License:          LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone},
-			Memberships:      toMembershipDTOs(memberships),
+			Token:             orgless,
+			User:              ToPublicUserDTO(u),
+			License:           LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone},
+			Memberships:       toMembershipDTOs(memberships),
 			SelectionRequired: true,
 		})
 		return
@@ -2103,4 +2112,42 @@ func claimsRolesUserRoles(claims *auth.Claims) []domain.UserRole {
 		out[i] = domain.UserRole(r)
 	}
 	return out
+}
+
+// HandleMe: GET /api/auth/me — current session snapshot for the shell:
+// user, active organization, roles and support-session context (banner).
+func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
+	if !ok || claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || u == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	resp := map[string]interface{}{
+		"user":           ToPublicUserDTO(u),
+		"roles":          claims.Roles,
+		"platform_admin": claims.PlatformAdmin,
+	}
+	if claims.OrgID != "" {
+		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
+			org := toOrgSummaryDTO(m.Organization)
+			resp["organization"] = org
+		}
+	}
+	if claims.Support != nil {
+		resp["support"] = map[string]interface{}{
+			"organization_id": claims.Support.OrgID,
+			"session_id":      claims.Support.SessionID,
+			"reason":          claims.Support.Reason,
+		}
+	}
+	respondWithJSON(w, http.StatusOK, resp)
 }
