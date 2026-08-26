@@ -34,6 +34,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   optionGroups: '/option-groups',
   settings: '/settings',
   users: '/users',
+  platform: '/platform',
 } as const;
 
 /**
@@ -46,7 +47,11 @@ export function navBlockedForSession(
   session: 'guest' | 'auth',
   roles: readonly (string | null | undefined)[] | string | null | undefined,
   navId: AppNavId,
+  isPlatformAdmin?: boolean,
 ): boolean {
+  if (navId === 'platform') {
+    return session !== 'auth' || !isPlatformAdmin;
+  }
   // Multi-role union (ADR-0005): accept a legacy single role too.
   const roleSet =
     typeof roles === 'string' ? [roles] : session === 'auth' ? (roles ?? []) : [];
@@ -58,6 +63,7 @@ export type EntitySection = Exclude<
   AppNavId,
   | 'home'
   | 'users'
+  | 'platform'
   | 'settings'
   | 'showcase'
   | 'plantBoard'

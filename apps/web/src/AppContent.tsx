@@ -350,6 +350,7 @@ import { SessionGate } from './SessionGate';
 import { ShellView } from './ShellView';
 import { ToastViewport } from './components/ToastViewport';
 import { BoardEditor } from './components/BoardEditor';
+import { SupportBanner } from './SupportBanner';
 
 
 function newId(): string {
@@ -612,13 +613,26 @@ export function AppContent({
   const showAdminUsers = session === 'auth' && isAdminRole(authUser?.role);
   const canAssignOwner = roleCanAssignOwner(authUser?.role);
   /** Guest (local) has full tool; auth uses product RBAC (F035). */
+  const supportInfo = useWorkspaceStore((st) => st.supportInfo);
+  const supportExiting = useWorkspaceStore((st) => st.supportExiting);
+  const exitSupport = useWorkspaceStore((st) => st.exitSupport);
+  const activeOrg = useWorkspaceStore((st) => st.activeOrg);
+  const hydrateSessionInfo = useWorkspaceStore((st) => st.hydrateSessionInfo);
+  useEffect(() => {
+    if (session === 'auth') void hydrateSessionInfo();
+  }, [session, hydrateSessionInfo]);
+  const enterSupportSession = useWorkspaceStore((st) => st.enterSupportSession);
+  const isPlatformAdmin = Boolean(authUser?.platform_admin);
   const actorRole = session === 'auth' ? authUser?.role : null;
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
-  const allowedNavIds = useMemo(
-    () => navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []),
-    [session, authUser],
-  );
+  const allowedNavIds = useMemo(() => {
+    const ids = new Set(navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []));
+    if (session === 'auth' && authUser?.platform_admin) {
+      ids.add('platform');
+    }
+    return ids;
+  }, [session, authUser]);
   // F094 — own station assignments (Mi Estación). Loaded for scoped
   // operator roles; null = unrestricted / local mode.
   const isSectorScoped = rolesAllScopedBySector(actorRoles);
@@ -919,7 +933,7 @@ export function AppContent({
     }
     const blocked =
       (session === 'auth' || session === 'guest') &&
-      navBlockedForSession(session, actorRoles, resolved);
+      navBlockedForSession(session, actorRoles, resolved, isPlatformAdmin);
     if (blocked) {
       toast({
         type: 'error',
@@ -930,7 +944,7 @@ export function AppContent({
       });
       navigate(pathForNav('home'), { replace: true });
     }
-  }, [location.pathname, navigate, session, actorRole, toast]);
+  }, [location.pathname, navigate, session, actorRole, toast, actorRoles, isPlatformAdmin]);
 
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
@@ -2983,7 +2997,21 @@ export function AppContent({
     warrantyTickets,
     workshopAnalytics,
     workshopSettings,
+    enterSupportSession,
+    isPlatformAdmin,
   };
 
-  return <ShellView ctx={shellViewCtx} />;
+  return (
+    <>
+      {supportInfo ? (
+        <SupportBanner
+          support={supportInfo}
+          organization={activeOrg}
+          exiting={supportExiting}
+          onExit={() => void exitSupport()}
+        />
+      ) : null}
+      <ShellView ctx={shellViewCtx} />
+    </>
+  );
 }

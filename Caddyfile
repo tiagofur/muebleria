@@ -1,0 +1,71 @@
+{
+    # Global options
+    admin off
+    persist_config off
+}
+
+{$DOMAIN:localhost} {
+    # Logging
+    log {
+        output stdout
+        format json
+    }
+
+    # Compression
+    encode gzip zstd
+
+    # Security Headers
+    header {
+        # HSTS (1 year, include subdomains)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        # Prevent clickjacking
+        X-Frame-Options "DENY"
+        # Referrer Policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Disable browser features not needed by Granete
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+        # Remove server header
+        -Server
+    }
+
+    # Reverse proxy API requests to Go backend
+    handle /api/* {
+        reverse_proxy backend:8080 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Reverse proxy uploaded media (materials/hardware photos) to Go backend
+    handle /media/* {
+        reverse_proxy backend:8080 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Static assets serving for React SPA
+    handle {
+        root * /srv
+
+        # Cache control for immutable hashed assets
+        @static {
+            path /assets/*
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        # Cache control for HTML entry points
+        @html {
+            path / /index.html
+        }
+        header @html Cache-Control "no-cache, no-store, must-revalidate"
+
+        # Single Page Application fallback
+        try_files {path} /index.html
+        file_server
+    }
+}

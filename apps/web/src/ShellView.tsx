@@ -149,6 +149,7 @@ import {
   RegisterScreen,
   SettingsScreen,
   UsersScreen,
+  PlatformScreen,
   Modal,
   OnboardingTourModal,
   UsabilityBenchmarkPanel,
@@ -593,6 +594,8 @@ export interface ShellViewCtx {
   readonly warrantyTickets: readonly WarrantyTicket[] | null;
   readonly workshopAnalytics: WorkshopAnalytics | undefined;
   readonly workshopSettings: WorkshopSettings;
+  readonly enterSupportSession?: (token: string, orgId: string) => Promise<void>;
+  readonly isPlatformAdmin?: boolean;
 }
 
 export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
@@ -855,6 +858,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     warrantyTickets,
     workshopAnalytics,
     workshopSettings,
+    enterSupportSession,
+    isPlatformAdmin,
   } = ctx;
   return (
 
@@ -1618,6 +1623,18 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
 
       {navId === 'users' && showAdminUsers && authToken ? (
         <UsersScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
+      ) : null}
+      {navId === 'platform' && isPlatformAdmin && authToken ? (
+        <PlatformScreen
+          baseUrl={DEFAULT_API_BASE}
+          token={authToken}
+          onSupportSessionStart={(token, orgId) => {
+            if (enterSupportSession) {
+              void enterSupportSession(token, orgId);
+            }
+            onNavigate('home');
+          }}
+        />
       ) : null}
       {navId === 'settings' ? (
         <SettingsScreen

@@ -27,11 +27,35 @@ export type AuthUser = {
   readonly active: boolean;
   /** Active membership roles (multi-role union, ADR-0005). */
   readonly roles?: readonly string[];
+  readonly platform_admin?: boolean;
+};
+
+export type OrgSummary = {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+};
+
+export type MembershipChoice = {
+  readonly organization_id: string;
+  readonly roles: readonly string[];
+  readonly organization: OrgSummary;
+};
+
+export type SupportInfo = {
+  readonly organization_id: string;
+  readonly session_id: string;
+  readonly reason: string;
 };
 
 export type LoginSuccess = {
   readonly token: string;
   readonly user: AuthUser;
+  readonly roles?: readonly string[];
+  readonly organization?: OrgSummary;
+  readonly memberships?: readonly MembershipChoice[];
+  readonly selectionRequired?: boolean;
+  readonly support?: boolean;
 };
 
 /**
@@ -142,6 +166,8 @@ export function readAuthUser(
       name: typeof parsed.name === 'string' ? parsed.name : '',
       role: parsed.role,
       active: parsed.active !== false,
+      ...(parsed.platform_admin === true ? { platform_admin: true } : {}),
+      ...(Array.isArray(parsed.roles) ? { roles: parsed.roles } : {}),
     };
   } catch {
     return null;
@@ -227,40 +253,7 @@ export async function loginRequest(
     );
   }
 
-  const data = (await res.json()) as {
-    token?: unknown;
-    user?: Partial<AuthUser>;
-    roles?: unknown;
-  };
-  if (typeof data.token !== 'string' || !data.token) {
-    throw new Error('Respuesta de login inválida');
-  }
-
-  const u = data.user;
-  if (
-    !u ||
-    typeof u.id !== 'string' ||
-    typeof u.email !== 'string' ||
-    typeof u.role !== 'string'
-  ) {
-    throw new Error('Respuesta de login inválida (usuario)');
-  }
-
-  const roles = Array.isArray(data.roles)
-    ? data.roles.filter((r): r is string => typeof r === 'string' && r !== '')
-    : undefined;
-
-  return {
-    token: data.token,
-    user: {
-      id: u.id,
-      email: u.email,
-      name: typeof u.name === 'string' ? u.name : '',
-      role: u.role,
-      active: u.active !== false,
-      ...(roles && roles.length > 0 ? { roles } : {}),
-    },
-  };
+  return parseAuthResponse(await res.json());
 }
 
 /**
@@ -322,4 +315,119 @@ function safeLocalStorage(): Storage | null {
     // ignore
   }
   return null;
+}
+
+/**
+ * POST {base}/auth/select-org — exchanges the org-less selection token for
+ * one scoped to the chosen organization (multi-membership users, ADR-0005).
+ */
+export async function selectOrgRequest(
+  token: string,
+  organizationId: string,
+  options: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+): Promise<LoginSuccess> {
+  const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  const res = await doFetch(`${baseUrl}/auth/select-org`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ organization_id: organizationId }),
+  });
+  if (!res.ok) {
+    throw new Error('No se pudo entrar al taller seleccionado');
+  }
+  return parseAuthResponse(await res.json());
+}
+
+/**
+ * GET {base}/auth/me — session snapshot for the shell (org, roles, support
+ * banner context).
+ */
+export async function meRequest(
+  token: string,
+  options: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+): Promise<{
+  user: AuthUser;
+  roles?: readonly string[];
+  organization?: OrgSummary;
+  support?: SupportInfo;
+}> {
+  const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  const res = await doFetch(`${baseUrl}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  } as RequestInit);
+  if (!res.ok) {
+    throw new Error('No se pudo verificar la sesión');
+  }
+  return (await res.json()) as {
+    user: AuthUser;
+    roles?: readonly string[];
+    organization?: OrgSummary;
+    support?: SupportInfo;
+  };
+}
+
+export function parseAuthResponse(data: unknown): LoginSuccess {
+  const d = data as {
+    token?: unknown;
+    user?: Partial<AuthUser> & { role?: unknown };
+    roles?: unknown;
+    organization?: unknown;
+    memberships?: unknown;
+    selection_required?: unknown;
+    support?: unknown;
+  };
+  if (typeof d.token !== 'string' || !d.token || !d.user || typeof d.user.role !== 'string') {
+    throw new Error('Respuesta de autenticación inválida');
+  }
+  const u = d.user;
+  const roles = Array.isArray(d.roles)
+    ? d.roles.filter((r): r is string => typeof r === 'string' && r !== '')
+    : undefined;
+  const org =
+    d.organization && typeof (d.organization as OrgSummary).id === 'string'
+      ? (d.organization as OrgSummary)
+      : undefined;
+  const memberships = Array.isArray(d.memberships)
+    ? (d.memberships as MembershipChoice[]).filter(
+        (m) => m && typeof m.organization_id === 'string' && m.organization,
+      )
+    : undefined;
+  return {
+    token: d.token,
+    user: {
+      id: String(u.id ?? ''),
+      email: String(u.email ?? ''),
+      name: typeof u.name === 'string' ? u.name : '',
+      role: String(u.role),
+      active: u.active !== false,
+      ...((u as { platform_admin?: unknown }).platform_admin === true ? { platform_admin: true } : {}),
+      ...(roles && roles.length > 0 ? { roles } : {}),
+    },
+    ...(org ? { organization: org } : {}),
+    ...(memberships && memberships.length > 0 ? { memberships } : {}),
+    ...(d.selection_required === true ? { selectionRequired: true } : {}),
+    ...(d.support === true ? { support: true } : {}),
+  };
+}
+
+/**
+ * DELETE {base}/platform/support-sessions/{id} — explicit support-session
+ * logout (banner "Salir del soporte").
+ */
+export async function endSupportRequest(
+  token: string,
+  sessionId: string,
+  options: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+): Promise<void> {
+  const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
+  const doFetch = options.fetchImpl ?? globalThis.fetch;
+  const res = await doFetch(`${baseUrl}/platform/support-sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error('No se pudo cerrar la sesión de soporte');
+  }
 }

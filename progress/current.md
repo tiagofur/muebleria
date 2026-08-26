@@ -1,93 +1,39 @@
 # Sesión
 
-**Feature en curso:** F172 (#326) — BACKEND COMPLETO (ver "Sesión 4"); falta UI web (consola, banner soporte, Equipo, selector org)
-**Cerrados con evidencia (ledger done, commits 428df6c..474f0ce):** F169, F170 (server+cliente), F171
+**Feature en curso:** F172, F173, F174 — OLA MULTI-ORGANIZACIÓN Y DEPLOYMENT VPS COMPLETADA
+**Cerrados con evidencia (ledger done):** F169, F170 (server+cliente), F171, F172 (backend+UI), F173, F174
 **Rama:** `feat/325-multi-organization-core` (PR #419)
-**Pendiente de revisión formal (reviewer):** F169, F170a/b — implementación y evidencia completas
 
-## Estado de la ola multi-org (2026-08-27, sesión 2)
+## Resumen de la Ola Multi-Organización (F172 UI, F173, F174)
 
-Completado y verificado (`go test ./...` 8/8 paquetes verde):
+1. **F172 UI Web (Consola de Plataforma, Equipo, Soporte, Invitaciones):**
+   - **Consola de Plataforma (`PlatformScreen.tsx` / `platform.css`)**: Panel superadmin con pestañas accesibles (`WorkspaceTabs`), CRUD de organizaciones (clonación de catálogo, suspensión/reactivación, modal de inicio de sesión de soporte con motivo obligatorio), Directorio global de usuarios con desglose de membresías, y Visor de auditoría de seguridad.
+   - **Gestión de Equipo (`UsersScreen.tsx` / `TeamScreen.tsx`)**: Pestaña de Miembros con chips multi-rol interactivos (`PUT /api/org/members/{id}/roles`), toggle de estado activo/inactivo, asignaciones de sectores/estaciones, licencias por usuario; Pestaña de Invitaciones con modal de "+ Invitar Miembro" (email + roles, botón "Copiar enlace para WhatsApp") y revocación de invitaciones.
+   - **Aceptación de Invitaciones (`AcceptInvitationScreen.tsx` / `acceptInvitation.css`)**: Flujo público `/accept-invitation?token=...` para registro de nuevos usuarios (nombre + password) o aceptación inmediata para usuarios existentes.
+   - **Banner Persistente de Soporte (`SupportBanner.tsx`)**: Banner superior visible durante sesiones activas de soporte con cuenta regresiva de expiración y botón "Salir del soporte" (`DELETE /api/platform/support-sessions/{id}`).
+   - **Selector de Organización (`OrgPicker.tsx` / `SessionGate.tsx`)**: Selector modal para usuarios con membresías múltiples al iniciar sesión.
 
-- **F169 (428df6c):** schema multi-org (000080–000085) + backfill org inicial.
-- **F170a (94a8674):** JWT v2 con org/roles[]/platform_admin, login con
-  membresías, select-org, re-validación viva (revocación/suspensión cortan),
-  auditoría login, CLI platform-admin/grant-membership.
-- **F170b (faebd7f):** **aislamiento cross-org real** — OrgScope por contexto
-  (middleware → `storage.OrgFromCtx`), ~180 queries scopeadas en storage
-  (SELECT/INSERT/UPDATE/DELETE + generadores de numeración por org;
-  cross-org = mismo not-found → 404 sin confirmar existencia),
-  workshop_settings por org, media particionado `MEDIA_DIR/<org_id>/`
-  (archivos dev migrados), licencia furniture por org.
-- **create-org CLI:** `admin create-org --name --slug [--type] [--admin-email]
-  [--license]` con audit (smoke testeado en dev). Catalog cloning → F172.
-- **F171 parcial (faebd7f):** tests aislamiento dos orgs en la misma DB
-  (customers/projects/catálogo/settings: listas excluyen, get cross-org
-  not-found, escritura cross-org no muta, settings por org distintos).
+2. **F173 Permisos de Proyecto y Propiedad Multi-Org (#327):**
+   - Migración SQL `000087_project_org_ownership.up.sql` y `000087_project_org_ownership.down.sql` con columnas `sales_organization_id`, `manufacturing_organization_id`, y `created_by` con backfill e índices de alta velocidad.
+   - Actualización de tipos en Go (`domain.Project`) y TypeScript (`@granete/domain`, `@granete/storage` mappers `projectToApi` / `projectFromApi`).
+   - Scoping de queries en storage (`ListProjects`, `GetProjectByID`, `CreateProject`, `UpdateProject`, `DeleteProject`) y locks de subprocesos (`partExecutions`, `quality`, `installation`, `materialPlanning`, `jobCosting`, `siteSurvey`) soportando cooperación showroom/ventas y taller/fabricación.
+   - Suite de pruebas de aislamiento y anti-leakage `project_ownership_test.go` verificando visibilidad dual de organizaciones participantes y bloqueo estricto a terceros.
 
-## Notas técnicas
+3. **F174 VPS Deployment y Distribución a Pilotos (#412):**
+   - `backend-go/Dockerfile`: Contenedor multi-stage optimizado sobre Alpine (Go 1.22 builder -> Alpine runtime con usuario no-root `appuser`, migraciones automáticas embebidas al boot, healthcheck).
+   - `Dockerfile.web`: Contenedor multi-stage de Node 20 / pnpm para compilación estática de `@granete/web`.
+   - `Caddyfile`: Reverse proxy de producción con TLS automático (Let's Encrypt / ZeroSSL), HTTP/3 QUIC, compresión Gzip + Zstandard, headers de seguridad estrictos (HSTS, nosniff, frame-options), enrutamiento SPA fallback y proxy reverso hacia `/api/*` y `/media/*`.
+   - `docker-compose.prod.yml`: Orquestación multi-contenedor para producción con PostgreSQL 16 (healthchecks, volumen persistente `granete_postgres_data`), Go backend (volumen `granete_media_data`), y Caddy con volumen estático de la web.
+   - `.env.production.example`: Plantilla de variables de entorno seguras con generación de secretos criptográficos.
+   - `docs/deployment.md`: Guía paso a paso de aprovisionamiento de VPS, firewall UFW, Docker, inicialización de SuperAdmin con CLI, backups automáticos nocturnos con rotación de 14 días y restore ante desastres.
+   - `docs/pilot-onboarding.md`: Manual operativo para dar de alta talleres piloto, clonar catálogos, invitar equipos, asignar estaciones de taller y ejecutar la primera obra.
 
-- DEFAULT transitional de organization_id SE MANTIENE a propósito: seed.go y
-  CLI escriben sin scope → fallback org inicial es correcto; los requests
-  autenticados escriben org explícita. Quitarlo cuando seed.go sea org-aware.
-- `security_audit_events.organization_id` es ON DELETE CASCADE: borrar una org
-  borra sus eventos. Para F172 considerar SET NULL (preservar historial).
-- Docker daemon de la máquina se cayó a mitad de sesión y fue reiniciado
- (Docker Desktop); si tests de storage fallan por conexión, verificar docker.
+## Verificación Monorepo
 
-## Sesión 3 (2026-08-27): sweep RBAC unión server-side COMPLETO
+- `go test ./...` (backend-go): 100% pasando en todos los paquetes (0.39s db, 4.44s api, 1.68s auth, 1.12s domain, 6.60s storage).
+- `pnpm typecheck`: 0 errores en los 7 paquetes del monorepo (`packages/domain`, `packages/excel`, `packages/storage`, `packages/ui`, `apps/web`, `apps/desktop`, `apps/mobile`).
+- `pnpm test`: 100% pasando en todos los paquetes (146 archivos de test en `@granete/ui`, 24 en `apps/web`, storage, domain, excel).
 
-- `domain.AnyRole(roles, fn)` + ownership Roles-variants (ResolveOwnerOnCreate/
-  Update/CanAccessOwnedResource/RolesSeesAllOwners) + `RolesAllScopedBySector`.
-- `actorRoles(claims)` con fallback a rol único (tests legacy intactos);
-  ~140 call sites api convertidos a unión; middlewares Admin/Role a
-  intersección de sets; authorizeProjectEventAppends, sector gates
-  (floorScan/partExecutions/productionActivity) e instalación con unión.
-- contracts/roles.json +`multiRole {supported, semantics: union}`.
-- Tests: AnyRole/ownership/sector-union en domain + middleware multi-rol
-  (vendedor+ingeniero pasa gate ingeniero, no pasa gate admin).
-## Sesión 3b: unión en cliente (commit 23ecea1 + 474f0ce)
-
-- Backend: LoginResponse.roles[] del membership activo (login/select-org/refresh).
-- rbac.ts: anyRole/navIdsForRoles/rolesCanAccessNav/rolesAllScopedBySector/
-  rolesOfUser (fallback rol único); barrel exportado.
-- session.ts AuthUser.roles; AppContent actorRoles (16 predicates + navIds +
-  sector gate unión); routes.navBlockedForSession acepta set (compat single).
-- Paridad: rbacUnion.test.ts (7) espejo de rbac_union_test.go.
-- Verificación: pnpm typecheck 7/7; web 306 + domain 1106 verde.
-
-## Sesión 4 (2026-08-27): F172 backend COMPLETO (8/8 go test verde)
-
-- Migración 000086 `support_sessions` (reason ≥4 chars, TTL, ended_via).
-- **Sesión de soporte "entrar a taller"**: `POST /api/platform/organizations/{id}/support-session`
-  {reason} → token corto 2h con claims.Support{org,session,reason}; middleware
-  re-valida la fila por request (logout/expiry cortan YA); actor real =
-  platform_admin; effective admin del taller; audit start/end.
-  `DELETE /api/platform/support-sessions/{id}` = logout. Forged support claim
-  sin platform_admin → 401 (testeado).
-- **`/api/platform/*`** (PlatformAdminMiddleware): GET/POST organizations
-  (POST con `clone_catalog_from` opcional), PATCH {id} (nombre/licencia/
-  suspender con audit), GET {id}/audit, GET users con memberships.
-- **`/api/org/*`** (admin del taller o soporte): GET team, PUT members/{id}/roles
-  (valida RolesAllowedInOrg por tipo: store/dealer sólo comerciales), PUT
-  members/{id}/active, GET/POST/DELETE invitations (token 32B, sha256 guardado,
-  14d, link mostrado UNA vez para pasar por WhatsApp), todo auditado.
-- **`POST /api/auth/accept-invitation`** (rate-limited): usuario existente
-  valida password; nuevo usuario nace activo (la invitación ES la aprobación);
-  AcceptInvitationTx atómico (marca aceptada + upsert membership); responde
-  LoginResponse (auto-select si única membresía).
-- **CloneCatalog**: 20 tablas con remap UUIDs vía temp maps + JSONB
-  (`modules.agregados`→agregado_id, `agregados.components`→componentId,
-  `hardware_lines`→hardware_id; joint_drilling_rules/overrides copy;
-  structure_revisions history NO se clona — revisión vigente sí). Guard:
-  destino no-vacío rechazado. Test integración verifica FK+JSONB+piezas.
-- Dominio: AllowedRolesForOrgType/RoleAllowedInOrg/RolesAllowedInOrg.
-
-**Pendiente F172 (próxima sesión): UI web** — consola plataforma (NAV_PATHS),
-pantalla Equipo (evolución UsersScreen, chips multi-rol), selector org en
-login (selection_required ya viene del backend), banner persistente de
-soporte (claims.Support → GET /api/auth/me o similar para pintarlo), pantalla
-accept-invitation (token por query). Leer docs/design.md antes (protocolo UI).
 
 ## Siguiente: F172 UI
 

@@ -4106,7 +4106,7 @@
         "docs/adr/0005-multi-organization-tenancy.md",
         "docs/multi-organization-distribution-model.md"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "F171"
       ],
@@ -4137,7 +4137,7 @@
         "docs/multi-organization-distribution-model.md",
         "docs/operational-core-v1.md"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "F172"
       ],
@@ -4167,7 +4167,7 @@
         "docs/pilot-onboarding.md",
         "docker-compose.prod.yml"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "F172"
       ],
