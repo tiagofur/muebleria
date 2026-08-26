@@ -23,6 +23,26 @@
 | Privadas/internas | prefijo `_` | `_atomicWrite` |
 | IDs de entidad | UUID v4 (string) como ID primario; 'code' legible para negocio | id: `"123e4567-e89b-12d3-a456-426614174000"`, code: `"MOD-GAB-01"` |
 
+## Identificadores técnicos legacy (#366)
+
+El rename de marca Muebles → Granete (#366) cambió branding, claves de storage
+(con migración) y el scope de paquetes (`@granete/*`). Los siguientes
+identificadores **quedan como técnicos a propósito** — renombrarlos rompe
+consumidores o datos existentes sin beneficio real:
+
+| Identificador | Dónde | Por qué queda |
+|---|---|---|
+| `github.com/tiagofur/muebles-backend` | `backend-go/go.mod` + imports | Module path interno; cambiarlo toca 114 archivos sin efecto para usuarios |
+| DB `muebles` + container `muebles-postgres` | `docker-compose.yml`, DSN default en `config.go` | Renombrar la DB exige recrear volúmenes locales de dev |
+| `~/.muebles-media` | default `MEDIA_DIR` (`config.go`, `cmd/admin`) | Directorio local existente con catálogo de imágenes |
+| scheme QR `muebles://` (`PIECE_LABEL_QR_SCHEME`) | `packages/domain/pieceLabelQr.ts`, `apps/mobile/app.json` | Formato impreso en etiquetas físicas (F091): compatibilidad eterna con QRs ya impresos |
+| schema `muebles.drilling-data.v1` | production pack ZIP (`exportProductionPack.ts`) | Ya consumido por descargas; schemas nuevas nacen `granete.*` (F168) |
+| repo/remote `tiagofur/muebleria` | git remote, URLs en docs, publish de electron-updater | Rename del repo requiere coordinación de CI/links (#366: fuera de alcance) |
+
+Regla para lo nuevo: identificadores y schemas que nazcan hoy usan `granete.*`
+(p. ej. capabilities `granete.drilling`, `granete.panel-geometry`; claves
+`granete_*`). Los `muebles_*` de arriba no se renombran ni se "corrigen".
+
 ## Tamaño de archivos y partición (harness / tokens)
 
 Pantallas y módulos grandes **se parten** para no quemar contexto del agente ni

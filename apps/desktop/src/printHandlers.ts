@@ -41,7 +41,7 @@ export function createPrintRawHandler(deps: PrintRawDeps) {
     }
     try {
       if (deps.platform === 'win32') {
-        const dir = await deps.mkdtemp('muebles-zpl-');
+        const dir = await deps.mkdtemp('granete-zpl-');
         const file = `${dir}/labels.zpl`;
         await deps.writeFile(file, payload);
         try {

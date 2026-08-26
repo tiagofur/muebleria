@@ -5,7 +5,7 @@ function deps(overrides: Partial<PrintRawDeps> = {}): PrintRawDeps {
   return {
     platform: 'darwin',
     execFile: vi.fn(async () => ({ stdout: 'request id is lp-42', stderr: '' })),
-    mkdtemp: vi.fn(async () => '/tmp/muebles-zpl-xxx'),
+    mkdtemp: vi.fn(async () => '/tmp/granete-zpl-xxx'),
     writeFile: vi.fn(async () => undefined),
     unlink: vi.fn(async () => undefined),
     ...overrides,
@@ -42,7 +42,7 @@ describe('createPrintRawHandler', () => {
       {},
     );
     expect(unlink).toHaveBeenCalled();
-    expect(rmdir).toHaveBeenCalledWith('/tmp/muebles-zpl-xxx');
+    expect(rmdir).toHaveBeenCalledWith('/tmp/granete-zpl-xxx');
   });
 
   it('rejects an empty printer name or payload without spawning', async () => {
