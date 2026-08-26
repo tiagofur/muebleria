@@ -1,276 +1,784 @@
-# Resolución de muebles consciente del material
+# Material-Aware Furniture Resolution
 
-> **Estado:** CANÓNICO
-> **Fecha:** 2026-08-26
-> **Ámbito:** Engineering, Design / Proyectar 3D, backend Go y Granete for SketchUp
-> **Programa:** [#401](https://github.com/tiagofur/muebleria/issues/401)
-> **Entrega documental:** [#409](https://github.com/tiagofur/muebleria/issues/409)
-> **Slices:** [#402](https://github.com/tiagofur/muebleria/issues/402) · [#403](https://github.com/tiagofur/muebleria/issues/403) · [#404](https://github.com/tiagofur/muebleria/issues/404) · [#405](https://github.com/tiagofur/muebleria/issues/405)
+> **Estado:** CANONICAL  
+> **Fecha:** 2026-08-26  
+> **Bounded Contexts:** Engineering, Catalog & Libraries, Design / Proyectar 3D, SketchUp Integration, Manufacturing  
+> **Programa:** #401 · issues #402–#405  
+> **Documentos relacionados:** `smart-furniture-engine.md`, `parametric-furniture-library.md`, `domain-model.md`, `catalog-option-selector.md`, `sketchup-interaction-model.md`, `docs/sketchup-manufacturing-contract.md`, ADR-0001 y ADR-0002.  
+> **Invariante central:** **para toda pieza de tablero respaldada por un `MaterialBoard` seleccionado, el espesor efectivo del material participa en la resolución paramétrica antes de calcular dimensiones, posiciones, poses, anchors o geometría 3D.**
 
-## Decisión
+---
 
-Para toda pieza de tablero con un `MaterialBoard` seleccionado, el espesor efectivo
-`T` es `MaterialBoard.thicknessMm`. Esa decisión ocurre **antes** de cualquier fórmula
-de tamaño o posición. El espesor nominal del componente sólo puede usarse cuando no
-existe un binding de material aplicable; nunca puede ganar sobre una elección válida.
+## 1. Propósito
 
-```text
-OptionChoices efectivos
-  -> material-binding role del componente
-  -> MaterialBoard activo seleccionado
-  -> effective T
-  -> fórmulas geométricas
-  -> fórmulas espaciales y pose
-  -> anchors y AABB
-  -> DTO resuelto
-  -> render/adaptador
-```
-
-Cambiar un acabado no significa repintar una caja existente. Significa cambiar la
-intención del rol, volver a resolver el mueble completo y reconstruir atómicamente
-todos y sólo los componentes que dependen de ese rol.
-
-## Invariantes no negociables
-
-1. Granete resuelve la verdad geométrica y de manufactura; Ruby, React y otros
-   clientes sólo capturan intención o renderizan DTOs resueltos.
-2. Una elección válida de `MaterialBoard` determina `T`, la dimensión local de
-   espesor y toda fórmula que consuma `T` o `H` como espesor de pieza.
-3. El mismo `T` alimenta geometría, pose por defecto, fórmulas espaciales, anchors de
-   herrajes, AABB y el DTO final. No se permite corregir sólo `ThicknessMm` al final.
-4. La dimensión exterior solicitada del mueble permanece estable salvo una fórmula
-   explícita; cambian las cotas internas y dependientes.
-5. La dependencia de acabado se expresa por un material-binding role, no por nombre
-   de componente, placement, color, textura, fabricante ni material actualmente
-   pintado.
-6. Estructura, componentes propios del módulo y componentes dentro de agregados usan
-   exactamente el mismo contrato.
-7. Un error de resolución ocurre antes de mutar un modelo cliente. Un error durante
-   el rebuild aborta la única operación y restaura el estado anterior.
-8. Toda regla duplicada entre TypeScript y Go necesita fixture de contrato; la
-   inspección manual no demuestra paridad.
-
-## Binding semántico de material
-
-### Placement no es material-binding role
-
-`placement` responde **qué pieza es y dónde se ubica**. El material-binding role
-responde **qué elección de tablero sigue**.
+Este documento define el contrato canónico que conecta:
 
 ```text
-left_side, right_side, base, top, shelf  -> BODY
-normal_door, drawer_front                -> FRONT
-back_panel                               -> BACK
-plinth_board                             -> PLINTH o ZOCLO legado
+Material choice
+  -> material binding role
+  -> MaterialBoard
+  -> effective thickness
+  -> formulas / spatial resolution
+  -> resolved board
+  -> hardware/features anchored to that board
+  -> SketchUp/Web visualization
+  -> BOM/manufacturing truth
 ```
 
-Los códigos recomendados (`BODY`, `FRONT`, `BACK`, `PLINTH`) son convenciones, no un
-enum cerrado. Cada taller puede definir roles adicionales mediante `OptionGroup`; la
-etiqueta visible proviene de `OptionGroup.name`.
+El objetivo es evitar que Granete represente un mismo mueble con verdades físicas distintas según el cliente que lo consume.
 
-### Contrato transitorio de `optionRoles`
+El caso que originó este contrato fue directo: un mueble configurado con un tablero blanco de **16 mm** podía aparecer en SketchUp con componentes de cuerpo de **15 mm** y frentes de **18 mm**, porque el layout Go utilizaba el espesor nominal del `Component` para generar geometría y resolvía el material seleccionado sólo después, principalmente para color/textura/metadata.
 
-La persistencia actual conserva `Component.optionRoles` como array, pero los motores
-TypeScript y Go sólo consumen `optionRoles[0]`, mientras la UI y varias validaciones
-recorren todos sus elementos. Para no fingir una semántica que hoy no existe:
+Ese comportamiento es incorrecto.
 
-- `optionRoles[0]` es el **único material-binding role primario** del componente;
-- un componente de tablero nuevo debe declarar como máximo un role de grupo
-  `kind="board"`, ubicado en `[0]`;
-- un segundo role de tablero es una configuración ambigua: el editor debe impedir
-  crearla y la validación debe alertarla o hacer fallar el flujo autoritativo;
-- catálogos legados con múltiples roles se diagnostican de forma explícita; no se
-  migran ni se reinterpretan automáticamente;
-- los roles adicionales no se consideran bindings de material hasta que una evolución
-  de dominio defina precedencia, composición y compatibilidad multi-role.
+Un acabado de tablero no es únicamente una textura. En una plataforma que conecta diseño y manufactura, `MaterialBoard` contiene propiedades físicas que pueden alterar la geometría resultante. El espesor es una de ellas.
 
-Esta restricción no cambia el formato persistido en este programa. [#403](https://github.com/tiagofur/muebleria/issues/403)
-debe alinear authoring, validación, proyección y motores con esta semántica.
+---
 
-### Lookup directo y aliases
+## 2. Autoridad y boundary
 
-El lookup canónico aplica esta precedencia:
+Se mantiene el principio del Smart Furniture Engine:
 
-1. elección directa para el role persistido;
-2. si no existe, un alias legado permitido;
-3. si tampoco existe, no hay elección aplicable.
+> **SketchUp owns authoring and interaction. Granete owns manufacturing truth.**
 
-| Role persistido | Fallback de elección | Regla |
-|---|---|---|
-| `ZOCLO` | `FRENTE` | sólo cuando no existe elección directa de `ZOCLO` |
-| `PUERTA` | `FRENTE` | sólo cuando no existe elección directa de `PUERTA` |
-| `PUERTA_*` | `FRENTE` | aplica a cualquier código con ese prefijo |
-| `FRENTE_CAJON` | `FRENTE` | sólo cuando no existe elección directa |
-| cualquier otro | ninguno | el código custom se conserva sin inferencias |
+Por lo tanto:
 
-El alias resuelve una elección; no reescribe el role persistido ni une componentes por
-apariencia. TypeScript ya implementa estas reglas en `resolveBoardOptionChoiceId`; Go
-hace lookup directo y está en drift. [#403](https://github.com/tiagofur/muebleria/issues/403)
-debe centralizar o replicar el contrato con pruebas de paridad.
+- SketchUp puede permitir seleccionar un acabado;
+- SketchUp puede mostrar textura, color, veta y ficha del material;
+- SketchUp puede solicitar una actualización del mueble;
+- SketchUp **no** decide el espesor industrial de las piezas;
+- Ruby **no** debe corregir localmente una pieza de 15/18 mm mediante `pushpull`, scaling o una lectura paralela del catálogo;
+- Granete resuelve el material, el espesor efectivo, las fórmulas y la composición;
+- los clientes dibujan el resultado resuelto.
 
-## Resolución paso a paso
+El mismo contrato debe gobernar TypeScript, Go, Web 3D, SketchUp y futuras integraciones.
 
-### 1. Configuración efectiva
+---
 
-Combinar defaults de proyecto y overrides del mueble mediante
-`effectiveOptionChoices()`. Un override explícito gana; eliminar la clave vuelve a
-heredar. Mientras el binding Project/Design no sea durable, un default de “toda la
-obra” en SketchUp es sólo intención de sesión, no verdad persistida.
+## 3. Terminología canónica
 
-### 2. Role y material
+### 3.1 Espesor nominal del componente
 
-Leer exclusivamente el material-binding role primario. Resolver elección directa y,
-si corresponde, alias. La elección debe apuntar a un `MaterialBoard` existente, activo
-y con `thicknessMm > 0`.
+Una definición de componente rectangular puede contener un espesor de autoría, por ejemplo:
 
-### 3. Espesor efectivo
+```text
+Component: Left Side
+geometry.thicknessMm = 18
+```
+
+Ese valor describe el espesor por defecto con el que el componente fue definido y permite preview/fallback cuando todavía no existe una elección de tablero.
+
+No es necesariamente el espesor final de una pieza de proyecto.
+
+### 3.2 Material seleccionado
+
+Una `OptionChoice` de tipo board resuelve un `MaterialBoard` concreto:
+
+```text
+BODY -> mat-arauco-white-16
+```
+
+El `MaterialBoard` contiene, entre otros datos:
+
+```text
+id
+code
+name
+thicknessMm
+manufacturer
+categoryId
+grainDefault
+preview / texture metadata
+```
+
+### 3.3 Espesor efectivo
+
+**Effective thickness** es el espesor utilizado para resolver la pieza concreta.
+
+Para componentes rectangulares respaldados por un `MaterialBoard`:
 
 ```text
 selected active MaterialBoard.thicknessMm
-  > nominal component thickness, sólo sin binding aplicable
-  > fallback legado explícito, sólo para preview no autoritativo
+  > component nominal/default thickness
+  > explicit legacy fallback only when no material binding can be resolved
 ```
 
-Si existe un binding de tablero pero falta una elección requerida, el flujo
-autoritativo falla; no degrada silenciosamente al espesor nominal. Una elección
-presente pero desconocida, inactiva o dimensionalmente inválida también falla.
-
-### 4. Geometría y espacio
-
-Con `T` resuelto, evaluar en este orden:
-
-1. fórmulas de largo/ancho con dimensiones padre y `T`;
-2. dimensiones locales de la pieza;
-3. fórmulas espaciales y pose por defecto con ese mismo `T`;
-4. rotación;
-5. anchors de herrajes sobre la geometría final;
-6. AABB y `translationMm`;
-7. `LayoutComponent`/BOM/DTO.
-
-`ThicknessMm` del DTO y el eje de espesor en `DimensionsMm` deben representar el mismo
-valor que participó en las fórmulas. Resolver el material después de AABB es demasiado
-tarde.
-
-## Propagación de cambios de acabado
-
-Una elección se propaga por dependencia semántica, no por búsqueda visual:
+Si el material elegido mide 16 mm y el componente nominal fue creado con 18 mm:
 
 ```text
-change OptionChoices[FRONT]
-  -> recompute effective choices
-  -> resolve the full furniture definition
-  -> every normal/agregado component whose binding depends on FRONT
-  -> new T, geometry, pose, anchors, AABB and material metadata
-  -> atomic rebuild
+nominalThickness = 18
+materialThickness = 16
+effectiveThickness = 16
 ```
 
-La elección directa conserva precedencia sobre el alias. Por ejemplo, un componente
-`PUERTA` con elección directa propia no depende de `FRENTE`; sin elección directa,
-`PUERTA` sí depende del fallback `FRENTE`.
+### 3.4 Physical/semantic role
 
-El resolver puede recalcular el mueble completo —es la opción segura actual— aunque el
-conjunto semánticamente afectado sea menor. No se admite un parche “paint-only” ni
-actualizar sólo la primera pieza encontrada.
+Responde qué es la pieza y cómo participa en el mueble:
 
-## Rebuild atómico en SketchUp
+```text
+left_side
+right_side
+base
+top
+shelf
+door
+drawer_front
+back_panel
+```
 
-El cliente solicita y valida un layout completo **antes** de tocar entidades. En una
-actualización exitosa:
+Actualmente esa semántica aparece principalmente en `placement`, slots y metadata de componente.
 
-1. conserva `instanceRef` y el transform exterior del grupo del mueble;
-2. inicia una sola operación de SketchUp;
-3. reemplaza los hijos administrados con `components[]` y `hardware[]` del DTO;
-4. escribe metadata de intención únicamente para el estado reconstruido;
-5. confirma la operación.
+### 3.5 Material binding role
 
-Si la resolución remota falla, el builder no se ejecuta. Si el render o la escritura de
-metadata falla después de iniciar la operación, se aborta y debe restaurarse la
-geometría/metadata anterior. Los IDs locales de hijos pueden cambiar; la identidad del
-mueble y su posición exterior no.
+Responde **qué selección de material sigue esa pieza**.
 
-El flujo actual ya resuelve antes de llamar al builder y usa una operación para
-`clear! + rebuild`, pero [#404](https://github.com/tiagofur/muebleria/issues/404) debe
-demostrar rollback real, propagación uno-a-muchos, anchors e identidad mediante tests.
+El contrato actual ya dispone de ese identificador mediante `optionRole` / código de `OptionGroup`.
 
-## Fallbacks, offline y errores
+Ejemplos de convenciones comunes:
 
-| Situación | Resultado autoritativo | Preview/fallback permitido |
+```text
+BODY
+FRONT
+BACK
+PLINTH
+```
+
+Granete sigue siendo abierto: esos códigos no deben convertirse en un enum global rígido de cocinas. Un taller o una familia de muebles puede definir roles adicionales cuando existe una necesidad real.
+
+---
+
+## 4. Physical role y material role son ortogonales
+
+No deben confundirse.
+
+Ejemplo correcto:
+
+| Componente físico | Placement / función | Material binding (`optionRole`) |
 |---|---|---|
-| binding y material activo seleccionado | usar `MaterialBoard.thicknessMm` | mismo resultado |
-| sin binding de tablero aplicable | usar espesor nominal documentado | permitido |
-| binding requerido sin elección efectiva | error accionable | sólo representación marcada no autoritativa |
-| material seleccionado desconocido | error; no DTO parcial | ninguno silencioso |
-| material seleccionado inactivo | error; no DTO parcial | ninguno silencioso |
-| `thicknessMm <= 0` | error de catálogo | ninguno silencioso |
-| múltiples board roles | error/diagnóstico de authoring | no elegir uno silenciosamente |
-| catálogo remoto no disponible | no hay manufacturing truth nueva | geometría genérica/local explícitamente no autoritativa |
+| Lateral izquierdo | `left_side` | `BODY` |
+| Lateral derecho | `right_side` | `BODY` |
+| Piso | `base` | `BODY` |
+| Techo | `top` | `BODY` |
+| Entrepaño | `shelf` | `BODY` |
+| Puerta | `door` | `FRONT` |
+| Frente de cajón | `drawer_front` | `FRONT` |
+| Fondo | `back_panel` | `BACK` |
 
-Un layout offline o genérico sirve para continuidad de autoría, no para BOM, cotización,
-release, CNC ni prueba de paridad. Debe conservar su provenance y nunca reemplazar en
-silencio un error del catálogo remoto.
-
-## Estado actual y deuda conocida
-
-| Capa | Estado actual | Brecha contra este contrato | Issue |
-|---|---|---|---|
-| TypeScript BOM (`packages/domain/src/engine/bom.ts`) | resuelve material elegido y `T` antes de fórmulas/pose; usa `optionRoles[0]`; soporta aliases | falta formalizar la unicidad del binding y mantener paridad ejecutable | [#403](https://github.com/tiagofur/muebleria/issues/403), [#405](https://github.com/tiagofur/muebleria/issues/405) |
-| Go BOM (`backend-go/internal/domain/engine/resolve.go`) | expande con `Component.ThicknessMm`; usa `[0]` | el defecto también existe aquí, no sólo en layout | [#402](https://github.com/tiagofur/muebleria/issues/402) |
-| Go layout (`backend-go/internal/domain/engine/layout.go`) | calcula fórmulas, pose y AABB con espesor nominal; adjunta material después; lookup directo | debe resolver material/aliases antes de geometría y usar un solo `T` | [#402](https://github.com/tiagofur/muebleria/issues/402), [#403](https://github.com/tiagofur/muebleria/issues/403) |
-| Ruby SketchUp | consume `dimensionsMm`, recorre todos los componentes y hace `clear! + rebuild` dentro de una operación | debe probar rollback, preservación de identidad y propagación completa; nunca calcular `T` localmente | [#404](https://github.com/tiagofur/muebleria/issues/404) |
-
-Por lo tanto, “Go refleja la semántica TS” es una meta contractual, no una afirmación
-válida sobre los bytes actuales hasta cerrar las regresiones.
-
-## Matriz de verificación
-
-El fixture de [#405](https://github.com/tiagofur/muebleria/issues/405) debe usar espesores
-nominales deliberadamente distintos de los materiales seleccionados e incluir estructura,
-módulo, agregado y herraje anclado.
-
-| Invariante | TypeScript | Go BOM | Go layout/API | Ruby/SketchUp |
-|---|---|---|---|---|
-| material 16 gana a nominal 15/18 | unit/contract | unit | unit + endpoint | consume 16 sin reescribir |
-| `PW - 2*T` usa `T=16` | fórmula | fórmula | fórmula | compara DTO construido |
-| pose `PW - T` y AABB usan el mismo `T` | spatial fixture | semántica equivalente | pose + AABB | transform/dimensiones |
-| `BODY=16`, `FRONT=18`, `BACK=6` quedan aislados | role fixture | role fixture | role fixture | grupos/materiales |
-| puerta y frentes de cajón agregado siguen `FRONT` | alias/binding | binding | binding | rebuild de todos |
-| unknown/inactive falla cerrado | error | error | HTTP/engine error | modelo previo intacto |
-| cambio 18→16 conserva identidad/transform exterior | n/a | n/a | DTO completo | update + undo/rollback |
-| aliases directos y fallback coinciden | resolver | parity | parity | elección reenviada |
-| múltiples board roles no pasan silenciosos | validation | validation | validation | bloqueo mostrado |
-
-La prueba debe fallar contra el comportamiento Go previo donde
-`Component.ThicknessMm` gana. Usar materiales y componentes todos a 18 mm no demuestra
-este contrato.
-
-## Fuera de alcance
-
-- implementar el cambio completo de motor en este documento;
-- calcular espesor, fórmulas, anchors o BOM en Ruby/React;
-- agregar un campo `materialRole` paralelo sin demostrar una incompatibilidad real;
-- migrar automáticamente roles históricos ambiguos;
-- inferir bindings por placement, nombre, color o textura;
-- implementar persistencia “toda la obra” antes del Digital Thread de [#384](https://github.com/tiagofur/muebleria/issues/384);
-- optimizar con parches diferenciales de geometría antes de probar el rebuild completo;
-- ampliar aliases fuera de la tabla sin decisión y fixture explícitos.
-
-## Plan y dependencias
+Esto permite al usuario pensar:
 
 ```text
-Contrato documental (#409, tracks #401)
-  -> #402 effective T en Go BOM + layout
-  -> #403 binding único, aliases y validación
-#402 + #403
-  -> #404 re-resolve y rebuild atómico en SketchUp
-#402 + #403 + #404
-  -> #405 fixture/regresión TS <-> Go <-> SketchUp
+Cuerpo  -> Blanco 16 mm
+Frentes -> Roble 18 mm
+Fondo   -> Blanco 6 mm
 ```
 
-Documentos relacionados:
+sin perder la identidad constructiva individual de cada componente.
 
-- [Smart Furniture Engine](smart-furniture-engine.md)
-- [Modelo de Interacción SketchUp](sketchup-interaction-model.md)
-- [Selector de Opciones de Catálogo](catalog-option-selector.md)
-- [Biblioteca Paramétrica Universal](parametric-furniture-library.md)
-- [Modelo de Dominio](domain-model.md)
-- [SketchUp Manufacturing Contract](../sketchup-manufacturing-contract.md)
+### Regla
+
+Nunca agrupar dependencias mediante:
+
+- nombre del componente;
+- nombre comercial del material;
+- color HEX;
+- textura;
+- fabricante;
+- coincidencia visual actual.
+
+La dependencia es explícita mediante el material binding role.
+
+---
+
+## 5. No crear un segundo campo sólo para renombrar `optionRole`
+
+Mientras el modelo actual pueda expresar correctamente la relación, `optionRole` es la clave persistida del material binding.
+
+No se debe introducir simultáneamente:
+
+```text
+optionRole = BODY
+materialRole = BODY
+```
+
+sin una diferencia semántica real, porque produciría dos autoridades para la misma relación.
+
+Si en el futuro surge una necesidad que `optionRole` no puede representar, el cambio debe entrar mediante ADR/migración explícita.
+
+En el estado actual:
+
+```text
+Component.optionRole / Component.optionRoles[0]
+        == material binding role
+```
+
+mientras `placement`/slot/semantic role continúa expresando la identidad física.
+
+---
+
+## 6. Algoritmo canónico de resolución
+
+Para cada componente rectangular de tablero:
+
+```text
+1. Find Component definition
+2. Determine material binding role (optionRole)
+3. Resolve effective option choice
+4. If choice exists:
+     find MaterialBoard
+     require material.active
+     require material.thicknessMm > 0
+     T = material.thicknessMm
+   else:
+     T = component nominal/default thickness
+5. Build formula context using effective T
+6. Evaluate length/width formulas
+7. Build spatial formula context using effective T
+8. Resolve default placement pose using effective T
+9. Evaluate x/y/z overrides using effective T
+10. Build local board dimensions using effective T
+11. Resolve AABB/transform
+12. Resolve hardware/features against the final host board geometry
+13. Emit material identity + effective thickness + resolved geometry together
+```
+
+Pseudocódigo conceptual:
+
+```ts
+const material = resolveSelectedBoard(component.optionRole, choices, catalog);
+const T = material?.thicknessMm ?? component.geometry.thicknessMm;
+
+const geometry = resolveGeometry({
+  component,
+  T,
+  parentDimensions,
+});
+
+return {
+  ...geometry,
+  materialId: material?.id,
+  thicknessMm: T,
+};
+```
+
+El orden es obligatorio. Resolver el material después de generar la geometría reproduce el bug que este contrato elimina.
+
+---
+
+## 7. Qué significa `T` en fórmulas
+
+`T` significa **effective thickness de la pieza actual que se está resolviendo**.
+
+No significa:
+
+- espesor global de toda la obra;
+- espesor del primer material encontrado;
+- espesor fijo de 18 mm;
+- espesor del BODY salvo que la pieza actual pertenezca a BODY;
+- espesor de otra pieza relacionada implícitamente.
+
+Ejemplo:
+
+```text
+BODY -> 16 mm
+```
+
+Para un lateral BODY:
+
+```text
+T = 16
+x/right placement = PW - T
+```
+
+Para un piso BODY cuya fórmula fue diseñada suponiendo laterales del mismo BODY:
+
+```text
+width = PW - 2*T
+      = PW - 32
+```
+
+### Dependencias de espesor entre piezas diferentes
+
+Una fórmula que realmente necesita el espesor de **otra** pieza no debe abusar de `T` como variable global.
+
+Ejemplo conceptual:
+
+```text
+back panel thickness = 6
+but its width depends on BODY side thickness = 16
+```
+
+Si la fórmula necesita 16, usar el `T=6` del fondo sería incorrecto. Ese tipo de dependencia debe modelarse mediante relación/anchor/contexto explícito cuando el motor lo soporte, o mediante una definición constructiva donde las piezas que comparten la hipótesis de espesor estén ligadas al mismo material role.
+
+Hasta existir una variable/referencia explícita cross-component, el autor de catálogo no debe asumir silenciosamente que `T` significa el espesor de otro role.
+
+Este documento **no redefine `T` como global** para ocultar ese problema.
+
+---
+
+## 8. Dimensión exterior vs dimensiones derivadas
+
+Cambiar el espesor del material no debe escalar el mueble completo por accidente.
+
+Ejemplo:
+
+```text
+external width = 600
+BODY = 16
+```
+
+Si el piso está entre laterales:
+
+```text
+internal/base width = 600 - 2*16 = 568
+```
+
+Al cambiar BODY a 18:
+
+```text
+external width = 600          // permanece
+internal/base width = 600 - 2*18 = 564
+```
+
+Por lo tanto:
+
+- los parámetros externos del furniture instance permanecen como intención;
+- se reevalúan las piezas derivadas;
+- se recalculan posiciones dependientes;
+- no se aplica generic scaling al mueble.
+
+---
+
+## 9. Cambio de acabado = nueva resolución paramétrica
+
+Seleccionar otro `MaterialBoard` no es una operación puramente visual cuando cambia una propiedad física relevante.
+
+Flujo correcto:
+
+```text
+User selects FRONT = Roble 18
+        ↓
+materialChoices.FRONT changes
+        ↓
+Granete resolves complete furniture layout again
+        ↓
+all FRONT components receive material + effective T=18
+        ↓
+formulas / positions / anchors recalculate
+        ↓
+client rebuilds/render resolved result
+```
+
+Flujo incorrecto:
+
+```text
+User selects FRONT = Roble 18
+        ↓
+replace SketchUp material/texture only
+        ↓
+old 16 mm geometry remains
+```
+
+El segundo flujo produce una mentira industrial.
+
+---
+
+## 10. Propagación por rol
+
+Si varias piezas declaran:
+
+```text
+optionRole = FRONT
+```
+
+una elección:
+
+```text
+FRONT -> material-x
+```
+
+debe aplicarse a todas esas piezas durante la resolución.
+
+Esto incluye componentes provenientes de:
+
+- `Structure`;
+- componentes propios de `Module`;
+- componentes dentro de `Agregado`;
+- múltiples copias (`quantity > 1`).
+
+Ejemplo:
+
+```text
+1 door + 3 drawer fronts
+all optionRole = FRONT
+```
+
+Cambiar FRONT debe afectar las cuatro piezas. No sólo la primera coincidencia.
+
+Roles diferentes permanecen aislados:
+
+```text
+BODY  -> white16
+FRONT -> oak18
+BACK  -> back6
+```
+
+Cambiar `FRONT` no modifica `BODY` ni `BACK`.
+
+---
+
+## 11. Herrajes y features dependientes
+
+Un cambio de espesor puede desplazar caras físicas.
+
+Por eso un hardware placement o feature anclado a una pieza no puede conservar coordenadas mundiales stale.
+
+El orden correcto es:
+
+```text
+resolve board geometry
+        ↓
+resolve board transform/AABB
+        ↓
+resolve hardware/features from host board + semantic anchor
+```
+
+Ejemplos:
+
+- jaladera sobre frente;
+- bisagra ligada a puerta/lateral;
+- perforación derivada de hardware;
+- machining derivado de joint/relationship.
+
+Las coordenadas derivadas nunca son autoridad superior al host semántico.
+
+---
+
+## 12. SketchUp: contrato de actualización
+
+Granete for SketchUp ya sigue el patrón arquitectónico correcto: solicita un `resolved_layout` y `FurnitureBuilder` dibuja las `dimensionsMm` recibidas.
+
+Al cambiar un material role, el comportamiento canónico es:
+
+```text
+selector / inspector
+  -> update materialChoices
+  -> request fresh resolved layout
+  -> validate response
+  -> one SketchUp operation
+  -> rebuild managed furniture contents
+  -> persist successful intent metadata
+```
+
+### Rebuild MVP
+
+`clear! + rebuild` sigue siendo una estrategia válida de MVP si cumple:
+
+- operación atómica/undoable;
+- rollback seguro ante error;
+- preservación del furniture `instanceRef`;
+- preservación del transform exterior del grupo administrado;
+- metadata sólo representa un estado que sí fue construido con éxito.
+
+No se requiere reconciliación diferencial en #404. Diff/patch puede ser optimización futura.
+
+### Failure safety
+
+Un error de red, material inválido o layout 422 no debe producir:
+
+```text
+valid furniture
+ -> clear entities
+ -> resolution/build error
+ -> empty/broken furniture
+```
+
+La resolución debe completarse antes de iniciar mutación destructiva o el operation boundary debe demostrar rollback real.
+
+---
+
+## 13. Persistencia de intención
+
+La fuente persistida debe ser la intención semántica:
+
+```text
+furnitureDefinitionId
+parameters
+materialChoices
+identity / revision context
+transform / authoring state as defined by Digital Thread
+```
+
+La geometría SketchUp es una proyección derivada.
+
+No guardar como verdad primaria:
+
+```text
+"doorThicknessWas18BecauseThatWasTheMesh"
+```
+
+Si `materialChoices.FRONT = mat-16`, el motor puede regenerar la puerta correcta usando esa intención y la revisión de definición correspondiente.
+
+---
+
+## 14. Scope “este mueble” y “toda la obra”
+
+`OptionChoices` mantiene la semántica general:
+
+```text
+project defaults + furniture/item overrides = effective choices
+```
+
+### Este mueble
+
+Una selección en scope furniture/item crea o actualiza el override de ese mueble.
+
+### Toda la obra
+
+Una selección de project default debe afectar muebles que **heredan** ese role y no debe sobrescribir silenciosamente overrides explícitos.
+
+Ejemplo:
+
+```text
+Project default FRONT = White16
+
+Cabinet A: no override       -> White16
+Cabinet B: FRONT = Oak18     -> Oak18
+```
+
+Cambiar project default:
+
+```text
+FRONT = Grey16
+```
+
+produce:
+
+```text
+Cabinet A -> Grey16
+Cabinet B -> Oak18
+```
+
+### Estado actual de SketchUp
+
+La persistencia durable de “toda la obra” debe alinearse con el Project/Design Digital Thread (#384 y descendientes, especialmente binding/revision flow).
+
+Antes de ese binding, una preferencia temporal en la sesión del webview no debe presentarse como manufacturing truth persistida.
+
+---
+
+## 15. Validaciones
+
+### Material seleccionado
+
+Cuando existe choice explícita:
+
+- el material debe existir;
+- debe estar activo;
+- `thicknessMm` debe ser válido para una pieza de tablero;
+- la opción debe ser compatible con el OptionGroup/role cuando el catálogo define restricciones.
+
+Un choice explícito inválido falla loudly.
+
+### Sin choice
+
+Para preview/authoring donde la elección aún no fue realizada, el motor puede usar el espesor nominal del componente como fallback determinista.
+
+Esto no autoriza fabricar una pieza required sin material. El preflight/BOM final mantiene sus reglas de completitud.
+
+### Legacy modules
+
+Los módulos legacy sin composición semántica pueden necesitar fallback histórico. Ese fallback debe estar identificado explícitamente como legacy y no contaminar el resolver compuesto moderno.
+
+### Agregados
+
+Los agregados no crean una excepción. Cada componente interno resuelve su propio material role y effective thickness.
+
+No usar `T=18` por conveniencia cuando el componente posee una elección de material resoluble.
+
+---
+
+## 16. CURRENT implementation truth y drift conocido
+
+### TypeScript [CURRENT, semántica correcta para effective thickness]
+
+`packages/domain/src/engine/bom.ts` dispone de `getComponentThickness(...)`, que busca la choice del `optionRole` y retorna `material.thicknessMm` cuando encuentra el material.
+
+Ese `T` entra en el contexto de geometría y fórmulas.
+
+### Go layout [CURRENT, drift a corregir por #402]
+
+`backend-go/internal/domain/engine/layout.go` toma actualmente el espesor desde `comp.ThicknessMm` durante `expandLayoutInstances(...)` y resuelve `MaterialBoard` posteriormente al construir `LayoutComponent`.
+
+También existen contextos legacy/agregado que deben auditarse por hardcoded 18 mm.
+
+### SketchUp [CURRENT, boundary mayormente correcto]
+
+`FurnitureBuilder` consume `resolved_layout.components[].dimensionsMm` y aplica material/textura. El inspector ya envía `materialChoices` al update y el provider incluye `choice.<role>` al solicitar layout.
+
+El trabajo de #404 consiste en convertir esa ruta existente en un contrato de propagación, atomicidad e identidad completamente probado; no mover la regla física a Ruby.
+
+---
+
+## 17. Compatibilidad y migración de roles
+
+Los catálogos actuales pueden contener roles fragmentados:
+
+```text
+LATERAL
+INTERIOR
+FONDO
+FRENTE
+```
+
+No se deben migrar automáticamente a:
+
+```text
+BODY
+BACK
+FRONT
+```
+
+porque no conocemos la intención del taller.
+
+Ejemplo: un taller puede querer laterales exteriores en acabado decorativo y piezas interiores blancas. Fusionar todo a BODY rompería esa intención.
+
+La evolución correcta es:
+
+1. mantener compatibilidad con roles existentes;
+2. permitir que el editor de catálogo cambie explícitamente el material binding role de componentes;
+3. usar OptionGroup names amigables en UI;
+4. promover convenciones como BODY/FRONT/BACK/PLINTH para nuevas bibliotecas cuando representan la intención real;
+5. no inferir por nombres de piezas.
+
+---
+
+## 18. Paridad obligatoria TS ↔ Go ↔ SketchUp
+
+Este bug es una clase de **semantic drift**.
+
+La regla de `AGENTS.md` aplica especialmente aquí:
+
+> Si una regla vive en TS y Go, planear contract fixture de paridad.
+
+El fixture canónico de #405 debe usar espesores deliberadamente diferentes de los nominales para impedir tests falsamente verdes.
+
+Ejemplo mínimo:
+
+```text
+nominal:
+  side = 15
+  base = 18
+  door = 18
+
+materials:
+  white16 = 16
+  oak18 = 18
+  back6 = 6
+```
+
+Escenarios obligatorios:
+
+1. BODY=16 + FRONT=16;
+2. BODY=16 + FRONT=18 + BACK=6;
+3. update FRONT 18→16;
+4. agregado con tres drawer fronts FRONT;
+5. hardware anclado a FRONT;
+6. failure/rollback.
+
+Comparar invariantes semánticos cuando TS y Go tengan representaciones diferentes (por ejemplo board-local pose vs AABB).
+
+---
+
+## 19. Anti-patrones prohibidos
+
+### Paint-only material update
+
+```text
+change texture
+keep old board thickness
+```
+
+Prohibido para `MaterialBoard` con propiedades físicas relevantes.
+
+### Thickness patch in SketchUp
+
+```ruby
+if selected_material.thickness == 16
+  pushpull_to_16
+end
+```
+
+Prohibido. Duplica motor industrial.
+
+### Global thickness
+
+```text
+projectThickness = 18
+all formulas use 18
+```
+
+Prohibido. Un mueble puede mezclar BODY 16, FRONT 18 y BACK 6.
+
+### Visual matching
+
+```text
+all white faces => BODY
+```
+
+Prohibido. La apariencia no define dependencia semántica.
+
+### First-match propagation
+
+```text
+find first FRONT component and update it
+```
+
+Prohibido. El role puede tener N componentes y N copies/agregados.
+
+### Silent legacy fallback
+
+No permitir que un hardcoded 18 mm entre silenciosamente en un resolver moderno cuando existe material seleccionado.
+
+---
+
+## 20. Issue map
+
+Programa: #401.
+
+| Issue | Responsabilidad |
+|---|---|
+| #402 · MT-1 | Go layout resuelve effective thickness desde `MaterialBoard` antes de geometría |
+| #403 · MT-2 | Semántica canónica de material binding roles / `optionRole` |
+| #404 · MT-3 | Re-resolve + atomic rebuild en SketchUp al cambiar material role |
+| #405 · MT-4 | Fixtures de regresión/paridad TS ↔ Go ↔ SketchUp |
+
+Dependencias:
+
+```mermaid
+graph TD
+    D["material-aware contract"] --> A["#402 effective thickness"]
+    D --> B["#403 binding roles"]
+    A --> C["#404 SketchUp propagation"]
+    B --> C
+    A --> T["#405 parity tests"]
+    B --> T
+    C --> T
+```
+
+---
+
+## 21. Definition of Done arquitectónico
+
+El contrato se considera cumplido cuando:
+
+- un material seleccionado de 16 mm genera piezas de 16 mm aunque el componente nominal diga 15/18;
+- el effective thickness participa en fórmulas, poses y geometría antes del render;
+- BODY/FRONT/BACK u otros roles actualizan todas y sólo sus piezas explícitamente ligadas;
+- agregados respetan la misma regla;
+- hardware/features se derivan de la geometría final del host;
+- SketchUp re-resuelve y reconstruye sin calcular manufactura local;
+- un fallo deja intacto el último estado válido;
+- metadata conserva intención e identidad;
+- TS y Go tienen fixtures de paridad con espesores no triviales;
+- ninguna implementación depende de nombre/color/textura para propagar materiales;
+- el scope project respeta defaults + overrides y se integra con el Digital Thread antes de declararse persistente.
