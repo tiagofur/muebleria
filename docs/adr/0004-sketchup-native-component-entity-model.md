@@ -4,28 +4,36 @@
 - **Date:** 2026-08-26
 - **Decision owners:** Granete architecture / Granete for SketchUp
 - **Tracking:** #413, #418
-- **Related:** ADR-0001, ADR-0003, #290, #384, #401
+- **Related:** ADR-0001, ADR-0003, #290, #346, #384, #401
 
 ## Context
 
-Granete for SketchUp currently renders a resolved furniture layout using a top-level SketchUp `Group` and nested `Group`s containing generated box geometry. This proved the remote-layout architecture quickly, but it is no longer the right long-term host representation for the product.
+Granete for SketchUp currently renders a resolved furniture layout using a top-level SketchUp `Group` and nested `Group`s containing generated box geometry. This proved the remote-layout architecture quickly, but it is no longer the right long-term host representation.
 
 Granete now needs:
 
-- stable furniture and component instance identity;
+- stable furniture/component instance identity;
 - part-level selection and inspection;
 - local board axes independent from furniture world rotation;
 - safe parametric/material rebuilds;
 - copy/duplicate semantics integrated with Project-owned `FurnitureInstance` identity;
 - native Outliner structure;
 - reasonable interoperability with component-oriented woodworking extensions;
-- future complex component geometry beyond world-axis-aligned boxes.
+- future complex component geometry beyond AABB boxes.
 
-SketchUp's native model distinguishes `ComponentDefinition` from `ComponentInstance`. That distinction is useful for representation and reuse, but it must not be confused with Granete's own `FurnitureDefinition`, `FurnitureInstance`, `ComponentDefinition` and `ComponentInstance` concepts.
+SketchUp distinguishes `ComponentDefinition` from `ComponentInstance`. That distinction is useful for representation/reuse, but it must not be confused with Granete's business/catalog/authoring identities.
 
-The current resolved layout exposes local board dimensions but only a world/workshop AABB translation to external clients. A native component model also needs authoritative part orientation/local transform so Ruby does not duplicate placement logic.
+The existing SketchUp authoring contract (#346) already distinguishes:
 
-The material-aware program (#401) also introduces atomic re-resolution/rebuild. If that rebuild is hardened against the current Group renderer first, Granete would immediately need to rewrite it when native components arrive.
+- `componentDefinitionId`: stable reusable **authoring-definition identity** managed by the Granete contract;
+- `componentInstanceId`: concrete authoring/component occurrence;
+- optional `catalogComponentId`: catalog provenance/reference.
+
+A native SketchUp ComponentDefinition may carry/be associated with a `componentDefinitionId`, but its host-generated GUID is not that contract ID. Likewise `componentDefinitionId` is not automatically `catalogComponentId`.
+
+The current resolved layout exposes local board dimensions but only an AABB-oriented public translation. Native parts also need authoritative local orientation/transform so Ruby does not duplicate placement logic.
+
+The material-aware program (#401) introduces atomic re-resolution/rebuild. Hardening that final rebuild against Groups first would create immediate rework once native components arrive.
 
 ## Decision
 
@@ -33,48 +41,58 @@ Granete adopts native SketchUp `ComponentInstance` as the canonical host entity 
 
 ### 1. Furniture
 
-Each Granete-managed physical furniture unit is represented by a top-level `Sketchup::ComponentInstance`.
+Each managed physical `FurnitureInstance` is represented by a top-level `Sketchup::ComponentInstance`.
 
-For V1, every Granete `FurnitureInstance` receives its own generated SketchUp top-level `ComponentDefinition`, even when multiple units reference the same Granete `FurnitureDefinition`.
+For V1, each FurnitureInstance receives an isolated generated SketchUp top-level `ComponentDefinition`, even when several furniture units reference the same Granete `FurnitureDefinition`.
 
-Reason: independently editable physical units must not be coupled by mutable shared SketchUp definitions.
+The SU definition is a host implementation container and does not replace `furnitureDefinitionId` or `furnitureInstanceId`.
 
-### 2. Physical board/part
+### 2. Physical component/part
 
-Each resolved physical managed board/part is represented by a nested `Sketchup::ComponentInstance` whose definition contains local geometry at origin and whose instance transform positions/orients it relative to the furniture/subassembly.
+Each resolved managed physical board/front/panel is represented by a nested `Sketchup::ComponentInstance` whose definition contains local geometry at origin and whose instance transform positions/orients it relative to the parent.
 
-### 3. Subassemblies
+### 3. Authoring definition identity
 
-Additional ComponentInstance nesting exists only for a semantic aggregate/subassembly that has real authoring identity, interaction or movement/configuration value. No fixed three-level wrapper hierarchy is mandated.
+`componentDefinitionId` remains the stable reusable definition ID of the Granete authoring contract established by #346.
 
-### 4. Hardware
+Rules:
+
+```text
+componentDefinitionId != SketchUp ComponentDefinition GUID
+componentDefinitionId != catalogComponentId (unless a future schema explicitly maps them)
+```
+
+A generated/imported SU ComponentDefinition may store the Granete `componentDefinitionId` in namespaced metadata. The native GUID remains a technical locator.
+
+### 4. Concrete component identity
+
+`componentInstanceId` identifies the concrete authoring/component occurrence and lives on the nested managed instance metadata. Relationships and hardware hosts continue to target concrete instance IDs according to the manufacturing contract.
+
+### 5. Subassemblies
+
+Additional ComponentInstance nesting exists only for a semantic aggregate/subassembly with real authoring identity, interaction, selection or movement/configuration value. No fixed three-level wrapper hierarchy is mandated.
+
+### 6. Hardware
 
 Visible hardware uses ComponentInstances whether loaded from `.skp` assets or generated as fallback geometry. Cost-only hardware remains non-visual.
 
-### 5. Identity ownership
+### 7. Host identity ownership
 
-Granete IDs remain authoritative:
+Granete contract/business IDs remain authoritative. SketchUp definition GUID, `entityID`, `persistent_id`, name and geometry hash are locators/labels only.
 
-- `furnitureInstanceId`;
-- `furnitureDefinitionId`;
-- `componentInstanceId`;
-- Granete `componentDefinitionId`.
+### 8. Definition sharing
 
-SketchUp definition GUID, `entityID`, `persistent_id`, display name and geometry hash are technical locators/labels only.
+Top-level furniture SU definitions are isolated per FurnitureInstance in V1.
 
-A SketchUp `ComponentDefinition` GUID must never be exposed as Granete `componentDefinitionId`.
+Part SU definitions may also be unique initially. Sharing is permitted only for generated **immutable** definitions keyed by a deterministic resolved geometry signature. When geometry changes, an instance rebinds/recreates against another definition; shared definitions are not mutated in-place.
 
-### 6. Definition sharing
+The geometry signature is an optimization key, not a business/authoring ID.
 
-Top-level furniture definitions are unique per FurnitureInstance in V1.
+### 9. Local frame
 
-Part definitions may also be unique initially. Sharing is permitted only for generated **immutable** definitions keyed by a deterministic resolved geometry signature. A part that changes geometry rebinds/recreates against another definition; shared definitions are not mutated in-place.
+The resolved-layout contract must provide local board geometry plus authoritative local-to-parent orientation/transform. Ruby applies it generically and must not infer rotation from `slotId`, role names or AABB dimensions.
 
-### 7. Local frame
-
-The resolved-layout contract must provide local board geometry plus authoritative local-to-parent transform/orientation. Ruby applies that transform generically and must not infer rotation from `slotId`, role names or AABB dimensions.
-
-The current board-local axis convention is retained unless deliberately versioned:
+Retain the current board-local convention unless deliberately versioned:
 
 ```text
 X = widthMm
@@ -82,105 +100,111 @@ Y = thicknessMm
 Z = lengthMm
 ```
 
-### 8. Regeneration vs scaling
+### 10. Regeneration vs scaling
 
 Managed productive geometry is regenerated/rebound when parameters/material thickness change. Non-uniform SketchUp scaling is not used to encode manufacturing dimensions.
 
-### 9. Material rebuild sequencing
+### 11. Material rebuild sequencing
 
-#404 must target this native component hierarchy and therefore depends on the native renderer (#415). Material/manufacturing truth remains server/domain-owned.
+#404 targets this native hierarchy and therefore depends on #415. Material/manufacturing truth remains server/domain-owned.
 
-### 10. Legacy models
+### 12. Legacy models
 
-Current Granete Group-based entities are legacy managed representation, not arbitrary unmanaged geometry. They receive an explicit migration path (#416) that preserves known identity/intent and rebuilds from authoritative resolved layout.
+Current Granete Group-based entities are legacy managed representation. They receive explicit migration (#416) that preserves known identity/intent and rebuilds from authoritative layout.
 
 Business adoption of an existing `.skp` remains a separate Digital Thread workflow (#397).
 
-### 11. Third-party interoperability
+### 13. Third-party interoperability
 
-Granete intentionally becomes a better native SketchUp citizen. OpenCutList and similar tools may inspect native solid component parts, but their output is compatibility/user convenience only. Granete BOM/manufacturing outputs remain authoritative.
+Granete intentionally becomes a better native SketchUp citizen. OpenCutList and similar tools may inspect native solid component parts, but their output is compatibility/user convenience only. Granete BOM/manufacturing remains authoritative.
 
 ## Consequences
 
 ### Positive
 
-- part-level native selection and Outliner structure;
+- native part selection/Outliner;
 - stable local part axes;
 - better fit with SketchUp host concepts;
-- safer evolution to complex door/part geometry;
+- safer complex geometry evolution;
 - controlled definition reuse;
-- clear interaction with copy/duplicate and Design identity;
-- improved interoperability potential with woodworking extensions;
-- eliminates world-AABB baking as the canonical part model.
+- clearer copy/duplicate behavior;
+- improved interoperability potential;
+- removes world-AABB baking as canonical part model;
+- preserves #346 distinction between authoring definition, concrete instance and catalog reference.
 
 ### Costs
 
 - renderer becomes more complex than `Group + faces + pushpull`;
 - generated definition lifecycle/cleanup must be managed;
-- shared definition safety requires explicit policy/tests;
-- layout DTO needs authoritative rotation/transform fields;
-- current Group-based `.skp` files need representation migration;
-- tests/stubs must model ComponentDefinition/ComponentInstance behavior more accurately.
+- layout DTO needs authoritative orientation/transform;
+- tests/stubs must model ComponentDefinition/ComponentInstance behavior;
+- current Group-based `.skp` files need representation migration.
 
-### Risks
+### Risks and mitigations
 
 #### Shared-definition side effects
 
-Mitigated by unique top-level definitions in V1 and immutable-only part definition sharing.
+Mitigation: isolated top-level definitions in V1 and immutable-only sharing for generated part definitions.
 
 #### Definition accumulation
 
-Mitigated by scoped generated-definition lifecycle/cleanup; broad SketchUp purge operations are forbidden because user/third-party definitions may exist.
+Mitigation: scoped generated-definition lifecycle/cleanup. Broad purge operations that may delete user/third-party definitions are forbidden.
 
 #### Identity confusion
 
-Mitigated by explicit naming in contracts/code and the rule that SU GUID/persistent IDs are never business IDs.
+Mitigation: explicit namespaces and terminology. Contract IDs are Granete-managed; native GUIDs/persistent IDs remain technical.
 
-#### Renderer reintroduces manufacturing logic
+#### Renderer reintroduces domain logic
 
-Mitigated by #414: server exposes the complete local pose contract. Ruby only builds local geometry and applies resolved transforms.
+Mitigation: #414 exposes a sufficient server-resolved local pose contract. Ruby only builds local geometry/applies transforms.
 
-#### OpenCutList drives domain decisions
+#### OpenCutList drives manufacturing semantics
 
-Mitigated by treating OCL support as a validation target (#417), never a manufacturing authority.
+Mitigation: OCL support is a validation target (#417), not manufacturing authority.
 
 ## Alternatives considered
 
 ### A. Keep Groups for furniture and parts
 
-Rejected as the canonical long-term model. It remains simple but loses explicit definition/instance semantics, weakens component-centric interoperability, and does not naturally model reusable local part geometry.
+Rejected as long-term canonical model. Simple, but weak for explicit definition/instance semantics, local axes and component-oriented interoperability.
 
 ### B. Furniture Group + Part ComponentInstances
 
-Technically viable and common in woodworking SketchUp models. Rejected for Granete because the furniture itself has stable physical identity, placement, copy/duplicate behavior, Project/Design lifecycle and future semantic inspection. A top-level ComponentInstance provides the more consistent host abstraction.
+Technically viable and common in woodworking models. Rejected for Granete because the furniture itself has stable physical identity, placement, duplicate lifecycle and Project/Design semantics; a top-level ComponentInstance is the more consistent host abstraction.
 
-### C. Share one top-level SketchUp ComponentDefinition per Granete FurnitureDefinition
+### C. Share one mutable top-level SU ComponentDefinition per Granete FurnitureDefinition
 
-Rejected for V1. Two physical furniture instances may diverge independently; mutating one shared definition would silently change all instances.
+Rejected for V1. Two physical units may diverge independently; editing one shared definition could silently change all instances.
 
-### D. Use one unique ComponentDefinition for every object forever
+### D. Unique SU ComponentDefinition for every object forever
 
-Safe but potentially wasteful. Accepted as a valid V1 implementation strategy for parts, but not mandated permanently. Immutable geometry-signature sharing may be added after correctness/performance evidence.
+Safe but potentially wasteful. Accepted as a valid V1 strategy for parts, but immutable geometry-signature sharing may be added after correctness/performance evidence.
 
-### E. Continue world AABB boxes inside Components
+### E. Wrap current world AABB boxes in ComponentInstances
 
-Rejected. Merely wrapping current AABB geometry in ComponentInstances would not preserve meaningful local axes and would force later rework. The layout contract must expose authoritative part orientation.
+Rejected. That would change entity class without preserving meaningful local axes. #414 must expose the authoritative local pose first.
+
+### F. Use native SketchUp GUID as `componentDefinitionId`
+
+Rejected. Host GUID is an implementation locator; the authoring contract needs stable, versioned semantics independent from host internals/migrations.
+
+### G. Reuse catalog component ID as `componentDefinitionId`
+
+Rejected as a blanket rule. Catalog provenance and an authoring reusable definition are distinct concerns; the existing schema already supports `catalogComponentId` separately.
 
 ## Implementation impact
-
-The decision is implemented through:
 
 - #414 — resolved local transform/orientation contract;
 - #415 — native renderer + definition lifecycle;
 - #416 — legacy Group representation migration;
-- #417 — host/interoperability validation.
+- #417 — real host/interoperability validation.
 
-Existing related work is updated rather than duplicated:
+Existing work is aligned rather than duplicated:
 
 - #404 material rebuild depends on #415;
 - #405 validates material behavior on native parts;
 - #389 placement uses #415 hierarchy;
-- #391 duplicate handling applies to top-level managed ComponentInstances;
+- #391 copy/duplicate handles both new business identity and host-definition isolation;
 - #397 adoption consumes #416;
 - #398 includes native-host invariants in Digital Thread E2E.
 
@@ -189,8 +213,10 @@ Existing related work is updated rather than duplicated:
 This ADR is considered implemented only when:
 
 1. resolved layout exposes authoritative local part orientation;
-2. newly inserted furniture and physical boards are ComponentInstances;
-3. two furniture instances can diverge without definition side effects;
-4. material/parameter rebuild preserves furniture identity/world transform;
-5. legacy Groups can migrate safely;
-6. real SketchUp host validation and documented OpenCutList smoke exist.
+2. newly inserted furniture/physical boards are ComponentInstances;
+3. two FurnitureInstances diverge without host-definition side effects;
+4. authoring `componentDefinitionId` survives independently from native SU GUID;
+5. catalog reference remains distinct when present;
+6. material/parameter rebuild preserves furniture identity/world transform;
+7. legacy Groups migrate safely;
+8. real SketchUp host validation and documented OpenCutList smoke exist.
