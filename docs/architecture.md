@@ -36,6 +36,10 @@
    silenciosamente.
 12. **Release exacto.** `ProductionRelease` fija una `DesignRevision` y fingerprint/
    revisión de manufactura exactos; nunca consume `latest` implícitamente.
+13. **Material antes que geometría.** En piezas de tablero, el `MaterialBoard` seleccionado
+   determina el espesor efectivo antes de fórmulas, poses, anchors y AABB; el acabado se
+   propaga por material-binding role. Ver
+   `docs/architecture/material-aware-furniture-resolution.md`.
 
 Fuente normativa de 10–12: `docs/architecture/project-design-digital-thread.md` +
 `docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md`.
@@ -327,7 +331,9 @@ Cuando una regla deba existir en ambos lados:
 
 > usar **contract fixtures** compartidos y fallar CI si TS y Go divergen.
 
-No declarar “paridad” sólo por inspección manual.
+No declarar “paridad” sólo por inspección manual. Para espesor efectivo, roles y
+propagación de acabados, el contrato normativo es
+[`material-aware-furniture-resolution.md`](architecture/material-aware-furniture-resolution.md).
 
 ---
 
@@ -495,6 +501,7 @@ cerrado con conflicto explícito; nunca overwrite silencioso.
   `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
 - selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`;
+- espesor efectivo y propagación por material role: `docs/architecture/material-aware-furniture-resolution.md`;
 - furniture semantics: `docs/architecture/domain-model.md`;
 - Quote ↔ Project Furniture ↔ Design ↔ Production digital thread:
   `docs/architecture/project-design-digital-thread.md`;
