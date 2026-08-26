@@ -4011,14 +4011,16 @@
         "docs/adr/0005-multi-organization-tenancy.md",
         "docs/multi-organization-distribution-model.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "tags": [
         "multi-org",
         "backend",
         "schema",
         "rbac"
       ],
-      "created": "2026-08-26"
+      "created": "2026-08-26",
+      "evidence": "go test ./... verde: multi_org_migration_test (backfill desde schema legacy 000001-000079 con datos, down migrations reversibles+re-aplicables, códigos repetidos entre orgs permitidos/duplicados dentro rechazados, multi-rol CHECK, DB fresca con org inicial); suite completa 8/8 paquetes",
+      "completedAt": "2026-08-27"
     },
     {
       "id": "F170",
@@ -4040,7 +4042,7 @@
         "https://github.com/tiagofur/muebleria/issues/325",
         "docs/adr/0005-multi-organization-tenancy.md"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "F169"
       ],
@@ -4050,7 +4052,9 @@
         "auth",
         "rbac"
       ],
-      "created": "2026-08-26"
+      "created": "2026-08-26",
+      "evidence": "go test ./... 8/8 verde (claims v2 org/roles[], revocación/suspensión cortan acceso, roles vivos de membership, select-org org ajena 403, tokens v1 rechazados, sweep unión ~140 call sites + middlewares intersección + tests unión domain/api); pnpm typecheck 7/7 + web 306 + domain 1106 tests verde (anyRole/navIdsForRoles/rolesOfUser + navBlockedForSession multi-rol); media por org + licencia org + CLI create-org/create-platform-admin/grant-membership smokeados",
+      "completedAt": "2026-08-27"
     },
     {
       "id": "F171",
@@ -4069,7 +4073,7 @@
         "https://github.com/tiagofur/muebleria/issues/325",
         "docs/verification.md"
       ],
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "F170"
       ],
@@ -4079,7 +4083,9 @@
         "tests",
         "security"
       ],
-      "created": "2026-08-26"
+      "created": "2026-08-26",
+      "evidence": "go test ./... verde: multi_org_isolation_test (dos orgs misma DB — customers/projects/catálogo/settings: listas excluyen, get cross-org not-found, escritura cross-org no muta, settings distintos) + middleware revocación/suspensión + paridad unión Go (rbac_union_test) ↔ TS (rbacUnion.test) con contracts/roles.json multiRole union",
+      "completedAt": "2026-08-27"
     },
     {
       "id": "F172",
