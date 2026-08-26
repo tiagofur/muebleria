@@ -431,7 +431,7 @@ auditado.
 
 ### Multi-organización y aislamiento de talleres
 
-El sistema es multi-organización (ADR-0004): los datos de negocio llevan
+El sistema es multi-organización (ADR-0005): los datos de negocio llevan
 `organization_id` y el acceso se resuelve vía membresías. Reglas:
 
 - el scope de organización se inyecta por middleware en todo request autenticado

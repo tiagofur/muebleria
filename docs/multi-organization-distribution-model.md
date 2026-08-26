@@ -9,7 +9,7 @@ The product positioning is not to be a cheaper alternative to existing design to
 Implementation decisions for this model (row-level tenancy, multi-role
 memberships, platform admin support sessions, per-organization catalogs and
 licenses) live in
-[`docs/adr/0004-multi-organization-tenancy.md`](adr/0004-multi-organization-tenancy.md).
+[`docs/adr/0005-multi-organization-tenancy.md`](adr/0005-multi-organization-tenancy.md).
 
 ## Core Concept
 
@@ -56,7 +56,7 @@ type OrganizationRole =
 
 Role availability depends on organization type.
 
-### Implemented roles (ADR-0004)
+### Implemented roles (ADR-0005)
 
 The implemented system keeps the 8 canonical operational roles (OC-004) as the
 membership roles — `OrganizationRole` above stays conceptual and maps onto them:
@@ -81,7 +81,7 @@ parity.
 Pilot talleres are organizations of type `factory` that act as their own sales
 organization. Platform staff (`users.platform_admin`) are not a membership role:
 they manage organizations from the platform console and may open audited,
-time-boxed support sessions into an organization (see ADR-0004 §5).
+time-boxed support sessions into an organization (see ADR-0005 §5).
 
 ## Factory Organization
 

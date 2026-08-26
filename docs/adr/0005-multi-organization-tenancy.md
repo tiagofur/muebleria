@@ -1,4 +1,4 @@
-# ADR-0004 — Multi-Organization Tenancy (row-level) con membresías multi-rol y soporte de plataforma auditado
+# ADR-0005 — Multi-Organization Tenancy (row-level) con membresías multi-rol y soporte de plataforma auditado
 
 - **Status:** Accepted
 - **Date:** 2026-08-26

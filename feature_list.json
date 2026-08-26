@@ -3998,7 +3998,7 @@
       "phase": 0,
       "name": "multi_org_core_schema",
       "title": "#325 Multi-org core — organizations, memberships, invitations, auditoría de seguridad y scoping del schema",
-      "description": "Fundación multi-organización (ADR-0004): migraciones aditivas crean organizations (slug URL-safe único, type factory|store|dealer, license por org, active), memberships con roles[] múltiples validados contra los roles canónicos (UNIQUE user+org), invitations con token_hash y lifecycle, y security_audit_events append-only. Backfill conservador: la organización inicial 'Taller inicial' recibe todas las filas de negocio existentes (organization_id nullable → backfill → NOT NULL), cada usuario existente recibe una membresía que preserva su rol vigente, la licencia migra de users a la organización y workshop_settings pasa de singleton a fila por organización. users.role queda deprecado (memberships es la fuente de verdad). Media se particiona en MEDIA_DIR/<org_id>/.",
+      "description": "Fundación multi-organización (ADR-0005): migraciones aditivas crean organizations (slug URL-safe único, type factory|store|dealer, license por org, active), memberships con roles[] múltiples validados contra los roles canónicos (UNIQUE user+org), invitations con token_hash y lifecycle, y security_audit_events append-only. Backfill conservador: la organización inicial 'Taller inicial' recibe todas las filas de negocio existentes (organization_id nullable → backfill → NOT NULL), cada usuario existente recibe una membresía que preserva su rol vigente, la licencia migra de users a la organización y workshop_settings pasa de singleton a fila por organización. users.role queda deprecado (memberships es la fuente de verdad). Media se particiona en MEDIA_DIR/<org_id>/.",
       "acceptance": [
         "Migraciones up/down crean organizations/memberships/invitations/security_audit_events sin romper el arranque del server con datos existentes",
         "Backfill: toda fila de negocio existente queda con organization_id NOT NULL apuntando a la organización inicial; membresía por usuario preservando rol; licencia en org; workshop_settings por org",
@@ -4008,7 +4008,7 @@
       ],
       "references": [
         "https://github.com/tiagofur/muebleria/issues/325",
-        "docs/adr/0004-multi-organization-tenancy.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
         "docs/multi-organization-distribution-model.md"
       ],
       "status": "in_progress",
@@ -4038,7 +4038,7 @@
       ],
       "references": [
         "https://github.com/tiagofur/muebleria/issues/325",
-        "docs/adr/0004-multi-organization-tenancy.md"
+        "docs/adr/0005-multi-organization-tenancy.md"
       ],
       "status": "pending",
       "depends_on": [
@@ -4097,7 +4097,7 @@
       ],
       "references": [
         "https://github.com/tiagofur/muebleria/issues/326",
-        "docs/adr/0004-multi-organization-tenancy.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
         "docs/multi-organization-distribution-model.md"
       ],
       "status": "pending",

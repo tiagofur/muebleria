@@ -47,7 +47,7 @@ Completado y verificado (`go test ./...` 8/8 paquetes verde):
    web: selector org login + UsersScreen → Equipo.
 3. **F173 (#327)** y **F174 (#412)** después.
 
-Decisiones: `docs/adr/0004-multi-organization-tenancy.md`.
+Decisiones: `docs/adr/0005-multi-organization-tenancy.md`.
 
 ## Notas de sesión
 
