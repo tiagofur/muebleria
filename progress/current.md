@@ -1,6 +1,7 @@
 # Sesión
 
-**Feature en curso:** F172 (#326) consola plataforma — F170 CERRADO server-side (sweep RBAC unión completo, ver abajo); falta lado TS/web (navIdsForRoles)
+**Feature en curso:** F172 (#326) consola plataforma + equipo + soporte auditado + clonación catálogo
+**Cerrados con evidencia (ledger done, commits 428df6c..474f0ce):** F169, F170 (server+cliente), F171
 **Rama:** `feat/325-multi-organization-core` (PR #419)
 **Pendiente de revisión formal (reviewer):** F169, F170a/b — implementación y evidencia completas
 
@@ -45,13 +46,28 @@ Completado y verificado (`go test ./...` 8/8 paquetes verde):
 - contracts/roles.json +`multiRole {supported, semantics: union}`.
 - Tests: AnyRole/ownership/sector-union en domain + middleware multi-rol
   (vendedor+ingeniero pasa gate ingeniero, no pasa gate admin).
-- **Falta lado TS/web:** `anyRole` + `navIdsForRoles` + session roles[]
-  (la UI hoy muestra el rol primario; server ya aplica unión). Próxima sesión.
+## Sesión 3b: unión en cliente (commit 23ecea1 + 474f0ce)
 
-## Siguiente sesión (en orden)
+- Backend: LoginResponse.roles[] del membership activo (login/select-org/refresh).
+- rbac.ts: anyRole/navIdsForRoles/rolesCanAccessNav/rolesAllScopedBySector/
+  rolesOfUser (fallback rol único); barrel exportado.
+- session.ts AuthUser.roles; AppContent actorRoles (16 predicates + navIds +
+  sector gate unión); routes.navBlockedForSession acepta set (compat single).
+- Paridad: rbacUnion.test.ts (7) espejo de rbac_union_test.go.
+- Verificación: pnpm typecheck 7/7; web 306 + domain 1106 verde.
 
-1. **TS/web RBAC:** anyRole + navIdsForRoles + roles en session/web (cierra
-   del todo F170 en cliente).
+## Siguiente: F172 (#326)
+
+1. Backend `/api/platform/*` (solo platform_admin): orgs CRUD/suspensión,
+   licencias, usuarios global, audit viewer, support-session (razón + token
+   corto 1-2h + banner + actor real + audit start/end).
+2. Backend `/api/org/*` (admin membership): equipo, invitaciones link/código,
+   roles[] + sectores, settings, audit de su org.
+3. Clonación catálogo base: remap UUIDs incl. ids embebidos en JSONB
+   (modules.agregados, agregados.components, structures.joint_drilling_rules,
+   structure_revisions.snapshot).
+4. Web: consola plataforma (NAV_PATHS), Equipo (evolución UsersScreen con
+   chips multi-rol), selector org login, banner soporte.
 2. **F172 (#326):** consola plataforma (`/api/platform/*`), equipo del taller
    (`/api/org/*`), invitaciones por link, sesión de soporte (razón + banner +
    audit + actor real), clonación de catálogo base con remap de UUIDs
