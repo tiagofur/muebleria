@@ -3,7 +3,7 @@
 > **Estado:** CANÓNICO  
 > **Fecha:** 2026-08-24  
 > **ADR Relacionado:** [ADR-0001](../adr/0001-sketchup-manufacturing-ownership.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md)  
-> **Documento de Estrategia:** [sketchup-muebles-strategy.md](../sketchup-muebles-strategy.md)  
+> **Documento de Estrategia:** [sketchup-granete-strategy.md](../sketchup-granete-strategy.md)  
 > **Invariante Central:** **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 ---

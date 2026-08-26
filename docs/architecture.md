@@ -276,7 +276,7 @@ La extensión no implementa BOM, drilling rules, nesting, kerf, stale/release ga
 postprocessing. Granete valida el
 [`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva la
 autoridad descrita en el
-[`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md).
+[`ADR-0001`](adr/0001-sketchup-authoring-granete-manufacturing-truth.md).
 
 El binding Project/Design, versionado de `.skp`, semantic manifest, duplicate identity
 handling y reconciliation se rigen por
@@ -284,7 +284,7 @@ handling y reconciliation se rigen por
 [`ADR-0003`](adr/0003-project-owned-furniture-identity-and-versioned-design.md).
 
 Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa reglas
-de ingeniería. Ver la [estrategia del programa](sketchup-muebles-strategy.md).
+de ingeniería. Ver la [estrategia del programa](sketchup-granete-strategy.md).
 
 ---
 
@@ -468,9 +468,9 @@ cerrado con conflicto explícito; nunca overwrite silencioso.
 - UX: `docs/design.md` + `docs/operational-ux.md`;
 - producto: `docs/prd-v2.md`;
 - plan: `docs/operational-core-v1.md`.
-- programa SketchUp: `docs/sketchup-muebles-strategy.md`;
+- programa SketchUp: `docs/sketchup-granete-strategy.md`;
 - boundary SketchUp/Granete:
-  `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
+  `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
 - selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`;
 - furniture semantics: `docs/architecture/domain-model.md`;

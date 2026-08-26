@@ -122,8 +122,8 @@ Granete conserva catálogo, BOM, parts, materials, hardware, drilling, revisions
 preflight, release y machine outputs. Cotizar rápido, Proyectar y SketchUp convergen en
 una misma `Project/Job`.
 
-Ver `docs/sketchup-muebles-strategy.md`,
-`docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md` y
+Ver `docs/sketchup-granete-strategy.md`,
+`docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md` y
 `docs/sketchup-manufacturing-contract.md`.
 
 ---
@@ -527,8 +527,8 @@ Integrar herramientas externas es preferible a recrearlas cuando no sea parte de
 | Arquitectura/boundaries | `docs/architecture.md` |
 | UX operacional | `docs/operational-ux.md` + `docs/design.md` |
 | Roadmap comercial | `docs/roadmap-comercial-v2.md` |
-| Programa SketchUp + Granete | `docs/sketchup-muebles-strategy.md` + issue #290 |
-| Ownership SketchUp/Granete | `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md` |
+| Programa SketchUp + Granete | `docs/sketchup-granete-strategy.md` + issue #290 |
+| Ownership SketchUp/Granete | `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md` |
 | Contract conceptual | `docs/sketchup-manufacturing-contract.md` |
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | Permisos ejecutables | `packages/domain/src/rbac.ts` / backend correspondiente |
