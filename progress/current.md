@@ -1,10 +1,8 @@
 # Sesión
 
-**Feature en curso:** #349 — Smart Parametric Furniture Library MVP & #350 — Hardware Placement/Machining Sync
-**Inicio:** 2026-08-24
-**Estado:** Implementado y verificado (ver `progress/implementation_F164.md`).
-**Rama:** `feat/349-parametric-furniture-library`
-**Worktree:** `/Users/tiagofur/dev/carpinteria/muebles-worktrees/sketchup-extension-bootstrap`
+**Feature en curso:** housekeeping GitHub + #379 (alineación docs arquitectura) + registro milestone #347 — completadas 2026-08-26
+**Siguiente activa:** #347 — manufacturing preflight, Definition of Done completo (milestone mínimo ya registrado y verificado)
+**Rama:** `main`
 
 ## Notas de sesión
 
@@ -108,3 +106,30 @@ y "Heredar default de la obra" cuando hay override.
 - Gates F111 respetados: tokens `--z-modal-dialog`, `--surface-overlay`, `--text-inverse`, `--surface-overlay-chrome` (0 literales de color).
 
 **Verificación:** ui 146 archivos/1433 tests + web 24/306 + typecheck 4/4 workspaces. Browser E2E manual en dev server (modo invitado, cotización borrador): colocar mueble → bloques por rol → Catálogo → seleccionar → Aplicar → fila actualizada. Nota: cotización "Aceptado" deshabilita edición (correcto).
+
+## Housekeeping GitHub + #379 + registro milestone #347 (2026-08-26)
+
+**Issues cerrados:** #375–#378 (entradas accidentales de la sesión de docs, con
+comentario de motivo), #371–#374 (docs creados y alineados) y #379 (alineación
+completada con evidencia).
+
+**#379 (commit 54ec806):** naming normalizado a Granete en
+`smart-furniture-engine.md`, `3d-asset-library.md`, `manufacturing-feature-model.md`
+y `domain-model.md`; secciones "Canonical references" en cada doc umbrella hacia
+los specs autoritativos (`parametric-furniture-library.md`, ADR 0001/0002,
+`production-flow-v2.md`, `catalog-option-selector.md`) y referencia inversa desde
+el spec; AGENTS.md registra los 4 docs en fuentes canónicas; #347 (Referencias) y
+#290 (Autoridades) citan la docs canónica. Verificado: grep sin "Muebleria" en
+los 4 docs; Ruby del plugin sin cálculo de BOM/drilling/nesting/kerf/preflight.
+`multi-organization-distribution-model.md` queda para el rename #366.
+
+**#347 milestone:** el `minimum authoritative preflight` existía como evidencia
+(`progress/implementation_F163.md`, tests 6/6 re-ejecutados hoy en verde; campos de
+correlación `inReplyToMessageId`/`idempotencyKey` en `sketchupAuthoringExchange.ts`)
+pero nunca se había registrado en el issue. Registrado como comentario en #347 con
+la cobertura completa, la prueba negativa y la re-verificación de los fixtures de
+#349/#350 (`progress/implementation_F164.md`).
+
+**Siguiente:** implementar el DoD completo de #347 (machine capability checks,
+severity/remediation hacia contexto SketchUp, stale post-release, override
+auditable server-authoritative) — #348/#351 siguen bloqueadas hasta ese cierre.
