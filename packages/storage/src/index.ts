@@ -12,6 +12,7 @@ export {
   GUEST_WORKSPACE_STORAGE_KEY,
 } from './localStorageWorkspaceRepository';
 export { SCHEMA_VERSION, createSeedWorkspace } from './seed';
+export { migrateLegacyStorageKeys } from './legacyStorageKeys';
 export {
   breakdownFromApi,
   catalogFromApi,

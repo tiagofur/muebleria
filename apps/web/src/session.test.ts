@@ -76,7 +76,7 @@ describe('session helpers', () => {
     expect(local.getItem(USER_STORAGE_KEY)).toBeNull();
   });
 
-  it('storeAuthToken writes muebles_token', () => {
+  it('storeAuthToken writes granete_token', () => {
     const local = memoryStorage();
     storeAuthToken('abc.def', local);
     expect(local.getItem(TOKEN_STORAGE_KEY)).toBe('abc.def');

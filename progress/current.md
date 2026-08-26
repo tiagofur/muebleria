@@ -179,6 +179,31 @@ lo permitido por la regla del programa (sólo discovery/planificación):
 **Siguiente:** cuando lleguen dossiers → #348 (congelar fixture PTX + readback).
 Alternativa mientras tanto: work del plugin no bloqueado o carril Proyectar.
 
+## #366 Parte 2 — Claves locales muebles_* → granete_* con migración (2026-08-26)
+
+**Qué:** todas las claves persistentes del cliente pasaron de `muebles_*` a
+`granete_*` con migración one-shot leer-viejo→escribir-nuevo→borrar-viejo
+(idempotente, new-wins, best-effort): nadie se desloguea ni pierde el workspace
+invitado ni la cola offline de piso.
+
+- `packages/storage/src/legacyStorageKeys.ts` (nuevo, +6 tests): mapa de 10
+  claves localStorage + `muebles_session` (sessionStorage). Export en index;
+  la llama `apps/web/src/main.tsx` al arrancar, antes de que nada lea storage.
+- Renames in-place: `session.ts` (granete_session/token/user),
+  `apiWorkspaceRepository` (token), 7 claves guest en
+  `localStorageWorkspaceRepository`, flag de perf en `seed.ts`.
+- Mobile (AsyncStorage + SecureStore): `granete_floor_*_v1` con migración al
+  inyectar el storage (`offlineQueueStorage.ts`); `granete_auth_token/_user`
+  vía `secureStoreMigration.ts` (nuevo, memoizado) llamado desde `apiClient`
+  y `authStore` (loadSession + biometrics).
+- Smokes Playwright actualizados a las claves nuevas (init scripts).
+- Schema `muebles.drilling-data.v1` de exports: se mantiene (decisión del
+  plan; ya consumido).
+
+**Verificación:** storage 161 tests (10 files), web 306 (24), mobile 45 (8),
+typecheck 7/7 en verde. Sweep final: `muebles_*` sólo vive en los mapas de
+migración y sus tests. Branding web ya estaba en Granete (title/login) — sin
+cambios visibles en esta parte.
 ## #366 Parte 1 — Rename docs Muebles→Granete (2026-08-26)
 
 Auditoría + plan de 4 partes registrado en

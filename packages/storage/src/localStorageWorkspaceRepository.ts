@@ -37,14 +37,14 @@ import { createSeedWorkspace } from './seed';
 import { migrateWorkspace } from './migrateWorkspace';
 
 /** Exported so the shell can probe for meaningful guest data (F118 S3). */
-export const GUEST_WORKSPACE_STORAGE_KEY = 'muebles_guest_workspace';
+export const GUEST_WORKSPACE_STORAGE_KEY = 'granete_guest_workspace';
 const LOCAL_STORAGE_KEY = GUEST_WORKSPACE_STORAGE_KEY;
-const PICKING_LOCAL_STORAGE_KEY = 'muebles_guest_picking';
-const STOCK_LOCAL_STORAGE_KEY = 'muebles_guest_stock';
-const STOCK_MOVEMENTS_LOCAL_STORAGE_KEY = 'muebles_guest_stock_movements';
-const SUPPLIERS_LOCAL_STORAGE_KEY = 'muebles_guest_suppliers';
-const PURCHASE_ORDERS_LOCAL_STORAGE_KEY = 'muebles_guest_purchase_orders';
-const PO_COUNTER_LOCAL_STORAGE_KEY = 'muebles_guest_po_counter';
+const PICKING_LOCAL_STORAGE_KEY = 'granete_guest_picking';
+const STOCK_LOCAL_STORAGE_KEY = 'granete_guest_stock';
+const STOCK_MOVEMENTS_LOCAL_STORAGE_KEY = 'granete_guest_stock_movements';
+const SUPPLIERS_LOCAL_STORAGE_KEY = 'granete_guest_suppliers';
+const PURCHASE_ORDERS_LOCAL_STORAGE_KEY = 'granete_guest_purchase_orders';
+const PO_COUNTER_LOCAL_STORAGE_KEY = 'granete_guest_po_counter';
 
 export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
   private getWorkspace(): Workspace {
