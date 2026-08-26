@@ -46,12 +46,12 @@ import type {
   CommercialStatus,
   ProductionReleaseOptions,
   ChangeOrderImpact,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import {
   exportWarrantyRefabricationOptimizer,
   warrantyRefabricationFilename,
-} from '@muebles/excel';
+} from '@granete/excel';
 
 
 
@@ -101,9 +101,9 @@ import {
   type ModuleUnitExecution,
   type InstallationJob,
   type PartInstance,
-} from '@muebles/domain';
-import { breakdownFromApi } from '@muebles/storage';
-import type { ProjectDraft } from '@muebles/ui';
+} from '@granete/domain';
+import { breakdownFromApi } from '@granete/storage';
+import type { ProjectDraft } from '@granete/ui';
 
 import type { ToastFn } from './catalogStore';
 import { getCatalogStoreState } from './catalogStore';
@@ -424,7 +424,7 @@ export interface ProjectState {
   ) => void;
   readonly saveCutPlan: (
     projectId: string,
-    cutPlan: import('@muebles/domain').CutPlan,
+    cutPlan: import('@granete/domain').CutPlan,
   ) => void;
   /** PROD-3.1 — shop-floor status per line item. */
   readonly setItemFloorStatus: (

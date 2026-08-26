@@ -22,7 +22,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   UNCATEGORIZED_FILTER,
   canPlaceCategory,
@@ -31,7 +31,7 @@ import {
   cascadeSelectedCategoryId,
   filterModulesByCategory,
   type CategoryFilterId,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { validateNonNegativeNumber, validateRequiredName } from '../../catalogs/catalogHelpers';
 import {
   seedEditorDraftFromBaseline,

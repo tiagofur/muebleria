@@ -4,7 +4,7 @@ import type {
   Hardware,
   MaterialBoard,
   OptionGroup,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   canShowPricePreview,
   filterOptionIdsByMembers,

@@ -4,7 +4,7 @@
  * so browser bundles can use it too (F116 C6).
  */
 
-import type { Catalog, Workspace } from '@muebles/domain';
+import type { Catalog, Workspace } from '@granete/domain';
 
 import { SCHEMA_VERSION } from './seed';
 

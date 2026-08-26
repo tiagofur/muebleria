@@ -18,12 +18,12 @@ import type {
   Hardware,
   AmbientMaterial,
   AmbientCategory,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   defaultMeasurePresetId,
   resolveBom,
   resolveModuleMeasurePreset,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import { defaultOptionChoicesForModule } from './moduleHelpers';
 

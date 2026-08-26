@@ -15,7 +15,7 @@ import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { colors, spacing, radius, typography } from '../theme';
 import { useFloorScannerStore } from '../stores/floorScannerStore';
-import { ITEM_FLOOR_STATUS_LABELS_ES } from '@muebles/domain';
+import { ITEM_FLOOR_STATUS_LABELS_ES } from '@granete/domain';
 
 export interface ScannerScreenProps {
   onBack: () => void;

@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Agregado, Hardware, ModuleAgregadoInstance, OptionGroup } from '@muebles/domain';
+import type { Agregado, Hardware, ModuleAgregadoInstance, OptionGroup } from '@granete/domain';
 import { StructureAgregadoCard } from './agregados/StructureAgregadoCard';
 import { StructureAgregadoFormulaLegend } from './agregados/StructureAgregadoFormulaLegend';
 import { getOptionRolesForAgregado } from './agregados/agregadoRoleHelpers';

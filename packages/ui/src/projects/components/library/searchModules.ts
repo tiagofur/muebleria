@@ -5,8 +5,8 @@
  * de cualquier categoría de la ruta del módulo.
  */
 
-import type { CategoryNode, Module } from '@muebles/domain';
-import { categoryPath } from '@muebles/domain';
+import type { CategoryNode, Module } from '@granete/domain';
+import { categoryPath } from '@granete/domain';
 
 /** Normaliza texto para búsqueda: minúsculas, sin diacríticos, espacios colapsados. */
 export function normalizeSearchText(input: string): string {

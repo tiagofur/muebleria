@@ -9,9 +9,9 @@ import {
   ptxCutPlanExport,
 } from './index';
 
-describe('@muebles/excel', () => {
+describe('@granete/excel', () => {
   it('exports package identity and export APIs', () => {
-    expect(PACKAGE_NAME).toBe('@muebles/excel');
+    expect(PACKAGE_NAME).toBe('@granete/excel');
     expect(typeof optimizerExport).toBe('function');
     expect(typeof hardwareListExport).toBe('function');
     expect(typeof commercialQuoteExport).toBe('function');

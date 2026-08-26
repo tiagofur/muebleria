@@ -20,7 +20,7 @@ import type {
   MaterialBoard,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   EntityEditorLayout,
   Modal,

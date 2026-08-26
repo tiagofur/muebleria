@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@muebles/domain';
+import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@granete/domain';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import type {
   MaterialColorLookup,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { plantillaGabOnlyProject, plantillaCatalogWithModules } from '@muebles/domain/fixtures';
+import { plantillaGabOnlyProject, plantillaCatalogWithModules } from '@granete/domain/fixtures';
 import { buildCommercialScenarioPdfExport, scenarioPdfFileName } from './exportScenarioPdf';
 
 describe('buildCommercialScenarioPdfExport (#137)', () => {

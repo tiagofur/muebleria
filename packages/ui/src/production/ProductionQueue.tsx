@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import {
   CheckCircle2,
   ClipboardList,
@@ -54,7 +54,7 @@ export type ProductionQueueProps = {
    */
   readonly cutRowsFor?: (
     projectId: string,
-  ) => readonly import('@muebles/domain').ProductionCutRow[] | undefined;
+  ) => readonly import('@granete/domain').ProductionCutRow[] | undefined;
   /** Active claims — projects with at least one go to "Ya en producción". */
   readonly activeClaims?: readonly FabricActiveClaim[];
 };

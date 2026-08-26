@@ -115,19 +115,19 @@ import type {
   WarrantyTicketStatus,
   ShowcasePhotoItem,
   WorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   TIME_ENTRY_CATEGORIES,
   OTHER_COST_KINDS,
   MATERIAL_MANUFACTURER_UNSET,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 
 import {
   normalizeHardwarePartFinishes,
   normalizeMachiningProfile,
   resolveWorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 
 
@@ -644,7 +644,7 @@ function optionalRotate(value: unknown): number | undefined {
 }
 
 function componentInstanceToApi(
-  c: import('@muebles/domain').ModuleComponentInstance,
+  c: import('@granete/domain').ModuleComponentInstance,
 ): Record<string, unknown> {
   const overrides: Record<string, unknown> = {};
   if (c.overrides?.edges) {
@@ -686,7 +686,7 @@ function componentInstanceToApi(
 
 function hardwarePlacementFromApi(
   raw: Record<string, unknown>,
-): import('@muebles/domain').HardwarePlacement {
+): import('@granete/domain').HardwarePlacement {
   const relRaw = (raw.relativePosition ?? raw.relative_position) as
     | Record<string, unknown>
     | undefined;
@@ -725,7 +725,7 @@ function hardwarePlacementFromApi(
 
 function componentInstanceFromApi(
   raw: Record<string, unknown>,
-): import('@muebles/domain').ModuleComponentInstance {
+): import('@granete/domain').ModuleComponentInstance {
   const placement = str(raw.placementOverride ?? raw.placement_override);
   const overridesRaw =
     raw.overrides && typeof raw.overrides === 'object'
@@ -797,7 +797,7 @@ function componentInstanceFromApi(
     componentId: str(raw.componentId ?? raw.component_id),
     quantity: num(raw.quantity, 1),
     placementOverride: placement
-      ? (placement as import('@muebles/domain').ComponentPlacement)
+      ? (placement as import('@granete/domain').ComponentPlacement)
       : undefined,
     overrides: hasOverrides
       ? {
@@ -824,7 +824,7 @@ function componentInstanceFromApi(
   };
 }
 
-function presetToApi(p: import('@muebles/domain').DimensionPreset): Record<string, unknown> {
+function presetToApi(p: import('@granete/domain').DimensionPreset): Record<string, unknown> {
   return {
     id: p.id,
     name: p.name ?? '',
@@ -834,7 +834,7 @@ function presetToApi(p: import('@muebles/domain').DimensionPreset): Record<strin
   };
 }
 
-function presetFromApi(raw: Record<string, unknown>): import('@muebles/domain').DimensionPreset {
+function presetFromApi(raw: Record<string, unknown>): import('@granete/domain').DimensionPreset {
   const name = str(raw.name);
   return {
     id: str(raw.id),
@@ -851,7 +851,7 @@ function presetFromApi(raw: Record<string, unknown>): import('@muebles/domain').
  * (no `notes`/`active` — irrelevant for re-resolution, see Slice 1).
  */
 export function agregadoInstanceToApi(
-  inst: import('@muebles/domain').ModuleAgregadoInstance,
+  inst: import('@granete/domain').ModuleAgregadoInstance,
 ): Record<string, unknown> {
   return {
     id: inst.id,
@@ -881,7 +881,7 @@ export function agregadoInstanceToApi(
 
 export function agregadoInstanceFromApi(
   raw: Record<string, unknown>,
-): import('@muebles/domain').ModuleAgregadoInstance {
+): import('@granete/domain').ModuleAgregadoInstance {
   const posRaw = raw.position as Record<string, unknown> | undefined;
   const dimsRaw = raw.dimensions as Record<string, unknown> | undefined;
   const overridesRaw = raw.option_overrides ?? raw.optionOverrides;
@@ -916,7 +916,7 @@ export function agregadoInstanceFromApi(
 }
 
 function structureRevisionToApi(
-  r: import('@muebles/domain').StructureRevision,
+  r: import('@granete/domain').StructureRevision,
 ): Record<string, unknown> {
   return {
     revision: r.revision,
@@ -933,7 +933,7 @@ function structureRevisionToApi(
 
 function structureRevisionFromApi(
   raw: Record<string, unknown>,
-): import('@muebles/domain').StructureRevision {
+): import('@granete/domain').StructureRevision {
   const w = num(raw.width_mm ?? raw.widthMm);
   const h = num(raw.height_mm ?? raw.heightMm);
   const d = num(raw.depth_mm ?? raw.depthMm);
@@ -958,7 +958,7 @@ function structureRevisionFromApi(
   };
 }
 
-export function structureToApi(st: import('@muebles/domain').Structure): Record<string, unknown> {
+export function structureToApi(st: import('@granete/domain').Structure): Record<string, unknown> {
   // #108 — `revision` defaults to 1 when absent (domain normalizes the same way
   // via `structureRevision`). Always emit it so the Go side never sees a zero
   // revision from legacy FE payloads.
@@ -984,7 +984,7 @@ export function structureToApi(st: import('@muebles/domain').Structure): Record<
   };
 }
 
-export function structureFromApi(raw: Record<string, unknown>): import('@muebles/domain').Structure {
+export function structureFromApi(raw: Record<string, unknown>): import('@granete/domain').Structure {
   const w = num(raw.width_mm ?? raw.widthMm);
   const h = num(raw.height_mm ?? raw.heightMm);
   const d = num(raw.depth_mm ?? raw.depthMm);
@@ -998,7 +998,7 @@ export function structureFromApi(raw: Record<string, unknown>): import('@muebles
   const jointRulesRaw = raw.joint_drilling_rules ?? raw.jointDrillingRules;
   const jointDrillingRules =
     jointRulesRaw && typeof jointRulesRaw === 'object' && !Array.isArray(jointRulesRaw)
-      ? (jointRulesRaw as import('@muebles/domain').Structure['jointDrillingRules'])
+      ? (jointRulesRaw as import('@granete/domain').Structure['jointDrillingRules'])
       : undefined;
   const history = Array.isArray(historyRaw)
     ? (historyRaw as Record<string, unknown>[]).map(structureRevisionFromApi)
@@ -3132,7 +3132,7 @@ export function breakdownFromApi(raw: Record<string, unknown>): QuoteBreakdown {
   };
 }
 
-export function agregadoToApi(a: import('@muebles/domain').Agregado): Record<string, unknown> {
+export function agregadoToApi(a: import('@granete/domain').Agregado): Record<string, unknown> {
   const dims = a.externalDims;
   return {
     id: a.id,
@@ -3149,7 +3149,7 @@ export function agregadoToApi(a: import('@muebles/domain').Agregado): Record<str
   };
 }
 
-export function agregadoFromApi(raw: Record<string, unknown>): import('@muebles/domain').Agregado {
+export function agregadoFromApi(raw: Record<string, unknown>): import('@granete/domain').Agregado {
   const componentsRaw = raw.components;
   const hardwareLinesRaw = raw.hardware_lines ?? raw.hardwareLines;
   const w = num(raw.width_mm ?? raw.widthMm);

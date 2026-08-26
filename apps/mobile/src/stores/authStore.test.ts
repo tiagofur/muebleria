@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAuthStore, type UserSession } from './authStore';
-import { roleCanExportProduction, roleCanDeleteProject } from '@muebles/domain';
+import { roleCanExportProduction, roleCanDeleteProject } from '@granete/domain';
 
 // Mock expo-secure-store
 vi.mock('expo-secure-store', () => {
@@ -59,7 +59,7 @@ describe('authStore Mobile', () => {
     expect(state.user).toEqual(mockUser);
   });
 
-  it('valida permisos del usuario autenticado con @muebles/domain', async () => {
+  it('valida permisos del usuario autenticado con @granete/domain', async () => {
     const mockUser: UserSession = {
       userId: 'usr-prod',
       name: 'Carlos Planta',

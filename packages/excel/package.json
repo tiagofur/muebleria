@@ -1,5 +1,5 @@
 {
-  "name": "@muebles/excel",
+  "name": "@granete/excel",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@muebles/domain": "workspace:*",
+    "@granete/domain": "workspace:*",
     "exceljs": "^4.4.0",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4"

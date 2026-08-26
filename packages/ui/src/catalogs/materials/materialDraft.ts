@@ -2,7 +2,7 @@
  * Material draft model shared by the materials screen and its form modal.
  */
 
-import type { EdgeBand, MaterialBoard } from '@muebles/domain';
+import type { EdgeBand, MaterialBoard } from '@granete/domain';
 
 import type { EdgeDraft } from '../EdgesCatalog';
 

@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, type ReactNode } from 'react';
-import type { ShowcasePhotoItem, ProjectPhotoStage } from '@muebles/domain';
+import type { ShowcasePhotoItem, ProjectPhotoStage } from '@granete/domain';
 import {
   filterShowcasePhotos,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   Eye,
   EyeOff,

@@ -9,7 +9,7 @@ import type {
   OptionGroup,
   Project,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   resolveModuleHardwarePlacements,
   resolveProject3DPreview,

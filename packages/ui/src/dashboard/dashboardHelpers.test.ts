@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectStatus } from '@muebles/domain';
+import type { ProjectStatus } from '@granete/domain';
 import {
   aggregatePortfolioByOwner,
   countActiveMaterials,

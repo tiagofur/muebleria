@@ -4,7 +4,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import { ValidationError } from '@muebles/domain';
+import { ValidationError } from '@granete/domain';
 import { workbookBytes } from './optimizerExport';
 
 export type CommercialQuoteLine = {

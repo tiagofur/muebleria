@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { Hardware, HardwarePlacement, ResolvedBoardPart } from '@muebles/domain';
+import type { Hardware, HardwarePlacement, ResolvedBoardPart } from '@granete/domain';
 import { PieceFaceDrillingEditor, snappedPlacementPatch } from './PieceFaceDrillingEditor';
 
 afterEach(cleanup);

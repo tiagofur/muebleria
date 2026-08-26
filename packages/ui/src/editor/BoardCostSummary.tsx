@@ -6,8 +6,8 @@
  */
 
 import { useMemo, type ReactNode } from 'react';
-import type { ResolvedBoardPart, Catalog } from '@muebles/domain';
-import { calcBoardLineMetrics } from '@muebles/domain';
+import type { ResolvedBoardPart, Catalog } from '@granete/domain';
+import { calcBoardLineMetrics } from '@granete/domain';
 import './boardCostSummary.css';
 
 export interface BoardCostSummaryProps {

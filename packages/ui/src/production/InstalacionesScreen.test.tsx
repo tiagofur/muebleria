@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { Customer, Project, ProjectItem } from '@muebles/domain';
+import type { Customer, Project, ProjectItem } from '@granete/domain';
 
 import { InstalacionesScreen, instalacionesProjects } from './InstalacionesScreen';
 

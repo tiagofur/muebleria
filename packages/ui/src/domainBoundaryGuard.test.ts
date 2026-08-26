@@ -6,7 +6,7 @@
  * fuente de ui y falla si aparece:
  *   - aritmética de precio/costo propia (costPerM2/boardPrice/wastePercent);
  *   - implementación local de evaluación de fórmulas paramétricas (W/H/D).
- * Importar y llamar a @muebles/domain está permitido (estimateLineSalePrice
+ * Importar y llamar a @granete/domain está permitido (estimateLineSalePrice
  * delega a calcProjectBreakdown; ComponentsScreen llama a evaluatePartFormula
  * importada — el patrón correcto).
  *

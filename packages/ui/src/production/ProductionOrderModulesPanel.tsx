@@ -9,11 +9,11 @@ import type {
   Module,
   Project,
   ProductionCutRow,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   ITEM_FLOOR_STATUSES,
   ITEM_FLOOR_STATUS_LABELS_ES,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Search } from 'lucide-react';
 import { buildProductionModuleRows } from './productionModuleRows';
 

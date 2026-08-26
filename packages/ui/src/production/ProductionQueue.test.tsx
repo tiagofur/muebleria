@@ -4,7 +4,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import { ProductionQueue } from './ProductionQueue';
 
 function project(

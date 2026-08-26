@@ -3,7 +3,7 @@
  * Pure helpers only; shell supplies cut-list result from domain.
  */
 
-import type { Project, ProductionCutRow } from '@muebles/domain';
+import type { Project, ProductionCutRow } from '@granete/domain';
 import { isProductionQueueStatus } from './productionHelpers';
 
 /**

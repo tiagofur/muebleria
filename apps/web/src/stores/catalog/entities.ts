@@ -7,8 +7,8 @@ import {
   bumpStructureRevision,
   duplicateModule as deepCopyModule,
   suggestDuplicateCode,
-} from '@muebles/domain';
-import type { ModuleCategory } from '@muebles/domain';
+} from '@granete/domain';
+import type { ModuleCategory } from '@granete/domain';
 
 import { draftToComponent, draftToModule, draftToStructure } from '../catalogMappers';
 import type { CatalogState, CatalogStoreCtx } from './shared';

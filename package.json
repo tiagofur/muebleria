@@ -1,5 +1,5 @@
 {
-  "name": "muebles",
+  "name": "granete",
   "private": true,
   "version": "0.0.0",
   "description": "Furniture quotation and production system — pnpm monorepo",
@@ -9,8 +9,8 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present run build",
-    "build:desktop": "pnpm --filter @muebles/desktop package",
-    "release:desktop": "pnpm --filter @muebles/desktop dist",
+    "build:desktop": "pnpm --filter @granete/desktop package",
+    "release:desktop": "pnpm --filter @granete/desktop dist",
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "visual": "playwright test --config=playwright.config.ts",

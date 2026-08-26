@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   PIPELINE_SECTORS,
   PRODUCTION_SECTOR_LABELS_ES,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type ActiveJob = {
   readonly activityId: string;

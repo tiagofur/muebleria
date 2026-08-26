@@ -16,7 +16,7 @@ import type {
   ProductionCutRow,
   CutPlanSheet,
   CutPlanPlacedPiece,
-} from '@muebles/domain';
+} from '@granete/domain';
 import './productionBoardView.css';
 import {
   computeBoardCutLayout,

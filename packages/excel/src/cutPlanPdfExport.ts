@@ -8,8 +8,8 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { CutPlan, CutPlanConfig, CutPlanSheet, CutPlanPlacedPiece, CutPlanRemnant } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { CutPlan, CutPlanConfig, CutPlanSheet, CutPlanPlacedPiece, CutPlanRemnant } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 export interface CutPlanPdfExportInput {
   readonly cutPlan: CutPlan;

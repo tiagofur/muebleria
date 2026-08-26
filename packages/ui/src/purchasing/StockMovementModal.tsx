@@ -11,7 +11,7 @@ import {
   STOCK_MOVEMENT_LABELS_ES,
   type StockMaterialKind,
   type StockMovementType,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Modal } from '../common';
 import type { StockCatalogOption } from './StockPanel';
 

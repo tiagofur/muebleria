@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useQuoterStore } from './quoterStore';
-import { seedCatalogExpandedLatAm } from '@muebles/domain';
+import { seedCatalogExpandedLatAm } from '@granete/domain';
 
 describe('quoterStore Mobile (Fase 3)', () => {
   beforeEach(() => {
@@ -12,7 +12,7 @@ describe('quoterStore Mobile (Fase 3)', () => {
     });
   });
 
-  it('agrega módulos al cotizador y calcula costos con @muebles/domain', () => {
+  it('agrega módulos al cotizador y calcula costos con @granete/domain', () => {
     const store = useQuoterStore.getState();
     const mod = seedCatalogExpandedLatAm.modules[0];
 

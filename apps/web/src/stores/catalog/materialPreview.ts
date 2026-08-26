@@ -3,9 +3,9 @@
  * (color + PBR), shared by create/update so both clamp identically.
  */
 
-import { normalizePreviewColor } from '@muebles/domain';
-import type { MaterialBoard } from '@muebles/domain';
-import type { MaterialDraft } from '@muebles/ui';
+import { normalizePreviewColor } from '@granete/domain';
+import type { MaterialBoard } from '@granete/domain';
+import type { MaterialDraft } from '@granete/ui';
 
 import { parsePbr } from './shared';
 

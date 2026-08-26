@@ -3,7 +3,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import type { PlacementDims, ResolvedBoardPart } from '@muebles/domain';
+import type { PlacementDims, ResolvedBoardPart } from '@granete/domain';
 import type {
   MaterialColorLookup,
   MaterialTextureLookup,

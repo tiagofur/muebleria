@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Component } from '@muebles/domain';
+import type { Component } from '@granete/domain';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { Furniture3DViewer } from '../../common';

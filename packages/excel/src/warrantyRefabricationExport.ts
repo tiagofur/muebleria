@@ -1,5 +1,5 @@
-import type { ProductionCutRow, WarrantyTicket } from '@muebles/domain';
-import { refabricationPiecesToCutRows } from '@muebles/domain';
+import type { ProductionCutRow, WarrantyTicket } from '@granete/domain';
+import { refabricationPiecesToCutRows } from '@granete/domain';
 import { optimizerExport } from './optimizerExport';
 
 /**

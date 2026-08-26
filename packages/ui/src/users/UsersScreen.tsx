@@ -18,7 +18,7 @@ import { ConfirmDialog, EmptyState, PageHeader, PageLoading, StatusChips } from 
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
-import type { ProductRole } from '@muebles/domain';
+import type { ProductRole } from '@granete/domain';
 
 export interface UserRow {
   readonly id: string;

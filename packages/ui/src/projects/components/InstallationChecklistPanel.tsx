@@ -6,8 +6,8 @@ import { useMemo, type ReactNode } from 'react';
 import type {
   InstallationChecklistItem,
   Project,
-} from '@muebles/domain';
-import { DEFAULT_INSTALLATION_CHECKLIST } from '@muebles/domain';
+} from '@granete/domain';
+import { DEFAULT_INSTALLATION_CHECKLIST } from '@granete/domain';
 
 export type InstallationChecklistPanelProps = {
   readonly project: Project;

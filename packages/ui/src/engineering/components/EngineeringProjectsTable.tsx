@@ -8,7 +8,7 @@ import {
   ENGINEERING_STATUS_LABELS_ES,
   type EngineeringDashboardProjectMetrics,
   type EngineeringStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState } from '../../common';
 
 const STATUS_BADGE_MODIFIERS: Readonly<Record<EngineeringStatus, string>> = {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useFloorScannerStore } from './floorScannerStore';
-import { pieceLabelQrPayload } from '@muebles/domain';
+import { pieceLabelQrPayload } from '@granete/domain';
 
 // Mock expo-haptics (non-native test env)
 vi.mock('expo-haptics', () => ({
@@ -274,7 +274,7 @@ describe('floorScannerStore offline persistence (F091 item 2)', () => {
 
 // --- #301: physical routing (pieza → part endpoint, unidad/bulto → unit endpoint) ---
 
-import { moduleLabelQrPayload } from '@muebles/domain';
+import { moduleLabelQrPayload } from '@granete/domain';
 
 const partQr = pieceLabelQrPayload({
   projectId: 'p1',

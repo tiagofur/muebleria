@@ -3,7 +3,7 @@
 > **Estado:** CANÓNICO  
 > **Fecha:** 2026-08-24  
 > **ADR Relacionado:** [ADR-0001](../adr/0001-sketchup-manufacturing-ownership.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md)  
-> **Documento de Estrategia:** [sketchup-muebles-strategy.md](../sketchup-muebles-strategy.md)  
+> **Documento de Estrategia:** [sketchup-granete-strategy.md](../sketchup-granete-strategy.md)  
 > **Invariante Central:** **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 ---
@@ -21,13 +21,13 @@ Biblioteca de Muebles  ──(Inserción)──►  Canvas 3D (SketchUp Viewport
 1. **Biblioteca (Catalog):** El diseñador explora definiciones de muebles paramétricos (`FurnitureDefinition`), configura cotas iniciales con validación interactiva ligera y solicita la inserción en el modelo.
 2. **Canvas 3D (Viewport de SketchUp):** La extensión actúa como **renderer/adaptador**, creando entidades geométricas agrupadas en el espacio 3D e inyectando metadata semántica inmutable.
 3. **Inspector Contextual:** Al hacer clic o seleccionar una entidad en el canvas, un `SelectionObserver` detecta la metadata y rehidrata dinámicamente el panel HTML con los parámetros activos del mueble, permitiendo edición en vivo.
-4. **Edición Paramétrica In-Place:** Al modificar parámetros en el inspector, `@muebles/domain` recalcula la estructura y Ruby actualiza la geometría interna del grupo **sin alterar su posición ni rotación global en el espacio**.
+4. **Edición Paramétrica In-Place:** Al modificar parámetros en el inspector, `@granete/domain` recalcula la estructura y Ruby actualiza la geometría interna del grupo **sin alterar su posición ni rotación global en el espacio**.
 
 ---
 
 ## 2. Fronteras de Responsabilidad (Boundary)
 
-| Responsabilidad | SketchUp (Ruby / Webview) | Granete (`@muebles/domain` / Backend) |
+| Responsabilidad | SketchUp (Ruby / Webview) | Granete (`@granete/domain` / Backend) |
 |---|---|---|
 | **Interacción y Viewport** | Selección, transformaciones 3D, navegación de cámara | Observador pasivo de transformaciones |
 | **Dibujo / Rendering** | Creación de grupos, caras y asignación de materiales | Desacoplado de APIs de dibujo |
@@ -86,7 +86,7 @@ Granete divide la validación en dos niveles claramente delimitados:
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 2. Preflight de Manufactura Completo (Authoritative Domain) │
-│    • Validación asíncrona rigurosa en @muebles/domain.      │
+│    • Validación asíncrona rigurosa en @granete/domain.      │
 │    • Detección de colisiones de perforaciones (DRILLING).   │
 │    • Verificación de capacidades de máquina CNC y perfiles.  │
 │    • Trazabilidad de revisión (bomFingerprint / revId).     │

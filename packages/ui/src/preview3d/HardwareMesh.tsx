@@ -15,8 +15,8 @@
  */
 
 import { type ReactNode } from 'react';
-import type { Hardware, HardwarePlacement, ResolvedHardwarePlacement } from '@muebles/domain';
-import { normalizePreviewColor, resolveHardwarePartFinish } from '@muebles/domain';
+import type { Hardware, HardwarePlacement, ResolvedHardwarePlacement } from '@granete/domain';
+import { normalizePreviewColor, resolveHardwarePartFinish } from '@granete/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
 
 // --- pure geometry helpers (jsdom-tested) ---------------------------------

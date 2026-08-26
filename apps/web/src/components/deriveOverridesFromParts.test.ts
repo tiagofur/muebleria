@@ -3,7 +3,7 @@
  * @vitest-environment node
  */
 import { describe, expect, it } from 'vitest';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type { ResolvedBoardPart } from '@granete/domain';
 import { deriveOverridesFromParts } from './deriveOverridesFromParts';
 
 function makePart(

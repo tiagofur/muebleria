@@ -13,7 +13,7 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { deliverExcelFile } from './exportOptimizer';
 
 export type ExportCncPilotResult =

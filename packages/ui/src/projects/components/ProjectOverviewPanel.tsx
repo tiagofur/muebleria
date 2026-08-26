@@ -26,7 +26,7 @@ import {
   openFieldIssues,
   openInstallationVisits,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import '../projects.css';
 import './projectOverview.css';
 

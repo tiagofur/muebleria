@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPerfReferenceProject,
   perfReferenceCatalog,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   resolveProject3DPreview,
   resetProject3dPreviewStatsForTests,

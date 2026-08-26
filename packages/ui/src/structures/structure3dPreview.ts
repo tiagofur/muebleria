@@ -9,8 +9,8 @@ import type {
   OptionChoices,
   ResolvedBoardPart,
   Structure,
-} from '@muebles/domain';
-import { resolveComposedModule } from '@muebles/domain';
+} from '@granete/domain';
+import { resolveComposedModule } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';

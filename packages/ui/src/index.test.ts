@@ -21,9 +21,9 @@ import {
   validateUniqueCode,
 } from './index';
 
-describe('@muebles/ui package surface', () => {
+describe('@granete/ui package surface', () => {
   it('exports package identity', () => {
-    expect(PACKAGE_NAME).toBe('@muebles/ui');
+    expect(PACKAGE_NAME).toBe('@granete/ui');
   });
 
   it('exports catalog screens and helpers (F006)', () => {

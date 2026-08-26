@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
-import type { WarrantyTicket } from '@muebles/domain';
+import type { WarrantyTicket } from '@granete/domain';
 import {
   exportWarrantyRefabricationOptimizer,
   warrantyRefabricationFilename,

@@ -15,28 +15,28 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: '@muebles/domain/fixtures',
+        find: '@granete/domain/fixtures',
         replacement: path.resolve(
           rootDir,
           '../../packages/domain/src/__fixtures__/plantillaDemo.ts',
         ),
       },
       {
-        find: '@muebles/domain',
+        find: '@granete/domain',
         replacement: path.resolve(
           rootDir,
           '../../packages/domain/src/index.ts',
         ),
       },
       {
-        find: '@muebles/storage/seed',
+        find: '@granete/storage/seed',
         replacement: path.resolve(
           rootDir,
           '../../packages/storage/src/seed.ts',
         ),
       },
       {
-        find: '@muebles/ui/design-system',
+        find: '@granete/ui/design-system',
         replacement: path.resolve(
           rootDir,
           '../../packages/ui/src/design-system',

@@ -3,7 +3,7 @@
  * F086: NEVER enters BOM/cost) + their 3-level categories.
  */
 
-import type { AmbientCategory, AmbientMaterial } from '@muebles/domain';
+import type { AmbientCategory, AmbientMaterial } from '@granete/domain';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { parsePbr } from './shared';

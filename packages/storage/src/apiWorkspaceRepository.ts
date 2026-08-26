@@ -37,11 +37,11 @@ import type {
   ReworkAction,
   UnitQcChecklistItem,
   SurveyElementInput,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
   withWorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type {
   WorkspaceRepository,
   InstallationView,
@@ -267,7 +267,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     };
     if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
       try {
-        const token = globalThis.localStorage.getItem('muebles_token');
+        const token = globalThis.localStorage.getItem('granete_token');
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
@@ -709,7 +709,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const headers: Record<string, string> = {};
     if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
       try {
-        const token = globalThis.localStorage.getItem('muebles_token');
+        const token = globalThis.localStorage.getItem('granete_token');
         if (token) headers['Authorization'] = `Bearer ${token}`;
       } catch {
         // ignore

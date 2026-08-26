@@ -8,7 +8,7 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import { ValidationError } from '@muebles/domain';
+import { ValidationError } from '@granete/domain';
 import type { CommercialQuoteLine } from './commercialQuoteExport';
 
 export type CommercialQuotePdfVariant = 'detailed' | 'summary';

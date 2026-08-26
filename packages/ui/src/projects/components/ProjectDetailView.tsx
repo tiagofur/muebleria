@@ -31,7 +31,7 @@ import type {
   Structure,
   WarrantyPhotoKind,
   WarrantyTicket,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import {
   Check,
@@ -175,7 +175,7 @@ export interface ProjectDetailViewProps {
   // --- Kitchen layout / scenarios / checklist / nesting callbacks ---
   readonly onUpdateKitchenLayout?: (
     projectId: string,
-    layout: import('@muebles/domain').ProjectKitchenLayout,
+    layout: import('@granete/domain').ProjectKitchenLayout,
   ) => void;
   readonly onApplyScenarioB?: (
     projectId: string,
@@ -194,7 +194,7 @@ export interface ProjectDetailViewProps {
   ) => void;
   readonly onUpdateInstallationChecklist?: (
     projectId: string,
-    items: readonly import('@muebles/domain').InstallationChecklistItem[],
+    items: readonly import('@granete/domain').InstallationChecklistItem[],
   ) => void;
   readonly onImportNesting?: (
     projectId: string,
@@ -265,13 +265,13 @@ export interface ProjectDetailViewProps {
 
   // --- CRM & Warranty Desk (CRM Phase 3) ---
   readonly warranties?: readonly WarrantyTicket[];
-  readonly availableCutRows?: readonly import('@muebles/domain').ProductionCutRow[];
+  readonly availableCutRows?: readonly import('@granete/domain').ProductionCutRow[];
   readonly onCreateWarrantyTicket?: (
     ticket: Partial<WarrantyTicket> & {
       projectId: string;
       title: string;
-      category: import('@muebles/domain').WarrantyTicketCategory;
-      priority: import('@muebles/domain').WarrantyTicketPriority;
+      category: import('@granete/domain').WarrantyTicketCategory;
+      priority: import('@granete/domain').WarrantyTicketPriority;
     },
   ) => Promise<void>;
 
@@ -294,7 +294,7 @@ export interface ProjectDetailViewProps {
   readonly onReleaseToProduction?: (
     projectId: string,
     note?: string,
-    options?: import('@muebles/domain').ProductionReleaseOptions,
+    options?: import('@granete/domain').ProductionReleaseOptions,
   ) => void | Promise<void>;
   readonly onRevokeProductionRelease?: (
     projectId: string,
@@ -305,7 +305,7 @@ export interface ProjectDetailViewProps {
     params: {
       reason: string;
       description?: string;
-      impact?: import('@muebles/domain').ChangeOrderImpact;
+      impact?: import('@granete/domain').ChangeOrderImpact;
     },
   ) => void | Promise<void>;
   readonly onSubmitChangeOrder?: (
@@ -335,16 +335,16 @@ export interface ProjectDetailViewProps {
   ) => void | Promise<void>;
   readonly onRequestApproval?: (
     projectId: string,
-    type: import('@muebles/domain').ApprovalType,
+    type: import('@granete/domain').ApprovalType,
     notes?: string,
   ) => void | Promise<void>;
   readonly onChangeCommercialStatus?: (
     projectId: string,
-    status: import('@muebles/domain').CommercialStatus,
+    status: import('@granete/domain').CommercialStatus,
   ) => void | Promise<void>;
   readonly onRecordDeposit?: (
     projectId: string,
-    params: import('@muebles/domain').DepositReceivedPayload & { note?: string },
+    params: import('@granete/domain').DepositReceivedPayload & { note?: string },
   ) => void | Promise<void>;
 }
 

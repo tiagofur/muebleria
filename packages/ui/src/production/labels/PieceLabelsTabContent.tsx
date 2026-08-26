@@ -5,14 +5,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 import { FileDown, Printer, Search, Tags } from 'lucide-react';
-import type { PieceLabel, Project } from '@muebles/domain';
+import type { PieceLabel, Project } from '@granete/domain';
 import {
   pieceBatchToZpl,
   pieceLabelEdgeSides,
   pieceLabelQrPayload,
   pieceLabelQrPayloadUrl,
   ZPL_SIZE_PRESETS,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { LabelPrinterSettings } from '../labelPrinterSettings';
 import { LabelPrinterConfigSection } from './LabelPrinterConfigSection';
 

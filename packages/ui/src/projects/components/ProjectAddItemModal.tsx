@@ -28,7 +28,7 @@ import type {
   OptionChoices,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   cascadeOptions,
   cascadeSelectedCategoryId,
@@ -37,7 +37,7 @@ import {
   filterModulesByCategory,
   pickPresetByMeasureDefaults,
   type CategoryFilterId,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { Modal } from '../../common';
 import {

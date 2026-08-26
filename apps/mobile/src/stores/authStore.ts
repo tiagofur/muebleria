@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { type UserRole, DomainError } from '@muebles/domain';
+import { type UserRole, DomainError } from '@granete/domain';
 import { apiClient } from '../services/apiClient';
+import { ensureSecureStoreMigrated } from '../services/secureStoreMigration';
 
-const TOKEN_KEY = 'muebles_auth_token';
-const USER_KEY = 'muebles_auth_user';
+const TOKEN_KEY = 'granete_auth_token';
+const USER_KEY = 'granete_auth_user';
 
 export interface UserSession {
   userId: string;
@@ -113,6 +114,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       await get().checkBiometrics();
+      await ensureSecureStoreMigrated();
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       const userJson = await SecureStore.getItemAsync(USER_KEY);
 
@@ -144,6 +146,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loginWithBiometrics: async () => {
     try {
+      await ensureSecureStoreMigrated();
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       const userJson = await SecureStore.getItemAsync(USER_KEY);
 

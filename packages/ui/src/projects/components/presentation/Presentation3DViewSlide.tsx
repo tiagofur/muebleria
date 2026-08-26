@@ -3,7 +3,7 @@
  */
 
 import { lazy, Suspense, type ReactNode } from 'react';
-import type { AmbientMaterial, Project } from '@muebles/domain';
+import type { AmbientMaterial, Project } from '@granete/domain';
 import {
   Box,
   Camera,

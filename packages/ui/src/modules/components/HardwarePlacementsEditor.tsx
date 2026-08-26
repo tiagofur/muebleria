@@ -10,7 +10,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { AnchorFace, Hardware, HardwarePlacement } from '@muebles/domain';
+import type { AnchorFace, Hardware, HardwarePlacement } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 
 export type HardwarePlacementsEditorProps = {

@@ -3,7 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
-import type { MaterialBoard, MaterialCategory } from '@muebles/domain';
+import type { MaterialBoard, MaterialCategory } from '@granete/domain';
 import { BoardMaterialPalette } from './BoardMaterialPalette';
 
 afterEach(() => {

@@ -1,8 +1,8 @@
 /**
  * Dev helper: wait for Vite (web) then launch Electron host.
  * Usage (from repo root):
- *   pnpm --filter @muebles/web dev   # terminal 1
- *   pnpm --filter @muebles/desktop dev:app
+ *   pnpm --filter @granete/web dev   # terminal 1
+ *   pnpm --filter @granete/desktop dev:app
  *
  * Or single command from desktop package after web is up.
  */
@@ -28,7 +28,7 @@ async function waitForUrl(target) {
     await new Promise((r) => setTimeout(r, delayMs));
   }
   throw new Error(
-    `Vite dev server not reachable at ${target}. Start: pnpm --filter @muebles/web dev`,
+    `Vite dev server not reachable at ${target}. Start: pnpm --filter @granete/web dev`,
   );
 }
 

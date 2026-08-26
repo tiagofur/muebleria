@@ -17,7 +17,7 @@ import type {
   CutPlan,
   CutPlanConfig,
   CutStrategy,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   estimateBoardSheets,
   generateProjectMaterialSummary,
@@ -25,7 +25,7 @@ import {
   DEFAULT_CUT_PLAN_CONFIG,
   DEFAULT_TOOL_SPACING_MM,
   type Catalog,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { ProductionBoardView } from './ProductionBoardView';
 
 export type ProductionOrderOptimizationPanelProps = {

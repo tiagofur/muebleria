@@ -9,35 +9,35 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: '@muebles/domain/fixtures',
+        find: '@granete/domain/fixtures',
         replacement: new URL(
           '../../packages/domain/src/__fixtures__/plantillaDemo.ts',
           import.meta.url,
         ).pathname,
       },
       {
-        find: '@muebles/domain',
+        find: '@granete/domain',
         replacement: new URL(
           '../../packages/domain/src/index.ts',
           import.meta.url,
         ).pathname,
       },
       {
-        find: '@muebles/storage/seed',
+        find: '@granete/storage/seed',
         replacement: new URL(
           '../../packages/storage/src/seed.ts',
           import.meta.url,
         ).pathname,
       },
       {
-        find: '@muebles/storage',
+        find: '@granete/storage',
         replacement: new URL(
           '../../packages/storage/src/index.ts',
           import.meta.url,
         ).pathname,
       },
       {
-        find: '@muebles/ui/design-system',
+        find: '@granete/ui/design-system',
         replacement: new URL(
           '../../packages/ui/src/design-system',
           import.meta.url,

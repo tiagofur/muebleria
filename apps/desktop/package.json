@@ -1,5 +1,5 @@
 {
-  "name": "@muebles/desktop",
+  "name": "@granete/desktop",
   "version": "1.0.0",
   "description": "Granete — Sistema de cotización y producción de muebles para talleres de carpintería",
   "author": "Tiago Furtado",
@@ -15,11 +15,11 @@
     "start": "electron .",
     "dev:app": "node ./scripts/dev-app.mjs",
     "prepackage": "node ./scripts/generate-icons.mjs",
-    "package": "pnpm --filter @muebles/web build && pnpm prepackage && electron-builder --dir",
-    "dist": "pnpm --filter @muebles/web build && pnpm prepackage && electron-builder",
-    "dist:win": "pnpm --filter @muebles/web build && pnpm prepackage && electron-builder --win",
-    "dist:mac": "pnpm --filter @muebles/web build && pnpm prepackage && electron-builder --mac",
-    "dist:linux": "pnpm --filter @muebles/web build && pnpm prepackage && electron-builder --linux"
+    "package": "pnpm --filter @granete/web build && pnpm prepackage && electron-builder --dir",
+    "dist": "pnpm --filter @granete/web build && pnpm prepackage && electron-builder",
+    "dist:win": "pnpm --filter @granete/web build && pnpm prepackage && electron-builder --win",
+    "dist:mac": "pnpm --filter @granete/web build && pnpm prepackage && electron-builder --mac",
+    "dist:linux": "pnpm --filter @granete/web build && pnpm prepackage && electron-builder --linux"
   },
   "build": {
     "appId": "com.granete.app",
@@ -95,8 +95,8 @@
     }
   },
   "dependencies": {
-    "@muebles/domain": "workspace:*",
-    "@muebles/storage": "workspace:*",
+    "@granete/domain": "workspace:*",
+    "@granete/storage": "workspace:*",
     "electron-updater": "^6.8.9"
   },
   "devDependencies": {

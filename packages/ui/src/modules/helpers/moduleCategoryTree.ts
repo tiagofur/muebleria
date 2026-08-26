@@ -2,8 +2,8 @@
  * Module category hierarchy traversal and filtering helpers.
  */
 
-import type { Module, ModuleCategory } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import type { Module, ModuleCategory } from '@granete/domain';
+import { childrenOf } from '@granete/domain';
 import { matchesCodeOrName } from '../../catalogs/catalogHelpers';
 import { formatMoneyDisplay } from '../../common/formatMoneyDisplay';
 

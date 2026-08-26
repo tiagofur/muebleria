@@ -10,7 +10,7 @@ import {
   type CategoryFilterId,
   type Module,
   type ModuleCategory,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Package, Search, ShoppingCart } from 'lucide-react';
 import { CatalogImage } from '../common/CatalogImage';
 import { EmptyState, Modal, PageHeader, PageToolbar, SearchInput, useDebouncedValue } from '../common';

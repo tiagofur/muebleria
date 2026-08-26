@@ -19,7 +19,7 @@ import {
   type Project,
   type ChangeOrder,
   type ChangeOrderImpact,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface ChangeOrderModalProps {
   readonly project: Project;

@@ -4,7 +4,7 @@
  */
 
 import { type ReactNode, useState } from 'react';
-import type { EdgeBand } from '@muebles/domain';
+import type { EdgeBand } from '@granete/domain';
 import { Modal } from '../../common';
 import {
   validateNonNegativeNumber,

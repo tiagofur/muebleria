@@ -3,8 +3,8 @@ import {
   ptxCutPlanExport,
   generatePtxByMaterial,
   type PtxCutPlanExportInput,
-} from '@muebles/excel';
-import type { CutPlan } from '@muebles/domain';
+} from '@granete/excel';
+import type { CutPlan } from '@granete/domain';
 import { downloadOptimizerXlsx, type DownloadDeps } from './exportOptimizer';
 
 export interface DownloadCutPlanPtxOptions {

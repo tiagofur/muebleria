@@ -3,7 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { ModuleCategory } from '@muebles/domain';
+import type { ModuleCategory } from '@granete/domain';
 import { CatalogImage } from '../../common';
 import type { ModuleDraft } from '../moduleHelpers';
 

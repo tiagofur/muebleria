@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StructuresScreen } from './StructuresScreen';
-import type { Component, Structure } from '@muebles/domain';
+import type { Component, Structure } from '@granete/domain';
 
 const mockCatalogComponent: Component = {
   id: 'comp-costado',

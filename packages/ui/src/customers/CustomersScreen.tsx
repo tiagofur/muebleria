@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import type { Customer, Project } from '@muebles/domain';
+import type { Customer, Project } from '@granete/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Users } from 'lucide-react';
 import {
 	EmptyState,

@@ -3,7 +3,7 @@
  */
 
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
-import type { Hardware, OptionGroup } from '@muebles/domain';
+import type { Hardware, OptionGroup } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import {
   moduleHardwareGridInputId,

@@ -10,15 +10,15 @@ import type {
   Customer,
   Module,
   Structure,
-} from '@muebles/domain';
-import type { ComponentPlacement } from '@muebles/domain';
+} from '@granete/domain';
+import type { ComponentPlacement } from '@granete/domain';
 import {
   draftToModule as draftToModuleFromUi,
   edgesFromFlags,
   type ComponentDraft,
   type ModuleDraft,
   type StructureDraft,
-} from '@muebles/ui';
+} from '@granete/ui';
 
 function optionalNotes(notes: string): string | undefined {
   const trimmed = notes.trim();

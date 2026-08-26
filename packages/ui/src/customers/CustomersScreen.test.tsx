@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { CustomersScreen } from './CustomersScreen';
-import type { Customer } from '@muebles/domain';
+import type { Customer } from '@granete/domain';
 
 const mockCustomers: Customer[] = [
 	{

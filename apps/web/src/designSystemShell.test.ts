@@ -61,11 +61,11 @@ describe('web shell design system wiring (F016)', () => {
 
   it('main.tsx imports design-system tokens and reset globally', () => {
     const main = readFileSync(mainTsxPath, 'utf8');
-    expect(main).toContain("@muebles/ui/design-system/tokens.css");
-    expect(main).toContain("@muebles/ui/design-system/reset.css");
+    expect(main).toContain("@granete/ui/design-system/tokens.css");
+    expect(main).toContain("@granete/ui/design-system/reset.css");
   });
 
-  it('app.css has no prototype palette leftovers (shell chrome lives in @muebles/ui)', () => {
+  it('app.css has no prototype palette leftovers (shell chrome lives in @granete/ui)', () => {
     const css = readFileSync(appCssPath, 'utf8');
     expect(css).not.toContain('#1a73e8');
     expect(css).not.toContain('#f0f2f5');
@@ -182,9 +182,9 @@ describe('web shell login gate (Slice E)', () => {
   it('session helpers module exists with token, user and auth routes', () => {
     const sessionPath = join(here, 'session.ts');
     const session = readFileSync(sessionPath, 'utf8');
-    expect(session).toContain('muebles_session');
-    expect(session).toContain('muebles_token');
-    expect(session).toContain('muebles_user');
+    expect(session).toContain('granete_session');
+    expect(session).toContain('granete_token');
+    expect(session).toContain('granete_user');
     expect(session).toContain('/auth/login');
     expect(session).toContain('/auth/register');
     expect(session).toContain('http://localhost:8080/api');
@@ -202,8 +202,8 @@ describe('web shell logout (Slice F)', () => {
     const { createWorkspaceStore } = await import('./stores/workspaceStore');
     const store = createWorkspaceStore();
     // Seed an auth session + token, then logout.
-    globalThis.localStorage.setItem('muebles_token', 'jwt');
-    globalThis.sessionStorage.setItem('muebles_session', 'auth');
+    globalThis.localStorage.setItem('granete_token', 'jwt');
+    globalThis.sessionStorage.setItem('granete_session', 'auth');
     store.setState({
       session: 'auth',
       workspace: { schemaVersion: 0, catalog: { materials: [], edges: [], hardware: [], optionGroups: [], categories: [], customers: [], modules: [], structures: [], components: [] }, projects: [] },
@@ -215,8 +215,8 @@ describe('web shell logout (Slice F)', () => {
     expect(store.getState().session).toBeNull();
     expect(store.getState().workspace).toBeNull();
     expect(store.getState().loginError).toBeNull();
-    expect(globalThis.localStorage.getItem('muebles_token')).toBeNull();
-    expect(globalThis.sessionStorage.getItem('muebles_session')).toBeNull();
+    expect(globalThis.localStorage.getItem('granete_token')).toBeNull();
+    expect(globalThis.sessionStorage.getItem('granete_session')).toBeNull();
   });
 });
 

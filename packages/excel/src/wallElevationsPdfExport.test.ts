@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Module, Project } from '@muebles/domain';
+import type { Module, Project } from '@granete/domain';
 import { PDFDocument } from 'pdf-lib';
 import { wallElevationsPdfExport } from './wallElevationsPdfExport';
 

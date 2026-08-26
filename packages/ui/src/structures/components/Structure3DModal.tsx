@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { OptionChoices, Structure } from '@muebles/domain';
+import type { OptionChoices, Structure } from '@granete/domain';
 import { Modal, Furniture3DViewer } from '../../common';
 import { materialColorMap, materialTextureMap } from '../../preview3d';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';

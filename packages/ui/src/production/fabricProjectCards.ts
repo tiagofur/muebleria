@@ -16,7 +16,7 @@ import {
   type ProductionMaterialTotal,
   type Project,
   type ProjectPickingState,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type FabricStation = 'cutting' | 'edge_banding' | 'assembly' | 'packaging';
 

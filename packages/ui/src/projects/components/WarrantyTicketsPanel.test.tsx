@@ -7,7 +7,7 @@ import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { WarrantyTicketsPanel } from './WarrantyTicketsPanel';
-import type { WarrantyTicket } from '@muebles/domain';
+import type { WarrantyTicket } from '@granete/domain';
 
 afterEach(() => {
   cleanup();

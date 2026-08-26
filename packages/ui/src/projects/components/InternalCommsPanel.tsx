@@ -4,12 +4,12 @@ import type {
   ProjectInternalMessage,
   ProjectInternalMessageType,
   ProjectTechnicalStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   TECHNICAL_STATUS_METADATA,
   INTERNAL_MESSAGE_TYPE_METADATA,
   getAvailableTechnicalTransitions,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   MessageSquare,
   Send,

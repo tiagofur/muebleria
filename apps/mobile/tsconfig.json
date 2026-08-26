@@ -14,8 +14,8 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@muebles/domain": ["../../packages/domain/src"],
-      "@muebles/storage": ["../../packages/storage/src"]
+      "@granete/domain": ["../../packages/domain/src"],
+      "@granete/storage": ["../../packages/storage/src"]
     }
   },
   "include": ["src/**/*", "App.tsx"]

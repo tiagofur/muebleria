@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Workspace, WorkshopSettings } from '@muebles/domain';
-import type { WorkspaceRepository } from '@muebles/storage';
-import { createSeedWorkspace } from '@muebles/storage';
+import type { Workspace, WorkshopSettings } from '@granete/domain';
+import type { WorkspaceRepository } from '@granete/storage';
+import { createSeedWorkspace } from '@granete/storage';
 
 import {
   type RepositoryFactory,
@@ -731,7 +731,7 @@ describe('workspaceStore — F118 guest import (S3)', () => {
   it('login offers import when the guest workspace has projects', async () => {
     const guest = createSeedWorkspace();
     globalThis.localStorage.setItem(
-      'muebles_guest_workspace',
+      'granete_guest_workspace',
       JSON.stringify({
         ...guest,
         projects: [{ ...guest.projects[0]!, id: 'guest-proj-1' }],
@@ -755,7 +755,7 @@ describe('workspaceStore — F118 guest import (S3)', () => {
   });
 
   it('login does NOT offer import when no guest work exists', async () => {
-    globalThis.localStorage.removeItem('muebles_guest_workspace');
+    globalThis.localStorage.removeItem('granete_guest_workspace');
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonOk({ token: 'jwt-3', user: AUTH_USER }));
@@ -771,7 +771,7 @@ describe('workspaceStore — F118 guest import (S3)', () => {
   it('importGuestWorkspace pushes guest catalog+projects and reloads', async () => {
     const guestWs = createSeedWorkspace();
     globalThis.localStorage.setItem(
-      'muebles_guest_workspace',
+      'granete_guest_workspace',
       JSON.stringify({
         ...guestWs,
         projects: [{ ...guestWs.projects[0]!, id: 'guest-proj-1' }],

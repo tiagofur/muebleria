@@ -12,7 +12,7 @@ import {
   recordOtherCost,
   type JobCosting,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 afterEach(cleanup);
 

@@ -12,13 +12,13 @@ import {
   type ProductionCutRow,
   type Project,
   ValidationError,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   IDS,
   plantillaCatalogWithModules,
   plantillaChoices,
   plantillaGabOnlyProject,
-} from '@muebles/domain/fixtures';
+} from '@granete/domain/fixtures';
 import { OPTIMIZER_DATA_HEADERS, optimizerExport } from './optimizerExport';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

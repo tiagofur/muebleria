@@ -4,7 +4,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Agregado, Component, Hardware } from '@muebles/domain';
+import type { Agregado, Component, Hardware } from '@granete/domain';
 import { AgregadoDetailView } from './AgregadoDetailView';
 import { Agregado3DModal } from './Agregado3DModal';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';

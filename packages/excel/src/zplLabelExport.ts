@@ -16,4 +16,4 @@ export {
   type ZplExportOptions,
   type ZplSizeDimensions,
   type ZplSizePreset,
-} from '@muebles/domain';
+} from '@granete/domain';

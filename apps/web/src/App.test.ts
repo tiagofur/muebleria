@@ -7,9 +7,9 @@ import {
   collectExportIssues,
   type Project,
   type ProjectItem,
-} from '@muebles/domain';
-import { createSeedWorkspace } from '@muebles/storage/seed';
-import { PACKAGE_NAME as domainName } from '@muebles/domain';
+} from '@granete/domain';
+import { createSeedWorkspace } from '@granete/storage/seed';
+import { PACKAGE_NAME as domainName } from '@granete/domain';
 import {
   canShowPricePreview,
   canShowProjectPricePreview,
@@ -31,14 +31,14 @@ import {
   validateProjectDraft,
   validateUniqueCode,
   emptyProjectDraft,
-} from '@muebles/ui';
+} from '@granete/ui';
 import {
   buildHardwareListExport,
   hardwareListFileName,
 } from './exportHardwareList';
 import { buildOptimizerExport, optimizerFileName } from './exportOptimizer';
 import { resolveDisplayBreakdown } from './derivations/breakdown';
-import type { QuoteBreakdown } from '@muebles/domain';
+import type { QuoteBreakdown } from '@granete/domain';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -89,7 +89,7 @@ describe('resolveDisplayBreakdown (list vs detail parity)', () => {
   });
 });
 
-describe('@muebles/web #15 setState side effects / stale patches', () => {
+describe('@granete/web #15 setState side effects / stale patches', () => {
   it('project mutations live in projectStore; catalog mutations in catalogStore (F063)', () => {
     // F062 moved catalog mutations to catalogStore. F063 moved project mutations
     // (including the old `patchProjects` wrapper) to projectStore. App.tsx no
@@ -130,7 +130,7 @@ const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
   });
 });
 
-describe('@muebles/web reliability (issues #11–#13)', () => {
+describe('@granete/web reliability (issues #11–#13)', () => {
   it('#11: calculate path uses DEFAULT_API_BASE + getAuthToken (no hardcode) — F063 hook moved', () => {
     // F063: the backend breakdown useEffect migrated from App.tsx to the
     // `useBackendBreakdownEffect` hook in projectStore. URL + token logic
@@ -141,7 +141,7 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
     );
     expect(projectStoreSrc).not.toMatch(/localhost:8080\/api\/projects/);
     expect(projectStoreSrc).not.toMatch(
-      /localStorage\.getItem\(['"]muebles_token['"]\)/,
+      /localStorage\.getItem\(['"]granete_token['"]\)/,
     );
     expect(projectStoreSrc).toContain('baseUrl');
     expect(projectStoreSrc).toMatch(/\/projects\/\$\{projectId\}\/calculate/);
@@ -228,10 +228,10 @@ describe('@muebles/web reliability (issues #11–#13)', () => {
   });
 });
 
-describe('@muebles/web F006 shell wiring', () => {
+describe('@granete/web F006 shell wiring', () => {
   it('resolves workspace packages', () => {
-    expect(domainName).toBe('@muebles/domain');
-    expect(uiName).toBe('@muebles/ui');
+    expect(domainName).toBe('@granete/domain');
+    expect(uiName).toBe('@granete/ui');
   });
 
   it('loads plantilla seed catalogs on first open (CAT-06)', () => {
@@ -271,7 +271,7 @@ describe('@muebles/web F006 shell wiring', () => {
   });
 });
 
-describe('@muebles/web F007 option groups + price gate', () => {
+describe('@granete/web F007 option groups + price gate', () => {
   it('seed includes INTERIOR/FRENTE/BISAGRA/CORREDERA (OPT-03)', () => {
     const ws = createSeedWorkspace();
     const codes = new Set(ws.catalog.optionGroups.map((g) => g.code));
@@ -352,7 +352,7 @@ describe('@muebles/web F007 option groups + price gate', () => {
   });
 });
 
-describe('@muebles/web F008 module editor wiring', () => {
+describe('@granete/web F008 module editor wiring', () => {
   it('seed includes MOD-GAB-01 and MOD-CAJ-01 with correct optionRoles (MOD-07)', () => {
     const ws = createSeedWorkspace();
     const codes = new Set(ws.catalog.modules.map((m) => m.code));
@@ -445,7 +445,7 @@ describe('@muebles/web F008 module editor wiring', () => {
   });
 });
 
-describe('@muebles/web F009 quotation / projects wiring', () => {
+describe('@granete/web F009 quotation / projects wiring', () => {
   it('seed includes demo plantilla project; UI can still create drafts (PRJ-01)', () => {
     const ws = createSeedWorkspace();
     expect(ws.projects.length).toBeGreaterThanOrEqual(1);
@@ -620,7 +620,7 @@ describe('@muebles/web F009 quotation / projects wiring', () => {
   });
 });
 
-describe('@muebles/web F010 export Optimizer', () => {
+describe('@granete/web F010 export Optimizer', () => {
   it('buildOptimizerExport produces buffer for seed project with complete choices', async () => {
     const ws = createSeedWorkspace();
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;
@@ -697,7 +697,7 @@ describe('@muebles/web F010 export Optimizer', () => {
   });
 });
 
-describe('@muebles/web F013 export lista de herrajes', () => {
+describe('@granete/web F013 export lista de herrajes', () => {
   it('buildHardwareListExport produces buffer for seed project with complete choices', async () => {
     const ws = createSeedWorkspace();
     const gab = ws.catalog.modules.find((m) => m.code === 'MOD-GAB-01')!;

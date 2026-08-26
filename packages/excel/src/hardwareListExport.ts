@@ -3,8 +3,8 @@
  */
 
 import ExcelJS from 'exceljs';
-import type { HardwarePurchaseRow, HardwareUnit } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { HardwarePurchaseRow, HardwareUnit } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 import { workbookBytes } from './optimizerExport';
 
 /** Purchase-list column headers (Código → Costo total). */

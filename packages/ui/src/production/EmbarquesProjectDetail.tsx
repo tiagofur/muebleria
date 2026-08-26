@@ -15,12 +15,12 @@ import type {
   Module,
   ModuleLabel,
   Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   calculateLoadingProgress,
   generateModuleLabels,
   parsePieceLabelScan,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { ProductionOrderDispatchPanel } from './ProductionOrderDispatchPanel';
 
 type CrossProjectAlert = {

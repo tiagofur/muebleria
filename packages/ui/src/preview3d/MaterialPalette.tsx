@@ -9,13 +9,13 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import type { AmbientCategory, AmbientMaterial } from '@muebles/domain';
+import type { AmbientCategory, AmbientMaterial } from '@granete/domain';
 import {
   categoryPath,
   childrenOf,
   filterAmbientMaterialsByCategory,
   UNCATEGORIZED_FILTER,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { SearchInput } from '../common';
 import {
   PAINT_DRAG_MIME,

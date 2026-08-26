@@ -17,7 +17,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   QuoteBreakdown,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
 import { ModulesScreen } from './ModulesScreen';
 

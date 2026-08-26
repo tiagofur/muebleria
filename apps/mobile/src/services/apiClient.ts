@@ -1,7 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
-import { DomainError } from '@muebles/domain';
+import { DomainError } from '@granete/domain';
+import { ensureSecureStoreMigrated } from './secureStoreMigration';
 
-const TOKEN_KEY = 'muebles_auth_token';
+const TOKEN_KEY = 'granete_auth_token';
 
 export interface ApiClientConfig {
   baseUrl: string;
@@ -47,6 +48,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   };
 
   try {
+    await ensureSecureStoreMigrated();
     const token = await SecureStore.getItemAsync(TOKEN_KEY);
     if (token && !headers.Authorization) {
       headers.Authorization = `Bearer ${token}`;

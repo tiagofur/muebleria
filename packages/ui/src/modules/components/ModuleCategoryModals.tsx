@@ -3,8 +3,8 @@
  */
 
 import type { FormEvent, ReactNode } from 'react';
-import type { ModuleCategory } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import type { ModuleCategory } from '@granete/domain';
+import { childrenOf } from '@granete/domain';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Modal } from '../../common';
 import type { CategoryDraft } from '../moduleHelpers';

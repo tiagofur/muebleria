@@ -7,7 +7,7 @@
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Component, Hardware } from '@muebles/domain';
+import type { Component, Hardware } from '@granete/domain';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import {
   AgregadoEditorForm,

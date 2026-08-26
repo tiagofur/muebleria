@@ -48,7 +48,7 @@
   con Reintentar/Ir al inicio y la nav sigue viva, en vez de tumbar toda la app.
 - 5.5 Performance: se intentó `lazy()` de `FurnitureScene3D` en
   `ProductionOrderViewsPanel`, pero el build mostró que NO separa el chunk:
-  el barrel de `@muebles/ui` re-exporta preview3d y ~8 modals/pantallas lo
+  el barrel de `@granete/ui` re-exporta preview3d y ~8 modals/pantallas lo
   importan estático → three.js queda eager igual. Revertido; quedó la
   extracción de `canUseWebGL` a `preview3d/webglSupport.ts` (chequeo de WebGL
   sin arrastrar three) y el import directo del panel a FurnitureScene3D

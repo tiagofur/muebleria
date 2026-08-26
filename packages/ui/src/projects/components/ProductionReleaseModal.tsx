@@ -19,7 +19,7 @@ import {
   RELEASE_CHECK_LABELS_ES,
   type Project,
   type ProductionReleaseOptions,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface ProductionReleaseModalProps {
   readonly project: Project;

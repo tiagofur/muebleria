@@ -12,7 +12,7 @@ import {
   type PartOperationType,
   type Project,
   type ProjectPickingState,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { QualityPanel, type QualityHandlers } from './QualityPanel';
 import type { QualityPanelView } from './qualityView';
 import { EmptyState, PageHeader, WorkflowTabs } from '../common';

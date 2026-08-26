@@ -13,8 +13,8 @@ import type {
   OptionGroup,
   OptionGroupKind,
   Structure,
-} from '@muebles/domain';
-import { collectModuleOptionRoles } from '@muebles/domain';
+} from '@granete/domain';
+import { collectModuleOptionRoles } from '@granete/domain';
 import { Pencil, Plus, SearchX, ToggleLeft, Trash2 } from 'lucide-react';
 import {
   EmptyState,

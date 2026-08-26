@@ -4,8 +4,8 @@
 
 import type { ReactNode } from 'react';
 import { CircleAlert } from 'lucide-react';
-import type { Project, ProjectFloorSummary } from '@muebles/domain';
-import { PRODUCTION_SECTOR_LABELS_ES } from '@muebles/domain';
+import type { Project, ProjectFloorSummary } from '@granete/domain';
+import { PRODUCTION_SECTOR_LABELS_ES } from '@granete/domain';
 import { EmptyState } from '../../common';
 import { SectorIcon } from './ProductionManagerSectorsGrid';
 

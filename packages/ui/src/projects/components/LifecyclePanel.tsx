@@ -47,7 +47,7 @@ import {
   type CommercialStatus,
   type ApprovalType,
   type DesignRevision,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface LifecyclePanelProps {
   readonly project: Project;

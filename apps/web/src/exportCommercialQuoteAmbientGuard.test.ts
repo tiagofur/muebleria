@@ -18,11 +18,11 @@ import {
   type Catalog,
   type KitchenSpace,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   plantillaCatalogWithModules,
   plantillaGabOnlyProject,
-} from '@muebles/domain/fixtures';
+} from '@granete/domain/fixtures';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 
 const AMBIENT_FLOOR: AmbientMaterial = {

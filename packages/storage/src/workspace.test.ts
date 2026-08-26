@@ -6,7 +6,7 @@ import { mkdtemp, readFile, writeFile, access, constants } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { Project, Workspace } from '@muebles/domain';
+import type { Project, Workspace } from '@granete/domain';
 import { describe, expect, it } from 'vitest';
 
 import { JSONFileStorage } from './jsonFileStorage';

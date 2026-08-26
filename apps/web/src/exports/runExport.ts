@@ -6,7 +6,7 @@
  * unique parts: project resolution, RBAC gate, builder args and stamp.
  */
 
-import type { ExportIssue } from '@muebles/domain';
+import type { ExportIssue } from '@granete/domain';
 
 import { deliverExcelFile, type DeliverExcelResult } from '../exportOptimizer';
 import { getUiStoreState } from '../stores/uiStore';

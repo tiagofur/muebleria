@@ -10,8 +10,8 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { optimizerExport } from '@muebles/excel';
+} from '@granete/domain';
+import { optimizerExport } from '@granete/excel';
 
 export type ExportOptimizerResult =
   | { readonly ok: true; readonly fileName: string; readonly bytes: Uint8Array }
@@ -100,7 +100,7 @@ function defaultDownloadDeps(): DownloadDeps {
 
 /**
  * Optional Electron preload surface (EXP-06). Present only in the desktop host.
- * Kept local to the web shell so `@muebles/ui` never imports Electron.
+ * Kept local to the web shell so `@granete/ui` never imports Electron.
  */
 export type ElectronSaveApi = {
   readonly showSaveDialog: (options: {

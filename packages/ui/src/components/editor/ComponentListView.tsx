@@ -4,7 +4,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Component } from '@muebles/domain';
+import type { Component } from '@granete/domain';
 import { Plus, Puzzle } from 'lucide-react';
 import {
   EmptyState,

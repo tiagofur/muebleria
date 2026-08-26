@@ -2,7 +2,7 @@
  * componentDraft helpers — geometrySummary parametric labels (JD R3-S1).
  */
 import { describe, expect, it } from 'vitest';
-import type { Component } from '@muebles/domain';
+import type { Component } from '@granete/domain';
 import { geometrySummary } from './componentDraft';
 
 const base: Component = {

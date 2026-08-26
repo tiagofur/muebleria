@@ -6,8 +6,8 @@
  */
 
 import { memo, type ReactNode } from 'react';
-import type { FurnitureType, Project } from '@muebles/domain';
-import { isProjectClosed } from '@muebles/domain';
+import type { FurnitureType, Project } from '@granete/domain';
+import { isProjectClosed } from '@granete/domain';
 import { useProjectDetail } from './projectDetailContext';
 
 const TYPE_LABELS: Record<FurnitureType, string> = {

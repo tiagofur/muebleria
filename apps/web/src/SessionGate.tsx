@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { LoginScreen, RegisterScreen } from '@muebles/ui';
+import { LoginScreen, RegisterScreen } from '@granete/ui';
 
 import { useWorkspaceStore } from './stores/workspaceStore';
 

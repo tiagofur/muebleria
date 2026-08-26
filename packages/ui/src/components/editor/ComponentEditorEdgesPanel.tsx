@@ -7,7 +7,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { EdgeSide } from '@muebles/domain';
+import type { EdgeSide } from '@granete/domain';
 import type { ComponentDraft } from '../componentDraft';
 import { PlankEdgeDiagram, type EdgeStates } from './PlankEdgeDiagram';
 

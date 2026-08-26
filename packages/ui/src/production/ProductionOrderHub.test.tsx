@@ -5,7 +5,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import type { ProductionCutRow, Project } from '@muebles/domain';
+import type { ProductionCutRow, Project } from '@granete/domain';
 import { ProductionOrderHub } from './ProductionOrderHub';
 import {
   buildProductionOrderReadiness,

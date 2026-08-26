@@ -5,8 +5,8 @@
  * tiene hijos. Pura y testeable.
  */
 
-import type { CategoryNode } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import type { CategoryNode } from '@granete/domain';
+import { childrenOf } from '@granete/domain';
 
 export type CascadeLevelRow = {
   readonly options: readonly CategoryNode[];

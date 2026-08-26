@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Component } from '@muebles/domain';
+import type { Component } from '@granete/domain';
 import { Modal } from '../../common';
 
 export type ModuleComponentAdderModalProps = {

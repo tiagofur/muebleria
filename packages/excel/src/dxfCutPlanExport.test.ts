@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CutPlan, PartDrillingPattern } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { CutPlan, PartDrillingPattern } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 import {
   dxfCutPlanExport,
   generateDxfBySheet,

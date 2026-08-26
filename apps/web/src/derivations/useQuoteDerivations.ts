@@ -16,12 +16,12 @@ import type {
   ProjectMaterialSummary,
   QuoteBreakdown,
   WorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   generateProjectMaterialSummary,
   resolveWorkshopSettings,
   roleCanViewCosts,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { computeModuleCostPreview, computeSelectedProjectBreakdown } from './breakdown';
 import {
   aggregatePortfolioByOwner,
@@ -31,8 +31,8 @@ import {
   resolveCustomerName,
   selectRecentProjects,
   sumMonthlyQuotedTotal,
-} from '@muebles/ui';
-import { roleLabelEs } from '@muebles/domain';
+} from '@granete/ui';
+import { roleLabelEs } from '@granete/domain';
 import type { SessionMode } from '../session';
 
 export interface QuoteDerivationsDeps {

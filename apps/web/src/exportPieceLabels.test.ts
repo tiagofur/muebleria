@@ -4,9 +4,9 @@ import {
   plantillaCatalogWithModules,
   plantillaChoices,
   plantillaProject,
-} from '@muebles/domain/fixtures';
-import { generatePieceLabels } from '@muebles/domain';
-import type { Project } from '@muebles/domain';
+} from '@granete/domain/fixtures';
+import { generatePieceLabels } from '@granete/domain';
+import type { Project } from '@granete/domain';
 import {
   buildPieceLabelsExport,
   pieceLabelsFileName,

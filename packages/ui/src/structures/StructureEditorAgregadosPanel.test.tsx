@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Agregado } from '@muebles/domain';
+import type { Agregado } from '@granete/domain';
 import { StructureEditorAgregadosPanel } from './components/StructureEditorAgregadosPanel';
 import { emptyStructureDraft, type StructureDraft } from './structureDraft';
 

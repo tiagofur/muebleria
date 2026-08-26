@@ -3,13 +3,13 @@
  * Runtime BrowserWindow host lives in `electron/main.mjs` (F032 / #38).
  */
 
-import { PACKAGE_NAME as domainName } from '@muebles/domain';
-import { PACKAGE_NAME as storageName } from '@muebles/storage';
+import { PACKAGE_NAME as domainName } from '@granete/domain';
+import { PACKAGE_NAME as storageName } from '@granete/storage';
 import { createExcelIpcHandlers, type ExcelIpcDeps } from './ipcHandlers';
 import type { ElectronAPI } from './electronApi';
 
 export interface DesktopShellInfo {
-  readonly name: '@muebles/desktop';
+  readonly name: '@granete/desktop';
   readonly domain: typeof domainName;
   readonly storage: typeof storageName;
 }
@@ -17,7 +17,7 @@ export interface DesktopShellInfo {
 /** Factory for the desktop shell identity (no window required for unit tests). */
 export function createDesktopShell(): DesktopShellInfo {
   return {
-    name: '@muebles/desktop',
+    name: '@granete/desktop',
     domain: domainName,
     storage: storageName,
   };

@@ -2,7 +2,7 @@
  * Domain package entry — pure TypeScript (no UI, fs, or Excel).
  */
 
-export const PACKAGE_NAME = '@muebles/domain' as const;
+export const PACKAGE_NAME = '@granete/domain' as const;
 
 export type {
   HardwareUnit,

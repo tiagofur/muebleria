@@ -4,7 +4,7 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import { ValidationError, type QuoteBreakdown } from '@muebles/domain';
+import { ValidationError, type QuoteBreakdown } from '@granete/domain';
 
 export type CommercialScenarioPdfInput = {
   readonly projectName: string;

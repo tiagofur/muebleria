@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import { fabricProjectCards } from './fabricProjectCards';
 
 const project = {

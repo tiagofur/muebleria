@@ -5,13 +5,13 @@
  */
 
 import { type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from 'react';
-import type { EdgeBand, MaterialCategory } from '@muebles/domain';
+import type { EdgeBand, MaterialCategory } from '@granete/domain';
 import {
   cascadeFromCategoryId,
   cascadeOptions,
   cascadeSelectedCategoryId,
   categoryPath,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { CatalogImage, Modal, formatMoneyDisplay } from '../../common';
 import { CatalogPicker } from '../CatalogPicker';

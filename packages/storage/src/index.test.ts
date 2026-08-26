@@ -6,9 +6,9 @@ import {
   createSeedWorkspace,
 } from './index';
 
-describe('@muebles/storage exports', () => {
+describe('@granete/storage exports', () => {
   it('exports package identity and storage surface', () => {
-    expect(PACKAGE_NAME).toBe('@muebles/storage');
+    expect(PACKAGE_NAME).toBe('@granete/storage');
     expect(SCHEMA_VERSION).toBe(3);
     expect(typeof createSeedWorkspace).toBe('function');
   });

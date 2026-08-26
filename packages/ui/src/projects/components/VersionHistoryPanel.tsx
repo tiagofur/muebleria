@@ -10,11 +10,11 @@ import type {
   Project,
   ProjectVersion,
   ProjectStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   currentVersion,
   diffVersions,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type VersionHistoryPanelProps = {
   readonly project: Project;

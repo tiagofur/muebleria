@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Muebleria must support not only individual factories, but also factories that operate sales networks with stores, dealers and distributed teams.
+Granete must support not only individual factories, but also factories that operate sales networks with stores, dealers and distributed teams.
 
 The product positioning is not to be a cheaper alternative to existing design tools. The goal is to become the ideal operational platform for small and medium furniture manufacturers by connecting sales, design, production and installation.
 
@@ -185,7 +185,7 @@ This allows future growth into franchises, multiple factories, external installe
 
 ## Strategic Goal
 
-Muebleria should enable a factory to grow from a single operation into a complete furniture network:
+Granete should enable a factory to grow from a single operation into a complete furniture network:
 
 ```
 Customer

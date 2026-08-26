@@ -8,8 +8,8 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { wallElevationsPdfExport } from '@muebles/excel';
+} from '@granete/domain';
+import { wallElevationsPdfExport } from '@granete/excel';
 import { deliverExcelFile } from './exportOptimizer';
 
 export type ExportWallElevationsResult =

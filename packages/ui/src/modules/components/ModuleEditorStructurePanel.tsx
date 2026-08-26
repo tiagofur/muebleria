@@ -3,7 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Structure } from '@muebles/domain';
+import type { Structure } from '@granete/domain';
 import { StructureRevisionBadge } from '../../structures';
 import type { ModuleDraft } from '../moduleHelpers';
 

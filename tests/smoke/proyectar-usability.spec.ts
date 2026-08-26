@@ -197,7 +197,7 @@ test.describe('Proyectar usability benchmark — script canónico (#314 P3D-8)',
     test.setTimeout(480_000);
     await page.addInitScript(() => {
       try {
-        sessionStorage.setItem('muebles_session', 'guest');
+        sessionStorage.setItem('granete_session', 'guest');
         localStorage.setItem('muebles_usability_benchmark', '1');
       } catch {
         /* storage unavailable */

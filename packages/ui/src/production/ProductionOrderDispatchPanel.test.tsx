@@ -4,8 +4,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Module, ModuleLabel, Project } from '@muebles/domain';
-import { moduleLabelQrPayload } from '@muebles/domain';
+import type { Module, ModuleLabel, Project } from '@granete/domain';
+import { moduleLabelQrPayload } from '@granete/domain';
 import { ProductionOrderDispatchPanel } from './ProductionOrderDispatchPanel';
 
 function projectFixture(): Project {

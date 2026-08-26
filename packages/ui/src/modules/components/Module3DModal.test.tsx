@@ -15,7 +15,7 @@ import type {
   Module,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Module3DModal } from './Module3DModal';
 
 vi.mock('../../common/Furniture3DViewer', () => ({

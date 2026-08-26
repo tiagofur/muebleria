@@ -3,7 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { MaterialBoard, MaterialCategory, OptionGroup } from '@muebles/domain';
+import type { MaterialBoard, MaterialCategory, OptionGroup } from '@granete/domain';
 import { MaterialOptionSelectorDialog } from './MaterialOptionSelectorDialog';
 
 afterEach(() => {

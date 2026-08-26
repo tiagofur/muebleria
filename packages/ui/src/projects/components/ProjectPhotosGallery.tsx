@@ -1,5 +1,5 @@
 import { useState, useRef, useId, type ChangeEvent, type DragEvent } from 'react';
-import type { ProjectPhoto, ProjectPhotoStage } from '@muebles/domain';
+import type { ProjectPhoto, ProjectPhotoStage } from '@granete/domain';
 import {
   Camera,
   UploadCloud,

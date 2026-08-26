@@ -12,7 +12,7 @@ import {
   Plus,
   SearchX,
 } from 'lucide-react';
-import type { Customer, Project, ProjectTemplate } from '@muebles/domain';
+import type { Customer, Project, ProjectTemplate } from '@granete/domain';
 import {
   EmptyState,
   PageHeader,

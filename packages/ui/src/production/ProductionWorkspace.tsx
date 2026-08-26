@@ -13,7 +13,7 @@ import type {
   ModuleLabel,
   ProductionCutRow,
   Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   buildProductionElevations,
   ensureProductionRevision,
@@ -25,7 +25,7 @@ import {
   listProductionSpaceOptions,
   PRODUCTION_SCOPE_ALL,
   projectScopedToProductionSpace,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState } from '../common';
 import { Factory } from 'lucide-react';
 import { ProductionQueue, type ProductionQueueProps } from './ProductionQueue';

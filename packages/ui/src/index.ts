@@ -4,7 +4,7 @@ export type { OwnerPortfolioRow } from './dashboard/dashboardHelpers';
  */
 
 export { Placeholder } from './placeholder';
-export const PACKAGE_NAME = '@muebles/ui' as const;
+export const PACKAGE_NAME = '@granete/ui' as const;
 
 export {
   ActiveBadge,

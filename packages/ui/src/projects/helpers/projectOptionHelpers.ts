@@ -16,13 +16,13 @@ import type {
   Project,
   ProjectItem,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   calcProjectBreakdown,
   defaultBaseModeForFurnitureType,
   effectiveOptionChoices,
   pickPresetByMeasureDefaults,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   canShowPricePreview,
   membersForKind,

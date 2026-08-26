@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { Users } from 'lucide-react';
-import type { EngineerWorkloadSummary } from '@muebles/domain';
+import type { EngineerWorkloadSummary } from '@granete/domain';
 
 export interface EngineerWorkloadTableProps {
   readonly engineerWorkload: readonly EngineerWorkloadSummary[];
