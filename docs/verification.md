@@ -40,7 +40,7 @@
 ### Domain
 
 ```bash
-pnpm --filter @muebles/domain test
+pnpm --filter @granete/domain test
 ```
 
 Cubre BOM, cálculos, routing, lifecycle puro, validaciones, optimizer/machining y helpers
@@ -49,7 +49,7 @@ sin DOM.
 ### UI
 
 ```bash
-pnpm --filter @muebles/ui test
+pnpm --filter @granete/ui test
 ```
 
 Probar comportamiento, accesibilidad y wiring; no usar grep de source como sustituto de
@@ -58,7 +58,7 @@ interacción cuando el feature sea interactivo.
 ### Storage
 
 ```bash
-pnpm --filter @muebles/storage test
+pnpm --filter @granete/storage test
 ```
 
 Round-trip, migrations/adapters, compatibilidad legacy y errores.
@@ -66,7 +66,7 @@ Round-trip, migrations/adapters, compatibilidad legacy y errores.
 ### Excel/exports
 
 ```bash
-pnpm --filter @muebles/excel test
+pnpm --filter @granete/excel test
 ```
 
 Golden/estructura de XLSX/PDF/DXF/ZPL/CSV según output.
@@ -249,8 +249,8 @@ Smoke por screen operativa:
 ### Electron
 
 ```bash
-pnpm --filter @muebles/desktop test
-pnpm --filter @muebles/desktop dev:app
+pnpm --filter @granete/desktop test
+pnpm --filter @granete/desktop dev:app
 ```
 
 Smoke de dialogs/exports/update según feature.

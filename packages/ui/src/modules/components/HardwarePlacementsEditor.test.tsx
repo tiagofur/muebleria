@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Hardware, HardwarePlacement } from '@muebles/domain';
+import type { Hardware, HardwarePlacement } from '@granete/domain';
 import { HardwarePlacementsEditor } from './HardwarePlacementsEditor';
 
 afterEach(() => {

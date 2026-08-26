@@ -21,7 +21,7 @@ import {
   type InstallationVisitResult,
   type Project,
   type PunchSeverity,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { canCompleteInstallationNow, installationJobCardView } from './installationJobView';
 
 const VISIT_STATUS_BADGE: Record<string, string> = {

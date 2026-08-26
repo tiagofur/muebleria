@@ -4,8 +4,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Project, WarrantyTicket, WorkshopAnalytics } from '@muebles/domain';
-import { computeWorkshopAnalytics } from '@muebles/domain';
+import type { Project, WarrantyTicket, WorkshopAnalytics } from '@granete/domain';
+import { computeWorkshopAnalytics } from '@granete/domain';
 import { WorkshopAnalyticsPanel } from './WorkshopAnalyticsPanel';
 
 afterEach(() => cleanup());

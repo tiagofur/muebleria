@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { CutPlanSheet, CutPlanPlacedPiece } from '@muebles/domain';
+import type { CutPlanSheet, CutPlanPlacedPiece } from '@granete/domain';
 import type {
   BoardCutLayout,
   PlacedPieceLegacy,

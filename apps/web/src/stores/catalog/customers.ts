@@ -3,8 +3,8 @@
  * cross-store upsert used by project flows.
  */
 
-import { resolveOwnerOnCreate, resolveOwnerOnUpdate } from '@muebles/domain';
-import type { Customer } from '@muebles/domain';
+import { resolveOwnerOnCreate, resolveOwnerOnUpdate } from '@granete/domain';
+import type { Customer } from '@granete/domain';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 

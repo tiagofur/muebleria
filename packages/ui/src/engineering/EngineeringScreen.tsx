@@ -23,7 +23,7 @@ import {
   projectProcessStage,
   type EngineeringStatus,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   EmptyState,
   PageHeader,

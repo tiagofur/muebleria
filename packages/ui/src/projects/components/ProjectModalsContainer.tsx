@@ -23,7 +23,7 @@ import type {
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Project3DModal } from './Project3DModal';
 import { ProjectAddItemModal } from './ProjectAddItemModal';
 import { ProjectConfirmDeleteModal } from './ProjectConfirmDeleteModal';
@@ -87,8 +87,8 @@ export interface ProjectModalsContainerProps {
     readonly edges: readonly EdgeBand[];
     readonly hardware: readonly Hardware[];
     readonly optionGroups: readonly OptionGroup[];
-    readonly ambientMaterials?: readonly import('@muebles/domain').AmbientMaterial[];
-    readonly ambientCategories?: readonly import('@muebles/domain').AmbientCategory[];
+    readonly ambientMaterials?: readonly import('@granete/domain').AmbientMaterial[];
+    readonly ambientCategories?: readonly import('@granete/domain').AmbientCategory[];
     readonly agregados?: readonly Agregado[];
   };
   readonly breakdown?: QuoteBreakdown | null;
@@ -133,7 +133,7 @@ export interface ProjectModalsContainerProps {
   readonly onCloseSpatialStudio: () => void;
   readonly onUpdateKitchenLayout?: (
     projectId: string,
-    layout: import('@muebles/domain').ProjectKitchenLayout,
+    layout: import('@granete/domain').ProjectKitchenLayout,
   ) => void;
   readonly onUpdateItem?: (projectId: string, item: ProjectItem) => void;
   /** Elimina una línea de la cotización desde Proyectar (scope obra). */

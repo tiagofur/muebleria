@@ -9,12 +9,12 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { AmbientCategory } from '@muebles/domain';
+import type { AmbientCategory } from '@granete/domain';
 import {
   cascadeFromCategoryId,
   cascadeOptions,
   cascadeSelectedCategoryId,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Modal } from '../../common';
 import type { AmbientMaterialDraft } from './ambientMaterialDraft';
 

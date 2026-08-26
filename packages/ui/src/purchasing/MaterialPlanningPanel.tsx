@@ -12,7 +12,7 @@ import {
   MATERIALS_RELEASE_CHECK_LABELS_ES,
   STOCK_KIND_LABELS_ES,
   stockUnitLabel,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { MaterialPlanningCardView } from './materialPlanningView';
 import './purchasing.css';
 

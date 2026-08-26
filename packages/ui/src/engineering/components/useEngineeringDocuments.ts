@@ -3,7 +3,7 @@
  */
 
 import { useMemo } from 'react';
-import type { ModuleLabel, PieceLabel } from '@muebles/domain';
+import type { ModuleLabel, PieceLabel } from '@granete/domain';
 import type { ProductionOrderReadiness } from '../../production/productionOrderModel';
 import type { ProductionDocumentItem } from '../../production/ProductionOrderDocumentsPanel';
 

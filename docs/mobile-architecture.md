@@ -29,7 +29,7 @@ muebles/ (pnpm monorepo)
 
 | Módulo | Puede importar | No puede importar |
 |---|---|---|
-| `apps/mobile` | `@muebles/domain`, `@muebles/storage`, `react-native`, `expo-*` | `packages/ui` (DOM/HTML), `packages/excel` (Node/fs), `electron` |
+| `apps/mobile` | `@granete/domain`, `@granete/storage`, `react-native`, `expo-*` | `packages/ui` (DOM/HTML), `packages/excel` (Node/fs), `electron` |
 | `packages/domain` | TypeScript stdlib puro | Cualquier cosa externa (sin react, sin react-native, sin fs) |
 | `packages/storage` | `domain`, fetch/axios agnóstico | React, React Native, electron |
 
@@ -37,7 +37,7 @@ muebles/ (pnpm monorepo)
 
 | Capa / Módulo | % Reutilización | Estrategia |
 |---|---|---|
-| `@muebles/domain` (BOM, costeo, QR, RBAC) | 100% | Importación directa (TS puro) |
+| `@granete/domain` (BOM, costeo, QR, RBAC) | 100% | Importación directa (TS puro) |
 | DTOs & Mappers API (`apiMappers.ts`) | 100% | Misma función de serialización |
 | Reglas RBAC (`rbac.ts`) | 100% | Misma función `hasPermission` |
 | Parsers QR (`pieceLabelQr.ts`) | 100% | `parsePieceLabelScan` idéntico |
@@ -47,7 +47,7 @@ muebles/ (pnpm monorepo)
 
 **Módulos de dominio clave en mobile:** `resolveBom`, `calcProjectTotals`, `setProjectItemFloorStatus`, `nextItemFloorStatus`, `parsePieceLabelScan`, `hasPermission`.
 
-**Mappers API:** `mapApiProjectToDomain` / `mapDomainProjectToApi` (y equivalentses de Customer, Material, Module) se reutilizan 100% desde `@muebles/storage`.
+**Mappers API:** `mapApiProjectToDomain` / `mapDomainProjectToApi` (y equivalentses de Customer, Material, Module) se reutilizan 100% desde `@granete/storage`.
 
 **Design tokens:** las CSS variables de `docs/design.md` se traducen a constantes TS en `apps/mobile/src/theme/colors.ts` (ej. `--color-primary: hsl(217, 91%, 60%)` → `'#2563eb'`). Iconografía: `lucide-react-native` (misma lista que `lucide-react`).
 
@@ -84,8 +84,8 @@ config.resolver.nodeModulesPaths = [
 config.resolver.extraNodeModules = {
   react: path.resolve(projectRoot, 'node_modules/react'),
   'react-native': path.resolve(projectRoot, 'node_modules/react-native'),
-  '@muebles/domain': path.resolve(monorepoRoot, 'packages/domain/src'),
-  '@muebles/storage': path.resolve(monorepoRoot, 'packages/storage/src'),
+  '@granete/domain': path.resolve(monorepoRoot, 'packages/domain/src'),
+  '@granete/storage': path.resolve(monorepoRoot, 'packages/storage/src'),
 };
 
 module.exports = config;
@@ -108,7 +108,7 @@ flowchart TD
         QueryCache["TanStack Query (Caché local de Catálogos & Proyectos)"]
     end
 
-    subgraph DOMAIN_LAYER["3. Capa de Dominio Puro (@muebles/domain)"]
+    subgraph DOMAIN_LAYER["3. Capa de Dominio Puro (@granete/domain)"]
         Engine["Motor de Costos & BOM (engine.ts)"]
         QRParser["Decodificador de Etiquetas (pieceLabelQr.ts)"]
         FloorLogic["Reglas de Piso (productionFloor.ts)"]
@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS sync_mutation_queue (
 ```
 
 ### 4.3 Resolución de Conflictos y Concurrencia
-- **Estados de Piso de Taller:** La función `setProjectItemFloorStatus` de `@muebles/domain` actualiza únicamente el estado del ítem y el timestamp `updatedAt`. El backend Go valida que el avance sea mono-direccional (`pending` → `cut` → `edged` → `assembled` → `installed`), resolviendo mediante Last-Write-Wins con versionado semántico.
+- **Estados de Piso de Taller:** La función `setProjectItemFloorStatus` de `@granete/domain` actualiza únicamente el estado del ítem y el timestamp `updatedAt`. El backend Go valida que el avance sea mono-direccional (`pending` → `cut` → `edged` → `assembled` → `installed`), resolviendo mediante Last-Write-Wins con versionado semántico.
 - **Edición de Medidas y Opciones:** Las decisiones de diseño complejas se reservan para la web; si ocurre un cambio en simultáneo, prevalece la versión con mayor `updatedAt` o se emite una alerta al usuario.
 
 ---
@@ -219,7 +219,7 @@ CREATE TABLE IF NOT EXISTS sync_mutation_queue (
 
 ### 5.1 Escáner de Códigos QR de Alto Rendimiento
 - **Librería:** `expo-camera` con `CameraView` nativo (SDK 52+).
-- **Procesamiento:** `onBarcodeScanned` invoca directamente a `parsePieceLabelScan(data)` de `@muebles/domain`.
+- **Procesamiento:** `onBarcodeScanned` invoca directamente a `parsePieceLabelScan(data)` de `@granete/domain`.
 - **Tiempo de Respuesta:** < 100 milisegundos desde el enfoque hasta el renderizado de la ficha de pieza.
 - **Feedback:** Disparo instantáneo de `Haptics.notificationAsync(NotificationFeedbackType.Success)`.
 
@@ -249,7 +249,7 @@ CREATE TABLE IF NOT EXISTS sync_mutation_queue (
    - HTTPS estricto con TLS 1.3 hacia el backend Go.
    - Headers `Authorization: Bearer <token>` inyectados automáticamente por el interceptor del cliente API.
 4. **Control de Acceso Basado en Roles (RBAC):**
-   - Validación local e inmediata utilizando `hasPermission` de `@muebles/domain/src/rbac.ts` para ocultar botones o pantallas según el rol del usuario (`produccion`, `vendedor`, `ingeniero`, `admin`).
+   - Validación local e inmediata utilizando `hasPermission` de `@granete/domain/src/rbac.ts` para ocultar botones o pantallas según el rol del usuario (`produccion`, `vendedor`, `ingeniero`, `admin`).
 
 ---
 
@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS sync_mutation_queue (
 Código en main (apps/mobile)
    │
    ├── pnpm typecheck (Verificación TypeScript)
-   ├── vitest run (Tests unitarios con @muebles/domain)
+   ├── vitest run (Tests unitarios con @granete/domain)
    │
    ▼
 Expo Application Services (EAS)

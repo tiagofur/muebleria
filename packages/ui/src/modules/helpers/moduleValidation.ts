@@ -2,7 +2,7 @@
  * Validation and code conflict checking helpers for modules.
  */
 
-import type { Module } from '@muebles/domain';
+import type { Module } from '@granete/domain';
 import { normalizeCode } from '../../catalogs/catalogHelpers';
 
 export function parseOptionalNumber(raw: string): number | undefined {

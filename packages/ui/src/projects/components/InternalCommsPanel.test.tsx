@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 
-import type { Project, ProjectInternalMessage } from '@muebles/domain';
+import type { Project, ProjectInternalMessage } from '@granete/domain';
 import { InternalCommsPanel } from './InternalCommsPanel';
 
 describe('InternalCommsPanel', () => {

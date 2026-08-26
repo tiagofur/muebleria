@@ -10,7 +10,7 @@ import {
   getProjectStalenessReport,
   STALENESS_REASON_LABELS_ES,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface ProjectStalenessBannerProps {
   readonly project: Project;

@@ -12,7 +12,7 @@
 
 import { create } from 'zustand';
 
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type { ResolvedBoardPart } from '@granete/domain';
 
 // ---------------------------------------------------------------------------
 // Types

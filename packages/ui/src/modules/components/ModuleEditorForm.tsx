@@ -18,7 +18,7 @@ import type {
   OptionGroup,
   QuoteBreakdown,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { HardwareLineDraft, ModuleDraft } from '../moduleHelpers';
 import {
   ModuleEditorComponentsPanel,

@@ -8,7 +8,7 @@ import type {
   Module,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { resolveModule3DPreview } from './module3dPreview';
 
 const edge: EdgeBand = {

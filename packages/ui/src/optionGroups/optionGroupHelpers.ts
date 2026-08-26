@@ -13,12 +13,12 @@ import type {
   OptionGroup,
   OptionGroupKind,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   PATAS_ROLE,
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { filterActiveForPicker, normalizeCode } from '../catalogs/catalogHelpers';
 
 /**

@@ -9,8 +9,8 @@ import type {
   CsvDelimiter,
   CsvOptimizerPreset,
   ProductionCutRow,
-} from '@muebles/domain';
-import { cutListConfigurableCsvExport } from '@muebles/domain';
+} from '@granete/domain';
+import { cutListConfigurableCsvExport } from '@granete/domain';
 import { Download } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import './csvExportConfigModal.css';

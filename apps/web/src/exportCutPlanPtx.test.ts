@@ -4,7 +4,7 @@ import {
   ptxFileName,
   ptxZipFileName,
 } from './exportCutPlanPtx';
-import type { CutPlan } from '@muebles/domain';
+import type { CutPlan } from '@granete/domain';
 import type { DownloadDeps } from './exportOptimizer';
 
 function buildCutPlanFixture(): CutPlan {

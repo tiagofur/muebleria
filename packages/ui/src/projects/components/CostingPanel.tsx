@@ -7,7 +7,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { ClipboardCheck, DollarSign, ShieldAlert } from 'lucide-react';
-import { OTHER_COST_KIND_LABELS_ES, TIME_ENTRY_CATEGORIES, TIME_ENTRY_CATEGORY_LABELS_ES } from '@muebles/domain';
+import { OTHER_COST_KIND_LABELS_ES, TIME_ENTRY_CATEGORIES, TIME_ENTRY_CATEGORY_LABELS_ES } from '@granete/domain';
 import { MATERIAL_TRUTH_LABELS_ES, type CostingPanelView } from '../costingView';
 import '../projects.css';
 import './costing.css';

@@ -120,7 +120,7 @@ export function ExpressQuoterScreen({
             Cotizador Express
           </Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>
-            Cálculo en vivo con @muebles/domain
+            Cálculo en vivo con @granete/domain
           </Text>
         </View>
 

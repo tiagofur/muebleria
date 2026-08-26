@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Component, Structure } from '@muebles/domain';
+import type { Component, Structure } from '@granete/domain';
 import {
   Box,
   ChevronLeft,

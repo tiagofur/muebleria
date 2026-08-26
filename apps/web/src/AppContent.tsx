@@ -5,8 +5,8 @@
  */
 
 /**
- * Thin web shell — holds catalog state; presentation lives in @muebles/ui.
- * Price formulas call @muebles/domain only here (not in UI package).
+ * Thin web shell — holds catalog state; presentation lives in @granete/ui.
+ * Price formulas call @granete/domain only here (not in UI package).
  */
 
 import {
@@ -53,7 +53,7 @@ import type {
   StockMovementType,
   PurchaseOrder,
   Supplier,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
@@ -153,7 +153,7 @@ import {
   type MaterialRequirementLine,
   type ReworkActionType,
   type QualityIssueCategory,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 
 import {
@@ -244,7 +244,7 @@ import {
   type CostingHandlers,
   type SurveyHandlers,
   type ProjectOverviewNav,
-} from '@muebles/ui';
+} from '@granete/ui';
 import {
   APIWorkspaceRepository,
   LocalStorageWorkspaceRepository,
@@ -252,7 +252,7 @@ import {
   createSeedWorkspace,
   type JobCostingView,
   type SiteSurveyView,
-} from '@muebles/storage';
+} from '@granete/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';

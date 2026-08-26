@@ -21,4 +21,4 @@ export type {
   DesktopExcelApi,
   DesktopExportStatus,
 } from './exportAdapter';
-export const PACKAGE_NAME = '@muebles/desktop' as const;
+export const PACKAGE_NAME = '@granete/desktop' as const;

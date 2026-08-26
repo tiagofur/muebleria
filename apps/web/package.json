@@ -1,5 +1,5 @@
 {
-  "name": "@muebles/web",
+  "name": "@granete/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,10 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@muebles/domain": "workspace:*",
-    "@muebles/excel": "workspace:*",
-    "@muebles/storage": "workspace:*",
-    "@muebles/ui": "workspace:*",
+    "@granete/domain": "workspace:*",
+    "@granete/excel": "workspace:*",
+    "@granete/storage": "workspace:*",
+    "@granete/ui": "workspace:*",
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",

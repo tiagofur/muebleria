@@ -11,7 +11,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Structure } from '@muebles/domain';
+import type { Structure } from '@granete/domain';
 
 export type StructureRevisionBadgeVariant = 'default' | 'pinned';
 

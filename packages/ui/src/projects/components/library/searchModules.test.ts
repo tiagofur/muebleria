@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CategoryNode, Module } from '@muebles/domain';
+import type { CategoryNode, Module } from '@granete/domain';
 import { normalizeSearchText, searchModules } from './searchModules';
 
 function buildModule(

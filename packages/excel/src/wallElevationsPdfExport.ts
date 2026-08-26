@@ -12,7 +12,7 @@ import {
   type ProductionElevationsResult,
   type ProductionIslandUnit,
   type ProductionWallElevation,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type WallElevationsPdfInput = {
   readonly project: Project;

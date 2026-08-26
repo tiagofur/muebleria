@@ -30,11 +30,11 @@ import {
   type PurchaseOrderItem,
   type StockMaterialKind,
   type Supplier,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState, WorkspaceTabs } from '../common';
 import { Modal } from '../common/Modal';
 import type { StockCatalogOption } from './StockPanel';
-import { STOCK_KIND_LABELS_ES } from '@muebles/domain';
+import { STOCK_KIND_LABELS_ES } from '@granete/domain';
 
 export type PoLineInput = {
   kind: StockMaterialKind;

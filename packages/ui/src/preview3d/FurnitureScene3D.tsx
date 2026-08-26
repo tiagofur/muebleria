@@ -40,7 +40,7 @@ import {
   type HardwarePlacement,
   type ResolvedHardwarePlacement,
   type WallOpening,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
 import {

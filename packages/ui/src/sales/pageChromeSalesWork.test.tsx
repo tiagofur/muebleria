@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import { Dashboard, type DashboardProps } from '../dashboard/Dashboard';
 import { PlantBoardScreen } from '../production/PlantBoardScreen';
 import { SalesDashboard } from './SalesDashboard';

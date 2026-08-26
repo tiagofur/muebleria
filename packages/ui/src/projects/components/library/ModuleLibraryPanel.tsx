@@ -8,14 +8,14 @@
  */
 
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
-import type { Module, ModuleCategory } from '@muebles/domain';
+import type { Module, ModuleCategory } from '@granete/domain';
 import {
   childrenOf,
   defaultMeasurePresetId,
   filterModulesByCategory,
   resolveModuleMeasurePreset,
   UNCATEGORIZED_FILTER,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Star } from 'lucide-react';
 import { sanitizeCategoryPath } from '../../../common/cascadeLevels';
 import { SearchInput } from '../../../common';

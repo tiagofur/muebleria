@@ -4,7 +4,7 @@
  * Role-focused home variants (F043 / #88).
  */
 
-import type { AnalyticsPeriodDays, OpsException, ProjectStatus, WorkshopAnalytics } from '@muebles/domain';
+import type { AnalyticsPeriodDays, OpsException, ProjectStatus, WorkshopAnalytics } from '@granete/domain';
 import type { ReactNode } from 'react';
 import {
   CheckCircle2,

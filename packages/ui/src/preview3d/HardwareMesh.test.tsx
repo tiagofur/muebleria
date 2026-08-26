@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Quaternion, Vector3 } from 'three';
-import type { Hardware, ResolvedHardwarePlacement } from '@muebles/domain';
+import type { Hardware, ResolvedHardwarePlacement } from '@granete/domain';
 import {
   HardwareMesh,
   DEFAULT_BAR_LENGTH_MM,

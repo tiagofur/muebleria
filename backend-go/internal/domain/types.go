@@ -538,7 +538,7 @@ const (
 )
 
 // Component is a reusable engineering component (carcasa piece).
-// Mirrors the frontend Component type from @muebles/domain.
+// Mirrors the frontend Component type from @granete/domain.
 type Component struct {
 	ID            string             `json:"id"`
 	Code          string             `json:"code"`

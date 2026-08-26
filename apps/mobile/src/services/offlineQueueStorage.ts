@@ -4,7 +4,7 @@
  * environments where the module is unavailable.
  */
 
-import type { ItemFloorStatus } from '@muebles/domain';
+import type { ItemFloorStatus } from '@granete/domain';
 
 const QUEUE_KEY = 'muebles_floor_queue_v1';
 const STATUSES_KEY = 'muebles_floor_statuses_v1';

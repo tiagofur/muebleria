@@ -2,7 +2,7 @@
  * Types and helper functions for SalesDashboard metrics and filtering.
  */
 
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 
 export type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 

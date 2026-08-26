@@ -2,9 +2,9 @@
  * catalog/hardware — Hardware mutations incl. 3D preview fields (F069/F080).
  */
 
-import { normalizeHardwarePartFinishes } from '@muebles/domain';
-import type { Hardware } from '@muebles/domain';
-import type { HardwareDraft } from '@muebles/ui';
+import { normalizeHardwarePartFinishes } from '@granete/domain';
+import type { Hardware } from '@granete/domain';
+import type { HardwareDraft } from '@granete/ui';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes, parseDraftNum } from './shared';

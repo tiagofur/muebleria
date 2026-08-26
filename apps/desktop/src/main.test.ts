@@ -8,16 +8,16 @@ import { PACKAGE_NAME } from './index';
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = join(here, '..');
 
-describe('@muebles/desktop scaffold', () => {
+describe('@granete/desktop scaffold', () => {
   it('exports package identity', () => {
-    expect(PACKAGE_NAME).toBe('@muebles/desktop');
+    expect(PACKAGE_NAME).toBe('@granete/desktop');
   });
 
   it('wires domain and storage package names', () => {
     const shell = createDesktopShell();
-    expect(shell.name).toBe('@muebles/desktop');
-    expect(shell.domain).toBe('@muebles/domain');
-    expect(shell.storage).toBe('@muebles/storage');
+    expect(shell.name).toBe('@granete/desktop');
+    expect(shell.domain).toBe('@granete/domain');
+    expect(shell.storage).toBe('@granete/storage');
   });
 });
 

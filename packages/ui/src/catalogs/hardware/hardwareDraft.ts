@@ -3,7 +3,7 @@
  * screen and its form modal.
  */
 
-import type { Hardware, HardwareMachiningProfile, HardwareUnit } from '@muebles/domain';
+import type { Hardware, HardwareMachiningProfile, HardwareUnit } from '@granete/domain';
 
 export const UNIT_LABELS: Record<HardwareUnit, string> = {
   piece: 'Pieza',

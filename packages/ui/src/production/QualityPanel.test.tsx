@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { QualityPanel } from './QualityPanel';
 import { qualityPanelView } from './qualityView';
-import type { ModuleUnitExecution, Project, QualityJob } from '@muebles/domain';
+import type { ModuleUnitExecution, Project, QualityJob } from '@granete/domain';
 
 afterEach(cleanup);
 

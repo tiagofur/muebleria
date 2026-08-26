@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { defaultBaseModeForFurnitureType } from '@muebles/domain';
+import { defaultBaseModeForFurnitureType } from '@granete/domain';
 import type {
   Customer,
   Module,
   OptionGroup,
   Project,
   ProjectItem,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   canEditQuoteContent,
   canShowProjectPricePreview,

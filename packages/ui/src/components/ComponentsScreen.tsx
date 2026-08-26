@@ -11,8 +11,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@muebles/domain';
-import { evaluatePartFormula, previewPartForComponent } from '@muebles/domain';
+import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@granete/domain';
+import { evaluatePartFormula, previewPartForComponent } from '@granete/domain';
 import {
   EntityEditorLayout,
   seedEditorDraftFromBaseline,

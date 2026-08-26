@@ -26,7 +26,7 @@ import type {
   ProjectItem,
   ProjectItemPlacement,
   ProjectKitchenLayout,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   addKitchenSpace,
   addOpening,
@@ -89,7 +89,7 @@ import {
   type ClipboardEntry,
   type LayoutCommandResult,
   type WallOpeningKind,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   ArrowDown,
   ArrowLeft,
@@ -171,7 +171,7 @@ import {
   optionsForGroup,
   setItemOptionChoice,
 } from '../projectHelpers';
-import type { Catalog, ModuleBaseMode } from '@muebles/domain';
+import type { Catalog, ModuleBaseMode } from '@granete/domain';
 import { WorkspaceTabs } from '../../common/Tabs';
 import { ModuleLibraryPanel, moduleDefaultDims } from './library/ModuleLibraryPanel';
 import { useLibraryCollections } from './library/useLibraryFavorites';

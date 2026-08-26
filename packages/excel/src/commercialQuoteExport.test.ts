@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
-import { ValidationError } from '@muebles/domain';
+import { ValidationError } from '@granete/domain';
 import {
   commercialQuoteExport,
   type CommercialQuoteExportInput,

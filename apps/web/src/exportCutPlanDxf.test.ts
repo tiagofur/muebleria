@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
-import type { CutPlan } from '@muebles/domain';
+import type { CutPlan } from '@granete/domain';
 import type { DownloadDeps } from './exportOptimizer';
 import {
   downloadCutPlanDxf,

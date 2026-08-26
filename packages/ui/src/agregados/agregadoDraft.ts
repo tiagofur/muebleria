@@ -6,7 +6,7 @@ import type {
   Agregado,
   HardwareLine,
   ModuleComponentInstance,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface AgregadoDraft {
   code: string;

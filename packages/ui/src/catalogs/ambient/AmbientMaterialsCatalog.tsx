@@ -15,14 +15,14 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { AmbientCategory, AmbientMaterial } from '@muebles/domain';
+import type { AmbientCategory, AmbientMaterial } from '@granete/domain';
 import {
   categoryPath,
   filterAmbientMaterialsByCategory,
   isValidPreviewColor,
   normalizePreviewColor,
   UNCATEGORIZED_FILTER,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   Eye,
   EyeOff,

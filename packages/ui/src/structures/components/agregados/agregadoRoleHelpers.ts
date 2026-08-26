@@ -2,7 +2,7 @@
  * Helpers for resolving option roles and hardware references in agregados.
  */
 
-import type { Agregado, OptionGroup } from '@muebles/domain';
+import type { Agregado, OptionGroup } from '@granete/domain';
 
 export function getOptionRolesForAgregado(
   agregado: Agregado | undefined,

@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { HardwarePurchaseRow } from '@muebles/domain';
+import type { HardwarePurchaseRow } from '@granete/domain';
 import { Wrench } from 'lucide-react';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 

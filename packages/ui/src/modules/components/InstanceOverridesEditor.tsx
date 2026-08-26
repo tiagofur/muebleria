@@ -5,7 +5,7 @@
 
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
-import type { Hardware, HardwarePlacement } from '@muebles/domain';
+import type { Hardware, HardwarePlacement } from '@granete/domain';
 import {
   instanceOverridesSummary,
   patchInstanceOverrides,

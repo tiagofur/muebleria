@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProductionCutRow } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
 import {
   CUT_LIST_CSV_HEADERS,
   CUT_LIST_CSV_SEPARATOR,

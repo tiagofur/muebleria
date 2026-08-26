@@ -6,8 +6,8 @@ import {
   PRODUCTION_SECTOR_LABELS_ES,
   PIPELINE_SECTORS,
   type ProjectFloorSummary,
-} from '@muebles/domain';
-import type { Project } from '@muebles/domain';
+} from '@granete/domain';
+import type { Project } from '@granete/domain';
 import { EmptyState, PageHeader } from '../common';
 
 /**

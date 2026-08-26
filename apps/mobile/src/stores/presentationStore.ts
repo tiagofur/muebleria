@@ -5,7 +5,7 @@ import {
   type MaterialBoard,
   seedCatalogExpandedLatAm,
   resolveBom,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { useCrmStore } from './crmStore';
 
 export interface SignatureData {

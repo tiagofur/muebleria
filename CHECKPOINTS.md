@@ -31,7 +31,7 @@
 
 ## C4 — La verificación es real
 
-- [ ] `pnpm --filter @muebles/domain test` pasa al 100%.
+- [ ] `pnpm --filter @granete/domain test` pasa al 100%.
 - [ ] Si la feature toca el export: test de fixture contra `ProductionCutRow[]`
       esperado.
 - [ ] Si la feature toca storage: test con directorio temporal real (no mock de fs).

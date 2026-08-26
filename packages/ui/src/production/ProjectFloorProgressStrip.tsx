@@ -5,8 +5,8 @@ import {
   PRODUCTION_SECTOR_LABELS_ES,
   type ProjectFloorSummary,
   type FloorStageProgress,
-} from '@muebles/domain';
-import type { Project } from '@muebles/domain';
+} from '@granete/domain';
+import type { Project } from '@granete/domain';
 
 /**
  * Compact per-sector progress strip (F093 — Fase 1 visibilidad).

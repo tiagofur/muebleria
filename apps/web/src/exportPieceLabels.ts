@@ -12,8 +12,8 @@ import {
   type ExportIssue,
   type PieceLabel,
   type Project,
-} from '@muebles/domain';
-import { pieceLabelsPdfExport } from '@muebles/excel';
+} from '@granete/domain';
+import { pieceLabelsPdfExport } from '@granete/excel';
 import {
   downloadOptimizerXlsx,
   type DownloadDeps,

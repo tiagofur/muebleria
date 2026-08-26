@@ -13,8 +13,8 @@ import type {
   ModuleCategory,
   QuoteBreakdown,
   Structure,
-} from '@muebles/domain';
-import { categoryPath } from '@muebles/domain';
+} from '@granete/domain';
+import { categoryPath } from '@granete/domain';
 import {
   Box,
   ChevronLeft,

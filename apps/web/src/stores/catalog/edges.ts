@@ -2,7 +2,7 @@
  * catalog/edges — EdgeBand mutations.
  */
 
-import { normalizePreviewColor } from '@muebles/domain';
+import { normalizePreviewColor } from '@granete/domain';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes } from './shared';

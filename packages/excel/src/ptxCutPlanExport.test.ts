@@ -4,7 +4,7 @@ import {
   generatePtxString,
   generatePtxByMaterial,
 } from './ptxCutPlanExport';
-import { ValidationError, type CutPlan } from '@muebles/domain';
+import { ValidationError, type CutPlan } from '@granete/domain';
 
 function buildCutPlanFixture(): CutPlan {
   return {

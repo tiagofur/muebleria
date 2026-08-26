@@ -8,7 +8,7 @@ import {
   seedCatalogExpandedLatAm,
   resolveBom,
   calcProjectBreakdown,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface QuoterCartItem {
   id: string;

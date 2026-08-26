@@ -17,18 +17,18 @@
     "declarationMap": true,
     "sourceMap": true,
     "paths": {
-      "@muebles/domain": ["./packages/domain/src/index.ts"],
-      "@muebles/domain/fixtures": [
+      "@granete/domain": ["./packages/domain/src/index.ts"],
+      "@granete/domain/fixtures": [
         "./packages/domain/src/__fixtures__/plantillaDemo.ts"
       ],
-      "@muebles/domain/*": ["./packages/domain/src/*"],
-      "@muebles/ui": ["./packages/ui/src/index.ts"],
-      "@muebles/ui/*": ["./packages/ui/src/*"],
-      "@muebles/excel": ["./packages/excel/src/index.ts"],
-      "@muebles/excel/*": ["./packages/excel/src/*"],
-      "@muebles/storage": ["./packages/storage/src/index.ts"],
-      "@muebles/storage/seed": ["./packages/storage/src/seed.ts"],
-      "@muebles/storage/*": ["./packages/storage/src/*"]
+      "@granete/domain/*": ["./packages/domain/src/*"],
+      "@granete/ui": ["./packages/ui/src/index.ts"],
+      "@granete/ui/*": ["./packages/ui/src/*"],
+      "@granete/excel": ["./packages/excel/src/index.ts"],
+      "@granete/excel/*": ["./packages/excel/src/*"],
+      "@granete/storage": ["./packages/storage/src/index.ts"],
+      "@granete/storage/seed": ["./packages/storage/src/seed.ts"],
+      "@granete/storage/*": ["./packages/storage/src/*"]
     }
   }
 }

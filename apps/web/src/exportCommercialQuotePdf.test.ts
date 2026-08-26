@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Catalog, Project } from '@muebles/domain';
+import type { Catalog, Project } from '@granete/domain';
 import {
   buildCommercialQuotePdfExport,
   commercialQuotePdfFileName,

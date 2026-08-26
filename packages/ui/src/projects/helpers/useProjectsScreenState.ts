@@ -28,7 +28,7 @@ import type {
   ProjectTemplate,
   Structure,
   WorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { trackUsability } from '../../preview3d/usabilityBenchmark';
 import { useDebouncedValue } from '../../common';
 import { consumeRequestCreateKey } from '../../common/consumeRequestCreateKey';
@@ -82,7 +82,7 @@ export interface UseProjectsScreenStateProps {
   readonly onUpdateItem: (projectId: string, item: ProjectItem) => void;
   readonly onUpdateKitchenLayout?: (
     projectId: string,
-    layout: import('@muebles/domain').ProjectKitchenLayout,
+    layout: import('@granete/domain').ProjectKitchenLayout,
   ) => void;
   readonly onAcquirePlanEdit?: (projectId: string) => boolean;
   readonly onRenewPlanEdit?: (projectId: string) => boolean;

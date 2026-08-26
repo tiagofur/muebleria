@@ -20,7 +20,7 @@ import type {
   PurchaseOrderItem,
   PurchaseOrderStatus,
   Supplier,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   withWorkshopSettings,
   advanceFloorStatus,
@@ -31,7 +31,7 @@ import {
   pickingKey,
   poCanReceive,
   stockMovementDelta,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { WorkspaceRepository } from './workspaceRepository';
 import { createSeedWorkspace } from './seed';
 import { migrateWorkspace } from './migrateWorkspace';

@@ -3,8 +3,8 @@
  */
 
 import ExcelJS from 'exceljs';
-import type { ProductionCutRow } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 /** Row 2 data headers (columns A–J), matching Plantilla_Optimizer.xlsx. */
 export const OPTIMIZER_DATA_HEADERS = [

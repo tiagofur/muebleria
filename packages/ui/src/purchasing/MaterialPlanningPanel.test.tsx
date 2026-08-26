@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { MaterialPlanningPanel } from './MaterialPlanningPanel';
 import { materialPlanningCardView } from './materialPlanningView';
-import type { MaterialPlanning, Project } from '@muebles/domain';
+import type { MaterialPlanning, Project } from '@granete/domain';
 
 afterEach(cleanup);
 

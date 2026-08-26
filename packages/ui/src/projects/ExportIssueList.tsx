@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ExportIssue } from '@muebles/domain';
+import type { ExportIssue } from '@granete/domain';
 
 export interface ExportIssueListProps {
   readonly issues: readonly ExportIssue[];

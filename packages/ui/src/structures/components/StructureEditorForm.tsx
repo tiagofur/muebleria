@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Agregado, Component, DimensionPreset } from '@muebles/domain';
+import type { Agregado, Component, DimensionPreset } from '@granete/domain';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import {
   STRUCTURE_EDITOR_TABS,

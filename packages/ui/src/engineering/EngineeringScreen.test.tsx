@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { EngineeringScreen } from './EngineeringScreen';
-import type { Project } from '@muebles/domain';
-import type { EngineeringLog } from '@muebles/domain';
+import type { Project } from '@granete/domain';
+import type { EngineeringLog } from '@granete/domain';
 
 type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 

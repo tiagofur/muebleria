@@ -16,7 +16,7 @@ import {
   type ReactNode,
 } from 'react';
 import { LayoutTemplate } from 'lucide-react';
-import type { Customer, ProjectTemplate, WorkshopSettings } from '@muebles/domain';
+import type { Customer, ProjectTemplate, WorkshopSettings } from '@granete/domain';
 import { Modal } from '../../common';
 import {
   emptyProjectDraft,

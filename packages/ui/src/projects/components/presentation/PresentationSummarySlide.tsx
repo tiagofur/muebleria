@@ -3,11 +3,11 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Module, Project, ProjectItem } from '@muebles/domain';
+import type { Module, Project, ProjectItem } from '@granete/domain';
 import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface PresentationSummarySlideProps {
   readonly project: Project;

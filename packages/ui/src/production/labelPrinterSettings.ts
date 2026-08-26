@@ -3,7 +3,7 @@
  * The shop configures its Zebra once; every session reuses it.
  */
 
-import type { ZplDpi, ZplSizePreset } from '@muebles/domain';
+import type { ZplDpi, ZplSizePreset } from '@granete/domain';
 
 export type LabelPrinterSettings = {
   readonly preset: ZplSizePreset;

@@ -3,7 +3,7 @@
  * Catalog + modules + demo project align with Plantilla_Muebles.xlsx.
  */
 
-import type { Workspace } from '@muebles/domain';
+import type { Workspace } from '@granete/domain';
 import {
   DEFAULT_WORKSHOP_SETTINGS,
   buildPerfReferenceProject,
@@ -11,7 +11,7 @@ import {
   createPlantillaDemoProject,
   seedCatalogExpandedLatAm,
   seedCocinaEstandarTemplate,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 /**
  * Persistence format version (NFR-10). Bump when migrations are required.

@@ -15,7 +15,7 @@ import type {
   ProjectItem,
   ResolvedBoardPart,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   defaultMeasurePresetId,
   layoutKitchenPlacements,
@@ -35,7 +35,7 @@ import {
   PATAS_ROLE,
   type ResolvedHardwarePlacement,
   type ResolvedWallFrame,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {

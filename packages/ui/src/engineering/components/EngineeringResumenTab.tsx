@@ -15,7 +15,7 @@ import {
   summarizeProductionTotals,
   type ProductionCutRow,
   type HardwarePurchaseRow,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { ProductionOrderReadiness } from '../../production/productionOrderModel';
 
 export function CheckRow({

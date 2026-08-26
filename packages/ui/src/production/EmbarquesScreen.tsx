@@ -17,7 +17,7 @@ import {
   calculateLoadingProgress,
   normalizeItemFloorStatus,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState, PageHeader } from '../common';
 
 type EmbarquesProjectCard = {

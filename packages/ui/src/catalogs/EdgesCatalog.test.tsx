@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { EdgeBand } from '@muebles/domain';
+import type { EdgeBand } from '@granete/domain';
 import { EdgesCatalog } from './EdgesCatalog';
 
 function makeEdge(id: string, overrides: Partial<EdgeBand> = {}): EdgeBand {

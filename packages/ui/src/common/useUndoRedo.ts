@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type Command, CommandManager } from '@muebles/domain';
+import { type Command, CommandManager } from '@granete/domain';
 
 export interface UndoRedoApi<T> {
   readonly state: T;

@@ -9,7 +9,7 @@ import {
   ValidationError,
   type Catalog,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface MaterialSummaryPdfInput {
   readonly project: Project;

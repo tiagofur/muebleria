@@ -2,7 +2,7 @@
  * Pure dashboard helpers — counts and selection only (no cost formulas).
  */
 
-import type { ProjectStatus } from '@muebles/domain';
+import type { ProjectStatus } from '@granete/domain';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 
 export type ProjectLike = {

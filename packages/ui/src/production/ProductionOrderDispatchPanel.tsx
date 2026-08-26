@@ -18,13 +18,13 @@ import type {
   Module,
   ModuleLabel,
   Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   calculateLoadingProgress,
   generateModuleLabels,
   ITEM_FLOOR_STATUS_LABELS_ES,
   parsePieceLabelScan,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   AlertTriangle,
   Camera,

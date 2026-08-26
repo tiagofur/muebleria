@@ -23,7 +23,7 @@ import type {
   ModuleCategory,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   type ComponentDraft,
   type CustomerDraft,
@@ -35,7 +35,7 @@ import {
   type StructureDraft,
   type CategoryDraft,
   type AmbientMaterialDraft,
-} from '@muebles/ui';
+} from '@granete/ui';
 
 /**
  * Toast callback signature. catalogStore no longer accepts toast as a dep

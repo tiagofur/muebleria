@@ -7,12 +7,12 @@ import type {
   WarrantyTicketCategory,
   WarrantyTicketPriority,
   WarrantyTicketStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   WARRANTY_CATEGORY_METADATA,
   WARRANTY_PRIORITY_METADATA,
   WARRANTY_STATUS_METADATA,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   AlertCircle,
   Calendar,

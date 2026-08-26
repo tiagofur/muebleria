@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { Component, EdgeSide } from '@muebles/domain';
+import type { Component, EdgeSide } from '@granete/domain';
 import { ChevronLeft, Eye, EyeOff, Pencil } from 'lucide-react';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { geometrySummary, placementLabel } from '../componentDraft';

@@ -8,13 +8,13 @@ import {
   generateHardwareList,
   type Project,
   ValidationError,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   IDS,
   plantillaCatalogWithModules,
   plantillaChoices,
   plantillaGabOnlyProject,
-} from '@muebles/domain/fixtures';
+} from '@granete/domain/fixtures';
 import {
   HARDWARE_LIST_HEADERS,
   hardwareListExport,

@@ -20,7 +20,7 @@
 import type {
   ProjectItem,
   ProjectKitchenLayout,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type PlanHistoryEntry = {
   /** Etiqueta de la intención (español, para "Deshacer: …"). */

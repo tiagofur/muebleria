@@ -19,7 +19,7 @@
 import { Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { Edges, useTexture } from '@react-three/drei';
 import { DoubleSide, RepeatWrapping, SRGBColorSpace } from 'three';
-import { splitWallSegments, type AmbientMaterial } from '@muebles/domain';
+import { splitWallSegments, type AmbientMaterial } from '@granete/domain';
 import { boardPhysicalResponse, type SceneLightingMode } from './sceneLighting';
 import {
   contactShadowForFloor,

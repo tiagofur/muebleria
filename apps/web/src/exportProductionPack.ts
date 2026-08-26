@@ -18,7 +18,7 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   optimizerExport,
   hardwareListExport,
@@ -31,7 +31,7 @@ import {
   assemblySheetsPdfExport,
   cutPreviewPdfExport,
   ptxCutPlanExport,
-} from '@muebles/excel';
+} from '@granete/excel';
 
 export type ExportProductionPackResult =
   | {

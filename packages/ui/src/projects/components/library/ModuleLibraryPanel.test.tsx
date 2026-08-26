@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
-import type { Module, ModuleCategory } from '@muebles/domain';
+import type { Module, ModuleCategory } from '@granete/domain';
 import { ModuleLibraryPanel, moduleDefaultDims } from './ModuleLibraryPanel';
 import { useLibraryCollections } from './useLibraryFavorites';
 

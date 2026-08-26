@@ -18,13 +18,13 @@ import {
   BarChart3,
   RefreshCw,
 } from 'lucide-react';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import {
   buildProjectFloorSummary,
   PIPELINE_SECTORS,
   PRODUCTION_SECTOR_LABELS_ES,
   type PipelineSector,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { PageHeader } from '../common';
 import {
   useProductionDashboard,

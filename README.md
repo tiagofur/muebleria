@@ -85,9 +85,9 @@ Cuando el monorepo esté scaffolded:
 
 ```bash
 pnpm install
-pnpm --filter @muebles/domain test   # tests del motor
+pnpm --filter @granete/domain test   # tests del motor
 pnpm test                             # todos los paquetes
-pnpm --filter @muebles/web dev        # UI en localhost:5173
+pnpm --filter @granete/web dev        # UI en localhost:5173
 ```
 
 ### Desktop Electron (dev y empaquetado)
@@ -96,8 +96,8 @@ Misma UI que web; el host solo aporta ventana + diálogo nativo de guardar (EXP-
 
 ```bash
 # Desarrollo local
-pnpm --filter @muebles/web dev
-pnpm --filter @muebles/desktop dev:app
+pnpm --filter @granete/web dev
+pnpm --filter @granete/desktop dev:app
 
 # Empaquetado / release (F075)
 pnpm build:desktop      # Genera bundle en apps/desktop/dist/ (--dir)

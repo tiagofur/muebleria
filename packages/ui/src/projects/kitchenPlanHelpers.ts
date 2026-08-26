@@ -8,11 +8,11 @@ import type {
   Module,
   Project,
   ProjectItem,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   defaultMeasurePresetId,
   resolveItemDims,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 function moduleDims(
   item: ProjectItem,

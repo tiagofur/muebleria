@@ -4,14 +4,14 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Module, Project } from '@muebles/domain';
+import type { Module, Project } from '@granete/domain';
 import {
   buildProductionElevations,
   groupProductionElevationsBySpace,
   listProductionSpaceOptions,
   projectScopedToProductionSpace,
   unplacedItemIdsForProduction,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { canUseWebGL } from '../preview3d/webglSupport';
 import {
   DEFAULT_MATERIAL_SURFACE_MODE,

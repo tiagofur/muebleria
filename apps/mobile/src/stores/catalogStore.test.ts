@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useCatalogStore } from './catalogStore';
-import { seedCatalogExpandedLatAm } from '@muebles/domain';
+import { seedCatalogExpandedLatAm } from '@granete/domain';
 
 describe('catalogStore Mobile (Fase 3)', () => {
   beforeEach(() => {

@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Agregado, Component, Hardware } from '@muebles/domain';
+import type { Agregado, Component, Hardware } from '@granete/domain';
 import { Box, ChevronLeft, Layers, Pencil, Settings2, Trash2 } from 'lucide-react';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 

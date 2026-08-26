@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type { ResolvedBoardPart } from '@granete/domain';
 
 export type PartListProps = {
   readonly parts: readonly ResolvedBoardPart[];

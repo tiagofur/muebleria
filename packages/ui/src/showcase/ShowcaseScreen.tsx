@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { Module, ModuleCategory, ShowcasePhotoItem } from '@muebles/domain';
+import type { Module, ModuleCategory, ShowcasePhotoItem } from '@granete/domain';
 import { Sparkles, Boxes, Store } from 'lucide-react';
 import { PageHeader, PageToolbar } from '../common';
 import { WorkspaceTabs } from '../common/Tabs';

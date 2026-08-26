@@ -4,7 +4,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ProductionCutRow } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
 import { ProductionOrderDespiecePanel } from './ProductionOrderDespiecePanel';
 
 afterEach(() => cleanup());

@@ -13,13 +13,13 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Hardware, HardwareUnit } from '@muebles/domain';
+import type { Hardware, HardwareUnit } from '@granete/domain';
 import {
   HARDWARE_FINISHES,
   HARDWARE_PART_ROLE_LABELS_ES,
   hardwarePartRolesForShape,
   matchHardwareFinish,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { CatalogImage, Modal } from '../../common';
 import { HardwareMachiningSection } from './HardwareMachiningSection';

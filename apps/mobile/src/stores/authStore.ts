@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { type UserRole, DomainError } from '@muebles/domain';
+import { type UserRole, DomainError } from '@granete/domain';
 import { apiClient } from '../services/apiClient';
 
 const TOKEN_KEY = 'muebles_auth_token';

@@ -11,7 +11,7 @@ import type {
   OptionGroup,
   Project,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 const mocks = vi.hoisted(() => ({
   sceneRenders: [] as Array<{

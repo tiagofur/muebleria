@@ -12,8 +12,8 @@ import {
   type Customer,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { commercialQuoteExport } from '@muebles/excel';
+} from '@granete/domain';
+import { commercialQuoteExport } from '@granete/excel';
 import {
   downloadOptimizerXlsx,
   type DownloadDeps,

@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Module, OptionChoices } from '@muebles/domain';
+import type { Module, OptionChoices } from '@granete/domain';
 import { Modal } from '../../common';
 import { Furniture3DViewer } from '../../common';
 import {

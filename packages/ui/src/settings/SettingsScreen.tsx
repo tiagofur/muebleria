@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import type { WorkshopSettings } from '@muebles/domain';
+import type { WorkshopSettings } from '@granete/domain';
 import { Settings, SlidersHorizontal, Wrench } from 'lucide-react';
 import { PageHeader, submitBusyLabel, WorkspaceTabs, type TabDefinition } from '../common';
 import '../catalogs/catalogs.css';

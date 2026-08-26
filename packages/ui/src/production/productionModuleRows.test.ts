@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Module, Project, ProductionCutRow } from '@muebles/domain';
+import type { Module, Project, ProductionCutRow } from '@granete/domain';
 import { buildProductionModuleRows } from './productionModuleRows';
 
 const modules: Module[] = [

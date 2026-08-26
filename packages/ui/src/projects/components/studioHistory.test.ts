@@ -6,7 +6,7 @@ import {
   redoLabelOf,
   undoLabelOf,
 } from './studioHistory';
-import type { ProjectItem, ProjectKitchenLayout } from '@muebles/domain';
+import type { ProjectItem, ProjectKitchenLayout } from '@granete/domain';
 
 function layout(tag: string): ProjectKitchenLayout {
   return { walls: [], placements: [], activeSpaceId: tag } as ProjectKitchenLayout;

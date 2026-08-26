@@ -17,8 +17,8 @@ import type {
   MachiningEntryFace,
   MachiningOperation,
   MachiningOperationKind,
-} from '@muebles/domain';
-import { countMachiningOperations } from '@muebles/domain';
+} from '@granete/domain';
+import { countMachiningOperations } from '@granete/domain';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { HardwareDraft } from './hardwareDraft';
 

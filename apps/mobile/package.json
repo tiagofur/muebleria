@@ -1,5 +1,5 @@
 {
-  "name": "@muebles/mobile",
+  "name": "@granete/mobile",
   "version": "0.0.0",
   "private": true,
   "main": "index.js",
@@ -12,8 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@muebles/domain": "workspace:*",
-    "@muebles/storage": "workspace:*",
+    "@granete/domain": "workspace:*",
+    "@granete/storage": "workspace:*",
     "@react-native-async-storage/async-storage": "1.23.1",
     "expo": "~52.0.37",
     "expo-haptics": "~14.0.1",

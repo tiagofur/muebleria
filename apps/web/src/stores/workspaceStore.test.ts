@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Workspace, WorkshopSettings } from '@muebles/domain';
-import type { WorkspaceRepository } from '@muebles/storage';
-import { createSeedWorkspace } from '@muebles/storage';
+import type { Workspace, WorkshopSettings } from '@granete/domain';
+import type { WorkspaceRepository } from '@granete/storage';
+import { createSeedWorkspace } from '@granete/storage';
 
 import {
   type RepositoryFactory,

@@ -20,8 +20,8 @@ import type {
   CutPlan,
   CutPlanPlacedPiece,
   PartDrillingPattern,
-} from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+} from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 export interface DxfCutPlanExportInput {
   readonly cutPlan: CutPlan;

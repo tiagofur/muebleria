@@ -55,7 +55,7 @@ import {
   workshopSettingsToApi,
   workshopSettingsFromApi,
 } from './apiMappers';
-import { MATERIAL_MANUFACTURER_UNSET } from '@muebles/domain';
+import { MATERIAL_MANUFACTURER_UNSET } from '@granete/domain';
 import type {
   AmbientCategory,
   AmbientMaterial,
@@ -84,7 +84,7 @@ import type {
   MaterialCostValuation,
   SiteSurvey,
   KitchenWall,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 describe('apiMappers', () => {
   it('round-trips edge preview color', () => {

@@ -7,7 +7,7 @@
  * y decide qué superficie fue golpeada. Así es testeable en jsdom sin WebGL.
  */
 
-import type { AmbientSurfaceType } from '@muebles/domain';
+import type { AmbientSurfaceType } from '@granete/domain';
 
 /** Superficie objetivo de un drop de material. */
 export type PaintSurface =

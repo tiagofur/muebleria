@@ -29,7 +29,7 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 ```
 
 ### 1.1 Por qué React Native & Expo en nuestro stack
-1. **100% Reutilización de Dominio:** `@muebles/domain` (BOM, costeo, validaciones, QR parsing) está escrito en TypeScript puro sin dependencias de DOM/fs, permitiendo importación directa en React Native sin duplicación de lógica.
+1. **100% Reutilización de Dominio:** `@granete/domain` (BOM, costeo, validaciones, QR parsing) está escrito en TypeScript puro sin dependencias de DOM/fs, permitiendo importación directa en React Native sin duplicación de lógica.
 2. **Acceso a Hardware Nativo:** Cámara de alto rendimiento para códigos QR y captura de fotos, Bluetooth Low Energy (BLE) para distanciómetros, acelerómetro/giroscopio, almacenamiento seguro (SecureStore) y notificaciones push.
 3. **Fluidez y Ergonomía Táctil:** Interfaz táctil optimizada para operar con una sola mano, respuestas hápticas, escaneo continuo y navegación por gestos.
 4. **Offline-First:** Capacidad de operar en sótanos, galpones y obras sin cobertura celular, encolando mutaciones y sincronizando al recuperar conexión con el backend Go.
@@ -65,7 +65,7 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 | ID | Decisión | Fundamento Técnico |
 |---|---|---|
 | **D-RN-1** | **Expo SDK 52+ con New Architecture (Bridgeless / Turbomodules)** | Máximo rendimiento en C++, soporte nativo de `expo-camera`, `expo-sqlite` y facilidad de compilación con EAS Build dentro del monorepo pnpm. |
-| **D-RN-2** | **Reutilización 100% de `@muebles/domain`** | Se importa `@muebles/domain` directo en React Native. Las fórmulas de despiece, resolución de BOM, parsers de QR y RBAC son idénticos a Web y Go. |
+| **D-RN-2** | **Reutilización 100% de `@granete/domain`** | Se importa `@granete/domain` directo en React Native. Las fórmulas de despiece, resolución de BOM, parsers de QR y RBAC son idénticos a Web y Go. |
 | **D-RN-3** | **Offline-First con SQLite & Cola de Mutaciones** | Se usa `expo-sqlite` o WatermelonDB como store local respaldado por TanStack Query + Zustand, permitiendo trabajar sin internet y resolver conflictos por versión (`productionRevision.ts`). |
 | **D-RN-4** | **Hardware Nativo: Cámara & BLE** | Integración de `expo-camera` para escaneo de QR v2 (#141) con respuesta háptica y `react-native-ble-plx` para distanciómetros láser (Bosch GLM, Leica Disto). |
 | **D-RN-5** | **Compresión de Imágenes en Cliente** | Las fotos de obra tomadas desde la app se redimensionan y comprimen a WebP/JPEG optimizado en el dispositivo antes de subirse al backend Go (`/api/projects/:id/photos`). |
@@ -83,7 +83,7 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 │ • Setup apps/mobile con Expo & pnpm symlinks                                │
 │ • Design tokens móviles (Inter, colores de docs/design.md, spacing)         │
 │ • Auth JWT con Go Backend + Biometría (FaceID/Huella)                       │
-│ • Integración de @muebles/domain y @muebles/storage                         │
+│ • Integración de @granete/domain y @granete/storage                         │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
                                        ▼
@@ -109,7 +109,7 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ FASE 3: Catálogo Móvil & Cotizador Express de Campo                         │
 │ • Navegación y búsqueda de materiales, cantos, herrajes y módulos           │
-│ • Cotizador rápido con presets y cálculo en vivo vía @muebles/domain        │
+│ • Cotizador rápido con presets y cálculo en vivo vía @granete/domain        │
 │ • Compartir presupuesto por WhatsApp / PDF con un toque                     │
 │ • Historial y ficha 360° del cliente                                        │
 └──────────────────────────────────────┬──────────────────────────────────────┘
@@ -139,7 +139,7 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 ### Fase 0 — Cimientos del Monorepo & Auth (Completada)
 **Objetivo:** Tener la aplicación compilando en iOS y Android dentro del monorepo pnpm, conectada al backend Go y consumiendo el dominio compartido.
 
-- [x] **0.1 Setup de `apps/mobile`:** Configuración con Expo SDK 52+, TypeScript estricto, y resolución de symlinks en `metro.config.js` para `@muebles/domain` y `@muebles/storage`.
+- [x] **0.1 Setup de `apps/mobile`:** Configuración con Expo SDK 52+, TypeScript estricto, y resolución de symlinks en `metro.config.js` para `@granete/domain` y `@granete/storage`.
 - [x] **0.2 Sistema de Diseño Móvil:** Implementación de tokens de color HSL, tipografía Inter, espaciados y componentes base (`Button`, `Card`, `Input`, `Badge`, `BottomSheet`, `Header`).
 - [x] **0.3 Autenticación & Sesión:** Login con JWT contra Go backend (`POST /api/auth/login`), guardado seguro de tokens con `expo-secure-store`, refresh token automático y login biométrico opcional (`expo-local-authentication`).
 - [x] **0.4 Capa de Red y Cliente API:** Cliente HTTP Axios/Fetch configurado con interceptores de autenticación y manejo de errores tipados `DomainError`.

@@ -3,8 +3,8 @@
  */
 
 import { useMemo, useState, type ReactNode } from 'react';
-import type { ProductionCutRow } from '@muebles/domain';
-import { summarizeProductionTotals } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
+import { summarizeProductionTotals } from '@granete/domain';
 import { WorkflowTabs } from '../common/Tabs';
 
 export type ProductionOrderDespiecePanelProps = {

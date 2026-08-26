@@ -25,7 +25,7 @@ import {
   type StockMaterialKind,
   type StockMovement,
   type StockMovementType,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState, formatMoneyDisplay, WorkspaceTabs } from '../common';
 import { StockMovementModal } from './StockMovementModal';
 

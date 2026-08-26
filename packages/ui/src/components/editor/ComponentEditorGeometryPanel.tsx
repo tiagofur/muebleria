@@ -17,7 +17,7 @@ import {
   ChevronRight,
   RotateCcw,
 } from 'lucide-react';
-import type { PlacementDims, ResolvedBoardPart } from '@muebles/domain';
+import type { PlacementDims, ResolvedBoardPart } from '@granete/domain';
 import type {
   MaterialColorLookup,
   MaterialTextureLookup,

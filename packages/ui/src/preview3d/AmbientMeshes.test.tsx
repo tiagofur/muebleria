@@ -24,7 +24,7 @@
  * Vite dev, Project 3D preview) — see Work Unit Evidence.
  */
 import { describe, expect, it } from 'vitest';
-import type { AmbientMaterial } from '@muebles/domain';
+import type { AmbientMaterial } from '@granete/domain';
 import {
   BaseboardMesh,
   BackWallMesh,

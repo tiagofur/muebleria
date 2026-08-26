@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { ValidationError } from '@muebles/domain';
+import { ValidationError } from '@granete/domain';
 import {
   commercialQuotePdfExport,
   type CommercialQuotePdfInput,

@@ -11,8 +11,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { AmbientCategory } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import type { AmbientCategory } from '@granete/domain';
+import { childrenOf } from '@granete/domain';
 import { Layers, Plus } from 'lucide-react';
 import { EmptyState, Modal } from '../../common';
 import type { AmbientCategoryDraft } from './ambientMaterialDraft';

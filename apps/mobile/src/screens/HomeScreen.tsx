@@ -278,7 +278,7 @@ export function HomeScreen({
 
         {/* Workshop Offline Status Banner */}
         <View style={styles.syncStatusCard}>
-          <Text style={styles.syncStatusTitle}>🟢 Motor de Cálculo Activo (@muebles/domain)</Text>
+          <Text style={styles.syncStatusTitle}>🟢 Motor de Cálculo Activo (@granete/domain)</Text>
           <Text style={styles.syncStatusText}>
             Presupuestación paramétrica local 100% offline con sincronización al servidor.
           </Text>

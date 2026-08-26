@@ -9,14 +9,14 @@
  * Convention: plank lying flat with its length horizontal.
  *   L1 = top long edge, L2 = bottom long edge
  *   W1 = left short edge, W2 = right short edge
- * (L = Length, W = Width — matches EdgeSide in @muebles/domain.)
+ * (L = Length, W = Width — matches EdgeSide in @granete/domain.)
  *
  * Accessibility: each edge is a real button (role/tabindex/aria-pressed) with a
  * visible focus ring, so the whole diagram works keyboard-only.
  */
 
 import { type KeyboardEvent, type ReactNode } from 'react';
-import type { EdgeSide } from '@muebles/domain';
+import type { EdgeSide } from '@granete/domain';
 
 export type EdgeStates = {
   readonly L1: boolean;

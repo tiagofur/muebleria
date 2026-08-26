@@ -10,8 +10,8 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { cutListExportCsv } from '@muebles/excel';
+} from '@granete/domain';
+import { cutListExportCsv } from '@granete/excel';
 import { deliverExcelFile } from './exportOptimizer';
 
 export type ExportCutListCsvResult =

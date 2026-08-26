@@ -13,9 +13,9 @@ import type {
   Project,
   ProjectTechnicalStatus,
   WorkshopSettings,
-} from '@muebles/domain';
-import { canExportProductionForProject } from '@muebles/domain';
-import { resolveCustomerName } from '@muebles/ui';
+} from '@granete/domain';
+import { canExportProductionForProject } from '@granete/domain';
+import { resolveCustomerName } from '@granete/ui';
 
 import type { SessionMode } from '../session';
 import type { ToastFn } from '../stores/catalogStore';
@@ -43,7 +43,7 @@ import { buildAssemblySheetsExport } from '../exportAssemblySheets';
 import { downloadDespiecePdf } from '../exportDespiecePdf';
 import { downloadCutPlanPdf } from '../exportCutPlanPdf';
 import { downloadCutPlanDxf } from '../exportCutPlanDxf';
-import { resolveProjectDrilling } from '@muebles/domain';
+import { resolveProjectDrilling } from '@granete/domain';
 import { downloadCutPlanPtx, ptxFileName } from '../exportCutPlanPtx';
 import { runExport, type ExportDelivery } from './runExport';
 
@@ -406,7 +406,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
   );
 
   const handleExportCutPlanPdf = useCallback(
-    async (cutPlan: import('@muebles/domain').CutPlan) => {
+    async (cutPlan: import('@granete/domain').CutPlan) => {
       setExportBusy(true);
       try {
         const fileName = `${cutPlan.projectName || 'proyecto'}-plan-de-corte.pdf`;
@@ -431,7 +431,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
   );
 
   const handleExportCutPlanDxf = useCallback(
-    async (cutPlan: import('@muebles/domain').CutPlan, variant: 'sheets' | 'pieces') => {
+    async (cutPlan: import('@granete/domain').CutPlan, variant: 'sheets' | 'pieces') => {
       setExportBusy(true);
       try {
         const suffix = variant === 'sheets' ? 'tableros' : 'piezas';
@@ -469,7 +469,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
 
   const handleExportCutPlanPtx = useCallback(
     async (
-      cutPlan: import('@muebles/domain').CutPlan,
+      cutPlan: import('@granete/domain').CutPlan,
       mode?: 'unified' | 'by-material',
     ) => {
       setExportBusy(true);

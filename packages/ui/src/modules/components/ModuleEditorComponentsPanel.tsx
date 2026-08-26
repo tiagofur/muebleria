@@ -3,7 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Component, Hardware } from '@muebles/domain';
+import type { Component, Hardware } from '@granete/domain';
 import { Copy, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import type { ModuleDraft } from '../moduleHelpers';

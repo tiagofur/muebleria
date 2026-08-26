@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import type { Module, Project } from '@muebles/domain';
+import type { Module, Project } from '@granete/domain';
 import { ProductionOrderModulesPanel } from './ProductionOrderModulesPanel';
 
 function project(): Project {

@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { DomainError } from '@muebles/domain';
+import { DomainError } from '@granete/domain';
 
 const TOKEN_KEY = 'muebles_auth_token';
 

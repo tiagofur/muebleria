@@ -3,12 +3,12 @@
  * Workshop frame: X = width (PW), Y = depth (PD), Z = height (PH).
  */
 
-import type { MaterialBoard, ResolvedBoardPart } from '@muebles/domain';
+import type { MaterialBoard, ResolvedBoardPart } from '@granete/domain';
 import {
   DEFAULT_MATERIAL_PREVIEW_COLOR,
   groupPositionFromMinCorner,
   normalizePreviewColor,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type BoardPartVisual = {
   readonly id: string;

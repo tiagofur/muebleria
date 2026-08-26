@@ -12,7 +12,7 @@ import {
   parseNestingImportCsv,
   nestingImportFromRows,
   isProjectClosed,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { AlertCircle } from 'lucide-react';
 import { InlineLoading } from '../../common';
 import { TotalsSkeleton } from './TotalsSkeleton';

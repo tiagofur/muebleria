@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { OptionChoices } from '@muebles/domain';
+import type { OptionChoices } from '@granete/domain';
 import { canShowPricePreview } from './optionGroupHelpers';
 import './optionGroups.css';
 

@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Agregado, Hardware, ModuleAgregadoInstance, OptionGroup } from '@muebles/domain';
+import type { Agregado, Hardware, ModuleAgregadoInstance, OptionGroup } from '@granete/domain';
 import {
   ChevronDown,
   ChevronRight,

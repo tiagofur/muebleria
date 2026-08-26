@@ -10,8 +10,8 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { hardwareListExport } from '@muebles/excel';
+} from '@granete/domain';
+import { hardwareListExport } from '@granete/excel';
 import {
   downloadOptimizerXlsx,
   type DownloadDeps,

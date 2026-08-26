@@ -49,7 +49,7 @@ taller (email, contraseña y URL del servidor Granete). Al iniciar sesión:
 - El plugin solicita un **token de extensión de 30 días** (claim
   `client: sketchetchup-extension`), restringido server-side a solo lectura.
 - Carga la **biblioteca del taller** desde `GET /api/furniture/definitions`
-  (catálogo piloto compartido con `@muebles/domain` vía
+  (catálogo piloto compartido con `@granete/domain` vía
   `contracts/pilotFurnitureCatalog.json`) y muestra sus modelos listos
   (presets) en la Biblioteca.
 - La sesión se persiste en

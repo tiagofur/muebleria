@@ -17,7 +17,7 @@ import {
   type ReworkActionType,
   type QualityIssueCategory,
   type UnitQcChecklistItem,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { QualityPanelView } from './qualityView';
 import './production.css';
 

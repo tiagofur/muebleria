@@ -61,11 +61,11 @@ describe('web shell design system wiring (F016)', () => {
 
   it('main.tsx imports design-system tokens and reset globally', () => {
     const main = readFileSync(mainTsxPath, 'utf8');
-    expect(main).toContain("@muebles/ui/design-system/tokens.css");
-    expect(main).toContain("@muebles/ui/design-system/reset.css");
+    expect(main).toContain("@granete/ui/design-system/tokens.css");
+    expect(main).toContain("@granete/ui/design-system/reset.css");
   });
 
-  it('app.css has no prototype palette leftovers (shell chrome lives in @muebles/ui)', () => {
+  it('app.css has no prototype palette leftovers (shell chrome lives in @granete/ui)', () => {
     const css = readFileSync(appCssPath, 'utf8');
     expect(css).not.toContain('#1a73e8');
     expect(css).not.toContain('#f0f2f5');

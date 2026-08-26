@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ProductionCutRow, Project } from '@muebles/domain';
+import type { ProductionCutRow, Project } from '@granete/domain';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 
 import { EngineeringWorkspace } from './EngineeringWorkspace';

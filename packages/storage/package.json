@@ -1,5 +1,5 @@
 {
-  "name": "@muebles/storage",
+  "name": "@granete/storage",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -29,7 +29,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@muebles/domain": "workspace:*"
+    "@granete/domain": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.32",

@@ -7,7 +7,7 @@
 
 import type { ReactNode } from 'react';
 import { ArrowRight, CircleAlert, TriangleAlert } from 'lucide-react';
-import type { OpsException } from '@muebles/domain';
+import type { OpsException } from '@granete/domain';
 import './dashboard.css';
 
 export interface OpsExceptionsPanelProps {

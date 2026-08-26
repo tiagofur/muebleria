@@ -7,8 +7,8 @@ import {
   dxfCutPlanExport,
   generateDxfBySheet,
   generateDxfByPiece,
-} from '@muebles/excel';
-import type { CutPlan, PartDrillingPattern } from '@muebles/domain';
+} from '@granete/excel';
+import type { CutPlan, PartDrillingPattern } from '@granete/domain';
 import { downloadOptimizerXlsx, type DownloadDeps } from './exportOptimizer';
 
 export interface DownloadCutPlanDxfOptions {

@@ -13,8 +13,8 @@ import {
   Package,
   Ruler,
 } from 'lucide-react';
-import type { ProductionCutRow, Project } from '@muebles/domain';
-import { summarizeProductionTotals } from '@muebles/domain';
+import type { ProductionCutRow, Project } from '@granete/domain';
+import { summarizeProductionTotals } from '@granete/domain';
 import type { ProductionOrderReadiness } from '../productionOrderModel';
 
 function CheckRow({

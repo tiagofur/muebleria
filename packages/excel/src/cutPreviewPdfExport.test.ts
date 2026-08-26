@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ProductionCutRow } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 import {
   cutPreviewPdfExport,
   packCutRowsIntoSheets,

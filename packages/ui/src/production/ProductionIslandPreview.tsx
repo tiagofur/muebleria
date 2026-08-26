@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ProductionIslandUnit } from '@muebles/domain';
+import type { ProductionIslandUnit } from '@granete/domain';
 import { getCategoryTheme } from '../projects/kitchenPlanHelpers';
 
 export type ProductionIslandPreviewProps = {

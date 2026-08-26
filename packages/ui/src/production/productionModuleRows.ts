@@ -10,12 +10,12 @@ import type {
   ProjectItem,
   ProjectItemPlacement,
   ProductionCutRow,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   defaultMeasurePresetId,
   normalizeItemFloorStatus,
   resolveModuleMeasurePreset,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type ProductionModuleRow = {
   readonly itemId: string;

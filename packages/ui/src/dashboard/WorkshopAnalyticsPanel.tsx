@@ -11,9 +11,9 @@ import type {
   ProjectStatus,
   WorkshopAnalytics,
   WarrantyAnalyticsMetrics,
-} from '@muebles/domain';
-import { ANALYTICS_PERIODS } from '@muebles/domain';
-import { WARRANTY_CATEGORY_METADATA } from '@muebles/domain';
+} from '@granete/domain';
+import { ANALYTICS_PERIODS } from '@granete/domain';
+import { WARRANTY_CATEGORY_METADATA } from '@granete/domain';
 import { TrendingUp, ShieldAlert } from 'lucide-react';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 import { projectStatusLabel } from '../projects/projectHelpers';

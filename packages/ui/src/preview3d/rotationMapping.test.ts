@@ -11,7 +11,7 @@ import { Euler, Matrix4, Vector3 } from 'three';
 import {
   defaultPoseForPlacement,
   groupPositionFromMinCorner,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 const dims = { PW: 600, PH: 720, PD: 560, T: 18 };
 

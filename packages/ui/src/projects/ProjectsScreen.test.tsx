@@ -21,7 +21,7 @@ import type {
   Project,
   ProjectTemplate,
   QuoteBreakdown,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { ProjectsScreen } from './ProjectsScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -15,7 +15,7 @@ import {
   sectorsAllowedForRole,
   type ProductionSector,
   type ProductRole,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Modal } from '../common/Modal';
 import './sectorAssignment.css';
 

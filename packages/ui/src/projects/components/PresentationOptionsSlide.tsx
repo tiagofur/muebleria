@@ -10,11 +10,11 @@ import type {
   Module,
   OptionGroup,
   Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   defaultMeasurePresetId,
   resolveModuleMeasurePreset,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { optionLabelForId, optionSwatchForId } from '../projectHelpers';
 
 export type PresentationOptionsSlideProps = {

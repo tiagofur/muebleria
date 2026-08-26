@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ProductionWallElevation } from '@muebles/domain';
+import type { ProductionWallElevation } from '@granete/domain';
 
 export type ProductionElevationPreviewProps = {
   readonly wall: ProductionWallElevation;
