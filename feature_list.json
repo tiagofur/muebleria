@@ -3992,6 +3992,186 @@
       ],
       "created": "2026-08-26",
       "completedAt": "2026-08-26"
+    },
+    {
+      "id": "F169",
+      "phase": 0,
+      "name": "multi_org_core_schema",
+      "title": "#325 Multi-org core — organizations, memberships, invitations, auditoría de seguridad y scoping del schema",
+      "description": "Fundación multi-organización (ADR-0004): migraciones aditivas crean organizations (slug URL-safe único, type factory|store|dealer, license por org, active), memberships con roles[] múltiples validados contra los roles canónicos (UNIQUE user+org), invitations con token_hash y lifecycle, y security_audit_events append-only. Backfill conservador: la organización inicial 'Taller inicial' recibe todas las filas de negocio existentes (organization_id nullable → backfill → NOT NULL), cada usuario existente recibe una membresía que preserva su rol vigente, la licencia migra de users a la organización y workshop_settings pasa de singleton a fila por organización. users.role queda deprecado (memberships es la fuente de verdad). Media se particiona en MEDIA_DIR/<org_id>/.",
+      "acceptance": [
+        "Migraciones up/down crean organizations/memberships/invitations/security_audit_events sin romper el arranque del server con datos existentes",
+        "Backfill: toda fila de negocio existente queda con organization_id NOT NULL apuntando a la organización inicial; membresía por usuario preservando rol; licencia en org; workshop_settings por org",
+        "memberships.roles validado contra contracts/roles.json (roles canónicos), multi-rol permitido",
+        "users.role deja de ser leído por el código server (deprecado, no eliminado)",
+        "Script/migración de media particiona MEDIA_DIR/<org_id>/ y el server sirve media bajo ese layout",
+        "go test ./... verde incluyendo tests de migración/backfill sobre DB seed"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "docs/adr/0004-multi-organization-tenancy.md",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "in_progress",
+      "tags": [
+        "multi-org",
+        "backend",
+        "schema",
+        "rbac"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F170",
+      "phase": 0,
+      "name": "multi_org_auth_context",
+      "title": "#325 Auth con contexto de organización — JWT v2, select-org, middleware OrgContext y scoping ruta por ruta",
+      "description": "JWT v2 con claims {sub, email, client, ver, org_id, roles[], platform_admin, support?}; bump de ver invalida tokens previos (re-login documentado). Login devuelve memberships y acepta hint ?org=slug; POST /api/auth/select-org emite token con la org elegida; platform_admin sin membresía entra a la consola plataforma. Middleware OrgContext re-valida membership/roles/active contra DB por request (patrón issue #16) e inyecta el scope; acceso cross-org responde 404. Storage/handlers revisados ruta por ruta para filtrar/escribir con scope org. rbac.ts/rbac.go pasan a firmas roles[] (unión) con contracts/roles.json extendido y fixtures de paridad. Token 30d de la extensión SketchUp gana org_id y la licencia se verifica contra la organización. CLI cmd/admin gana create-platform-admin, create-org y grant-membership.",
+      "acceptance": [
+        "Login/select-org/refresh emiten y aceptan JWT v2 con contexto org; tokens v1 rechazados",
+        "OrgContext re-valida membership por request; membresía revocada u org inactiva cortan el acceso",
+        "Endpoints de datos filtran por organization_id del scope; cross-org responde 404",
+        "rbac TS/Go con roles[] (unión) y paridad via contracts/roles.json rota CI al divergir",
+        "Extensión SketchUp opera scoped a la org del usuario y la licencia se verifica contra organizations",
+        "cmd/admin permite crear platform_admin, organización y asignar membresías",
+        "pnpm test + pnpm typecheck + go test ./... verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "docs/adr/0004-multi-organization-tenancy.md"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "F169"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "auth",
+        "rbac"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F171",
+      "phase": 0,
+      "name": "multi_org_isolation_tests",
+      "title": "#325 Tests de aislamiento cross-org y paridad de roles múltiples",
+      "description": "Slice de verificación del core multi-org: tests de integración que prueban que el taller A no puede leer ni escribir proyectos, customers, catálogo ni media del taller B (404, sin confirmar existencia), que revocar membresía o suspender organización corta el acceso en el siguiente request, que el token de la extensión queda scoped a su org, y que el backfill sobre una DB con datos seed produce membresías/scoping correctos. Paridad TS↔Go de las matrices roles[] con contract fixtures.",
+      "acceptance": [
+        "Suite cross-org: lecturas y escrituras entre dos organizaciones fallan 404 en todos los endpoints de datos tocados",
+        "Revocación de membresía y suspensión de org cortan acceso en el request siguiente",
+        "Token de extensión scoped a org del miembro",
+        "Backfill verificado sobre DB seed",
+        "Paridad TS↔Go roles[] con fixtures compartidos en CI"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "docs/verification.md"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "F170"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "tests",
+        "security"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F172",
+      "phase": 0,
+      "name": "org_administration_platform_and_team",
+      "title": "#326 Administración — consola de plataforma, equipo del taller, invitaciones auditables y sesión de soporte",
+      "description": "Backend /api/platform/* (solo platform_admin): CRUD/suspensión de organizaciones, licencias por org, usuarios global, visor de auditoría y apertura de sesión de soporte (razón obligatoria, token corto 1-2h con contexto org+admin, eventos audit start/end, actor real en toda escritura). Backend /api/org/* para el admin del taller: gestión de equipo con invitaciones por link/código (sin SMTP en pilotos), asignación de roles[] y sectores, desactivación, settings del taller y visor de auditoría de su org. Web: consola de plataforma (NAV_PATHS nuevo), pantalla Equipo del taller con chips multi-rol, selector de org en login, banner persistente de soporte con salida de sesión, session/workspaceStore con {user, org, roles, platform_admin, support}.",
+      "acceptance": [
+        "Platform admin crea/suspende organizaciones, gestiona licencias y ve auditoría; no ve datos de negocio sin sesión de soporte",
+        "Sesión de soporte: razón obligatoria, token corto, banner persistente en toda la UI, eventos start/end auditados, actor real registrado",
+        "Admin del taller invita por link/código, asigna roles múltiples y sectores, desactiva usuarios; invitaciones y memberships quedan auditadas",
+        "Roles de tienda/dealer restringidos a los permitidos por tipo de organización",
+        "Selector de org para usuarios multi-membresía en login",
+        "pnpm test + pnpm typecheck + go test ./... verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "docs/adr/0004-multi-organization-tenancy.md",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "F171"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "web",
+        "admin",
+        "audit"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F173",
+      "phase": 0,
+      "name": "project_org_ownership",
+      "title": "#327 Permisos de proyecto entre organizaciones — ownership comercial vs manufactura",
+      "description": "Projects ganan sales_organization_id y manufacturing_organization_id (default: la org del creador en ambos) y created_by revisado frente a owner_user_id existente. Reglas documentadas: hoy cada taller piloto es su propia org de ventas y manufactura; cuando sales_org ≠ mfg_org, usuarios de ventas no ven costos de manufactura, CNC, BOM interno ni planificación (doc de permisos actualizado). Tests anti-leakage cross-org en endpoints de proyectos y eventos. Revisión de flujos existentes documentada en progress.",
+      "acceptance": [
+        "projects.sales_organization_id / manufacturing_organization_id / created_by poblados y con FK",
+        "Permisos documentados en el doc de distribución (quién ve qué cuando sales_org ≠ mfg_org)",
+        "Tests anti-leakage: sin fuga de datos de manufactura hacia usuarios de otra org",
+        "Flujos existentes revisados y documentados sin regreso a ownership ambiguo",
+        "go test ./... + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/327",
+        "docs/multi-organization-distribution-model.md",
+        "docs/operational-core-v1.md"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "F172"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "permissions",
+        "projects"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F174",
+      "phase": 0,
+      "name": "vps_deployment_pilot_distribution",
+      "title": "Deployment VPS de producción + distribución del plugin SketchUp a talleres piloto",
+      "description": "docker-compose.prod.yml + Dockerfile multi-stage del backend + Caddy (TLS automático, sirve build estático de web, reverse proxy /api y media) con .env.production.example (JWT_SECRET fuerte, CORS con dominio real) y volumes de pgdata/media. Backups pg_dump + media con cron y documento de restore. docs/deployment.md (runbook VPS) y docs/pilot-onboarding.md (crear taller → invitar admin → catálogo clonado → roles/sectores → licencia trial → enviar .rbz + URL HTTPS). Migraciones ya se auto-aplican al arrancar (embebidas).",
+      "acceptance": [
+        "docker-compose.prod.yml levanta postgres + backend + caddy con TLS y la web servida",
+        "docs/deployment.md permite reproducir el deployment en un VPS limpio (incluye backups/restore)",
+        "docs/pilot-onboarding.md describe el alta completa de un taller piloto end-to-end",
+        "La extensión SketchUp se conecta contra el VPS por HTTPS con URL configurable existente",
+        "Smoke de producción documentado (login, org, catálogo, furniture endpoint)"
+      ],
+      "references": [
+        "docs/deployment.md",
+        "docs/pilot-onboarding.md",
+        "docker-compose.prod.yml"
+      ],
+      "status": "pending",
+      "depends_on": [
+        "F172"
+      ],
+      "tags": [
+        "deployment",
+        "vps",
+        "pilots",
+        "devops"
+      ],
+      "created": "2026-08-26"
     }
   ]
 }

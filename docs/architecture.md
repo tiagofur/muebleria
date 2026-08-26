@@ -423,6 +423,28 @@ publish/approve`) en vez de checks dispersos por nombres de rol. Ingeniería aut
 libera; Producción registra hechos físicos; supervisores corrigen mediante override
 auditado.
 
+### Multi-organización y aislamiento de talleres
+
+El sistema es multi-organización (ADR-0004): los datos de negocio llevan
+`organization_id` y el acceso se resuelve vía membresías. Reglas:
+
+- el scope de organización se inyecta por middleware en todo request autenticado
+  y el storage siempre filtra/escribe con ese scope;
+- el acceso cross-org responde 404 (no confirma existencia con 403);
+- tests de aislamiento cross-org son obligatorios en CI para toda ruta nueva
+  que toque datos de negocio;
+- `users.platform_admin` no ve datos de negocio de talleres: el soporte se
+  presta mediante sesiones de soporte acotadas, con razón, banner visible y
+  registro del actor real.
+
+### Auditoría de seguridad
+
+`security_audit_events` es append-only y registra como mínimo: login
+success/fail, invitación creada/aceptada/revocada, cambios de roles/membresía,
+organización creada/suspendida, cambios de licencia y sesión de soporte
+start/end. Los eventos de dominio operativos siguen en sus ledgers propios
+(`project_events`, floor events, `stock_movements`).
+
 ---
 
 ## 12. Arquitectura Cliente-Servidor implementada

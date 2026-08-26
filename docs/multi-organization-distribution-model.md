@@ -6,6 +6,11 @@ Granete must support not only individual factories, but also factories that oper
 
 The product positioning is not to be a cheaper alternative to existing design tools. The goal is to become the ideal operational platform for small and medium furniture manufacturers by connecting sales, design, production and installation.
 
+Implementation decisions for this model (row-level tenancy, multi-role
+memberships, platform admin support sessions, per-organization catalogs and
+licenses) live in
+[`docs/adr/0004-multi-organization-tenancy.md`](adr/0004-multi-organization-tenancy.md).
+
 ## Core Concept
 
 A user is not a factory or a store. A user belongs to one or more organizations through memberships.
@@ -50,6 +55,33 @@ type OrganizationRole =
 ```
 
 Role availability depends on organization type.
+
+### Implemented roles (ADR-0004)
+
+The implemented system keeps the 8 canonical operational roles (OC-004) as the
+membership roles — `OrganizationRole` above stays conceptual and maps onto them:
+
+| Conceptual role | Implemented membership role |
+|---|---|
+| owner | `admin` (first membership of an organization) |
+| admin | `admin` |
+| sales_manager | `gerente_ventas` |
+| sales | `vendedor` |
+| designer | `ingeniero` |
+| production_manager | `gerente_produccion` |
+| installer | future (`installer` is not a canonical role yet) |
+| — | `produccion`, `almacen`, `user` (sector operators / no post) |
+
+Memberships carry a **set** of roles (`roles[]`); effective permissions are the
+union. This supports small workshops where one person covers several areas
+(e.g. `vendedor` + `ingeniero`) while sensitive combinations remain an explicit
+admin decision. Roles are validated against `contracts/roles.json` with TS ↔ Go
+parity.
+
+Pilot talleres are organizations of type `factory` that act as their own sales
+organization. Platform staff (`users.platform_admin`) are not a membership role:
+they manage organizations from the platform console and may open audited,
+time-boxed support sessions into an organization (see ADR-0004 §5).
 
 ## Factory Organization
 

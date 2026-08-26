@@ -1,8 +1,21 @@
 # Sesión
 
-**Feature en curso:** F168 — #347 manufacturing preflight, Definition of Done completo — implementado y verificado 2026-08-26 (ver `progress/implementation_F168.md`)
-**Siguiente activa:** #348 — validación PTX con import/readback (requiere field evidence #306)
-**Rama:** `main`
+**Feature en curso:** F169 — #325 multi-org core: schema, memberships, auditoría y backfill — inicio 2026-08-26
+**Siguiente activa:** F170 (auth contexto org) → F171 (tests aislamiento) → F172 (#326) → F173 (#327) → F174 (#412 deployment VPS)
+**Rama:** `feat/325-multi-organization-core`
+
+## Plan de la ola multi-org (aprobado 2026-08-26)
+
+Decisiones en `docs/adr/0004-multi-organization-tenancy.md`: tenancy row-level
+con `organization_id` (mismo modelo interno que monday.com; subdominio por
+taller queda habilitado por slug + auth por header, se hace post-piloto),
+catálogo base clonado por taller, licencia por organización, memberships con
+`roles[]` múltiples (unión de permisos — resuelve al "hace todo" de talleres
+chicos), `users.platform_admin` + sesión de soporte auditada (entrar a taller
+con razón + banner + actor real, sin suplantar usuarios), auditoría de
+seguridad nueva (`security_audit_events`), #327 con columnas
+sales/manufacturing org + reglas same-org ahora y red fábrica↔tienda cuando
+exista caso real. Issue de deployment: #412.
 
 ## Notas de sesión
 
