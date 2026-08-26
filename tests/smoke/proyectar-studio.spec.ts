@@ -12,7 +12,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function enterAsGuest(page: Page) {
   await page.addInitScript(() => {
     try {
-      sessionStorage.setItem('muebles_session', 'guest');
+      sessionStorage.setItem('granete_session', 'guest');
     } catch {
       /* sessionStorage unavailable */
     }
