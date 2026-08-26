@@ -1,194 +1,482 @@
 # Modelo de Interacción SketchUp + Granete
 
 > **Estado:** CANÓNICO  
-> **Fecha:** 2026-08-24  
-> **ADR Relacionado:** [ADR-0001](../adr/0001-sketchup-manufacturing-ownership.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md)  
-> **Documento de Estrategia:** [sketchup-granete-strategy.md](../sketchup-granete-strategy.md)  
-> **Invariante Central:** **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
+> **Fecha:** 2026-08-26  
+> **ADR relacionados:** [ADR-0001](../adr/0001-sketchup-manufacturing-ownership.md), [ADR-0002](../adr/0002-parametric-furniture-library-architecture.md), [ADR-0004](../adr/0004-sketchup-native-component-entity-model.md)  
+> **Host representation:** [sketchup-native-entity-model.md](sketchup-native-entity-model.md)  
+> **Resolución Material-Aware:** [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md)  
+> **Digital Thread:** [project-design-digital-thread.md](project-design-digital-thread.md)  
+> **Invariante central:** **SketchUp owns authoring/interaction; Granete owns business/manufacturing truth.**
 
 ---
 
-## 1. Modelo Mental Canónico
+## 1. Propósito
 
-El modelo mental de interacción en Granete for SketchUp sigue el flujo:
+Este documento define el comportamiento de interacción de **Granete for SketchUp**:
+
+- biblioteca/configuración de muebles;
+- inserción y placement;
+- selección e inspector contextual;
+- cambios paramétricos y materiales;
+- drill-down a piezas/agregados/herrajes;
+- round-trip de authoring intent;
+- atomicidad/undo;
+- feedback de preflight;
+- relación entre el viewport de SketchUp y el modelo industrial de Granete.
+
+No define BOM, drilling/machining, reglas de espesor, identidad empresarial ni lifecycle de DesignRevision/ProductionRelease. Esos contratos pertenecen a sus autoridades específicas.
+
+---
+
+## 2. Modelo mental canónico
 
 ```text
-Biblioteca de Muebles  ──(Inserción)──►  Canvas 3D (SketchUp Viewport)  ──(Selección)──►  Inspector Contextual
-         ▲                                                                                          │
-         └───────────────────────────(Edición Paramétrica In-Place)─────────────────────────────────┘
+Biblioteca de Muebles
+        ↓ insertar/configurar
+Canvas 3D de SketchUp
+        ↓ seleccionar
+Inspector Contextual
+        ↓ cambiar authoring intent
+Granete resolve/validate
+        ↓ resolved layout/feedback
+Rebuild in-place del mueble gestionado
 ```
 
-1. **Biblioteca (Catalog):** El diseñador explora definiciones de muebles paramétricos (`FurnitureDefinition`), configura cotas iniciales con validación interactiva ligera y solicita la inserción en el modelo.
-2. **Canvas 3D (Viewport de SketchUp):** La extensión actúa como **renderer/adaptador**, creando entidades geométricas agrupadas en el espacio 3D e inyectando metadata semántica inmutable.
-3. **Inspector Contextual:** Al hacer clic o seleccionar una entidad en el canvas, un `SelectionObserver` detecta la metadata y rehidrata dinámicamente el panel HTML con los parámetros activos del mueble, permitiendo edición en vivo.
-4. **Edición Paramétrica In-Place:** Al modificar parámetros en el inspector, `@granete/domain` recalcula la estructura y Ruby actualiza la geometría interna del grupo **sin alterar su posición ni rotación global en el espacio**.
+El usuario percibe un único objeto de trabajo —el mueble— pero puede profundizar a componentes cuando la intención lo requiere.
+
+Reglas UX:
+
+- selección principal por mueble;
+- drill-down explícito a pieza/agregado/herraje;
+- mover/rotar el mueble en SketchUp es interacción de autoría;
+- parámetros productivos se cambian mediante intención semántica, no deformando geometría;
+- cambios relevantes son undoable como una acción coherente;
+- errores no destruyen el último estado válido.
 
 ---
 
-## 2. Fronteras de Responsabilidad (Boundary)
+## 3. Current vs target host representation
 
-| Responsabilidad | SketchUp (Ruby / Webview) | Granete (`@granete/domain` / Backend) |
+### 3.1 Runtime actual [CURRENT]
+
+La implementación vigente del `FurnitureBuilder` todavía utiliza:
+
+```text
+Furniture Group
+├── Board Group + generated faces/pushpull
+├── Board Group + generated faces/pushpull
+└── hardware Group / loaded asset
+```
+
+El layout remoto publica cajas/AABB suficientes para ese renderer MVP. Esto es estado actual verificable, **no** arquitectura objetivo.
+
+### 3.2 Arquitectura aprobada [TARGET]
+
+La autoridad es [sketchup-native-entity-model.md](sketchup-native-entity-model.md) y ADR-0004:
+
+```text
+Furniture Sketchup::ComponentInstance
+├── Physical Part Sketchup::ComponentInstance
+├── Physical Part Sketchup::ComponentInstance
+├── Hardware Sketchup::ComponentInstance
+└── optional semantic Aggregate/Subassembly ComponentInstance
+    └── managed Part/Hardware ComponentInstances
+```
+
+No existe una “jerarquía estricta de tres niveles”. El nesting es **semántico**. Un nivel intermedio sólo existe cuando representa un agregado/subassembly real que necesita identidad, selección, configuración o movimiento propio.
+
+### 3.3 Regla de transición
+
+Hasta cerrar #415:
+
+- los tests/documentos pueden describir el renderer Group como CURRENT;
+- ninguna feature nueva debe elevar Groups/AABB boxes a autoridad de largo plazo;
+- #389, #391 y #404 deben apuntar al modelo nativo, no crear caminos finales paralelos basados en Groups.
+
+---
+
+## 4. Fronteras de responsabilidad
+
+| Responsabilidad | SketchUp / Ruby / WebView | Granete domain/backend |
 |---|---|---|
-| **Interacción y Viewport** | Selección, transformaciones 3D, navegación de cámara | Observador pasivo de transformaciones |
-| **Dibujo / Rendering** | Creación de grupos, caras y asignación de materiales | Desacoplado de APIs de dibujo |
-| **Lógica Paramétrica** | *Ninguna* (Cero cálculo de holguras o fórmulas) | **Fuente de verdad única** (evaluación de fórmulas, slots y piezas) |
-| **Metadata Semántica** | Almacena y lee diccionarios de atributos | Define esquemas de metadata y envelopes |
-| **Mecanizado y Perforaciones** | No calcula ni almacena perforaciones manuales | Deriva mecanizados industriales con trazabilidad |
-| **Validación de Preflight** | Muestra feedback visual (badges / alertas) | Ejecuta validación de colisiones y capacidades CNC |
-| **Catálogo de Muebles** | Presenta catálogo y captura inputs | Provee definiciones y reglas constructivas |
+| Viewport/cámara/selección | owns | no |
+| Move/rotate del mueble | captura/aplica interacción | persiste/reconcilia cuando corresponda |
+| Render host | crea/aplica entidades nativas y materiales visuales | entrega layout resuelto |
+| Espesor/material efectivo | no calcula | owns |
+| Fórmulas paramétricas | no calcula | owns |
+| Placement interno de piezas | aplica transform resuelto | owns resolution |
+| Stable business identity | almacena/reproduce metadata | owns creación/validación |
+| BOM/cut/edge/CNC | no | owns |
+| Hardware/machining derivados | renderiza feedback | owns |
+| Preflight industrial | muestra resultado | owns |
+| Undo de edición host | owns operación SketchUp | — |
+
+Ruby puede crear local geometry, `ComponentDefinition`/`ComponentInstance`, aplicar transforms/materiales y leer/escribir metadata namespaced.
+
+Ruby no puede inferir manufacturing thickness, re-evaluar fórmulas, inferir board rotation por role/name/AABB, generar drilling desde geometría visible, usar non-uniform scale como parametric resize ni escanear geometría arbitraria como BOM autoritativo.
 
 ---
 
-## 3. Jerarquía Estructural de 3 Niveles en SketchUp
+## 5. Identidad y selección
 
-Cada mueble insertado se estructura en una jerarquía estricta de grupos con metadata semántica:
+### 5.1 Business identity
+
+El `FurnitureInstance` del Project es la identidad física estable del mueble. SketchUp guarda/reproduce esa identidad en metadata, pero no la inventa a partir de `persistent_id`, `entityID`, ComponentDefinition GUID, nombre, geometría o posición.
+
+### 5.2 Selección primaria
+
+Un top-level managed Furniture ComponentInstance es la unidad normal para mover/rotar, abrir inspector, cambiar dimensiones/materiales/configuración y sincronizar authoring intent.
+
+### 5.3 Drill-down
+
+Nested managed ComponentInstances permiten seleccionar/inspeccionar una entidad concreta: lateral, entrepaño, puerta, frente de cajón, agregado o herraje.
+
+El `SelectionObserver` debe resolver el InstancePath/ownership hasta encontrar el mueble gestionado y la metadata del elemento seleccionado.
+
+Renombrar una entidad en Outliner no cambia su Granete ID.
+
+---
+
+## 6. Inserción de muebles
+
+### 6.1 Catálogo
+
+`RemoteCatalogProvider` consulta el catálogo real del taller mediante `GET /api/furniture/definitions`. La extensión no sustituye silenciosamente el catálogo remoto por muebles genéricos en producción.
+
+### 6.2 Layout resuelto
 
 ```text
-[Grupo Nivel 1: FurnitureInstance]
-  │  Dictionary: com.granete.sketchup_extension
-  │  Payload: { kind: "furnitureInstance", instanceRef: "inst-123", furnitureDefinitionId: "kitchen-base-standard", parameters: { ... } }
-  │
-  ├── [Grupo Nivel 2: ComponentInstance (Lateral Izquierdo)]
-  │     │  Payload: { kind: "componentInstance", slotRef: "left_side", componentDefinitionId: "panel_lateral" }
-  │     └── [Entidad Nivel 3: PartInstance (Pieza Física)]
-  │           Payload: { kind: "partInstance", partRef: "part-01", role: "left_side", dimensionsMm: [18, 570, 720] }
-  │
-  ├── [Grupo Nivel 2: ComponentInstance (Entrepaño Ajustable)]
-  │     │  Payload: { kind: "componentInstance", slotRef: "shelf_1", componentDefinitionId: "shelf" }
-  │     └── [Entidad Nivel 3: PartInstance (Pieza Física)]
-  │           Payload: { kind: "partInstance", partRef: "part-02", role: "shelf", dimensionsMm: [564, 570, 18] }
-  │
-  └── [Grupo Nivel 2: ComponentInstance (Puerta)]
-        │  Payload: { kind: "componentInstance", slotRef: "door_1", componentDefinitionId: "door" }
-        └── [Entidad Nivel 3: PartInstance (Pieza Física)]
-              Payload: { kind: "partInstance", partRef: "part-03", role: "door", dimensionsMm: [596, 18, 716] }
-```
-
-### Beneficios de la Jerarquía
-- **Selección de Nivel 1 (Furniture):** Un clic simple en el viewport selecciona el mueble completo para moverlo o editar sus parámetros globales en el inspector.
-- **Selección de Nivel 2/3 (Component / Part):** Doble clic permite hacer drill-down a componentes individuales (ej. cambiar el material de una puerta específica o verificar el tamaño de un entrepaño).
-
----
-
-## 4. Separación de Niveles de Preflight
-
-Granete divide la validación en dos niveles claramente delimitados:
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Preflight Interactivo Ligero (UX Gating en Cliente)      │
-│    • Validación síncrona inmediata en el diálogo HTML.      │
-│    • Comprueba límites de parámetros (min, max, step).       │
-│    • Valida reglas de catálogo simples (ej. max entrepaños).│
-│    • Da feedback visual instantáneo (warning badges).       │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ (Al solicitar liberación / sync)
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. Preflight de Manufactura Completo (Authoritative Domain) │
-│    • Validación asíncrona rigurosa en @granete/domain.      │
-│    • Detección de colisiones de perforaciones (DRILLING).   │
-│    • Verificación de capacidades de máquina CNC y perfiles.  │
-│    • Trazabilidad de revisión (bomFingerprint / revId).     │
-│    • Gate formal para emitir ProductionRelease.             │
-└──────────────────────────────┘
-```
-
----
-
-## 5. Resolución de Assets (`AssetResolver`)
-
-Los componentes 3D (tiradores, bisagras, patas, guías de cajón) no utilizan rutas de archivo locales fijas:
-- El dominio referencia el asset mediante `AssetReference` / `assetId`.
-- En SketchUp, el `AssetResolver` traduce el `assetId` a:
-  1. **Caché local** de la extensión si el archivo `.skp` ya fue descargado.
-  2. **Bundle empaquetado** de recursos de fábrica.
-  3. **Descarga remota** desde la API de Granete si el asset no está en caché.
-- Si el archivo 3D `.skp` no está disponible, el builder genera automáticamente una representación geométrica volumétrica simplificada de respaldo (*fallback*).
-
----
-
-## 6. Proveedor de Catálogo Pluggable (`CatalogProvider`)
-
-La extensión implementa un contrato polimórfico para obtener el catálogo de muebles:
-
-- **`StaticCatalogProvider`:** Definiciones locales empaquetadas con la extensión. Sólo desarrollo/tests o fallback **explícito** (inyectado al construir el provider); nunca se usa en producción como sustituto silencioso del catálogo remoto.
-- **`RemoteCatalogProvider`:** Consulta el endpoint REST `GET /api/furniture/definitions` del servidor de Granete utilizando los puertos `Transport::Adapter` (HTTP) y `Auth::Provider` (sesión). La respuesta es el **catálogo real del taller autenticado**: el backend proyecta los mismos `modules` que la app React edita bajo `/api/catalog/modules` al envelope compartido de furniture (forma `contracts/pilotFurnitureCatalog.json`; adaptador `internal/api/furniture_catalog.go`). Se traduce a la forma interna en un único punto del provider. Expone además `all_presets` (medidas comerciales de cada mueble) y `last_source` (`remote|unauthenticated|license_blocked|error|local`) + `last_license_blocked` para que la UI distinga cargado/vacío/error/sin sesión/licencia bloqueada.
-
-El cambio entre proveedores locales y remotos es transparente para el diálogo HTML y el controlador de la extensión. Cuando el catálogo remoto no está disponible, el provider devuelve un catálogo vacío y reporta el motivo — **no** sustituye muebles genéricos.
-
-### 6.1 Sesión y licencia (implementado)
-
-- El usuario inicia sesión desde la pestaña **Estado** con su cuenta del taller; el login viaja con `client: sketchup-extension`.
-- El backend emite un **JWT de extensión de 30 días** marcado con claim `client`; el middleware lo restringe a **solo lectura** (GET + refresh) y revalida usuario/rol/activo contra la DB en cada request, así que desactivar el usuario revoca la sesión al instante.
-- La sesión se persiste en `~/Library/Application Support/Granete/sketchup_extension_session.json` (fuera del RBZ; sin credenciales incrustadas). No se usan preferencias de SketchUp para estado estructurado: `read_default` evalúa strings con aspecto de contenedor y corrompe JSON.
-- `GET /api/furniture/definitions` exige **licencia activa por usuario** (`users.license_plan`/`license_expires_at`, gestionada por el admin con `PUT /api/admin/users/{id}/license`); sin licencia la extensión muestra el bloqueador con instrucciones y la biblioteca queda vacía (sin catálogo de respaldo).
-
-### 6.2 Layout resuelto — inserción de la composición completa (implementado)
-
-La identidad de un mueble no alcanza para materializarlo: el catálogo de
-definiciones proyecta identidad/parámetros, y la **composición real**
-(estructura + componentes del módulo + agregados + herrajes visibles) se
-resuelve en el servidor en el momento de la inserción:
-
-```text
-Mueble creado en Granete React (Module + Structure + Components + Agregados)
-        ↓  GET /api/furniture/definitions/{definitionId}/layout?widthMm=&heightMm=&depthMm=
-Resolved Furniture Layout (backend Go, engine/layout.go)
-        • components[]: cada tablero con slotId, nombre, AABB (translationMm =
-          min corner en marco taller X=ancho/Y=fondo/Z=alto, dimensionsMm),
-          L/W/T y color por rol (misma paleta que el preview 3D web)
-        • hardware[]: cada herraje con preview shape/size/projection/color
-          resuelto a caja world-space anclada a la cara de su tablero host
-        ↓  RemoteCatalogProvider#resolved_layout (nil ⇒ fallback genérico)
-FurnitureBuilder.render_resolved_components (adaptador visual puro)
+FurnitureDefinition + parameters + materialChoices
         ↓
-FurnitureInstance completa en SketchUp (jerarquía de 3 niveles + metadata)
+GET /api/furniture/definitions/{definitionId}/layout
+        ↓
+Granete resolves composition
+        ↓
+resolved components + hardware
+        ↓
+Ruby materializes SketchUp host representation
 ```
 
-Reglas del contrato:
+Hoy el DTO expone AABB suficiente para el renderer Group. #414 amplía el contrato con local geometry + authoritative orientation/transform para el renderer nativo.
 
-- **La resolución vive en Go** (`internal/domain/engine/layout.go`), espejo
-  server-side de la semántica TS canónica (`engine/bom.ts` expansión espacial,
-  `spatialPlacement.ts` poses por defecto, `spatialAnchor.ts` convención
-  min-corner, `agregados.ts` unidades de sub-espacio, `hardwarePlacement.ts`
-  anclas de cara). Ruby **nunca** compone: sólo transforma cajas pre-horneadas.
-- Las fórmulas evalúan con `W/H/D`, `PW/PH/PD`, `T`, `B` (zoclo), `HW` y `i`
-  (índice de copia), igual que TS.
-- `widthMm/heightMm/depthMm` de query sobreescriben las cotas del módulo (el
-  diálogo las edita libremente); 404 definición desconocida, 400 medidas
-  inválidas, 422 composición no resoluble (error explícito), 403 sin licencia.
-- Módulos legados (sin estructura, `BoardParts` planos) se apilan por índice:
-  completitud visual sin inventar posiciones.
-- El mismo endpoint alimenta `estimatedPartCount`/`estimatedHardwareCount` de
-  cada definición en `GET /api/furniture/definitions` (contador "piezas" real
-  del diálogo; nunca más el guess `2 + entrepaños + puertas`).
-- Herrajes **cost-only** (sin `previewShape` válido) no se materializan —
-  paridad con `resolveHardwarePlacement` (VH-09).
+### 6.3 Placement exterior
 
-### 6.3 Elección de materiales por rol (option choices, implementado)
+El top-level furniture transform representa el placement exterior del usuario en SketchUp. Los transforms internos de piezas son relativos al mueble/subassembly y se resuelven en Granete.
 
-El plugin permite elegir el tablero por rol antes de insertar, con el mismo
-modelo de elecciones que la app web (`OptionChoices = { [optionGroupCode]:
-materialId }`; el `optionRole` de cada componente ES el código del grupo):
+Cambiar dimensión/material no debe llevar el mueble de regreso al origen ni borrar su rotación global.
 
-- **Catálogo** (`GET /api/furniture/definitions`): el envelope agrega
-  `materials` (tableros activos con `materialId/code/name/previewColor/
-  imageUrl/thicknessMm/grain`) y cada definición lleva `materialRoles:
-  [{role, label, optionIds}]` — roles presentes en su composición; `optionIds`
-  = la lista curada del `OptionGroup(code==role, kind="board")` si existe, o
-  todos los materiales activos como fallback. El `revisionId` (y ETag) cubre
-  también `materials`.
-- **Selector** (dialog): una lista por rol en configurador e inspector
-  (`renderMaterialSelectors`), default = primera opción; viaja al backend en
-  el payload de insert/update como `materialChoices: {ROL: materialId}`.
-- **Resolución**: el Ruby lo reenvía como `?choice.ROL=<materialId>` — el
-  token de extensión es **read-only (GET)**, así que las elecciones viajan en
-  el query string. Con elección válida, cada tablero resuelto lleva
-  `materialId/materialCode/materialName/materialColorHex` reales; elección
-  desconocida o inactiva → **422 explícito** (nunca fallback silencioso); rol
-  sin elección → paleta por rol.
-- **Visual**: el builder pinta cada grupo con materiales de SketchUp
-  namespaced (`Granete · <nombre>`, color desde `materialColorHex` /
-  `colorHex` de herrajes) vía `Model::MaterialApplier` — mismo color que el
-  preview 3D de la app web.
+---
+
+## 7. Resolución local de pieza y ejes
+
+Para el target nativo:
+
+```text
+Granete resolved local board geometry
++
+Granete resolved local→furniture transform
+        ↓
+Ruby creates local ComponentDefinition geometry
++
+applies ComponentInstance transform
+```
+
+Convención actual del engine:
+
+```text
+local X = widthMm
+local Y = thicknessMm
+local Z = lengthMm
+```
+
+Un AABB world-space no sustituye ese frame local. #414 es prerequisite del renderer nativo porque actualmente la rotación existe en el resolver interno pero no viaja en el transform público del layout.
+
+---
+
+## 8. Materiales y acabados
+
+La autoridad completa está en [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md).
+
+### 8.1 Captura de elección
+
+```text
+materialChoices = {
+  BODY: materialId,
+  FRONT: materialId,
+  BACK: materialId
+}
+```
+
+La propagación se decide por material-binding role; nunca por nombre/color/textura actual.
+
+### 8.2 Orden obligatorio
+
+```text
+material choice
+→ MaterialBoard
+→ effective thickness T
+→ formulas / dimensions / placement
+→ authoritative part transform
+→ SketchUp rendering
+```
+
+### 8.3 Rebuild
+
+#404 implementa:
+
+```text
+change material role
+→ request fresh full layout
+→ validate
+→ rebuild/rebind native managed hierarchy
+→ persist accepted metadata
+```
+
+#404 depende de #415 para no consolidar el Group renderer como target final.
+
+### 8.4 Scope
+
+`this furniture` es un override del mueble. `toda la obra` usa `project defaults + item overrides`; la persistencia durable sigue el Digital Thread y un default temporal de sesión no se presenta como verdad persistida.
+
+---
+
+## 9. Edición paramétrica in-place
+
+Correcto:
+
+```text
+change widthMm / shelfCount / model / material
+→ update authoring intent
+→ Granete resolve
+→ rebuild managed children
+→ keep FurnitureInstance identity + world transform
+```
+
+Incorrecto:
+
+```text
+SketchUp non-uniform scale
+→ assume new manufacturing dimensions
+```
+
+Una herramienta gráfica puede traducir un gesto a un parámetro válido, pero el gesto debe convertirse en authoring intent antes de ser manufacturing truth.
+
+---
+
+## 10. Atomicidad y Undo
+
+### Inserción
+
+```text
+start operation
+→ create valid managed hierarchy
+→ write metadata
+→ commit
+```
+
+Un error aborta la operación completa.
+
+### Update/rebuild
+
+```text
+resolve + validate first
+→ prepare definitions/assets
+→ start SketchUp operation
+→ replace/rebind child managed hierarchy
+→ write accepted metadata
+→ commit
+```
+
+Si falla, `abort` deja el mueble válido anterior intacto. Un cambio de material/parámetro debe aparecer como una sola acción de Undo.
+
+---
+
+## 11. ComponentDefinition lifecycle
+
+La autoridad detallada es ADR-0004.
+
+### Furniture
+
+V1: top-level SketchUp ComponentDefinition única por Granete `FurnitureInstance`. Dos muebles provenientes de la misma `FurnitureDefinition` pueden divergir sin editarse mutuamente.
+
+### Parts
+
+Puede iniciarse con definition única por part instance. Sharing sólo es válido para definitions generadas inmutables con una `resolvedGeometrySignature` determinística.
+
+Una pieza que cambia geometría se rebind/recrea; no se edita una shared definition usada por otra pieza/mueble.
+
+---
+
+## 12. Copy / Paste / Duplicate
+
+Copiar un managed top-level Furniture ComponentInstance puede copiar temporalmente metadata host. Eso no convierte la copia en una segunda unidad válida con el mismo business ID.
+
+#391 debe:
+
+```text
+copy detected
+→ original keeps furnitureInstanceId
+→ server allocates/validates new FurnitureInstance
+→ copied host entity receives new ID
+→ copied top-level definition is isolated
+```
+
+Mientras no se resuelva la duplicación, el objeto copiado no es publicable como estado válido.
+
+---
+
+## 13. Agregados y subassemblies
+
+Un `Agregado` no obliga automáticamente a crear un wrapper SketchUp.
+
+Crear subassembly ComponentInstance cuando tenga valor semántico real: selección/configuración/movimiento propios, stable authoring identity, relationships/anchors al aggregate o un asset compuesto que deba conservarse como unidad.
+
+Si sólo agrupa piezas por implementación interna, no añadir nesting innecesario.
+
+---
+
+## 14. Hardware y assets
+
+`AssetResolver` traduce `assetId` a caché local, bundle autorizado o recurso remoto permitido.
+
+Hardware con asset `.skp` se instancia como ComponentInstance. Fallback visual generado sigue el mismo wrapper semántico del target nativo. Hardware cost-only sin preview válido no se materializa.
+
+Los componentes/grupos internos de un asset no se convierten automáticamente en piezas productivas Granete.
+
+---
+
+## 15. Preflight
+
+### Interactive/lightweight
+
+La UI puede validar min/max/step, required choices, compatibilidad simple de catálogo y datos faltantes.
+
+### Authoritative manufacturing preflight
+
+Granete valida relaciones, machining/drilling, BOM/manufacturing completeness, revision/fingerprint, machine capabilities y stale/release gates. SketchUp muestra el resultado; no lo reemplaza.
+
+---
+
+## 16. Session y licencia
+
+El plugin usa autenticación/licencia del usuario/taller para consumir catálogo/layout. No se incrustan credenciales en RBZ ni se usa un catálogo silencioso de producción cuando servidor/licencia bloquean el acceso.
+
+Detalles de almacenamiento/transporte de sesión son implementación y pueden evolucionar sin cambiar este modelo de interacción.
+
+---
+
+## 17. Legacy Group models
+
+El renderer Group actual puede haber generado modelos con metadata Granete válida. #416 migra esa representación hacia el target nativo.
+
+No confundir:
+
+```text
+representation migration (#416)
+```
+
+con:
+
+```text
+business adoption into Project/Design (#397)
+```
+
+Cambiar `Group` a `ComponentInstance` no crea por sí mismo un nuevo FurnitureInstance.
+
+---
+
+## 18. Digital Thread
+
+- **#388 model binding:** `.skp` se vincula a Project/Design mediante metadata/contratos, no filename.
+- **#389 Place existing Furniture:** crea la representación nativa #415 del FurnitureInstance existente.
+- **#390 design-first insertion:** crea/obtiene Project FurnitureInstance antes de materializarlo.
+- **#391 duplicate:** gestiona business identity del copy; no usa SU definition como identity.
+- **#392 publish:** publica authoring state/manifests de entidades gestionadas; decoración/arquitectura arbitraria no entra al BOM.
+- **#397 adopt existing SKP:** distingue native Granete entities, legacy Groups, unmanaged geometry y identity conflicts.
+
+---
+
+## 19. Third-party interoperability
+
+Granete busca ser un buen ciudadano SketchUp: physical boards como solid ComponentInstances, local axes útiles, nombres legibles, materiales visibles y nesting semántico.
+
+Pero:
+
+```text
+third-party cut list = convenience/compatibility
+Granete BOM          = manufacturing authority
+```
+
+#417 documenta OpenCutList con versión y smoke real antes de prometer compatibilidad concreta.
+
+---
+
+## 20. Current implementation debts explícitas
+
+Hasta completar los programas abiertos:
+
+- #402: Go usa selected `MaterialBoard.thicknessMm` antes de geometry;
+- #403: binding/alias semantics alineadas TS/Go;
+- #414: authoritative local part transform/orientation en layout;
+- #415: Group renderer → native ComponentInstances;
+- #404: material update reconstruye el target nativo atómicamente;
+- #416: legacy Groups tienen migration path;
+- #388/#389/#390/#391: Project-owned identity sustituye legacy local identity donde corresponda.
+
+No documentar estos targets como “implemented” antes de evidencia/tests.
+
+---
+
+## 21. Verification
+
+### Unit/contract
+
+- catalog/layout parsing;
+- semantic metadata;
+- transform/local axes;
+- material choices;
+- selection/ownership;
+- atomic abort;
+- definition isolation.
+
+### Real SketchUp host
+
+Cuando cambia representación/interacción: insertar fixture, seleccionar furniture/part, mover/rotar, editar parámetro/material, Undo, save/reopen y revisar Outliner.
+
+### Cross-runtime
+
+Cuando una regla existe TS + Go: contract fixture/parity required; no declarar paridad por inspección manual.
+
+### Third party
+
+OpenCutList smoke pertenece a #417 y nunca sustituye las pruebas de BOM Granete.
+
+---
+
+## 22. Reglas finales
+
+1. **SketchUp interaction, Granete truth.**
+2. **Current Group renderer != canonical target.**
+3. **Managed furniture + physical parts -> native ComponentInstances.**
+4. **Semantic nesting, not fixed three-level wrappers.**
+5. **Business IDs != SketchUp GUID/persistent IDs.**
+6. **Local geometry + resolved transform; no AABB/role inference in Ruby.**
+7. **Material resolution precedes geometry.**
+8. **Regenerate/rebind; do not non-uniformly scale productive parts.**
+9. **One user edit = coherent atomic/undoable operation.**
+10. **Legacy migration, business adoption and third-party interoperability remain separate concerns.**
+
+---
+
+## Canonical references
+
+- Native host representation: `sketchup-native-entity-model.md` + ADR-0004
+- Material-aware resolution: `material-aware-furniture-resolution.md`
+- Semantic domain: `domain-model.md`
+- Parametric library: `parametric-furniture-library.md`
+- Catalog selector: `catalog-option-selector.md`
+- Manufacturing round-trip: `../sketchup-manufacturing-contract.md`
+- Project/Design identity: `project-design-digital-thread.md` + ADR-0003
+- Engine umbrella: `smart-furniture-engine.md`
+- Verification: `../verification.md`
+- Program tracking: #290, #384, #401, #413

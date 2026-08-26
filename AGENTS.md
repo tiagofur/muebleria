@@ -47,7 +47,8 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Biblioteca Paramétrica Universal | `docs/architecture/parametric-furniture-library.md` |
 | ADR Biblioteca Paramétrica | `docs/adr/0002-parametric-furniture-library-architecture.md` |
 | Motor de muebles inteligentes (umbrella) | `docs/architecture/smart-furniture-engine.md` |
-| Material-aware geometry / espesor efectivo / propagación de acabados | `docs/architecture/material-aware-furniture-resolution.md` |
+| Espesor efectivo y propagación por material role | `docs/architecture/material-aware-furniture-resolution.md` |
+| Modelo nativo de entidades SketchUp | `docs/architecture/sketchup-native-entity-model.md` + `docs/adr/0004-sketchup-native-component-entity-model.md` |
 | Modelo de dominio semántico | `docs/architecture/domain-model.md` |
 | Biblioteca de assets 3D | `docs/architecture/3d-asset-library.md` |
 | Features de manufactura semánticas | `docs/architecture/manufacturing-feature-model.md` |
@@ -151,7 +152,14 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 - **Server authority para seguridad/concurrencia/stock/workflow persistente** cuando
   aplique; TS para dominio interactivo/puro según `docs/architecture.md`.
 - **Si una regla vive en TS y Go**, planear contract fixture de paridad.
-- **En piezas de tablero con `MaterialBoard` elegido, el espesor efectivo viene del material antes de fórmulas/geometría; no corregirlo localmente en SketchUp/Web.** Ver `docs/architecture/material-aware-furniture-resolution.md`.
+- **Material antes que geometría:** para tableros, resolver `MaterialBoard` y `T`
+  antes de fórmulas/poses; ver
+  `docs/architecture/material-aware-furniture-resolution.md`.
+- **SketchUp host nativo:** muebles gestionados y piezas físicas gestionadas se
+  materializan como `Sketchup::ComponentInstance`; Granete IDs nunca se derivan de
+  GUID/`persistent_id`/nombre de SketchUp. Ruby aplica geometría local + transform
+  resueltos; no infiere orientación por role/AABB ni usa scale para dimensiones
+  productivas. Ver `docs/architecture/sketchup-native-entity-model.md`.
 - **Código/identificadores en inglés; copy UI en español**.
 - **pnpm only** para monorepo JS.
 - **No `.env` en git.**
