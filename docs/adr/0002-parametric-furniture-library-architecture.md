@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-24
 - **Decision owners:** Product + Engineering
-- **Program:** [SketchUp + Granete](../sketchup-muebles-strategy.md)
+- **Program:** [SketchUp + Granete](../sketchup-granete-strategy.md)
 - **Tracking:** [#290](https://github.com/tiagofur/muebleria/issues/290),
   [#347](https://github.com/tiagofur/muebleria/issues/347),
   [#349](https://github.com/tiagofur/muebleria/issues/349),

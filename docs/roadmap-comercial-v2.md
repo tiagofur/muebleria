@@ -9,7 +9,7 @@ Este documento es la fuente narrativa de prioridad comercial. Se complementa con
 - `docs/operational-core-v1.md` — consolidación operacional;
 - `docs/proyectar-3d-north-star.md` — quality bar del editor 3D;
 - `docs/proyectar-3d-roadmap-vnext.md` — ejecución de Proyectar;
-- [`docs/sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md) — programa
+- [`docs/sketchup-granete-strategy.md`](sketchup-granete-strategy.md) — programa
   SketchUp + Granete y sus límites de fabricación;
 - GitHub issues — trabajo futuro;
 - `feature_list.json` — ledger de implementación/historia.
@@ -65,8 +65,8 @@ authoring intent; Granete conserva la única manufacturing truth para catálogo,
 relationships/joints, BOM, parts, hardware, drilling, revisions, preflight y machine
 outputs.
 
-Ver la [estrategia canónica](sketchup-muebles-strategy.md), el
-[ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md) y el
+Ver la [estrategia canónica](sketchup-granete-strategy.md), el
+[ADR-0001](adr/0001-sketchup-authoring-granete-manufacturing-truth.md) y el
 [manufacturing contract](sketchup-manufacturing-contract.md).
 
 ---
@@ -392,7 +392,7 @@ Por defecto necesitan demanda demostrada:
 El plugin SketchUp dejó de ser una idea genérica congelada porque existen pilotos y
 máquinas concretas por caracterizar. El programa activo es
 [#290](https://github.com/tiagofur/muebleria/issues/290) y se ejecuta mediante
-[`docs/sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md).
+[`docs/sketchup-granete-strategy.md`](sketchup-granete-strategy.md).
 
 La activación autoriza contrato, dossiers, validación y trabajo por fases. No autoriza
 afirmar compatibilidad PTX/CNC sin import/readback y operator sign-off, ni mover BOM,
@@ -498,8 +498,8 @@ Validar mediante #314; recalibrar con evidencia.
 - posicionamiento Proyectar: `docs/proyectar-3d-competitive-position.md`;
 - calidad Proyectar: `docs/proyectar-3d-north-star.md`;
 - ejecución Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
-- programa SketchUp + Granete: `docs/sketchup-muebles-strategy.md`;
-- boundary: `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
+- programa SketchUp + Granete: `docs/sketchup-granete-strategy.md`;
+- boundary: `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
 - relationships/joints: #356;
 - consolidación operacional: `docs/operational-core-v1.md`;
