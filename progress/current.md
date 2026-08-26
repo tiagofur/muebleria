@@ -77,3 +77,18 @@ boundary) en verde.
 **SketchUp owns authoring/interaction; Granete owns manufacturing truth.** Ruby no
 calcula BOM, partes resueltas, joints, drilling, nesting, kerf, preflight/release ni
 postprocessing.
+
+## Critique + fixes UI/UX plugin SketchUp (2026-08-25, impeccable)
+
+**Critique** (`$impeccable critique`, snapshot `.impeccable/critique/2026-08-26T03-00-49Z__apps-sketchup-extension.md`): 22/40 aceptable, 3 P1. Nota: P1-1 (selector sin filtro por rol) ya estaba resuelto en el working tree por la sesión anterior — la review leyó HEAD.
+
+**Fixes aplicados sobre el working tree:**
+
+- **P1-3 placement**: `FurnitureBuilder#prepare_placement` tras commit — selecciona el grupo nuevo y activa `selectMoveTool:`; toast de inserción guía "movelo a su lugar (tecla M)". Test nuevo + `send_action` recorder en stub.
+- **P1-2 unificación visual**: `material_selector.html` re-tematizado al sistema Granete claro (mismos tokens que dialog.html: brand 245, Inter-first, rem, radius 6/8/12, shadow-sm). Label del scope unificado a "Valor por defecto de la obra" en ambas superficies (el "A todos los muebles" mentía). Micro-glass badges eliminados.
+- **P2-4 a11y/prevención**: delete con confirmación two-step (armar → confirmar en 4s); toast `role="status" aria-live="polite"` + timer no pisado + errores persisten 8s; tabs con `aria-selected` + flechas; ítems del modal embebido focusables; contraste `--text-muted` 3.68:1→5.27:1 (hsl 230 12% 45%); piso tipográfico 12px (`--text-xs` 11→12px, tags/codes ≥12px).
+- **P2-5 honestidad**: pill inicial "Comprobando…" (antes "Conectado" falso); espesor ausente muestra "—" (antes inventaba 18 mm); fabricante ausente "Sin fabricante" (antes "Taller"); fuera "#347", copy "Invariante" → "Cómo funciona…"; instance ID fuera del inspector; empty states diferenciados (rol sin materiales ≠ sin resultados); `cat.name` del modal embebido ahora por DOM APIs (sin innerHTML).
+- **Iconografía**: emojis de chrome reemplazados por set SVG inline 16px stroke currentColor (tabs, búsqueda, botones, empty states, veta, licencia, medidas).
+- `user-select: text` en códigos/nombres copiables.
+
+**Verificación**: `bundle exec rake` completo en verde (rubocop + 115 unit +910 assertions + boundary/smoke 763 + verify .rbz) + browser check DOM/screenshots (pill, tabs, selector claro, apply deshabilitado).

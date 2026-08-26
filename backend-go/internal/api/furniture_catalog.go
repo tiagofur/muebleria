@@ -433,11 +433,12 @@ func categoryPathNames(categoryID string, byID map[string]domain.ModuleCategory)
 // revisionId and as the HTTP ETag so clients cache per catalog content.
 func workshopCatalogRevisionID(c workshopFurnitureCatalog) string {
 	payload := struct {
-		Categories  []workshopFurnitureCategory            `json:"categories"`
-		Definitions map[string]workshopFurnitureDefinition `json:"definitions"`
-		Presets     []workshopFurniturePreset              `json:"presets"`
-		Materials   []workshopMaterial                     `json:"materials"`
-	}{c.Categories, c.Definitions, c.Presets, c.Materials}
+		Categories         []workshopFurnitureCategory            `json:"categories"`
+		MaterialCategories []workshopMaterialCategory             `json:"materialCategories"`
+		Definitions        map[string]workshopFurnitureDefinition `json:"definitions"`
+		Presets            []workshopFurniturePreset              `json:"presets"`
+		Materials          []workshopMaterial                     `json:"materials"`
+	}{c.Categories, c.MaterialCategories, c.Definitions, c.Presets, c.Materials}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		// Marshal of these plain structs cannot fail in practice; fall back

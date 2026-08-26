@@ -17,6 +17,7 @@ import {
 import type {
   EnvironmentCommandResult,
   KitchenWall,
+  MaterialBoard,
   MaterialCategory,
   Module,
   ModuleCategory,
@@ -190,6 +191,10 @@ import {
   type StudioDeleteScope,
   type StudioDeleteTarget,
 } from './StudioDeleteDialog';
+import {
+  MaterialOptionSelectorDialog,
+  type MaterialSelectorScope,
+} from './optionSelector/MaterialOptionSelectorDialog';
 import {
   pushPlanHistory,
   redoLabelOf,
@@ -434,6 +439,10 @@ export function ProjectSpatialStudio({
   const [detailMode, setDetailMode] = useState(false);
   const [detailPartId, setDetailPartId] = useState<string | null>(null);
   const [detailHardwareId, setDetailHardwareId] = useState<string | null>(null);
+  /** Rol de acabado (optionGroup.code) con el selector visual abierto. */
+  const [finishSelectorCode, setFinishSelectorCode] = useState<string | null>(
+    null,
+  );
   /** F143 — feedback de comandos (errores que enseñan, aria-live). */
   const [commandStatus, setCommandStatus] = useState<string | null>(null);
   /** F144 — issues de validación de "A medida" (no commitea inválido). */
@@ -2751,6 +2760,76 @@ export function ProjectSpatialStudio({
     setBoardPaintHoverKey(null);
   };
 
+  // ── Selector visual de acabados por rol (catalog-option-selector.md) ─────
+  // Misma ventana que el plugin de SketchUp: el grupo curado del rol es la
+  // única lista elegible y el scope distingue override del ítem vs default
+  // de obra (effectiveOptionChoices queda como única autoridad).
+
+  // Nota: derivaciones sin useMemo — viven después de un early-return del
+  // studio, y el costo (finds sobre listas chicas) no justifica hooks.
+  const finishSelectorGroup = finishSelectorCode
+    ? (catalog.optionGroups.find((g) => g.code === finishSelectorCode) ?? null)
+    : null;
+
+  const finishSelectorMaterials: readonly MaterialBoard[] =
+    finishSelectorGroup && finishSelectorGroup.kind === 'board'
+      ? optionsForGroup(finishSelectorGroup, pickerCatalogs)
+          .map((member) =>
+            pickerCatalogs.materials.find((m) => m.id === member.id),
+          )
+          .filter((m): m is MaterialBoard => m !== undefined)
+      : [];
+
+  const finishSelectorCurrentValue: string | undefined =
+    finishSelectorGroup && selectedItem
+      ? selectedItem.optionChoices[finishSelectorGroup.code]?.trim() ||
+        project.projectLevelChoices?.[finishSelectorGroup.code]?.trim() ||
+        undefined
+      : undefined;
+
+  const finishSelectorIsOverride = Boolean(
+    finishSelectorGroup &&
+      selectedItem?.optionChoices[finishSelectorGroup.code]?.trim(),
+  );
+
+  const handleFinishSelectorApply = (
+    optionId: string,
+    scope: MaterialSelectorScope,
+  ): void => {
+    if (!finishSelectorGroup || !selectedItem) return;
+    if (scope === 'project') {
+      onUpdateProjectLevelChoice?.(finishSelectorGroup.code, optionId);
+    } else {
+      onUpdateItem?.({
+        ...selectedItem,
+        optionChoices: setItemOptionChoice(
+          selectedItem.optionChoices,
+          finishSelectorGroup.code,
+          optionId,
+        ),
+      });
+    }
+    trackUsability('option_change', {
+      group: finishSelectorGroup.code,
+      value: optionId,
+      scope,
+    });
+    setFinishSelectorCode(null);
+  };
+
+  const handleFinishSelectorInherit = (): void => {
+    if (!finishSelectorGroup || !selectedItem) return;
+    onUpdateItem?.({
+      ...selectedItem,
+      optionChoices: setItemOptionChoice(
+        selectedItem.optionChoices,
+        finishSelectorGroup.code,
+        '',
+      ),
+    });
+    setFinishSelectorCode(null);
+  };
+
   // ── F141 Biblioteca: inserción por click/teclado ─────────────────────────
 
   /** F141v2: biblioteca disponible (editable + insert conectado). Read-only ⇒ sólo ítems. */
@@ -4165,6 +4244,20 @@ export function ProjectSpatialStudio({
             onConfirm={handleConfirmDelete}
           />
 
+          <MaterialOptionSelectorDialog
+            open={finishSelectorGroup !== null}
+            group={finishSelectorGroup}
+            materials={finishSelectorMaterials}
+            materialCategories={materialCategories}
+            currentValue={finishSelectorCurrentValue}
+            currentIsOverride={finishSelectorIsOverride}
+            canEdit={canEdit}
+            resolveMediaUrl={resolveMediaUrl}
+            onApply={handleFinishSelectorApply}
+            onInherit={handleFinishSelectorInherit}
+            onClose={() => setFinishSelectorCode(null)}
+          />
+
           {showPlan2d && planMini ? (
             <div
               className="spatial-studio__plan-mini"
@@ -5367,6 +5460,94 @@ export function ProjectSpatialStudio({
                         const inheritLabel = projectDefault
                           ? `Proyecto (${optionLabelForId(projectDefault, group, pickerCatalogs)})`
                           : 'Default del proyecto';
+                        // Grupos de tableros usan el selector visual por rol
+                        // (mismo diálogo que el plugin de SketchUp); el resto
+                        // (herrajes/perfiles sin swatches) mantiene select.
+                        if (group.kind === 'board') {
+                          const effectiveId = lineValue || projectDefault;
+                          const currentMaterial =
+                            pickerCatalogs.materials.find(
+                              (m) => m.id === effectiveId,
+                            ) ?? null;
+                          const swatchTexture = currentMaterial
+                            ? resolveMediaUrl?.(
+                                currentMaterial.previewTextureUrl ??
+                                  currentMaterial.imageUrl,
+                              )
+                            : undefined;
+                          return (
+                            <div
+                              key={group.id}
+                              className="spatial-studio__finish-role"
+                            >
+                              <div className="spatial-studio__finish-role-head">
+                                <span className="spatial-studio__finish-role-title">
+                                  {group.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="spatial-studio__finish-role-open"
+                                  disabled={!canEdit || !onUpdateItem}
+                                  onClick={() => setFinishSelectorCode(group.code)}
+                                  data-testid={`spatial-studio-choice-open-${group.code}`}
+                                >
+                                  Catálogo
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                className="spatial-studio__finish-role-preview"
+                                disabled={!canEdit || !onUpdateItem}
+                                onClick={() => setFinishSelectorCode(group.code)}
+                                data-testid={`spatial-studio-choice-${group.code}`}
+                              >
+                                <span
+                                  className="spatial-studio__finish-role-swatch"
+                                  style={
+                                    swatchTexture
+                                      ? {
+                                          backgroundImage: `url('${swatchTexture}')`,
+                                          backgroundColor:
+                                            currentMaterial?.previewColor,
+                                        }
+                                      : {
+                                          backgroundColor:
+                                            currentMaterial?.previewColor,
+                                        }
+                                  }
+                                  aria-hidden="true"
+                                />
+                                <span className="spatial-studio__finish-role-info">
+                                  <span className="spatial-studio__finish-role-name">
+                                    {currentMaterial
+                                      ? currentMaterial.name
+                                      : inheritLabel}
+                                  </span>
+                                  <span className="spatial-studio__finish-role-meta">
+                                    {currentMaterial
+                                      ? [
+                                          currentMaterial.code,
+                                          currentMaterial.thicknessMm
+                                            ? `${currentMaterial.thicknessMm} mm`
+                                            : undefined,
+                                          currentMaterial.grainDefault
+                                            ? 'Veta'
+                                            : undefined,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ')
+                                      : 'Elegí el acabado en el catálogo'}
+                                  </span>
+                                </span>
+                                {!lineValue && projectDefault && (
+                                  <span className="spatial-studio__finish-role-inherit">
+                                    hereda
+                                  </span>
+                                )}
+                              </button>
+                            </div>
+                          );
+                        }
                         return (
                           <label
                             key={group.id}

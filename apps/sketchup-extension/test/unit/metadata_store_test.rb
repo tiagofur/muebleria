@@ -111,4 +111,13 @@ class MetadataStoreTest < Minitest::Test
     assert_equal 'instance-fixture-opaque',
                  @store.write(@entity, @fixture).dig('identity', 'instanceRef')
   end
+
+  def test_project_ref_reads_and_writes_project_identity
+    model = Entity.new
+    store = Granete::SketchUpExtension::Metadata::Store.new(model)
+
+    assert_equal 'project-sketchup-active', store.project_ref
+    store.project_ref = 'project-obra-123'
+    assert_equal 'project-obra-123', store.project_ref
+  end
 end

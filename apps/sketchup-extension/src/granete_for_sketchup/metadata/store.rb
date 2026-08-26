@@ -20,6 +20,24 @@ module Granete
           @model = model
         end
 
+        def project_ref
+          return 'project-sketchup-active' unless @model.respond_to?(:get_attribute)
+
+          stored = @model.get_attribute(DICTIONARY, 'project_ref')
+          return stored if stored && !stored.to_s.strip.empty?
+
+          guid = @model.respond_to?(:guid) ? @model.guid : nil
+          return "project-skp-#{guid}" if guid && !guid.to_s.strip.empty?
+
+          'project-sketchup-active'
+        end
+
+        def project_ref=(value)
+          return unless @model.respond_to?(:set_attribute) && value
+
+          @model.set_attribute(DICTIONARY, 'project_ref', value.to_s.strip)
+        end
+
         # Writes semantic intent metadata. The caller owns the undoable SketchUp
         # operation: an inner start_operation/commit issued while entities are
         # being created in an outer operation invalidates Ruby references to

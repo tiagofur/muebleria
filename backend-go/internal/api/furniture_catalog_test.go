@@ -140,6 +140,17 @@ func TestWorkshopCatalogRevisionIsContentAddressed(t *testing.T) {
 	if workshopCatalogRevisionID(mk(600)) == workshopCatalogRevisionID(mk(900)) {
 		t.Fatal("revision must change when the catalog content changes")
 	}
+
+	catA := buildWorkshopFurnitureCatalog(nil, nil, []domain.MaterialCategory{
+		{ID: "c1", Name: "Maderas", SortOrder: 1},
+	}, domain.Catalog{})
+	catB := buildWorkshopFurnitureCatalog(nil, nil, []domain.MaterialCategory{
+		{ID: "c1", Name: "Maderas Macizas", SortOrder: 1},
+	}, domain.Catalog{})
+
+	if workshopCatalogRevisionID(catA) == workshopCatalogRevisionID(catB) {
+		t.Fatal("revision must change when materialCategories change")
+	}
 }
 
 func TestBuildWorkshopCatalogCategoriesAreHierarchical(t *testing.T) {

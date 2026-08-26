@@ -96,6 +96,7 @@ module Granete
                                          material_choices: material_choices)
 
           model.commit_operation
+          prepare_placement(model, main_group)
 
           {
             'success' => true,
@@ -141,6 +142,22 @@ module Granete
         end
 
         private
+
+        # Placement assist after commit: the group spawns at the workshop-frame
+        # origin, so keep it selected and hand the user the Move tool to land it
+        # where intended (interim step toward north-star drag/placement).
+        # Never fails the reported insertion: selection and tool activation are
+        # UI state, not model geometry.
+        def prepare_placement(model, group)
+          selection = model.respond_to?(:selection) ? model.selection : nil
+          return unless selection
+
+          selection.clear
+          selection.add(group)
+          ::Sketchup.send_action('selectMoveTool:') if defined?(::Sketchup) && ::Sketchup.respond_to?(:send_action)
+        rescue StandardError
+          nil
+        end
 
         def generate_instance_id
           "inst-#{rand(0x1000..0xffff).to_s(16)}#{rand(0x1000..0xffff).to_s(16)}"
@@ -213,6 +230,9 @@ module Granete
           pos = placement.dig('transform', 'translationMm') || [0, 0, 0]
           dims = placement['dimensionsMm'] || [96, 32, 25]
 
+          asset_id = placement['assetId'] || placement['hardwareId'] || placement['code']
+          return if @asset_loader && asset_id && @asset_loader.load_asset_instance(model, asset_id, main_group, pos)
+
           group = create_hierarchical_component(
             main_group, instance_id, "hardware_#{placement['placementId'] || index}", name,
             pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
@@ -281,21 +301,17 @@ module Granete
         end
 
         def build_box_geometry(comp_group, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
-          scale = 1.0 / 25.4
-          x = x_mm * scale
-          y = y_mm * scale
-          z = z_mm * scale
-          dx = dx_mm * scale
-          dy = dy_mm * scale
-          dz = dz_mm * scale
+          s = 1.0 / 25.4
+          x = x_mm * s
+          y = y_mm * s
+          z = z_mm * s
+          dx = dx_mm * s
+          dy = dy_mm * s
+          dz = dz_mm * s
 
-          # Min-corner semantics: the face sits at the box bottom (z) and the
-          # pull grows upward, so translationMm/pose z is always the AABB min.
           pts = [
-            Geom::Point3d.new(x, y, z),
-            Geom::Point3d.new(x + dx, y, z),
-            Geom::Point3d.new(x + dx, y + dy, z),
-            Geom::Point3d.new(x, y + dy, z)
+            Geom::Point3d.new(x, y, z), Geom::Point3d.new(x + dx, y, z),
+            Geom::Point3d.new(x + dx, y + dy, z), Geom::Point3d.new(x, y + dy, z)
           ]
           face = comp_group.entities.add_face(pts)
           return unless face
@@ -313,14 +329,17 @@ module Granete
         def write_furniture(store, main_group, instance_id, definition, parameters, material_choices: nil)
           return unless store
 
+          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
+          rev_ref = definition['revisionId'] || definition['version'] || 'rev-1'
+
           metadata_payload = {
             'namespace' => 'com.granete.sketchup_extension',
             'metadataVersion' => 1,
             'kind' => 'furnitureInstance',
             'identity' => {
               'instanceRef' => instance_id,
-              'projectRef' => 'project-sketchup-active',
-              'sourceRevisionRef' => 'rev-1'
+              'projectRef' => proj_ref,
+              'sourceRevisionRef' => rev_ref
             },
             'intent' => {
               'semanticRole' => 'furniture-instance',
@@ -337,11 +356,13 @@ module Granete
         def write_component(store, comp_group, comp_id, slot_id)
           return unless store
 
+          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
+
           comp_meta = {
             'namespace' => 'com.granete.sketchup_extension',
             'metadataVersion' => 1,
             'kind' => 'componentInstance',
-            'identity' => { 'instanceRef' => comp_id, 'projectRef' => 'project-sketchup-active' },
+            'identity' => { 'instanceRef' => comp_id, 'projectRef' => proj_ref },
             'intent' => { 'semanticRole' => slot_id }
           }
           store.write(comp_group, comp_meta)

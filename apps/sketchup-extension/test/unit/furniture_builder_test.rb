@@ -48,6 +48,22 @@ class FurnitureBuilderTest < Minitest::Test
                  @model.operations
   end
 
+  def test_insertion_selects_the_new_furniture_and_activates_move_tool
+    definition = @provider.find_definition('kitchen-base-standard')
+    result = @builder.insert_furniture(@model, definition,
+                                       { 'widthMm' => 600, 'shelfCount' => 2, 'doorCount' => 1 })
+
+    assert result['success']
+    # Placement assist: the fresh group stays selected and the Move tool is
+    # activated so the user lands it where intended (interim north-star step).
+    main_group = @model.active_entities.groups.first
+    assert_equal [main_group], @model.selection.items
+    assert_includes SketchupStub.send_actions, 'selectMoveTool:'
+    # Selection is UI state, not an undoable model operation.
+    assert_equal [[:start, 'Insertar Mueble Gabinete Base Estándar', true], :commit],
+                 @model.operations
+  end
+
   def test_updates_furniture_in_place_regenerating_components_and_preserving_identity
     definition = @provider.find_definition('kitchen-base-standard')
     insert_result = @builder.insert_furniture(@model, definition,
@@ -259,5 +275,36 @@ class FurnitureBuilderTest < Minitest::Test
     assert_in_delta 96.063, door.material.texture.size[1], 0.01
   ensure
     FileUtils.rm_f(fake_texture_file)
+  end
+
+  def test_resolved_hardware_uses_asset_loader_when_asset_available
+    definition = @provider.find_definition('kitchen-base-standard')
+    loader_mock = Object.new
+    loaded_instances = []
+    loader_mock.define_singleton_method(:load_asset_instance) do |_model, asset_id, _target_group, pos|
+      loaded_instances << { asset_id: asset_id, pos: pos }
+      true
+    end
+
+    builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: @store,
+      asset_loader: loader_mock
+    )
+
+    layout_with_hardware = JSON.parse(JSON.generate(RESOLVED_LAYOUT))
+    layout_with_hardware['hardware'] = [
+      {
+        'name' => 'Tirador Perfil',
+        'assetId' => 'handle_profile_96',
+        'transform' => { 'translationMm' => [100, 20, 700] },
+        'dimensionsMm' => [96, 32, 25]
+      }
+    ]
+
+    builder.insert_furniture(@model, definition, {}, resolved_layout: layout_with_hardware)
+
+    assert_equal 1, loaded_instances.length
+    assert_equal 'handle_profile_96', loaded_instances.first[:asset_id]
+    assert_equal [100, 20, 700], loaded_instances.first[:pos]
   end
 end

@@ -54,12 +54,38 @@ class TextureCacheTest < Minitest::Test
     assert_nil @cache.resolve_texture('   ')
   end
 
+  def test_cache_filename_avoids_collisions_for_different_urls_with_same_basename
+    name1 = @cache.cache_filename('http://cdn.com/materials/1/texture.jpg')
+    name2 = @cache.cache_filename('http://cdn.com/materials/2/texture.jpg')
+
+    refute_equal name1, name2
+    assert name1.end_with?('-texture.jpg')
+    assert name2.end_with?('-texture.jpg')
+  end
+
+  def test_cache_filename_rejects_unallowed_extensions
+    assert_nil @cache.cache_filename('http://cdn.com/file.exe')
+    assert_nil @cache.cache_filename('http://cdn.com/script.sh')
+    assert_nil @cache.cache_filename('http://cdn.com/no_extension')
+    refute_nil @cache.cache_filename('http://cdn.com/photo.png')
+    refute_nil @cache.cache_filename('http://cdn.com/photo.webp')
+  end
+
   def test_resolve_texture_returns_cached_file_if_present
-    target = File.join(@tmp_dir, 'sample.jpg')
+    url = '/api/media/sample.jpg'
+    filename = @cache.cache_filename(url)
+    target = File.join(@tmp_dir, filename)
     File.binwrite(target, 'fake-jpeg-data')
 
-    resolved = @cache.resolve_texture('/api/media/sample.jpg')
+    resolved = @cache.resolve_texture(url)
     assert_equal target, resolved
     assert File.file?(resolved)
+  end
+
+  def test_resolve_texture_returns_existing_disk_file
+    target = File.join(@tmp_dir, 'direct.jpg')
+    File.binwrite(target, 'disk-data')
+
+    assert_equal target, @cache.resolve_texture(target)
   end
 end

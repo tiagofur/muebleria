@@ -194,11 +194,26 @@ module SketchupStub
   end
 
   class EntitiesStub
+    include Enumerable
+
     attr_reader :groups, :faces
 
     def initialize
       @groups = []
       @faces = []
+    end
+
+    def each(&block)
+      (@groups + @faces).each(&block)
+    end
+
+    def add(item)
+      if item.is_a?(GroupStub)
+        @groups << item
+      elsif item.is_a?(FaceStub)
+        @faces << item
+      end
+      item
     end
 
     def add_group
@@ -243,6 +258,10 @@ module SketchupStub
       @operations = []
     end
 
+    def entities
+      @active_entities
+    end
+
     def start_operation(name, disable_ui)
       @operations << [:start, name, disable_ui]
     end
@@ -257,7 +276,8 @@ module SketchupStub
   end
 
   class << self
-    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model, :toolbars
+    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model, :toolbars,
+                :send_actions
     attr_accessor :preferences
 
     def reset!
@@ -268,6 +288,7 @@ module SketchupStub
       @active_model = ModelStub.new
       @preferences = Hash.new { |hash, key| hash[key] = {} }
       @toolbars = []
+      @send_actions = []
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
     end
 
@@ -302,6 +323,10 @@ module Sketchup
 
   def self.register_extension(extension, enabled)
     SketchupStub.registered_extensions << [extension, enabled]
+  end
+
+  def self.send_action(action)
+    SketchupStub.send_actions << action
   end
 
   def self.require(path)

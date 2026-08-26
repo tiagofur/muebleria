@@ -8,7 +8,7 @@
       :root {
         color-scheme: light;
         --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        --text-xs: 0.6875rem;
+        --text-xs: 0.75rem;
         --text-sm: 0.8125rem;
         --text-base: 0.875rem;
         --text-md: 1rem;
@@ -31,7 +31,7 @@
         
         --text-primary: hsl(230 18% 12%);
         --text-secondary: hsl(230 12% 40%);
-        --text-muted: hsl(230 10% 55%);
+        --text-muted: hsl(230 12% 45%);
         --text-inverse: hsl(0 0% 100%);
         --text-inverse-soft: hsl(0 0% 100% / 80%);
         
@@ -177,6 +177,12 @@
 
       .tab-pane.active {
         display: block;
+      }
+
+      .icon {
+        flex-shrink: 0;
+        display: inline-block;
+        vertical-align: -0.15em;
       }
 
       .card {
@@ -380,8 +386,7 @@
         position: absolute;
         top: var(--space-2);
         right: var(--space-2);
-        background: hsl(0 0% 100% / 92%);
-        backdrop-filter: blur(4px);
+        background: hsl(0 0% 100% / 95%);
         border: 1px solid var(--border-default);
         border-radius: var(--radius-sm);
         font-size: var(--text-xs);
@@ -414,9 +419,10 @@
       }
 
       .furniture-card-code {
-        font-size: 0.65rem;
+        font-size: var(--text-xs);
         color: var(--text-secondary);
         font-family: monospace;
+        user-select: text;
       }
 
       /* Configurator Back Button */
@@ -601,6 +607,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        user-select: text;
       }
 
       .material-selected-meta {
@@ -895,7 +902,7 @@
       }
 
       .selector-column-count {
-        font-size: 0.6875rem;
+        font-size: var(--text-xs);
         color: var(--text-muted);
         background: var(--surface-app);
         padding: 0 0.25rem;
@@ -976,10 +983,12 @@
         right: 3px;
         background: rgba(0, 0, 0, 0.7);
         color: #fff;
-        font-size: 0.625rem;
+        font-size: 0.6875rem;
         padding: 1px 4px;
         border-radius: 3px;
-        backdrop-filter: blur(2px);
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
       }
 
       .mat-card-info {
@@ -1001,7 +1010,7 @@
       }
 
       .mat-card-meta {
-        font-size: 0.6875rem;
+        font-size: var(--text-xs);
         color: var(--text-secondary);
         display: flex;
         flex-wrap: wrap;
@@ -1013,8 +1022,9 @@
         background: var(--surface-card-subtle);
         padding: 0 4px;
         border-radius: 2px;
-        font-size: 0.625rem;
+        font-size: var(--text-xs);
         color: var(--text-secondary);
+        user-select: text;
       }
 
       .mat-card-selected-check {
@@ -1369,6 +1379,7 @@
         font-weight: var(--weight-medium);
         text-align: right;
         overflow-wrap: anywhere;
+        user-select: text;
       }
 
       footer {
@@ -1390,23 +1401,26 @@
             <span>para SketchUp</span>
           </div>
         </div>
-        <div id="connection-pill" class="status-badge valid">Conectado</div>
+        <div id="connection-pill" class="status-badge pending">Comprobando…</div>
       </header>
 
       <nav class="tabs-nav" role="tablist">
-        <button id="tab-btn-library" class="tab-button active" role="tab" data-tab="library">
-          📦 Biblioteca
+        <button id="tab-btn-library" class="tab-button active" role="tab" aria-selected="true" data-tab="library">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          <span>Biblioteca</span>
         </button>
-        <button id="tab-btn-inspector" class="tab-button" role="tab" data-tab="inspector">
-          🔍 Inspector
+        <button id="tab-btn-inspector" class="tab-button" role="tab" aria-selected="false" data-tab="inspector">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Inspector</span>
         </button>
-        <button id="tab-btn-status" class="tab-button" role="tab" data-tab="status">
-          ⚡ Estado
+        <button id="tab-btn-status" class="tab-button" role="tab" aria-selected="false" data-tab="status">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Estado</span>
         </button>
       </nav>
 
       <main>
-        <div id="toast-message" class="toast"></div>
+        <div id="toast-message" class="toast" role="status" aria-live="polite"></div>
 
         <!-- Tab 1: Library (Insertion) -->
         <section id="pane-library" class="tab-pane active" role="tabpanel">
@@ -1419,7 +1433,7 @@
 
             <!-- Search input -->
             <div class="search-container">
-              <span class="search-icon" aria-hidden="true">🔍</span>
+              <span class="search-icon" aria-hidden="true"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg></span>
               <input
                 id="library-search-input"
                 type="text"
@@ -1441,8 +1455,11 @@
             </div>
 
             <!-- License blocker alert if applicable -->
-            <div class="card" id="library-license-blocker" style="display: none; border-left: 3px solid var(--warning-700); margin-bottom: var(--space-3);">
-              <div class="card-title">🔒 Licencia inactiva</div>
+            <div class="card" id="library-license-blocker" style="display: none; margin-bottom: var(--space-3);">
+              <div class="card-title">
+                <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Licencia inactiva
+              </div>
               <p class="subhead" style="margin-bottom: 0;">
                 Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.
                 Pedile al administrador del taller que asigne o renueve tu licencia desde Granete.
@@ -1451,20 +1468,20 @@
 
             <!-- States -->
             <div id="library-loading-state" class="card empty-state" style="display: none;">
-              <div class="empty-state-icon">⏳</div>
+              <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
               <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Cargando catálogo…</h2>
               <p style="margin-bottom: 0; font-size: var(--text-sm);">Obteniendo los muebles del taller.</p>
             </div>
 
             <div id="library-empty-state" class="card empty-state" style="display: none;">
-              <div id="library-empty-icon" class="empty-state-icon">📦</div>
+              <div id="library-empty-icon" class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
               <h2 id="library-empty-title" style="font-size: var(--text-md); margin-bottom: var(--space-1);">Catálogo vacío</h2>
               <p id="library-empty-msg" style="margin-bottom: var(--space-2); font-size: var(--text-sm);"></p>
               <button id="btn-library-empty-action" class="btn btn-secondary" style="display: none; width: auto; margin: var(--space-2) auto 0;"></button>
             </div>
 
             <div id="library-no-results-state" class="card empty-state" style="display: none;">
-              <div class="empty-state-icon">🔍</div>
+              <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
               <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Sin resultados</h2>
               <p id="library-no-results-msg" style="margin-bottom: var(--space-2); font-size: var(--text-sm);">No se encontraron muebles que coincidan con la búsqueda.</p>
               <button id="btn-clear-search" class="btn btn-secondary" style="width: auto; margin: var(--space-2) auto 0;">Ver todos los muebles</button>
@@ -1524,7 +1541,8 @@
             </div>
 
             <button id="btn-insert" class="btn btn-primary">
-              <span>➕ Insertar en Modelo</span>
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Insertar en Modelo</span>
             </button>
           </div>
         </section>
@@ -1532,7 +1550,7 @@
         <!-- Tab 2: Contextual Inspector (Editing) -->
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
           <div id="inspector-empty-state" class="card empty-state">
-            <div class="empty-state-icon">🖱️</div>
+            <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg></div>
             <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Ningún mueble seleccionado</h2>
             <p style="margin-bottom: 0; font-size: var(--text-sm);">
               Haz clic en cualquier mueble de Granete en el viewport 3D para inspeccionar y editar sus propiedades.
@@ -1544,13 +1562,12 @@
               <div class="card-header-row">
                 <div>
                   <h2 id="inspector-furniture-name" style="font-size: var(--text-md); margin: 0;">--</h2>
-                  <span id="inspector-instance-id" style="font-size: var(--text-xs); color: var(--text-muted);">--</span>
                 </div>
                 <div class="badges-column">
                   <!-- Level 1: Interactive validation badge -->
-                  <span id="inspector-interactive-badge" class="status-badge valid">✓ Parámetros Válidos</span>
+                  <span id="inspector-interactive-badge" class="status-badge valid">✓ Medidas válidas</span>
                   <!-- Level 2: Authoritative preflight badge (NEVER auto-assumed) -->
-                  <span id="inspector-manufacturing-badge" class="status-badge pending">⏳ Preflight Pendiente</span>
+                  <span id="inspector-manufacturing-badge" class="status-badge pending">Revisión técnica pendiente</span>
                 </div>
               </div>
             </div>
@@ -1577,10 +1594,12 @@
             </div>
 
             <button id="btn-update" class="btn btn-primary">
-              <span>💾 Actualizar Mueble</span>
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>Actualizar Mueble</span>
             </button>
             <button id="btn-delete" class="btn btn-danger">
-              <span>🗑️ Eliminar Mueble</span>
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>Eliminar Mueble</span>
             </button>
           </div>
         </section>
@@ -1592,12 +1611,12 @@
             <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1); margin-top: var(--space-2);">Comprobando…</h2>
             <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
             <p class="subhead" style="margin-bottom: 0;">
-              <strong>Invariante:</strong> SketchUp captura intención de autoría; Granete resuelve el mecanizado y valida la manufacturabilidad industrial.
+              <strong>Cómo funciona:</strong> diseñás el mueble en SketchUp; Granete calcula las piezas y valida que se pueda fabricar.
             </p>
           </div>
 
           <div class="card" id="login-card">
-            <div class="card-title">🔑 Iniciar Sesión en Granete</div>
+            <div class="card-title">Iniciar Sesión en Granete</div>
             <p class="subhead" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
               Iniciá sesión con tu cuenta del taller para cargar su biblioteca de muebles.
             </p>
@@ -1611,7 +1630,7 @@
           </div>
 
           <div class="card" id="session-card" style="display: none;">
-            <div class="card-title">👤 Sesión del Taller</div>
+            <div class="card-title">Sesión del Taller</div>
             <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
             <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
             <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
@@ -1637,8 +1656,8 @@
 
           <!-- Search Bar -->
           <div class="selector-search-bar">
-            <div class="selector-search-input-wrapper">
-              <span class="selector-search-icon">🔍</span>
+              <div class="selector-search-input-wrapper">
+              <span class="selector-search-icon" aria-hidden="true"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg></span>
               <input id="selector-search-input" type="search" placeholder="Buscar por nombre, código o fabricante..." autocomplete="off" />
               <button id="selector-search-clear" class="selector-search-clear-btn" type="button" style="display: none;" aria-label="Limpiar búsqueda">✕</button>
             </div>
@@ -1674,8 +1693,8 @@
               </div>
               <div id="selector-candidate-grid" class="selector-candidate-grid"></div>
               <div id="selector-candidate-empty" class="selector-candidate-empty" style="display: none;">
-                <div class="empty-state-icon">📦</div>
-                <p>No se encontraron materiales que coincidan con la búsqueda o categoría.</p>
+                <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+                <p id="selector-candidate-empty-msg">No se encontraron materiales que coincidan con la búsqueda o categoría.</p>
               </div>
             </div>
 
@@ -1720,7 +1739,7 @@
                   </label>
                   <label class="selector-scope-option">
                     <input type="radio" name="selector-scope" value="project" />
-                    <span>A todos los muebles</span>
+                    <span>Valor por defecto de la obra</span>
                   </label>
                 </div>
               </div>
@@ -1753,6 +1772,7 @@
         var activeLibDef = null;
         var libParams = {};
         var libMaterialChoices = {};
+        var projectDefaultMaterials = {};
 
         var searchQuery = "";
         var selectedCategory = "ALL";
@@ -1828,7 +1848,6 @@
         var inspectorEmpty = document.getElementById("inspector-empty-state");
         var inspectorActive = document.getElementById("inspector-active-view");
         var inspectorName = document.getElementById("inspector-furniture-name");
-        var inspectorId = document.getElementById("inspector-instance-id");
         var inspectorInteractiveBadge = document.getElementById("inspector-interactive-badge");
         var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
         var inspectorParamsContainer = document.getElementById("inspector-params-container");
@@ -1855,6 +1874,28 @@
           "inferior": "Bases",
           "superior": "Alacenas"
         };
+
+        // Inline SVG icon set (16px, stroke = currentColor) — replaces emoji
+        // chrome so the panel keeps one iconographic vocabulary.
+        var ICON_PATHS = {
+          box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+          search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/>',
+          clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+          plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+          save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+          trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+          key: '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+          warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+          lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+          ruler: '<rect x="2" y="8" width="20" height="8" rx="1"/><line x1="7" y1="8" x2="7" y2="11"/><line x1="12" y1="8" x2="12" y2="11"/><line x1="17" y1="8" x2="17" y2="11"/>',
+          grain: '<line x1="4" y1="20" x2="20" y2="4"/><line x1="4" y1="14" x2="14" y2="4"/><line x1="10" y1="20" x2="20" y2="10"/>',
+          book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'
+        };
+
+        function icon(name, size) {
+          size = size || 16;
+          return '<svg class="icon" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON_PATHS[name] + '</svg>';
+        }
 
         function formatCategoryLabel(catKey) {
           if (!catKey) return "General";
@@ -1910,18 +1951,38 @@
 
         // Tabs navigation
         function switchTab(tabId) {
-          document.querySelectorAll(".tab-button").forEach(function (b) { b.classList.remove("active"); });
+          document.querySelectorAll(".tab-button").forEach(function (b) {
+            b.classList.remove("active");
+            b.setAttribute("aria-selected", "false");
+          });
           document.querySelectorAll(".tab-pane").forEach(function (p) { p.classList.remove("active"); });
           var btn = document.querySelector(".tab-button[data-tab='" + tabId + "']");
-          if (btn) btn.classList.add("active");
+          if (btn) {
+            btn.classList.add("active");
+            btn.setAttribute("aria-selected", "true");
+          }
           var pane = document.getElementById("pane-" + tabId);
           if (pane) pane.classList.add("active");
         }
 
+        var tabOrder = ["library", "inspector", "status"];
+
         document.querySelectorAll(".tab-button").forEach(function (btn) {
+          btn.setAttribute("aria-selected", btn.classList.contains("active") ? "true" : "false");
           btn.addEventListener("click", function () {
             switchTab(btn.getAttribute("data-tab"));
           });
+        });
+
+        document.querySelector(".tabs-nav").addEventListener("keydown", function (e) {
+          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+          var activeBtn = document.querySelector(".tab-button.active");
+          var current = tabOrder.indexOf(activeBtn.getAttribute("data-tab"));
+          var next = e.key === "ArrowRight"
+            ? (current + 1) % tabOrder.length
+            : (current - 1 + tabOrder.length) % tabOrder.length;
+          switchTab(tabOrder[next]);
+          document.querySelector(".tab-button.active").focus();
         });
 
         // -------------------------------------------------------------
@@ -1948,8 +2009,11 @@
           libMaterialChoices = defaultMaterialChoices(def);
 
           bindLibraryParamForm();
-          renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id) {
+          renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
             libMaterialChoices[role] = id;
+            if (scope === "project" || scope === "project_default") {
+              projectDefaultMaterials[role] = id;
+            }
           });
           renderRegisteredMeasuresButton(def);
           renderPresetChips();
@@ -1987,7 +2051,13 @@
           var choices = {};
           (def && def.materialRoles ? def.materialRoles : []).forEach(function (r) {
             var ids = optionMaterialIds(r);
-            if (ids.length > 0) choices[r.role] = ids[0];
+            if (ids.length > 0) {
+              if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
+                choices[r.role] = projectDefaultMaterials[r.role];
+              } else {
+                choices[r.role] = ids[0];
+              }
+            }
           });
           return choices;
         }
@@ -2027,17 +2097,24 @@
           var parts = [];
           if (mat.code) parts.push(mat.code);
           if (mat.thicknessMm) parts.push(mat.thicknessMm + " mm");
-          if (mat.grain) parts.push("🌲 Veta");
+          if (mat.grain) parts.push("Veta");
           if (mat.manufacturer) parts.push(mat.manufacturer);
           el.textContent = parts.join(" · ");
         }
 
-        function renderMaterialSelectors(card, container, def, choices, onChange) {
+        function renderMaterialSelectors(card, container, def, choices, onChange, contextInfo) {
           var roles = (def && def.materialRoles ? def.materialRoles : []).filter(function (r) {
             return r && r.role && optionMaterialIds(r).length > 0;
           });
           card.style.display = roles.length > 0 ? "block" : "none";
           container.innerHTML = "";
+
+          var isInspector = (card === inspectorMaterialsCard || def === inspectorDef);
+          var ctx = contextInfo || {
+            context: isInspector ? "inspector" : "configurator",
+            instanceId: isInspector && selectedInstance ? selectedInstance.instanceId : null,
+            definitionId: def ? (def.furnitureDefinitionId || def.furniture_definition_id) : null
+          };
 
           roles.forEach(function (r) {
             var availableIds = optionMaterialIds(r);
@@ -2060,7 +2137,7 @@
             var openBtn = document.createElement("button");
             openBtn.type = "button";
             openBtn.className = "btn-picker-open";
-            openBtn.textContent = "🔍 Catálogo";
+            openBtn.innerHTML = icon("search", 12) + "<span>Catálogo</span>";
             openBtn.title = "Explorar catálogo de acabados";
             header.appendChild(openBtn);
 
@@ -2070,6 +2147,9 @@
             var preview = document.createElement("div");
             preview.className = "material-selected-preview";
             preview.title = "Clic para abrir el selector de acabados";
+            preview.setAttribute("role", "button");
+            preview.setAttribute("tabindex", "0");
+            preview.setAttribute("aria-label", "Cambiar material del rol " + (r.label || r.role));
 
             var swatch = document.createElement("div");
             swatch.className = "material-swatch";
@@ -2097,7 +2177,11 @@
                 window.sketchup.open_material_selector(JSON.stringify({
                   role: r.role,
                   roleName: r.label || r.role,
-                  currentMaterialId: choices[r.role]
+                  currentMaterialId: choices[r.role],
+                  context: ctx.context,
+                  instanceId: ctx.instanceId,
+                  definitionId: ctx.definitionId,
+                  allowedMaterialIds: availableIds
                 }));
               } else if (typeof openMaterialSelector === "function") {
                 openMaterialSelector(r, choices[r.role], function (newId, scope) {
@@ -2113,6 +2197,12 @@
 
             preview.addEventListener("click", triggerVisualPicker);
             openBtn.addEventListener("click", triggerVisualPicker);
+            preview.addEventListener("keydown", function (e) {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                triggerVisualPicker();
+              }
+            });
 
             container.appendChild(block);
           });
@@ -2140,6 +2230,7 @@
         var selectorCandidateGrid = document.getElementById("selector-candidate-grid");
         var selectorCandidateCount = document.getElementById("selector-candidate-count");
         var selectorCandidateEmpty = document.getElementById("selector-candidate-empty");
+        var selectorCandidateEmptyMsg = document.getElementById("selector-candidate-empty-msg");
 
         var selectorDetailSwatch = document.getElementById("selector-detail-swatch");
         var selectorDetailName = document.getElementById("selector-detail-name");
@@ -2203,6 +2294,7 @@
             activeCatL2: null,
             activeCatL3: null,
             searchQuery: "",
+            allowedCount: optionMaterialIds(roleEntry).length,
             onApply: onApply
           };
 
@@ -2276,6 +2368,33 @@
           });
         }
 
+        // Column items are built with DOM APIs (never innerHTML) so catalog
+        // category names can't inject markup into the dev-fallback modal.
+        function appendSelectorColumnItem(list, label, count, isActive, onClick) {
+          var item = document.createElement("li");
+          item.className = "selector-column-item" + (isActive ? " active" : "");
+          item.setAttribute("role", "button");
+          item.setAttribute("tabindex", "0");
+
+          var labelSpan = document.createElement("span");
+          labelSpan.textContent = label;
+          item.appendChild(labelSpan);
+
+          var countSpan = document.createElement("span");
+          countSpan.className = "selector-column-count";
+          countSpan.textContent = String(count);
+          item.appendChild(countSpan);
+
+          item.addEventListener("click", onClick);
+          item.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClick();
+            }
+          });
+          list.appendChild(item);
+        }
+
         function renderMillerColumns() {
           if (!selectorCtx) return;
 
@@ -2291,33 +2410,28 @@
           }).sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
 
           selectorColList1.innerHTML = "";
-          var allL1Item = document.createElement("li");
-          allL1Item.className = "selector-column-item" + (selectorCtx.activeCatL1 === null ? " active" : "");
-          allL1Item.innerHTML = '<span>Todas</span><span class="selector-column-count">' +
-            countMaterialsInSubtree(selectorCtx.roleEntry, null) + '</span>';
-          allL1Item.addEventListener("click", function () {
-            selectorCtx.activeCatL1 = null;
-            selectorCtx.activeCatL2 = null;
-            selectorCtx.activeCatL3 = null;
-            renderSelectorNavigation();
-            renderSelectorGrid();
-          });
-          selectorColList1.appendChild(allL1Item);
-
-          l1Cats.forEach(function (cat) {
-            var count = countMaterialsInSubtree(selectorCtx.roleEntry, cat.id);
-            var item = document.createElement("li");
-            item.className = "selector-column-item" + (selectorCtx.activeCatL1 === cat.id ? " active" : "");
-            item.innerHTML = '<span>' + cat.name + '</span>' +
-              '<span class="selector-column-count">' + count + '</span>';
-            item.addEventListener("click", function () {
-              selectorCtx.activeCatL1 = cat.id;
+          appendSelectorColumnItem(selectorColList1, "Todas",
+            countMaterialsInSubtree(selectorCtx.roleEntry, null),
+            selectorCtx.activeCatL1 === null,
+            function () {
+              selectorCtx.activeCatL1 = null;
               selectorCtx.activeCatL2 = null;
               selectorCtx.activeCatL3 = null;
               renderSelectorNavigation();
               renderSelectorGrid();
             });
-            selectorColList1.appendChild(item);
+
+          l1Cats.forEach(function (cat) {
+            appendSelectorColumnItem(selectorColList1, cat.name,
+              countMaterialsInSubtree(selectorCtx.roleEntry, cat.id),
+              selectorCtx.activeCatL1 === cat.id,
+              function () {
+                selectorCtx.activeCatL1 = cat.id;
+                selectorCtx.activeCatL2 = null;
+                selectorCtx.activeCatL3 = null;
+                renderSelectorNavigation();
+                renderSelectorGrid();
+              });
           });
 
           // Column 2: Subcategories of selected L1
@@ -2329,31 +2443,26 @@
             selectorColLevel2.style.display = "flex";
             selectorColList2.innerHTML = "";
 
-            var allL2Item = document.createElement("li");
-            allL2Item.className = "selector-column-item" + (selectorCtx.activeCatL2 === null ? " active" : "");
-            allL2Item.innerHTML = '<span>Todas</span><span class="selector-column-count">' +
-              countMaterialsInSubtree(selectorCtx.roleEntry, selectorCtx.activeCatL1) + '</span>';
-            allL2Item.addEventListener("click", function () {
-              selectorCtx.activeCatL2 = null;
-              selectorCtx.activeCatL3 = null;
-              renderSelectorNavigation();
-              renderSelectorGrid();
-            });
-            selectorColList2.appendChild(allL2Item);
-
-            l2Cats.forEach(function (cat) {
-              var count = countMaterialsInSubtree(selectorCtx.roleEntry, cat.id);
-              var item = document.createElement("li");
-              item.className = "selector-column-item" + (selectorCtx.activeCatL2 === cat.id ? " active" : "");
-              item.innerHTML = '<span>' + cat.name + '</span>' +
-                '<span class="selector-column-count">' + count + '</span>';
-              item.addEventListener("click", function () {
-                selectorCtx.activeCatL2 = cat.id;
+            appendSelectorColumnItem(selectorColList2, "Todas",
+              countMaterialsInSubtree(selectorCtx.roleEntry, selectorCtx.activeCatL1),
+              selectorCtx.activeCatL2 === null,
+              function () {
+                selectorCtx.activeCatL2 = null;
                 selectorCtx.activeCatL3 = null;
                 renderSelectorNavigation();
                 renderSelectorGrid();
               });
-              selectorColList2.appendChild(item);
+
+            l2Cats.forEach(function (cat) {
+              appendSelectorColumnItem(selectorColList2, cat.name,
+                countMaterialsInSubtree(selectorCtx.roleEntry, cat.id),
+                selectorCtx.activeCatL2 === cat.id,
+                function () {
+                  selectorCtx.activeCatL2 = cat.id;
+                  selectorCtx.activeCatL3 = null;
+                  renderSelectorNavigation();
+                  renderSelectorGrid();
+                });
             });
           } else {
             selectorColLevel2.style.display = "none";
@@ -2368,29 +2477,24 @@
             selectorColLevel3.style.display = "flex";
             selectorColList3.innerHTML = "";
 
-            var allL3Item = document.createElement("li");
-            allL3Item.className = "selector-column-item" + (selectorCtx.activeCatL3 === null ? " active" : "");
-            allL3Item.innerHTML = '<span>Todas</span><span class="selector-column-count">' +
-              countMaterialsInSubtree(selectorCtx.roleEntry, selectorCtx.activeCatL2) + '</span>';
-            allL3Item.addEventListener("click", function () {
-              selectorCtx.activeCatL3 = null;
-              renderSelectorNavigation();
-              renderSelectorGrid();
-            });
-            selectorColList3.appendChild(allL3Item);
-
-            l3Cats.forEach(function (cat) {
-              var count = countMaterialsInSubtree(selectorCtx.roleEntry, cat.id);
-              var item = document.createElement("li");
-              item.className = "selector-column-item" + (selectorCtx.activeCatL3 === cat.id ? " active" : "");
-              item.innerHTML = '<span>' + cat.name + '</span>' +
-                '<span class="selector-column-count">' + count + '</span>';
-              item.addEventListener("click", function () {
-                selectorCtx.activeCatL3 = cat.id;
+            appendSelectorColumnItem(selectorColList3, "Todas",
+              countMaterialsInSubtree(selectorCtx.roleEntry, selectorCtx.activeCatL2),
+              selectorCtx.activeCatL3 === null,
+              function () {
+                selectorCtx.activeCatL3 = null;
                 renderSelectorNavigation();
                 renderSelectorGrid();
               });
-              selectorColList3.appendChild(item);
+
+            l3Cats.forEach(function (cat) {
+              appendSelectorColumnItem(selectorColList3, cat.name,
+                countMaterialsInSubtree(selectorCtx.roleEntry, cat.id),
+                selectorCtx.activeCatL3 === cat.id,
+                function () {
+                  selectorCtx.activeCatL3 = cat.id;
+                  renderSelectorNavigation();
+                  renderSelectorGrid();
+                });
             });
           } else {
             selectorColLevel3.style.display = "none";
@@ -2432,6 +2536,11 @@
           if (materials.length === 0) {
             selectorCandidateGrid.style.display = "none";
             selectorCandidateEmpty.style.display = "block";
+            selectorCandidateEmptyMsg.textContent = selectorCtx.allowedCount === 0
+              ? "Este rol no tiene materiales asignados. Configurá el grupo de opciones en Granete."
+              : (selectorCtx.searchQuery
+                  ? "No se encontraron materiales que coincidan con la búsqueda."
+                  : "No hay materiales en esta categoría.");
             return;
           }
 
@@ -2451,7 +2560,7 @@
             if (mat.grain) {
               var grainBadge = document.createElement("span");
               grainBadge.className = "mat-card-badge-grain";
-              grainBadge.textContent = "🌲 Veta";
+              grainBadge.innerHTML = icon("grain", 11) + " Veta";
               swatch.appendChild(grainBadge);
             }
             card.appendChild(swatch);
@@ -2611,7 +2720,7 @@
             return;
           }
           var values = dims.map(function (p) { return p.defaultValue + " mm"; }).join(" × ");
-          btnRegisteredMeasures.textContent = "📐 Medidas registradas: " + values;
+          btnRegisteredMeasures.innerHTML = icon("ruler", 14) + "<span>Medidas registradas: " + values + "</span>";
           btnRegisteredMeasures.style.display = "flex";
           btnRegisteredMeasures.onclick = function () {
             registeredMeasureParams(activeLibDef).forEach(function (p) {
@@ -2635,26 +2744,26 @@
             var blocked = !!options.blocked;
 
             if (blocked) {
-              libEmptyIcon.textContent = "🔒";
+              libEmptyIcon.innerHTML = icon("lock", 28);
               libEmptyTitle.textContent = "Licencia inactiva";
               libEmptyMsg.textContent = "Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.";
               btnEmptyAction.style.display = "none";
             } else if (source === "unauthenticated") {
-              libEmptyIcon.textContent = "🔑";
+              libEmptyIcon.innerHTML = icon("key", 28);
               libEmptyTitle.textContent = "Sesión requerida";
               libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca de muebles.";
               btnEmptyAction.textContent = "Ir a Iniciar Sesión";
               btnEmptyAction.style.display = "inline-flex";
               btnEmptyAction.onclick = function () { switchTab("status"); };
             } else if (source === "error") {
-              libEmptyIcon.textContent = "⚠️";
+              libEmptyIcon.innerHTML = icon("warning", 28);
               libEmptyTitle.textContent = "Error de conexión";
               libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
               btnEmptyAction.textContent = "Revisar Estado";
               btnEmptyAction.style.display = "inline-flex";
               btnEmptyAction.onclick = function () { switchTab("status"); };
             } else {
-              libEmptyIcon.textContent = "📦";
+              libEmptyIcon.innerHTML = icon("box", 28);
               libEmptyTitle.textContent = "El taller todavía no tiene muebles";
               libEmptyMsg.textContent = "Creá muebles en la plataforma Granete para verlos e insertarlos directamente en SketchUp.";
               btnEmptyAction.style.display = "none";
@@ -3047,7 +3156,7 @@
 
           onInsertionResult: function (result) {
             btnInsert.disabled = false;
-            btnInsert.textContent = "➕ Insertar en Modelo";
+            btnInsert.innerHTML = icon("plus") + "<span>Insertar en Modelo</span>";
             if (result && result.success) {
               var detail = "";
               if (typeof result.component_count === "number" && result.component_count > 0) {
@@ -3056,7 +3165,8 @@
                   detail += " (" + result.hardware_count + " herraje" + (result.hardware_count === 1 ? "" : "s") + ")";
                 }
               }
-              showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail + ".");
+              showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail +
+                ". Quedó seleccionado: movelo a su lugar (tecla M).");
             } else {
               showToast("error", "Error: " + ((result && result.error) || "Fallo en la inserción"));
             }
@@ -3064,14 +3174,36 @@
 
           onUpdateResult: function (result) {
             btnUpdate.disabled = false;
-            btnUpdate.textContent = "💾 Actualizar Mueble";
+            btnUpdate.innerHTML = icon("save") + "<span>Actualizar Mueble</span>";
             if (result && result.success) {
               var detail = typeof result.component_count === "number" && result.component_count > 0
                 ? " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s")
                 : "";
               showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place" + detail + ".");
+              if (selectedInstance) {
+                selectedInstance.parameters = Object.assign({}, inspectorParams);
+                selectedInstance.materialChoices = Object.assign({}, inspectorMaterialChoices);
+              }
             } else {
               showToast("error", "Error: " + ((result && result.error) || "Fallo al actualizar"));
+              // Rollback in-memory inspector state to last confirmed values from selectedInstance
+              if (selectedInstance && inspectorDef) {
+                inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedInstance.parameters || {});
+                inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(inspectorDef), selectedInstance.materialChoices || {});
+                renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, function (name, val, unit) {
+                  inspectorParams[name] = val;
+                  updateInspectorSummary();
+                  validateInteractiveClient(inspectorDef, inspectorParams);
+                });
+                renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
+                  inspectorMaterialChoices, function (role, id, s) {
+                    inspectorMaterialChoices[role] = id;
+                    if (s === "project" || s === "project_default") {
+                      projectDefaultMaterials[role] = id;
+                    }
+                  }, { context: "inspector", instanceId: selectedInstance.instanceId, definitionId: selectedInstance.definitionId });
+                updateInspectorSummary();
+              }
             }
           },
 
@@ -3089,18 +3221,17 @@
             var def = instanceData.definition || catalog.find(function (d) { return d.furniture_definition_id === instanceData.definitionId; });
             inspectorDef = def || null;
             inspectorName.textContent = instanceData.name || (def ? def.name : "Mueble");
-            inspectorId.textContent = "ID: " + (instanceData.instanceId || "--");
 
             // Interactive validation reset
-            inspectorInteractiveBadge.textContent = "✓ Parámetros Válidos";
+            inspectorInteractiveBadge.textContent = "✓ Medidas válidas";
             inspectorInteractiveBadge.className = "status-badge valid";
 
             // Authoritative preflight reset (must NOT claim ready without real domain preflight)
             if (instanceData.manufacturingPreflightPassed) {
-              inspectorManufacturingBadge.textContent = "✓ Fabricación Aprobada (#347)";
+              inspectorManufacturingBadge.textContent = "✓ Aprobado para fabricación";
               inspectorManufacturingBadge.className = "status-badge passed";
             } else {
-              inspectorManufacturingBadge.textContent = "⏳ Preflight Pendiente";
+              inspectorManufacturingBadge.textContent = "Revisión técnica pendiente";
               inspectorManufacturingBadge.className = "status-badge pending";
             }
 
@@ -3118,26 +3249,41 @@
               });
 
             updateInspectorSummary();
-            switchTab("inspector");
+
+            // Preserve active tab context: do not hijack user away from library when they are browsing catalog
+            var activeTabBtn = document.querySelector(".tab-btn.active");
+            var currentTabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "library";
+            if (currentTabId === "inspector" || !activeLibDef) {
+              switchTab("inspector");
+            }
           },
 
           onMaterialChoiceApplied: function (payload) {
             if (!payload || !payload.role || !payload.materialId) return;
             var role = payload.role;
             var materialId = payload.materialId;
+            var scope = payload.scope || "furniture";
+            var isProjectScope = (scope === "project" || scope === "project_default");
 
-            var inspectorPane = document.getElementById("pane-inspector");
-            var isInspectorTab = inspectorPane && inspectorPane.classList.contains("active");
+            if (isProjectScope) {
+              projectDefaultMaterials[role] = materialId;
+            }
 
-            // If we are currently inspecting / editing a placed furniture in the model
-            if (selectedInstance && inspectorDef && (isInspectorTab || !activeLibDef)) {
+            var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedInstance && payload.instanceId === selectedInstance.instanceId);
+            var isConfiguratorTarget = payload.context === "configurator" || (!isInspectorTarget && activeLibDef);
+
+            // If the finish choice belongs to an inspected placed furniture in the model
+            if (isInspectorTarget && selectedInstance && inspectorDef && (!payload.instanceId || payload.instanceId === selectedInstance.instanceId)) {
               if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
               inspectorMaterialChoices[role] = materialId;
 
               renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
-                inspectorMaterialChoices, function (r, id) {
+                inspectorMaterialChoices, function (r, id, s) {
                   inspectorMaterialChoices[r] = id;
-                });
+                  if (s === "project" || s === "project_default") {
+                    projectDefaultMaterials[r] = id;
+                  }
+                }, { context: "inspector", instanceId: selectedInstance.instanceId, definitionId: selectedInstance.definitionId });
               updateInspectorSummary();
 
               var updatePayload = {
@@ -3148,40 +3294,58 @@
               };
 
               if (window.sketchup && window.sketchup.update_furniture) {
+                btnUpdate.disabled = true;
+                btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
                 window.sketchup.update_furniture(JSON.stringify(updatePayload));
+              } else {
+                var mat = materialById(materialId);
+                var toastMsg = isProjectScope
+                  ? "✓ Default de obra actualizado: " + (mat ? mat.name : materialId)
+                  : "✓ Acabado actualizado: " + (mat ? mat.name : materialId);
+                showToast("success", toastMsg);
               }
-
-              var mat = materialById(materialId);
-              showToast("success", "✓ Acabado actualizado: " + (mat ? mat.name : materialId));
-            } else if (activeLibDef) {
+            } else if (isConfiguratorTarget && activeLibDef) {
               // If configuring a module in the library before inserting
               if (!libMaterialChoices) libMaterialChoices = {};
               libMaterialChoices[role] = materialId;
 
-              renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id) {
+              renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id, s) {
                 libMaterialChoices[r] = id;
-              });
+                if (s === "project" || s === "project_default") {
+                  projectDefaultMaterials[r] = id;
+                }
+              }, { context: "configurator", definitionId: activeLibDef.furnitureDefinitionId || activeLibDef.furniture_definition_id });
               updateLibrarySummary();
 
               var matLib = materialById(materialId);
-              showToast("success", "✓ Acabado seleccionado: " + (matLib ? matLib.name : materialId));
+              var toastLibMsg = isProjectScope
+                ? "✓ Default de obra actualizado: " + (matLib ? matLib.name : materialId)
+                : "✓ Acabado seleccionado: " + (matLib ? matLib.name : materialId);
+              showToast("success", toastLibMsg);
+            } else if (isProjectScope) {
+              var matProj = materialById(materialId);
+              showToast("success", "✓ Default de obra actualizado: " + (matProj ? matProj.name : materialId));
             }
           }
         };
 
+        var toastTimer = null;
+
         function showToast(type, message) {
           toast.className = "toast " + type;
           toast.textContent = message;
-          setTimeout(function () {
+          if (toastTimer) clearTimeout(toastTimer);
+          toastTimer = setTimeout(function () {
             toast.className = "toast";
-          }, 4000);
+            toastTimer = null;
+          }, type === "error" ? 8000 : 4000);
         }
 
         function catalogSourceNote(source, blocked, count) {
-          if (blocked) return "🔒 Tu licencia no está activa; la biblioteca del taller quedó bloqueada.";
+          if (blocked) return "Tu licencia no está activa; la biblioteca del taller quedó bloqueada.";
           if (source === "remote") {
             return count > 0
-              ? "📚 Biblioteca del taller (servidor Granete) — " + count + " mueble" + (count === 1 ? "" : "s")
+              ? "Biblioteca del taller (servidor Granete) — " + count + " mueble" + (count === 1 ? "" : "s")
               : "El taller todavía no tiene muebles. Creá muebles en Granete y volvé a abrir la biblioteca.";
           }
           if (source === "unauthenticated") {
@@ -3190,7 +3354,7 @@
           if (source === "error") {
             return "No se pudo conectar con Granete. Revisá el servidor en la pestaña Estado e iniciá sesión de nuevo.";
           }
-          return "💾 Catálogo local (modo desarrollo)";
+          return "Catálogo local (modo desarrollo)";
         }
 
         function getDefaultParams(def) {
@@ -3257,10 +3421,10 @@
           }
 
           if (valid) {
-            inspectorInteractiveBadge.textContent = "✓ Parámetros Válidos";
+            inspectorInteractiveBadge.textContent = "✓ Parámetros válidos";
             inspectorInteractiveBadge.className = "status-badge valid";
           } else {
-            inspectorInteractiveBadge.textContent = "⚠️ Parámetro Fuera de Rango";
+            inspectorInteractiveBadge.textContent = "Parámetro fuera de rango";
             inspectorInteractiveBadge.className = "status-badge invalid";
           }
         }
@@ -3451,7 +3615,7 @@
         btnInsert.addEventListener("click", function () {
           if (!activeLibDef) return;
           btnInsert.disabled = true;
-          btnInsert.textContent = "⏳ Insertando en SketchUp…";
+          btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
 
           var payload = {
             definitionId: activeLibDef.furniture_definition_id,
@@ -3471,7 +3635,7 @@
         btnUpdate.addEventListener("click", function () {
           if (!selectedInstance) return;
           btnUpdate.disabled = true;
-          btnUpdate.textContent = "⏳ Actualizando…";
+          btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
 
           var payload = {
             instanceId: selectedInstance.instanceId,
@@ -3489,9 +3653,33 @@
           }
         });
 
+        // Destructive action guard: first click arms the button, second click
+        // within the window confirms. Undo still applies after deletion.
+        var deleteArmed = false;
+        var deleteArmTimer = null;
+
+        function resetDeleteConfirm() {
+          deleteArmed = false;
+          if (deleteArmTimer) {
+            clearTimeout(deleteArmTimer);
+            deleteArmTimer = null;
+          }
+          btnDelete.innerHTML = icon("trash") + "<span>Eliminar Mueble</span>";
+          btnDelete.setAttribute("aria-label", "Eliminar Mueble");
+        }
+
         btnDelete.addEventListener("click", function () {
+          if (!deleteArmed) {
+            deleteArmed = true;
+            btnDelete.textContent = "¿Confirmar eliminación?";
+            btnDelete.setAttribute("aria-label", "Confirmar la eliminación del mueble");
+            deleteArmTimer = setTimeout(resetDeleteConfirm, 4000);
+            return;
+          }
+          resetDeleteConfirm();
           if (window.sketchup && window.sketchup.delete_selected_furniture) {
-            window.sketchup.delete_selected_furniture();
+            var deletePayload = selectedInstance ? { instanceId: selectedInstance.instanceId } : {};
+            window.sketchup.delete_selected_furniture(JSON.stringify(deletePayload));
           } else {
             window.GraneteDialog.onSelectionChange(null);
           }
@@ -3506,7 +3694,7 @@
             return;
           }
           btnLogin.disabled = true;
-          btnLogin.textContent = "⏳ Conectando…";
+          btnLogin.textContent = "Conectando…";
           loginPassword.value = "";
           if (window.sketchup && window.sketchup.login) {
             window.sketchup.login(JSON.stringify({ email: email, password: password, serverUrl: server }));

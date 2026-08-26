@@ -106,6 +106,16 @@ class SessionProviderTest < Minitest::Test
     assert_equal 'http://taller.local:8080/api', rebooted.status['server_url']
   end
 
+  def test_session_file_is_written_atomically_with_secure_permissions
+    body = { 'token' => session_header, 'user' => { 'name' => 'Ana' }, 'license' => {} }
+    @transport.response = { 'status' => 200, 'body' => body }
+    @provider.login('a@b.c', 'secret123', 'http://taller.local:8080/api')
+
+    assert File.exist?(@store_path)
+    mode = File.stat(@store_path).mode & 0o777
+    assert_equal 0o600, mode, 'Stored session file must be chmod 0600 (owner only)'
+  end
+
   private
 
   # Unsigned JWT-shaped header: the provider only decodes the payload locally

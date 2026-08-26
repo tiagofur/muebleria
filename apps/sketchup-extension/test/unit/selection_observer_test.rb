@@ -44,6 +44,9 @@ class SelectionObserverTest < Minitest::Test
     left_panel = main_group.entities.groups.first
 
     @model.selection.add_observer(@observer)
+    # Insert leaves the new furniture selected (placement assist); picking a
+    # child component implies replacing that selection, as a viewport click does.
+    @model.selection.clear
     @model.selection.add(left_panel)
 
     refute_nil @last_selected_data

@@ -3902,7 +3902,7 @@
         "Sesión persistida en ~/Library/Application Support/Granete (no en preferencias de SketchUp)",
         "Test de paridad TS (golden) y Go (embed == contracts) del catálogo compartido"
       ],
-      "status": "implemented",
+      "status": "done",
       "evidence": "In-host smoke SketchUp 2026.2/macOS contra backend local: 11/11 pasos OK (login pro, catálogo remoto, insert de definición remota, metadata, sesión persistente, bloqueo por licencia); rake verify 54+3 tests; go test ./... verde; pnpm domain tests 1092+1",
       "tags": [
         "sketchup",
@@ -3928,7 +3928,7 @@
         "El builder pinta cada componente con materiales de SketchUp namespaced (Granete · nombre) con el color resuelto; conteos board/hardware/total en el resultado y toasts del diálogo",
         "Una definición remota cuya composición no resuelve falla con error accionable; módulos legados apilan todas sus piezas"
       ],
-      "status": "implemented",
+      "status": "done",
       "evidence": "go test ./... verde (engine layout: composición completa, herrajes world-space, agregados, overrides de cotas, elecciones de material 422; api: endpoint auth/licencia/404/400/422, conteos y materialRoles del catálogo); bundle exec rake verde (rubocop + 97 unit + boundary 687 assertions: layout con choices, materials passthrough, reenvío de materialChoices, pintura de materiales); pnpm vitest ModuleLibraryPanel 11/11.",
       "tags": [
         "sketchup",

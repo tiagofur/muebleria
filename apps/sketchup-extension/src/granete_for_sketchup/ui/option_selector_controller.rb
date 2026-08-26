@@ -101,8 +101,15 @@ module Granete
           role = payload['role'] || payload[:role]
           material_id = payload['materialId'] || payload[:materialId] || payload['material_id'] || payload[:material_id]
           scope = payload['scope'] || payload[:scope] || 'furniture'
+          context = payload['context'] || payload[:context]
 
-          @on_apply&.call(role, material_id, scope)
+          if @on_apply
+            if @on_apply.arity == 3
+              @on_apply.call(role, material_id, scope)
+            else
+              @on_apply.call(role, material_id, scope, context)
+            end
+          end
           close
         rescue StandardError => e
           @logger&.error('option_selector_apply_failed', error: e)

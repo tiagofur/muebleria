@@ -13,7 +13,11 @@ module Granete
         end
 
         def read(target)
-          model = Sketchup.respond_to?(:active_model) ? Sketchup.active_model : nil
+          model = if target.respond_to?(:model) && target.model
+                    target.model
+                  elsif Sketchup.respond_to?(:active_model)
+                    Sketchup.active_model
+                  end
           return nil unless model
 
           @factory.call(model).read(target)
@@ -109,8 +113,10 @@ module Granete
               active_model, target_entity, definition, params,
               resolved_layout: layout, material_choices: choices
             )
-          else
+          elsif active_model.nil?
             mock_result(definition['name'], payload['parameters'], payload['instanceId'])
+          else
+            { 'success' => false, 'error' => 'Instancia no encontrada en el modelo' }
           end
         end
 
@@ -118,14 +124,15 @@ module Granete
           return nil unless active_model
 
           first = active_model.selection&.first
-          if first && instance_id
-            meta = @metadata_store_factory.call(active_model).read(first)
-            return first if meta&.dig('identity', 'instanceRef') == instance_id
+          if instance_id
+            if first
+              meta = @metadata_store_factory.call(active_model).read(first)
+              return first if meta&.dig('identity', 'instanceRef') == instance_id
+            end
+            return search_entities_for_instance(instance_id)
           end
 
-          return first if first && instance_id.nil?
-
-          search_entities_for_instance(instance_id) || first
+          first
         end
 
         def search_entities_for_instance(instance_id)
@@ -169,34 +176,151 @@ module Granete
       module OptionSelectorBridge
         def handle_open_material_selector(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
-          role = payload['role'] || payload[:role]
-          role_name = payload['roleName'] || payload[:roleName] || payload['role_name'] || payload[:role_name]
-          current_material_id = payload['currentMaterialId'] || payload[:currentMaterialId] ||
-                                payload['current_material_id'] || payload[:current_material_id]
-          allowed_materials = @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : []
-          categories = if @catalog_provider.respond_to?(:all_material_categories)
-                         @catalog_provider.all_material_categories
-                       else
-                         []
-                       end
+          params = extract_selector_params(payload)
 
           option_selector.show_selector(
-            role: role,
-            role_name: role_name,
-            current_material_id: current_material_id,
-            allowed_materials: allowed_materials,
-            categories: categories,
+            role: params[:role],
+            role_name: params[:role_name],
+            current_material_id: params[:current_material_id],
+            allowed_materials: selector_allowed_materials(params),
+            categories: selector_categories,
             media: build_media_payload,
             on_apply: lambda do |selected_role, selected_material_id, scope|
               execute_bridge(dialog, 'onMaterialChoiceApplied', {
                                'role' => selected_role,
                                'materialId' => selected_material_id,
-                               'scope' => scope
+                               'scope' => scope,
+                               'context' => params[:context],
+                               'instanceId' => params[:instance_id],
+                               'definitionId' => params[:definition_id]
                              })
             end
           )
         rescue StandardError => e
           @logger&.error('open_material_selector_failed', error: e)
+        end
+
+        private
+
+        def extract_selector_params(payload)
+          mat_id = payload['currentMaterialId'] || payload[:currentMaterialId] ||
+                   payload['current_material_id'] || payload[:current_material_id]
+          allowed_ids = payload['allowedMaterialIds'] || payload[:allowedMaterialIds] ||
+                        payload['optionIds'] || payload[:optionIds]
+          {
+            role: payload['role'] || payload[:role],
+            role_name: payload['roleName'] || payload[:roleName] || payload['role_name'] || payload[:role_name],
+            current_material_id: mat_id,
+            context: payload['context'] || payload[:context],
+            instance_id: payload['instanceId'] || payload[:instanceId],
+            definition_id: payload['definitionId'] || payload[:definitionId],
+            allowed_material_ids: allowed_ids
+          }
+        end
+
+        def selector_allowed_materials(params)
+          all = @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : []
+          filter_ids = resolve_allowed_material_ids(params)
+          return all if filter_ids.nil? || filter_ids.empty?
+
+          all.select do |mat|
+            mat_id = mat['materialId'] || mat[:materialId] || mat['id'] || mat[:id]
+            filter_ids.include?(mat_id)
+          end
+        end
+
+        def resolve_allowed_material_ids(params)
+          if params[:allowed_material_ids].is_a?(Array) && !params[:allowed_material_ids].empty?
+            return params[:allowed_material_ids]
+          end
+
+          return nil unless params[:definition_id] && params[:role] && @catalog_provider.respond_to?(:find_definition)
+
+          definition = @catalog_provider.find_definition(params[:definition_id])
+          return nil unless definition
+
+          roles = definition['materialRoles'] || definition[:materialRoles] || []
+          role_entry = roles.find { |r| (r['role'] || r[:role]) == params[:role] }
+          role_entry ? (role_entry['optionIds'] || role_entry[:optionIds]) : nil
+        end
+
+        def selector_categories
+          @catalog_provider.respond_to?(:all_material_categories) ? @catalog_provider.all_material_categories : []
+        end
+      end
+
+      # Observes SketchUp application events (new, open, activate model) to re-bind
+      # selection observers when the user switches documents.
+      class AppModelObserver < (defined?(::Sketchup::AppObserver) ? ::Sketchup::AppObserver : Object)
+        def initialize(on_model_change:)
+          super() if defined?(::Sketchup::AppObserver)
+          @on_model_change = on_model_change
+        end
+
+        def onNewModel(model)
+          @on_model_change.call(model)
+        end
+
+        def onOpenModel(model)
+          @on_model_change.call(model)
+        end
+
+        def onActivateModel(model)
+          @on_model_change.call(model)
+        end
+      end
+
+      # Selection and model lifecycle observer bridge for keeping the dialog in sync with SketchUp.
+      module ObserverBridge
+        def handle_selection_change(instance_data)
+          return unless @dialog&.visible?
+
+          execute_bridge(@dialog, 'onSelectionChange', instance_data)
+        rescue StandardError => e
+          @logger.error('selection_change_failed', error: e)
+        end
+
+        def check_current_selection(dialog)
+          first = (@observed_model || active_model)&.selection&.first
+          data = @selection_observer.inspect_entity(first)
+          execute_bridge(dialog, 'onSelectionChange', data)
+        end
+
+        def attach_selection_observer
+          @observed_model = active_model
+          @observed_model&.selection&.add_observer(@selection_observer)
+          attach_app_observer
+        end
+
+        def detach_selection_observer
+          @observed_model&.selection&.remove_observer(@selection_observer)
+          @observed_model = nil
+          detach_app_observer
+        end
+
+        def rebind_model(new_model)
+          return if @observed_model.equal?(new_model)
+
+          @observed_model&.selection&.remove_observer(@selection_observer)
+          @observed_model = new_model
+          @observed_model&.selection&.add_observer(@selection_observer)
+          @builder_model = nil
+          check_current_selection(@dialog) if @dialog&.visible?
+        end
+
+        def attach_app_observer
+          return unless defined?(::Sketchup) && ::Sketchup.respond_to?(:add_observer)
+          return if @app_observer
+
+          @app_observer = AppModelObserver.new(on_model_change: method(:rebind_model))
+          ::Sketchup.add_observer(@app_observer)
+        end
+
+        def detach_app_observer
+          return unless defined?(::Sketchup) && ::Sketchup.respond_to?(:remove_observer) && @app_observer
+
+          ::Sketchup.remove_observer(@app_observer)
+          @app_observer = nil
         end
       end
 
@@ -204,6 +328,7 @@ module Granete
         include SessionBridge
         include FurnitureBridge
         include OptionSelectorBridge
+        include ObserverBridge
 
         attr_reader :selection_observer
 
@@ -219,6 +344,8 @@ module Granete
           @model_builder = nil
           @session = session
           @dialog = nil
+          @observed_model = nil
+          @app_observer = nil
 
           @selection_observer = Observers::SelectionObserver.new(
             metadata_store: metadata_store || ActiveModelMetadataStore.new(@metadata_store_factory),
@@ -273,6 +400,7 @@ module Granete
             @builder_model = model
             @model_builder = Model::FurnitureBuilder.new(
               metadata_store: @metadata_store_factory.call(model),
+              asset_loader: Assets::AssetLoader.new,
               texture_cache: texture_cache
             )
           end
@@ -307,7 +435,7 @@ module Granete
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
-          dialog.add_action_callback('delete_selected_furniture') { handle_delete(dialog) }
+          dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           dialog.add_action_callback('login') { |_c, p| handle_login(dialog, p) }
           dialog.add_action_callback('logout') { handle_logout(dialog) }
@@ -370,37 +498,34 @@ module Granete
           nil
         end
 
-        def handle_delete(dialog)
-          target = active_model&.selection&.first
-          if target
-            active_model.start_operation('Eliminar Mueble', true)
-            active_model.active_entities.erase_entities([target])
-            active_model.commit_operation
+        def handle_delete(dialog, raw_payload = nil)
+          payload = if raw_payload.is_a?(String) && !raw_payload.strip.empty?
+                      JSON.parse(raw_payload)
+                    else
+                      raw_payload || {}
+                    end
+          instance_id = payload['instanceId'] || payload[:instanceId]
+
+          target = find_target_furniture_entity(instance_id)
+          if target && active_model
+            store = @metadata_store_factory.call(active_model)
+            meta = store.read(target)
+            if meta && meta['identity']
+              active_model.start_operation('Eliminar Mueble', true)
+              active_model.active_entities.erase_entities([target])
+              active_model.commit_operation
+              @logger.info('furniture_deleted', instance_id: instance_id || meta.dig('identity', 'instanceRef'))
+            else
+              @logger.warn('furniture_delete_rejected_no_metadata', target_class: target.class.name)
+            end
+          else
+            @logger.warn('furniture_delete_target_not_found', instance_id: instance_id)
           end
 
           execute_bridge(dialog, 'onSelectionChange', nil)
-        end
-
-        def handle_selection_change(instance_data)
-          return unless @dialog&.visible?
-
-          execute_bridge(@dialog, 'onSelectionChange', instance_data)
         rescue StandardError => e
-          @logger.error('selection_change_failed', error: e)
-        end
-
-        def check_current_selection(dialog)
-          first = active_model&.selection&.first
-          data = @selection_observer.inspect_entity(first)
-          execute_bridge(dialog, 'onSelectionChange', data)
-        end
-
-        def attach_selection_observer
-          active_model&.selection&.add_observer(@selection_observer)
-        end
-
-        def detach_selection_observer
-          active_model&.selection&.remove_observer(@selection_observer)
+          @logger.error('furniture_delete_failed', error: e)
+          execute_bridge(dialog, 'onSelectionChange', nil)
         end
 
         def active_model

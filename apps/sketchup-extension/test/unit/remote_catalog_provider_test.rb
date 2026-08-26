@@ -247,20 +247,27 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal '/furniture/definitions/abc/layout', transport.last_payload['path']
   end
 
-  def test_resolved_layout_returns_nil_on_remote_failures
-    [401, 403, 500].each do |status|
+  def test_resolved_layout_raises_on_remote_failures
+    [401, 403, 422, 500].each do |status|
       provider = build_provider(status: status, body: { 'error' => 'boom' })
-      assert_nil provider.resolved_layout('abc', {}), "status #{status} must not resolve a layout"
+      assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError,
+                    "status #{status} must raise LayoutResolutionError") do
+        provider.resolved_layout('abc', {})
+      end
     end
 
     transport = FakeTransport.new(nil, error: Granete::SketchUpExtension::Transport::RequestError.new('down'))
     provider = build_provider(transport: transport)
-    assert_nil provider.resolved_layout('abc', {})
+    assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      provider.resolved_layout('abc', {})
+    end
   end
 
   def test_resolved_layout_rejects_bodies_without_components
     provider = build_provider(status: 200, body: { 'error' => 'unexpected' })
-    assert_nil provider.resolved_layout('abc', {})
+    assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      provider.resolved_layout('abc', {})
+    end
   end
 
   def test_resolved_layout_never_falls_back_to_a_local_guess
@@ -270,9 +277,11 @@ class RemoteCatalogProviderTest < Minitest::Test
       auth_provider: FakeAuth.new, fallback_provider: static
     )
 
-    # Granete owns resolution truth: a failed resolution is nil (generic
-    # authoring path), never a locally composed layout.
-    assert_nil provider.resolved_layout('kitchen-base-standard', {})
+    # Granete owns resolution truth: a failed resolution raises LayoutResolutionError,
+    # never a locally composed layout.
+    assert_raises(Granete::SketchUpExtension::Library::LayoutResolutionError) do
+      provider.resolved_layout('kitchen-base-standard', {})
+    end
   end
 
   def test_static_providers_do_not_resolve_layouts
@@ -333,6 +342,29 @@ class RemoteCatalogProviderTest < Minitest::Test
     static = Granete::SketchUpExtension::Library::StaticCatalogProvider.new
     assert_equal [], static.all_materials
     assert_equal [], static.all_material_categories
+  end
+
+  def test_handles_conditional_etag_and_304_not_modified
+    transport = FakeTransport.new(
+      {
+        'status' => 200,
+        'headers' => { 'etag' => '"workshop-v1"' },
+        'body' => CONTRACT
+      }
+    )
+    provider = build_provider(transport: transport)
+
+    # Initial request fetches and caches contract + etag
+    defs = provider.all_definitions
+    assert_equal 2, defs.length
+    assert_equal 1, transport.requests
+
+    # Second request with force: true sends If-None-Match header and handles 304
+    transport.response = { 'status' => 304, 'headers' => { 'etag' => '"workshop-v1"' }, 'body' => '' }
+    defs2 = provider.all_definitions(force: true)
+    assert_equal 2, defs2.length
+    assert_equal 2, transport.requests
+    assert_equal({ 'If-None-Match' => '"workshop-v1"' }, transport.last_payload['headers'])
   end
 
   private

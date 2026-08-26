@@ -39,7 +39,7 @@ class OwnershipTest < Minitest::Test
     resolvedParts
     toolpath
   ].freeze
-  ALLOWED_REQUIRES = %w[base64 extensions fileutils json net/http sketchup time uri].freeze
+  ALLOWED_REQUIRES = %w[base64 digest extensions fileutils json net/http sketchup time uri].freeze
   # Matches require('x'), require "x", Kernel.require 'x', require_relative
   # 'x', gem 'x', and ::require 'x' — not just the plain single-line form.
   RUNTIME_DEPENDENCY_PATTERN = /

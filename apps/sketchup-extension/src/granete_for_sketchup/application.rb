@@ -21,7 +21,10 @@ module Granete
           status_provider: method(:connection_status),
           metadata_store_factory: method(:metadata_store),
           catalog_provider: catalog_provider || Library::RemoteCatalogProvider.new(
-            transport: @transport, auth_provider: @auth_provider, logger: logger
+            transport: @transport,
+            auth_provider: @auth_provider,
+            fallback_provider: Library::StaticCatalogProvider.new,
+            logger: logger
           ),
           session: @session
         )

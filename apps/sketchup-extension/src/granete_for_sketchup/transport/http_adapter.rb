@@ -48,6 +48,7 @@ module Granete
           response = perform(http, request)
           {
             'status' => response.code.to_i,
+            'headers' => response.each_header.to_h,
             'body' => parse_body(response)
           }
         rescue NotConfiguredError
@@ -57,7 +58,16 @@ module Granete
           raise RequestError, "No se pudo conectar con el servidor de Granete: #{e.message}"
         end
 
+        LOCAL_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
+
         private
+
+        def local_host?(host)
+          return false if host.nil?
+
+          h = host.downcase
+          LOCAL_HOSTS.include?(h) || h.end_with?('.local', '.internal', '.localhost')
+        end
 
         def normalize_base_url(value)
           return nil if value.nil? || value.strip.empty?
@@ -67,6 +77,12 @@ module Granete
           trimmed = "#{trimmed}/api" unless trimmed.end_with?('/api')
           uri = URI.parse(trimmed)
           return nil unless uri.is_a?(URI::HTTP) && !uri.host.nil?
+
+          # Enforce HTTPS on remote/internet endpoints to protect credentials in transit.
+          if uri.scheme == 'http' && !local_host?(uri.host)
+            uri.scheme = 'https'
+            trimmed = uri.to_s
+          end
 
           trimmed.sub(%r{/\z}, '')
         rescue URI::InvalidURIError
@@ -91,6 +107,11 @@ module Granete
           request = Net::HTTP.const_get(method.capitalize).new(uri.request_uri)
           request['Accept'] = 'application/json'
           request['Authorization'] = authorization_header if authorization_header
+          if payload['headers'].is_a?(Hash)
+            payload['headers'].each do |k, v|
+              request[k.to_s] = v.to_s
+            end
+          end
           if payload['body']
             request['Content-Type'] = 'application/json'
             request.body = JSON.generate(payload['body'])

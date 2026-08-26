@@ -6,6 +6,15 @@ require 'uri'
 module Granete
   module SketchUpExtension
     module Library
+      class LayoutResolutionError < StandardError
+        attr_reader :status
+
+        def initialize(message, status: nil)
+          super(message)
+          @status = status
+        end
+      end
+
       class BaseCatalogProvider
         def all_definitions
           raise NotImplementedError
@@ -174,49 +183,39 @@ module Granete
           @last_source = SOURCE_UNAUTHENTICATED
           @last_license_blocked = false
           @cached_contract = nil
+          @cached_etag = nil
         end
 
-        def all_definitions
-          remote = fetch_contract
+        def all_definitions(force: false)
+          remote = fetch_contract(force: force)
           return translate_definitions(remote) if remote
 
           serve_from_fallback(&:all_definitions) || []
         end
 
-        def all_presets
-          remote = fetch_contract
+        def all_presets(force: false)
+          remote = fetch_contract(force: force)
           return remote.fetch('presets', []) if remote
 
           serve_from_fallback(&:all_presets) || []
         end
 
-        # Category tree of the workshop catalog (contract shape: categoryId,
-        # name, parentId, sortOrder) for cascading L1/L2/L3 filters; empty for
-        # providers without a workshop category tree.
-        def all_categories
-          remote = fetch_contract
+        def all_categories(force: false)
+          remote = fetch_contract(force: force)
           return remote.fetch('categories', []) if remote
 
           serve_from_fallback(&:all_categories) || []
         end
 
-        # Workshop material categories tree (id, name, parentId, sortOrder)
-        # for hierarchical material filtering; empty for providers without
-        # material categories.
-        def all_material_categories
-          remote = fetch_contract
+        def all_material_categories(force: false)
+          remote = fetch_contract(force: force)
           return remote.fetch('materialCategories', []) if remote
 
           serve_from_fallback(&:all_material_categories) || []
         end
 
-        # Workshop board materials (contract shape: materialId, code, name,
-        # manufacturer, categoryId, previewColor, imageUrl, previewTextureUrl,
-        # previewTextureTileWidthMm, previewTextureTileLengthMm,
-        # previewRoughness, previewMetalness, previewClearcoat, thicknessMm, grain)
-        # for client material selectors; empty for providers without a workshop material list.
-        def all_materials
-          remote = fetch_contract
+        def all_materials(force: false)
+          remote = fetch_contract(force: force)
           return remote.fetch('materials', []) if remote
 
           serve_from_fallback(&:all_materials) || []
@@ -241,15 +240,16 @@ module Granete
           response = @transport.request({ 'method' => 'GET', 'path' => path },
                                         authorization_header: @auth_provider.authorization_header)
           interpret_layout_response(response)
-        rescue Transport::RequestError, Auth::NotConfiguredError => e
+        rescue Transport::RequestError => e
           @logger&.info('layout_remote_failed', error: e)
-          nil
+          raise LayoutResolutionError, "Error de conexión al resolver composición: #{e.message}"
         end
 
         # Drops the cached contract so the next read re-fetches with the
         # current session (used right after login/logout).
         def reset
           @cached_contract = nil
+          @cached_etag = nil
           @last_source = SOURCE_UNAUTHENTICATED
           @last_license_blocked = false
           nil
@@ -257,16 +257,20 @@ module Granete
 
         private
 
-        def fetch_contract
+        def fetch_contract(force: false)
           unless @transport&.configured? && @auth_provider&.configured?
             mark_unavailable(SOURCE_UNAUTHENTICATED)
             return nil
           end
-          return @cached_contract if @cached_contract
+          return @cached_contract if @cached_contract && !force
 
           @auth_provider.refresh_if_needed if @auth_provider.respond_to?(:refresh_if_needed)
-          response = @transport.request({ 'method' => 'GET', 'path' => '/furniture/definitions' },
-                                        authorization_header: @auth_provider.authorization_header)
+          headers = {}
+          headers['If-None-Match'] = @cached_etag if @cached_etag
+          response = @transport.request(
+            { 'method' => 'GET', 'path' => '/furniture/definitions', 'headers' => headers },
+            authorization_header: @auth_provider.authorization_header
+          )
           interpret_response(response)
         rescue Transport::RequestError, Auth::NotConfiguredError => e
           mark_unavailable(SOURCE_ERROR)
@@ -279,7 +283,12 @@ module Granete
         def interpret_response(response)
           case response['status']
           when 200
-            cache_contract(response['body'])
+            etag = response.dig('headers', 'etag')
+            cache_contract(response['body'], etag: etag)
+          when 304
+            @last_source = SOURCE_REMOTE
+            @last_license_blocked = false
+            @cached_contract
           when 401
             mark_unavailable(SOURCE_UNAUTHENTICATED)
             @logger&.info('catalog_session_invalid')
@@ -296,7 +305,7 @@ module Granete
           end
         end
 
-        def cache_contract(body)
+        def cache_contract(body, etag: nil)
           unless body.is_a?(Hash) && body['definitions'].is_a?(Hash)
             mark_unavailable(SOURCE_ERROR)
             @logger&.info('catalog_remote_invalid_body')
@@ -305,6 +314,7 @@ module Granete
 
           @last_source = SOURCE_REMOTE
           @last_license_blocked = false
+          @cached_etag = etag
           @cached_contract = body
         end
 
@@ -324,21 +334,31 @@ module Granete
           result
         end
 
-        # Maps a layout response onto the layout body (or nil on any failure).
+        # Maps a layout response onto the layout body or raises LayoutResolutionError.
         def interpret_layout_response(response)
-          case response['status']
+          status = response['status']
+          case status
           when 200
             body = response['body']
-            body.is_a?(Hash) && body['components'].is_a?(Array) ? body : nil
+            unless body.is_a?(Hash) && body['components'].is_a?(Array)
+              raise LayoutResolutionError.new('Respuesta de composición inválida del servidor', status: 200)
+            end
+
+            body
           when 401
             @logger&.info('layout_session_invalid')
-            nil
+            raise LayoutResolutionError.new('Sesión inválida o expirada', status: 401)
           when 403
             @logger&.info('layout_license_blocked')
-            nil
+            raise LayoutResolutionError.new('Licencia requerida para composición 3D', status: 403)
+          when 422
+            msg = response.dig('body', 'error') || 'Composición no resoluble para los parámetros seleccionados'
+            @logger&.info('layout_resolution_unprocessable', error: msg)
+            raise LayoutResolutionError.new(msg, status: 422)
           else
-            @logger&.info('layout_remote_unavailable', status: response['status'])
-            nil
+            msg = response.dig('body', 'error') || "Error del servidor al resolver composición (HTTP #{status})"
+            @logger&.info('layout_remote_unavailable', status: status)
+            raise LayoutResolutionError.new(msg, status: status)
           end
         end
 
@@ -349,8 +369,6 @@ module Granete
 
             "#{name}=#{URI.encode_www_form_component(value.to_s)}"
           end
-          # Board choices ride as choice.ROLE=<materialId> — GET-only surface
-          # for the read-only extension token.
           choices.each do |role, material_id|
             next if role.to_s.empty? || material_id.to_s.empty?
 
@@ -359,25 +377,20 @@ module Granete
           segments.empty? ? '' : "?#{segments.join('&')}"
         end
 
-        # Single translation point from the shared contract (camelCase) to the
-        # internal dialog/builder shape (snake_case definition, camelCase
-        # parameters preserved as-is).
         def translate_definitions(contract)
-          contract.fetch('definitions', {}).map do |_id, definition|
+          contract.fetch('definitions', {}).map do |_id, defn|
             item = {
-              'furniture_definition_id' => definition['furnitureDefinitionId'],
-              'code' => definition['code'],
-              'name' => definition['name'],
-              'category' => definition['category'],
-              'version' => definition['version'],
-              'description' => definition['description'],
-              'parameters' => translate_parameters(definition['parameters'])
+              'furniture_definition_id' => defn['furnitureDefinitionId'],
+              'code' => defn['code'], 'name' => defn['name'],
+              'category' => defn['category'], 'version' => defn['version'],
+              'description' => defn['description'],
+              'parameters' => translate_parameters(defn['parameters'])
             }
-            image_url = definition['imageUrl'] || definition['thumbnailUrl'] || definition['previewUrl']
+            image_url = defn['imageUrl'] || defn['thumbnailUrl'] || defn['previewUrl']
             item['imageUrl'] = image_url if image_url
-            item['categoryId'] = definition['categoryId'] if definition['categoryId']
-            ESTIMATED_COUNT_KEYS.each { |key| item[key] = definition[key] if definition[key] }
-            item['materialRoles'] = definition['materialRoles'] if definition['materialRoles'].is_a?(Array)
+            item['categoryId'] = defn['categoryId'] if defn['categoryId']
+            ESTIMATED_COUNT_KEYS.each { |key| item[key] = defn[key] if defn[key] }
+            item['materialRoles'] = defn['materialRoles'] if defn['materialRoles'].is_a?(Array)
             item
           end
         end
@@ -385,13 +398,10 @@ module Granete
         def translate_parameters(parameters)
           (parameters || []).map do |param|
             translated = {
-              'name' => param['name'],
-              'label' => param['label'],
-              'type' => param['type'],
-              'defaultValue' => param['defaultValue']
+              'name' => param['name'], 'label' => param['label'],
+              'type' => param['type'], 'defaultValue' => param['defaultValue']
             }
-            %w[min max step unit].each { |key| translated[key] = param[key] unless param[key].nil? }
-            translated['options'] = param['options'] if param['options']
+            %w[min max step unit options].each { |k| translated[k] = param[k] unless param[k].nil? }
             translated
           end
         end

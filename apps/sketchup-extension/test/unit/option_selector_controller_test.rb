@@ -19,7 +19,7 @@ class OptionSelectorControllerTest < Minitest::Test
       role: 'FRENTES',
       role_name: 'Frentes',
       current_material_id: 'mat-01',
-      allowed_materials: [{ 'id' => 'mat-01', 'name' => 'Roble' }],
+      allowed_materials: [{ 'materialId' => 'mat-01', 'name' => 'Roble' }],
       categories: [{ 'id' => 'cat-01', 'name' => 'Maderas' }]
     )
 
@@ -42,7 +42,7 @@ class OptionSelectorControllerTest < Minitest::Test
       role: 'INTERIOR',
       role_name: 'Interiores',
       current_material_id: 'mat-white',
-      allowed_materials: [{ 'id' => 'mat-white', 'name' => 'Blanco' }],
+      allowed_materials: [{ 'materialId' => 'mat-white', 'name' => 'Blanco' }],
       categories: [],
       on_apply: lambda do |role, material_id, scope|
         applied_result = { role: role, material_id: material_id, scope: scope }
@@ -74,5 +74,24 @@ class OptionSelectorControllerTest < Minitest::Test
     assert @controller.open?
     dialog.callbacks.fetch('close_selector').call(dialog)
     refute @controller.open?
+  end
+
+  def test_html_resource_contains_accessibility_and_keyboard_navigation_semantics
+    html_path = @controller.send(:default_resource_path)
+    assert File.exist?(html_path), 'material_selector.html must exist'
+    html = File.read(html_path, encoding: 'UTF-8')
+
+    # ARIA roles and tabindex
+    assert_includes html, 'role="button"'
+    assert_includes html, 'tabindex="0"'
+    assert_includes html, 'aria-pressed='
+    assert_includes html, ':focus-visible'
+
+    # Keyboard navigation
+    assert_includes html, "e.key === 'Escape'"
+    assert_includes html, "e.key === 'ArrowRight'"
+    assert_includes html, "e.key === 'ArrowLeft'"
+    assert_includes html, "e.key === 'ArrowDown'"
+    assert_includes html, "e.key === 'ArrowUp'"
   end
 end

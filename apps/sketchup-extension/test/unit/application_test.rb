@@ -26,8 +26,12 @@ class ApplicationTest < Minitest::Test
       true
     end
 
-    def request(*)
-      { 'status' => 200, 'body' => WORKSHOP_CONTRACT }
+    def request(req = {}, *)
+      if req['path'].to_s.include?('/layout')
+        { 'status' => 200, 'body' => { 'components' => [], 'hardware' => [] } }
+      else
+        { 'status' => 200, 'body' => WORKSHOP_CONTRACT }
+      end
     end
   end
 
@@ -180,5 +184,16 @@ class ApplicationTest < Minitest::Test
     refute_nil selection_script, 'selecting inserted furniture must reach the dialog'
     assert_includes selection_script, '"type":"furniture"'
     assert_includes selection_script, '"definitionId":"kitchen-base-standard"'
+  end
+
+  def test_offline_application_serves_local_fallback_definitions
+    @application.start
+    dialog = @application.open_dialog
+    dialog.callbacks.fetch('get_catalog').call(nil)
+
+    catalog_script = dialog.executed_scripts.reverse.find { |s| s.include?('setCatalog') }
+    refute_nil catalog_script, 'get_catalog must respond with catalog definitions'
+    assert_includes catalog_script, 'kitchen-base-standard'
+    assert_includes catalog_script, 'Gabinete Base Estándar'
   end
 end

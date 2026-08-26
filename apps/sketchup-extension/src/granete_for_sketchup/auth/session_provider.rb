@@ -185,10 +185,16 @@ module Granete
         def write_value(key, value)
           @store[key] = value
           dirname = File.dirname(@store_path)
-          FileUtils.mkdir_p(dirname)
-          File.write(@store_path, JSON.generate(@store))
+          FileUtils.mkdir_p(dirname, mode: 0o700)
+          tmp_path = "#{@store_path}.tmp.#{Process.pid}.#{rand(10_000)}"
+          File.open(tmp_path, 'w', 0o600) do |f|
+            f.write(JSON.generate(@store))
+          end
+          File.chmod(0o600, tmp_path)
+          File.rename(tmp_path, @store_path)
           true
         rescue SystemCallError, IOError => e
+          FileUtils.rm_f(tmp_path) if tmp_path && File.exist?(tmp_path)
           @logger&.error('session_store_write_failed', error: e)
           false
         end

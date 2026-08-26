@@ -1066,3 +1066,125 @@
   flex-direction: column;
   gap: var(--space-1);
 }
+
+/* ── Acabados por rol: bloque resumido + entrada al selector visual ─────── */
+
+.spatial-studio__finish-role {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+}
+
+.spatial-studio__finish-role-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.spatial-studio__finish-role-title {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold, 600);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.spatial-studio__finish-role-open {
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--brand-500);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold, 600);
+  padding: var(--space-1) var(--space-2);
+  min-height: var(--touch-min);
+  cursor: pointer;
+}
+
+.spatial-studio__finish-role-open:hover:not(:disabled) {
+  background: var(--surface-selected);
+}
+
+.spatial-studio__finish-role-open:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.spatial-studio__finish-role-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  font: inherit;
+  text-align: left;
+  min-height: var(--touch-min);
+  cursor: pointer;
+}
+
+.spatial-studio__finish-role-preview:hover:not(:disabled) {
+  border-color: var(--border-default);
+}
+
+.spatial-studio__finish-role-preview:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spatial-studio__finish-role-preview:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.spatial-studio__finish-role-swatch {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background-size: cover;
+  background-position: center;
+  background-color: var(--surface-hover);
+}
+
+.spatial-studio__finish-role-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.spatial-studio__finish-role-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold, 600);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spatial-studio__finish-role-meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spatial-studio__finish-role-inherit {
+  flex-shrink: 0;
+  padding: 0 var(--space-1);
+  border-radius: 9999px;
+  background: var(--surface-selected);
+  color: var(--brand-500);
+  font-size: var(--text-xs);
+}
