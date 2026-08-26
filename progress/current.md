@@ -1,21 +1,49 @@
 # Sesión
 
-**Feature en curso:** F169 — #325 multi-org core: schema, memberships, auditoría y backfill — inicio 2026-08-26
-**Siguiente activa:** F170 (auth contexto org) → F171 (tests aislamiento) → F172 (#326) → F173 (#327) → F174 (#412 deployment VPS)
-**Rama:** `feat/325-multi-organization-core`
+**Feature en curso:** F170 — #325 auth con contexto de organización — F170a completo (commit 94a8674); **F170b pendiente** (ver abajo)
+**Rama:** `feat/325-multi-organization-core` (base: `feat/366-granete-app-ids-p4`)
 
-## Plan de la ola multi-org (aprobado 2026-08-26)
+## Estado de la ola multi-org (2026-08-26)
 
-Decisiones en `docs/adr/0004-multi-organization-tenancy.md`: tenancy row-level
-con `organization_id` (mismo modelo interno que monday.com; subdominio por
-taller queda habilitado por slug + auth por header, se hace post-piloto),
-catálogo base clonado por taller, licencia por organización, memberships con
-`roles[]` múltiples (unión de permisos — resuelve al "hace todo" de talleres
-chicos), `users.platform_admin` + sesión de soporte auditada (entrar a taller
-con razón + banner + actor real, sin suplantar usuarios), auditoría de
-seguridad nueva (`security_audit_events`), #327 con columnas
-sales/manufacturing org + reglas same-org ahora y red fábrica↔tienda cuando
-exista caso real. Issue de deployment: #412.
+Completado y verificado (`go test ./...` verde):
+
+- **F169 (commit 428df6c):** migraciones 000080–000085 — organizations,
+  memberships (roles[] multi-rol), invitations, security_audit_events,
+  users.platform_admin; backfill determinista a org inicial
+  (`00000000-0000-0000-0000-000000000001`, slug `inicial`, licencia más fuerte
+  sube a la org); organization_id en 47 tablas con UNIQUE por org para códigos
+  de catálogo/numeradores; workshop_settings por org; user_sectors scopeado.
+  **DEFAULT transitional** a la org inicial en organization_id (documentado).
+  Tests: backfill desde schema legacy, down migrations reversibles,
+  códigos repetidos entre orgs, DB fresca.
+- **F170a (commit 94a8674):** JWT v2 con org/roles[]/platform_admin (invalida
+  tokens previos, re-login único); login resuelve membresías (hint ?org=slug,
+  auto-select single, selection_required + `/api/auth/select-org` para multi);
+  AuthMiddleware re-valida membresía/org viva por request (revocación y
+  suspensión cortan de inmediato); auditoría login_success/login_failed;
+  cmd/admin create-platform-admin + grant-membership; puentes approve/role →
+  membership. Tokens sin org caen a users.role (transicional).
+
+## F170b — siguiente sesión (en orden)
+
+1. **Sweep RBAC roles[] (unión):** `RoleCanX(role)` → semántica unión sobre
+   `claims.Roles` en rbac.go + rbac.ts (133 call sites en 22 archivos api;
+   paridad con fixtures en `contracts/roles.json`). Multi-rol queda
+   bloqueado hasta esto (middleware ya lleva roles[] en el token).
+2. **Scoping ruta por ruta:** leer/escribir con `claims.OrgID` en
+   storage/handlers; cross-org → 404. Con esto `cmd/admin create-org` +
+   clonación de catálogo base puede habilitarse (F172 usa lo mismo).
+3. **Media por org:** `MEDIA_DIR/<org_id>/` (URLs guardadas no cambian;
+   mover archivos existentes a org inicial) + licencia de furniture.go
+   contra organizations.
+4. **Quitar DEFAULT transitional** de organization_id (fail-loud) tras (2).
+5. F171: tests de aislamiento cross-org + paridad roles[].
+
+Después: F172 (#326 consola plataforma + equipo + sesión de soporte con
+banner), F173 (#327 columnas ownership), F174 (#412 deployment VPS).
+
+Decisiones: `docs/adr/0004-multi-organization-tenancy.md`. Ledger F169–F174 en
+`feature_list.json`.
 
 ## Notas de sesión
 
