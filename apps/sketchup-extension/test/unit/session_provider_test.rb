@@ -112,7 +112,8 @@ class SessionProviderTest < Minitest::Test
     @provider.login('a@b.c', 'secret123', 'http://taller.local:8080/api')
 
     assert File.exist?(@store_path)
-    unless Gem.win_platform?
+    is_windows = (RUBY_PLATFORM =~ /mswin|mingw|cygwin/) != nil
+    unless is_windows
       mode = File.stat(@store_path).mode & 0o777
       assert_equal 0o600, mode, 'Stored session file must be chmod 0600 (owner only)'
     end
