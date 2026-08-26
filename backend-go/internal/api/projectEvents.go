@@ -28,7 +28,7 @@ func newProjectEventID() string {
 // resending the existing log is never rejected. Writes the HTTP error
 // response and returns false when a new event violates the vocabulary or the
 // RBAC matrix.
-func authorizeProjectEventAppends(w http.ResponseWriter, role domain.UserRole, existing, incoming []domain.ProjectEvent) bool {
+func authorizeProjectEventAppends(w http.ResponseWriter, roles []domain.UserRole, existing, incoming []domain.ProjectEvent) bool {
 	known := make(map[string]struct{}, len(existing))
 	for _, ev := range existing {
 		known[ev.ID] = struct{}{}
@@ -44,7 +44,7 @@ func authorizeProjectEventAppends(w http.ResponseWriter, role domain.UserRole, e
 			respondWithError(w, http.StatusBadRequest, "tipo de evento desconocido: "+ev.Type)
 			return false
 		}
-		if !domain.RoleCanAppendProjectEvent(role, ev.Type) {
+		if !domain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.RoleCanAppendProjectEvent(rr, ev.Type) }) {
 			respondWithError(w, http.StatusForbidden, "no tenés permiso para registrar este evento del ciclo de vida: "+ev.Type)
 			return false
 		}
@@ -130,7 +130,7 @@ func (s *Server) HandleProjectEvents(w http.ResponseWriter, r *http.Request) {
 		// RBAC (OC-010..OC-024): appending a lifecycle event is a role-gated
 		// action, not just "any authenticated user".
 		if !requirePermission(w,
-			domain.RoleCanAppendProjectEvent(actorRole(claims), req.Type),
+			domain.AnyRole(actorRoles(claims), func(rr domain.UserRole) bool { return domain.RoleCanAppendProjectEvent(rr, req.Type) }),
 			"no tenés permiso para registrar este evento del ciclo de vida") {
 			return
 		}

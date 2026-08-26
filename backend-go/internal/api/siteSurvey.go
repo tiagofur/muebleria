@@ -81,7 +81,7 @@ func (s *Server) HandleProjectSiteSurvey(w http.ResponseWriter, r *http.Request)
 		}
 		respondWithJSON(w, http.StatusOK, view)
 	case http.MethodPost:
-		if !requirePermission(w, roleCanCaptureSurvey(actorRole(claims)),
+		if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanCaptureSurvey),
 			"no tenés permiso para iniciar el levantamiento") {
 			return
 		}
@@ -127,7 +127,7 @@ func (s *Server) HandleSiteSurveySpaces(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanCaptureSurvey(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanCaptureSurvey),
 		"no tenés permiso para editar el levantamiento") {
 		return
 	}
@@ -163,7 +163,7 @@ func (s *Server) HandleSiteSurveySpaceDelete(w http.ResponseWriter, r *http.Requ
 	projectID := r.PathValue("id")
 	spaceID := r.PathValue("spaceId")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanCaptureSurvey(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanCaptureSurvey),
 		"no tenés permiso para editar el levantamiento") {
 		return
 	}
@@ -196,7 +196,7 @@ func (s *Server) HandleSiteSurveyCapture(w http.ResponseWriter, r *http.Request)
 	projectID := r.PathValue("id")
 	spaceID := r.PathValue("spaceId")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanCaptureSurvey(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanCaptureSurvey),
 		"no tenés permiso para capturar medidas en obra") {
 		return
 	}
@@ -244,7 +244,7 @@ func (s *Server) HandleSiteSurveyApprove(w http.ResponseWriter, r *http.Request)
 	projectID := r.PathValue("id")
 	spaceID := r.PathValue("spaceId")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanApproveSurveyMeasures(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanApproveSurveyMeasures),
 		"no tenés permiso para aprobar medidas (ingeniería)") {
 		return
 	}
@@ -284,7 +284,7 @@ func (s *Server) HandleSiteSurveyVerify(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanVerifySurvey(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanVerifySurvey),
 		"no tenés permiso para verificar el levantamiento") {
 		return
 	}
@@ -325,7 +325,7 @@ func (s *Server) HandleSiteSurveyFreeze(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanApproveSurveyMeasures(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanApproveSurveyMeasures),
 		"no tenés permiso para congelar medidas (ingeniería)") {
 		return
 	}

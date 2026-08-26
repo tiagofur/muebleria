@@ -41,11 +41,11 @@ func supplierFromRequest(body supplierRequest) domain.Supplier {
 // HandleSuppliers handles GET (list) / POST (create) /api/suppliers.
 func (s *Server) HandleSuppliers(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessPurchasingNav(role),
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessPurchasingNav),
 			"no tenés permiso para ver proveedores") {
 			return
 		}
@@ -57,7 +57,7 @@ func (s *Server) HandleSuppliers(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanManagePurchasing(role),
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanManagePurchasing),
 			"no tenés permiso para crear proveedores") {
 			return
 		}
@@ -88,8 +88,8 @@ func (s *Server) HandleSuppliers(w http.ResponseWriter, r *http.Request) {
 // HandleSupplierByID handles PUT (update) / DELETE (deactivate) /api/suppliers/{id}.
 func (s *Server) HandleSupplierByID(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
-	if !requirePermission(w, domain.RoleCanManagePurchasing(role),
+	roles := actorRoles(claims)
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanManagePurchasing),
 		"no tenés permiso para modificar proveedores") {
 		return
 	}

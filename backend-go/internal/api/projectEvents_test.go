@@ -202,7 +202,7 @@ func TestAuthorizeProjectEventAppends(t *testing.T) {
 
 	t.Run("permite reenviar el log existente", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		if !authorizeProjectEventAppends(rec, domain.RoleVendedor, existing, existing) {
+		if !authorizeProjectEventAppends(rec, []domain.UserRole{domain.RoleVendedor}, existing, existing) {
 			t.Fatalf("expected resend of existing log to be allowed, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
@@ -211,7 +211,7 @@ func TestAuthorizeProjectEventAppends(t *testing.T) {
 		incoming := append(append([]domain.ProjectEvent{}, existing...),
 			domain.ProjectEvent{ID: "evt_2", ProjectID: "p1", Type: "production_released"})
 		rec := httptest.NewRecorder()
-		if authorizeProjectEventAppends(rec, domain.RoleVendedor, existing, incoming) {
+		if authorizeProjectEventAppends(rec, []domain.UserRole{domain.RoleVendedor}, existing, incoming) {
 			t.Fatal("expected vendedor injecting production_released via PUT to be rejected")
 		}
 		if rec.Code != http.StatusForbidden {
@@ -222,7 +222,7 @@ func TestAuthorizeProjectEventAppends(t *testing.T) {
 	t.Run("rechaza tipo inventado", func(t *testing.T) {
 		incoming := []domain.ProjectEvent{{ID: "evt_2", ProjectID: "p1", Type: "foo_bar"}}
 		rec := httptest.NewRecorder()
-		if authorizeProjectEventAppends(rec, domain.RoleAdmin, existing, incoming) {
+		if authorizeProjectEventAppends(rec, []domain.UserRole{domain.RoleAdmin}, existing, incoming) {
 			t.Fatal("expected invented event type to be rejected")
 		}
 		if rec.Code != http.StatusBadRequest {
@@ -234,7 +234,7 @@ func TestAuthorizeProjectEventAppends(t *testing.T) {
 		incoming := append(append([]domain.ProjectEvent{}, existing...),
 			domain.ProjectEvent{ID: "evt_2", ProjectID: "p1", Type: "production_released"})
 		rec := httptest.NewRecorder()
-		if !authorizeProjectEventAppends(rec, domain.RoleIngeniero, existing, incoming) {
+		if !authorizeProjectEventAppends(rec, []domain.UserRole{domain.RoleIngeniero}, existing, incoming) {
 			t.Fatalf("expected ingeniero appending production_released to be allowed, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})

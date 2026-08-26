@@ -20,7 +20,7 @@ func (s *Server) HandleAgregados(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var a domain.Agregado
@@ -60,7 +60,7 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, a)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var a domain.Agregado
@@ -82,7 +82,7 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, a)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		if err := s.Store.DeleteAgregado(r.Context(), id); err != nil {

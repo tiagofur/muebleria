@@ -18,13 +18,15 @@ import (
 
 // actorCanViewCosts resolves COST-01/COST-02 for the request actor (F039 + F044).
 func (s *Server) actorCanViewCosts(r *http.Request) bool {
-	role := actorRole(claimsFromRequest(r))
+	roles := actorRoles(claimsFromRequest(r))
 	ws, err := s.Store.GetWorkshopSettings(r.Context())
 	flag := false
 	if err == nil {
 		flag = ws.VendedorCanViewCosts
 	}
-	return domain.RoleCanViewCosts(role, flag)
+	return domain.AnyRole(roles, func(r domain.UserRole) bool {
+		return domain.RoleCanViewCosts(r, flag)
+	})
 }
 
 // maxJSONBodyBytes caps request bodies to avoid OOM from huge payloads (issue #20).
@@ -556,12 +558,12 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	id := actorID(claims)
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessCustomers(role), "no tenés permiso para ver clientes") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessCustomers), "no tenés permiso para ver clientes") {
 			return
 		}
 		list, err := s.Store.ListCustomers(r.Context())
@@ -569,10 +571,10 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		respondWithJSON(w, http.StatusOK, filterCustomersByOwner(list, id, role))
+		respondWithJSON(w, http.StatusOK, filterCustomersByOwner(list, id, roles))
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCustomers(role), "no tenés permiso para crear clientes") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para crear clientes") {
 			return
 		}
 		var c domain.Customer
@@ -580,7 +582,7 @@ func (s *Server) HandleCustomers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.Active = true
-		c.OwnerUserID = domain.ResolveOwnerOnCreate(id, role, c.OwnerUserID)
+		c.OwnerUserID = domain.ResolveOwnerOnCreateRoles(id, roles, c.OwnerUserID)
 		err := s.Store.CreateCustomer(r.Context(), &c)
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -604,10 +606,10 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	uid := actorID(claims)
 
-	if !requirePermission(w, domain.RoleCanAccessCustomers(role), "no tenés permiso para ver clientes") {
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessCustomers), "no tenés permiso para ver clientes") {
 		return
 	}
 
@@ -618,14 +620,14 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
-		if !domain.CanAccessOwnedResource(uid, role, c.OwnerUserID) {
+		if !domain.CanAccessOwnedResourceRoles(uid, roles, c.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCustomers(role), "no tenés permiso para editar clientes") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para editar clientes") {
 			return
 		}
 		existing, err := s.Store.GetCustomerByID(r.Context(), id)
@@ -633,7 +635,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
-		if !domain.CanAccessOwnedResource(uid, role, existing.OwnerUserID) {
+		if !domain.CanAccessOwnedResourceRoles(uid, roles, existing.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
@@ -641,7 +643,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
-		c.OwnerUserID = domain.ResolveOwnerOnUpdate(role, existing.OwnerUserID, c.OwnerUserID)
+		c.OwnerUserID = domain.ResolveOwnerOnUpdateRoles(roles, existing.OwnerUserID, c.OwnerUserID)
 		err = s.Store.UpdateCustomer(r.Context(), id, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -654,7 +656,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCustomers(role), "no tenés permiso para eliminar clientes") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para eliminar clientes") {
 			return
 		}
 		existing, err := s.Store.GetCustomerByID(r.Context(), id)
@@ -662,7 +664,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
-		if !domain.CanAccessOwnedResource(uid, role, existing.OwnerUserID) {
+		if !domain.CanAccessOwnedResourceRoles(uid, roles, existing.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
@@ -694,7 +696,7 @@ func (s *Server) HandleMaterials(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var m domain.MaterialBoard
@@ -742,7 +744,7 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var m domain.MaterialBoard
@@ -785,7 +787,7 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		err := s.Store.DeactivateMaterialBoard(r.Context(), id)
@@ -804,12 +806,12 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	uid := actorID(claims)
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver cotizaciones") {
 			return
 		}
 		list, err := s.Store.ListProjects(r.Context())
@@ -817,14 +819,14 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		filtered := filterProjectsByOwner(list, uid, role)
+		filtered := filterProjectsByOwner(list, uid, roles)
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectsList(filtered)
 		}
 		respondWithJSON(w, http.StatusOK, filtered)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para crear cotizaciones") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para crear cotizaciones") {
 			return
 		}
 		var p domain.Project
@@ -835,7 +837,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if claims != nil {
 			p.CreatedBy = claims.UserID
 		}
-		p.OwnerUserID = domain.ResolveOwnerOnCreate(uid, role, p.OwnerUserID)
+		p.OwnerUserID = domain.ResolveOwnerOnCreateRoles(uid, roles, p.OwnerUserID)
 
 		p.Status = domain.StatusDraft
 		// Product default currency (Mexico).
@@ -868,10 +870,10 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	uid := actorID(claims)
 
-	if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver cotizaciones") {
 		return
 	}
 
@@ -882,7 +884,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		if !domain.CanAccessOwnedResource(uid, role, p.OwnerUserID) {
+		if !domain.CanAccessOwnedResourceRoles(uid, roles, p.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
@@ -902,7 +904,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
-		if !domain.CanAccessOwnedResource(uid, role, existing.OwnerUserID) {
+		if !domain.CanAccessOwnedResourceRoles(uid, roles, existing.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
@@ -921,15 +923,15 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			reopen := engine.IsProjectClosed(existing.Status) && p.Status == domain.StatusDraft
 			markProduced := p.Status == domain.StatusProduced
 			if reopen {
-				if !requirePermission(w, domain.ProjectAllowsReopenToDraft(existing.Status, role), "no tenés permiso para reabrir cotizaciones") {
+				if !requirePermission(w, domain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.ProjectAllowsReopenToDraft(existing.Status, rr) }), "no tenés permiso para reabrir cotizaciones") {
 					return
 				}
 			} else if markProduced {
-				if !requirePermission(w, domain.RoleCanMarkProduced(role), "no tenés permiso para marcar en producción") {
+				if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMarkProduced), "no tenés permiso para marcar en producción") {
 					return
 				}
 				// Production queue roles may only flip status (not rewrite BOM).
-				if !domain.RoleCanMutateProjects(role) {
+				if !domain.AnyRole(roles, domain.RoleCanMutateProjects) {
 					next := *existing
 					next.Status = domain.StatusProduced
 					if next.PriceSnapshot == nil && existing.PriceSnapshot != nil {
@@ -938,14 +940,14 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 					// Keep closed→closed snapshot; engine-equivalent without catalog re-freeze.
 					p = next
 				}
-			} else if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para editar cotizaciones") {
+			} else if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para editar cotizaciones") {
 				return
 			}
-		} else if !requirePermission(w, domain.RoleCanMutateProjects(role), "no tenés permiso para editar cotizaciones") {
+		} else if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para editar cotizaciones") {
 			return
 		}
 
-		p.OwnerUserID = domain.ResolveOwnerOnUpdate(role, existing.OwnerUserID, p.OwnerUserID)
+		p.OwnerUserID = domain.ResolveOwnerOnUpdateRoles(roles, existing.OwnerUserID, p.OwnerUserID)
 		// Reopen must clear snapshot even if client resends one.
 		if statusChanging && p.Status == domain.StatusDraft && engine.IsProjectClosed(existing.Status) {
 			p.PriceSnapshot = nil
@@ -970,7 +972,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// aggregate (dual-write). New event ids must pass the same vocabulary +
 		// RBAC gates as POST /api/projects/{id}/events; resending the existing
 		// log is always allowed.
-		if !authorizeProjectEventAppends(w, role, existing.Events, p.Events) {
+		if !authorizeProjectEventAppends(w, roles, existing.Events, p.Events) {
 			return
 		}
 		// OC-074: new closeout events in the dual-write path must pass the
@@ -993,7 +995,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanDeleteProject(role), "no tenés permiso para eliminar cotizaciones") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanDeleteProject), "no tenés permiso para eliminar cotizaciones") {
 			return
 		}
 		existing, err := s.Store.GetProjectByID(r.Context(), id)
@@ -1001,7 +1003,7 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		if !domain.CanAccessOwnedResource(uid, role, existing.OwnerUserID) {
+		if !domain.CanAccessOwnedResourceRoles(uid, roles, existing.OwnerUserID) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
@@ -1031,9 +1033,9 @@ func (s *Server) HandleProjectCalculate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	uid := actorID(claims)
-	if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver cotizaciones") {
 		return
 	}
 
@@ -1042,7 +1044,7 @@ func (s *Server) HandleProjectCalculate(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusNotFound, "project not found")
 		return
 	}
-	if !domain.CanAccessOwnedResource(uid, role, p.OwnerUserID) {
+	if !domain.CanAccessOwnedResourceRoles(uid, roles, p.OwnerUserID) {
 		respondWithError(w, http.StatusNotFound, "project not found")
 		return
 	}
@@ -1083,7 +1085,7 @@ func (s *Server) HandleEdgeBands(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var e domain.EdgeBand
@@ -1127,7 +1129,7 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, e)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var e domain.EdgeBand
@@ -1150,7 +1152,7 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, e)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		err := s.Store.DeactivateEdgeBand(r.Context(), id)
@@ -1181,7 +1183,7 @@ func (s *Server) HandleHardwares(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var h domain.Hardware
@@ -1225,7 +1227,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, h)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var h domain.Hardware
@@ -1257,7 +1259,7 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, h)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		err := s.Store.DeactivateHardware(r.Context(), id)
@@ -1285,7 +1287,7 @@ func (s *Server) HandleOptionGroups(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var og domain.OptionGroup
@@ -1325,7 +1327,7 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, og)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var og domain.OptionGroup
@@ -1348,7 +1350,7 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, og)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		err := s.Store.DeleteOptionGroup(r.Context(), id)
@@ -1368,7 +1370,7 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 // HandleSeed populates the database with plantilla fixture data.
 // Idempotent: skips if materials already exist.
 func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
-	if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "solo administradores") {
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "solo administradores") {
 		return
 	}
 	if err := s.Store.SeedCatalog(r.Context()); err != nil {
@@ -1392,7 +1394,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, catalog.Modules)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar muebles plantilla") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
 			return
 		}
 		var m domain.Module
@@ -1432,7 +1434,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar muebles plantilla") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
 			return
 		}
 		var m domain.Module
@@ -1464,7 +1466,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar muebles plantilla") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
 			return
 		}
 		// Physical delete: capture the image URL before deleting the row, then
@@ -1507,7 +1509,7 @@ func (s *Server) HandleStructures(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar estructuras") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
 			return
 		}
 		var st domain.Structure
@@ -1547,7 +1549,7 @@ func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, st)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar estructuras") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
 			return
 		}
 		var st domain.Structure
@@ -1570,7 +1572,7 @@ func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, st)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar estructuras") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
 			return
 		}
 		err := s.Store.DeleteStructure(r.Context(), id)
@@ -1602,7 +1604,7 @@ func (s *Server) HandleCategories(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var c domain.ModuleCategory
@@ -1644,7 +1646,7 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var c domain.ModuleCategory
@@ -1671,7 +1673,7 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		err := s.Store.DeleteCategory(r.Context(), id)
@@ -1713,8 +1715,8 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	role := actorRole(claimsFromRequest(r))
-	if !requirePermission(w, domain.RoleCanAssignOwner(role), "no tenés permiso para asignar responsables") {
+	roles := actorRoles(claimsFromRequest(r))
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAssignOwner), "no tenés permiso para asignar responsables") {
 		return
 	}
 	list, err := s.Store.ListUsers(r.Context())
@@ -1841,7 +1843,7 @@ func (s *Server) HandleAdminUserReject(w http.ResponseWriter, r *http.Request) {
 
 // HandleWorkshopSettings: GET/PUT /api/settings (F031 + F044 COST-02).
 func (s *Server) HandleWorkshopSettings(w http.ResponseWriter, r *http.Request) {
-	role := actorRole(claimsFromRequest(r))
+	roles := actorRoles(claimsFromRequest(r))
 	switch r.Method {
 	case http.MethodGet:
 		// Any authenticated user may read settings (needed for cost visibility on client).
@@ -1853,7 +1855,7 @@ func (s *Server) HandleWorkshopSettings(w http.ResponseWriter, r *http.Request) 
 		respondWithJSON(w, http.StatusOK, ws)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanAccessSettings(role), "no tenés permiso para editar ajustes del taller") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessSettings), "no tenés permiso para editar ajustes del taller") {
 			return
 		}
 		var ws domain.WorkshopSettings
@@ -1885,7 +1887,7 @@ func (s *Server) HandleComponents(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
 			return
 		}
 		var c domain.Component
@@ -1925,7 +1927,7 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
 			return
 		}
 		var c domain.Component
@@ -1948,7 +1950,7 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateModules(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar componentes") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
 			return
 		}
 		err := s.Store.DeleteComponent(r.Context(), id)
@@ -1973,11 +1975,11 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 // collection (no customer/owner scoping) — readable by anyone who can access
 // projects, mutable by engineer/admin (catalog-style RBAC).
 func (s *Server) HandleProjectTemplates(w http.ResponseWriter, r *http.Request) {
-	role := actorRole(claimsFromRequest(r))
+	roles := actorRoles(claimsFromRequest(r))
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver cotizaciones") {
 			return
 		}
 		list, err := s.Store.ListProjectTemplates(r.Context())
@@ -1988,7 +1990,7 @@ func (s *Server) HandleProjectTemplates(w http.ResponseWriter, r *http.Request) 
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateModules(role), "no tenés permiso para crear plantillas") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateModules), "no tenés permiso para crear plantillas") {
 			return
 		}
 		var t domain.ProjectTemplate
@@ -2026,11 +2028,11 @@ func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Reques
 		respondWithError(w, http.StatusBadRequest, "missing template id")
 		return
 	}
-	role := actorRole(claimsFromRequest(r))
+	roles := actorRoles(claimsFromRequest(r))
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.RoleCanAccessProjects(role), "no tenés permiso para ver cotizaciones") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver cotizaciones") {
 			return
 		}
 		t, err := s.Store.GetProjectTemplateByID(r.Context(), id)
@@ -2041,7 +2043,7 @@ func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, t)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateModules(role), "no tenés permiso para editar plantillas") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateModules), "no tenés permiso para editar plantillas") {
 			return
 		}
 		var t domain.ProjectTemplate
@@ -2066,7 +2068,7 @@ func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, updated)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateModules(role), "no tenés permiso para borrar plantillas") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateModules), "no tenés permiso para borrar plantillas") {
 			return
 		}
 		if err := s.Store.DeleteProjectTemplate(r.Context(), id); err != nil {

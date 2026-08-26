@@ -491,3 +491,37 @@ func TestAuthMiddleware_MultiRoleMembershipUsesPrimaryRole(t *testing.T) {
 		t.Fatalf("primary role = %q, want %q", seenRole, domain.RoleVendedor)
 	}
 }
+
+// TestRoleMiddleware_MultiRoleTokenPassesUnion: a multi-role membership
+// token passes a RoleMiddleware gate when ANY of its roles is allowed.
+func TestRoleMiddleware_MultiRoleTokenPassesUnion(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"m-1": {ID: "m-1", Email: "multi@test.com", Role: domain.RoleUser, Active: true},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{
+			"m-1:org-1": memEntry("m-1", "org-1", []domain.UserRole{domain.RoleVendedor, domain.RoleIngeniero}, true),
+		},
+	}
+	handler := RoleMiddleware(secret, users, domain.RoleIngeniero)(okHandler())
+
+	token := orgScopedToken(t, secret, "m-1", "org-1", []domain.UserRole{domain.RoleVendedor})
+	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("vendedor+ingeniero debe pasar gate de ingeniero, got %d", rr.Code)
+	}
+
+	// Gate que ninguno de los dos roles satisface → 403.
+	handler403 := RoleMiddleware(secret, users, domain.RoleAdmin)(okHandler())
+	req = httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	handler403.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("sin admin en el set no pasa gate admin, got %d", rr.Code)
+	}
+}

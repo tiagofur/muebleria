@@ -58,8 +58,8 @@ func sectorForUnitTargetStatus(status domain.ModuleUnitStatus) domain.Production
 // work: scoped operators (produccion/almacen) only work their assigned
 // sectors. Responds 403 and returns false when denied; sector-list read
 // failures fall open to the role-only check (logged), same as floor-scan.
-func (s *Server) actorCanWorkSector(w http.ResponseWriter, r *http.Request, role domain.UserRole, userID string, sector domain.ProductionSector) bool {
-	if !domain.RoleIsScopedBySector(role) {
+func (s *Server) actorCanWorkSector(w http.ResponseWriter, r *http.Request, roles []domain.UserRole, userID string, sector domain.ProductionSector) bool {
+	if !domain.RolesAllScopedBySector(roles) {
 		return true
 	}
 	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
@@ -71,7 +71,12 @@ func (s *Server) actorCanWorkSector(w http.ResponseWriter, r *http.Request, role
 	for _, us := range sectors {
 		names = append(names, us.Sector)
 	}
-	if domain.RoleCanWorkSector(role, sector, names) {
+	for _, role := range roles {
+		if domain.RoleCanWorkSector(role, sector, names) {
+			return true
+		}
+	}
+	if false {
 		return true
 	}
 	respondWithError(w, http.StatusForbidden,
@@ -192,10 +197,10 @@ func (s *Server) HandleAdvancePartOperation(w http.ResponseWriter, r *http.Reque
 	projectID := r.PathValue("id")
 	partID := r.PathValue("partId")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role) ||
-			domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanMarkProduced) || domain.AnyRole(roles, domain.RoleCanExportProduction) ||
+			domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para avanzar el piso de fábrica") {
 		return
 	}
@@ -219,12 +224,12 @@ func (s *Server) HandleAdvancePartOperation(w http.ResponseWriter, r *http.Reque
 			respondWithError(w, http.StatusBadRequest, "esa operación no corresponde a una estación física")
 			return
 		}
-		if !s.actorCanWorkSector(w, r, role, actorID(claims), sector) {
+		if !s.actorCanWorkSector(w, r, roles, actorID(claims), sector) {
 			return
 		}
-	} else if !s.actorCanWorkSectorInTx(r, role, actorID(claims), domain.SectorCutting) &&
-		!s.actorCanWorkSectorInTx(r, role, actorID(claims), domain.SectorCNC) &&
-		!s.actorCanWorkSectorInTx(r, role, actorID(claims), domain.SectorEdgeBanding) {
+	} else if !s.actorCanWorkSectorInTx(r, roles, actorID(claims), domain.SectorCutting) &&
+		!s.actorCanWorkSectorInTx(r, roles, actorID(claims), domain.SectorCNC) &&
+		!s.actorCanWorkSectorInTx(r, roles, actorID(claims), domain.SectorEdgeBanding) {
 		// Scanner mode has no station context: any pre-assembly sector works.
 		respondWithError(w, http.StatusForbidden, "no tenés ninguna estación de piezas asignada")
 		return
@@ -326,10 +331,10 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 	projectID := r.PathValue("id")
 	unitID := r.PathValue("unitId")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanMarkProduced(role) || domain.RoleCanExportProduction(role) ||
-			domain.RoleCanClaimProductionJob(role),
+		domain.AnyRole(roles, domain.RoleCanMarkProduced) || domain.AnyRole(roles, domain.RoleCanExportProduction) ||
+			domain.AnyRole(roles, domain.RoleCanClaimProductionJob),
 		"no tenés permiso para avanzar el piso de fábrica") {
 		return
 	}
@@ -374,7 +379,7 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 		if !domain.IsValidModuleUnitStatus(string(target)) {
 			return nil, fmt.Errorf("BAD_REQUEST:estado de unidad desconocido: %s", target)
 		}
-		if !s.actorCanWorkSectorInTx(r, role, actorID(claims), sectorForUnitTargetStatus(target)) {
+		if !s.actorCanWorkSectorInTx(r, roles, actorID(claims), sectorForUnitTargetStatus(target)) {
 			return nil, fmt.Errorf("FORBIDDEN")
 		}
 
@@ -470,11 +475,11 @@ func (s *Server) HandleAssemblyOverride(w http.ResponseWriter, r *http.Request) 
 	projectID := r.PathValue("id")
 	unitID := r.PathValue("unitId")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	// Override is a supervisor action (mark/export roles), never a scoped
 	// station operator.
 	if !requirePermission(w,
-		domain.RoleCanSuperviseFloor(role),
+		domain.AnyRole(roles, domain.RoleCanSuperviseFloor),
 		"sólo supervisión puede autorizar armado con piezas faltantes") {
 		return
 	}
@@ -550,9 +555,9 @@ func (s *Server) HandlePartRework(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	partID := r.PathValue("partId")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanSuperviseFloor(role),
+		domain.AnyRole(roles, domain.RoleCanSuperviseFloor),
 		"sólo supervisión puede retrabajar piezas") {
 		return
 	}
@@ -649,8 +654,8 @@ func (s *Server) HandlePartRework(w http.ResponseWriter, r *http.Request) {
 // actorCanWorkSectorInTx is the sector check inside a mutation closure: it
 // must not write the 403 itself (the caller owns the response), so it only
 // reports the verdict.
-func (s *Server) actorCanWorkSectorInTx(r *http.Request, role domain.UserRole, userID string, sector domain.ProductionSector) bool {
-	if !domain.RoleIsScopedBySector(role) {
+func (s *Server) actorCanWorkSectorInTx(r *http.Request, roles []domain.UserRole, userID string, sector domain.ProductionSector) bool {
+	if !domain.RolesAllScopedBySector(roles) {
 		return true
 	}
 	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
@@ -662,7 +667,12 @@ func (s *Server) actorCanWorkSectorInTx(r *http.Request, role domain.UserRole, u
 	for _, us := range sectors {
 		names = append(names, us.Sector)
 	}
-	return domain.RoleCanWorkSector(role, sector, names)
+	for _, role := range roles {
+		if domain.RoleCanWorkSector(role, sector, names) {
+			return true
+		}
+	}
+	return false
 }
 
 // respondWithMutationError maps mutation closure errors to HTTP responses.
@@ -724,9 +734,9 @@ type generatePartExecutionsRequest struct {
 func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 	if !requirePermission(w,
-		domain.RoleCanSuperviseFloor(role),
+		domain.AnyRole(roles, domain.RoleCanSuperviseFloor),
 		"sólo supervisión puede generar las unidades físicas de la obra") {
 		return
 	}

@@ -32,7 +32,7 @@ func (s *Server) HandleStockList(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	if !requirePermission(w, domain.RoleCanAccessPurchasingNav(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanAccessPurchasingNav),
 		"no tenés permiso para ver el stock") {
 		return
 	}
@@ -64,7 +64,7 @@ func (s *Server) HandleStockUpsertMin(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	if !requirePermission(w, domain.RoleCanManageStock(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanManageStock),
 		"no tenés permiso para modificar el stock") {
 		return
 	}
@@ -115,7 +115,7 @@ func (s *Server) HandleStockMovementCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, domain.RoleCanManageStock(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanManageStock),
 		"no tenés permiso para registrar movimientos de stock") {
 		return
 	}
@@ -246,7 +246,7 @@ func (s *Server) HandleStockMovementsList(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusMethodNotAllowed, "método no permitido")
 		return
 	}
-	if !requirePermission(w, domain.RoleCanAccessPurchasingNav(actorRole(claimsFromRequest(r))),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanAccessPurchasingNav),
 		"no tenés permiso para ver los movimientos de stock") {
 		return
 	}

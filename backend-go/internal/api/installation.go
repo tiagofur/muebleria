@@ -93,7 +93,7 @@ func closeoutFactsEqual(a, b *domain.ClientCloseout) bool {
 // installationDiffEvents derives the audit lifecycle events from the diff
 // between the stored job and the candidate one: installation_started on first
 // real visit work, punch_opened/punch_closed per punch item change.
-func installationDiffEvents(role domain.UserRole, claims *auth.Claims, snap *domain.InstallationSnapshot, next *domain.InstallationJob) ([]domain.ProjectEvent, error) {
+func installationDiffEvents(roles []domain.UserRole, claims *auth.Claims, snap *domain.InstallationSnapshot, next *domain.InstallationJob) ([]domain.ProjectEvent, error) {
 	byUserID := installationByUserID(claims)
 	events := []domain.ProjectEvent{}
 
@@ -139,7 +139,7 @@ func installationDiffEvents(role domain.UserRole, claims *auth.Claims, snap *dom
 				"punch_item_id": p.ID, "severity": p.Severity, "is_blocker": p.IsBlocker, "owner": p.Owner,
 			}
 		}
-		if !domain.RoleCanAppendProjectEvent(role, eventType) {
+		if !domain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.RoleCanAppendProjectEvent(rr, eventType) }) {
 			return nil, fmt.Errorf("FORBIDDEN_EVENTS:%s", eventType)
 		}
 		events = append(events, domain.ProjectEvent{
@@ -161,11 +161,11 @@ func (s *Server) HandleProjectInstallation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, roleCanManageInstallation(role), "no tenés permiso para ver la instalación") {
+		if !requirePermission(w, domain.AnyRole(roles, roleCanManageInstallation), "no tenés permiso para ver la instalación") {
 			return
 		}
 		project, err := s.Store.GetProjectByID(r.Context(), projectID)
@@ -176,7 +176,7 @@ func (s *Server) HandleProjectInstallation(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, buildInstallationView(project, project.Installation))
 
 	case http.MethodPut:
-		if !requirePermission(w, roleCanManageInstallation(role), "no tenés permiso para gestionar la instalación") {
+		if !requirePermission(w, domain.AnyRole(roles, roleCanManageInstallation), "no tenés permiso para gestionar la instalación") {
 			return
 		}
 		var next domain.InstallationJob
@@ -197,7 +197,7 @@ func (s *Server) HandleProjectInstallation(w http.ResponseWriter, r *http.Reques
 			if !closeoutFactsEqual(prevCloseout, next.Closeout) {
 				return nil, fmt.Errorf("CONFLICT:conformidad/cierre sólo vía POST /installation/closeout")
 			}
-			events, err := installationDiffEvents(role, claims, snap, &next)
+			events, err := installationDiffEvents(roles, claims, snap, &next)
 			if err != nil {
 				return nil, err
 			}
@@ -244,7 +244,7 @@ func (s *Server) HandleProjectInstallationCloseout(w http.ResponseWriter, r *htt
 		return
 	}
 	claims := claimsFromRequest(r)
-	role := actorRole(claims)
+	roles := actorRoles(claims)
 
 	var body installationCloseoutRequest
 	if !decodeJSONBody(w, r, &body) {
@@ -262,7 +262,7 @@ func (s *Server) HandleProjectInstallationCloseout(w http.ResponseWriter, r *htt
 		return
 	}
 	if !requirePermission(w,
-		domain.RoleCanAppendProjectEvent(role, actionEvent),
+		domain.AnyRole(roles, func(rr domain.UserRole) bool { return domain.RoleCanAppendProjectEvent(rr, actionEvent) }),
 		"no tenés permiso para esta acción de instalación ("+body.Action+")") {
 		return
 	}

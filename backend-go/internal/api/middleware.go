@@ -163,7 +163,9 @@ func AdminMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler
 	return func(next http.Handler) http.Handler {
 		return authMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
-			if !ok || claims == nil || claims.Role != string(domain.RoleAdmin) {
+			if !ok || claims == nil || !domain.AnyRole(actorRoles(claims), func(rl domain.UserRole) bool {
+				return rl == domain.RoleAdmin
+			}) {
 				respondWithError(w, http.StatusForbidden, "admin access required")
 				return
 			}
@@ -186,7 +188,14 @@ func RoleMiddleware(jwtSecret string, users MembershipLookup, allowedRoles ...do
 				respondWithError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
-			if _, allowed := roleSet[claims.Role]; !allowed {
+			allowed := false
+			for _, rl := range actorRoles(claims) {
+				if _, ok := roleSet[string(rl)]; ok {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
 				respondWithError(w, http.StatusForbidden, "insufficient permissions")
 				return
 			}

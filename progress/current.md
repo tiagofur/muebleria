@@ -1,6 +1,6 @@
 # Sesión
 
-**Feature en curso:** F170/F171 — #325 multi-org: aislamiento cross-org COMPLETO (commit faebd7f + create-org); queda SOLO el sweep RBAC roles[] unión
+**Feature en curso:** F172 (#326) consola plataforma — F170 CERRADO server-side (sweep RBAC unión completo, ver abajo); falta lado TS/web (navIdsForRoles)
 **Rama:** `feat/325-multi-organization-core` (PR #419)
 **Pendiente de revisión formal (reviewer):** F169, F170a/b — implementación y evidencia completas
 
@@ -34,12 +34,24 @@ Completado y verificado (`go test ./...` 8/8 paquetes verde):
 - Docker daemon de la máquina se cayó a mitad de sesión y fue reiniciado
  (Docker Desktop); si tests de storage fallan por conexión, verificar docker.
 
+## Sesión 3 (2026-08-27): sweep RBAC unión server-side COMPLETO
+
+- `domain.AnyRole(roles, fn)` + ownership Roles-variants (ResolveOwnerOnCreate/
+  Update/CanAccessOwnedResource/RolesSeesAllOwners) + `RolesAllScopedBySector`.
+- `actorRoles(claims)` con fallback a rol único (tests legacy intactos);
+  ~140 call sites api convertidos a unión; middlewares Admin/Role a
+  intersección de sets; authorizeProjectEventAppends, sector gates
+  (floorScan/partExecutions/productionActivity) e instalación con unión.
+- contracts/roles.json +`multiRole {supported, semantics: union}`.
+- Tests: AnyRole/ownership/sector-union en domain + middleware multi-rol
+  (vendedor+ingeniero pasa gate ingeniero, no pasa gate admin).
+- **Falta lado TS/web:** `anyRole` + `navIdsForRoles` + session roles[]
+  (la UI hoy muestra el rol primario; server ya aplica unión). Próxima sesión.
+
 ## Siguiente sesión (en orden)
 
-1. **Sweep RBAC roles[] unión (F170 tail):** `anyRole(roles, fn)` Go+TS +
-   call sites (133 en api, web consumers) + fixtures paridad
-   `contracts/roles.json`. Es lo único que falta de F170. Los agentes
-   subordinados tienen límite de uso hasta ~02:13 — hacer inline o esperar.
+1. **TS/web RBAC:** anyRole + navIdsForRoles + roles en session/web (cierra
+   del todo F170 en cliente).
 2. **F172 (#326):** consola plataforma (`/api/platform/*`), equipo del taller
    (`/api/org/*`), invitaciones por link, sesión de soporte (razón + banner +
    audit + actor real), clonación de catálogo base con remap de UUIDs

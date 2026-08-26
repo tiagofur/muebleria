@@ -27,7 +27,7 @@ func (s *Server) HandleAmbientMaterials(w http.ResponseWriter, r *http.Request) 
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var m domain.AmbientMaterial
@@ -67,7 +67,7 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var m domain.AmbientMaterial
@@ -99,7 +99,7 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		if err := s.Store.DeactivateAmbientMaterial(r.Context(), id); err != nil {
@@ -126,7 +126,7 @@ func (s *Server) HandleAmbientCategories(w http.ResponseWriter, r *http.Request)
 		respondWithJSON(w, http.StatusOK, list)
 
 	case http.MethodPost:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var c domain.AmbientCategory
@@ -168,7 +168,7 @@ func (s *Server) HandleAmbientCategoryByID(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		var c domain.AmbientCategory
@@ -195,7 +195,7 @@ func (s *Server) HandleAmbientCategoryByID(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
-		if !requirePermission(w, domain.RoleCanMutateCatalog(actorRole(claimsFromRequest(r))), "no tenés permiso para modificar el catálogo") {
+		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
 		err := s.Store.DeleteAmbientCategory(r.Context(), id)

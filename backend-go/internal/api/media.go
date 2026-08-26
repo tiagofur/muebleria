@@ -31,8 +31,8 @@ func (s *Server) HandleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	role := actorRole(claimsFromRequest(r))
-	if !requirePermission(w, domain.RoleCanMutateCatalog(role), "no tenés permiso para subir imágenes") {
+	roles := actorRoles(claimsFromRequest(r))
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCatalog), "no tenés permiso para subir imágenes") {
 		return
 	}
 	if strings.TrimSpace(s.MediaDir) == "" {

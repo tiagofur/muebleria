@@ -142,7 +142,7 @@ type captureBaselineRequest struct{}
 func (s *Server) HandleCostingBaseline(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManageCosting(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanManageCosting),
 		"no tenés permiso para capturar el baseline de costos") {
 		return
 	}
@@ -206,7 +206,7 @@ type setLaborRateRequest struct {
 func (s *Server) HandleCostingLaborRate(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanManageCosting(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanManageCosting),
 		"no tenés permiso para configurar la tarifa horaria") {
 		return
 	}
@@ -254,7 +254,7 @@ type recordTimeRequest struct {
 func (s *Server) HandleCostingTime(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanRecordCostTime(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanRecordCostTime),
 		"no tenés permiso para registrar tiempo de obra") {
 		return
 	}
@@ -340,7 +340,7 @@ func (s *Server) voidCostEntry(w http.ResponseWriter, r *http.Request, entryType
 		entryID = r.PathValue("costId")
 	}
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanVoidCostEntry(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanVoidCostEntry),
 		"no tenés permiso para anular registros de costos") {
 		return
 	}
@@ -453,7 +453,7 @@ type recordOtherCostRequest struct {
 func (s *Server) HandleCostingOther(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	claims := claimsFromRequest(r)
-	if !requirePermission(w, roleCanRecordOtherCost(actorRole(claims)),
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), roleCanRecordOtherCost),
 		"no tenés permiso para registrar costos externos") {
 		return
 	}
