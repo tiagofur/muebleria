@@ -400,7 +400,8 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - programa SketchUp: `docs/sketchup-muebles-strategy.md`;
 - boundary SketchUp/Granete:
   `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
-- contract conceptual: `docs/sketchup-manufacturing-contract.md`.
+- contract conceptual: `docs/sketchup-manufacturing-contract.md`;
+- selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`.
 
 ---
 

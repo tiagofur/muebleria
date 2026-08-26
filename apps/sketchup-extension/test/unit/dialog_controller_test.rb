@@ -5,6 +5,7 @@ require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/metadata/store'
+require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
 class DialogControllerTest < Minitest::Test
@@ -70,6 +71,7 @@ class DialogControllerTest < Minitest::Test
     catalog_script = scripts[1]
     assert_includes catalog_script, '"source":"local"'
     assert_includes catalog_script, '"presets":[]'
+    assert_includes catalog_script, '"materialCategories":[]'
   end
 
   def test_insert_furniture_callback_invokes_builder_and_returns_result
@@ -108,14 +110,16 @@ class DialogControllerTest < Minitest::Test
   class BuilderSpy
     attr_reader :insert_layout, :update_layout
 
-    def insert_furniture(_model, _definition, _parameters = {}, resolved_layout: nil)
+    def insert_furniture(_model, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
       @insert_layout = resolved_layout
+      @material_choices = material_choices
       { 'success' => true, 'name' => 'Base Una Puerta', 'component_count' => 1,
         'board_count' => 1, 'hardware_count' => 0 }
     end
 
-    def update_furniture(_model, _group, _definition, _parameters = {}, resolved_layout: nil)
+    def update_furniture(_model, _group, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
       @update_layout = resolved_layout
+      @material_choices = material_choices
       { 'success' => true, 'name' => 'Base Una Puerta', 'component_count' => 1 }
     end
   end
@@ -277,5 +281,26 @@ class DialogControllerTest < Minitest::Test
     catalog_script = dialog.executed_scripts.find { |s| s.include?('setCatalog') }
     refute_nil catalog_script
     refute_includes catalog_script, '"media"'
+  end
+
+  def test_open_material_selector_callback_opens_option_selector
+    dialog = @controller.show
+    payload = { 'role' => 'FRENTES', 'roleName' => 'Frentes', 'currentMaterialId' => 'mat-01' }
+
+    dialog.callbacks.fetch('open_material_selector').call(nil, JSON.generate(payload))
+
+    selector_dialog = @controller.send(:option_selector).dialog
+    refute_nil selector_dialog
+    assert @controller.send(:option_selector).open?
+
+    # Apply through selector
+    selector_dialog.callbacks.fetch('apply_selection').call(
+      selector_dialog,
+      JSON.generate({ 'role' => 'FRENTES', 'materialId' => 'mat-02' })
+    )
+
+    script = dialog.executed_scripts.find { |s| s.include?('onMaterialChoiceApplied') }
+    refute_nil script
+    assert_includes script, '"materialId":"mat-02"'
   end
 end

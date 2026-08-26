@@ -82,15 +82,32 @@ type workshopMaterialRole struct {
 }
 
 // workshopMaterial is a board of the workshop catalog for client material
-// selectors (visual fields only — no pricing).
+// selectors (visual & PBR fields only — no pricing).
 type workshopMaterial struct {
-	MaterialID   string `json:"materialId"`
-	Code         string `json:"code"`
-	Name         string `json:"name"`
-	PreviewColor string `json:"previewColor,omitempty"`
-	ImageURL     string `json:"imageUrl,omitempty"`
-	ThicknessMm  int    `json:"thicknessMm"`
-	Grain        bool   `json:"grain"`
+	MaterialID                 string   `json:"materialId"`
+	Code                       string   `json:"code"`
+	Name                       string   `json:"name"`
+	Manufacturer               string   `json:"manufacturer,omitempty"`
+	CategoryID                 string   `json:"categoryId,omitempty"`
+	PreviewColor               string   `json:"previewColor,omitempty"`
+	ImageURL                   string   `json:"imageUrl,omitempty"`
+	PreviewTextureURL          string   `json:"previewTextureUrl,omitempty"`
+	PreviewTextureTileWidthMm  float64  `json:"previewTextureTileWidthMm,omitempty"`
+	PreviewTextureTileLengthMm float64  `json:"previewTextureTileLengthMm,omitempty"`
+	PreviewRoughness           *float64 `json:"previewRoughness,omitempty"`
+	PreviewMetalness           *float64 `json:"previewMetalness,omitempty"`
+	PreviewClearcoat           *float64 `json:"previewClearcoat,omitempty"`
+	ThicknessMm                int      `json:"thicknessMm"`
+	Grain                      bool     `json:"grain"`
+}
+
+// workshopMaterialCategory exposes the workshop's board category tree (up to
+// 3 levels) for hierarchical material filtering (Miller Columns / CategoryNode).
+type workshopMaterialCategory struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ParentID  string `json:"parentId,omitempty"`
+	SortOrder int    `json:"sortOrder"`
 }
 
 // workshopFurnitureCategory exposes the workshop's module category tree
@@ -112,11 +129,12 @@ type workshopFurniturePreset struct {
 }
 
 type workshopFurnitureCatalog struct {
-	SchemaID    string                                 `json:"schemaId"`
-	RevisionID  string                                 `json:"revisionId"`
-	Categories  []workshopFurnitureCategory            `json:"categories"`
-	Definitions map[string]workshopFurnitureDefinition `json:"definitions"`
-	Presets     []workshopFurniturePreset              `json:"presets"`
+	SchemaID           string                                 `json:"schemaId"`
+	RevisionID         string                                 `json:"revisionId"`
+	Categories         []workshopFurnitureCategory            `json:"categories"`
+	MaterialCategories []workshopMaterialCategory            `json:"materialCategories"`
+	Definitions        map[string]workshopFurnitureDefinition `json:"definitions"`
+	Presets            []workshopFurniturePreset              `json:"presets"`
 	// Materials carries the workshop's active boards so clients can populate
 	// per-role material selectors without a second request.
 	Materials []workshopMaterial `json:"materials"`
@@ -151,13 +169,14 @@ var workshopDimensionSpecs = []dimensionSpec{
 // no min/max):
 //   - with presets: min/max span every preset value plus the module default;
 //   - without presets: an operational band around the default (half to double).
-func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.ModuleCategory, composition domain.Catalog) workshopFurnitureCatalog {
+func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.ModuleCategory, materialCategories []domain.MaterialCategory, composition domain.Catalog) workshopFurnitureCatalog {
 	catalog := workshopFurnitureCatalog{
-		SchemaID:    workshopFurnitureSchemaID,
-		Categories:  []workshopFurnitureCategory{},
-		Definitions: map[string]workshopFurnitureDefinition{},
-		Presets:     []workshopFurniturePreset{},
-		Materials:   buildWorkshopMaterials(composition.Materials),
+		SchemaID:           workshopFurnitureSchemaID,
+		Categories:         []workshopFurnitureCategory{},
+		MaterialCategories: buildWorkshopMaterialCategories(materialCategories),
+		Definitions:        map[string]workshopFurnitureDefinition{},
+		Presets:            []workshopFurniturePreset{},
+		Materials:          buildWorkshopMaterials(composition.Materials),
 	}
 
 	byID := make(map[string]domain.ModuleCategory, len(categories))
@@ -215,8 +234,22 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 	return catalog
 }
 
+// buildWorkshopMaterialCategories projects the workshop's board category tree.
+func buildWorkshopMaterialCategories(categories []domain.MaterialCategory) []workshopMaterialCategory {
+	out := make([]workshopMaterialCategory, 0, len(categories))
+	for _, c := range categories {
+		out = append(out, workshopMaterialCategory{
+			ID:        c.ID,
+			Name:      c.Name,
+			ParentID:  c.ParentID,
+			SortOrder: c.SortOrder,
+		})
+	}
+	return out
+}
+
 // buildWorkshopMaterials projects the workshop's active boards for client
-// material selectors (visual fields only).
+// material selectors (visual & PBR fields only).
 func buildWorkshopMaterials(materials []domain.MaterialBoard) []workshopMaterial {
 	out := make([]workshopMaterial, 0, len(materials))
 	for _, m := range materials {
@@ -224,13 +257,21 @@ func buildWorkshopMaterials(materials []domain.MaterialBoard) []workshopMaterial
 			continue
 		}
 		out = append(out, workshopMaterial{
-			MaterialID:   m.ID,
-			Code:         m.Code,
-			Name:         m.Name,
-			PreviewColor: m.PreviewColor,
-			ImageURL:     m.ImageURL,
-			ThicknessMm:  m.ThicknessMm,
-			Grain:        m.GrainDefault,
+			MaterialID:                 m.ID,
+			Code:                       m.Code,
+			Name:                       m.Name,
+			Manufacturer:               m.Manufacturer,
+			CategoryID:                 m.CategoryID,
+			PreviewColor:               m.PreviewColor,
+			ImageURL:                   m.ImageURL,
+			PreviewTextureURL:          m.PreviewTextureURL,
+			PreviewTextureTileWidthMm:  m.PreviewTextureTileWidthMm,
+			PreviewTextureTileLengthMm: m.PreviewTextureTileLengthMm,
+			PreviewRoughness:           m.PreviewRoughness,
+			PreviewMetalness:           m.PreviewMetalness,
+			PreviewClearcoat:           m.PreviewClearcoat,
+			ThicknessMm:                m.ThicknessMm,
+			Grain:                      m.GrainDefault,
 		})
 	}
 	return out

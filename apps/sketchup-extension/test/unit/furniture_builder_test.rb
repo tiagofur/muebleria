@@ -175,4 +175,89 @@ class FurnitureBuilderTest < Minitest::Test
     assert_equal 2, result['component_count']
     assert_equal 2, main_group.entities.groups.length
   end
+
+  def test_inserts_resolved_composition_with_long_composite_hardware_id
+    definition = @provider.find_definition('kitchen-base-standard')
+    long_hw_layout = JSON.parse(JSON.generate(RESOLVED_LAYOUT))
+    long_hw_layout['hardware'] = [
+      {
+        'placementId' => 'agr-agr-1786465647616-8jgc-u0-a0000008-0000-0000-0000-000000000001-copy-0-hw-0',
+        'hardwareId' => 'a0000003-0000-0000-0000-000000000002',
+        'name' => 'Jaladera Acero Inox',
+        'shape' => 'bar-pull',
+        'hostComponentInstanceId' => 'agr-agr-1786465647616-8jgc-u0-a0000008-0000-0000-0000-000000000001-copy-0',
+        'anchorFace' => 'front',
+        'transform' => { 'translationMm' => [552, 578, 592] },
+        'dimensionsMm' => [32, 25, 96],
+        'colorHex' => '#1a1a1a'
+      }
+    ]
+
+    result = @builder.insert_furniture(@model, definition, {}, resolved_layout: long_hw_layout)
+
+    assert result['success'], "insert failed with: #{result['error']}"
+    assert_equal 4, result['component_count']
+    assert_equal 1, result['hardware_count']
+
+    main_group = @model.active_entities.groups.first
+    hw_group = main_group.entities.groups.find { |g| g.name == 'Jaladera Acero Inox' }
+    refute_nil hw_group
+    hw_meta = @store.read(hw_group)
+    assert_equal 'componentInstance', hw_meta['kind']
+    assert_equal 'hardware_agr-agr-1786465647616-8jgc-u0-a0000008-0000-0000-0000-000000000001-copy-0-hw-0',
+                 hw_meta['intent']['semanticRole']
+  end
+
+  def test_ensures_downward_normal_faces_are_reversed_upwards
+    # In SketchUp, ground plane faces often default to downward normal (-Z).
+    # Builder must reverse them so pushpull extrudes upwards (+Z).
+    custom_entities = SketchupStub::EntitiesStub.new
+    class << custom_entities
+      def add_face(_pts)
+        face = SketchupStub::FaceStub.new
+        face.normal = Geom::Vector3d.new(0, 0, -1)
+        @faces << face
+        face
+      end
+    end
+    group = SketchupStub::GroupStub.new('TestGroup')
+    group.instance_variable_set(:@entities, custom_entities)
+
+    @builder.send(:build_box_geometry, group, 0, 0, 0, 600, 500, 720)
+
+    face = custom_entities.faces.first
+    refute_nil face
+    assert face.normal.z.positive?, 'Face normal must be reversed to point upwards (+Z)'
+  end
+
+  def test_resolved_components_apply_physical_scale_texture
+    definition = @provider.find_definition('kitchen-base-standard')
+    fake_texture_file = File.expand_path('../support/fixtures/oak_test.jpg', __dir__)
+    FileUtils.mkdir_p(File.dirname(fake_texture_file))
+    File.write(fake_texture_file, 'fake-image-data')
+
+    cache_mock = Object.new
+    cache_mock.define_singleton_method(:resolve_texture) { |_url| fake_texture_file }
+
+    builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(
+      metadata_store: @store,
+      texture_cache: cache_mock
+    )
+
+    textured_layout = JSON.parse(JSON.generate(RESOLVED_LAYOUT))
+    textured_layout['components'].last['materialTextureUrl'] = '/api/media/oak_test.jpg'
+    textured_layout['components'].last['materialTextureTileWidthMm'] = 1830.0
+    textured_layout['components'].last['materialTextureTileLengthMm'] = 2440.0
+
+    builder.insert_furniture(@model, definition, {}, resolved_layout: textured_layout)
+
+    door = @model.active_entities.groups.first.entities.groups.find { |g| g.name == 'Puerta' }
+    refute_nil door.material
+    refute_nil door.material.texture
+    assert_equal fake_texture_file, door.material.texture.filename
+    assert_in_delta 72.047, door.material.texture.size[0], 0.01
+    assert_in_delta 96.063, door.material.texture.size[1], 0.01
+  ensure
+    FileUtils.rm_f(fake_texture_file)
+  end
 end

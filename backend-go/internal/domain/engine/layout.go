@@ -47,21 +47,29 @@ type LayoutTransform struct {
 // Material fields carry the workshop's chosen board when an option choice
 // resolved it; otherwise the role-palette fallback color is used.
 type LayoutComponent struct {
-	ComponentInstanceID string          `json:"componentInstanceId"`
-	SlotID              string          `json:"slotId"`
-	Role                string          `json:"role,omitempty"`
-	Name                string          `json:"name"`
-	Kind                string          `json:"kind"`
-	Transform           LayoutTransform `json:"transform"`
-	DimensionsMm        [3]float64      `json:"dimensionsMm"`
-	LengthMm            int             `json:"lengthMm"`
-	WidthMm             int             `json:"widthMm"`
-	ThicknessMm         int             `json:"thicknessMm"`
-	OptionRole          string          `json:"optionRole,omitempty"`
-	MaterialID          string          `json:"materialId,omitempty"`
-	MaterialCode        string          `json:"materialCode,omitempty"`
-	MaterialName        string          `json:"materialName,omitempty"`
-	MaterialColorHex    string          `json:"materialColorHex,omitempty"`
+	ComponentInstanceID        string          `json:"componentInstanceId"`
+	SlotID                     string          `json:"slotId"`
+	Role                       string          `json:"role,omitempty"`
+	Name                       string          `json:"name"`
+	Kind                       string          `json:"kind"`
+	Transform                  LayoutTransform `json:"transform"`
+	DimensionsMm               [3]float64      `json:"dimensionsMm"`
+	LengthMm                   int             `json:"lengthMm"`
+	WidthMm                    int             `json:"widthMm"`
+	ThicknessMm                int             `json:"thicknessMm"`
+	OptionRole                 string          `json:"optionRole,omitempty"`
+	MaterialID                 string          `json:"materialId,omitempty"`
+	MaterialCode               string          `json:"materialCode,omitempty"`
+	MaterialName               string          `json:"materialName,omitempty"`
+	MaterialColorHex           string          `json:"materialColorHex,omitempty"`
+	MaterialImageURL           string          `json:"materialImageUrl,omitempty"`
+	MaterialTextureURL         string          `json:"materialTextureUrl,omitempty"`
+	MaterialTextureTileWidthMm float64         `json:"materialTextureTileWidthMm,omitempty"`
+	MaterialTextureTileLengthMm float64        `json:"materialTextureTileLengthMm,omitempty"`
+	MaterialRoughness          *float64        `json:"materialRoughness,omitempty"`
+	MaterialMetalness          *float64        `json:"materialMetalness,omitempty"`
+	MaterialClearcoat          *float64        `json:"materialClearcoat,omitempty"`
+	MaterialGrain              bool            `json:"materialGrain,omitempty"`
 }
 
 // LayoutHardware is one visible hardware placement (handle, hinge, …) resolved
@@ -168,6 +176,14 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 			component.MaterialID = material.ID
 			component.MaterialCode = material.Code
 			component.MaterialName = material.Name
+			component.MaterialImageURL = material.ImageURL
+			component.MaterialTextureURL = material.PreviewTextureURL
+			component.MaterialTextureTileWidthMm = material.PreviewTextureTileWidthMm
+			component.MaterialTextureTileLengthMm = material.PreviewTextureTileLengthMm
+			component.MaterialRoughness = material.PreviewRoughness
+			component.MaterialMetalness = material.PreviewMetalness
+			component.MaterialClearcoat = material.PreviewClearcoat
+			component.MaterialGrain = material.GrainDefault
 			if color := normalizeHexColor(material.PreviewColor); color != "" {
 				component.MaterialColorHex = color
 			}

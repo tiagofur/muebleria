@@ -230,4 +230,121 @@ describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
       }),
     );
   });
+
+  it('renders category sidebar and allows creating a material category', async () => {
+    const user = userEvent.setup();
+    const onCreateCategory = vi.fn();
+    render(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        materialCategories={[
+          { id: 'cat-wood', name: 'Maderas', sortOrder: 1 },
+        ]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        onCreateCategory={onCreateCategory}
+        getCostPerM2={() => 25}
+      />,
+    );
+
+    // Sidebar should be present
+    expect(screen.getByTestId('category-filter-panel')).toBeTruthy();
+    expect(screen.getByTestId('category-filter-all')).toBeTruthy();
+    expect(screen.getByTestId('category-filter-cat-wood')).toBeTruthy();
+
+    // Click edit categories button
+    await user.click(screen.getByTestId('category-filter-edit'));
+    expect(screen.getByTestId('material-category-manage-modal')).toBeTruthy();
+
+    // Click "Nueva categoría" inside manage modal
+    await user.click(screen.getByTestId('material-category-create-btn'));
+    expect(screen.getByTestId('material-category-form-modal')).toBeTruthy();
+
+    // Type category name and submit
+    fireEvent.change(screen.getByTestId('material-category-name-input'), {
+      target: { value: 'Unicolores' },
+    });
+    const form = screen.getByTestId('material-category-form-modal').querySelector('form');
+    fireEvent.submit(form!);
+
+    expect(onCreateCategory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Unicolores',
+        parentId: '',
+      }),
+    );
+  });
+
+  it('allows progressive selection of 3-level subcategories in material form', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(
+      <MaterialsCatalog
+        materials={[]}
+        edges={[]}
+        materialCategories={[
+          { id: 'cat-maderas', name: 'Maderas', sortOrder: 1 },
+          { id: 'cat-roble', name: 'Roble', parentId: 'cat-maderas', sortOrder: 1 },
+          { id: 'cat-claro', name: 'Claro', parentId: 'cat-roble', sortOrder: 1 },
+        ]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+      />,
+    );
+
+    // Click "Agregar material"
+    await user.click(screen.getByRole('button', { name: 'Agregar material' }));
+
+    // Fill code, name, manufacturer
+    fireEvent.change(screen.getByLabelText('Código'), { target: { value: 'MAT-02' } });
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Roble Claro 18' } });
+    fireEvent.change(screen.getByTestId('material-form-manufacturer'), { target: { value: 'Arauco' } });
+
+    // Level 1 category should be visible, L2 should not yet
+    expect(screen.getByTestId('material-form-category-l1')).toBeTruthy();
+    expect(screen.queryByTestId('material-form-category-l2')).toBeNull();
+
+    // Select Level 1: "Maderas"
+    fireEvent.change(screen.getByTestId('material-form-category-l1'), { target: { value: 'cat-maderas' } });
+
+    // Level 2 should now appear
+    expect(screen.getByTestId('material-form-category-l2')).toBeTruthy();
+    expect(screen.queryByTestId('material-form-category-l3')).toBeNull();
+
+    // Select Level 2: "Roble"
+    fireEvent.change(screen.getByTestId('material-form-category-l2'), { target: { value: 'cat-roble' } });
+
+    // Level 3 should now appear
+    expect(screen.getByTestId('material-form-category-l3')).toBeTruthy();
+
+    // Select Level 3: "Claro"
+    fireEvent.change(screen.getByTestId('material-form-category-l3'), { target: { value: 'cat-claro' } });
+
+    // Fill required dimensions/price
+    fireEvent.change(screen.getByLabelText('Espesor (mm)'), { target: { value: '18' } });
+    fireEvent.change(screen.getByLabelText('Ancho del tablero (mm)'), { target: { value: '1830' } });
+    fireEvent.change(screen.getByLabelText('Largo del tablero — Veta (mm)'), { target: { value: '2440' } });
+    fireEvent.change(screen.getByLabelText('Precio del tablero ($)'), { target: { value: '100' } });
+
+    // Submit
+    const form = screen.getByTestId('material-form-modal').querySelector('form');
+    fireEvent.submit(form!);
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'MAT-02',
+        name: 'Roble Claro 18',
+        manufacturer: 'Arauco',
+        categoryId: 'cat-claro',
+      }),
+    );
+  });
 });

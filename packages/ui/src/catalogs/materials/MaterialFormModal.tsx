@@ -6,7 +6,12 @@
 
 import { type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from 'react';
 import type { EdgeBand, MaterialCategory } from '@muebles/domain';
-import { categoryPath } from '@muebles/domain';
+import {
+  cascadeFromCategoryId,
+  cascadeOptions,
+  cascadeSelectedCategoryId,
+  categoryPath,
+} from '@muebles/domain';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { CatalogImage, Modal, formatMoneyDisplay } from '../../common';
 import { CatalogPicker } from '../CatalogPicker';
@@ -64,6 +69,50 @@ export function MaterialFormModal({
   const textureImagePath =
     draft.previewTextureUrl.trim() || draft.imageUrl.trim() || '';
 
+  // Draft category cascade for 3-level progressive selector
+  const draftCascade = cascadeFromCategoryId(
+    draft.categoryId || undefined,
+    materialCategories,
+  );
+  const draftCascadeOpts = cascadeOptions(materialCategories, draftCascade);
+
+  const setDraftCascadeLevel = (level: 1 | 2 | 3, value: string) => {
+    const next = {
+      level1Id:
+        level >= 1
+          ? level === 1
+            ? value || undefined
+            : draftCascade.level1Id
+          : undefined,
+      level2Id:
+        level >= 2
+          ? level === 2
+            ? value || undefined
+            : draftCascade.level2Id
+          : undefined,
+      level3Id:
+        level >= 3
+          ? level === 3
+            ? value || undefined
+            : draftCascade.level3Id
+          : undefined,
+    };
+    if (level === 1) {
+      next.level2Id = undefined;
+      next.level3Id = undefined;
+      next.level1Id = value || undefined;
+    } else if (level === 2) {
+      next.level3Id = undefined;
+      next.level2Id = value || undefined;
+    } else {
+      next.level3Id = value || undefined;
+    }
+    setDraft((prev) => ({
+      ...prev,
+      categoryId: cascadeSelectedCategoryId(next) ?? '',
+    }));
+  };
+
   return (
     <Modal
       open={open}
@@ -85,6 +134,7 @@ export function MaterialFormModal({
       <form id={formId} className="catalog-form" onSubmit={onSubmit}>
         {error ? <p className="catalog-form__error">{error}</p> : null}
 
+        {/* --- Sección 1: Identidad --- */}
         <fieldset className="catalog-form__section">
           <legend className="catalog-form__section-title">Identidad</legend>
           <div className="catalog-form__field">
@@ -121,26 +171,62 @@ export function MaterialFormModal({
             />
           </div>
           {materialCategories.length > 0 ? (
-            <div className="catalog-form__field">
-              <label htmlFor="mat-category">Subgrupo</label>
-              <select
-                id="mat-category"
-                value={draft.categoryId}
-                onChange={(e) =>
-                  setDraft({ ...draft, categoryId: e.target.value })
-                }
-                data-testid="material-form-category"
-              >
-                <option value="">Sin subgrupo</option>
-                {materialCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {categoryPath(category.id, materialCategories)
-                      .map((node) => node.name)
-                      .join(' › ')}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="catalog-form__field">
+                <label htmlFor="mat-category-l1">Categoría</label>
+                <select
+                  id="mat-category-l1"
+                  value={draftCascade.level1Id ?? ''}
+                  onChange={(e) => setDraftCascadeLevel(1, e.target.value)}
+                  data-testid="material-form-category-l1"
+                >
+                  <option value="">Sin categoría</option>
+                  {draftCascadeOpts.level1.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {draftCascade.level1Id && draftCascadeOpts.level2.length > 0 ? (
+                <div className="catalog-form__field">
+                  <label htmlFor="mat-category-l2">Subcategoría 1 (opcional)</label>
+                  <select
+                    id="mat-category-l2"
+                    value={draftCascade.level2Id ?? ''}
+                    onChange={(e) => setDraftCascadeLevel(2, e.target.value)}
+                    data-testid="material-form-category-l2"
+                  >
+                    <option value="">Ninguna</option>
+                    {draftCascadeOpts.level2.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              {draftCascade.level2Id && draftCascadeOpts.level3.length > 0 ? (
+                <div className="catalog-form__field">
+                  <label htmlFor="mat-category-l3">Subcategoría 2 (opcional)</label>
+                  <select
+                    id="mat-category-l3"
+                    value={draftCascade.level3Id ?? ''}
+                    onChange={(e) => setDraftCascadeLevel(3, e.target.value)}
+                    data-testid="material-form-category-l3"
+                  >
+                    <option value="">Ninguna</option>
+                    {draftCascadeOpts.level3.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </>
           ) : null}
           <div
             className="catalog-form__field"

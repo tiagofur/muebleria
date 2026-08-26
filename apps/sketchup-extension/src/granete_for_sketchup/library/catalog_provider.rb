@@ -28,6 +28,13 @@ module Granete
           []
         end
 
+        # Workshop material categories tree (id, name, parentId, sortOrder)
+        # for hierarchical material filtering; empty for providers without
+        # material categories.
+        def all_material_categories
+          []
+        end
+
         # Workshop board materials in the shared contract shape; empty for
         # providers without a workshop material list.
         def all_materials
@@ -193,9 +200,21 @@ module Granete
           serve_from_fallback(&:all_categories) || []
         end
 
+        # Workshop material categories tree (id, name, parentId, sortOrder)
+        # for hierarchical material filtering; empty for providers without
+        # material categories.
+        def all_material_categories
+          remote = fetch_contract
+          return remote.fetch('materialCategories', []) if remote
+
+          serve_from_fallback(&:all_material_categories) || []
+        end
+
         # Workshop board materials (contract shape: materialId, code, name,
-        # previewColor, imageUrl, thicknessMm, grain) for client material
-        # selectors; empty for providers without a workshop material list.
+        # manufacturer, categoryId, previewColor, imageUrl, previewTextureUrl,
+        # previewTextureTileWidthMm, previewTextureTileLengthMm,
+        # previewRoughness, previewMetalness, previewClearcoat, thicknessMm, grain)
+        # for client material selectors; empty for providers without a workshop material list.
         def all_materials
           remote = fetch_contract
           return remote.fetch('materials', []) if remote

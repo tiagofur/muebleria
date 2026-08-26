@@ -15,8 +15,10 @@ import {
 } from 'react';
 import type { EdgeBand, MaterialBoard, MaterialCategory } from '@muebles/domain';
 import {
+  filterMaterialBoardsByCategory,
   isValidPreviewColor,
   normalizePreviewColor,
+  UNCATEGORIZED_FILTER,
 } from '@muebles/domain';
 import {
   Eye,
@@ -47,6 +49,9 @@ import {
 } from '../catalogHelpers';
 import { ActiveBadge, CatalogTable, type CatalogColumn } from '../CatalogTable';
 import type { EdgeDraft } from '../EdgesCatalog';
+import type { CategoryDraft } from '../../modules/moduleHelpers';
+import { CategoryTree } from '../ambient/AmbientCategoryTree';
+import { MaterialCategoryModals } from './MaterialCategoryModals';
 import {
   loadImageNaturalSize,
   suggestTextureTileMmFromImage,
@@ -97,6 +102,10 @@ export interface MaterialsCatalogProps {
   /** F042: upload catalog image; returns relative media URL. */
   readonly onUploadImage?: (file: File) => Promise<string>;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** Category CRUD for material categories (F142) */
+  readonly onCreateCategory?: (draft: CategoryDraft) => void;
+  readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
+  readonly onDeleteCategory?: (id: string) => void;
 }
 
 export function MaterialsCatalog({
@@ -116,11 +125,16 @@ export function MaterialsCatalog({
   showCosts = true,
   onUploadImage,
   resolveImageUrl = (u) => u,
+  onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
 }: MaterialsCatalogProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<CatalogStatusFilter>('active');
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
   const materialIds = useMemo(() => materials.map((m) => m.id), [materials]);
   const { selectedId: expandedId, toggleSelectedId } =
     useRoutableEntitySelection({
@@ -138,14 +152,36 @@ export function MaterialsCatalog({
   /** Progressive disclosure: color / texture / tile mm (Fase 3 UI). */
   const [preview3dOpen, setPreview3dOpen] = useState(false);
 
-  const rows = useMemo(
-    () =>
-      filterCatalogItems(materials, {
-        status,
-        query: debouncedSearch,
-      }),
-    [materials, status, debouncedSearch],
-  );
+  const categoryFilterCounts = useMemo(() => {
+    const byCategoryId = new Map<string, number>();
+    for (const cat of materialCategories) {
+      byCategoryId.set(
+        cat.id,
+        filterMaterialBoardsByCategory(materials, cat.id, materialCategories).length,
+      );
+    }
+    return {
+      all: materials.length,
+      uncategorized: filterMaterialBoardsByCategory(
+        materials,
+        UNCATEGORIZED_FILTER,
+        materialCategories,
+      ).length,
+      byCategoryId,
+    };
+  }, [materials, materialCategories]);
+
+  const rows = useMemo(() => {
+    const byCat = filterMaterialBoardsByCategory(
+      materials,
+      categoryFilter,
+      materialCategories,
+    );
+    return filterCatalogItems(byCat, {
+      status,
+      query: debouncedSearch,
+    });
+  }, [materials, categoryFilter, materialCategories, status, debouncedSearch]);
 
   const activeEdges = useMemo(
     () => edges.filter((e) => e.active),
@@ -416,6 +452,9 @@ export function MaterialsCatalog({
   const isTrulyEmpty = materials.length === 0;
   const isFilterEmpty = !isTrulyEmpty && rows.length === 0;
 
+      const showCategorySidebar =
+    materialCategories.length > 0 || Boolean(onCreateCategory);
+
   return (
     <section className="catalog-page" aria-label="Catálogo de materiales">
       <PageHeader
@@ -436,93 +475,183 @@ export function MaterialsCatalog({
         }
       />
 
-      {!isTrulyEmpty ? (
-        <PageToolbar
-          ariaLabel="Buscar y filtrar materiales"
-          search={
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Buscar materiales…"
-              aria-label="Buscar materiales"
-            />
-          }
-          filters={<StatusChips value={status} onChange={setStatus} />}
-        />
-      ) : null}
-
-      <div className="catalog-layout">
-        {isTrulyEmpty ? (
-          <EmptyState
-            icon={Layers}
-            title="No hay materiales"
-            description="Agregá el primer tablero del catálogo o cargá la semilla del workspace."
-            actionLabel="Agregar material"
-            onAction={startCreate}
-          />
-        ) : isFilterEmpty ? (
-          <EmptyState
-            variant="no-results"
-            icon={SearchX}
-            title="Sin resultados"
-            description="No hay materiales que coincidan con la búsqueda o el filtro."
-            actionLabel="Limpiar filtros"
-            onAction={() => {
-              setSearch('');
-              setStatus('active');
-            }}
-          />
-        ) : (
-          <CatalogTable
-            columns={visibleColumns}
-            rows={rows}
-            expandedId={expandedId}
-            isInactive={(r) => !r.active}
-            onRowClick={(row) => toggleSelectedId(row.id)}
-            renderExpandedDetail={(row) => (
-              <MaterialExpandedDetail
-                row={row}
-                edgeNameById={edgeNameById}
-                resolveImageUrl={resolveImageUrl}
-              />
-            )}
-            getRowActions={(row) => (
-              <>
+      <div className={showCategorySidebar ? 'module-list-layout' : 'catalog-layout'}>
+        {showCategorySidebar ? (
+          <aside
+            className="module-category-tree"
+            aria-label="Filtro por categorías"
+            data-testid="category-filter-panel"
+          >
+            <div className="module-category-tree__header">
+              <h3 className="module-category-tree__title">Categorías</h3>
+              {canMutate && onCreateCategory ? (
                 <button
                   type="button"
-                  className="btn btn--small btn--ghost"
-                  aria-label={`Editar ${row.code}`}
-                  onClick={() => startEdit(row)}
+                  className="btn btn--ghost btn--small"
+                  onClick={() => setManageCategoriesOpen(true)}
+                  aria-label="Editar categorías"
+                  data-testid="category-filter-edit"
                 >
                   <Pencil size={14} strokeWidth={1.5} aria-hidden />
-                  Editar
                 </button>
-                {row.active ? (
-                  <button
-                    type="button"
-                    className="btn btn--small btn--ghost btn--danger"
-                    aria-label={`Desactivar ${row.code}`}
-                    onClick={() => onDeactivate(row.id)}
-                  >
-                    <EyeOff size={14} strokeWidth={1.5} aria-hidden />
-                    Desactivar
-                  </button>
-                ) : (
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className={
+                categoryFilter === null
+                  ? 'module-category-tree__item module-category-tree__item--active'
+                  : 'module-category-tree__item'
+              }
+              onClick={() => setCategoryFilter(null)}
+              data-testid="category-filter-all"
+            >
+              <span className="module-category-tree__label">Todas</span>
+              <span
+                className="module-category-tree__count"
+                data-testid="category-filter-count-all"
+              >
+                {categoryFilterCounts.all}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={
+                categoryFilter === UNCATEGORIZED_FILTER
+                  ? 'module-category-tree__item module-category-tree__item--active'
+                  : 'module-category-tree__item'
+              }
+              onClick={() => setCategoryFilter(UNCATEGORIZED_FILTER)}
+              data-testid="category-filter-uncategorized"
+            >
+              <span className="module-category-tree__label">Sin categoría</span>
+              <span
+                className="module-category-tree__count"
+                data-testid="category-filter-count-uncategorized"
+              >
+                {categoryFilterCounts.uncategorized}
+              </span>
+            </button>
+            {materialCategories.length === 0 ? (
+              <p className="module-category-tree__empty">
+                Sin categorías. Usá «Editar categorías» para crear la jerarquía de materiales.
+              </p>
+            ) : (
+              <CategoryTree
+                categories={materialCategories}
+                parentId={undefined}
+                depth={0}
+                categoryFilter={categoryFilter}
+                setCategoryFilter={setCategoryFilter}
+                counts={categoryFilterCounts.byCategoryId}
+              />
+            )}
+          </aside>
+        ) : null}
+
+        <div className="module-list-main">
+          {!isTrulyEmpty ? (
+            <PageToolbar
+              ariaLabel="Buscar y filtrar materiales"
+              search={
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Buscar materiales…"
+                  aria-label="Buscar materiales"
+                />
+              }
+              filters={<StatusChips value={status} onChange={setStatus} />}
+            />
+          ) : null}
+
+          {isTrulyEmpty ? (
+            <EmptyState
+              icon={Layers}
+              title="No hay materiales"
+              description="Agregá el primer tablero del catálogo o cargá la semilla del workspace."
+              actionLabel="Agregar material"
+              onAction={startCreate}
+            />
+          ) : isFilterEmpty ? (
+            <EmptyState
+              variant="no-results"
+              icon={SearchX}
+              title="Sin resultados"
+              description="No hay materiales que coincidan con la búsqueda o el filtro."
+              actionLabel="Limpiar filtros"
+              onAction={() => {
+                setSearch('');
+                setStatus('active');
+                setCategoryFilter(null);
+              }}
+            />
+          ) : (
+            <CatalogTable
+              columns={visibleColumns}
+              rows={rows}
+              expandedId={expandedId}
+              isInactive={(r) => !r.active}
+              onRowClick={(row) => toggleSelectedId(row.id)}
+              renderExpandedDetail={(row) => (
+                <MaterialExpandedDetail
+                  row={row}
+                  edgeNameById={edgeNameById}
+                  resolveImageUrl={resolveImageUrl}
+                />
+              )}
+              getRowActions={(row) => (
+                <>
                   <button
                     type="button"
                     className="btn btn--small btn--ghost"
-                    aria-label={`Reactivar ${row.code}`}
-                    onClick={() => onReactivate(row.id)}
+                    aria-label={`Editar ${row.code}`}
+                    onClick={() => startEdit(row)}
                   >
-                    <Eye size={14} strokeWidth={1.5} aria-hidden />
-                    Reactivar
+                    <Pencil size={14} strokeWidth={1.5} aria-hidden />
+                    Editar
                   </button>
-                )}
-              </>
-            )}
-          />
-        )}
+                  {row.active ? (
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost btn--danger"
+                      aria-label={`Desactivar ${row.code}`}
+                      onClick={() => onDeactivate(row.id)}
+                    >
+                      <EyeOff size={14} strokeWidth={1.5} aria-hidden />
+                      Desactivar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Reactivar ${row.code}`}
+                      onClick={() => onReactivate(row.id)}
+                    >
+                      <Eye size={14} strokeWidth={1.5} aria-hidden />
+                      Reactivar
+                    </button>
+                  )}
+                </>
+              )}
+            />
+          )}
+        </div>
       </div>
+
+      <MaterialCategoryModals
+        open={manageCategoriesOpen}
+        onClose={() => setManageCategoriesOpen(false)}
+        categories={materialCategories}
+        onCreateCategory={onCreateCategory}
+        onUpdateCategory={onUpdateCategory}
+        onDeleteCategory={onDeleteCategory}
+        onAfterDelete={(deletedId) => {
+          if (categoryFilter === deletedId) {
+            setCategoryFilter(null);
+          }
+        }}
+      />
 
       <MaterialFormModal
         materialCategories={materialCategories}

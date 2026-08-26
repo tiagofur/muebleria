@@ -1343,6 +1343,9 @@ export function AppContent({
   const createAmbientCategory = catalogActions.createAmbientCategory;
   const updateAmbientCategory = catalogActions.updateAmbientCategory;
   const deleteAmbientCategory = catalogActions.deleteAmbientCategory;
+  const createMaterialCategory = catalogActions.createMaterialCategory;
+  const updateMaterialCategory = catalogActions.updateMaterialCategory;
+  const deleteMaterialCategory = catalogActions.deleteMaterialCategory;
   const createOptionGroup = catalogActions.createOptionGroup;
   const updateOptionGroup = catalogActions.updateOptionGroup;
   const deleteOptionGroup = catalogActions.deleteOptionGroup;
@@ -2759,6 +2762,7 @@ export function AppContent({
     createFromTemplate,
     createHardware,
     createMaterial,
+    createMaterialCategory,
     createModule,
     createOptionGroup,
     createProject,
@@ -2771,6 +2775,7 @@ export function AppContent({
     deleteAgregado,
     deleteAmbientCategory,
     deleteCategory,
+    deleteMaterialCategory,
     deleteModule,
     deleteOptionGroup,
     deleteProject,
@@ -2959,6 +2964,7 @@ export function AppContent({
     updateInstallationChecklist,
     updateKitchenLayout,
     updateMaterial,
+    updateMaterialCategory,
     updateMeasureDefaults,
     updateModule,
     updateOptionGroup,

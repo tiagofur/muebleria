@@ -40,7 +40,8 @@ module Granete
                         else
                           (entity.respond_to?(:name) ? entity.name : 'Mueble')
                         end,
-              'parameters' => meta.dig('intent', 'parameters') || {}
+              'parameters' => meta.dig('intent', 'parameters') || {},
+              'materialChoices' => meta.dig('intent', 'materialChoices') || {}
             }
           when 'componentInstance'
             {

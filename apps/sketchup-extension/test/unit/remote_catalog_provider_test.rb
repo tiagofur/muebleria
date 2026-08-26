@@ -288,7 +288,10 @@ class RemoteCatalogProviderTest < Minitest::Test
     ]
     contract['materials'] = [
       { 'materialId' => 'mat-oak', 'code' => 'ROBLE-CLARO', 'name' => 'Roble Claro',
-        'previewColor' => '#c4a574', 'thicknessMm' => 18, 'grain' => true }
+        'manufacturer' => 'Arauco', 'categoryId' => 'cat-light',
+        'previewColor' => '#c4a574', 'previewTextureUrl' => '/api/media/oak_pbr.jpg',
+        'previewTextureTileWidthMm' => 600.0, 'previewRoughness' => 0.65,
+        'thicknessMm' => 18, 'grain' => true }
     ]
     provider = build_provider(status: 200, body: contract)
 
@@ -305,10 +308,31 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal 1, materials.length
     assert_equal 'mat-oak', materials.first['materialId']
     assert_equal '#c4a574', materials.first['previewColor']
+    assert_equal 'Arauco', materials.first['manufacturer']
+    assert_equal 'cat-light', materials.first['categoryId']
+    assert_equal '/api/media/oak_pbr.jpg', materials.first['previewTextureUrl']
+    assert_equal 600.0, materials.first['previewTextureTileWidthMm']
+    assert_equal 0.65, materials.first['previewRoughness']
   end
 
-  def test_static_providers_serve_no_materials
-    assert_equal [], Granete::SketchUpExtension::Library::StaticCatalogProvider.new.all_materials
+  def test_serves_material_categories_hierarchical_tree
+    contract = JSON.parse(JSON.generate(CONTRACT))
+    contract['materialCategories'] = [
+      { 'id' => 'matcat-wood', 'name' => 'Maderas', 'sortOrder' => 1 },
+      { 'id' => 'matcat-light', 'name' => 'Claras', 'parentId' => 'matcat-wood', 'sortOrder' => 1 }
+    ]
+    provider = build_provider(status: 200, body: contract)
+
+    categories = provider.all_material_categories
+    assert_equal 2, categories.length
+    assert_equal 'Maderas', categories[0]['name']
+    assert_equal 'matcat-wood', categories[1]['parentId']
+  end
+
+  def test_static_providers_serve_no_materials_or_material_categories
+    static = Granete::SketchUpExtension::Library::StaticCatalogProvider.new
+    assert_equal [], static.all_materials
+    assert_equal [], static.all_material_categories
   end
 
   private

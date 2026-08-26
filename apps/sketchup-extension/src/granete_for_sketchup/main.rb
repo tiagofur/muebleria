@@ -19,8 +19,10 @@ module Granete
         library/catalog_provider
         assets/asset_resolver
         assets/asset_loader
+        assets/texture_cache
         model/furniture_builder
         observers/selection_observer
+        ui/option_selector_controller
         ui/dialog_controller
         lifecycle
         application

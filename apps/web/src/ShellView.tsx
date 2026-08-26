@@ -365,6 +365,7 @@ export interface ShellViewCtx {
   readonly createFromTemplate: (templateId: string, draft: ProjectDraft) => void;
   readonly createHardware: (draft: HardwareDraft) => void;
   readonly createMaterial: (draft: MaterialDraft) => void;
+  readonly createMaterialCategory: (draft: CategoryDraft) => void;
   readonly createModule: (draft: ModuleDraft) => void;
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
   readonly createProject: (draft: ProjectDraft) => void;
@@ -377,6 +378,7 @@ export interface ShellViewCtx {
   readonly deleteAgregado: (id: string) => Promise<void>;
   readonly deleteAmbientCategory: (id: string) => Promise<void>;
   readonly deleteCategory: (id: string) => Promise<void>;
+  readonly deleteMaterialCategory: (id: string) => Promise<void>;
   readonly deleteModule: (id: string) => void;
   readonly deleteOptionGroup: (id: string) => Promise<void>;
   readonly deleteProject: (id: string) => void;
@@ -577,6 +579,7 @@ export interface ShellViewCtx {
   readonly updateInstallationChecklist: (projectId: string, installationChecklist: readonly InstallationChecklistItem[]) => void;
   readonly updateKitchenLayout: (projectId: string, kitchenLayout: ProjectKitchenLayout) => void;
   readonly updateMaterial: (id: string, draft: MaterialDraft) => void;
+  readonly updateMaterialCategory: (id: string, draft: CategoryDraft) => void;
   readonly updateMeasureDefaults: (projectId: string, defaults: { readonly inferior?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; readonly superior?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; readonly alto?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; } | undefined) => void;
   readonly updateModule: (id: string, draft: ModuleDraft) => void;
   readonly updateOptionGroup: (id: string, draft: OptionGroupDraft) => void;
@@ -636,6 +639,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     createFromTemplate,
     createHardware,
     createMaterial,
+    createMaterialCategory,
     createModule,
     createOptionGroup,
     createProject,
@@ -648,6 +652,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     deleteAgregado,
     deleteAmbientCategory,
     deleteCategory,
+    deleteMaterialCategory,
     deleteModule,
     deleteOptionGroup,
     deleteProject,
@@ -836,6 +841,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     updateInstallationChecklist,
     updateKitchenLayout,
     updateMaterial,
+    updateMaterialCategory,
     updateMeasureDefaults,
     updateModule,
     updateOptionGroup,
@@ -1497,6 +1503,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onUpdate={updateMaterial}
           onDeactivate={(id) => setMaterialActive(id, false)}
           onReactivate={(id) => setMaterialActive(id, true)}
+          onCreateCategory={createMaterialCategory}
+          onUpdateCategory={updateMaterialCategory}
+          onDeleteCategory={deleteMaterialCategory}
           getCostPerM2={getMaterialCostPerM2}
           openEntityId={routeEntityId}
           onSelectionChange={(id) => onEntitySelectionChange('materials', id)}

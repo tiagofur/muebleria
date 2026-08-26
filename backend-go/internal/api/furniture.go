@@ -86,6 +86,11 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 		return
 	}
+	materialCategories, err := s.Store.ListMaterialCategories(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
 	composition := domain.Catalog{
 		Structures:   structures,
 		Components:   components,
@@ -95,7 +100,7 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 		OptionGroups: optionGroups,
 	}
 
-	catalog := buildWorkshopFurnitureCatalog(modules, categories, composition)
+	catalog := buildWorkshopFurnitureCatalog(modules, categories, materialCategories, composition)
 	catalog.RevisionID = workshopCatalogRevisionID(catalog)
 	body, err := json.Marshal(catalog)
 	if err != nil {

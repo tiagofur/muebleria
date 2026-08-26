@@ -42,6 +42,8 @@ func main() {
 		runCreate(os.Args[2:])
 	case "reset-password":
 		runResetPassword(os.Args[2:])
+	case "set-license":
+		runSetLicense(os.Args[2:])
 	case "seed":
 		runSeed(os.Args[2:])
 	case "clean-media":
@@ -59,6 +61,7 @@ func usage() {
 	fmt.Fprint(os.Stderr, `Usage:
   admin create         --email <email> [--name <name>]
   admin reset-password --email <email>
+  admin set-license    --email <email> [--plan <trial|active|none>]
   admin seed
   admin clean-media [--apply]
 
@@ -102,7 +105,8 @@ func runCreate(args []string) {
 
 	// Idempotent: if the user already exists (any active state), do nothing.
 	if existing, err := store.GetUserByEmailAnyState(ctx, *email); err == nil && existing != nil {
-		log.Printf("User %q already exists (active=%v); nothing to do.", *email, existing.Active)
+		log.Printf("User %q already exists (active=%v); updating license...", *email, existing.Active)
+		_, _ = store.Pool.Exec(ctx, `UPDATE users SET license_plan = $1 WHERE email = $2`, domain.LicensePlanTrial, *email)
 		return
 	} else if err != nil && !strings.Contains(err.Error(), "not found") {
 		fatal(fmt.Errorf("checking existing user: %w", err))
@@ -118,6 +122,7 @@ func runCreate(args []string) {
 		PasswordHash: hash,
 		Name:         *name,
 		Role:         domain.RoleAdmin,
+		LicensePlan:  domain.LicensePlanTrial,
 		Active:       true,
 	}
 	if err := store.CreateUser(ctx, u); err != nil {
@@ -125,6 +130,34 @@ func runCreate(args []string) {
 	}
 
 	log.Printf("Admin user created: %s", *email)
+}
+
+func runSetLicense(args []string) {
+	fs := flag.NewFlagSet("set-license", flag.ExitOnError)
+	email := fs.String("email", "", "user email (required)")
+	plan := fs.String("plan", string(domain.LicensePlanTrial), "license plan (trial|active|none)")
+	_ = fs.Parse(args)
+
+	if err := validateEmail(*email); err != nil {
+		fatal(err)
+	}
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+	res, err := store.Pool.Exec(ctx, `UPDATE users SET license_plan = $1 WHERE email = $2`, *plan, *email)
+	if err != nil {
+		fatal(fmt.Errorf("updating license: %w", err))
+	}
+	if res.RowsAffected() == 0 {
+		fatal(fmt.Errorf("user %q not found", *email))
+	}
+
+	log.Printf("License set to %q for %s", *plan, *email)
 }
 
 func runResetPassword(args []string) {

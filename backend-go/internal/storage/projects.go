@@ -1168,7 +1168,7 @@ func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, category_id,
-		       furniture_type, base_mode, base_clearance_mm, image_url
+		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados
 		FROM modules
 		ORDER BY name ASC;
 	`
@@ -1188,8 +1188,10 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		var baseMode *string
 		var baseClearanceMm *int
 		var imageURL *string
+		var structureID *string
+		var agrsRaw []byte
 		err := rows.Scan(&m.ID, &m.Code, &m.Name, &w, &h, &d, &notes, &categoryID,
-			&furnitureType, &baseMode, &baseClearanceMm, &imageURL)
+			&furnitureType, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw)
 		if err != nil {
 			return nil, err
 		}
@@ -1220,9 +1222,23 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		if imageURL != nil {
 			m.ImageURL = *imageURL
 		}
+		if structureID != nil {
+			m.StructureID = *structureID
+		}
+		if len(agrsRaw) > 0 {
+			_ = json.Unmarshal(agrsRaw, &m.Agregados)
+		}
+		if m.Agregados == nil {
+			m.Agregados = []domain.ModuleAgregadoInstance{}
+		}
 		modules = append(modules, m)
 	}
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	componentsByModule, err := s.listAllModuleComponents(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1231,6 +1247,11 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		return nil, err
 	}
 	for i := range modules {
+		if comps, ok := componentsByModule[modules[i].ID]; ok {
+			modules[i].Components = comps
+		} else {
+			modules[i].Components = []domain.ComponentInstance{}
+		}
 		if presets, ok := presetsByModule[modules[i].ID]; ok {
 			modules[i].Presets = presets
 		} else {
@@ -1238,6 +1259,59 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		}
 	}
 	return modules, nil
+}
+
+func (s *PostgresStore) listAllModuleComponents(ctx context.Context) (map[string][]domain.ComponentInstance, error) {
+	query := `
+		SELECT module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides
+		FROM module_components
+		ORDER BY created_at ASC;
+	`
+	rows, err := s.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error query all module components: %w", err)
+	}
+	defer rows.Close()
+
+	byModule := map[string][]domain.ComponentInstance{}
+	for rows.Next() {
+		var moduleID string
+		var ci domain.ComponentInstance
+		var placementOverride *string
+		var lengthFormula, widthFormula *string
+		var overridesJSON []byte
+		if err := rows.Scan(&moduleID, &ci.ComponentID, &ci.Quantity, &placementOverride, &lengthFormula, &widthFormula, &overridesJSON); err != nil {
+			return nil, err
+		}
+		if placementOverride != nil && *placementOverride != "" {
+			p := domain.ComponentPlacement(*placementOverride)
+			ci.PlacementOverride = &p
+		}
+		hasFormula := (lengthFormula != nil && *lengthFormula != "") || (widthFormula != nil && *widthFormula != "")
+		hasJSON := len(overridesJSON) > 0 && string(overridesJSON) != "null" && string(overridesJSON) != "{}"
+		if hasFormula || hasJSON {
+			ov := &domain.ComponentInstanceOverrides{}
+			if lengthFormula != nil {
+				ov.LengthFormula = *lengthFormula
+			}
+			if widthFormula != nil {
+				ov.WidthFormula = *widthFormula
+			}
+			if hasJSON {
+				if err := json.Unmarshal(overridesJSON, ov); err != nil {
+					var edgeStruct struct {
+						Edges []domain.EdgeAssignment `json:"edges"`
+					}
+					if err2 := json.Unmarshal(overridesJSON, &edgeStruct); err2 == nil {
+						ov.Edges = edgeStruct.Edges
+					}
+				}
+			}
+			ci.Overrides = ov
+		}
+		byModule[moduleID] = append(byModule[moduleID], ci)
+	}
+	return byModule, rows.Err()
 }
 
 func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]domain.DimensionPreset, error) {

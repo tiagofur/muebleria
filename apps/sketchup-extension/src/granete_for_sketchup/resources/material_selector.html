@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catálogo de Acabados — Granete</title>
+  <style>
+    :root {
+      --bg-canvas: #0f172a;
+      --bg-surface: #1e293b;
+      --bg-elevated: #334155;
+      --bg-hover: #475569;
+      --border-subtle: #334155;
+      --border-focus: #38bdf8;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-hover: #0369a1;
+      --accent-active: #0c4a6e;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --success: #10b981;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 10px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    /* HEADER */
+    header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .role-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 420px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      color: var(--text-muted);
+      pointer-events: none;
+      font-size: 14px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 7px 32px 7px 32px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 8px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      display: none;
+    }
+
+    .search-clear:hover {
+      color: var(--text-primary);
+      background: var(--bg-elevated);
+    }
+
+    /* BREADCRUMBS */
+    .breadcrumbs-bar {
+      background: rgba(30, 41, 59, 0.6);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .crumb-item {
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: color 0.15s;
+    }
+
+    .crumb-item:hover {
+      color: var(--text-primary);
+      text-decoration: underline;
+    }
+
+    .crumb-item.active {
+      color: #38bdf8;
+      font-weight: 500;
+      cursor: default;
+      text-decoration: none;
+    }
+
+    .crumb-sep {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* MAIN CONTAINER */
+    .main-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: auto 1fr 300px;
+      overflow: hidden;
+      height: 100%;
+    }
+
+    .main-layout.no-categories {
+      grid-template-columns: 1fr 300px;
+    }
+
+    /* ZONE 1-3: MILLER COLUMNS */
+    .miller-pane {
+      display: flex;
+      border-right: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      max-width: 480px;
+      overflow-x: auto;
+    }
+
+    .miller-column {
+      width: 160px;
+      min-width: 150px;
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      background: rgba(15, 23, 42, 0.3);
+    }
+
+    .miller-column:last-child {
+      border-right: none;
+    }
+
+    .column-header {
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      background: rgba(30, 41, 59, 0.8);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .column-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+    }
+
+    .column-item {
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      transition: all 0.15s;
+      margin-bottom: 2px;
+    }
+
+    .column-item:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    .column-item.active {
+      background: var(--accent-primary);
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .column-item .badge {
+      font-size: 10px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 1px 5px;
+      border-radius: 10px;
+      color: inherit;
+      opacity: 0.85;
+    }
+
+    /* ZONE 4: CANDIDATE SWATCH GRID */
+    .grid-pane {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-canvas);
+      overflow: hidden;
+    }
+
+    .grid-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-muted);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .swatch-grid {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 14px;
+      align-content: start;
+    }
+
+    .swatch-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.18s ease;
+      position: relative;
+    }
+
+    .swatch-card:hover {
+      border-color: var(--border-focus);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .swatch-card.active {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px var(--border-focus), 0 4px 16px rgba(56, 189, 248, 0.2);
+    }
+
+    .card-preview {
+      height: 110px;
+      background-color: #27272a;
+      background-size: cover;
+      background-position: center;
+      background-repeat: repeat;
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: 6px;
+    }
+
+    .card-check {
+      background: #0284c7;
+      color: #ffffff;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .swatch-card.active .card-check {
+      display: flex;
+    }
+
+    .grain-indicator {
+      position: absolute;
+      bottom: 6px;
+      left: 6px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      color: #94a3b8;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .card-info {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .card-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      min-height: 31px;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .card-code {
+      font-family: monospace;
+      color: var(--text-muted);
+    }
+
+    .card-manufacturer {
+      font-size: 10px;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 1px 4px;
+      border-radius: var(--radius-sm);
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 48px 16px;
+      color: var(--text-muted);
+    }
+
+    /* ZONE 5: DETAIL INSPECTOR PANE */
+    .inspector-pane {
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 16px;
+    }
+
+    .inspector-preview-box {
+      width: 100%;
+      height: 160px;
+      background: #27272a;
+      background-size: cover;
+      background-position: center;
+      background-repeat: repeat;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .inspector-details {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .inspector-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .detail-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .detail-value {
+      font-size: 12px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    /* SCOPE SELECTOR */
+    .scope-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .scope-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .scope-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .scope-option input[type="radio"] {
+      accent-color: #0284c7;
+      cursor: pointer;
+    }
+
+    /* ACTION BUTTONS */
+    .actions-box {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn-apply {
+      background: var(--accent-primary);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-apply:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-apply:active {
+      background: var(--accent-active);
+    }
+
+    .btn-cancel {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 8px 16px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-cancel:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--bg-hover);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <div class="header-title">
+        <span>Catálogo de Acabados</span>
+        <span id="role-badge" class="role-badge">FRENTES</span>
+      </div>
+    </div>
+
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Buscar por nombre, código o fabricante..." autocomplete="off">
+      <button id="search-clear" class="search-clear" title="Limpiar búsqueda">✕</button>
+    </div>
+  </header>
+
+  <!-- BREADCRUMBS -->
+  <div id="breadcrumbs-bar" class="breadcrumbs-bar">
+    <span class="crumb-item active" data-path="">Catálogo Completo</span>
+  </div>
+
+  <!-- MAIN 3-ZONE LAYOUT -->
+  <div id="main-layout" class="main-layout">
+
+    <!-- ZONE 1-3: MILLER COLUMNS -->
+    <div id="miller-pane" class="miller-pane">
+      <!-- Col 1: L1 Root Categories -->
+      <div class="miller-column" id="miller-col-1">
+        <div class="column-header">Categorías</div>
+        <div class="column-list" id="miller-list-1"></div>
+      </div>
+      <!-- Col 2: L2 Subcategories -->
+      <div class="miller-column" id="miller-col-2" style="display: none;">
+        <div class="column-header">Subcategorías</div>
+        <div class="column-list" id="miller-list-2"></div>
+      </div>
+      <!-- Col 3: L3 Subgroups -->
+      <div class="miller-column" id="miller-col-3" style="display: none;">
+        <div class="column-header">Subgrupos</div>
+        <div class="column-list" id="miller-list-3"></div>
+      </div>
+    </div>
+
+    <!-- ZONE 4: CANDIDATE SWATCH GRID -->
+    <div class="grid-pane">
+      <div class="grid-header">
+        <span id="grid-count">0 materiales disponibles</span>
+        <span id="active-category-label">Todas las opciones</span>
+      </div>
+      <div id="swatch-grid" class="swatch-grid">
+        <!-- Swatch Cards generated dynamically -->
+      </div>
+    </div>
+
+    <!-- ZONE 5: DETAIL INSPECTOR PANE -->
+    <div class="inspector-pane">
+      <div id="inspector-preview" class="inspector-preview-box"></div>
+      <div class="inspector-details">
+        <div id="inspector-name" class="inspector-title">Selecciona un material</div>
+        
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Código</span>
+            <span id="detail-code" class="detail-value">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Espesor</span>
+            <span id="detail-thickness" class="detail-value">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Fabricante</span>
+            <span id="detail-manufacturer" class="detail-value">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Veta</span>
+            <span id="detail-grain" class="detail-value">—</span>
+          </div>
+          <div class="detail-item" style="grid-column: 1 / -1;">
+            <span class="detail-label">Textura 3D</span>
+            <span id="detail-texture-status" class="detail-value">—</span>
+          </div>
+        </div>
+
+        <div class="scope-box">
+          <span class="scope-title">Alcance de la Selección</span>
+          <label class="scope-option">
+            <input type="radio" name="scope-choice" value="furniture" checked>
+            <span>Aplicar a este mueble</span>
+          </label>
+          <label class="scope-option">
+            <input type="radio" name="scope-choice" value="project">
+            <span>Valor por defecto de la obra</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="actions-box">
+        <button id="btn-apply" class="btn-apply">
+          <span>✓</span>
+          <span>Aplicar Acabado</span>
+        </button>
+        <button id="btn-cancel" class="btn-cancel">Cancelar (Esc)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Bridge helper with SketchUp
+    function callBridge(action, payload) {
+      if (window.sketchup && typeof window.sketchup[action] === 'function') {
+        if (payload !== undefined && payload !== null) {
+          window.sketchup[action](JSON.stringify(payload));
+        } else {
+          window.sketchup[action]();
+        }
+      } else {
+        console.log('[MaterialSelector Bridge]', action, payload);
+      }
+    }
+
+    // State
+    const state = {
+      role: 'INTERIOR',
+      roleName: 'Interiores',
+      currentMaterialId: null,
+      selectedMaterialId: null,
+      allowedMaterials: [],
+      categories: [],
+      media: null,
+      selectedL1Id: null,
+      selectedL2Id: null,
+      selectedL3Id: null,
+      searchQuery: ''
+    };
+
+    function resolveMediaUrl(url) {
+      if (!url) return '';
+      if (url.startsWith('http://') || url.startsWith('https://')) return url;
+      if (state.media && state.media.baseUrl) {
+        const cleanPath = url.startsWith('/') ? url : `/${url}`;
+        const tokenParam = state.media.token ? `?token=${encodeURIComponent(state.media.token)}` : '';
+        return `${state.media.baseUrl}${cleanPath}${tokenParam}`;
+      }
+      return url;
+    }
+
+    // Initialize from Ruby controller
+    window.initOptionSelector = function(payload) {
+      state.role = payload.role || 'INTERIOR';
+      state.roleName = payload.roleName || payload.role || 'Acabado';
+      state.currentMaterialId = payload.currentMaterialId || null;
+      state.selectedMaterialId = payload.currentMaterialId || null;
+      state.allowedMaterials = payload.allowedMaterials || [];
+      state.categories = payload.categories || [];
+      state.media = payload.media || null;
+      state.selectedL1Id = null;
+      state.selectedL2Id = null;
+      state.selectedL3Id = null;
+      state.searchQuery = '';
+
+      // Update header
+      const roleBadge = document.getElementById('role-badge');
+      if (roleBadge) roleBadge.textContent = state.roleName;
+
+      // Check if categories exist
+      const mainLayout = document.getElementById('main-layout');
+      const millerPane = document.getElementById('miller-pane');
+      if (state.categories.length === 0) {
+        mainLayout.classList.add('no-categories');
+        millerPane.style.display = 'none';
+      } else {
+        mainLayout.classList.remove('no-categories');
+        millerPane.style.display = 'flex';
+      }
+
+      // If current material has a category, navigate to it
+      if (state.currentMaterialId) {
+        const currentMat = state.allowedMaterials.find(m => m.id === state.currentMaterialId);
+        if (currentMat && currentMat.categoryId) {
+          locateCategoryBranch(currentMat.categoryId);
+        }
+      }
+
+      renderMillerColumns();
+      renderBreadcrumbs();
+      renderGrid();
+      updateDetailPane();
+
+      // Focus search
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus();
+      }
+    };
+
+    function locateCategoryBranch(catId) {
+      const cat = state.categories.find(c => c.id === catId);
+      if (!cat) return;
+
+      if (!cat.parentId) {
+        state.selectedL1Id = cat.id;
+      } else {
+        const parent = state.categories.find(c => c.id === cat.parentId);
+        if (parent && !parent.parentId) {
+          state.selectedL1Id = parent.id;
+          state.selectedL2Id = cat.id;
+        } else if (parent && parent.parentId) {
+          state.selectedL1Id = parent.parentId;
+          state.selectedL2Id = parent.id;
+          state.selectedL3Id = cat.id;
+        }
+      }
+    }
+
+    function getSelectedCategoryId() {
+      return state.selectedL3Id || state.selectedL2Id || state.selectedL1Id || null;
+    }
+
+    function getDescendantCategoryIds(catId) {
+      const result = [catId];
+      const children = state.categories.filter(c => c.parentId === catId);
+      children.forEach(c => {
+        result.push(...getDescendantCategoryIds(c.id));
+      });
+      return result;
+    }
+
+    function countMaterialsInBranch(catId) {
+      const validIds = getDescendantCategoryIds(catId);
+      return state.allowedMaterials.filter(m => m.categoryId && validIds.includes(m.categoryId)).length;
+    }
+
+    function renderBreadcrumbs() {
+      const bar = document.getElementById('breadcrumbs-bar');
+      if (!bar) return;
+
+      const crumbs = [{ label: 'Catálogo Completo', l1: null, l2: null, l3: null }];
+
+      if (state.selectedL1Id) {
+        const l1 = state.categories.find(c => c.id === state.selectedL1Id);
+        if (l1) crumbs.push({ label: l1.name, l1: l1.id, l2: null, l3: null });
+      }
+      if (state.selectedL2Id) {
+        const l2 = state.categories.find(c => c.id === state.selectedL2Id);
+        if (l2) crumbs.push({ label: l2.name, l1: state.selectedL1Id, l2: l2.id, l3: null });
+      }
+      if (state.selectedL3Id) {
+        const l3 = state.categories.find(c => c.id === state.selectedL3Id);
+        if (l3) crumbs.push({ label: l3.name, l1: state.selectedL1Id, l2: state.selectedL2Id, l3: l3.id });
+      }
+
+      bar.innerHTML = crumbs.map((c, i) => {
+        const isLast = i === crumbs.length - 1;
+        const sep = i > 0 ? '<span class="crumb-sep">›</span>' : '';
+        const cls = isLast ? 'crumb-item active' : 'crumb-item';
+        return `${sep}<span class="${cls}" data-l1="${c.l1 || ''}" data-l2="${c.l2 || ''}" data-l3="${c.l3 || ''}">${c.label}</span>`;
+      }).join('');
+
+      bar.querySelectorAll('.crumb-item').forEach(el => {
+        el.addEventListener('click', () => {
+          state.selectedL1Id = el.getAttribute('data-l1') || null;
+          state.selectedL2Id = el.getAttribute('data-l2') || null;
+          state.selectedL3Id = el.getAttribute('data-l3') || null;
+          renderMillerColumns();
+          renderBreadcrumbs();
+          renderGrid();
+        });
+      });
+    }
+
+    function renderMillerColumns() {
+      if (state.categories.length === 0) return;
+
+      // Col 1 (Roots)
+      const list1 = document.getElementById('miller-list-1');
+      const rootCats = state.categories.filter(c => !c.parentId);
+      
+      let html1 = `
+        <div class="column-item ${!state.selectedL1Id ? 'active' : ''}" data-id="">
+          <span>Todas</span>
+          <span class="badge">${state.allowedMaterials.length}</span>
+        </div>
+      `;
+      rootCats.forEach(cat => {
+        const count = countMaterialsInBranch(cat.id);
+        const isActive = state.selectedL1Id === cat.id;
+        html1 += `
+          <div class="column-item ${isActive ? 'active' : ''}" data-id="${cat.id}">
+            <span>${cat.name}</span>
+            <span class="badge">${count}</span>
+          </div>
+        `;
+      });
+      list1.innerHTML = html1;
+
+      list1.querySelectorAll('.column-item').forEach(el => {
+        el.addEventListener('click', () => {
+          state.selectedL1Id = el.getAttribute('data-id') || null;
+          state.selectedL2Id = null;
+          state.selectedL3Id = null;
+          renderMillerColumns();
+          renderBreadcrumbs();
+          renderGrid();
+        });
+      });
+
+      // Col 2 (L2 Subcategories)
+      const col2 = document.getElementById('miller-col-2');
+      const list2 = document.getElementById('miller-list-2');
+      if (state.selectedL1Id) {
+        const subCats = state.categories.filter(c => c.parentId === state.selectedL1Id);
+        if (subCats.length > 0) {
+          col2.style.display = 'flex';
+          let html2 = `
+            <div class="column-item ${!state.selectedL2Id ? 'active' : ''}" data-id="">
+              <span>Todas</span>
+              <span class="badge">${countMaterialsInBranch(state.selectedL1Id)}</span>
+            </div>
+          `;
+          subCats.forEach(cat => {
+            const count = countMaterialsInBranch(cat.id);
+            const isActive = state.selectedL2Id === cat.id;
+            html2 += `
+              <div class="column-item ${isActive ? 'active' : ''}" data-id="${cat.id}">
+                <span>${cat.name}</span>
+                <span class="badge">${count}</span>
+              </div>
+            `;
+          });
+          list2.innerHTML = html2;
+
+          list2.querySelectorAll('.column-item').forEach(el => {
+            el.addEventListener('click', () => {
+              state.selectedL2Id = el.getAttribute('data-id') || null;
+              state.selectedL3Id = null;
+              renderMillerColumns();
+              renderBreadcrumbs();
+              renderGrid();
+            });
+          });
+        } else {
+          col2.style.display = 'none';
+        }
+      } else {
+        col2.style.display = 'none';
+      }
+
+      // Col 3 (L3 Subgroups)
+      const col3 = document.getElementById('miller-col-3');
+      const list3 = document.getElementById('miller-list-3');
+      if (state.selectedL2Id) {
+        const subSubCats = state.categories.filter(c => c.parentId === state.selectedL2Id);
+        if (subSubCats.length > 0) {
+          col3.style.display = 'flex';
+          let html3 = `
+            <div class="column-item ${!state.selectedL3Id ? 'active' : ''}" data-id="">
+              <span>Todas</span>
+              <span class="badge">${countMaterialsInBranch(state.selectedL2Id)}</span>
+            </div>
+          `;
+          subSubCats.forEach(cat => {
+            const count = countMaterialsInBranch(cat.id);
+            const isActive = state.selectedL3Id === cat.id;
+            html3 += `
+              <div class="column-item ${isActive ? 'active' : ''}" data-id="${cat.id}">
+                <span>${cat.name}</span>
+                <span class="badge">${count}</span>
+              </div>
+            `;
+          });
+          list3.innerHTML = html3;
+
+          list3.querySelectorAll('.column-item').forEach(el => {
+            el.addEventListener('click', () => {
+              state.selectedL3Id = el.getAttribute('data-id') || null;
+              renderMillerColumns();
+              renderBreadcrumbs();
+              renderGrid();
+            });
+          });
+        } else {
+          col3.style.display = 'none';
+        }
+      } else {
+        col3.style.display = 'none';
+      }
+    }
+
+    function filterMaterials() {
+      let list = state.allowedMaterials;
+
+      // Filter by category branch
+      const catId = getSelectedCategoryId();
+      if (catId) {
+        const validIds = getDescendantCategoryIds(catId);
+        list = list.filter(m => m.categoryId && validIds.includes(m.categoryId));
+      }
+
+      // Filter by search query
+      if (state.searchQuery.trim()) {
+        const q = state.searchQuery.trim().toLowerCase();
+        list = list.filter(m => {
+          return (m.name && m.name.toLowerCase().includes(q)) ||
+                 (m.code && m.code.toLowerCase().includes(q)) ||
+                 (m.manufacturer && m.manufacturer.toLowerCase().includes(q));
+        });
+      }
+
+      return list;
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById('swatch-grid');
+      const countEl = document.getElementById('grid-count');
+      const labelEl = document.getElementById('active-category-label');
+      if (!grid) return;
+
+      const materials = filterMaterials();
+      if (countEl) countEl.textContent = `${materials.length} materiales disponibles`;
+
+      const catId = getSelectedCategoryId();
+      if (labelEl) {
+        if (catId) {
+          const cat = state.categories.find(c => c.id === catId);
+          labelEl.textContent = cat ? cat.name : 'Filtrado';
+        } else {
+          labelEl.textContent = 'Todas las opciones';
+        }
+      }
+
+      if (materials.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div style="font-size: 28px; margin-bottom: 8px;">📦</div>
+            <div style="font-weight: 500; color: var(--text-secondary); margin-bottom: 4px;">No se encontraron acabados</div>
+            <div style="font-size: 11px;">Prueba ajustando el término de búsqueda o cambiando de categoría.</div>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = materials.map(mat => {
+        const isSelected = state.selectedMaterialId === mat.id;
+        const textureUrl = resolveMediaUrl(mat.previewTextureUrl || mat.imageUrl);
+        const style = textureUrl 
+          ? `background-image: url('${textureUrl}');` 
+          : `background-color: ${mat.previewColor || '#64748b'};`;
+        const grainBadge = mat.grainDefault ? '<span class="grain-indicator">🌲 Veta</span>' : '';
+        const mfgBadge = mat.manufacturer ? `<span class="card-manufacturer">${mat.manufacturer}</span>` : '';
+
+        return `
+          <div class="swatch-card ${isSelected ? 'active' : ''}" data-id="${mat.id}">
+            <div class="card-preview" style="${style}">
+              <span class="card-check">✓</span>
+              ${grainBadge}
+            </div>
+            <div class="card-info">
+              <div class="card-name" title="${mat.name}">${mat.name}</div>
+              <div class="card-meta">
+                <span class="card-code">${mat.code || '—'}</span>
+                <span>${mat.thicknessMm || 18} mm</span>
+              </div>
+              <div style="margin-top: 2px;">
+                ${mfgBadge}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      grid.querySelectorAll('.swatch-card').forEach(card => {
+        card.addEventListener('click', () => {
+          state.selectedMaterialId = card.getAttribute('data-id');
+          grid.querySelectorAll('.swatch-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          updateDetailPane();
+        });
+
+        card.addEventListener('dblclick', () => {
+          state.selectedMaterialId = card.getAttribute('data-id');
+          applySelection();
+        });
+      });
+    }
+
+    function updateDetailPane() {
+      const mat = state.allowedMaterials.find(m => m.id === state.selectedMaterialId);
+      const preview = document.getElementById('inspector-preview');
+      const nameEl = document.getElementById('inspector-name');
+      const codeEl = document.getElementById('detail-code');
+      const thickEl = document.getElementById('detail-thickness');
+      const mfgEl = document.getElementById('detail-manufacturer');
+      const grainEl = document.getElementById('detail-grain');
+      const texStatusEl = document.getElementById('detail-texture-status');
+
+      if (!mat) {
+        if (preview) preview.style.backgroundImage = 'none';
+        if (nameEl) nameEl.textContent = 'Selecciona un acabado';
+        if (codeEl) codeEl.textContent = '—';
+        if (thickEl) thickEl.textContent = '—';
+        if (mfgEl) mfgEl.textContent = '—';
+        if (grainEl) grainEl.textContent = '—';
+        if (texStatusEl) texStatusEl.textContent = '—';
+        return;
+      }
+
+      const textureUrl = resolveMediaUrl(mat.previewTextureUrl || mat.imageUrl);
+      if (preview) {
+        if (textureUrl) {
+          preview.style.backgroundImage = `url('${textureUrl}')`;
+          preview.style.backgroundColor = 'transparent';
+        } else {
+          preview.style.backgroundImage = 'none';
+          preview.style.backgroundColor = mat.previewColor || '#64748b';
+        }
+      }
+
+      if (nameEl) nameEl.textContent = mat.name;
+      if (codeEl) codeEl.textContent = mat.code || '—';
+      if (thickEl) thickEl.textContent = `${mat.thicknessMm || 18} mm`;
+      if (mfgEl) mfgEl.textContent = mat.manufacturer || 'Taller';
+      if (grainEl) grainEl.textContent = mat.grainDefault ? 'Sí (Alineada)' : 'No / Lisa';
+      if (texStatusEl) {
+        texStatusEl.textContent = mat.previewTextureUrl 
+          ? '✓ Textura fotográfica PBR' 
+          : (mat.imageUrl ? '✓ Foto comercial' : 'Color sólido');
+      }
+    }
+
+    function applySelection() {
+      if (!state.selectedMaterialId) return;
+
+      const scopeRadio = document.querySelector('input[name="scope-choice"]:checked');
+      const scope = scopeRadio ? scopeRadio.value : 'furniture';
+
+      callBridge('apply_selection', {
+        role: state.role,
+        materialId: state.selectedMaterialId,
+        scope: scope
+      });
+    }
+
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+      // Search Input
+      const searchInput = document.getElementById('search-input');
+      const searchClear = document.getElementById('search-clear');
+
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          state.searchQuery = e.target.value;
+          if (searchClear) {
+            searchClear.style.display = state.searchQuery ? 'block' : 'none';
+          }
+          renderGrid();
+        });
+      }
+
+      if (searchClear) {
+        searchClear.addEventListener('click', () => {
+          if (searchInput) searchInput.value = '';
+          state.searchQuery = '';
+          searchClear.style.display = 'none';
+          renderGrid();
+        });
+      }
+
+      // Apply & Cancel buttons
+      const btnApply = document.getElementById('btn-apply');
+      const btnCancel = document.getElementById('btn-cancel');
+
+      if (btnApply) btnApply.addEventListener('click', applySelection);
+      if (btnCancel) btnCancel.addEventListener('click', () => callBridge('close_selector', {}));
+
+      // Keyboard Shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          callBridge('close_selector', {});
+        } else if (e.key === 'Enter' && !e.target.matches('input')) {
+          applySelection();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+          e.preventDefault();
+          if (searchInput) searchInput.focus();
+        }
+      });
+
+      // Notify SketchUp that selector dialog is ready
+      callBridge('selector_ready', {});
+    });
+  </script>
+</body>
+</html>

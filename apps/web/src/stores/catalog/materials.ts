@@ -5,6 +5,7 @@
 import {
   calcMaterialCostPerM2,
   normalizePreviewColor,
+  type MaterialCategory,
 } from '@muebles/domain';
 import type { MaterialDraft } from '@muebles/ui';
 
@@ -14,7 +15,12 @@ import { materialPreviewFinishFields } from './materialPreview';
 
 type MaterialsSlice = Pick<
   CatalogState,
-  'createMaterial' | 'updateMaterial' | 'setMaterialActive'
+  | 'createMaterial'
+  | 'updateMaterial'
+  | 'setMaterialActive'
+  | 'createMaterialCategory'
+  | 'updateMaterialCategory'
+  | 'deleteMaterialCategory'
 >;
 
 /**
@@ -168,6 +174,65 @@ export function createMaterialsActions(ctx: CatalogStoreCtx): MaterialsSlice {
           : null,
         'info',
       );
+    },
+
+    createMaterialCategory: (draft) => {
+      const item: MaterialCategory = {
+        id: ctx.newId(),
+        name: draft.name.trim(),
+        parentId: draft.parentId.trim() || undefined,
+        sortOrder: Number(draft.sortOrder) || 0,
+      };
+      ctx.saveAndToast(
+        (c) => ({
+          ...c,
+          materialCategories: [...(c.materialCategories ?? []), item],
+        }),
+        `✓ Categoría "${item.name}" creada`,
+      );
+    },
+
+    updateMaterialCategory: (id, draft) => {
+      ctx.saveAndToast(
+        (cat) => ({
+          ...cat,
+          materialCategories: (cat.materialCategories ?? []).map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  name: draft.name.trim(),
+                  parentId: draft.parentId.trim() || undefined,
+                  sortOrder: Number(draft.sortOrder) || 0,
+                }
+              : c,
+          ),
+        }),
+        'Categoría actualizada',
+      );
+    },
+
+    deleteMaterialCategory: async (id) => {
+      const cats = ctx.get().catalog?.materialCategories ?? [];
+      const hasChildren = cats.some((c) => c.parentId === id);
+      if (hasChildren) {
+        ctx.toast({
+          type: 'warning',
+          message: 'No se puede eliminar: tiene subcategorías',
+        });
+        return;
+      }
+      const saved = await ctx.patchSaved((c) => ({
+        ...c,
+        materialCategories: (c.materialCategories ?? []).filter((cat) => cat.id !== id),
+        materials: (c.materials ?? []).map((m) =>
+          m.categoryId === id ? { ...m, categoryId: undefined } : m,
+        ),
+      }));
+      if (!saved) return;
+      const ok = await ctx.hardDeleteOnAuth(`/catalog/material-categories/${id}`);
+      if (ok) {
+        ctx.toast({ type: 'info', message: 'Categoría eliminada' });
+      }
     },
   };
 }

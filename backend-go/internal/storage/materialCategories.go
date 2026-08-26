@@ -96,8 +96,8 @@ func (s *PostgresStore) CreateMaterialCategory(ctx context.Context, c *domain.Ma
 	}
 
 	query := `
-		INSERT INTO material_categories (name, parent_id, sort_order)
-		VALUES ($1, $2, $3)
+		INSERT INTO material_categories (id, name, parent_id, sort_order)
+		VALUES (gen_random_uuid()::text, $1, $2, $3)
 		RETURNING id, created_at, updated_at;
 	`
 	return s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder).

@@ -6,21 +6,67 @@ module Granete
   module SketchUpExtension
     module Model
       # Paints groups with namespaced SketchUp materials so the workshop's
-      # board choices are visible in the model. No-op when the runtime exposes
-      # no materials API (pure stubs) or the layout carries no color.
+      # board choices and photographic textures are visible in the model. No-op
+      # when the runtime exposes no materials API (pure stubs).
       module MaterialApplier
-        module_function
+        DEFAULT_TILE_MM = 600.0
+        MM_TO_INCHES = 1.0 / 25.4
 
-        def apply(model, group, name, color_hex)
-          return unless color_hex.is_a?(String) && color_hex.start_with?('#')
-          return unless model.respond_to?(:materials)
+        class << self
+          def apply(model, group, name, color_hex, texture_path: nil, tile_width_mm: nil, tile_length_mm: nil,
+                    grain: nil)
+            return unless model.respond_to?(:materials)
 
-          materials = model.materials
-          material_name = "Granete · #{name}"
-          material = materials[material_name] if materials.respond_to?(:[])
-          material ||= materials.add(material_name)
-          material.color = color_hex if material.respond_to?(:color=)
-          group.material = material if group.respond_to?(:material=)
+            _ = grain
+            material = find_or_create_material(model.materials, name)
+            return unless material
+
+            apply_color(material, color_hex)
+            apply_texture(material, texture_path, tile_width_mm, tile_length_mm)
+            group.material = material if group.respond_to?(:material=)
+          end
+
+          private
+
+          def find_or_create_material(materials, name)
+            return nil unless materials
+
+            material_name = "Granete · #{name}"
+            material = materials[material_name] if materials.respond_to?(:[])
+            material || (materials.add(material_name) if materials.respond_to?(:add))
+          end
+
+          def apply_color(material, color_hex)
+            return unless color_hex.is_a?(String) && color_hex.start_with?('#') && material.respond_to?(:color=)
+
+            material.color = color_hex
+          end
+
+          def apply_texture(material, texture_path, tile_width_mm, tile_length_mm)
+            return unless texture_path && File.file?(texture_path) && material.respond_to?(:texture=)
+
+            material.texture = texture_path
+            apply_texture_dimensions(material.texture, tile_width_mm, tile_length_mm) if material.respond_to?(:texture)
+          rescue StandardError
+            # Fall back to color if SketchUp fails to load texture format
+            nil
+          end
+
+          def apply_texture_dimensions(texture, tile_width_mm, tile_length_mm)
+            return unless texture
+
+            w_mm = tile_width_mm&.to_f&.positive? ? tile_width_mm.to_f : DEFAULT_TILE_MM
+            l_mm = tile_length_mm&.to_f&.positive? ? tile_length_mm.to_f : DEFAULT_TILE_MM
+            w_in = w_mm * MM_TO_INCHES
+            l_in = l_mm * MM_TO_INCHES
+
+            if texture.respond_to?(:size=)
+              texture.size = [w_in, l_in]
+            elsif texture.respond_to?(:width=) && texture.respond_to?(:height=)
+              texture.width = w_in
+              texture.height = l_in
+            end
+          end
         end
       end
 
@@ -30,12 +76,13 @@ module Granete
       class FurnitureBuilder
         DEFAULT_THICKNESS_MM = 18.0
 
-        def initialize(metadata_store: nil, asset_loader: nil)
+        def initialize(metadata_store: nil, asset_loader: nil, texture_cache: nil)
           @metadata_store = metadata_store
           @asset_loader = asset_loader
+          @texture_cache = texture_cache
         end
 
-        def insert_furniture(model, definition, raw_parameters = {}, resolved_layout: nil)
+        def insert_furniture(model, definition, raw_parameters = {}, resolved_layout: nil, material_choices: nil)
           parameters = normalize_parameters(definition, raw_parameters)
           instance_id = generate_instance_id
 
@@ -45,7 +92,8 @@ module Granete
           main_group.name = "#{definition['name']} (#{instance_id})"
 
           counts = render_layout(model, main_group, instance_id, definition, parameters, resolved_layout)
-          MetadataWriter.write_furniture(@metadata_store, main_group, instance_id, definition, parameters)
+          MetadataWriter.write_furniture(@metadata_store, main_group, instance_id, definition, parameters,
+                                         material_choices: material_choices)
 
           model.commit_operation
 
@@ -63,7 +111,8 @@ module Granete
           { 'success' => false, 'error' => e.message }
         end
 
-        def update_furniture(model, group, definition, raw_parameters = {}, resolved_layout: nil)
+        def update_furniture(model, group, definition, raw_parameters = {}, resolved_layout: nil,
+                             material_choices: nil)
           parameters = normalize_parameters(definition, raw_parameters)
           existing_meta = @metadata_store&.read(group)
           instance_id = existing_meta&.dig('identity', 'instanceRef') || generate_instance_id
@@ -72,7 +121,8 @@ module Granete
           group.entities.clear!
 
           counts = render_layout(model, group, instance_id, definition, parameters, resolved_layout)
-          MetadataWriter.write_furniture(@metadata_store, group, instance_id, definition, parameters)
+          MetadataWriter.write_furniture(@metadata_store, group, instance_id, definition, parameters,
+                                         material_choices: material_choices)
 
           model.commit_operation
 
@@ -146,7 +196,15 @@ module Granete
             pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
           )
           material_name = component['materialName'] || component['optionRole'] || slot_id
-          MaterialApplier.apply(model, group, material_name, component['materialColorHex'])
+          texture_url = component['materialTextureUrl'] || component['materialImageUrl']
+          texture_path = @texture_cache&.resolve_texture(texture_url)
+          MaterialApplier.apply(
+            model, group, material_name, component['materialColorHex'],
+            texture_path: texture_path,
+            tile_width_mm: component['materialTextureTileWidthMm'],
+            tile_length_mm: component['materialTextureTileLengthMm'],
+            grain: component['materialGrain']
+          )
           group
         end
 
@@ -240,7 +298,10 @@ module Granete
             Geom::Point3d.new(x, y + dy, z)
           ]
           face = comp_group.entities.add_face(pts)
-          face.pushpull(dz) if face && dz.positive?
+          return unless face
+
+          face.reverse! if face.respond_to?(:normal) && face.normal.respond_to?(:z) && face.normal.z.negative?
+          face.pushpull(dz) if dz.positive?
         end
       end
 
@@ -249,7 +310,7 @@ module Granete
       module MetadataWriter
         module_function
 
-        def write_furniture(store, main_group, instance_id, definition, parameters)
+        def write_furniture(store, main_group, instance_id, definition, parameters, material_choices: nil)
           return unless store
 
           metadata_payload = {
@@ -267,6 +328,9 @@ module Granete
               'parameters' => parameters
             }
           }
+          if material_choices.is_a?(Hash) && !material_choices.empty?
+            metadata_payload['intent']['materialChoices'] = material_choices
+          end
           store.write(main_group, metadata_payload)
         end
 

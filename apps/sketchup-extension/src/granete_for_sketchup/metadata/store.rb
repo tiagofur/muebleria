@@ -69,7 +69,7 @@ module Granete
           raise InvalidMetadataError, 'identity must be an object' unless identity.is_a?(Hash)
 
           identity.each do |k, v|
-            assert_opaque_string(v, "identity.#{k}") if v.is_a?(String)
+            assert_opaque_string(v, "identity.#{k}", max_length: 256) if v.is_a?(String)
           end
         end
 
@@ -78,15 +78,18 @@ module Granete
 
           if intent.key?('semanticRole')
             assert_opaque_string(intent['semanticRole'], 'intent.semanticRole',
-                                 max_length: 64)
+                                 max_length: 256)
           end
           if intent.key?('furnitureDefinitionId')
             assert_opaque_string(intent['furnitureDefinitionId'], 'intent.furnitureDefinitionId',
-                                 max_length: 128)
+                                 max_length: 256)
           end
-          return unless intent.key?('parameters') && !intent['parameters'].is_a?(Hash)
+          if intent.key?('parameters') && !intent['parameters'].is_a?(Hash)
+            raise InvalidMetadataError, 'intent.parameters must be an object'
+          end
+          return unless intent.key?('materialChoices') && !intent['materialChoices'].is_a?(Hash)
 
-          raise InvalidMetadataError, 'intent.parameters must be an object'
+          raise InvalidMetadataError, 'intent.materialChoices must be an object'
         end
 
         def assert_equal(value, expected, path)
@@ -95,7 +98,7 @@ module Granete
           raise InvalidMetadataError, "#{path} must equal #{expected.inspect}"
         end
 
-        def assert_opaque_string(value, path, max_length: 128)
+        def assert_opaque_string(value, path, max_length: 256)
           valid = value.is_a?(String) && !value.strip.empty? && value.length <= max_length
           raise InvalidMetadataError, "#{path} must be a bounded opaque string" unless valid
         end

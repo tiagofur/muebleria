@@ -73,6 +73,10 @@ export interface CatalogState {
   readonly createMaterial: (draft: MaterialDraft) => void;
   readonly updateMaterial: (id: string, draft: MaterialDraft) => void;
   readonly setMaterialActive: (id: string, active: boolean) => void;
+  readonly createMaterialCategory: (draft: CategoryDraft) => void;
+  readonly updateMaterialCategory: (id: string, draft: CategoryDraft) => void;
+  /** Auth: also DELETE /catalog/material-categories/{id}. */
+  readonly deleteMaterialCategory: (id: string) => Promise<void>;
 
   // --- Edges ---
   readonly createEdge: (draft: EdgeDraft) => string;

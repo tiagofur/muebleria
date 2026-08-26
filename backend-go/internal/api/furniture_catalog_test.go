@@ -13,7 +13,7 @@ func TestBuildWorkshopCatalogPreservesModuleIdentity(t *testing.T) {
 		ImageURL: "/api/media/abc123.png",
 	}
 
-	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, []domain.ModuleCategory{{ID: "cat-1", Name: "Cocinas"}}, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, []domain.ModuleCategory{{ID: "cat-1", Name: "Cocinas"}}, nil, domain.Catalog{})
 
 	def, ok := catalog.Definitions[module.ID]
 	if !ok {
@@ -37,7 +37,7 @@ func TestBuildWorkshopCatalogDerivesRangesFromPresets(t *testing.T) {
 		},
 	}
 
-	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, nil, domain.Catalog{})
 	def := catalog.Definitions["m1"]
 
 	width := parameterByName(def.Parameters, "widthMm")
@@ -53,7 +53,7 @@ func TestBuildWorkshopCatalogDerivesRangesFromPresets(t *testing.T) {
 func TestBuildWorkshopCatalogBandWithoutPresets(t *testing.T) {
 	module := domain.Module{ID: "m1", Code: "M1", Name: "Módulo", WidthMm: 800, HeightMm: 2000, DepthMm: 60}
 
-	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, nil, domain.Catalog{})
 	def := catalog.Definitions["m1"]
 
 	for _, name := range []string{"widthMm", "heightMm", "depthMm"} {
@@ -75,7 +75,7 @@ func TestBuildWorkshopCatalogBandWithoutPresets(t *testing.T) {
 func TestBuildWorkshopCatalogModuleWithoutDimensions(t *testing.T) {
 	// No external dims, no presets: still a definition (insertable via builder
 	// fallbacks), just without authoring dimension parameters.
-	catalog := buildWorkshopFurnitureCatalog([]domain.Module{{ID: "m1", Code: "M1", Name: "Sin cotas"}}, nil, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog([]domain.Module{{ID: "m1", Code: "M1", Name: "Sin cotas"}}, nil, nil, domain.Catalog{})
 
 	def := catalog.Definitions["m1"]
 	if len(def.Parameters) != 0 {
@@ -95,7 +95,7 @@ func TestBuildWorkshopCatalogDefaultsFromPresetsWhenModuleHasNoDims(t *testing.T
 		},
 	}
 
-	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, nil, domain.Catalog{})
 	width := parameterByName(catalog.Definitions["m1"].Parameters, "widthMm")
 	if width == nil || width.DefaultValue != 400 || width.Min != 400 || width.Max != 800 {
 		t.Fatalf("widthMm must default to smallest preset: %+v", width)
@@ -111,7 +111,7 @@ func TestBuildWorkshopCatalogMapsPresetsVerbatim(t *testing.T) {
 		},
 	}
 
-	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, []domain.ModuleCategory{{ID: "cat-towers", Name: "Torres"}}, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, []domain.ModuleCategory{{ID: "cat-towers", Name: "Torres"}}, nil, domain.Catalog{})
 
 	if len(catalog.Presets) != 2 {
 		t.Fatalf("expected both module presets, got %d", len(catalog.Presets))
@@ -131,7 +131,7 @@ func TestWorkshopCatalogRevisionIsContentAddressed(t *testing.T) {
 	mk := func(width int) workshopFurnitureCatalog {
 		return buildWorkshopFurnitureCatalog([]domain.Module{
 			{ID: "m1", Code: "M1", Name: "Módulo", WidthMm: width, HeightMm: 720, DepthMm: 500},
-		}, nil, domain.Catalog{})
+		}, nil, nil, domain.Catalog{})
 	}
 
 	if workshopCatalogRevisionID(mk(600)) != workshopCatalogRevisionID(mk(600)) {
@@ -155,7 +155,7 @@ func TestBuildWorkshopCatalogCategoriesAreHierarchical(t *testing.T) {
 		{ID: "m3", Code: "M3", Name: "Sin clase"},
 	}
 
-	catalog := buildWorkshopFurnitureCatalog(modules, categories, domain.Catalog{})
+	catalog := buildWorkshopFurnitureCatalog(modules, categories, nil, domain.Catalog{})
 
 	if len(catalog.Categories) != 4 {
 		t.Fatalf("envelope must carry the whole category tree, got %d", len(catalog.Categories))
@@ -171,6 +171,72 @@ func TestBuildWorkshopCatalogCategoriesAreHierarchical(t *testing.T) {
 	}
 	if catalog.Definitions["m1"].CategoryID != "cat-doors" {
 		t.Fatalf("categoryId must be preserved for subtree filtering, got %q", catalog.Definitions["m1"].CategoryID)
+	}
+}
+
+func TestBuildWorkshopCatalogMaterialCategoriesAndVisualProperties(t *testing.T) {
+	materialCats := []domain.MaterialCategory{
+		{ID: "matcat-wood", Name: "Maderas", SortOrder: 1},
+		{ID: "matcat-light", Name: "Claras", ParentID: "matcat-wood", SortOrder: 1},
+	}
+	roughness := 0.65
+	metalness := 0.1
+	clearcoat := 0.05
+	boards := []domain.MaterialBoard{
+		{
+			ID:                         "mat-1",
+			Code:                       "TAB-ARA-NOU",
+			Name:                       "Arauco Nougat",
+			Manufacturer:               "Arauco",
+			CategoryID:                 "matcat-light",
+			PreviewColor:               "#8B5A2B",
+			ImageURL:                   "/api/media/nougat_thumb.jpg",
+			PreviewTextureURL:          "/api/media/nougat_pbr.jpg",
+			PreviewTextureTileWidthMm:  600.0,
+			PreviewTextureTileLengthMm: 600.0,
+			PreviewRoughness:           &roughness,
+			PreviewMetalness:           &metalness,
+			PreviewClearcoat:           &clearcoat,
+			ThicknessMm:                18,
+			GrainDefault:               true,
+			Active:                     true,
+		},
+		{
+			ID:           "mat-inactive",
+			Code:         "TAB-INACTIVE",
+			Name:         "Inactive Material",
+			Manufacturer: "Faplac",
+			Active:       false,
+		},
+	}
+
+	catalog := buildWorkshopFurnitureCatalog(nil, nil, materialCats, domain.Catalog{Materials: boards})
+
+	if len(catalog.MaterialCategories) != 2 {
+		t.Fatalf("expected 2 material categories, got %d", len(catalog.MaterialCategories))
+	}
+	if catalog.MaterialCategories[0].Name != "Maderas" || catalog.MaterialCategories[1].ParentID != "matcat-wood" {
+		t.Fatalf("material categories hierarchy mismatch: %+v", catalog.MaterialCategories)
+	}
+
+	if len(catalog.Materials) != 1 {
+		t.Fatalf("expected 1 active material, got %d", len(catalog.Materials))
+	}
+	m := catalog.Materials[0]
+	if m.MaterialID != "mat-1" || m.Manufacturer != "Arauco" || m.CategoryID != "matcat-light" {
+		t.Fatalf("material identity/category mismatch: %+v", m)
+	}
+	if m.PreviewTextureURL != "/api/media/nougat_pbr.jpg" || m.ImageURL != "/api/media/nougat_thumb.jpg" {
+		t.Fatalf("texture url vs image url mismatch: %+v", m)
+	}
+	if m.PreviewTextureTileWidthMm != 600.0 || m.PreviewTextureTileLengthMm != 600.0 {
+		t.Fatalf("texture tile size mismatch: %+v", m)
+	}
+	if m.PreviewRoughness == nil || *m.PreviewRoughness != 0.65 {
+		t.Fatalf("roughness mismatch: %+v", m.PreviewRoughness)
+	}
+	if m.ThicknessMm != 18 || !m.Grain {
+		t.Fatalf("thickness or grain mismatch: %+v", m)
 	}
 }
 

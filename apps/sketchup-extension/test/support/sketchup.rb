@@ -49,17 +49,45 @@ module SketchupStub
   end
 
   class FaceStub
+    attr_accessor :normal
+
+    def initialize
+      @normal = Geom::Vector3d.new(0, 0, 1)
+    end
+
+    def reverse!
+      @normal = Geom::Vector3d.new(-@normal.x, -@normal.y, -@normal.z)
+      self
+    end
+
     def pushpull(_distance)
       true
     end
   end
 
+  class TextureStub
+    attr_accessor :filename, :size, :width, :height
+
+    def initialize(filename)
+      @filename = filename
+      @size = nil
+      @width = nil
+      @height = nil
+    end
+  end
+
   class MaterialStub
     attr_accessor :color
+    attr_reader :texture
 
     def initialize(name)
       @name = name
       @color = nil
+      @texture = nil
+    end
+
+    def texture=(path)
+      @texture = path ? TextureStub.new(path) : nil
     end
 
     def name
@@ -339,6 +367,8 @@ module UI
 
   class HtmlDialog
     STYLE_DIALOG = 1
+    STYLE_WINDOW = 2
+    STYLE_UTILITY = 3
     CEF_VERSION = "137.0.7151.121"
 
     class << self

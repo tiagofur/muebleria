@@ -69,44 +69,83 @@ module Granete
                      furniture_builder_for(active_model).insert_furniture(
                        active_model, definition, payload['parameters'] || {},
                        resolved_layout: resolve_layout_for(definition, payload['parameters'],
-                                                           payload['materialChoices'])
+                                                           payload['materialChoices']),
+                       material_choices: payload['materialChoices']
                      )
                    else
                      mock_result(definition['name'], payload['parameters'])
                    end
 
           execute_bridge(dialog, 'onInsertionResult', result)
-          @logger.info('furniture_inserted', definition_id: payload['definitionId'],
-                                             success: result['success'],
-                                             components: result['component_count'])
+          log_operation_result('furniture_inserted', payload['definitionId'], result)
         rescue StandardError => e
           @logger.error('furniture_insert_failed', error: e)
           execute_bridge(dialog, 'onInsertionResult', { 'success' => false, 'error' => e.message })
         end
 
         def handle_update(dialog, payload_json)
-          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
-          definition = @catalog_provider.find_definition(payload['definitionId'])
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          definition_id = payload['definitionId'] || payload[:definitionId]
+          definition = @catalog_provider.find_definition(definition_id)
+          target_entity = find_target_furniture_entity(payload['instanceId'] || payload[:instanceId])
 
-          result = if definition.nil?
-                     { 'success' => false, 'error' => 'Definición no encontrada' }
-                   elsif active_model&.selection&.first
-                     furniture_builder_for(active_model).update_furniture(
-                       active_model, active_model.selection.first, definition, payload['parameters'] || {},
-                       resolved_layout: resolve_layout_for(definition, payload['parameters'],
-                                                           payload['materialChoices'])
-                     )
-                   else
-                     mock_result(definition['name'], payload['parameters'], payload['instanceId'])
-                   end
+          result = execute_furniture_update(definition, target_entity, payload)
 
           execute_bridge(dialog, 'onUpdateResult', result)
-          @logger.info('furniture_updated', definition_id: payload['definitionId'],
-                                            success: result['success'],
-                                            components: result['component_count'])
+          log_operation_result('furniture_updated', definition_id, result)
         rescue StandardError => e
           @logger.error('furniture_update_failed', error: e)
           execute_bridge(dialog, 'onUpdateResult', { 'success' => false, 'error' => e.message })
+        end
+
+        def execute_furniture_update(definition, target_entity, payload)
+          if definition.nil?
+            { 'success' => false, 'error' => 'Definición no encontrada' }
+          elsif target_entity
+            params = payload['parameters'] || payload[:parameters] || {}
+            choices = payload['materialChoices'] || payload[:materialChoices]
+            layout = resolve_layout_for(definition, params, choices)
+            furniture_builder_for(active_model).update_furniture(
+              active_model, target_entity, definition, params,
+              resolved_layout: layout, material_choices: choices
+            )
+          else
+            mock_result(definition['name'], payload['parameters'], payload['instanceId'])
+          end
+        end
+
+        def find_target_furniture_entity(instance_id)
+          return nil unless active_model
+
+          first = active_model.selection&.first
+          if first && instance_id
+            meta = @metadata_store_factory.call(active_model).read(first)
+            return first if meta&.dig('identity', 'instanceRef') == instance_id
+          end
+
+          return first if first && instance_id.nil?
+
+          search_entities_for_instance(instance_id) || first
+        end
+
+        def search_entities_for_instance(instance_id)
+          return nil unless instance_id && active_model.respond_to?(:entities)
+
+          store = @metadata_store_factory.call(active_model)
+          active_model.entities.find do |entity|
+            meta = store.read(entity)
+            meta&.dig('identity', 'instanceRef') == instance_id
+          end
+        end
+
+        def log_operation_result(event, definition_id, result)
+          ctx = {
+            definition_id: definition_id,
+            success: result['success'],
+            components: result['component_count']
+          }
+          ctx[:error] = result['error'] unless result['success']
+          @logger.info(event, ctx)
         end
 
         # Fetches the server-resolved composition for a definition at the
@@ -126,9 +165,45 @@ module Granete
         end
       end
 
+      # Material finish picker bridge for opening the dedicated floating dialog.
+      module OptionSelectorBridge
+        def handle_open_material_selector(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          role = payload['role'] || payload[:role]
+          role_name = payload['roleName'] || payload[:roleName] || payload['role_name'] || payload[:role_name]
+          current_material_id = payload['currentMaterialId'] || payload[:currentMaterialId] ||
+                                payload['current_material_id'] || payload[:current_material_id]
+          allowed_materials = @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : []
+          categories = if @catalog_provider.respond_to?(:all_material_categories)
+                         @catalog_provider.all_material_categories
+                       else
+                         []
+                       end
+
+          option_selector.show_selector(
+            role: role,
+            role_name: role_name,
+            current_material_id: current_material_id,
+            allowed_materials: allowed_materials,
+            categories: categories,
+            media: build_media_payload,
+            on_apply: lambda do |selected_role, selected_material_id, scope|
+              execute_bridge(dialog, 'onMaterialChoiceApplied', {
+                               'role' => selected_role,
+                               'materialId' => selected_material_id,
+                               'scope' => scope
+                             })
+            end
+          )
+        rescue StandardError => e
+          @logger&.error('open_material_selector_failed', error: e)
+        end
+      end
+
       class DialogController
         include SessionBridge
         include FurnitureBridge
+        include OptionSelectorBridge
 
         attr_reader :selection_observer
 
@@ -166,6 +241,7 @@ module Granete
 
         def close
           detach_selection_observer
+          @option_selector&.close
           @dialog&.close
         end
 
@@ -175,13 +251,29 @@ module Granete
 
         private
 
+        def option_selector
+          @option_selector ||= OptionSelectorController.new(logger: @logger)
+        end
+
+        def texture_cache
+          return @texture_cache if @texture_cache
+
+          transport = @session&.transport
+          auth_provider = @session
+          @texture_cache = Assets::TextureCache.new(
+            transport: transport,
+            auth_provider: auth_provider
+          )
+        end
+
         def furniture_builder_for(model)
           return @furniture_builder if @furniture_builder
 
           if @model_builder.nil? || @builder_model != model
             @builder_model = model
             @model_builder = Model::FurnitureBuilder.new(
-              metadata_store: @metadata_store_factory.call(model)
+              metadata_store: @metadata_store_factory.call(model),
+              texture_cache: texture_cache
             )
           end
           @model_builder
@@ -203,6 +295,7 @@ module Granete
           bind_callbacks(dialog)
           dialog.set_on_closed do
             detach_selection_observer
+            @option_selector&.close
             @dialog = nil if @dialog.equal?(dialog)
           end
           dialog
@@ -213,6 +306,7 @@ module Granete
           dialog.add_action_callback('get_catalog') { send_catalog(dialog) }
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
+          dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('delete_selected_furniture') { handle_delete(dialog) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           dialog.add_action_callback('login') { |_c, p| handle_login(dialog, p) }
@@ -235,10 +329,16 @@ module Granete
 
         def send_catalog(dialog)
           definitions = @catalog_provider.all_definitions
+          material_categories = if @catalog_provider.respond_to?(:all_material_categories)
+                                  @catalog_provider.all_material_categories
+                                else
+                                  []
+                                end
           payload = {
             'definitions' => definitions,
             'presets' => @catalog_provider.respond_to?(:all_presets) ? @catalog_provider.all_presets : [],
             'categories' => @catalog_provider.respond_to?(:all_categories) ? @catalog_provider.all_categories : [],
+            'materialCategories' => material_categories,
             'materials' => @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : [],
             'source' => @catalog_provider.respond_to?(:last_source) ? @catalog_provider.last_source : 'local',
             'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&

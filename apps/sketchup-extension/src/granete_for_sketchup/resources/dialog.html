@@ -536,6 +536,657 @@
         color: var(--text-muted);
       }
 
+      /* Material role selection blocks */
+      .material-role-block {
+        background: var(--surface-card-subtle);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        margin-bottom: var(--space-3);
+      }
+
+      .material-role-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: var(--space-2);
+      }
+
+      .material-role-title {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-secondary);
+      }
+
+      .material-selected-preview {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        margin-bottom: var(--space-2);
+        padding: var(--space-2);
+        border-radius: var(--radius-md);
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .material-selected-preview:hover {
+        background: var(--surface-hover);
+        border-color: var(--border-default);
+      }
+
+      .material-swatch {
+        width: 38px;
+        height: 38px;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        background-size: cover;
+        background-position: center;
+        flex-shrink: 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        position: relative;
+      }
+
+      .material-selected-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .material-selected-name {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .material-selected-meta {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        display: flex;
+        gap: var(--space-2);
+        align-items: center;
+      }
+
+      .btn-picker-open {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        color: var(--brand-600);
+        background: var(--brand-50);
+        border: 1px solid hsl(245 58% 51% / 25%);
+        padding: 0.125rem 0.5rem;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        transition: all var(--duration-fast);
+      }
+
+      .btn-picker-open:hover {
+        background: hsl(245 100% 94%);
+        border-color: var(--brand-500);
+      }
+
+      .material-select-control {
+        width: 100%;
+        font-size: var(--text-sm);
+        margin-top: var(--space-1);
+      }
+
+      /* ------------------------------------------------------------- */
+      /* Visual Material Option Selector Modal (Slice B - Miller Cols) */
+      /* ------------------------------------------------------------- */
+      .selector-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-3);
+      }
+
+      .selector-modal {
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.2);
+        width: 100%;
+        max-width: 920px;
+        height: 88vh;
+        max-height: 680px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .selector-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-3) var(--space-4);
+        background: var(--brand-800);
+        color: var(--text-inverse);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        flex-shrink: 0;
+      }
+
+      .selector-modal-title-group {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+      }
+
+      .selector-modal-title {
+        font-size: var(--text-base);
+        font-weight: var(--weight-bold);
+        margin: 0;
+        color: var(--text-inverse);
+      }
+
+      .selector-modal-role-badge {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        background: rgba(255, 255, 255, 0.2);
+        color: var(--text-inverse);
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+      }
+
+      .selector-modal-close-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-inverse-soft);
+        font-size: 1.25rem;
+        cursor: pointer;
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+
+      .selector-modal-close-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: var(--text-inverse);
+      }
+
+      .selector-search-bar {
+        padding: var(--space-2) var(--space-4);
+        background: var(--surface-card-subtle);
+        border-bottom: 1px solid var(--border-default);
+        flex-shrink: 0;
+      }
+
+      .selector-search-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      .selector-search-icon {
+        position: absolute;
+        left: 0.75rem;
+        font-size: 0.875rem;
+        pointer-events: none;
+        opacity: 0.6;
+      }
+
+      .selector-search-input-wrapper input {
+        width: 100%;
+        padding: var(--space-2) var(--space-4) var(--space-2) 2.25rem;
+        font-size: var(--text-sm);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--surface-card);
+        color: var(--text-primary);
+        font-family: inherit;
+        outline: none;
+      }
+
+      .selector-search-input-wrapper input:focus {
+        border-color: var(--brand-500);
+        box-shadow: var(--shadow-focus);
+      }
+
+      .selector-search-clear-btn {
+        position: absolute;
+        right: 0.75rem;
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0.25rem;
+        font-size: 0.75rem;
+      }
+
+      .selector-breadcrumb-nav {
+        padding: 0.375rem var(--space-4);
+        background: var(--surface-app);
+        border-bottom: 1px solid var(--border-default);
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        overflow-x: auto;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .selector-breadcrumbs {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+
+      .selector-breadcrumb-item {
+        cursor: pointer;
+        padding: 0.125rem 0.375rem;
+        border-radius: var(--radius-sm);
+        color: var(--brand-600);
+        font-weight: var(--weight-medium);
+      }
+
+      .selector-breadcrumb-item:hover {
+        background: var(--brand-50);
+      }
+
+      .selector-breadcrumb-item.active {
+        color: var(--text-primary);
+        font-weight: var(--weight-semibold);
+        cursor: default;
+      }
+
+      .selector-breadcrumb-item.active:hover {
+        background: transparent;
+      }
+
+      .selector-breadcrumb-separator {
+        color: var(--text-muted);
+        user-select: none;
+      }
+
+      .selector-modal-body {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+        min-height: 0;
+      }
+
+      .selector-miller-columns {
+        display: flex;
+        border-right: 1px solid var(--border-default);
+        background: var(--surface-card);
+        flex-shrink: 0;
+        max-width: 48%;
+      }
+
+      .selector-column {
+        width: 140px;
+        min-width: 115px;
+        border-right: 1px solid var(--border-default);
+        display: flex;
+        flex-direction: column;
+        background: var(--surface-card);
+      }
+
+      .selector-column:last-child {
+        border-right: none;
+      }
+
+      .selector-column-header {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-bold);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        padding: var(--space-2) var(--space-3);
+        background: var(--surface-card-subtle);
+        border-bottom: 1px solid var(--border-default);
+        flex-shrink: 0;
+      }
+
+      .selector-column-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .selector-column-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        color: var(--text-primary);
+        cursor: pointer;
+        border-left: 3px solid transparent;
+        transition: background var(--duration-fast);
+      }
+
+      .selector-column-item:hover {
+        background: var(--surface-hover);
+      }
+
+      .selector-column-item.active {
+        background: var(--brand-50);
+        color: var(--brand-600);
+        font-weight: var(--weight-semibold);
+        border-left-color: var(--brand-500);
+      }
+
+      .selector-column-item-chevron {
+        font-size: 0.625rem;
+        color: var(--text-muted);
+      }
+
+      .selector-column-item.active .selector-column-item-chevron {
+        color: var(--brand-600);
+      }
+
+      .selector-column-count {
+        font-size: 0.6875rem;
+        color: var(--text-muted);
+        background: var(--surface-app);
+        padding: 0 0.25rem;
+        border-radius: 9999px;
+      }
+
+      .selector-candidate-pane {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface-app);
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .selector-candidate-header {
+        padding: var(--space-2) var(--space-3);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-default);
+        background: var(--surface-card);
+        flex-shrink: 0;
+      }
+
+      .selector-candidate-grid {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--space-3);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+        gap: var(--space-3);
+        align-content: start;
+      }
+
+      .mat-card {
+        background: var(--surface-card);
+        border: 2px solid var(--border-default);
+        border-radius: var(--radius-md);
+        padding: var(--space-2);
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        transition: all var(--duration-fast) var(--ease-out);
+        position: relative;
+        text-align: left;
+      }
+
+      .mat-card:hover {
+        border-color: var(--border-focus);
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        transform: translateY(-1px);
+      }
+
+      .mat-card.selected {
+        border-color: var(--brand-500);
+        background: var(--brand-50);
+        box-shadow: 0 0 0 2px var(--brand-500);
+      }
+
+      .mat-card-swatch {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        background-size: cover;
+        background-position: center;
+        position: relative;
+        background-color: #e2e8f0;
+      }
+
+      .mat-card-badge-grain {
+        position: absolute;
+        bottom: 3px;
+        right: 3px;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        font-size: 0.625rem;
+        padding: 1px 4px;
+        border-radius: 3px;
+        backdrop-filter: blur(2px);
+      }
+
+      .mat-card-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 2px;
+      }
+
+      .mat-card-name {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-bold);
+        color: var(--text-primary);
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .mat-card-meta {
+        font-size: 0.6875rem;
+        color: var(--text-secondary);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .mat-card-tag {
+        background: var(--surface-card-subtle);
+        padding: 0 4px;
+        border-radius: 2px;
+        font-size: 0.625rem;
+        color: var(--text-secondary);
+      }
+
+      .mat-card-selected-check {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 18px;
+        height: 18px;
+        background: var(--brand-500);
+        color: white;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6875rem;
+        font-weight: bold;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      }
+
+      .selector-candidate-empty {
+        text-align: center;
+        padding: var(--space-5) var(--space-4);
+        color: var(--text-secondary);
+        margin: auto;
+      }
+
+      .selector-detail-pane {
+        width: 230px;
+        border-left: 1px solid var(--border-default);
+        background: var(--surface-card);
+        display: flex;
+        flex-direction: column;
+        padding: var(--space-3);
+        overflow-y: auto;
+        flex-shrink: 0;
+      }
+
+      .selector-detail-header {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-bold);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        margin-bottom: var(--space-2);
+        flex-shrink: 0;
+      }
+
+      .selector-detail-preview {
+        margin-bottom: var(--space-3);
+        flex-shrink: 0;
+      }
+
+      .selector-detail-swatch {
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        background-size: cover;
+        background-position: center;
+        background-color: #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .selector-detail-name {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-bold);
+        color: var(--text-primary);
+        margin: 0 0 2px 0;
+        line-height: 1.3;
+      }
+
+      .selector-detail-code {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin-bottom: var(--space-3);
+      }
+
+      .selector-detail-specs {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding-top: var(--space-2);
+        border-top: 1px solid var(--border-default);
+        margin-bottom: var(--space-3);
+      }
+
+      .selector-spec-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: var(--text-xs);
+        gap: var(--space-1);
+      }
+
+      .selector-spec-row .spec-label {
+        color: var(--text-secondary);
+        flex-shrink: 0;
+      }
+
+      .selector-spec-row .spec-value {
+        font-weight: var(--weight-medium);
+        color: var(--text-primary);
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .selector-scope-group {
+        padding-top: var(--space-2);
+        border-top: 1px solid var(--border-default);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        margin-top: auto;
+      }
+
+      .selector-scope-label {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-1);
+      }
+
+      .selector-scope-option {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-xs);
+        cursor: pointer;
+      }
+
+      .selector-scope-option input {
+        cursor: pointer;
+      }
+
+      .selector-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        background: var(--surface-card-subtle);
+        border-top: 1px solid var(--border-default);
+        flex-shrink: 0;
+      }
+
+      .selector-modal-footer .btn {
+        width: auto;
+      }
+
+      /* Compact View Adaptation */
+      @media (max-width: 680px) {
+        .selector-modal {
+          height: 96vh;
+          max-height: none;
+        }
+        .selector-modal-body {
+          flex-direction: column;
+        }
+        .selector-miller-columns {
+          max-width: 100%;
+          border-right: none;
+          border-bottom: 1px solid var(--border-default);
+          max-height: 120px;
+        }
+        .selector-detail-pane {
+          width: 100%;
+          border-left: none;
+          border-top: 1px solid var(--border-default);
+          max-height: 150px;
+        }
+      }
+
       .btn {
         display: inline-flex;
         align-items: center;
@@ -972,6 +1623,118 @@
         </section>
       </main>
 
+      <!-- Visual Material Option Selector Modal (Slice B - Miller Columns) -->
+      <div id="material-selector-modal" class="selector-modal-backdrop" style="display: none;">
+        <div class="selector-modal" role="dialog" aria-modal="true" aria-labelledby="selector-modal-title">
+          <!-- Header -->
+          <header class="selector-modal-header">
+            <div class="selector-modal-title-group">
+              <h2 id="selector-modal-title" class="selector-modal-title">Seleccionar Material</h2>
+              <span id="selector-modal-role-badge" class="selector-modal-role-badge">Rol: --</span>
+            </div>
+            <button id="btn-selector-modal-close" class="selector-modal-close-btn" type="button" aria-label="Cerrar modal">✕</button>
+          </header>
+
+          <!-- Search Bar -->
+          <div class="selector-search-bar">
+            <div class="selector-search-input-wrapper">
+              <span class="selector-search-icon">🔍</span>
+              <input id="selector-search-input" type="search" placeholder="Buscar por nombre, código o fabricante..." autocomplete="off" />
+              <button id="selector-search-clear" class="selector-search-clear-btn" type="button" style="display: none;" aria-label="Limpiar búsqueda">✕</button>
+            </div>
+          </div>
+
+          <!-- Breadcrumb Navigation -->
+          <nav class="selector-breadcrumb-nav" aria-label="Navegación de categorías">
+            <div id="selector-breadcrumbs" class="selector-breadcrumbs"></div>
+          </nav>
+
+          <!-- Main Body: Miller Columns / Hierarchy + Candidate Grid -->
+          <div class="selector-modal-body">
+            <!-- Zone 1-3: Progressive Category Columns (Miller Columns) -->
+            <div id="selector-miller-columns" class="selector-miller-columns">
+              <div id="selector-col-level-1" class="selector-column">
+                <div class="selector-column-header">Categoría</div>
+                <ul id="selector-col-list-1" class="selector-column-list"></ul>
+              </div>
+              <div id="selector-col-level-2" class="selector-column" style="display: none;">
+                <div class="selector-column-header">Subcategoría</div>
+                <ul id="selector-col-list-2" class="selector-column-list"></ul>
+              </div>
+              <div id="selector-col-level-3" class="selector-column" style="display: none;">
+                <div class="selector-column-header">Subgrupo</div>
+                <ul id="selector-col-list-3" class="selector-column-list"></ul>
+              </div>
+            </div>
+
+            <!-- Zone 4: Candidate Swatch Grid -->
+            <div class="selector-candidate-pane">
+              <div class="selector-candidate-header">
+                <span id="selector-candidate-count" class="selector-candidate-count">0 opciones</span>
+              </div>
+              <div id="selector-candidate-grid" class="selector-candidate-grid"></div>
+              <div id="selector-candidate-empty" class="selector-candidate-empty" style="display: none;">
+                <div class="empty-state-icon">📦</div>
+                <p>No se encontraron materiales que coincidan con la búsqueda o categoría.</p>
+              </div>
+            </div>
+
+            <!-- Zone 5: Inspector / Detail Panel -->
+            <aside id="selector-detail-pane" class="selector-detail-pane">
+              <div class="selector-detail-header">Ficha Técnica</div>
+              <div class="selector-detail-preview">
+                <div id="selector-detail-swatch" class="selector-detail-swatch"></div>
+              </div>
+              <div class="selector-detail-info">
+                <h3 id="selector-detail-name" class="selector-detail-name">Selecciona un material</h3>
+                <div id="selector-detail-code" class="selector-detail-code">--</div>
+                <div class="selector-detail-specs">
+                  <div class="selector-spec-row">
+                    <span class="spec-label">Fabricante</span>
+                    <span id="selector-spec-manufacturer" class="spec-value">--</span>
+                  </div>
+                  <div class="selector-spec-row">
+                    <span class="spec-label">Espesor</span>
+                    <span id="selector-spec-thickness" class="spec-value">--</span>
+                  </div>
+                  <div class="selector-spec-row">
+                    <span class="spec-label">Veta</span>
+                    <span id="selector-spec-grain" class="spec-value">--</span>
+                  </div>
+                  <div class="selector-spec-row">
+                    <span class="spec-label">Categoría</span>
+                    <span id="selector-spec-category" class="spec-value">--</span>
+                  </div>
+                  <div class="selector-spec-row">
+                    <span class="spec-label">Visual</span>
+                    <span id="selector-spec-texture" class="spec-value">--</span>
+                  </div>
+                </div>
+
+                <!-- Scope of Application -->
+                <div class="selector-scope-group">
+                  <div class="selector-scope-label">Alcance de aplicación:</div>
+                  <label class="selector-scope-option">
+                    <input type="radio" name="selector-scope" value="furniture" checked />
+                    <span>Aplicar a este mueble</span>
+                  </label>
+                  <label class="selector-scope-option">
+                    <input type="radio" name="selector-scope" value="project" />
+                    <span>A todos los muebles</span>
+                  </label>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <!-- Footer -->
+          <footer class="selector-modal-footer">
+            <button id="btn-selector-cancel" class="btn btn-secondary" type="button">Cancelar (Esc)</button>
+            <button id="btn-selector-apply" class="btn btn-primary" type="button" disabled>Aplicar Selección (↵)</button>
+          </footer>
+        </div>
+      </div>
+
       <footer>Granete for SketchUp · v0.1.0</footer>
     </div>
 
@@ -982,6 +1745,7 @@
         var catalog = [];
         var catalogPresets = [];
         var catalogCategories = [];
+        var catalogMaterialCategories = [];
         var catalogMaterials = [];
         var catalogSource = "loading";
         var licenseBlocked = false;
@@ -1236,6 +2000,38 @@
           return label;
         }
 
+        function updateMaterialSwatch(el, mat) {
+          if (!mat) {
+            el.style.backgroundColor = "#e2e8f0";
+            el.style.backgroundImage = "none";
+            return;
+          }
+          var url = resolveMediaUrl(mat.previewTextureUrl || mat.imageUrl);
+          if (url) {
+            el.style.backgroundImage = "url('" + url + "')";
+            el.style.backgroundColor = mat.previewColor || "#e2e8f0";
+          } else if (mat.previewColor) {
+            el.style.backgroundImage = "none";
+            el.style.backgroundColor = mat.previewColor;
+          } else {
+            el.style.backgroundImage = "none";
+            el.style.backgroundColor = "#e2e8f0";
+          }
+        }
+
+        function updateMaterialMeta(el, mat) {
+          if (!mat) {
+            el.textContent = "--";
+            return;
+          }
+          var parts = [];
+          if (mat.code) parts.push(mat.code);
+          if (mat.thicknessMm) parts.push(mat.thicknessMm + " mm");
+          if (mat.grain) parts.push("🌲 Veta");
+          if (mat.manufacturer) parts.push(mat.manufacturer);
+          el.textContent = parts.join(" · ");
+        }
+
         function renderMaterialSelectors(card, container, def, choices, onChange) {
           var roles = (def && def.materialRoles ? def.materialRoles : []).filter(function (r) {
             return r && r.role && optionMaterialIds(r).length > 0;
@@ -1244,34 +2040,558 @@
           container.innerHTML = "";
 
           roles.forEach(function (r) {
-            if (!choices[r.role]) choices[r.role] = optionMaterialIds(r)[0];
+            var availableIds = optionMaterialIds(r);
+            if (!choices[r.role] || availableIds.indexOf(choices[r.role]) === -1) {
+              choices[r.role] = availableIds[0];
+            }
+            var currentMat = materialById(choices[r.role]);
 
-            var group = document.createElement("div");
-            group.className = "param-group";
+            var block = document.createElement("div");
+            block.className = "material-role-block";
 
-            var label = document.createElement("label");
-            label.className = "param-label";
-            label.textContent = r.label || r.role;
-            group.appendChild(label);
+            // Header
+            var header = document.createElement("div");
+            header.className = "material-role-header";
+            var title = document.createElement("span");
+            title.className = "material-role-title";
+            title.textContent = r.label || r.role;
+            header.appendChild(title);
 
-            var select = document.createElement("select");
-            select.className = "dim-input";
-            select.style.width = "100%";
-            select.setAttribute("aria-label", "Material " + (r.label || r.role));
-            optionMaterialIds(r).forEach(function (id) {
-              var opt = document.createElement("option");
-              opt.value = id;
-              opt.textContent = materialOptionLabel(materialById(id));
-              if (id === choices[r.role]) opt.selected = true;
-              select.appendChild(opt);
-            });
-            select.addEventListener("change", function () {
-              onChange(r.role, select.value);
-            });
-            group.appendChild(select);
-            container.appendChild(group);
+            var openBtn = document.createElement("button");
+            openBtn.type = "button";
+            openBtn.className = "btn-picker-open";
+            openBtn.textContent = "🔍 Catálogo";
+            openBtn.title = "Explorar catálogo de acabados";
+            header.appendChild(openBtn);
+
+            block.appendChild(header);
+
+            // Selected Preview (interactive card)
+            var preview = document.createElement("div");
+            preview.className = "material-selected-preview";
+            preview.title = "Clic para abrir el selector de acabados";
+
+            var swatch = document.createElement("div");
+            swatch.className = "material-swatch";
+            updateMaterialSwatch(swatch, currentMat);
+            preview.appendChild(swatch);
+
+            var info = document.createElement("div");
+            info.className = "material-selected-info";
+
+            var nameSpan = document.createElement("div");
+            nameSpan.className = "material-selected-name";
+            nameSpan.textContent = currentMat ? currentMat.name : "Seleccionar material";
+            info.appendChild(nameSpan);
+
+            var metaSpan = document.createElement("div");
+            metaSpan.className = "material-selected-meta";
+            updateMaterialMeta(metaSpan, currentMat);
+            info.appendChild(metaSpan);
+
+            preview.appendChild(info);
+            block.appendChild(preview);
+
+            function triggerVisualPicker() {
+              if (window.sketchup && typeof window.sketchup.open_material_selector === "function") {
+                window.sketchup.open_material_selector(JSON.stringify({
+                  role: r.role,
+                  roleName: r.label || r.role,
+                  currentMaterialId: choices[r.role]
+                }));
+              } else if (typeof openMaterialSelector === "function") {
+                openMaterialSelector(r, choices[r.role], function (newId, scope) {
+                  choices[r.role] = newId;
+                  var newMat = materialById(newId);
+                  updateMaterialSwatch(swatch, newMat);
+                  nameSpan.textContent = newMat ? newMat.name : "Material";
+                  updateMaterialMeta(metaSpan, newMat);
+                  onChange(r.role, newId, scope);
+                });
+              }
+            }
+
+            preview.addEventListener("click", triggerVisualPicker);
+            openBtn.addEventListener("click", triggerVisualPicker);
+
+            container.appendChild(block);
           });
         }
+
+        // -------------------------------------------------------------
+        // Visual Material Option Selector Modal (Slice B - Miller Columns)
+        // -------------------------------------------------------------
+        var selectorModal = document.getElementById("material-selector-modal");
+        var selectorTitle = document.getElementById("selector-modal-title");
+        var selectorRoleBadge = document.getElementById("selector-modal-role-badge");
+        var selectorCloseBtn = document.getElementById("btn-selector-modal-close");
+        var selectorCancelBtn = document.getElementById("btn-selector-cancel");
+        var selectorApplyBtn = document.getElementById("btn-selector-apply");
+        var selectorSearchInput = document.getElementById("selector-search-input");
+        var selectorSearchClear = document.getElementById("selector-search-clear");
+        var selectorBreadcrumbs = document.getElementById("selector-breadcrumbs");
+        var selectorMillerColumns = document.getElementById("selector-miller-columns");
+        var selectorColLevel1 = document.getElementById("selector-col-level-1");
+        var selectorColLevel2 = document.getElementById("selector-col-level-2");
+        var selectorColLevel3 = document.getElementById("selector-col-level-3");
+        var selectorColList1 = document.getElementById("selector-col-list-1");
+        var selectorColList2 = document.getElementById("selector-col-list-2");
+        var selectorColList3 = document.getElementById("selector-col-list-3");
+        var selectorCandidateGrid = document.getElementById("selector-candidate-grid");
+        var selectorCandidateCount = document.getElementById("selector-candidate-count");
+        var selectorCandidateEmpty = document.getElementById("selector-candidate-empty");
+
+        var selectorDetailSwatch = document.getElementById("selector-detail-swatch");
+        var selectorDetailName = document.getElementById("selector-detail-name");
+        var selectorDetailCode = document.getElementById("selector-detail-code");
+        var selectorSpecManufacturer = document.getElementById("selector-spec-manufacturer");
+        var selectorSpecThickness = document.getElementById("selector-spec-thickness");
+        var selectorSpecGrain = document.getElementById("selector-spec-grain");
+        var selectorSpecCategory = document.getElementById("selector-spec-category");
+        var selectorSpecTexture = document.getElementById("selector-spec-texture");
+
+        var selectorCtx = null;
+
+        function findMaterialCategoryById(id) {
+          if (!id) return null;
+          for (var i = 0; i < catalogMaterialCategories.length; i++) {
+            if (catalogMaterialCategories[i].id === id) return catalogMaterialCategories[i];
+          }
+          return null;
+        }
+
+        function getCategoryPathNodes(catId) {
+          var path = [];
+          var curr = findMaterialCategoryById(catId);
+          var guard = 0;
+          while (curr && guard < 10) {
+            path.unshift(curr);
+            curr = curr.parentId ? findMaterialCategoryById(curr.parentId) : null;
+            guard++;
+          }
+          return path;
+        }
+
+        function isMaterialInSubtree(mat, rootCatId) {
+          if (!rootCatId) return true;
+          if (!mat || !mat.categoryId) return false;
+          if (mat.categoryId === rootCatId) return true;
+          var path = getCategoryPathNodes(mat.categoryId);
+          for (var i = 0; i < path.length; i++) {
+            if (path[i].id === rootCatId) return true;
+          }
+          return false;
+        }
+
+        function countMaterialsInSubtree(roleEntry, catId) {
+          var allowed = optionMaterialIds(roleEntry);
+          var count = 0;
+          for (var i = 0; i < allowed.length; i++) {
+            var m = materialById(allowed[i]);
+            if (m && isMaterialInSubtree(m, catId)) {
+              count++;
+            }
+          }
+          return count;
+        }
+
+        function openMaterialSelector(roleEntry, initialSelectedId, onApply) {
+          selectorCtx = {
+            roleEntry: roleEntry,
+            selectedCandidateId: initialSelectedId || null,
+            activeCatL1: null,
+            activeCatL2: null,
+            activeCatL3: null,
+            searchQuery: "",
+            onApply: onApply
+          };
+
+          // If the initially selected material has a category, auto-expand its hierarchy
+          var initialMat = materialById(initialSelectedId);
+          if (initialMat && initialMat.categoryId) {
+            var path = getCategoryPathNodes(initialMat.categoryId);
+            if (path[0]) selectorCtx.activeCatL1 = path[0].id;
+            if (path[1]) selectorCtx.activeCatL2 = path[1].id;
+            if (path[2]) selectorCtx.activeCatL3 = path[2].id;
+          }
+
+          selectorRoleBadge.textContent = "Rol: " + (roleEntry.label || roleEntry.role);
+          selectorSearchInput.value = "";
+          selectorSearchClear.style.display = "none";
+
+          renderSelectorNavigation();
+          renderSelectorGrid();
+          updateSelectorDetail();
+
+          selectorModal.style.display = "flex";
+          selectorSearchInput.focus();
+        }
+
+        function closeMaterialSelector() {
+          selectorModal.style.display = "none";
+          selectorCtx = null;
+        }
+
+        function renderSelectorNavigation() {
+          if (!selectorCtx) return;
+          renderBreadcrumbs();
+          renderMillerColumns();
+        }
+
+        function renderBreadcrumbs() {
+          selectorBreadcrumbs.innerHTML = "";
+          var crumbs = [{ label: "Catálogo", l1: null, l2: null, l3: null }];
+
+          if (selectorCtx.activeCatL1) {
+            var l1 = findMaterialCategoryById(selectorCtx.activeCatL1);
+            if (l1) crumbs.push({ label: l1.name, l1: l1.id, l2: null, l3: null });
+          }
+          if (selectorCtx.activeCatL2) {
+            var l2 = findMaterialCategoryById(selectorCtx.activeCatL2);
+            if (l2) crumbs.push({ label: l2.name, l1: selectorCtx.activeCatL1, l2: l2.id, l3: null });
+          }
+          if (selectorCtx.activeCatL3) {
+            var l3 = findMaterialCategoryById(selectorCtx.activeCatL3);
+            if (l3) crumbs.push({ label: l3.name, l1: selectorCtx.activeCatL1, l2: selectorCtx.activeCatL2, l3: l3.id });
+          }
+
+          crumbs.forEach(function (c, idx) {
+            if (idx > 0) {
+              var sep = document.createElement("span");
+              sep.className = "selector-breadcrumb-separator";
+              sep.textContent = "›";
+              selectorBreadcrumbs.appendChild(sep);
+            }
+            var item = document.createElement("span");
+            item.className = "selector-breadcrumb-item" + (idx === crumbs.length - 1 ? " active" : "");
+            item.textContent = c.label;
+            item.addEventListener("click", function () {
+              selectorCtx.activeCatL1 = c.l1;
+              selectorCtx.activeCatL2 = c.l2;
+              selectorCtx.activeCatL3 = c.l3;
+              renderSelectorNavigation();
+              renderSelectorGrid();
+            });
+            selectorBreadcrumbs.appendChild(item);
+          });
+        }
+
+        function renderMillerColumns() {
+          if (!selectorCtx) return;
+
+          if (catalogMaterialCategories.length === 0) {
+            selectorMillerColumns.style.display = "none";
+            return;
+          }
+          selectorMillerColumns.style.display = "flex";
+
+          // Column 1: Root categories (no parentId)
+          var l1Cats = catalogMaterialCategories.filter(function (c) {
+            return !c.parentId || c.parentId === "";
+          }).sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+
+          selectorColList1.innerHTML = "";
+          var allL1Item = document.createElement("li");
+          allL1Item.className = "selector-column-item" + (selectorCtx.activeCatL1 === null ? " active" : "");
+          allL1Item.innerHTML = '<span>Todas</span><span class="selector-column-count">' +
+            countMaterialsInSubtree(selectorCtx.roleEntry, null) + '</span>';
+          allL1Item.addEventListener("click", function () {
+            selectorCtx.activeCatL1 = null;
+            selectorCtx.activeCatL2 = null;
+            selectorCtx.activeCatL3 = null;
+            renderSelectorNavigation();
+            renderSelectorGrid();
+          });
+          selectorColList1.appendChild(allL1Item);
+
+          l1Cats.forEach(function (cat) {
+            var count = countMaterialsInSubtree(selectorCtx.roleEntry, cat.id);
+            var item = document.createElement("li");
+            item.className = "selector-column-item" + (selectorCtx.activeCatL1 === cat.id ? " active" : "");
+            item.innerHTML = '<span>' + cat.name + '</span>' +
+              '<span class="selector-column-count">' + count + '</span>';
+            item.addEventListener("click", function () {
+              selectorCtx.activeCatL1 = cat.id;
+              selectorCtx.activeCatL2 = null;
+              selectorCtx.activeCatL3 = null;
+              renderSelectorNavigation();
+              renderSelectorGrid();
+            });
+            selectorColList1.appendChild(item);
+          });
+
+          // Column 2: Subcategories of selected L1
+          var l2Cats = selectorCtx.activeCatL1 ? catalogMaterialCategories.filter(function (c) {
+            return c.parentId === selectorCtx.activeCatL1;
+          }).sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); }) : [];
+
+          if (l2Cats.length > 0) {
+            selectorColLevel2.style.display = "flex";
+            selectorColList2.innerHTML = "";
+
+            var allL2Item = document.createElement("li");
+            allL2Item.className = "selector-column-item" + (selectorCtx.activeCatL2 === null ? " active" : "");
+            allL2Item.innerHTML = '<span>Todas</span><span class="selector-column-count">' +
+              countMaterialsInSubtree(selectorCtx.roleEntry, selectorCtx.activeCatL1) + '</span>';
+            allL2Item.addEventListener("click", function () {
+              selectorCtx.activeCatL2 = null;
+              selectorCtx.activeCatL3 = null;
+              renderSelectorNavigation();
+              renderSelectorGrid();
+            });
+            selectorColList2.appendChild(allL2Item);
+
+            l2Cats.forEach(function (cat) {
+              var count = countMaterialsInSubtree(selectorCtx.roleEntry, cat.id);
+              var item = document.createElement("li");
+              item.className = "selector-column-item" + (selectorCtx.activeCatL2 === cat.id ? " active" : "");
+              item.innerHTML = '<span>' + cat.name + '</span>' +
+                '<span class="selector-column-count">' + count + '</span>';
+              item.addEventListener("click", function () {
+                selectorCtx.activeCatL2 = cat.id;
+                selectorCtx.activeCatL3 = null;
+                renderSelectorNavigation();
+                renderSelectorGrid();
+              });
+              selectorColList2.appendChild(item);
+            });
+          } else {
+            selectorColLevel2.style.display = "none";
+          }
+
+          // Column 3: Subcategories of selected L2
+          var l3Cats = selectorCtx.activeCatL2 ? catalogMaterialCategories.filter(function (c) {
+            return c.parentId === selectorCtx.activeCatL2;
+          }).sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); }) : [];
+
+          if (l3Cats.length > 0) {
+            selectorColLevel3.style.display = "flex";
+            selectorColList3.innerHTML = "";
+
+            var allL3Item = document.createElement("li");
+            allL3Item.className = "selector-column-item" + (selectorCtx.activeCatL3 === null ? " active" : "");
+            allL3Item.innerHTML = '<span>Todas</span><span class="selector-column-count">' +
+              countMaterialsInSubtree(selectorCtx.roleEntry, selectorCtx.activeCatL2) + '</span>';
+            allL3Item.addEventListener("click", function () {
+              selectorCtx.activeCatL3 = null;
+              renderSelectorNavigation();
+              renderSelectorGrid();
+            });
+            selectorColList3.appendChild(allL3Item);
+
+            l3Cats.forEach(function (cat) {
+              var count = countMaterialsInSubtree(selectorCtx.roleEntry, cat.id);
+              var item = document.createElement("li");
+              item.className = "selector-column-item" + (selectorCtx.activeCatL3 === cat.id ? " active" : "");
+              item.innerHTML = '<span>' + cat.name + '</span>' +
+                '<span class="selector-column-count">' + count + '</span>';
+              item.addEventListener("click", function () {
+                selectorCtx.activeCatL3 = cat.id;
+                renderSelectorNavigation();
+                renderSelectorGrid();
+              });
+              selectorColList3.appendChild(item);
+            });
+          } else {
+            selectorColLevel3.style.display = "none";
+          }
+        }
+
+        function getFilteredSelectorMaterials() {
+          if (!selectorCtx) return [];
+          var allowedIds = optionMaterialIds(selectorCtx.roleEntry);
+          var list = allowedIds.map(materialById).filter(Boolean);
+
+          // Apply category filter
+          var targetCat = selectorCtx.activeCatL3 || selectorCtx.activeCatL2 || selectorCtx.activeCatL1;
+          if (targetCat) {
+            list = list.filter(function (m) {
+              return isMaterialInSubtree(m, targetCat);
+            });
+          }
+
+          // Apply search filter
+          var q = (selectorCtx.searchQuery || "").trim().toLowerCase();
+          if (q) {
+            list = list.filter(function (m) {
+              var nameMatch = (m.name || "").toLowerCase().indexOf(q) >= 0;
+              var codeMatch = (m.code || "").toLowerCase().indexOf(q) >= 0;
+              var mfgMatch = (m.manufacturer || "").toLowerCase().indexOf(q) >= 0;
+              return nameMatch || codeMatch || mfgMatch;
+            });
+          }
+
+          return list;
+        }
+
+        function renderSelectorGrid() {
+          if (!selectorCtx) return;
+          var materials = getFilteredSelectorMaterials();
+          selectorCandidateCount.textContent = materials.length + " opción" + (materials.length === 1 ? "" : "es");
+
+          if (materials.length === 0) {
+            selectorCandidateGrid.style.display = "none";
+            selectorCandidateEmpty.style.display = "block";
+            return;
+          }
+
+          selectorCandidateGrid.style.display = "grid";
+          selectorCandidateEmpty.style.display = "none";
+          selectorCandidateGrid.innerHTML = "";
+
+          materials.forEach(function (mat) {
+            var card = document.createElement("div");
+            var isSelected = mat.materialId === selectorCtx.selectedCandidateId;
+            card.className = "mat-card" + (isSelected ? " selected" : "");
+
+            var swatch = document.createElement("div");
+            swatch.className = "mat-card-swatch";
+            updateMaterialSwatch(swatch, mat);
+
+            if (mat.grain) {
+              var grainBadge = document.createElement("span");
+              grainBadge.className = "mat-card-badge-grain";
+              grainBadge.textContent = "🌲 Veta";
+              swatch.appendChild(grainBadge);
+            }
+            card.appendChild(swatch);
+
+            if (isSelected) {
+              var check = document.createElement("div");
+              check.className = "mat-card-selected-check";
+              check.textContent = "✓";
+              card.appendChild(check);
+            }
+
+            var info = document.createElement("div");
+            info.className = "mat-card-info";
+
+            var nameEl = document.createElement("div");
+            nameEl.className = "mat-card-name";
+            nameEl.textContent = mat.name || "Material";
+            info.appendChild(nameEl);
+
+            var metaEl = document.createElement("div");
+            metaEl.className = "mat-card-meta";
+            if (mat.code) {
+              var codeTag = document.createElement("span");
+              codeTag.className = "mat-card-tag";
+              codeTag.textContent = mat.code;
+              metaEl.appendChild(codeTag);
+            }
+            if (mat.thicknessMm) {
+              var thkTag = document.createElement("span");
+              thkTag.className = "mat-card-tag";
+              thkTag.textContent = mat.thicknessMm + " mm";
+              metaEl.appendChild(thkTag);
+            }
+            if (mat.manufacturer) {
+              var mfgTag = document.createElement("span");
+              mfgTag.className = "mat-card-tag";
+              mfgTag.textContent = mat.manufacturer;
+              metaEl.appendChild(mfgTag);
+            }
+            info.appendChild(metaEl);
+            card.appendChild(info);
+
+            card.addEventListener("click", function () {
+              selectorCtx.selectedCandidateId = mat.materialId;
+              renderSelectorGrid();
+              updateSelectorDetail();
+            });
+
+            card.addEventListener("dblclick", function () {
+              selectorCtx.selectedCandidateId = mat.materialId;
+              applySelectorChoice();
+            });
+
+            selectorCandidateGrid.appendChild(card);
+          });
+        }
+
+        function updateSelectorDetail() {
+          if (!selectorCtx) return;
+          var mat = selectorCtx.selectedCandidateId ? materialById(selectorCtx.selectedCandidateId) : null;
+          selectorApplyBtn.disabled = !mat;
+
+          if (!mat) {
+            updateMaterialSwatch(selectorDetailSwatch, null);
+            selectorDetailName.textContent = "Selecciona un material";
+            selectorDetailCode.textContent = "--";
+            selectorSpecManufacturer.textContent = "--";
+            selectorSpecThickness.textContent = "--";
+            selectorSpecGrain.textContent = "--";
+            selectorSpecCategory.textContent = "--";
+            selectorSpecTexture.textContent = "--";
+            return;
+          }
+
+          updateMaterialSwatch(selectorDetailSwatch, mat);
+          selectorDetailName.textContent = mat.name || "Material";
+          selectorDetailCode.textContent = mat.code ? "Código: " + mat.code : "";
+          selectorSpecManufacturer.textContent = mat.manufacturer || "Sin fabricante";
+          selectorSpecThickness.textContent = mat.thicknessMm ? mat.thicknessMm + " mm" : "--";
+          selectorSpecGrain.textContent = mat.grain ? "Sí (con veta)" : "No";
+
+          var path = mat.categoryId ? getCategoryPathNodes(mat.categoryId) : [];
+          selectorSpecCategory.textContent = path.length > 0
+            ? path.map(function (n) { return n.name; }).join(" › ")
+            : "Sin categoría";
+
+          if (mat.previewTextureUrl) {
+            selectorSpecTexture.textContent = "Textura 3D / PBR";
+          } else if (mat.imageUrl) {
+            selectorSpecTexture.textContent = "Imagen / Foto";
+          } else if (mat.previewColor) {
+            selectorSpecTexture.textContent = "Color sólido (" + mat.previewColor + ")";
+          } else {
+            selectorSpecTexture.textContent = "Color estándar";
+          }
+        }
+
+        function applySelectorChoice() {
+          if (!selectorCtx || !selectorCtx.selectedCandidateId) return;
+          var chosenId = selectorCtx.selectedCandidateId;
+          var scopeRadio = document.querySelector('input[name="selector-scope"]:checked');
+          var scope = (scopeRadio && scopeRadio.value) || "furniture";
+          var cb = selectorCtx.onApply;
+          closeMaterialSelector();
+          if (cb) cb(chosenId, scope);
+        }
+
+        // Wire Selector Modal controls
+        selectorCloseBtn.addEventListener("click", closeMaterialSelector);
+        selectorCancelBtn.addEventListener("click", closeMaterialSelector);
+        selectorApplyBtn.addEventListener("click", applySelectorChoice);
+
+        selectorSearchInput.addEventListener("input", function () {
+          if (!selectorCtx) return;
+          selectorCtx.searchQuery = selectorSearchInput.value;
+          selectorSearchClear.style.display = selectorCtx.searchQuery ? "block" : "none";
+          renderSelectorGrid();
+        });
+
+        selectorSearchClear.addEventListener("click", function () {
+          if (!selectorCtx) return;
+          selectorSearchInput.value = "";
+          selectorCtx.searchQuery = "";
+          selectorSearchClear.style.display = "none";
+          renderSelectorGrid();
+          selectorSearchInput.focus();
+        });
+
+        // Global Esc / Enter inside modal
+        document.addEventListener("keydown", function (e) {
+          if (selectorModal.style.display !== "none") {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              closeMaterialSelector();
+            } else if (e.key === "Enter" && !selectorApplyBtn.disabled && document.activeElement !== selectorSearchInput) {
+              e.preventDefault();
+              applySelectorChoice();
+            }
+          }
+        });
 
         // Dimension parameters of a definition (mm measures).
         function registeredMeasureParams(def) {
@@ -1692,6 +3012,7 @@
               catalog = payload || [];
               catalogPresets = [];
               catalogCategories = [];
+              catalogMaterialCategories = [];
               catalogMaterials = [];
               catalogSource = "local";
               licenseBlocked = false;
@@ -1701,6 +3022,7 @@
               catalog = payload.definitions || [];
               catalogPresets = payload.presets || [];
               catalogCategories = payload.categories || [];
+              catalogMaterialCategories = payload.materialCategories || [];
               catalogMaterials = payload.materials || [];
               catalogSource = payload.source || "local";
               licenseBlocked = !!payload.licenseBlocked;
@@ -1783,7 +3105,7 @@
             }
 
             inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), instanceData.parameters || {});
-            inspectorMaterialChoices = defaultMaterialChoices(def);
+            inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(def), instanceData.materialChoices || {});
 
             renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
               inspectorParams[name] = val;
@@ -1797,6 +3119,53 @@
 
             updateInspectorSummary();
             switchTab("inspector");
+          },
+
+          onMaterialChoiceApplied: function (payload) {
+            if (!payload || !payload.role || !payload.materialId) return;
+            var role = payload.role;
+            var materialId = payload.materialId;
+
+            var inspectorPane = document.getElementById("pane-inspector");
+            var isInspectorTab = inspectorPane && inspectorPane.classList.contains("active");
+
+            // If we are currently inspecting / editing a placed furniture in the model
+            if (selectedInstance && inspectorDef && (isInspectorTab || !activeLibDef)) {
+              if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
+              inspectorMaterialChoices[role] = materialId;
+
+              renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
+                inspectorMaterialChoices, function (r, id) {
+                  inspectorMaterialChoices[r] = id;
+                });
+              updateInspectorSummary();
+
+              var updatePayload = {
+                instanceId: selectedInstance.instanceId,
+                definitionId: selectedInstance.definitionId,
+                parameters: inspectorParams,
+                materialChoices: inspectorMaterialChoices
+              };
+
+              if (window.sketchup && window.sketchup.update_furniture) {
+                window.sketchup.update_furniture(JSON.stringify(updatePayload));
+              }
+
+              var mat = materialById(materialId);
+              showToast("success", "✓ Acabado actualizado: " + (mat ? mat.name : materialId));
+            } else if (activeLibDef) {
+              // If configuring a module in the library before inserting
+              if (!libMaterialChoices) libMaterialChoices = {};
+              libMaterialChoices[role] = materialId;
+
+              renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id) {
+                libMaterialChoices[r] = id;
+              });
+              updateLibrarySummary();
+
+              var matLib = materialById(materialId);
+              showToast("success", "✓ Acabado seleccionado: " + (matLib ? matLib.name : materialId));
+            }
           }
         };
 
