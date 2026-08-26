@@ -4,7 +4,7 @@
  */
 
 import type { AppNavId } from '@granete/ui';
-import { roleCanAccessNav } from '@granete/domain';
+import { rolesCanAccessNav } from '@granete/domain';
 
 /** Canonical path for each sidebar destination. URLs name the screen. */
 export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
@@ -44,10 +44,13 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
  */
 export function navBlockedForSession(
   session: 'guest' | 'auth',
-  role: string | null | undefined,
+  roles: readonly (string | null | undefined)[] | string | null | undefined,
   navId: AppNavId,
 ): boolean {
-  return !roleCanAccessNav(session === 'auth' ? role ?? null : null, navId);
+  // Multi-role union (ADR-0005): accept a legacy single role too.
+  const roleSet =
+    typeof roles === 'string' ? [roles] : session === 'auth' ? (roles ?? []) : [];
+  return !rolesCanAccessNav(roleSet, navId);
 }
 
 /** Sections that support `/section/:id` deep links for entity rows. */

@@ -25,6 +25,8 @@ export type AuthUser = {
   readonly name: string;
   readonly role: string;
   readonly active: boolean;
+  /** Active membership roles (multi-role union, ADR-0005). */
+  readonly roles?: readonly string[];
 };
 
 export type LoginSuccess = {
@@ -228,6 +230,7 @@ export async function loginRequest(
   const data = (await res.json()) as {
     token?: unknown;
     user?: Partial<AuthUser>;
+    roles?: unknown;
   };
   if (typeof data.token !== 'string' || !data.token) {
     throw new Error('Respuesta de login inválida');
@@ -243,6 +246,10 @@ export async function loginRequest(
     throw new Error('Respuesta de login inválida (usuario)');
   }
 
+  const roles = Array.isArray(data.roles)
+    ? data.roles.filter((r): r is string => typeof r === 'string' && r !== '')
+    : undefined;
+
   return {
     token: data.token,
     user: {
@@ -251,6 +258,7 @@ export async function loginRequest(
       name: typeof u.name === 'string' ? u.name : '',
       role: u.role,
       active: u.active !== false,
+      ...(roles && roles.length > 0 ? { roles } : {}),
     },
   };
 }

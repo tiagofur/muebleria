@@ -71,7 +71,10 @@ import {
   duplicateProject as deepCopyProject,
   projectToTemplate,
   createProjectFromTemplate,
-  navIdsForRole,
+  navIdsForRoles,
+  anyRole,
+  rolesAllScopedBySector,
+  rolesOfUser,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
   resolveWorkshopSettings,
@@ -610,13 +613,15 @@ export function AppContent({
   const canAssignOwner = roleCanAssignOwner(authUser?.role);
   /** Guest (local) has full tool; auth uses product RBAC (F035). */
   const actorRole = session === 'auth' ? authUser?.role : null;
+  // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
+  const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
   const allowedNavIds = useMemo(
-    () => navIdsForRole(session === 'auth' ? authUser?.role : null),
-    [session, authUser?.role],
+    () => navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []),
+    [session, authUser],
   );
   // F094 — own station assignments (Mi Estación). Loaded for scoped
   // operator roles; null = unrestricted / local mode.
-  const isSectorScoped = roleIsScopedBySector(actorRole);
+  const isSectorScoped = rolesAllScopedBySector(actorRoles);
   const [mySectors, setMySectors] = useState<string[] | null>(null);
   useEffect(() => {
     if (session !== 'auth' || !isSectorScoped) {
@@ -645,7 +650,7 @@ export function AppContent({
 
   // ─── F119: Compras/Almacén lives in purchasingStore ─────────────────────
   const canAccessPurchasing =
-    session === 'guest' || roleCanAccessPurchasingNav(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanAccessPurchasingNav);
   ensurePurchasingStore({ deps: { getRepository } });
   const pickingStates = usePurchasingStore((s) => s.pickingStates);
   const stockRows = usePurchasingStore((s) => s.stockRows);
@@ -662,7 +667,7 @@ export function AppContent({
     void getPurchasingStoreState().loadAll();
   }, [canAccessPurchasing, workspaceSeq]);
 
-  const canManagePurchasing = session === 'guest' || roleCanManagePurchasing(actorRole);
+  const canManagePurchasing = session === 'guest' || anyRole(actorRoles, roleCanManagePurchasing);
 
   const handleRecordStockMovement = useCallback(
     (payload: {
@@ -735,32 +740,32 @@ export function AppContent({
   /** Catálogo para el panel de stock (derivación pura, F119). */
   const stockCatalog = useMemo(() => buildStockCatalog(catalog), [catalog]);
   const canMutateCatalog =
-    session === 'guest' || roleCanMutateCatalog(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanMutateCatalog);
   const canMutateModules =
-    session === 'guest' || roleCanMutateModules(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanMutateModules);
   const canMutateProjects =
-    session === 'guest' || roleCanMutateProjects(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanMutateProjects);
   const canDeleteProjects =
-    session === 'guest' || roleCanDeleteProject(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanDeleteProject);
   const canReopenProjects =
-    session === 'guest' || roleCanReopenProject(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanReopenProject);
   /** accepted/produced → draft: admin + gerente only (vendedor never). */
   const canForceReopenClosed =
     session === 'guest' ||
     actorRole === 'admin' ||
     actorRole === 'gerente_ventas';
   const canMarkProduced =
-    session === 'guest' || roleCanMarkProduced(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanMarkProduced);
   const canExportProduction =
-    session === 'guest' || roleCanExportProduction(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanExportProduction);
   const canViewPortfolioDashboard =
-    session === 'guest' || roleCanViewPortfolioDashboard(actorRole);
+    session === 'guest' || anyRole(actorRoles, roleCanViewPortfolioDashboard);
   /** F038: producción role only sees plant-ready quotes in project list. */
   const filterProjectsToPlant =
     session === 'auth' && roleUsesProductionQueue(actorRole);
   /** PROD-0.1: factory workspace nav (export roles). */
   const useProductionWorkspace =
-    session === 'auth' && roleCanAccessProductionNav(actorRole);
+    session === 'auth' && anyRole(actorRoles, roleCanAccessProductionNav);
 
   useEffect(() => {
     if (!canAssignOwner || !authToken) {
@@ -825,7 +830,7 @@ export function AppContent({
   // Fase 4.1 — Fábrica metrics for supervisors (admin / gerente_produccion):
   // fetched only when they open the screen; sector-scoped operators never do
   // (no toggle for them). Null until loaded or on failure → queue view only.
-  const canOpenFabric = roleCanAccessFabricNav(actorRole);
+  const canOpenFabric = anyRole(actorRoles, roleCanAccessFabricNav);
   const [fabricMetrics, setFabricMetrics] = useState<DashboardMetrics | null>(null);
   const [fabricActiveClaims, setFabricActiveClaims] = useState<readonly FabricActiveClaim[]>([]);
   useEffect(() => {
@@ -914,7 +919,7 @@ export function AppContent({
     }
     const blocked =
       (session === 'auth' || session === 'guest') &&
-      navBlockedForSession(session, actorRole, resolved);
+      navBlockedForSession(session, actorRoles, resolved);
     if (blocked) {
       toast({
         type: 'error',

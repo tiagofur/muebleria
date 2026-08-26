@@ -176,6 +176,11 @@ export {
   type CostVisibilityOptions,
   type UserSector,
   roleCanSuperviseFloor,
+  anyRole,
+  navIdsForRoles,
+  rolesCanAccessNav,
+  rolesAllScopedBySector,
+  rolesOfUser,
 } from './rbac';
 
 export type { CategoryFilterId } from './categories';

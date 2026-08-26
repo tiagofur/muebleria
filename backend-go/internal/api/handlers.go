@@ -249,6 +249,8 @@ type LoginResponse struct {
 	Token   string        `json:"token,omitempty"`
 	User    PublicUserDTO `json:"user"`
 	License LicenseDTO    `json:"license"`
+	// Roles are the active membership's roles (union semantics client-side).
+	Roles   []domain.UserRole `json:"roles,omitempty"`
 	// Organization is the active organization when the token is org-scoped.
 	Organization *OrgSummaryDTO `json:"organization,omitempty"`
 	// Memberships lists the user's selectable organizations.
@@ -434,6 +436,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Token:        token,
 		User:         ToPublicUserDTO(u),
 		License:      license,
+		Roles:        tcRolesUserRoles(tc),
 		Organization: orgDTO,
 		Memberships:  toMembershipDTOs(memberships),
 	})
@@ -489,6 +492,7 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		Token:        token,
 		User:         ToPublicUserDTO(u),
 		License:      org.License,
+		Roles:        m.Roles,
 		Organization: &org,
 	})
 }
@@ -538,6 +542,7 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	resp := LoginResponse{
 		Token: token,
 		User:  ToPublicUserDTO(u),
+		Roles: claimsRolesUserRoles(claims),
 		License: LicenseDTO{
 			Plan:      string(domain.LicensePlanNone),
 			Status:    domain.LicenseStatusNone,
@@ -2080,4 +2085,22 @@ func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Reques
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// tcRolesUserRoles converts token context string roles to domain roles.
+func tcRolesUserRoles(tc auth.TokenContext) []domain.UserRole {
+	out := make([]domain.UserRole, len(tc.Roles))
+	for i, r := range tc.Roles {
+		out[i] = domain.UserRole(r)
+	}
+	return out
+}
+
+// claimsRolesUserRoles converts the live claims role set to domain roles.
+func claimsRolesUserRoles(claims *auth.Claims) []domain.UserRole {
+	out := make([]domain.UserRole, len(claims.Roles))
+	for i, r := range claims.Roles {
+		out[i] = domain.UserRole(r)
+	}
+	return out
 }
