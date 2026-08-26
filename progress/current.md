@@ -92,3 +92,19 @@ postprocessing.
 - `user-select: text` en códigos/nombres copiables.
 
 **Verificación**: `bundle exec rake` completo en verde (rubocop + 115 unit +910 assertions + boundary/smoke 763 + verify .rbz) + browser check DOM/screenshots (pill, tabs, selector claro, apply deshabilitado).
+
+## Selector visual de acabados en Proyectar web (2026-08-26)
+
+**Qué:** la sección "Acabados y herrajes" del inspector del studio ya no usa
+`<select>` para grupos kind 'board': cada rol (INTERIORES/FRENTES…) es un
+bloque resumido (swatch + nombre + meta + botón "Catálogo") que abre el mismo
+diálogo visual del plugin de SketchUp — Miller Columns con conteos por rama,
+breadcrumbs, grid de swatches, ficha técnica, scope (mueble / default de obra)
+y "Heredar default de la obra" cuando hay override.
+
+- Nuevo: `packages/ui/src/projects/components/optionSelector/MaterialOptionSelectorDialog.tsx` (+css+16 tests). Lista elegible = `optionsForGroup` (curada por optionIds, regla anti-ComboBox del doc canónico). Esc/Enter/doble-click, auto-locate de la rama del material actual, empty states diferenciados, datos honestos (espesor "—", "Sin fabricante").
+- Studio: filas de rol + dialog wire-up con `setItemOptionChoice` / `onUpdateProjectLevelChoice` según scope; derivaciones sin useMemo (viven tras un early-return del studio — orden de hooks).
+- Grupos hardware/edge y acabado del zócalo mantienen `<select>` (sin swatches/categorías; follow-up).
+- Gates F111 respetados: tokens `--z-modal-dialog`, `--surface-overlay`, `--text-inverse`, `--surface-overlay-chrome` (0 literales de color).
+
+**Verificación:** ui 146 archivos/1433 tests + web 24/306 + typecheck 4/4 workspaces. Browser E2E manual en dev server (modo invitado, cotización borrador): colocar mueble → bloques por rol → Catálogo → seleccionar → Aplicar → fila actualizada. Nota: cotización "Aceptado" deshabilita edición (correcto).
