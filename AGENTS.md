@@ -50,6 +50,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Modelo de dominio semántico | `docs/architecture/domain-model.md` |
 | Biblioteca de assets 3D | `docs/architecture/3d-asset-library.md` |
 | Features de manufactura semánticas | `docs/architecture/manufacturing-feature-model.md` |
+| Machine profiles & adapters | `docs/architecture/machine-profiles-and-adapters.md` |
 | Modelo de Interacción SketchUp | `docs/architecture/sketchup-interaction-model.md` |
 | Selector Visual de Opciones de Catálogo | `docs/architecture/catalog-option-selector.md` |
 | UX visual | `docs/design.md` |

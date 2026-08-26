@@ -159,3 +159,22 @@ server-side que nunca viaja en el envelope (sin bypass desde SketchUp):
 
 **Verificación:** preflight 19/19 (6 milestone + 13 DoD), domain 87 files/1106
 tests, typecheck 7/7, `go test ./...` ok. Evidence: `progress/implementation_F168.md`.
+
+## #351 discovery + plantilla de dossier (2026-08-26)
+
+Sin dossiers de máquina disponibles (field evidence de #306 pendiente por
+parte del taller), #348 y la cadena dependiente quedan bloqueadas. Adelantado
+lo permitido por la regla del programa (sólo discovery/planificación):
+
+- `docs/architecture/machine-profiles-and-adapters.md` (#351): diseño de
+  MachineProfile/PostprocessorAdapter/evidence packs, registro de capabilities
+  canónicas (semilla: `granete.drilling`/`granete.panel-geometry` del preflight
+  F168) y flujo export→manifest. Implementación sigue hard-blocked hasta #348.
+- `docs/templates/machine-dossier-template.md`: checklist de recolección por
+  visita (identidad, software+versión exacta, formatos con sample real,
+  capacidades verificadas, readback, sign-off) + reglas de sanitización.
+- Issues #351/#348 actualizados con referencias; AGENTS.md registra el doc
+  nuevo en fuentes canónicas.
+
+**Siguiente:** cuando lleguen dossiers → #348 (congelar fixture PTX + readback).
+Alternativa mientras tanto: work del plugin no bloqueado o carril Proyectar.
