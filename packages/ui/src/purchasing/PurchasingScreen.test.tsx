@@ -9,7 +9,7 @@ import type {
   BoardSheetEstimate,
   HardwarePurchaseRow,
   ProductionCutRow,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 const hardwareRow = (
   id: string,

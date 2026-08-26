@@ -1,7 +1,7 @@
 /* Thin web shell chrome — uses design-system tokens only */
-/* Dashboard styles live in @muebles/ui (packages/ui/src/dashboard/dashboard.css) */
+/* Dashboard styles live in @granete/ui (packages/ui/src/dashboard/dashboard.css) */
 
-/* Workspace gate uses PageLoading from @muebles/ui (issue #30) */
+/* Workspace gate uses PageLoading from @granete/ui (issue #30) */
 
 .workspace-load-error {
   min-height: 100vh;

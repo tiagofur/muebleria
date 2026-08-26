@@ -15,8 +15,8 @@ import type {
   HardwarePlacement,
   HoleFace,
   ResolvedBoardPart,
-} from '@muebles/domain';
-import { getFaceDimensions, resolvePartDrilling, snapValue } from '@muebles/domain';
+} from '@granete/domain';
+import { getFaceDimensions, resolvePartDrilling, snapValue } from '@granete/domain';
 import './pieceFaceDrillingEditor.css';
 
 const FACE_LABELS_ES: Readonly<Record<HoleFace, string>> = {

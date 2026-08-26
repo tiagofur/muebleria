@@ -10,7 +10,7 @@ import {
   Layers,
   Send,
 } from 'lucide-react';
-import type { EngineeringDashboardStats } from '@muebles/domain';
+import type { EngineeringDashboardStats } from '@granete/domain';
 
 export interface EngineeringKpiStatsGridProps {
   readonly stats: EngineeringDashboardStats;

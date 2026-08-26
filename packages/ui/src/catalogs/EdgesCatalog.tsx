@@ -3,7 +3,7 @@
  */
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { isValidPreviewColor, normalizePreviewColor, type EdgeBand } from '@muebles/domain';
+import { isValidPreviewColor, normalizePreviewColor, type EdgeBand } from '@granete/domain';
 import { Eye, EyeOff, Minus, Pencil, Plus, SearchX } from 'lucide-react';
 import {
   EmptyState,

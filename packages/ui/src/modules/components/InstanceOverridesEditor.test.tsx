@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Hardware, HardwarePlacement } from '@muebles/domain';
+import type { Hardware, HardwarePlacement } from '@granete/domain';
 import { InstanceOverridesEditor } from './InstanceOverridesEditor';
 
 afterEach(() => {

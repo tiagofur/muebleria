@@ -2,7 +2,7 @@
  * Production queue helpers (F038) — pure filters, no domain costs.
  */
 
-import type { Project, ProjectStatus } from '@muebles/domain';
+import type { Project, ProjectStatus } from '@granete/domain';
 
 export type ProductionQueueTab = 'accepted' | 'produced';
 

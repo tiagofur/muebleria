@@ -2,7 +2,7 @@
  * Structure draft helpers — overrides round-trip (slice 3).
  */
 import { describe, expect, it } from 'vitest';
-import type { Structure } from '@muebles/domain';
+import type { Structure } from '@granete/domain';
 import { emptyStructureDraft, structureToDraft } from './structureDraft';
 
 describe('structureToDraft', () => {

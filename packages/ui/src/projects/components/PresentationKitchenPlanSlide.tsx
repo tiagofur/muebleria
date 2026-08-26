@@ -10,7 +10,7 @@ import type {
   Module,
   Project,
   ProjectKitchenLayout,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   emptyKitchenLayout,
   ensureKitchenSpaces,
@@ -18,7 +18,7 @@ import {
   isKitchenLayoutEmpty,
   pruneKitchenLayout,
   resolveWallFrames,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { LayoutTemplate } from 'lucide-react';
 import { EmptyState } from '../../common';
 import { WorkspaceTabs } from '../../common/Tabs';

@@ -10,15 +10,15 @@ import type {
   Project,
   QuoteBreakdown,
   Workspace,
-} from '@muebles/domain';
-import { calcProjectBreakdown, defaultMeasurePresetId } from '@muebles/domain';
+} from '@granete/domain';
+import { calcProjectBreakdown, defaultMeasurePresetId } from '@granete/domain';
 import {
   canShowPricePreview,
   canShowProjectPricePreview,
   defaultOptionChoicesForModule,
   requiredGroupCodesForModule,
   selectableGroupCodesForModule,
-} from '@muebles/ui';
+} from '@granete/ui';
 
 /**
  * MOD-06: domain cost preview for a single saved module using default option

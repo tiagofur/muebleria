@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { Project, ProjectItem } from '@muebles/domain';
+import type { Project, ProjectItem } from '@granete/domain';
 
 import { EmbarquesScreen, embarquesProjects } from './EmbarquesScreen';
 

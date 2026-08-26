@@ -2,7 +2,7 @@
  * Helpers for instance overrides, fingerprinting and live composition keying.
  */
 
-import type { Module } from '@muebles/domain';
+import type { Module } from '@granete/domain';
 import type { ComponentInstanceDraft, ModuleDraft } from './moduleDraftTransforms';
 
 /**

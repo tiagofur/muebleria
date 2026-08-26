@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import { projectStatusBadgeClass, projectStatusLabel } from '../projectHelpers';
 
 export function StatusBadge({

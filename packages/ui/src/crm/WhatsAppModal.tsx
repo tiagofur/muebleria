@@ -5,7 +5,7 @@ import {
   WHATSAPP_TEMPLATE_OPTIONS,
   type WhatsAppTemplateType,
   type WhatsAppTemplateVars,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { MessageSquare, ExternalLink } from 'lucide-react';
 import { Modal } from '../common';
 import './whatsAppModal.css';

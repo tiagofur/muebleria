@@ -9,13 +9,13 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import type { MaterialBoard, MaterialCategory, OptionGroup } from '@muebles/domain';
+import type { MaterialBoard, MaterialCategory, OptionGroup } from '@granete/domain';
 import {
   categoryPath,
   filterMaterialBoardsByCategory,
   materialManufacturer,
   MATERIAL_MANUFACTURER_UNSET,
-} from '@muebles/domain';
+} from '@granete/domain';
 import './materialOptionSelector.css';
 
 export type MaterialSelectorScope = 'furniture' | 'project';

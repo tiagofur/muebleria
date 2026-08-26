@@ -2,7 +2,7 @@
  * Excel adapter — Optimizer, hardware list, commercial quote writers.
  */
 
-export const PACKAGE_NAME = '@muebles/excel' as const;
+export const PACKAGE_NAME = '@granete/excel' as const;
 
 export {
   optimizerExport,

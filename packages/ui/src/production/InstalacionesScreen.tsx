@@ -12,7 +12,7 @@ import {
   normalizeItemFloorStatus,
   type Customer,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState, PageHeader } from '../common';
 import { installationJobCardView, type InstallationJobCardView } from './installationJobView';
 

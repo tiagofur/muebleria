@@ -5,7 +5,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WarehouseDashboard } from './WarehouseDashboard';
-import type { WarehouseProjectInput, MaterialStock, PurchaseOrder, ProjectPickingState } from '@muebles/domain';
+import type { WarehouseProjectInput, MaterialStock, PurchaseOrder, ProjectPickingState } from '@granete/domain';
 
 describe('WarehouseDashboard', () => {
   afterEach(cleanup);

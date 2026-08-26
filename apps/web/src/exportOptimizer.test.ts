@@ -4,9 +4,9 @@ import {
   plantillaCatalogWithModules,
   plantillaChoices,
   plantillaProject,
-} from '@muebles/domain/fixtures';
-import type { Project } from '@muebles/domain';
-import { createSeedWorkspace } from '@muebles/storage/seed';
+} from '@granete/domain/fixtures';
+import type { Project } from '@granete/domain';
+import { createSeedWorkspace } from '@granete/storage/seed';
 import {
   buildOptimizerExport,
   deliverExcelFile,

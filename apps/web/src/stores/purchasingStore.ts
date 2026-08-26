@@ -23,9 +23,9 @@ import {
   type StockMovement,
   type StockMovementType,
   type Supplier,
-} from '@muebles/domain';
-import type { WorkspaceRepository } from '@muebles/storage';
-import type { PoLineInput } from '@muebles/ui';
+} from '@granete/domain';
+import type { WorkspaceRepository } from '@granete/storage';
+import type { PoLineInput } from '@granete/ui';
 
 import { getUiStoreState } from './uiStore';
 import { useWorkspaceStore } from './workspaceStore';

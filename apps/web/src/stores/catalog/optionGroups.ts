@@ -3,7 +3,7 @@
  * (saveCatalog is upsert-only, so the FE must DELETE or rows reappear).
  */
 
-import type { OptionGroup } from '@muebles/domain';
+import type { OptionGroup } from '@granete/domain';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 

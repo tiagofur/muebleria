@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Project, ProductionCutRow } from '@muebles/domain';
+import type { Project, ProductionCutRow } from '@granete/domain';
 import {
   PRODUCTION_ORDER_TABS,
   buildProductionOrderReadiness,

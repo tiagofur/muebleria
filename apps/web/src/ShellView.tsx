@@ -7,8 +7,8 @@
  */
 
 /**
- * Thin web shell — holds catalog state; presentation lives in @muebles/ui.
- * Price formulas call @muebles/domain only here (not in UI package).
+ * Thin web shell — holds catalog state; presentation lives in @granete/ui.
+ * Price formulas call @granete/domain only here (not in UI package).
  */
 
 import {
@@ -56,7 +56,7 @@ import type {
   PurchaseOrder,
   Supplier,
   OpsException,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
@@ -109,7 +109,7 @@ import {
   transitionProjectStatus,
   type WarehouseProjectInput,
   roleCanAppendProjectEvent,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 
 import {
@@ -198,13 +198,13 @@ import {
   type CostingHandlers,
   type SurveyHandlers,
   type ProjectOverviewNav,
-} from '@muebles/ui';
+} from '@granete/ui';
 import {
   APIWorkspaceRepository,
   LocalStorageWorkspaceRepository,
   breakdownFromApi,
   createSeedWorkspace,
-} from '@muebles/storage';
+} from '@granete/storage';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
@@ -310,10 +310,10 @@ import type {
   ProjectKitchenLayout,
   ShowcasePhotoItem,
   WorkshopAnalytics,
-} from '@muebles/domain';
-import type { AmbientMaterialDraft } from '@muebles/ui';
-import type { OwnerPortfolioRow } from '@muebles/ui';
-import type { WorkspaceRepository } from '@muebles/storage';
+} from '@granete/domain';
+import type { AmbientMaterialDraft } from '@granete/ui';
+import type { OwnerPortfolioRow } from '@granete/ui';
+import type { WorkspaceRepository } from '@granete/storage';
 import type { AuthUser } from './session';
 import type { AssignableOwner } from './stores/workspaceStore';
 import type { StockCatalogView } from './derivations/stockCatalog';
@@ -524,7 +524,7 @@ export interface ShellViewCtx {
   readonly resolveMediaUrl: (url: string | undefined) => string | undefined;
   readonly restoreProjectItems: (
     projectId: string,
-    items: readonly import('@muebles/domain').ProjectItem[],
+    items: readonly import('@granete/domain').ProjectItem[],
     order?: readonly string[],
   ) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;

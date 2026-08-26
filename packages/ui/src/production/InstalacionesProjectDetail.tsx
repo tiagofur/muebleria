@@ -15,7 +15,7 @@ import {
   normalizeItemFloorStatus,
   type ItemFloorStatus,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { InstallationJobPanel, type InstallationJobPanelHandlers } from './InstallationJobPanel';
 import { installationJobCardView } from './installationJobView';
 

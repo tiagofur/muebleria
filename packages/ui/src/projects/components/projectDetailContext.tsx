@@ -26,7 +26,7 @@ import type {
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import type { DropdownMenuSection } from '../../common';
 import type { CostingHandlers } from './CostingPanel';
@@ -169,7 +169,7 @@ export interface ProjectDetailContextValue {
   readonly onMarkProduced?: (projectId: string) => void;
   readonly onChangeStatus?: (
     projectId: string,
-    status: import('@muebles/domain').ProjectStatus,
+    status: import('@granete/domain').ProjectStatus,
   ) => void;
   readonly onRequestReopen: () => void;
   readonly onRequestDelete: () => void;
@@ -177,7 +177,7 @@ export interface ProjectDetailContextValue {
   // --- Kitchen / scenarios / checklist / nesting ---
   readonly onUpdateKitchenLayout?: (
     projectId: string,
-    layout: import('@muebles/domain').ProjectKitchenLayout,
+    layout: import('@granete/domain').ProjectKitchenLayout,
   ) => void;
   readonly onApplyScenarioB?: (
     projectId: string,
@@ -196,7 +196,7 @@ export interface ProjectDetailContextValue {
   ) => void;
   readonly onUpdateInstallationChecklist?: (
     projectId: string,
-    items: readonly import('@muebles/domain').InstallationChecklistItem[],
+    items: readonly import('@granete/domain').InstallationChecklistItem[],
   ) => void;
   // --- Job costing (OC-080..OC-084, #304) ---
   readonly costingView?: CostingPanelView | null;
@@ -256,15 +256,15 @@ export interface ProjectDetailContextValue {
   readonly workshopName?: string;
 
   // --- CRM & Internal Comms (CRM Phase 2) ---
-  readonly internalMessages?: readonly import('@muebles/domain').ProjectInternalMessage[];
+  readonly internalMessages?: readonly import('@granete/domain').ProjectInternalMessage[];
   readonly onSendInternalMessage?: (msg: {
-    messageType: import('@muebles/domain').ProjectInternalMessageType;
+    messageType: import('@granete/domain').ProjectInternalMessageType;
     content: string;
     senderName?: string;
   }) => Promise<void> | void;
   readonly onUpdateTechnicalWorkflow?: (updates: {
     assignedEngineerId?: string;
-    technicalStatus?: import('@muebles/domain').ProjectTechnicalStatus;
+    technicalStatus?: import('@granete/domain').ProjectTechnicalStatus;
     surveyCompletedAt?: string;
     installationScheduledDate?: string;
     comment?: string;
@@ -273,30 +273,30 @@ export interface ProjectDetailContextValue {
   readonly currentUserId?: string;
 
   // --- CRM & Warranty Desk (CRM Phase 3) ---
-  readonly warranties?: readonly import('@muebles/domain').WarrantyTicket[];
-  readonly availableCutRows?: readonly import('@muebles/domain').ProductionCutRow[];
+  readonly warranties?: readonly import('@granete/domain').WarrantyTicket[];
+  readonly availableCutRows?: readonly import('@granete/domain').ProductionCutRow[];
   readonly onCreateWarrantyTicket?: (
-    ticket: Partial<import('@muebles/domain').WarrantyTicket> & {
+    ticket: Partial<import('@granete/domain').WarrantyTicket> & {
       projectId: string;
       title: string;
-      category: import('@muebles/domain').WarrantyTicketCategory;
-      priority: import('@muebles/domain').WarrantyTicketPriority;
+      category: import('@granete/domain').WarrantyTicketCategory;
+      priority: import('@granete/domain').WarrantyTicketPriority;
     },
   ) => Promise<void>;
 
   readonly onUpdateWarrantyTicket?: (
     ticketId: string,
-    updates: Partial<import('@muebles/domain').WarrantyTicket>,
+    updates: Partial<import('@granete/domain').WarrantyTicket>,
   ) => Promise<void>;
   readonly onDeleteWarrantyTicket?: (ticketId: string) => Promise<void>;
   readonly onUploadWarrantyPhoto?: (
     ticketId: string,
     file: File,
-    kind?: import('@muebles/domain').WarrantyPhotoKind,
+    kind?: import('@granete/domain').WarrantyPhotoKind,
     caption?: string,
   ) => Promise<void>;
   readonly onExportWarrantyRefabricationOptimizer?: (
-    ticket: import('@muebles/domain').WarrantyTicket,
+    ticket: import('@granete/domain').WarrantyTicket,
   ) => void;
 
   // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
@@ -305,7 +305,7 @@ export interface ProjectDetailContextValue {
   readonly onReleaseToProduction?: (
     projectId: string,
     note?: string,
-    options?: import('@muebles/domain').ProductionReleaseOptions,
+    options?: import('@granete/domain').ProductionReleaseOptions,
   ) => void | Promise<void>;
   readonly onRevokeProductionRelease?: (
     projectId: string,
@@ -316,7 +316,7 @@ export interface ProjectDetailContextValue {
     params: {
       reason: string;
       description?: string;
-      impact?: import('@muebles/domain').ChangeOrderImpact;
+      impact?: import('@granete/domain').ChangeOrderImpact;
     },
   ) => void | Promise<void>;
   readonly onSubmitChangeOrder?: (
@@ -340,14 +340,14 @@ export interface ProjectDetailContextValue {
     notes?: string,
   ) => void | Promise<void>;
   readonly onRequestApproval?: (
-    type: import('@muebles/domain').ApprovalType,
+    type: import('@granete/domain').ApprovalType,
     notes?: string,
   ) => void | Promise<void>;
   readonly onChangeCommercialStatus?: (
-    status: import('@muebles/domain').CommercialStatus,
+    status: import('@granete/domain').CommercialStatus,
   ) => void | Promise<void>;
   readonly onRecordDeposit?: (
-    params: import('@muebles/domain').DepositReceivedPayload & { note?: string },
+    params: import('@granete/domain').DepositReceivedPayload & { note?: string },
   ) => void | Promise<void>;
 }
 

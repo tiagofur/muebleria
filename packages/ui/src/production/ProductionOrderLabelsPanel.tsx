@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { PieceLabel, ModuleLabel, Project } from '@muebles/domain';
+import type { PieceLabel, ModuleLabel, Project } from '@granete/domain';
 import { Box, Layers } from 'lucide-react';
 import {
   readLabelPrinterSettings,

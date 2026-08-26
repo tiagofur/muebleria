@@ -8,8 +8,8 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { assemblySheetsPdfExport } from '@muebles/excel';
+} from '@granete/domain';
+import { assemblySheetsPdfExport } from '@granete/excel';
 import { deliverExcelFile } from './exportOptimizer';
 
 export type ExportAssemblySheetsResult =

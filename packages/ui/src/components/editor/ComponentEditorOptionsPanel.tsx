@@ -7,7 +7,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { OptionGroup } from '@muebles/domain';
+import type { OptionGroup } from '@granete/domain';
 import type { ComponentDraft } from '../componentDraft';
 
 export type ComponentEditorOptionsPanelProps = {

@@ -71,7 +71,7 @@ module Granete
       end
 
       # Pure visual adapter and renderer for SketchUp.
-      # Consumes resolved component layouts from @muebles/domain or generic slot definitions.
+      # Consumes resolved component layouts from @granete/domain or generic slot definitions.
       # Contains ZERO manufacturing rules, zero machining calculation, and zero category-specific logic.
       class FurnitureBuilder
         DEFAULT_THICKNESS_MM = 18.0

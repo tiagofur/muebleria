@@ -7,11 +7,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@muebles/domain/fixtures': new URL(
+      '@granete/domain/fixtures': new URL(
         '../domain/src/__fixtures__/plantillaDemo.ts',
         import.meta.url,
       ).pathname,
-      '@muebles/domain': new URL('../domain/src/index.ts', import.meta.url)
+      '@granete/domain': new URL('../domain/src/index.ts', import.meta.url)
         .pathname,
     },
   },

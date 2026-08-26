@@ -17,7 +17,7 @@ import type {
   OptionGroup,
   Project,
   ProjectKitchenLayout,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import { PresentationKitchenPlanSlide } from './PresentationKitchenPlanSlide';
 import { PresentationOptionsSlide } from './PresentationOptionsSlide';

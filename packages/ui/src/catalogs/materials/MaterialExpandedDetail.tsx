@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { MaterialBoard } from '@muebles/domain';
+import type { MaterialBoard } from '@granete/domain';
 import { CatalogImage, formatMoneyDisplay } from '../../common';
 import { ActiveBadge } from '../CatalogTable';
 

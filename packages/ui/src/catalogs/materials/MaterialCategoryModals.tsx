@@ -10,8 +10,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { MaterialCategory } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import type { MaterialCategory } from '@granete/domain';
+import { childrenOf } from '@granete/domain';
 import { Layers, Plus } from 'lucide-react';
 import { EmptyState, Modal } from '../../common';
 import type { CategoryDraft } from '../../modules/moduleHelpers';

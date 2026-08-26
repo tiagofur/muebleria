@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-import type { Project, ProjectItem } from '@muebles/domain';
+import type { Project, ProjectItem } from '@granete/domain';
 
 import { FabricScreen, summarizeFabricMetrics } from './FabricScreen';
 

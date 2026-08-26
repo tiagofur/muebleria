@@ -3,7 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { AmbientCategory, AmbientMaterial } from '@muebles/domain';
+import type { AmbientCategory, AmbientMaterial } from '@granete/domain';
 import { MaterialPalette } from './MaterialPalette';
 import { PAINT_DRAG_MIME, decodePaintDrag } from './paintMaterial';
 

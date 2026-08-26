@@ -6,7 +6,7 @@ import {
   nextItemFloorStatus,
   type ParsedPieceLabelScan,
   type ItemFloorStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';

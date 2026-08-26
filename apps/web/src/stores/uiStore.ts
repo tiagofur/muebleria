@@ -11,7 +11,7 @@
 
 import { create } from 'zustand';
 
-import type { ExportIssue } from '@muebles/domain';
+import type { ExportIssue } from '@granete/domain';
 
 // ---------------------------------------------------------------------------
 // Toast types + constants (re-exported for tests + ToastViewport)

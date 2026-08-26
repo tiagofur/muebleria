@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { QuoteBreakdown } from '@muebles/domain';
+import type { QuoteBreakdown } from '@granete/domain';
 import { formatModuleMoney } from '../moduleHelpers';
 
 export type CostPreviewPanelProps = {

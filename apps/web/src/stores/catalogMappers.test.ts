@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ComponentDraft, StructureDraft } from '@muebles/ui';
+import type { ComponentDraft, StructureDraft } from '@granete/ui';
 import { draftToComponent, draftToStructure } from './catalogMappers';
 
 describe('draftToStructure', () => {

@@ -3,7 +3,7 @@ import { Linking, View, ActivityIndicator, StyleSheet, Text } from 'react-native
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from './src/stores/authStore';
 import { useCatalogStore } from './src/stores/catalogStore';
-import { unwrapPieceLabelQrUrl } from '@muebles/domain';
+import { unwrapPieceLabelQrUrl } from '@granete/domain';
 import { setOfflineQueueStorage } from './src/services/offlineQueueStorage';
 import { useFloorScannerStore } from './src/stores/floorScannerStore';
 import { LoginScreen } from './src/screens/LoginScreen';

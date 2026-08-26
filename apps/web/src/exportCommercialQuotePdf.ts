@@ -14,11 +14,11 @@ import {
   type ExportIssue,
   type Project,
   type WorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   commercialQuotePdfExport,
   type CommercialQuotePdfVariant,
-} from '@muebles/excel';
+} from '@granete/excel';
 import {
   downloadOptimizerXlsx,
   type DownloadDeps,

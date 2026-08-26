@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Module, OptionGroup } from '@muebles/domain';
+import type { Module, OptionGroup } from '@granete/domain';
 import {
   boardFinishPickerGroupsForModule,
   defaultOptionChoicesForModule,

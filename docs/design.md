@@ -396,7 +396,7 @@ control**, nunca cambiando su tamaño ni estructura:
 **Librería:** [Lucide React](https://lucide.dev)
 
 ```bash
-pnpm add lucide-react --filter @muebles/ui
+pnpm add lucide-react --filter @granete/ui
 ```
 
 - **Stroke width:** siempre `strokeWidth={1.5}`
@@ -774,7 +774,7 @@ Cada lista con más de ~10 ítems esperados tiene:
 
 ### 4.7 Estados de carga (loading)
 
-Patrones reutilizables en `@muebles/ui` (`Spinner`, `PageLoading`, `InlineLoading`, `ListSkeleton`, `submitBusyLabel`):
+Patrones reutilizables en `@granete/ui` (`Spinner`, `PageLoading`, `InlineLoading`, `ListSkeleton`, `submitBusyLabel`):
 
 | Caso | Componente | Uso |
 |------|------------|-----|
@@ -918,7 +918,7 @@ Un SOLO componente de indicador KPI, `.stat-card` en `common/statCard.css`
 
 ## 6. Pantallas definidas
 
-Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase 2 UI review. Cada pantalla es presentación en `@muebles/ui`; el shell (`apps/web`) posee estado de workspace, costos y sesión.
+Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase 2 UI review. Cada pantalla es presentación en `@granete/ui`; el shell (`apps/web`) posee estado de workspace, costos y sesión.
 
 > **Tipos de patrón (§4.2):**
 > - **tabla-expand**: tabla + expand de fila para ver + Modal SM/LG para editar.
@@ -1011,7 +1011,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 - **Ruta nav:** `customers` (sección TRABAJO)
 - **Path:** `packages/ui/src/customers/`
-- **Dominio:** entidad `Customer` (`@muebles/domain`)
+- **Dominio:** entidad `Customer` (`@granete/domain`)
 - **Patrón:** tabla-expand (mismo que catálogos)
 - **Campos típicos de draft:** name, email, phone, address, notes
 - **Icono:** `Users`
@@ -1071,7 +1071,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
   - Celda: `done/total` (verde al completar el sector) + "n en cola" (esperando ese sector); columna del cuello de botella resaltada (brand)
   - Nombre de obra: botón a la orden de fábrica si el rol puede entrar al hub; si no, a la cotización (vendedor)
   - Copy explícito "el avance se marca desde Producción" — nada se muta acá
-- **Dominio:** `buildProjectFloorSummary` / `PIPELINE_SECTORS` / `PRODUCTION_SECTOR_LABELS_ES` (`@muebles/domain`, `productionSectors.ts`) — UI no calcula
+- **Dominio:** `buildProjectFloorSummary` / `PIPELINE_SECTORS` / `PRODUCTION_SECTOR_LABELS_ES` (`@granete/domain`, `productionSectors.ts`) — UI no calcula
 - **Bitácora (F092):** cada transición de piso (web/escaneo/despacho) escribe un `FloorStatusEvent` inmutable (quién/cuándo/cómo, saltos anotados); `GET /api/projects/:id/floor-events`
 - **Icono:** `KanbanSquare`
 

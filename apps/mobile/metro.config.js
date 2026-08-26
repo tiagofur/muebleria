@@ -21,8 +21,8 @@ config.resolver.nodeModulesPaths = [
 
 // 3. Prevent duplicate react/react-native instances
 config.resolver.extraNodeModules = {
-  '@muebles/domain': path.resolve(monorepoRoot, 'packages/domain/src'),
-  '@muebles/storage': path.resolve(monorepoRoot, 'packages/storage/src'),
+  '@granete/domain': path.resolve(monorepoRoot, 'packages/domain/src'),
+  '@granete/storage': path.resolve(monorepoRoot, 'packages/storage/src'),
 };
 
 module.exports = config;

@@ -16,7 +16,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Customer } from '@muebles/domain';
+import type { Customer } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { Modal } from '../../common';
 import {

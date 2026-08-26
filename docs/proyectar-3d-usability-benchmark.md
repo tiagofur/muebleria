@@ -123,7 +123,7 @@ siguiente participante.
 
 ## 7. Análisis y reporte
 
-- `summarizeUsabilitySessions(sessions)` (`@muebles/ui`, testeado) agrega:
+- `summarizeUsabilitySessions(sessions)` (`@granete/ui`, testeado) agrega:
   tiempos por tarea (mediana), abandonos, ayudas, errores, retrocesos
   (undo/redo), clicks, y cumplimiento de targets (`metRatio`).
 - Reporte mínimo por tanda de sesiones: tabla por tarea (mediana + rango +

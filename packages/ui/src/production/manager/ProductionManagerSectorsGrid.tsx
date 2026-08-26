@@ -16,7 +16,7 @@ import {
   PRODUCTION_SECTOR_LABELS_ES,
   type PipelineSector,
   type ProductionSector,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { SectorDashboard } from './useProductionDashboardState';
 
 export function SectorIcon({

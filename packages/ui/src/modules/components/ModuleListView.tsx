@@ -3,12 +3,12 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Module, ModuleCategory } from '@muebles/domain';
+import type { Module, ModuleCategory } from '@granete/domain';
 import {
   UNCATEGORIZED_FILTER,
   childrenOf,
   type CategoryFilterId,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Layers, Package, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import { CatalogImage, EmptyState, PageHeader, PageToolbar, SearchInput } from '../../common';
 import { formatModuleMoney } from '../moduleHelpers';

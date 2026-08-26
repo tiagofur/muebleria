@@ -6,8 +6,8 @@ import {
   calcMaterialCostPerM2,
   normalizePreviewColor,
   type MaterialCategory,
-} from '@muebles/domain';
-import type { MaterialDraft } from '@muebles/ui';
+} from '@granete/domain';
+import type { MaterialDraft } from '@granete/ui';
 
 import type { CatalogState, CatalogStoreCtx } from './shared';
 import { optionalNotes } from './shared';

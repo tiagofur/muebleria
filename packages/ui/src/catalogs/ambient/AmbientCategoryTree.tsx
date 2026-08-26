@@ -8,8 +8,8 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { AmbientCategory } from '@muebles/domain';
-import { childrenOf } from '@muebles/domain';
+import type { AmbientCategory } from '@granete/domain';
+import { childrenOf } from '@granete/domain';
 import { Pencil, Trash2 } from 'lucide-react';
 
 export function CategoryTree({

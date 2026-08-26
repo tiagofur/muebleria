@@ -14,8 +14,8 @@ import type { Catalog,
   ProductionStaleInfo,
   Project,
   ProductionSpaceOption,
-} from '@muebles/domain';
-import { PRODUCTION_SCOPE_ALL } from '@muebles/domain';
+} from '@granete/domain';
+import { PRODUCTION_SCOPE_ALL } from '@granete/domain';
 import { ArrowLeft, ExternalLink, Factory } from 'lucide-react';
 import {
   formatIsoDate,

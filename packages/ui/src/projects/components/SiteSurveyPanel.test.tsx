@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SiteSurveyPanel, type SurveyHandlers } from './SiteSurveyPanel';
-import type { SiteSurvey } from '@muebles/domain';
+import type { SiteSurvey } from '@granete/domain';
 
 afterEach(cleanup);
 

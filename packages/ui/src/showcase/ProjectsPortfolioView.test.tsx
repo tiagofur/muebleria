@@ -5,7 +5,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import userEvent from '@testing-library/user-event';
-import type { ShowcasePhotoItem } from '@muebles/domain';
+import type { ShowcasePhotoItem } from '@granete/domain';
 import { ProjectsPortfolioView } from './ProjectsPortfolioView';
 
 const MOCK_PHOTOS: ShowcasePhotoItem[] = [

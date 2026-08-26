@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PurchaseOrdersPanel } from './PurchaseOrdersPanel';
-import type { PurchaseOrder, Supplier } from '@muebles/domain';
+import type { PurchaseOrder, Supplier } from '@granete/domain';
 
 const suppliers: Supplier[] = [
   {

@@ -26,7 +26,7 @@ import {
   type ProjectPickingState,
   type PickingStatus,
   type WarehouseProjectInput,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState, PageHeader, PageToolbar, SearchInput, StatusChips } from '../common';
 import './purchasing.css';
 

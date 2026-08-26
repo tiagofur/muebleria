@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
-import { createSeedWorkspace } from '@muebles/storage/seed';
+import { createSeedWorkspace } from '@granete/storage/seed';
 import { buildProductionPackExport, productionPackFileName } from './exportProductionPack';
 
 describe('buildProductionPackExport (Issue #134)', () => {

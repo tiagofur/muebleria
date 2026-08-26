@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { plantillaGabOnlyProject, plantillaCatalogWithModules } from '@muebles/domain/fixtures';
-import { calcProjectBreakdown } from '@muebles/domain';
+import { plantillaGabOnlyProject, plantillaCatalogWithModules } from '@granete/domain/fixtures';
+import { calcProjectBreakdown } from '@granete/domain';
 import { commercialScenarioPdfExport } from './commercialScenarioPdfExport';
 
 describe('commercialScenarioPdfExport (Issue #137)', () => {

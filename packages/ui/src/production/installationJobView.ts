@@ -19,7 +19,7 @@ import {
   type InstallationJobStatus,
   type InstallationUnitsSummary,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type InstallationJobCardView = {
   readonly jobStatus: InstallationJobStatus;

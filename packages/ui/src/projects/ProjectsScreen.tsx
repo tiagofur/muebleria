@@ -46,7 +46,7 @@ import type {
   ChangeOrderImpact,
   ApprovalType,
   CommercialStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import {
   type DropdownMenuSection,
@@ -145,7 +145,7 @@ export interface ProjectsScreenProps {
   /** Kitchen plan walls + placements (#133). */
   readonly onUpdateKitchenLayout?: (
     projectId: string,
-    layout: import('@muebles/domain').ProjectKitchenLayout,
+    layout: import('@granete/domain').ProjectKitchenLayout,
   ) => void;
   /**
    * Soft lock for multi-user Proyectar (auth). When omitted, no lock protocol.
@@ -175,11 +175,11 @@ export interface ProjectsScreenProps {
   ) => void;
   readonly onUpdateInstallationChecklist?: (
     projectId: string,
-    items: readonly import('@muebles/domain').InstallationChecklistItem[],
+    items: readonly import('@granete/domain').InstallationChecklistItem[],
   ) => void;
   readonly onImportNesting?: (
     projectId: string,
-    nestingImport: NonNullable<import('@muebles/domain').Project['nestingImport']>,
+    nestingImport: NonNullable<import('@granete/domain').Project['nestingImport']>,
   ) => void;
 
   // --- Job costing (OC-080..OC-084, #304): estimate vs actual panel ---
@@ -433,7 +433,7 @@ export interface ProjectsScreenProps {
   ) => void | Promise<void>;
   readonly onRecordDeposit?: (
     projectId: string,
-    params: import('@muebles/domain').DepositReceivedPayload & { note?: string },
+    params: import('@granete/domain').DepositReceivedPayload & { note?: string },
   ) => void | Promise<void>;
 }
 

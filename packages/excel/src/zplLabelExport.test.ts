@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PieceLabel, ModuleLabel } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { PieceLabel, ModuleLabel } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 import {
   dotsPerMm,
   pieceBatchToZpl,

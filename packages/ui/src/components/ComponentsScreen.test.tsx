@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ComponentsScreen } from './ComponentsScreen';
-import type { Component, OptionGroup } from '@muebles/domain';
+import type { Component, OptionGroup } from '@granete/domain';
 
 const mockOptionGroups: OptionGroup[] = [
   { id: 'og1', code: 'FRENTE', name: 'Frente', kind: 'board', required: true, optionIds: [] },

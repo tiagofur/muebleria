@@ -7,7 +7,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it } from 'vitest';
-import { AppShell } from '@muebles/ui';
+import { AppShell } from '@granete/ui';
 import { navFromPath } from './routes';
 
 

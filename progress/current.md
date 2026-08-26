@@ -226,3 +226,27 @@ alineado), y ejemplo `"client": "muebles-for-sketchup"` del contract corregido a
 UI/mueble en copy español, `docs/history/`, `feature_list.json`, `progress/`
 previo, URLs del repo `tiagofur/muebleria`. `@muebles/*` en docs queda para la
 Parte 3.
+
+## #366 Parte 3 — Scope de paquetes @muebles/* → @granete/* (2026-08-26)
+
+**Qué:** codemod repo-wide del scope de paquetes JS. 459 archivos en
+apps+packages (~782 refs), más root package.json (name `muebles` → `granete` +
+scripts --filter), `tsconfig.base.json` paths, `playwright.config.ts`,
+README/CHECKPOINTS, docs vivientes (design, verification, desktop-release,
+mobile-architecture, roadmap_RN, sketchup-interaction-model, usability
+benchmark, roadmap-screens) y el comentario espejo de
+`backend-go/internal/domain/types.go`. PACKAGE_NAME de los 5 paquetes incluidos
+(literal en el export). Lockfile regenerado con pnpm install.
+
+**Exclusiones (historia aplicada):** migraciones SQL de backend-go
+(000016/000017/000019 referencian @muebles/domain en comentarios), `progress/`
+(completo), `feature_list.json`, `docs/history/`, artefactos `dist/`.
+
+**Verificación:** `pnpm typecheck` 7/7; `pnpm test` completo: domain 1106,
+storage 161, excel 93, ui 1433, mobile 45, desktop 17, web 306 — tests en
+verde. `@muebles/` sólo vive en las exclusiones. Merge con main (P1+P2)
+resuelto: apiClient/main.tsx con contenido P2 + imports @granete.
+
+**Estado:** PR #408 (475 archivos). Pendiente Parte 4: app IDs
+com.muebles.app → com.granete.app (desktop+mobile), slug Expo, documentar IDs
+técnicos que quedan (module path Go, DB local, ~/.muebles-media).

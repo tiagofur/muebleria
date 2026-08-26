@@ -9,8 +9,8 @@
  * Same board-part population as Optimizer export (no hardware).
  */
 
-import type { ProductionCutRow } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 /** Documented header row — keep in sync with tests and issue #224. */
 export const CUT_LIST_CSV_HEADERS = [

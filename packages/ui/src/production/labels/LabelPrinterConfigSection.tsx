@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { Printer } from 'lucide-react';
-import type { ZplDpi, ZplSizePreset } from '@muebles/domain';
+import type { ZplDpi, ZplSizePreset } from '@granete/domain';
 import type { LabelPrinterSettings } from '../labelPrinterSettings';
 
 export interface LabelPrinterConfigSectionProps {

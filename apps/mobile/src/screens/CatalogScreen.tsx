@@ -23,7 +23,7 @@ import {
   type CatalogTab,
 } from '../stores/catalogStore';
 import { useQuoterStore } from '../stores/quoterStore';
-import type { Module } from '@muebles/domain';
+import type { Module } from '@granete/domain';
 
 export interface CatalogScreenProps {
   onBack: () => void;

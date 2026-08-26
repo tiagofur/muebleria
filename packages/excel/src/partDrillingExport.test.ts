@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectDrillingData } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { ProjectDrillingData } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 import {
   drillingDataExportCsv,
   drillingDataExportJson,

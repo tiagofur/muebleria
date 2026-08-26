@@ -4,7 +4,7 @@
  * prices — computed from the workspace catalog.
  */
 
-import type { Catalog, StockMaterialKind } from '@muebles/domain';
+import type { Catalog, StockMaterialKind } from '@granete/domain';
 
 export interface StockCatalogView {
   readonly labels: Record<string, string>;

@@ -6,7 +6,7 @@ import type {
   AmbientCategory,
   AmbientMaterial,
   AmbientSurfaceType,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import type { CategoryDraft } from '../../modules/moduleHelpers';
 

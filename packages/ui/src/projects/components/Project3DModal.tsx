@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Module, Project, ProjectItem } from '@muebles/domain';
+import type { Module, Project, ProjectItem } from '@granete/domain';
 import { Modal } from '../../common';
 import {
   FurnitureScene3D,

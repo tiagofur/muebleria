@@ -1,6 +1,6 @@
 # Release y Empaquetado Desktop — Granete
 
-Guía oficial para compilar, firmar y publicar la aplicación de escritorio (`@muebles/desktop`) para Windows, macOS y Linux.
+Guía oficial para compilar, firmar y publicar la aplicación de escritorio (`@granete/desktop`) para Windows, macOS y Linux.
 
 ---
 
@@ -12,9 +12,9 @@ Desde la raíz del monorepo:
 |---|---|---|
 | `pnpm build:desktop` | Empaqueta la app en modo directorio (`--dir`) para prueba rápida | `apps/desktop/dist/mac-arm64/` o `dist/win-unpacked/` |
 | `pnpm release:desktop` | Genera instaladores completos para la plataforma actual | `apps/desktop/dist/*.dmg`, `*.exe`, `*.AppImage` |
-| `pnpm --filter @muebles/desktop dist:win` | Genera instalador Windows (NSIS `.exe` + portable) | `apps/desktop/dist/Granete-Setup-*.exe` |
-| `pnpm --filter @muebles/desktop dist:mac` | Genera instalador macOS (`.dmg` + `.zip`) | `apps/desktop/dist/Granete-*.dmg` |
-| `pnpm --filter @muebles/desktop dist:linux` | Genera binarios Linux (`AppImage` + `.tar.gz`) | `apps/desktop/dist/Granete-*.AppImage` |
+| `pnpm --filter @granete/desktop dist:win` | Genera instalador Windows (NSIS `.exe` + portable) | `apps/desktop/dist/Granete-Setup-*.exe` |
+| `pnpm --filter @granete/desktop dist:mac` | Genera instalador macOS (`.dmg` + `.zip`) | `apps/desktop/dist/Granete-*.dmg` |
+| `pnpm --filter @granete/desktop dist:linux` | Genera binarios Linux (`AppImage` + `.tar.gz`) | `apps/desktop/dist/Granete-*.AppImage` |
 
 ---
 

@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { CutPlanPlacedPiece } from '@muebles/domain';
+import type { CutPlanPlacedPiece } from '@granete/domain';
 
 export interface ProductionBoardHoverCardProps {
   readonly piece: CutPlanPlacedPiece | null;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { usePresentationStore } from './presentationStore';
-import { seedCatalogExpandedLatAm } from '@muebles/domain';
+import { seedCatalogExpandedLatAm } from '@granete/domain';
 
 describe('usePresentationStore (Fase 5 - 3D Presentation, Signatures & Paperless Bench)', () => {
   beforeEach(() => {

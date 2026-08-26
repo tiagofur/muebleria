@@ -18,7 +18,7 @@ import type {
   Structure,
   MaterialBoard,
   EdgeBand,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   EntityEditorLayout,
   Modal,

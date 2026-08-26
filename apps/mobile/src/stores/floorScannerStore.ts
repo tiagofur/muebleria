@@ -6,7 +6,7 @@ import {
   type ItemFloorStatus,
   normalizeItemFloorStatus,
   nextItemFloorStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { apiClient } from '../services/apiClient';
 import {
   loadActiveProjectId,

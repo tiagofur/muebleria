@@ -10,11 +10,11 @@ import type {
   Module,
   OptionGroup,
   Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   ensureKitchenSpaces,
   projectScopedToProductionSpace,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { FullscreenDialog } from '../../common';
 import { WorkspaceTabs } from '../../common/Tabs';
 import {

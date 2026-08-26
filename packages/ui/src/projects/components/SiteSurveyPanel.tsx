@@ -16,7 +16,7 @@ import {
   type MeasureIntent,
   type SiteSurvey,
   type SurveyElementKind,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState } from '../../common';
 import '../projects.css';
 import './siteSurvey.css';

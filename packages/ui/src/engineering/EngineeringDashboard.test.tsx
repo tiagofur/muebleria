@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { EngineeringDashboard } from './EngineeringDashboard';
-import type { Project, EngineeringLog } from '@muebles/domain';
+import type { Project, EngineeringLog } from '@granete/domain';
 
 type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 

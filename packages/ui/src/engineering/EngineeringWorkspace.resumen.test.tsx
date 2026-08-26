@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 
 import { EngineeringWorkspace } from './EngineeringWorkspace';

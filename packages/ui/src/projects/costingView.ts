@@ -17,7 +17,7 @@ import {
   type OtherActualCost,
   type Project,
   type TimeEntry,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export const MATERIAL_BASIS_LABELS_ES: Readonly<Record<string, string>> = {
   po_unit_cost: 'Costo OC',

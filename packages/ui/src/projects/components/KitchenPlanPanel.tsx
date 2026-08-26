@@ -15,7 +15,7 @@ import type {
   ProjectKitchenLayout,
   ProjectItemPlacement,
   KitchenWall,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   createDefaultLWalls,
   emptyKitchenLayout,
@@ -24,8 +24,8 @@ import {
   pruneKitchenLayout,
   reorderPlacementOnWall,
   resolveWallFrames,
-} from '@muebles/domain';
-import type { PlacementElevation } from '@muebles/domain';
+} from '@granete/domain';
+import type { PlacementElevation } from '@granete/domain';
 import { Lock } from 'lucide-react';
 import {
   allFootprints,

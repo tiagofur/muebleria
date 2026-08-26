@@ -3,8 +3,8 @@
  */
 
 import { useMemo } from 'react';
-import type { Catalog, PieceLabel, ProductionCutRow, Project } from '@muebles/domain';
-import { generatePartDrillingData, resolveProjectDrilling } from '@muebles/domain';
+import type { Catalog, PieceLabel, ProductionCutRow, Project } from '@granete/domain';
+import { generatePartDrillingData, resolveProjectDrilling } from '@granete/domain';
 import type { ProductionOrderReadiness } from '../productionOrderModel';
 import type { ProductionDocumentItem } from '../ProductionOrderDocumentsPanel';
 

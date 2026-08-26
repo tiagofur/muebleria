@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { ProjectOverviewPanel } from './ProjectOverviewPanel';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 
 afterEach(cleanup);
 

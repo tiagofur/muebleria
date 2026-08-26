@@ -20,7 +20,7 @@ import type {
   Project,
   StockMaterialKind,
   WarehouseProjectInput,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   computeProductionTotals,
   estimateBoardSheets,
@@ -28,13 +28,13 @@ import {
   generateCutRows,
   generateHardwareList,
   generateProjectMaterialSummary,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   filterProductionVisible,
   resolveCustomerName,
   type ActiveProjectMaterial,
   type FabricProjectMetrics,
-} from '@muebles/ui';
+} from '@granete/ui';
 import type { StockCatalogView } from './stockCatalog';
 
 import type { StockDebitLine } from '../stores/purchasingStore';

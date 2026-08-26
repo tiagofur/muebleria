@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { catalogFromApi } from '@muebles/storage';
+import { catalogFromApi } from '@granete/storage';
 import { apiClient } from '../services/apiClient';
 import {
   type MaterialBoard,
@@ -9,7 +9,7 @@ import {
   type Customer,
   type OptionGroup,
   seedCatalogExpandedLatAm,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type CatalogTab = 'materials' | 'edgeBands' | 'hardware' | 'modules';
 

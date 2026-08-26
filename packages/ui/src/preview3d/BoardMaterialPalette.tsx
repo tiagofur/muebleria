@@ -9,13 +9,13 @@
  */
 
 import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
-import type { MaterialBoard, MaterialCategory } from '@muebles/domain';
+import type { MaterialBoard, MaterialCategory } from '@granete/domain';
 import {
   categoryPath,
   filterMaterialBoardsByCategory,
   materialManufacturer,
   MATERIAL_MANUFACTURER_UNSET,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   BOARD_PAINT_DRAG_MIME,
   encodeBoardPaintDrag,

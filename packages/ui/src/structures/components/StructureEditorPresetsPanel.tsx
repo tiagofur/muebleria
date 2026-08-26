@@ -4,7 +4,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import type { DimensionPreset } from '@muebles/domain';
+import type { DimensionPreset } from '@granete/domain';
 import { Plus } from 'lucide-react';
 
 export type StructureEditorPresetsPanelProps = {

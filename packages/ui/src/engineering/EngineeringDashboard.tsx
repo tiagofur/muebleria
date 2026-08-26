@@ -15,7 +15,7 @@ import './engineering.css';
 import {
   computeEngineeringDashboardStats,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   PageHeader,
   PageToolbar,

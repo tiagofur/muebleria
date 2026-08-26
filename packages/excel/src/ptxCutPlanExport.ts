@@ -17,8 +17,8 @@ import type {
   CutPlanPlacedPiece,
   CutPlanRemnant,
   CutPlanSheet,
-} from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+} from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 export interface PtxCutPlanExportInput {
   readonly cutPlan: CutPlan;

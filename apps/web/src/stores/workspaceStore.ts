@@ -12,15 +12,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-import type { Workspace, WorkshopSettings } from '@muebles/domain';
+import type { Workspace, WorkshopSettings } from '@granete/domain';
 import {
   APIWorkspaceRepository,
   LocalStorageWorkspaceRepository,
   GUEST_WORKSPACE_STORAGE_KEY,
   createSeedWorkspace,
   type WorkspaceRepository,
-} from '@muebles/storage';
-import { resolveWorkshopSettings } from '@muebles/domain';
+} from '@granete/storage';
+import { resolveWorkshopSettings } from '@granete/domain';
 
 import {
   type AuthUser,

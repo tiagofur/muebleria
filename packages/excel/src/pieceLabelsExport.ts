@@ -4,12 +4,12 @@
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type PDFImage } from 'pdf-lib';
 import QRCode from 'qrcode';
-import type { PieceLabel } from '@muebles/domain';
+import type { PieceLabel } from '@granete/domain';
 import {
   pieceLabelQrPayload,
   pieceLabelQrPayloadUrl,
   ValidationError,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface PieceLabelsPdfInput {
   readonly projectId: string;

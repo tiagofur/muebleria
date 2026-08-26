@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Agregado, Component } from '@muebles/domain';
+import type { Agregado, Component } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { resolveStructure3DPreview } from './structure3dPreview';
 import { emptyStructureDraft, type StructureDraft } from './structureDraft';

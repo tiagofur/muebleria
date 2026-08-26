@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { CutPlan, Project } from '@muebles/domain';
+import type { CutPlan, Project } from '@granete/domain';
 import { ProductionOrderOptimizationPanel } from './ProductionOrderOptimizationPanel';
 
 function project(): Project {

@@ -5,7 +5,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { useState } from 'react';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ProductionCutRow } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
 import { CsvExportConfigModal } from './CsvExportConfigModal';
 
 const mockCutRows: readonly ProductionCutRow[] = [

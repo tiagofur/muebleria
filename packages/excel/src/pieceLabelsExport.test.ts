@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { ValidationError, type PieceLabel } from '@muebles/domain';
+import { ValidationError, type PieceLabel } from '@granete/domain';
 import { pieceLabelsPdfExport } from './pieceLabelsExport';
 
 const sampleLabel: PieceLabel = {

@@ -2,8 +2,8 @@
  * Web pipeline: CutPlan → vector PDF → download (F115).
  */
 
-import { cutPlanPdfExport } from '@muebles/excel';
-import type { CutPlan } from '@muebles/domain';
+import { cutPlanPdfExport } from '@granete/excel';
+import type { CutPlan } from '@granete/domain';
 import { downloadOptimizerXlsx, type DownloadDeps } from './exportOptimizer';
 
 export async function downloadCutPlanPdf(

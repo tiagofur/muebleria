@@ -7,7 +7,7 @@ import type {
   FurnitureType,
   Project,
   ProjectStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { formatMoneyDisplay } from '../../common/formatMoneyDisplay';
 import { matchesCodeOrName } from '../../catalogs/catalogHelpers';
 

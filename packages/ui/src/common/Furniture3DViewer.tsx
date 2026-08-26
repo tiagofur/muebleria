@@ -33,7 +33,7 @@ import type {
   Hardware,
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
-} from '@muebles/domain';
+} from '@granete/domain';
 import '../preview3d/partInspector.css';
 import './furniture3dViewer.css';
 
@@ -57,7 +57,7 @@ export type Furniture3DViewerProps = {
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   /** Catalog materials — used with resolveMediaUrl to build texture map. */
   readonly materialsForTextures?: readonly Pick<
-    import('@muebles/domain').MaterialBoard,
+    import('@granete/domain').MaterialBoard,
     'id' | 'previewTextureUrl' | 'imageUrl'
   >[];
   /** Initial color mode. Default: 'material'. */
@@ -451,4 +451,4 @@ Common causes:
 /** Export material maps for consumers that need to build their own lookup. */
 export { materialColorMap, materialTextureMap } from '../preview3d';
 export type { BoardColorMode, MaterialColorLookup } from '../preview3d';
-export type { ResolvedBoardPart } from '@muebles/domain';
+export type { ResolvedBoardPart } from '@granete/domain';

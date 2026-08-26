@@ -13,10 +13,10 @@ import type {
   Module,
   ModuleAgregadoInstance,
   ModuleBaseMode,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   isModuleBaseMode,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { parseOptionalNumber } from './moduleValidation';
 
 export type BoardPartDraft = {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { ValidationError, type ModuleLabel } from '@muebles/domain';
+import { ValidationError, type ModuleLabel } from '@granete/domain';
 import { moduleLabelsPdfExport } from './moduleLabelsExport';
 
 const sampleModuleLabel: ModuleLabel = {

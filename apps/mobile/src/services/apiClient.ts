@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { DomainError } from '@muebles/domain';
+import { DomainError } from '@granete/domain';
 import { ensureSecureStoreMigrated } from './secureStoreMigration';
 
 const TOKEN_KEY = 'granete_auth_token';

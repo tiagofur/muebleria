@@ -23,7 +23,7 @@ import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { colors, spacing, radius, typography } from '../theme';
 import { usePresentationStore } from '../stores/presentationStore';
-import { seedCatalogExpandedLatAm } from '@muebles/domain';
+import { seedCatalogExpandedLatAm } from '@granete/domain';
 
 export interface Presentation3DScreenProps {
   onBack: () => void;

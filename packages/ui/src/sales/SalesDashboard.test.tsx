@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SalesDashboard, monthlyActivity } from './SalesDashboard';
-import type { Project, ProjectStatus } from '@muebles/domain';
+import type { Project, ProjectStatus } from '@granete/domain';
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 

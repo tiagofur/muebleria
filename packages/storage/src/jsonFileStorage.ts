@@ -11,7 +11,7 @@ import type {
   ProjectTemplate,
   Workspace,
   WorkshopSettings,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 import { createSeedWorkspace } from './seed';
 import { migrateWorkspace } from './migrateWorkspace';

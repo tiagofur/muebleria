@@ -11,7 +11,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { useState } from 'react';
-import { pruneKitchenLayout, type Module, type Project } from '@muebles/domain';
+import { pruneKitchenLayout, type Module, type Project } from '@granete/domain';
 
 vi.mock('../../preview3d', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../preview3d')>();

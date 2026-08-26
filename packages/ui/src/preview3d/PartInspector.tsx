@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import type { Hardware, HardwarePlacement, ResolvedBoardPart } from '@muebles/domain';
+import type { Hardware, HardwarePlacement, ResolvedBoardPart } from '@granete/domain';
 import { PieceFaceDrillingEditor } from './PieceFaceDrillingEditor';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import {

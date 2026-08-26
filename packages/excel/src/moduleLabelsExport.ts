@@ -19,12 +19,12 @@ import {
   type PDFImage,
 } from 'pdf-lib';
 import QRCode from 'qrcode';
-import type { ModuleLabel } from '@muebles/domain';
+import type { ModuleLabel } from '@granete/domain';
 import {
   moduleLabelQrPayload,
   moduleLabelQrPayloadUrl,
   ValidationError,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface ModuleLabelsPdfInput {
   readonly projectId: string;

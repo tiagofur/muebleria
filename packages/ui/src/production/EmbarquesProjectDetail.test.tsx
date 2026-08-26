@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import type { Project, ProjectItem } from '@muebles/domain';
+import type { Project, ProjectItem } from '@granete/domain';
 
 import { EmbarquesProjectDetail } from './EmbarquesProjectDetail';
 

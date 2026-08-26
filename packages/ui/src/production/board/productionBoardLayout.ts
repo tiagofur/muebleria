@@ -6,7 +6,7 @@ import type {
   ProductionCutRow,
   CutPlanSheet,
   CutPlanPlacedPiece,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export const DEFAULT_SHEET_L = 2440;
 export const DEFAULT_SHEET_W = 1830;

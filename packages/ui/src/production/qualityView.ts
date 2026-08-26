@@ -14,7 +14,7 @@ import {
   type QcCheckCode,
   type QualityIssue,
   type UnitQcGateResult,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export interface QualityUnitGateView {
   readonly unitId: string;

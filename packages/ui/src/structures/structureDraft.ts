@@ -2,7 +2,7 @@
  * Structure editor draft helpers.
  */
 
-import type { DimensionPreset, ModuleAgregadoInstance, Structure } from '@muebles/domain';
+import type { DimensionPreset, ModuleAgregadoInstance, Structure } from '@granete/domain';
 import type { ComponentInstanceDraft } from '../modules';
 
 /**

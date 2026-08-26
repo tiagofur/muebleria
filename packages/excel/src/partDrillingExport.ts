@@ -2,8 +2,8 @@
  * JSON and CSV exporters for structured part drilling data (F074).
  */
 
-import type { ProjectDrillingData } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { ProjectDrillingData } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 export const DRILLING_CSV_HEADERS = [
   'piece_code',

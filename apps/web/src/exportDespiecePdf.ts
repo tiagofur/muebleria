@@ -10,8 +10,8 @@ import {
   type Catalog,
   type ExportIssue,
   type Project,
-} from '@muebles/domain';
-import { productionDespiecePdfExport } from '@muebles/excel';
+} from '@granete/domain';
+import { productionDespiecePdfExport } from '@granete/excel';
 import { deliverExcelFile } from './exportOptimizer';
 
 export type ExportDespiecePdfResult =

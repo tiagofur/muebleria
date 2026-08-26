@@ -7,13 +7,13 @@ import {
   createProjectFromTemplate,
   generateCutRows,
   resolveBom,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   GAB_ONLY_GOLDEN,
   IDS,
   plantillaChoices,
   plantillaGabOnlyExpected,
-} from '@muebles/domain/fixtures';
+} from '@granete/domain/fixtures';
 import { describe, expect, it } from 'vitest';
 
 import { SCHEMA_VERSION, createSeedWorkspace } from './seed';

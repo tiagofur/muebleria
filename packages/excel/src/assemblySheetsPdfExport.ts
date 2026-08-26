@@ -9,7 +9,7 @@ import {
   type AssemblySheet,
   type Catalog,
   type Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 export type AssemblySheetsPdfInput = {
   readonly project: Project;

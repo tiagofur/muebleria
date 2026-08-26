@@ -48,7 +48,7 @@ import type {
   SiteSurvey,
   SurveyGateBlocker,
   SurveyElementInput,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 /** Derived closeout gate check as returned by the installation endpoints. */
 export interface InstallationCloseoutCheck {

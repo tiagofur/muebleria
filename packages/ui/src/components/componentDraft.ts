@@ -2,7 +2,7 @@
  * Component catalog draft helpers and shared placement labels.
  */
 
-import type { Component, Perforation } from '@muebles/domain';
+import type { Component, Perforation } from '@granete/domain';
 
 /** Shared placement options for components and structure/module instances. */
 export const COMPONENT_PLACEMENTS: {

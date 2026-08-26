@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Project } from '@muebles/domain';
+import type { Project } from '@granete/domain';
 import {
   ProductionManagerDashboard,
   type DashboardMetrics,

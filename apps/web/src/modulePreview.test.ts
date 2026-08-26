@@ -10,7 +10,7 @@ import type {
   Module,
   OptionGroup,
   Structure,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 const matInterior = {
   id: 'mat-int',

@@ -3,7 +3,7 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { ProductionCutRow } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
 
 export type ProductionDespiecePdfInput = {
   readonly projectName: string;

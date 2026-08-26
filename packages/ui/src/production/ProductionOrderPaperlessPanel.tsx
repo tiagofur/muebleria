@@ -13,13 +13,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { ItemFloorStatus, Module, Project } from '@muebles/domain';
+import type { ItemFloorStatus, Module, Project } from '@granete/domain';
 import {
   ITEM_FLOOR_STATUSES,
   ITEM_FLOOR_STATUS_LABELS_ES,
   nextItemFloorStatus,
   parsePieceLabelScan,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Camera, ScanLine } from 'lucide-react';
 import { EmptyState } from '../common';
 import { buildProductionModuleRows } from './productionModuleRows';

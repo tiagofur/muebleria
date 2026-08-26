@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createSeedWorkspace } from '@muebles/storage';
-import type { Catalog } from '@muebles/domain';
+import { createSeedWorkspace } from '@granete/storage';
+import type { Catalog } from '@granete/domain';
 
 import { createCatalogStore, type CatalogStoreDeps } from './catalogStore';
 import { useUiStore } from './uiStore';

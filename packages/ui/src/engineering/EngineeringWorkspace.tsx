@@ -25,7 +25,7 @@ import {
   type ModuleLabel,
   type HardwarePurchaseRow,
   type NestingImportResult,
-} from '@muebles/domain';
+} from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { WorkspaceTabs } from '../common/Tabs';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
@@ -125,7 +125,7 @@ export function EngineeringWorkspace({
   readonly hardwareError?: string | null;
   readonly customerLabel?: string;
   /** Workshop-level cut strategy default (F133) passed to the Optimización tab. */
-  readonly defaultCutStrategy?: import('@muebles/domain').CutStrategy;
+  readonly defaultCutStrategy?: import('@granete/domain').CutStrategy;
   readonly onBack: () => void;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   readonly onExportCsv?: () => void | Promise<void>;
@@ -151,16 +151,16 @@ export function EngineeringWorkspace({
   readonly onExportAssemblySheets?: () => void | Promise<void>;
   readonly onExportCncPilot?: () => void | Promise<void>;
   readonly onExportDespiecePdf?: () => void | Promise<void>;
-  readonly onSaveCutPlan?: (cutPlan: import('@muebles/domain').CutPlan) => void;
+  readonly onSaveCutPlan?: (cutPlan: import('@granete/domain').CutPlan) => void;
   readonly onExportCutPlanPdf?: (
-    cutPlan: import('@muebles/domain').CutPlan,
+    cutPlan: import('@granete/domain').CutPlan,
   ) => void | Promise<void>;
   readonly onExportCutPlanDxf?: (
-    cutPlan: import('@muebles/domain').CutPlan,
+    cutPlan: import('@granete/domain').CutPlan,
     variant: 'sheets' | 'pieces',
   ) => void | Promise<void>;
   readonly onExportCutPlanPtx?: (
-    cutPlan: import('@muebles/domain').CutPlan,
+    cutPlan: import('@granete/domain').CutPlan,
     mode?: 'unified' | 'by-material',
   ) => void | Promise<void>;
   readonly onImportNesting?: (nesting: NestingImportResult) => void;

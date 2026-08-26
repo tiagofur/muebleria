@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { optimizeCutPlan, DEFAULT_CUT_PLAN_CONFIG, type MaterialBoard, type ProductionCutRow } from '@muebles/domain';
+import { optimizeCutPlan, DEFAULT_CUT_PLAN_CONFIG, type MaterialBoard, type ProductionCutRow } from '@granete/domain';
 import { cutPlanPdfExport } from './cutPlanPdfExport';
 import { PDFDocument } from 'pdf-lib';
 

@@ -8,7 +8,7 @@ import type {
   Hardware,
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { FurnitureScene3D } from './FurnitureScene3D';
 import type {
   BoardColorMode,

@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { Trash2 } from 'lucide-react';
-import type { ProjectTemplate } from '@muebles/domain';
+import type { ProjectTemplate } from '@granete/domain';
 import { Modal } from '../../common';
 
 export function ProjectTemplatesManagementModal({

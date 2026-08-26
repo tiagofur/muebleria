@@ -43,7 +43,7 @@ import {
   type StockMovement,
   type StockMovementType,
   type Supplier,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { EmptyState, PageHeader, WorkspaceTabs } from '../common';
 import { StockPanel, type StockCatalogOption } from './StockPanel';
 import {

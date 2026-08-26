@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
-import type { AmbientMaterial } from '@muebles/domain';
+import type { AmbientMaterial } from '@granete/domain';
 
 import { AmbientMaterialsCatalog } from './ambient/AmbientMaterialsCatalog';
 

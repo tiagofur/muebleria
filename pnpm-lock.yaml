@@ -20,10 +20,10 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@muebles/domain':
+      '@granete/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@muebles/storage':
+      '@granete/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       electron-updater:
@@ -48,10 +48,10 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@muebles/domain':
+      '@granete/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@muebles/storage':
+      '@granete/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       '@react-native-async-storage/async-storage':
@@ -103,16 +103,16 @@ importers:
 
   apps/web:
     dependencies:
-      '@muebles/domain':
+      '@granete/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@muebles/excel':
+      '@granete/excel':
         specifier: workspace:*
         version: link:../../packages/excel
-      '@muebles/storage':
+      '@granete/storage':
         specifier: workspace:*
         version: link:../../packages/storage
-      '@muebles/ui':
+      '@granete/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       jszip:
@@ -164,7 +164,7 @@ importers:
 
   packages/excel:
     dependencies:
-      '@muebles/domain':
+      '@granete/domain':
         specifier: workspace:*
         version: link:../domain
       exceljs:
@@ -192,7 +192,7 @@ importers:
 
   packages/storage:
     dependencies:
-      '@muebles/domain':
+      '@granete/domain':
         specifier: workspace:*
         version: link:../domain
     devDependencies:
@@ -208,7 +208,7 @@ importers:
 
   packages/ui:
     dependencies:
-      '@muebles/domain':
+      '@granete/domain':
         specifier: workspace:*
         version: link:../domain
       '@react-three/drei':
@@ -5700,7 +5700,7 @@ snapshots:
   '@babel/helper-member-expression-to-functions@7.29.7':
     dependencies:
       '@babel/traverse': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
     transitivePeerDependencies:
       - supports-color
 
@@ -5722,7 +5722,7 @@ snapshots:
 
   '@babel/helper-optimise-call-expression@7.29.7':
     dependencies:
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
 
   '@babel/helper-plugin-utils@7.29.7': {}
 

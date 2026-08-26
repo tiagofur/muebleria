@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { Component, Hardware, HardwareLine, ModuleComponentInstance } from '@muebles/domain';
+import type { Component, Hardware, HardwareLine, ModuleComponentInstance } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import { COMPONENT_PLACEMENTS } from '../../components';

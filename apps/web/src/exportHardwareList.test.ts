@@ -4,8 +4,8 @@ import {
   plantillaCatalogWithModules,
   plantillaChoices,
   plantillaProject,
-} from '@muebles/domain/fixtures';
-import type { Project } from '@muebles/domain';
+} from '@granete/domain/fixtures';
+import type { Project } from '@granete/domain';
 import {
   buildHardwareListExport,
   hardwareListFileName,

@@ -6,8 +6,8 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { ProductionCutRow } from '@muebles/domain';
-import { ValidationError } from '@muebles/domain';
+import type { ProductionCutRow } from '@granete/domain';
+import { ValidationError } from '@granete/domain';
 
 export interface CutPreviewPdfInput {
   readonly projectId: string;

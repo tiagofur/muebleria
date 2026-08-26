@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { plantillaGabOnlyProject, plantillaCatalogWithModules } from '@muebles/domain/fixtures';
+import { plantillaGabOnlyProject, plantillaCatalogWithModules } from '@granete/domain/fixtures';
 import { boardSheetsSectionLabel, materialSummaryPdfExport } from './materialSummaryPdfExport';
 
 describe('materialSummaryPdfExport (Issue #135)', () => {

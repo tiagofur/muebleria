@@ -12,8 +12,8 @@
 
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Box } from 'lucide-react';
-import type { Catalog, Module, ResolvedBoardPart } from '@muebles/domain';
-import { resolveBom } from '@muebles/domain';
+import type { Catalog, Module, ResolvedBoardPart } from '@granete/domain';
+import { resolveBom } from '@granete/domain';
 import {
   BoardCanvas,
   BoardPropertiesPanel,
@@ -22,7 +22,7 @@ import {
   boardPartsToVisuals,
   materialColorMap,
   moduleCompositionKey,
-} from '@muebles/ui';
+} from '@granete/ui';
 import {
   useEditorStore,
 } from '../stores';

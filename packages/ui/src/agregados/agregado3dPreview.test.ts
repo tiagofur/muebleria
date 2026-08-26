@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Component } from '@muebles/domain';
+import type { Component } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import { resolveAgregado3DPreview } from './agregado3dPreview';

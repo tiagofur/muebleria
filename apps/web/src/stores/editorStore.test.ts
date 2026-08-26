@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type { ResolvedBoardPart } from '@granete/domain';
 import { useEditorStore } from './editorStore';
 
 // ---------------------------------------------------------------------------

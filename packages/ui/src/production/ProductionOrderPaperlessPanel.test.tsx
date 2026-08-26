@@ -4,8 +4,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { Module, Project } from '@muebles/domain';
-import { ITEM_FLOOR_STATUSES, pieceLabelQrPayload } from '@muebles/domain';
+import type { Module, Project } from '@granete/domain';
+import { ITEM_FLOOR_STATUSES, pieceLabelQrPayload } from '@granete/domain';
 import {
   matchModuleFromScan,
   ProductionOrderPaperlessPanel,

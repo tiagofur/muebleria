@@ -13,13 +13,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { EdgeBand, MaterialBoard, MaterialCategory } from '@muebles/domain';
+import type { EdgeBand, MaterialBoard, MaterialCategory } from '@granete/domain';
 import {
   filterMaterialBoardsByCategory,
   isValidPreviewColor,
   normalizePreviewColor,
   UNCATEGORIZED_FILTER,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   Eye,
   EyeOff,

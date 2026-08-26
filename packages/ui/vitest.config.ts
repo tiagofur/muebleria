@@ -8,7 +8,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@muebles/domain': new URL('../domain/src/index.ts', import.meta.url)
+      '@granete/domain': new URL('../domain/src/index.ts', import.meta.url)
         .pathname,
       // CSS imports from catalog screens are no-ops in unit tests
       '\\.css$': new URL('./src/__test__/styleMock.ts', import.meta.url)

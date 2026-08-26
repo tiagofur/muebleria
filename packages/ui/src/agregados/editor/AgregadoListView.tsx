@@ -3,7 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Agregado } from '@muebles/domain';
+import type { Agregado } from '@granete/domain';
 import { Blocks, Layers, Plus, Settings2 } from 'lucide-react';
 import { EmptyState, PageHeader, PageToolbar, SearchInput } from '../../common';
 

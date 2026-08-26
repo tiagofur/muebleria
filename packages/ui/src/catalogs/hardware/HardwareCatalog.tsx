@@ -10,12 +10,12 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Hardware } from '@muebles/domain';
+import type { Hardware } from '@granete/domain';
 import {
   ValidationError,
   countMachiningOperations,
   validateMachiningProfile,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
   CatalogImage,

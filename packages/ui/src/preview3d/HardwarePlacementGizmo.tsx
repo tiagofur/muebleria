@@ -8,8 +8,8 @@
  */
 
 import { type ReactNode, useState } from 'react';
-import type { AnchorFace, HardwarePlacement } from '@muebles/domain';
-import { convertWorldDeltaToFaceMm, snapValue } from '@muebles/domain';
+import type { AnchorFace, HardwarePlacement } from '@granete/domain';
+import { convertWorldDeltaToFaceMm, snapValue } from '@granete/domain';
 
 export type HardwarePlacementGizmoProps = {
   readonly placement: HardwarePlacement;

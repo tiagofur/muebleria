@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import type { CutPlanSheet, CutStrategy } from '@muebles/domain';
+import type { CutPlanSheet, CutStrategy } from '@granete/domain';
 import { ProductionBoardView } from './ProductionBoardView';
 
 afterEach(cleanup);

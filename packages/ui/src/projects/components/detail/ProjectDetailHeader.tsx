@@ -20,7 +20,7 @@ import {
   deriveProjectStage,
   isProjectStaleForProduction,
   type ProjectStatus,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { DropdownMenu, type DropdownMenuSection } from '../../../common';
 import { WhatsAppButton } from '../../../crm/WhatsAppButton';
 import { StatusBadge } from '../StatusBadge';

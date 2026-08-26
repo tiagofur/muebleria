@@ -14,7 +14,7 @@ import {
   type Project,
   type PurchaseOrder,
   type StockMaterialKind,
-} from '@muebles/domain';
+} from '@granete/domain';
 
 /** Resolved evidence for one project's planning card. */
 export interface MaterialPlanningCardView {

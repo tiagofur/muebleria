@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import type { ItemFloorStatus, Project, ProjectItem } from '@muebles/domain';
+import type { ItemFloorStatus, Project, ProjectItem } from '@granete/domain';
 
 import { InstalacionesProjectDetail } from './InstalacionesProjectDetail';
 

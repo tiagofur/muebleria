@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { AlertTriangle, ArrowRight } from 'lucide-react';
-import type { EngineeringDashboardProjectMetrics } from '@muebles/domain';
+import type { EngineeringDashboardProjectMetrics } from '@granete/domain';
 
 export interface EngineeringStagnantAlertsProps {
   readonly stagnantAlerts: readonly EngineeringDashboardProjectMetrics[];

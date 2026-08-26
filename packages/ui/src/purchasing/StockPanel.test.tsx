@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { StockPanel } from './StockPanel';
-import type { MaterialStock, StockMovement } from '@muebles/domain';
+import type { MaterialStock, StockMovement } from '@granete/domain';
 
 const stock: readonly MaterialStock[] = [
   { kind: 'herrajes', materialId: 'h1', quantity: 38, minStock: 50 },

@@ -18,7 +18,7 @@
  * overrides; untouched parts produce nothing (keeping the draft clean).
  */
 
-import type { ResolvedBoardPart } from '@muebles/domain';
+import type { ResolvedBoardPart } from '@granete/domain';
 
 export type ComponentOverrides = {
   readonly lengthFormula?: string;

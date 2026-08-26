@@ -6,9 +6,9 @@ import type {
   Project,
   ProjectItem,
   ProjectTemplate,
-} from '@muebles/domain';
-import { createSeedWorkspace } from '@muebles/storage';
-import type { ProjectDraft } from '@muebles/ui';
+} from '@granete/domain';
+import { createSeedWorkspace } from '@granete/storage';
+import type { ProjectDraft } from '@granete/ui';
 
 import {
   createProjectStore,
@@ -880,7 +880,7 @@ describe('useBackendBreakdownEffect', () => {
 
 describe('projectStore — Warranty Desk & Refabrication (CRM Phase 3)', () => {
   it('loads, creates, updates and deletes warranty tickets', async () => {
-    const mockTicket: import('@muebles/domain').WarrantyTicket = {
+    const mockTicket: import('@granete/domain').WarrantyTicket = {
       id: 'ticket-1',
       ticketNumber: 'GAR-001',
       projectId: 'proj-1',

@@ -1,10 +1,10 @@
 /**
  * App section + entity detail URL paths.
- * Keep section keys in sync with AppNavId in @muebles/ui shell.
+ * Keep section keys in sync with AppNavId in @granete/ui shell.
  */
 
-import type { AppNavId } from '@muebles/ui';
-import { roleCanAccessNav } from '@muebles/domain';
+import type { AppNavId } from '@granete/ui';
+import { roleCanAccessNav } from '@granete/domain';
 
 /** Canonical path for each sidebar destination. URLs name the screen. */
 export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
@@ -74,7 +74,7 @@ export type EntitySection = Exclude<
  * Production order hub tabs (PROD-0.1). Kept local to routes so web shell
  * can deep-link without importing the full UI model at parse time.
  * URL slugs are English (i18n-ready); tab keys stay in sync with
- * PRODUCTION_ORDER_TABS in @muebles/ui.
+ * PRODUCTION_ORDER_TABS in @granete/ui.
  */
 export const PRODUCTION_PATH_TABS = [
   'resumen',

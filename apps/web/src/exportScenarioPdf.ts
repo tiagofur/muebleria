@@ -8,8 +8,8 @@ import {
   projectWithRoleChoice,
   type Catalog,
   type Project,
-} from '@muebles/domain';
-import { commercialScenarioPdfExport } from '@muebles/excel';
+} from '@granete/domain';
+import { commercialScenarioPdfExport } from '@granete/excel';
 
 export function scenarioPdfFileName(projectName: string): string {
   const trimmed = projectName.trim();

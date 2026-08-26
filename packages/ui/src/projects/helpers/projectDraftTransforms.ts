@@ -14,8 +14,8 @@ import type {
   ProjectTechnicalStatus,
   Structure,
   WorkshopSettings,
-} from '@muebles/domain';
-import { DEFAULT_WORKSHOP_SETTINGS } from '@muebles/domain';
+} from '@granete/domain';
+import { DEFAULT_WORKSHOP_SETTINGS } from '@granete/domain';
 import { defaultChoicesForNewItem } from './projectOptionHelpers';
 
 export type ProjectDraft = {

@@ -8,11 +8,11 @@ import type {
   Catalog,
   OptionGroup,
   Project,
-} from '@muebles/domain';
+} from '@granete/domain';
 import {
   compareRoleScenario,
   type ScenarioCompareResult,
-} from '@muebles/domain';
+} from '@granete/domain';
 import { formatMoneyDisplay } from '../../common';
 import { optionsForGroup } from '../projectHelpers';
 

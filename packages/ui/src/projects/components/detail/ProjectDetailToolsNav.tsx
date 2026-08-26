@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Wrench } from 'lucide-react';
-import { surveyFabricationBlockers } from '@muebles/domain';
+import { surveyFabricationBlockers } from '@granete/domain';
 import { useProjectDetail } from '../projectDetailContext';
 
 export type QuoteToolsPanel =
