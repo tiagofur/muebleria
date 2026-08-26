@@ -26,7 +26,7 @@ on:
 - operational continuity through installation and costing.
 
 See `docs/proyectar-3d-competitive-position.md` and
-`docs/sketchup-muebles-strategy.md`.
+`docs/sketchup-granete-strategy.md`.
 
 ## Users
 
@@ -83,8 +83,8 @@ BOM, parts, materials, hardware, drilling, revisions, preflight, release and mac
 outputs. Derived drilling is an output of semantic relationships and placements, never an
 independent authoring truth. The canonical references are:
 
-1. `docs/sketchup-muebles-strategy.md`;
-2. `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
+1. `docs/sketchup-granete-strategy.md`;
+2. `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`;
 3. `docs/sketchup-manufacturing-contract.md`;
 4. GitHub #356 for parametric relationships and joint-driven machining.
 
@@ -269,7 +269,7 @@ requirements where the environment demands larger targets and reduced precision.
 | Competitive positioning | `docs/proyectar-3d-competitive-position.md` |
 | Proyectar 3D North Star | `docs/proyectar-3d-north-star.md` |
 | Proyectar implementation roadmap | `docs/proyectar-3d-roadmap-vnext.md` |
-| SketchUp + Granete strategy | `docs/sketchup-muebles-strategy.md` |
+| SketchUp + Granete strategy | `docs/sketchup-granete-strategy.md` |
 | SketchUp manufacturing contract | `docs/sketchup-manufacturing-contract.md` |
 | Parametric relationships/joints | GitHub #356 |
 | Historical MVP PRD | `docs/history/prd.md` |

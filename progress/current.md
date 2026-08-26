@@ -178,3 +178,26 @@ lo permitido por la regla del programa (sólo discovery/planificación):
 
 **Siguiente:** cuando lleguen dossiers → #348 (congelar fixture PTX + readback).
 Alternativa mientras tanto: work del plugin no bloqueado o carril Proyectar.
+
+## #366 Parte 1 — Rename docs Muebles→Granete (2026-08-26)
+
+Auditoría + plan de 4 partes registrado en
+[#366 (comentario)](https://github.com/tiagofur/muebleria/issues/366#issuecomment-5426847636).
+Decisiones: scope JS `@muebles/*` se renombra (P3); localStorage con migración
+leer-viejo→escribir-nuevo (P2); **ambos app IDs cambian a `com.granete.app`** (no
+hay builds distribuidas); Go module path y DB quedan como IDs técnicos.
+
+**Parte 1 (este PR, docs):** renames de archivo `sketchup-muebles-strategy.md` →
+`sketchup-granete-strategy.md` y ADR-0001 → `...granete-manufacturing-truth.md`
+con stubs redirect en las rutas viejas; referencias actualizadas en 12 docs
+(PRODUCT, architecture, prd-v2, adr/0002, roadmap-comercial, contract, etc.);
+marca corregida: "Muebleria" ×2 en `multi-organization-distribution-model.md`,
+"ECOSISTEMA MUEBLES" → GRANETE en `roadmap_RN.md` (mismo largo, diagrama
+alineado), y ejemplo `"client": "muebles-for-sketchup"` del contract corregido a
+`"sketchup-extension"` (valor real de `EXTENSION_CLIENT` en
+`session_provider.rb`; el backend no valida ese campo).
+
+**No tocado (regla del issue + sustantivo de dominio):** "Muebles" como sección
+UI/mueble en copy español, `docs/history/`, `feature_list.json`, `progress/`
+previo, URLs del repo `tiagofur/muebleria`. `@muebles/*` en docs queda para la
+Parte 3.

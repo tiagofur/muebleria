@@ -429,4 +429,4 @@ Not:
 - Detailed library spec (7 entities, versioning, instantiation + preflight pipeline): `parametric-furniture-library.md` + `docs/adr/0002-parametric-furniture-library-architecture.md`
 - Digital assets: `3d-asset-library.md`
 - Semantic machining features: `manufacturing-feature-model.md`
-- SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`
+- SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`

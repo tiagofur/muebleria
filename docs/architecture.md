@@ -234,10 +234,10 @@ semantic metadata. No implementa BOM, drilling rules, nesting, kerf, stale/relea
 ni postprocessing. Granete valida el
 [`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva la
 autoridad descrita en el
-[`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md).
+[`ADR-0001`](adr/0001-sketchup-authoring-granete-manufacturing-truth.md).
 
 Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa reglas
-de ingeniería. Ver la [estrategia del programa](sketchup-muebles-strategy.md).
+de ingeniería. Ver la [estrategia del programa](sketchup-granete-strategy.md).
 
 ---
 
@@ -397,9 +397,9 @@ existir sólo como excepciones/toasts: se convierten en entidades/trabajo cuando
 - UX: `docs/design.md` + `docs/operational-ux.md`;
 - producto: `docs/prd-v2.md`;
 - plan: `docs/operational-core-v1.md`.
-- programa SketchUp: `docs/sketchup-muebles-strategy.md`;
+- programa SketchUp: `docs/sketchup-granete-strategy.md`;
 - boundary SketchUp/Granete:
-  `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`;
+  `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`;
 - contract conceptual: `docs/sketchup-manufacturing-contract.md`;
 - selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`.
 
