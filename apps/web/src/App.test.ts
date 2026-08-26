@@ -141,7 +141,7 @@ describe('@granete/web reliability (issues #11–#13)', () => {
     );
     expect(projectStoreSrc).not.toMatch(/localhost:8080\/api\/projects/);
     expect(projectStoreSrc).not.toMatch(
-      /localStorage\.getItem\(['"]muebles_token['"]\)/,
+      /localStorage\.getItem\(['"]granete_token['"]\)/,
     );
     expect(projectStoreSrc).toContain('baseUrl');
     expect(projectStoreSrc).toMatch(/\/projects\/\$\{projectId\}\/calculate/);

@@ -590,7 +590,7 @@ y operator sign-off para la combinación exacta de machine/software.
   "baseSourceRevisionId": "source-rev-7",
   "sourceRevisionId": "source-rev-8",
   "source": {
-    "client": "muebles-for-sketchup",
+    "client": "sketchup-extension",
     "clientVersion": "0.1.0",
     "host": "sketchup",
     "hostVersion": "2026"
@@ -760,8 +760,8 @@ ilustrativo y no congela el schema ejecutable final.
 
 ## References
 
-- [SketchUp + Granete strategy](sketchup-muebles-strategy.md)
-- [ADR-0001](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md)
+- [SketchUp + Granete strategy](sketchup-granete-strategy.md)
+- [ADR-0001](adr/0001-sketchup-authoring-granete-manufacturing-truth.md)
 - [Architecture](architecture.md)
 - [Project Lifecycle](project-lifecycle.md)
 - [Production Flow v2](production-flow-v2.md)

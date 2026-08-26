@@ -1,11 +1,13 @@
 /**
  * Session gate helpers for the web shell login / register screens.
- * Auth token key matches APIWorkspaceRepository (`muebles_token`).
+ * Auth token key matches APIWorkspaceRepository (`granete_token`).
+ * Claves legacy `muebles_*`: las migra `migrateLegacyStorageKeys` (#366) al
+ * arrancar la app (ver main.tsx).
  */
 
-export const SESSION_STORAGE_KEY = 'muebles_session';
-export const TOKEN_STORAGE_KEY = 'muebles_token';
-export const USER_STORAGE_KEY = 'muebles_user';
+export const SESSION_STORAGE_KEY = 'granete_session';
+export const TOKEN_STORAGE_KEY = 'granete_token';
+export const USER_STORAGE_KEY = 'granete_user';
 
 /**
  * API base URL. Overridable per environment via Vite's `VITE_API_BASE` in
@@ -33,7 +35,7 @@ export type LoginSuccess = {
 /**
  * Reads persisted session mode.
  * - guest → enter app without token
- * - auth → requires `muebles_token`; missing token → logged out (null)
+ * - auth → requires `granete_token`; missing token → logged out (null)
  * - missing / invalid → null (show login)
  */
 export function readSessionMode(

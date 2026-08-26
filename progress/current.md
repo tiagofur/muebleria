@@ -179,6 +179,54 @@ lo permitido por la regla del programa (sólo discovery/planificación):
 **Siguiente:** cuando lleguen dossiers → #348 (congelar fixture PTX + readback).
 Alternativa mientras tanto: work del plugin no bloqueado o carril Proyectar.
 
+## #366 Parte 2 — Claves locales muebles_* → granete_* con migración (2026-08-26)
+
+**Qué:** todas las claves persistentes del cliente pasaron de `muebles_*` a
+`granete_*` con migración one-shot leer-viejo→escribir-nuevo→borrar-viejo
+(idempotente, new-wins, best-effort): nadie se desloguea ni pierde el workspace
+invitado ni la cola offline de piso.
+
+- `packages/storage/src/legacyStorageKeys.ts` (nuevo, +6 tests): mapa de 10
+  claves localStorage + `muebles_session` (sessionStorage). Export en index;
+  la llama `apps/web/src/main.tsx` al arrancar, antes de que nada lea storage.
+- Renames in-place: `session.ts` (granete_session/token/user),
+  `apiWorkspaceRepository` (token), 7 claves guest en
+  `localStorageWorkspaceRepository`, flag de perf en `seed.ts`.
+- Mobile (AsyncStorage + SecureStore): `granete_floor_*_v1` con migración al
+  inyectar el storage (`offlineQueueStorage.ts`); `granete_auth_token/_user`
+  vía `secureStoreMigration.ts` (nuevo, memoizado) llamado desde `apiClient`
+  y `authStore` (loadSession + biometrics).
+- Smokes Playwright actualizados a las claves nuevas (init scripts).
+- Schema `muebles.drilling-data.v1` de exports: se mantiene (decisión del
+  plan; ya consumido).
+
+**Verificación:** storage 161 tests (10 files), web 306 (24), mobile 45 (8),
+typecheck 7/7 en verde. Sweep final: `muebles_*` sólo vive en los mapas de
+migración y sus tests. Branding web ya estaba en Granete (title/login) — sin
+cambios visibles en esta parte.
+## #366 Parte 1 — Rename docs Muebles→Granete (2026-08-26)
+
+Auditoría + plan de 4 partes registrado en
+[#366 (comentario)](https://github.com/tiagofur/muebleria/issues/366#issuecomment-5426847636).
+Decisiones: scope JS `@muebles/*` se renombra (P3); localStorage con migración
+leer-viejo→escribir-nuevo (P2); **ambos app IDs cambian a `com.granete.app`** (no
+hay builds distribuidas); Go module path y DB quedan como IDs técnicos.
+
+**Parte 1 (este PR, docs):** renames de archivo `sketchup-muebles-strategy.md` →
+`sketchup-granete-strategy.md` y ADR-0001 → `...granete-manufacturing-truth.md`
+con stubs redirect en las rutas viejas; referencias actualizadas en 12 docs
+(PRODUCT, architecture, prd-v2, adr/0002, roadmap-comercial, contract, etc.);
+marca corregida: "Muebleria" ×2 en `multi-organization-distribution-model.md`,
+"ECOSISTEMA MUEBLES" → GRANETE en `roadmap_RN.md` (mismo largo, diagrama
+alineado), y ejemplo `"client": "muebles-for-sketchup"` del contract corregido a
+`"sketchup-extension"` (valor real de `EXTENSION_CLIENT` en
+`session_provider.rb`; el backend no valida ese campo).
+
+**No tocado (regla del issue + sustantivo de dominio):** "Muebles" como sección
+UI/mueble en copy español, `docs/history/`, `feature_list.json`, `progress/`
+previo, URLs del repo `tiagofur/muebleria`. `@muebles/*` en docs queda para la
+Parte 3.
+
 ## #366 Parte 3 — Scope de paquetes @muebles/* → @granete/* (2026-08-26)
 
 **Qué:** codemod repo-wide del scope de paquetes JS. 459 archivos en
@@ -195,5 +243,10 @@ benchmark, roadmap-screens) y el comentario espejo de
 (completo), `feature_list.json`, `docs/history/`, artefactos `dist/`.
 
 **Verificación:** `pnpm typecheck` 7/7; `pnpm test` completo: domain 1106,
-storage 155, excel 93, ui 1433, mobile 45, desktop 17, web 306 — 3155 tests en
-verde. `@muebles/` sólo vive en las exclusiones.
+storage 161, excel 93, ui 1433, mobile 45, desktop 17, web 306 — tests en
+verde. `@muebles/` sólo vive en las exclusiones. Merge con main (P1+P2)
+resuelto: apiClient/main.tsx con contenido P2 + imports @granete.
+
+**Estado:** PR #408 (475 archivos). Pendiente Parte 4: app IDs
+com.muebles.app → com.granete.app (desktop+mobile), slug Expo, documentar IDs
+técnicos que quedan (module path Go, DB local, ~/.muebles-media).

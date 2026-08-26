@@ -14,7 +14,7 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          ECOSISTEMA MUEBLES                                 │
+│                          ECOSISTEMA GRANETE                                 │
 ├──────────────────────────────────────┬──────────────────────────────────────┤
 │    WEB / DESKTOP (Oficina Técnica)   │       REACT NATIVE (Campo & Taller)   │
 ├──────────────────────────────────────┼──────────────────────────────────────┤

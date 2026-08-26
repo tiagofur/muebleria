@@ -6,9 +6,16 @@
 
 import type { ItemFloorStatus } from '@granete/domain';
 
-const QUEUE_KEY = 'muebles_floor_queue_v1';
-const STATUSES_KEY = 'muebles_floor_statuses_v1';
-const ACTIVE_PROJECT_KEY = 'muebles_floor_active_project_v1';
+const QUEUE_KEY = 'granete_floor_queue_v1';
+const STATUSES_KEY = 'granete_floor_statuses_v1';
+const ACTIVE_PROJECT_KEY = 'granete_floor_active_project_v1';
+
+/** #366 — claves legacy muebles_* migradas a granete_* al inyectar el storage. */
+const LEGACY_QUEUE_KEYS: Readonly<Record<string, string>> = {
+  muebles_floor_queue_v1: QUEUE_KEY,
+  muebles_floor_statuses_v1: STATUSES_KEY,
+  muebles_floor_active_project_v1: ACTIVE_PROJECT_KEY,
+};
 
 export interface PersistedPendingScan {
   readonly rawText: string;
@@ -26,9 +33,27 @@ type AsyncStorageLike = {
 
 let storage: AsyncStorageLike | null = null;
 
+/** Leer-viejo → escribir-nuevo → borrar-viejo; idempotente y best-effort. */
+async function migrateLegacyQueueKeys(): Promise<void> {
+  if (!storage) return;
+  for (const [oldKey, newKey] of Object.entries(LEGACY_QUEUE_KEYS)) {
+    try {
+      const raw = await storage.getItem(oldKey);
+      if (raw === null) continue;
+      if ((await storage.getItem(newKey)) === null) {
+        await storage.setItem(newKey, raw);
+      }
+      await storage.removeItem(oldKey);
+    } catch {
+      // best effort por clave
+    }
+  }
+}
+
 /** Inject the storage implementation (App) or a mock (tests). */
 export function setOfflineQueueStorage(instance: AsyncStorageLike | null): void {
   storage = instance;
+  if (instance) void migrateLegacyQueueKeys();
 }
 
 async function readJson<T>(key: string, fallback: T): Promise<T> {

@@ -199,5 +199,5 @@ This document is the umbrella view. The detailed, authoritative specs are:
 - Semantic domain objects: `domain-model.md`
 - Digital assets (materials, hardware, components): `3d-asset-library.md`
 - Semantic machining features: `manufacturing-feature-model.md`
-- SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-muebles-manufacturing-truth.md`
+- SketchUp interaction contract: `sketchup-interaction-model.md` + `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`
 - Program tracking: #290 (meta), #347 (preflight), #349/#350 (library + hardware sync)

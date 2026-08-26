@@ -33,7 +33,7 @@ export const SCHEMA_VERSION = 3 as const;
  * de performance al seed. Lo setea el smoke de performance antes de cargar la
  * app; los seeds normales (tests, primer arranque) quedan intactos.
  */
-export const SEED_PERF_REFERENCE_FLAG = 'muebles_seed_perf_reference';
+export const SEED_PERF_REFERENCE_FLAG = 'granete_seed_perf_reference';
 
 function wantsPerfReferenceScene(): boolean {
   try {

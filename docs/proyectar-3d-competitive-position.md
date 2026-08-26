@@ -54,8 +54,8 @@ Ambas convergen en el mismo `Project/Job` y en el mismo dominio:
 > **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 La estrategia, el boundary y el contract están documentados en
-[`sketchup-muebles-strategy.md`](sketchup-muebles-strategy.md),
-[`ADR-0001`](adr/0001-sketchup-authoring-muebles-manufacturing-truth.md) y
+[`sketchup-granete-strategy.md`](sketchup-granete-strategy.md),
+[`ADR-0001`](adr/0001-sketchup-authoring-granete-manufacturing-truth.md) y
 [`sketchup-manufacturing-contract.md`](sketchup-manufacturing-contract.md).
 
 ---
