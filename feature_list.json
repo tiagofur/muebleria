@@ -4178,6 +4178,42 @@
         "devops"
       ],
       "created": "2026-08-26"
+    },
+    {
+      "id": "F175",
+      "phase": 0,
+      "name": "multi_org_hardening_327",
+      "title": "Hardening #325/#326/#327 — enforcement server-side de ownership, fail-closed org-less y redacción sales/manufactura",
+      "description": "Revisión a fondo de la ola multi-org (PR #419) contra issues y docs; cierra los 4 hallazgos críticos. (1) Ownership de proyecto server-authoritative: create valida las orgs asignadas contra las membresías activas del caller (manufacturing debe ser factory) y el update genérico deja de escribir sales/manufacturing_organization_id (columnas fuera del UPDATE; copias del cliente ignoradas). (2) Separación sales vs manufacturing: callers fuera de la org de manufactura reciben el agregado de proyecto con campos manufactureros redactados (engineering_log, cut_plan, part_instances, module_units, production/materials/nesting release, floor events, installation) y sus PUTs restauran la copia almacenada (round-trip no puede borrarlos). (3) Fail-closed: tokens sin org sólo acceden /api/platform/* y /api/auth/* (sin puente users.role); migración 000088 elimina los DEFAULT transicionales de organization_id (43 tablas) para que un INSERT sin scope falle loud; OrgFromCtx fallback reservado a tooling directo. Listado de usuarios scoped por org (ListUsersByOrganization) para /api/admin/users y assignable-owners por membresía. (4) Frontend: hydrateSessionInfo merguea me.roles en el usuario persistido (la unión multi-rol ya no se pierde en reload) y preserva roles existentes si la respuesta no trae.",
+      "acceptance": [
+        "Create de proyecto rechaza orgs sin membresía activa del caller y manufacturing no-factory (403)",
+        "Update de proyecto no reasigna ownership y un PUT de la org sales no borra payload manufacturero",
+        "GET list/detail redacta campos manufactureros para orgs != manufacturing org (test API incluido)",
+        "Token sin org: rutas de negocio 403, consola plataforma y auth permitidas, sin roles heredados",
+        "Migración 000088 up/down: DEFAULTs eliminados; INSERT sin organization_id viola NOT NULL (fail-loud)",
+        "ListUsersByOrganization aísla el directorio por org (test de aislamiento cross-org)",
+        "Hidratación web preserva roles multi-rol tras reload (tests vitest)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/327",
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F173"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "permissions",
+        "web"
+      ],
+      "created": "2026-08-26"
     }
   ]
 }

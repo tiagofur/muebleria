@@ -1,6 +1,68 @@
 # Sesión
 
-**Feature en curso:** F172, F173, F174 — OLA MULTI-ORGANIZACIÓN Y DEPLOYMENT VPS COMPLETADA
+**Feature en curso:** F175 — HARDENING MULTI-ORG (#325/#326/#327) COMPLETADO
+**Cerrados con evidencia (ledger done):** F169–F174 (ola anterior, PR #419) + F175
+**Rama:** `fix/327-multi-org-hardening`
+
+## F175: Hardening tras revisión a fondo de la ola multi-org
+
+Revisión sistemática de #325/#326/#327 contra ADR-0005, doc de distribución y
+issues: la capa identidad/membresía/audit estaba sólida, pero #327 quedó al
+50% (columnas + filtrado triple, sin enforcement). Cuatro fixes críticos:
+
+1. **Ownership de proyecto server-authoritative (#327):** `POST /api/projects`
+   valida `sales_organization_id`/`manufacturing_organization_id` contra las
+   membresías activas del caller (manufacturing exige org type `factory`);
+   vacío sigue defaulteando a la org del caller. `UpdateProject` (storage) ya
+   no escribe esas columnas y el handler PUT ignora copias del cliente
+   (server-authoritative, como `installation`). `api/projectOwnership_test.go`
+   cubre: org ajena → 403, mfg no-factory → 403, create válido → 201, PUT no
+   reasigna ownership ni borra payload manufacturero.
+2. **Separación sales vs manufacturing (#327):** `domain.RedactProjectManufacturing`
+   + `RestoreProjectManufacturing`. Callers fuera de la manufacturing org
+   reciben el agregado sin `engineering_log`, `cut_plan`, `part_instances`,
+   `module_units`, `production_release`, `materials_release`, `nesting_import`,
+   floor events ni installation job; su PUT restaura la copia almacenada
+   (round-trip no puede wipear). Aplica a list/get/create/update responses.
+   Sub-recursos siguen protegidos por RBAC (store/dealer no pueden tener roles
+   de producción).
+3. **Fail-closed org-less:** `AuthMiddleware` rechaza tokens sin `claims.OrgID`
+   fuera de `/api/platform/*` y `/api/auth/*` (403 "elegí un taller"), sin el
+   puente transicional `users.role`→roles. Migración `000088` elimina los
+   DEFAULT transicionales de `organization_id` (43 tablas, up/down); INSERT
+   sin scope ahora viola NOT NULL (fail-loud). `OrgFromCtx` fallback queda
+   sólo para tooling directo (CLI/migraciones/tests), documentado en
+   `storage/scope.go`. Directorio de usuarios scoped:
+   `ListUsersByOrganization` (join memberships) para `/api/admin/users`;
+   `assignable-owners` ahora sale de `ListOrgTeam` (roles por membresía, no
+   `users.role`). Test de aislamiento cross-org del directorio incluido.
+4. **Frontend hidratación multi-rol (#325):** `hydrateSessionInfo` merguea
+   `me.roles` en el usuario persistido (antes el DTO sin roles pisaba la
+   unión en cada reload) y preserva roles existentes si la respuesta no trae
+   (`workspaceStore.test.ts`).
+
+Docs actualizados: ADR-0005 §1 (fail-closed + 000088), doc de distribución
+(sección Enforcement). Deuda conocida NO abordada aquí (hallazgos medios de la
+revisión): flujo "factory crea tiendas conectadas" (#326 es hoy platform-only),
+espejo TS de `AllowedRolesForOrgType` + checkboxes filtrados en UsersScreen,
+paridad TS de ownership-union, divergencia `roleCanViewCosts` TS↔Go (almacen),
+puente `users.role` en `/api/staff` y `HandleOrgMemberRoles`.
+
+## Verificación F175
+
+- `go build ./...` + `go vet ./...` limpios.
+- `go test ./...` backend: 8/8 paquetes ok (incluye tests nuevos:
+  `TestAuthMiddleware_OrgLessTokenFailClosed`, `TestProjectOrgOwnership_*` x5,
+  `TestIsolation_UserDirectoryByOrganization`; seeds de isolation/clone/f116
+  adaptados a org explícita post-000088).
+- `pnpm -w typecheck`: 7/7 proyectos ok. `pnpm -w test`: ok (web 312/312 con
+  los 2 tests nuevos de hidratación).
+
+---
+
+## Ola anterior (PR #419)
+
+**Feature:** F172, F173, F174 — OLA MULTI-ORGANIZACIÓN Y DEPLOYMENT VPS COMPLETADA
 **Cerrados con evidencia (ledger done):** F169, F170 (server+cliente), F171, F172 (backend+UI), F173, F174
 **Rama:** `feat/325-multi-organization-core` (PR #419)
 

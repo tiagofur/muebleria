@@ -125,6 +125,18 @@ Stores should not access factory internal data such as:
 - CNC information;
 - internal BOM details.
 
+**Enforcement (server-side, #327 hardening).** When `sales_organization_id ≠
+manufacturing_organization_id`, the project aggregate payload served to the
+sales organization redacts the manufacturing-internal fields (`engineering_log`,
+`cut_plan`, `part_instances`, `module_units`, `production_release`,
+`materials_release`, `nesting_import`, floor events and the installation job);
+their PUTs restore the stored copy so a round-trip cannot wipe them either.
+Organization ownership is assigned once at create — validated against the
+caller's active memberships, and the manufacturing organization must be of
+type `factory` — and is immutable through the generic update endpoint.
+Sub-resource endpoints keep their own RBAC gates: store/dealer organizations
+cannot hold production roles, so production/warehouse routes fail closed.
+
 ## Factory and Store Relationship
 
 A factory can create and manage connected stores.

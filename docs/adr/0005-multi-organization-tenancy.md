@@ -33,6 +33,14 @@ aislamiento lo garantiza:
 3. tests de aislamiento cross-org obligatorios en CI (taller A jamás lee ni
    escribe datos de taller B: 404, no 403 que confirme existencia).
 
+**Fail-closed desde el hardening #327:** los tokens sin organización (staff de
+plataforma entre sesiones, usuarios a mitad de la selección) sólo alcanzan la
+consola `/api/platform/*` y `/api/auth/*`; toda ruta de negocio los rechaza y
+no heredan roles del `users.role` deprecado. Los DEFAULT transicionales de
+`organization_id` a la org inicial se eliminaron (migración 000088): un INSERT
+sin scope falla loud. El fallback a la org inicial queda reservado a tooling
+directo de storage (CLI/migraciones/tests).
+
 **RLS de Postgres queda como hardening posterior** (issue separado, antes de
 superar ~10 organizaciones activas): `SET app.organization_id` por transacción +
 políticas por tabla como defensa en profundidad contra bugs de la capa Go.
