@@ -517,11 +517,15 @@ func (s *PostgresStore) AcceptInvitationTx(ctx context.Context, invitationID, us
 
 // jsonbRemapKey returns a SQL expression that rewrites `key` inside every
 // element of a JSONB array of objects using an old→new id map table.
+// F179: jsonb_agg over an EMPTY array yields NULL, but columns like
+// structures.agregados / modules.agregados are NOT NULL ('[]' is the common
+// real-world value) — COALESCE keeps empty arrays empty instead of failing
+// the clone.
 func jsonbRemapKey(col, key, mapTable string) string {
-	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE (
+	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE COALESCE((
 		SELECT jsonb_agg(jsonb_set(el, '{%[2]s}',
 			COALESCE((SELECT to_jsonb(mt.new_id::text) FROM %[3]s mt WHERE mt.old_id::text = el->>'%[2]s'), el->'%[2]s')))
-		FROM jsonb_array_elements(s.%[1]s) el) END`, col, key, mapTable)
+		FROM jsonb_array_elements(s.%[1]s) el), '[]'::jsonb) END`, col, key, mapTable)
 }
 
 // CloneCatalog copies an organization's entire catalog (categories, boards,
@@ -575,7 +579,12 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 		}
 	}
 	for _, m := range maps {
-		if _, err := tx.Exec(ctx, fmt.Sprintf(`CREATE TEMP TABLE %s AS
+		// F179: ON COMMIT DROP — temp tables live for the whole pooled
+		// SESSION, so a second clone reusing the same server connection
+		// crashed with "relation already exists" (the pilot onboarding of a
+		// second organization on a long-lived server). Scope them to the
+		// transaction instead.
+		if _, err := tx.Exec(ctx, fmt.Sprintf(`CREATE TEMP TABLE %s ON COMMIT DROP AS
 			SELECT id AS old_id, uuid_generate_v4() AS new_id FROM %s WHERE organization_id = $1`, m.name, m.table), srcOrg); err != nil {
 			return fmt.Errorf("map %s: %w", m.name, err)
 		}
