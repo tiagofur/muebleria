@@ -79,6 +79,7 @@ export function PlatformScreen({
 }: PlatformScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<TabKey>('organizations');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Data
@@ -134,9 +135,11 @@ export function PlatformScreen({
         if (data.length > 0 && !selectedAuditOrgId) {
           setSelectedAuditOrgId(data[0]!.id);
         }
+      } else {
+        throw new Error('organizations');
       }
     } catch {
-      // ignore
+      throw new Error('organizations');
     }
   };
 
@@ -146,9 +149,11 @@ export function PlatformScreen({
       if (res.ok) {
         const data = (await res.json()) as PlatformUserRow[];
         setUsers(data);
+      } else {
+        throw new Error('users');
       }
     } catch {
-      // ignore
+      throw new Error('users');
     }
   };
 
@@ -169,6 +174,7 @@ export function PlatformScreen({
 
   const loadCurrentTab = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       if (activeTab === 'organizations') {
         await loadOrganizations();
@@ -178,6 +184,10 @@ export function PlatformScreen({
         if (organizations.length === 0) await loadOrganizations();
         await loadAudit(selectedAuditOrgId || (organizations[0]?.id ?? ''));
       }
+    } catch {
+      setLoadError(
+        'No se pudo cargar esta sección de la consola. Revisá tu conexión y volvé a intentar.',
+      );
     } finally {
       setLoading(false);
     }
@@ -370,6 +380,13 @@ export function PlatformScreen({
 
       {loading ? (
         <PageLoading label="Cargando consola de plataforma..." />
+      ) : loadError ? (
+        <EmptyState
+          title="No se pudo cargar la consola"
+          description={loadError}
+          actionLabel="Reintentar"
+          onAction={() => void loadCurrentTab()}
+        />
       ) : (
         <>
           {/* TAB 1: ORGANIZATIONS */}

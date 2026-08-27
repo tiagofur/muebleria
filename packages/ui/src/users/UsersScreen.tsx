@@ -92,6 +92,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Station sector assignment
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -132,6 +133,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // First try /api/org/team (F172)
       let teamLoaded = false;
@@ -143,7 +145,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           teamLoaded = true;
         }
       } catch {
-        // fallback
+        // fallback below
       }
 
       if (!teamLoaded) {
@@ -151,6 +153,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         if (res.ok) {
           const data = (await res.json()) as UserRow[];
           setUsers(data);
+        } else {
+          throw new Error('team');
         }
       }
 
@@ -162,8 +166,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           setInvitations(dataInv);
         }
       } catch {
-        // ignore
+        // invitations are supplementary — the member list already loaded
       }
+    } catch {
+      setLoadError('No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.');
     } finally {
       setLoading(false);
     }
@@ -390,6 +396,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         <div data-testid="users-loading">
           <PageLoading label="Cargando equipo..." />
         </div>
+      ) : loadError ? (
+        <EmptyState
+          title="No se pudo cargar el equipo"
+          description={loadError}
+          actionLabel="Reintentar"
+          onAction={() => void load()}
+        />
       ) : filter === 'invitations' ? (
         /* INVITATIONS VIEW */
         invitations.length === 0 ? (
@@ -439,7 +452,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       {new Date(inv.created_at).toLocaleDateString()}
                     </td>
                     <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      {new Date(inv.expires_at).toLocaleDateString()}
+                      {new Date(inv.expires_at).toLocaleDateString()}{' '}
+                      {new Date(inv.expires_at).getTime() <= Date.now() ? (
+                        <span className="status-badge status-badge--open">Vencida</span>
+                      ) : (
+                        <span className="status-badge status-badge--active">Pendiente</span>
+                      )}
                     </td>
                     <td className="users-table__align-right">
                       <button

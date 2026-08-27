@@ -13,11 +13,14 @@ export function OrgPicker({
   onPick,
   loading,
   error,
+  onLogout,
 }: {
   readonly memberships: readonly MembershipChoice[];
   readonly onPick: (organizationId: string) => void;
   readonly loading: boolean;
   readonly error: string | null;
+  /** Escape hatch: si la selección falla (token vencido), volver al login. */
+  readonly onLogout?: () => void;
 }): ReactNode {
   return (
     <main
@@ -110,6 +113,17 @@ export function OrgPicker({
           <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', margin: 'var(--space-3) 0 0' }}>
             Entrando…
           </p>
+        ) : null}
+        {onLogout ? (
+          <button
+            type="button"
+            className="btn btn--secondary"
+            style={{ width: '100%', marginTop: 'var(--space-4)' }}
+            disabled={loading}
+            onClick={onLogout}
+          >
+            Cerrar sesión y volver al login
+          </button>
         ) : null}
       </section>
     </main>

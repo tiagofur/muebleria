@@ -74,6 +74,7 @@ import {
   navIdsForRoles,
   anyRole,
   rolesAllScopedBySector,
+  rolesCanAssignOwner,
   rolesOfUser,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
@@ -610,8 +611,13 @@ export function AppContent({
     () => (session === 'auth' ? getAuthToken() : null),
     [session, getAuthToken],
   );
-  const showAdminUsers = session === 'auth' && isAdminRole(authUser?.role);
-  const canAssignOwner = roleCanAssignOwner(authUser?.role);
+  const actorRole = session === 'auth' ? authUser?.role : null;
+  // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
+  const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
+  const showAdminUsers =
+    session === 'auth' && anyRole(actorRoles, (r) => isAdminRole(r));
+  const canAssignOwner =
+    session === 'auth' && rolesCanAssignOwner(actorRoles);
   /** Guest (local) has full tool; auth uses product RBAC (F035). */
   const supportInfo = useWorkspaceStore((st) => st.supportInfo);
   const supportExiting = useWorkspaceStore((st) => st.supportExiting);
@@ -623,9 +629,6 @@ export function AppContent({
   }, [session, hydrateSessionInfo]);
   const enterSupportSession = useWorkspaceStore((st) => st.enterSupportSession);
   const isPlatformAdmin = Boolean(authUser?.platform_admin);
-  const actorRole = session === 'auth' ? authUser?.role : null;
-  // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
-  const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
   const allowedNavIds = useMemo(() => {
     const ids = new Set(navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []));
     if (session === 'auth' && authUser?.platform_admin) {
@@ -766,8 +769,7 @@ export function AppContent({
   /** accepted/produced → draft: admin + gerente only (vendedor never). */
   const canForceReopenClosed =
     session === 'guest' ||
-    actorRole === 'admin' ||
-    actorRole === 'gerente_ventas';
+    anyRole(actorRoles, (r) => r === 'admin' || r === 'gerente_ventas');
   const canMarkProduced =
     session === 'guest' || anyRole(actorRoles, roleCanMarkProduced);
   const canExportProduction =
@@ -776,7 +778,7 @@ export function AppContent({
     session === 'guest' || anyRole(actorRoles, roleCanViewPortfolioDashboard);
   /** F038: producción role only sees plant-ready quotes in project list. */
   const filterProjectsToPlant =
-    session === 'auth' && roleUsesProductionQueue(actorRole);
+    session === 'auth' && anyRole(actorRoles, roleUsesProductionQueue);
   /** PROD-0.1: factory workspace nav (export roles). */
   const useProductionWorkspace =
     session === 'auth' && anyRole(actorRoles, roleCanAccessProductionNav);
@@ -1274,11 +1276,11 @@ export function AppContent({
     | 'default'
     | 'sales'
     | 'engineering' => {
-    if (session !== 'auth' || !actorRole) return 'default';
-    if (actorRole === 'vendedor') return 'sales';
-    if (actorRole === 'ingeniero') return 'engineering';
+    if (session !== 'auth' || actorRoles.length === 0) return 'default';
+    if (actorRoles.includes('vendedor')) return 'sales';
+    if (actorRoles.includes('ingeniero')) return 'engineering';
     return 'default';
-  }, [session, actorRole]);
+  }, [session, actorRoles]);
 
   const modulesWithoutPhotoCount = useMemo(
     () => modules.filter((m) => !m.imageUrl).length,
@@ -1569,7 +1571,11 @@ export function AppContent({
       // packaged → loaded is a warehouse (Almacén) transition, not production.
       // Only almacen and admins can advance past packaged.
       if (target === 'loaded') {
-        if (actorRole !== 'admin' && actorRole !== 'gerente_produccion' && actorRole !== 'almacen') {
+        if (
+          !anyRole(actorRoles, (r) =>
+            r === 'admin' || r === 'gerente_produccion' || r === 'almacen',
+          )
+        ) {
           toast({ type: 'error', message: 'La carga de muebles es responsabilidad de Almacén.' });
           return;
         }
@@ -2434,13 +2440,21 @@ export function AppContent({
 
   const costingView = showCosts;
   const canManageCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_time_recorded');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_time_recorded'));
   const canCaptureCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_baseline_captured');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_baseline_captured'));
   const canRecordOtherCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_other_recorded');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_other_recorded'));
   const canVoidCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_entry_voided');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_entry_voided'));
 
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
     const repo = getRepository();
