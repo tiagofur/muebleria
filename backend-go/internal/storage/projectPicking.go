@@ -43,7 +43,7 @@ func (s *PostgresStore) UpsertProjectPicking(ctx context.Context, pick domain.Pr
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO project_picking (project_id, material, status, marked_at, marked_by, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (project_id, material) DO UPDATE SET
+		ON CONFLICT (project_id, material, organization_id) DO UPDATE SET
 			status    = EXCLUDED.status,
 			marked_at = EXCLUDED.marked_at,
 			marked_by = EXCLUDED.marked_by
