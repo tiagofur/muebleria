@@ -118,6 +118,18 @@ func (s *Server) authorizeProjectOrgOwnership(w http.ResponseWriter, r *http.Req
 			return false
 		}
 	}
+	// #327 (F178): a store/dealer cannot be its own manufacturer — leaving
+	// manufacturing empty would default it to the caller's org and the
+	// sales/manufacturing split would never apply. Pilot factories acting as
+	// their own sales org stay allowed.
+	if own, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && own != nil &&
+		(own.Organization.Type == domain.OrganizationTypeStore || own.Organization.Type == domain.OrganizationTypeDealer) {
+		if p.ManufacturingOrganizationID == "" || p.ManufacturingOrganizationID == claims.OrgID {
+			respondWithError(w, http.StatusBadRequest,
+				"una tienda necesita asignar la fábrica que fabricará el proyecto (manufacturing_organization_id)")
+			return false
+		}
+	}
 	return true
 }
 
@@ -130,6 +142,28 @@ func orgSeesManufacturing(claims *auth.Claims, p *domain.Project) bool {
 		return true
 	}
 	return claims.OrgID == p.ManufacturingOrganizationID
+}
+
+// manufacturingOnly wraps manufacturing subresource handlers (#327): only
+// the manufacturing organization may reach physical execution, MRP, quality,
+// installation and job costing. The sales organization gets the same 404 as
+// a missing project — cross-org access never confirms existence.
+func (s *Server) manufacturingOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims := claimsFromRequest(r)
+		if claims != nil && claims.OrgID != "" {
+			p, err := s.Store.GetProjectByID(r.Context(), r.PathValue("id"))
+			if err != nil || p == nil {
+				respondWithError(w, http.StatusNotFound, "obra no encontrada")
+				return
+			}
+			if !orgSeesManufacturing(claims, p) {
+				respondWithError(w, http.StatusNotFound, "obra no encontrada")
+				return
+			}
+		}
+		next(w, r)
+	}
 }
 
 // redactProjectsForCaller applies the sales/manufacturing split (#327) to a

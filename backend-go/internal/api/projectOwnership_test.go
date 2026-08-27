@@ -240,3 +240,109 @@ func TestProjectOrgOwnership_UpdatePreservesOwnershipAndManufacturing(t *testing
 		t.Fatal("sales PUT must restore (not wipe) the stored manufacturing payload")
 	}
 }
+
+// F178: manufacturing subresources are factory-only. The wrapper returns the
+// same 404 as a missing project for the sales org (never confirms existence)
+// and passes the manufacturing org through.
+func TestManufacturingOnly_RouteGate(t *testing.T) {
+	const orgSales, orgFactory = "org-sales", "org-factory"
+	newSrv := func() *Server {
+		return &Server{Store: &stubStore{projectReturnedByID: &domain.Project{
+			ID:                          "p1",
+			Name:                        "Split",
+			SalesOrganizationID:         orgSales,
+			ManufacturingOrganizationID: orgFactory,
+		}}}
+	}
+	wrapped := func(srv *Server) http.HandlerFunc {
+		return srv.manufacturingOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+	}
+
+	req := withOrgClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1/part-executions", nil),
+		"u1", orgSales, string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+	wrapped(newSrv()).ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("sales org on manufacturing route: got %d, want 404 (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	req = withOrgClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1/part-executions", nil),
+		"u2", orgFactory, string(domain.RoleProduccion))
+	req.SetPathValue("id", "p1")
+	rr = httptest.NewRecorder()
+	wrapped(newSrv()).ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("manufacturing org on manufacturing route: got %d, want 200", rr.Code)
+	}
+}
+
+// F178: a store cannot be its own manufacturer — the escape hatch that made
+// the sales/manufacturing split never apply is closed.
+func TestProjectOrgOwnership_StoreNeedsFactory(t *testing.T) {
+	const orgStore, orgFactory = "org-store", "org-factory"
+	store := &stubStore{
+		membershipsByUser: map[string][]domain.MembershipWithOrg{
+			"u1": {
+				membershipFor("u1", orgStore, domain.OrganizationTypeStore, domain.RoleAdmin),
+				membershipFor("u1", orgFactory, domain.OrganizationTypeFactory, domain.RoleIngeniero),
+			},
+		},
+	}
+	srv := &Server{Store: store}
+
+	// No mfg assigned → store would become its own manufacturer → 400.
+	body := strings.NewReader(`{"name":"Cocina tienda","currency":"MXN"}`)
+	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgStore, string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.HandleProjects(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("store without factory mfg: got %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	// Explicit factory mfg → allowed.
+	body = strings.NewReader(`{"name":"Cocina tienda","currency":"MXN","manufacturing_organization_id":"` + orgFactory + `"}`)
+	req = withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgStore, string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	srv.HandleProjects(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("store with factory mfg: got %d, want 201 (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+// F178: the aggregate redaction also covers the subprocess payloads loaded by
+// GetProjectByID (MRP planning, quality, job costing).
+func TestProjectOrgOwnership_GetRedactsSubprocessesForSalesOrg(t *testing.T) {
+	const orgSales, orgFactory = "org-sales", "org-factory"
+	existing := &domain.Project{
+		ID:                          "p1",
+		Name:                        "Split",
+		OwnerUserID:                 "u1",
+		SalesOrganizationID:         orgSales,
+		ManufacturingOrganizationID: orgFactory,
+		CutPlan:                     json.RawMessage(`{"sheets":1}`),
+		MaterialPlanning:            &domain.MaterialPlanning{ID: "mrp-1"},
+		Quality:                     &domain.QualityJob{ID: "q-1"},
+		Costing:                     &domain.JobCosting{ID: "jc-1"},
+	}
+	srv := &Server{Store: &stubStore{projectReturnedByID: existing}}
+	req := withOrgClaims(httptest.NewRequest(http.MethodGet, "/api/projects/p1", nil), "u1", orgSales, string(domain.RoleVendedor))
+	req.SetPathValue("id", "p1")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectByID(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), "material_planning") ||
+		strings.Contains(rr.Body.String(), "quality") ||
+		strings.Contains(rr.Body.String(), "costing") ||
+		strings.Contains(rr.Body.String(), "cut_plan") {
+		t.Fatalf("sales org must not see manufacturing/subprocess payloads: %s", rr.Body.String())
+	}
+}

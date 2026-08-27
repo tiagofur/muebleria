@@ -26,6 +26,12 @@ func RedactProjectManufacturing(p *Project) {
 	p.ModuleUnits = nil
 	p.FloorEvents = nil
 	p.Installation = nil
+	// Subprocess aggregates loaded by GetProjectByID (F178): MRP planning,
+	// quality and job costing are factory-internal per the distribution doc
+	// (production planning / manufacturing costs).
+	p.MaterialPlanning = nil
+	p.Quality = nil
+	p.Costing = nil
 }
 
 // RestoreProjectManufacturing copies the server-side manufacturing fields from
@@ -46,4 +52,7 @@ func RestoreProjectManufacturing(p, stored *Project) {
 	p.ModuleUnits = stored.ModuleUnits
 	p.FloorEvents = stored.FloorEvents
 	p.Installation = stored.Installation
+	p.MaterialPlanning = stored.MaterialPlanning
+	p.Quality = stored.Quality
+	p.Costing = stored.Costing
 }
