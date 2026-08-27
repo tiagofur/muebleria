@@ -34,4 +34,4 @@ Estructura (components[]) + Componentes Adicionales + Presets Comerciales + Opci
 
 ## Roles
 
-Nav **Estructuras**: Admin / Ingeniero / Carpintero. Permite definir el cuerpo estándar del taller.
+Nav **Estructuras**: Admin / Ingeniero (`roleCanMutateModules`). Permite definir el cuerpo estándar del taller.

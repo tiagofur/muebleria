@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 // Fixture de paridad TS↔Go (OC-004): backend-go/internal/domain/rbac_test.go
 // afirma contra el mismo contracts/roles.json, así que una divergencia de
@@ -53,6 +54,17 @@ describe('rbac (F035 / OC-004)', () => {
 
     for (const r of rejectedRoles) {
       expect(isValidUserRole(r)).toBe(false);
+    }
+  });
+
+  it('offers friendly labels for every canonical role (UI single source)', () => {
+    for (const r of rolesContract.canonicalRoles) {
+      expect(roleLabelEs(r)).not.toBe(r);
+      expect(roleLabelEs(r).length).toBeGreaterThan(0);
+    }
+    for (const r of rolesContract.rejectedRoles) {
+      // rejected ids render as-is (raw), never as a curated label
+      expect(roleLabelEs(r)).toBe(r);
     }
   });
 
@@ -480,5 +492,28 @@ describe('rbac (F035 / OC-004)', () => {
     expect(roleCanAppendProjectEvent('user', 'quote_won')).toBe(false);
     expect(roleCanAppendProjectEvent('admin', 'pizza_delivered')).toBe(false);
     expect(roleCanAppendProjectEvent(null, 'quote_won')).toBe(false);
+  });
+});
+
+// DoD del onboarding de pilotos (F174): quien sigue docs/pilot-onboarding.md
+// jamás intenta asignar un rol que la aplicación rechaza. El doc debe listar
+// todos los roles canónicos (con backticks, como identificadores) y nunca
+// presentar un rol rechazado como asignable.
+describe('pilot onboarding doc pins canonical roles', () => {
+  const doc = readFileSync(
+    new URL('../../../docs/pilot-onboarding.md', import.meta.url),
+    'utf8',
+  );
+
+  it('documents every canonical role as assignable', () => {
+    for (const r of rolesContract.canonicalRoles) {
+      expect(doc).toContain(`\`${r}\``);
+    }
+  });
+
+  it('never offers a rejected role as assignable', () => {
+    for (const r of rolesContract.rejectedRoles) {
+      expect(doc).not.toContain(`\`${r}\``);
+    }
   });
 });

@@ -6,6 +6,8 @@
 
 import type { ReactNode } from 'react';
 
+import { roleLabelEs } from '@granete/domain';
+
 import type { MembershipChoice } from './session';
 
 export function OrgPicker({
@@ -98,7 +100,7 @@ export function OrgPicker({
                   {m.organization.name}
                 </span>
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                  {m.roles.join(' · ')}
+                  {m.roles.map(roleLabelEs).join(' · ')}
                 </span>
               </button>
             </li>

@@ -1132,14 +1132,15 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 ### 6.11 Usuarios
 
 - **Ruta nav:** `users` (sección CONFIG, **solo admin**)
-- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026)
-- **Patrón:** tabla simple (acciones inline por fila, sin expand)
+- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172)
+- **Patrón:** tabla simple (acciones inline por fila, sin expand) + modales (roles, invitación, estaciones)
 - **Contenido:**
-  - Lista de usuarios con rol, email, estado (active/pending)
-  - Acciones por fila: Aprobar registro pending (cambia a active), Asignar rol (select), Desactivar
-  - Badge de pendientes en header (`users-badge`)
-- **Roles asignables:** admin, user, vendedor, ingeniero (ex `disenador`), produccion (ex `carpintero`) (F035).
-- **RBAC**: solo `admin` (vía `roleCanManageUsers`). El item se añade al sidebar condicionalmente.
+  - Filtros por estado: Miembros activos / Invitaciones pendientes / Todos (+ Pendientes de aprobación si aplica)
+  - Lista de miembros con chips de **roles múltiples** (unión RBAC, ADR-0005), email, estado y estación
+  - Acciones por fila: Editar roles (checkboxes multi-role), Estaciones (solo `produccion`/`almacen`), Aprobar/Rechazar pendientes, Desactivar, plan de licencia
+  - **"+ Invitar Miembro"**: email + roles → genera enlace de una sola vez (WhatsApp/email), revocación y vencimiento visible
+- **Roles asignables:** los 8 canónicos de `contracts/roles.json` — `admin`, `user`, `vendedor`, `gerente_ventas`, `gerente_produccion`, `ingeniero`, `produccion`, `almacen` (F035; `disenador`→`ingeniero` y `carpintero`→`produccion` son migraciones legacy rechazadas hoy). Etiquetas amigables centralizadas en `roleLabelEs` (`packages/domain`).
+- **RBAC**: solo `admin` (vía `roleCanManageUsers`; sesiones de soporte de plataforma actúan como admin del taller). El item se añade al sidebar condicionalmente.
 - **Icono:** `ShieldCheck`
 
 ### 6.12 Login

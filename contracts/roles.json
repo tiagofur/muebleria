@@ -12,7 +12,9 @@
   "rejectedRoles": [
     "disenador",
     "carpintero",
-    "supervisor"
+    "supervisor",
+    "instalador",
+    "installer"
   ],
   "multiRole": {
     "supported": true,
