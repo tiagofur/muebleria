@@ -7,6 +7,7 @@ import rolesContract from '../../../contracts/roles.json';
 import {
   isValidUserRole,
   navIdsForRole,
+  primaryRoleOf,
   roleCanAccessCustomers,
   roleCanAccessProjects,
   roleCanDeleteProject,
@@ -66,6 +67,19 @@ describe('rbac (F035 / OC-004)', () => {
       // rejected ids render as-is (raw), never as a curated label
       expect(roleLabelEs(r)).toBe(r);
     }
+  });
+
+  it('primaryRoleOf picks by canonical order (display-only, union keeps perms)', () => {
+    expect(primaryRoleOf(['produccion', 'admin'])).toBe('admin');
+    expect(primaryRoleOf(['almacen', 'produccion'])).toBe('produccion');
+    expect(primaryRoleOf(['vendedor'])).toBe('vendedor');
+    // rejected/unknown ids never surface as the primary role
+    for (const r of rolesContract.rejectedRoles) {
+      expect(primaryRoleOf([r])).toBeNull();
+    }
+    expect(primaryRoleOf([])).toBeNull();
+    expect(primaryRoleOf(null)).toBeNull();
+    expect(primaryRoleOf(undefined)).toBeNull();
   });
 
   it('denies catalog ABM to vendedor and produccion', () => {
