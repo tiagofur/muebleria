@@ -58,6 +58,17 @@ module Granete
         def resolved_layout(_definition_id, _parameters = {}, _choices = {})
           nil
         end
+
+        # Resolves the layout AND parses the authoritative board-local
+        # transform contract (#414 / ADR-0004 §9). Fails safely —
+        # LayoutContract::ContractError, a LayoutResolutionError — when the
+        # server publishes a missing or unknown transform contract; there is
+        # deliberately no AABB/slot fallback. nil = this provider cannot
+        # resolve layouts (generic authoring path).
+        def resolved_native_layout(definition_id, parameters = {}, choices = {})
+          body = resolved_layout(definition_id, parameters, choices)
+          body && LayoutContract.parse!(body)
+        end
       end
 
       class StaticCatalogProvider < BaseCatalogProvider

@@ -619,7 +619,10 @@ fallo loud para choice desconocido/inactivo o sin espesor válido.
 - `layout.go` (`expandLayoutInstances`) usa el mismo helper antes de fórmulas
   geométricas, spatial formulas, `defaultPoseForPlacement`, dimensiones del
   board, AABB y anchors de herrajes; `LayoutComponent.ThicknessMm` y el eje de
-  espesor de `DimensionsMm` salen del mismo `T` efectivo.
+  espesor de `DimensionsMm` salen del mismo `T` efectivo. Desde #414, el
+  transform local→furniture publicado (`localTransform`) se deriva del mismo
+  board ya resuelto con `T` efectivo (`boardLocalPose`), y el AABB se deriva
+  del transform.
 - Componentes internos de agregados resuelven su propio rol de material. El
   `T: 18` del contexto del box del agregado es el fallback legacy explícito
   (el box no tiene binding de material propio; paridad con TS

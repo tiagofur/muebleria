@@ -1,83 +1,86 @@
 # Sesión
 
-**Feature en curso:** F183 — ESPESOR EFECTIVO DESDE MATERIAL SELECCIONADO EN GO BOM + LAYOUT (#402 / MT-1) (COMPLETADA)
-**Cerrados con evidencia (ledger done):** F169–F182 (PRs #419/#424/#427/#428) + F183
-**Rama:** `fix/402-go-effective-thickness` (desde origin/main post-#430)
-**Contexto:** programa #401 (material-aware furniture resolution). Prerequisite
-#409 (contrato canónico) mergeado en PR #411. Este slice corrige el drift de
-verdad manufacturera entre TS y los resolvers Go. TS ya era correcto
-(`getComponentThickness` en `packages/domain/src/engine/bom.ts`) y NO se tocó.
+**Feature en curso:** F185 — TRANSFORM LOCAL→FURNITURE AUTORITATIVO EN EL LAYOUT RESUELTO (#414 / SU-ENT-1) (COMPLETADA; ver `progress/history.md` y `progress/review_F185.md`)
+**Cerrados con evidencia (ledger done):** F169–F184 (PRs #419/#424/#427/#428/#431/#432)
+**Rama:** `feat/414-local-transform-contract` (desde origin/main post-#432)
+**Inicio:** 2026-08-27
+**Contexto:** programa #413 (SketchUp native entity model). Prerequisites
+verificados mergeados: #418 docs+ADR-0004 (PR #420), #402 espesor efectivo en
+Go layout (PR #431), #403 binding roles (PR #432). Este slice desbloquea #415
+(renderer nativo) y es exclusivamente contract/resolver/parsing.
 
-## F183: una sola ruta canónica de espesor efectivo en Go
+## Problema
 
-El bug: con material seleccionado de 16 mm, el layout Go dibujaba laterales a
-15 mm y piso/techo a 18 mm (espesres nominales del componente), porque
-`resolve.go` expandía el BOM con `T = comp.ThicknessMm` antes de resolver
-materiales y `layout.go` hacía lo mismo para fórmulas/poses/AABB, adjuntando el
-material después sólo como identidad visual.
+`LayoutComponent` publicaba dimensiones locales (`lengthMm/widthMm/thicknessMm`)
+y un AABB world (`transform.translationMm` + `dimensionsMm`), pero la rotación
+sólo existía en el `layoutBoard` interno (`rotX/rotY/rotZ`, Euler XYZ en el
+frame render Y-up). Suficiente para cajas pre-horneadas; insuficiente para
+crear una `ComponentDefinition` nativa con ejes locales estables y posicionar
+la instancia — Ruby habría tenido que inferir orientación por slot/role/AABB.
 
-La corrección (`backend-go/internal/domain/engine/effective_thickness.go`):
+## Diseño entregado
 
-- `resolveSelectedBoard(role, choices, materials)`: choice vacía → nil (fallback
-  determinista); unknown/inactive → error loud con el rol en el mensaje.
-- `effectiveThicknessMm(role, nominal, choices, materials)`: precedencia
-  canónica `selected active MaterialBoard.thicknessMm > nominal > legacy sin
-  binding`; además exige `thicknessMm > 0` (el CHECK de la DB lo garantiza para
-  datos reales; runtime defiende contra catálogos hand-crafted).
+1. **Marker de contrato:** `FurnitureLayout.transformContract =
+   "granete.local-basis.v1"` (`LayoutTransformContractV1`). Cliente que no lo
+   reconoce debe fallar seguro — nunca reinterpretar campos nuevos.
+2. **Transform autoritativo:** `LayoutComponent.localTransform =
+   {translationMm, basis{x,y,z}}` con
+   `furniture_point = translationMm + basis · local_point` y caja local
+   `[0,width]×[0,thickness]×[0,length]` (convención local X=width/Y=thickness/
+   Z=length CONSERVADA).
+3. **Representación: base ortonormal diestra** (det=+1). Sobre Euler (orden
+   ambiguo — prohibido exportarlo por comodidad) y quaternion (orden de w +
+   ruido trig en 90°): las entradas son exactamente 0/±1 en los placements
+   estándar y mapea 1:1 a `Geom::Transformation.axes` en Ruby.
+4. **Decisión de frame (la explícita que el issue permite):** la rotación
+   interna vive en el frame render (Y-up); render→furniture es el swap Y/Z —
+   un espejo (det −1). La imagen fiel del frame local del engine sería
+   LEFT-handed: no es una rotación y espejaría geometría en SketchUp. El frame
+   local publicado conserva extents y semántica de caras (+Y hacia la cara
+   frontal, +Z hacia la superior — paridad con hardwarePlacement.ts) pero
+   espeja +X local; la traslación compensa un ancho a lo largo de la imagen de
+   +X local, así la caja ocupa EXACTAMENTE la región física del AABB legacy.
+   Implementado en `boardLocalPose` (layout.go).
+5. **AABB derivado:** `aabbFromLocalTransform` — el AABB publicado se deriva
+   del transform (única fuente, imposible que diverjan) + chequeo runtime
+   contra el pose del engine (desacuerdo > 1e-6 ⇒ error loud). Los tests
+   preexistentes que clavaban valores AABB pasan sin cambios.
+6. **Validación server-side:** `validateLayoutBasis` exige unitaria/ortogonal/
+   diestra (det +1) y finita; espejos/colapsos/NaN nunca se publican.
+7. **Material-aware (#402):** el transform se computa del board YA resuelto
+   con espesor efectivo del MaterialBoard seleccionado (mismo T en fórmulas,
+   pose, caja local, transform y AABB).
+8. **Ruby parser:** `library/layout_contract.rb` (`LayoutContract.parse!` +
+   `BaseCatalogProvider#resolved_native_layout`). Exige el marker exacto,
+   valida basis (unitaria/ortogonal/diestra, tolerancia 1e-4), triples y
+   escalares positivos; falla loudly (`ContractError < LayoutResolutionError`)
+   ante contrato ausente/desconocido o payload malformado. AABB es passthrough
+   opcional y NUNCA fuente de orientación. Cero tabla slot/role→rotación.
+   El renderer Group actual NO se tocó (sigue AABB; #415 lo cambia).
+9. **Golden compartido:** `contracts/sketchupLayoutTransform.contract.json`
+   generado desde el resolver Go (`UPDATE_LAYOUT_CONTRACT_GOLDEN=1`), consumido
+   textual por los tests Ruby del parser — paridad real de wire shape.
 
-Consumidores (ambos usan el MISMO helper — no hay lógica duplicada):
+## Evidencia
 
-- `resolve.go` `expandComponentInstances`: T efectivo entra en `evalDims`
-  antes de las fórmulas length/width. `ResolvedBoardPart` ahora emite
-  `thickness_mm` desde el material (paridad con TS `thicknessMm`).
-- `layout.go` `expandLayoutInstances`: mismo T en `geomDims`, `spatialDims`
-  (H y T), `defaultPoseForPlacement`, board local dims y AABB.
-  `LayoutComponent.ThicknessMm` y el eje de espesor de `DimensionsMm` salen del
-  mismo T. El loop de identidad visual reusa `resolveSelectedBoard`.
+- `go test ./...` backend-go completo: OK (incl. layout_test.go previo sin
+  cambios — paridad AABB exacta — y regression_402/403).
+- Tests nuevos Go (`layout_transform_test.go`): marker; boards canónicos
+  (lateral/piso/techo/fondo/puerta con bases ancladas); paridad AABB derivada
+  (8 esquinas, con dims overrides); espesor mixto 16/18/6 antes del transform;
+  agregado (3 frentes cajón, identidad); host de herraje atado a
+  componentInstanceId con transform válido; NEGATIVE PROOF (dos customs con
+  mismo slot/nombre/AABB y bases distintas); validateLayoutBasis negativos
+  (espejo/no-unitaria/NaN/skew); golden serialization API.
+- API test: endpoint sirve transformContract + localTransform en el wire.
+- Ruby `bundle exec rake verify` (syntax+lint+unit+boundary+RBZ): OK.
+  Tests Ruby del parser: golden servido, fail-safe contrato ausente/desconocido/
+  malformado, negative proof (slot renombrado no cambia transform; AABB
+  opcional), integración provider + estáticos nil.
+- `pnpm test`/typecheck TS: sin cambios de código TS (verificación de no-regresión).
 
-Auditoría de hardcodes 18:
+## No-goals respetados (issue #414)
 
-- `expandLayoutAgregado` `parentDims.T: 18` — SE CONSERVA documentado: es el
-  contexto del box del sub-espacio (sin binding de material propio), paridad
-  exacta con TS `resolveComposedModule`. Los componentes INTERNOS del agregado
-  sí resuelven su propio rol (era la fuga real).
-- `legacyBoardStack` — 18 mm sólo cuando el rol no tiene elección; con
-  material seleccionado usa su espesor (board + stacking).
-
-Tests (`regression_402_test.go`, 11 tests): fixture con nominales
-deliberadamente ≠ materiales (lateral 15 / base-top 18 / frente 18 / fondo 15 /
-frente cajón 15; materiales 16/18/6). Caso obligatorio del issue: BODY→16
-resuelve TODO el cuerpo a 16 (`PW-2*T` con T=16, `PD-T` con T=16, lateral
-derecho x=PW−T=584). Mixed BODY=16/FRONT=18/BACK=6 en el mismo mueble.
-Herraje anclado a FRONT sigue la cara recalculada. Agregado 3 frentes.
-ThicknessMm == eje de espesor del AABB por placement. Unknown/inactive/espesor
-0 fallan loud. Sin elección: nominal determinista.
-
-**Verificación rojo→verde:** los 11 tests se corrieron contra el código pre-fix
-y fallaron con el drift exacto (lateral 15/piso 18 pese a material 16;
-`PW-2*T` del frente cajón con T nominal 15 → 570 en vez de 564; herraje sobre
-cara de 18 pese a FRONT 16; legacy siempre 18). Tras el fix: verde.
-
-Fix colateral de fixture: `internal/api/furniture_layout_test.go` — su material
-stub no declaraba `ThicknessMm` (imposible en DB: `CHECK (thickness_mm > 0)`);
-con el fallo loud ahora 422eaba. Se le dio el espesor realista 18.
-
-Docs: `docs/architecture/material-aware-furniture-resolution.md` §16 actualizado
-(Go BOM + layout [CURRENT desde #402]; el T:18 del box de agregado documentado
-como fallback legacy con paridad TS). Ledger: F183 en `feature_list.json`.
-
-## Verificación
-
-- `go build ./...` + `go vet ./...`: ok.
-- `go test ./internal/domain/engine/ -run 'EffectiveThickness' -count=1`:
-  11/11 PASS (pre-fix: 11 FAIL con drift numérico).
-- `go test ./... -count=1` backend completo: exit 0 — 9 paquetes ok
-  (api, auth, config, domain, engine, storage contra PostgreSQL real,
-  pilotreadiness, db, cmd/admin).
-- `pnpm --filter @granete/domain test`: 89 archivos / 1134 tests PASS (TS sin
-  cambios, sin regresión).
-
-## Fuera de alcance (explícito del issue)
-
-- #403 (binding por rol/aliases), #404 (SketchUp re-resolve/rebuild),
-  #405 (fixtures de paridad TS↔Go↔SketchUp), renderer SketchUp, Digital Thread.
+- Renderer nativo (#415): no tocado; FurnitureBuilder sigue con AABB.
+- Material rebuild (#404): no tocado.
+- Heurísticas Ruby: no existen; el parser no lee slot/role/AABB para orientación.

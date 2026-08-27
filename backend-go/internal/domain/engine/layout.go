@@ -28,6 +28,11 @@ import (
 // AABB after rotation; rotations are Euler XYZ in the render frame (Three
 // Y-up: render X = workshop X, render Y = workshop Z, render Z = workshop Y),
 // exactly like the web 3D preview.
+//
+// #414 additionally publishes the authoritative local→furniture transform
+// per board (localTransform: orthonormal right-handed basis + translation in
+// the furniture frame). The legacy AABB (transform/dimensionsMm) is DERIVED
+// from it. See boardLocalPose for the frame/handedness decision.
 
 // LayoutDims is the W/H/D override for a layout resolution (mm).
 type LayoutDims struct {
@@ -37,66 +42,111 @@ type LayoutDims struct {
 }
 
 // LayoutTransform positions a layout element in workshop millimeters.
+// This is the legacy AABB shape: TranslationMm is the AABB min corner. It
+// stays for old plugin versions / previews; boards additionally carry the
+// authoritative LocalTransform below (#414).
 type LayoutTransform struct {
 	TranslationMm [3]float64 `json:"translationMm"`
 }
 
-// LayoutComponent is one resolved board rendered as an axis-aligned box.
-// TranslationMm is the AABB min corner in workshop space; DimensionsMm is the
-// rotated AABB size (exact for the standard 90° placement rotations).
+// LayoutTransformContractV1 is the capability marker published on every
+// resolved layout (#414 / ADR-0004 §9). Clients that need authoritative
+// local part transforms MUST match this exact value and fail safely on
+// anything else — an unknown contract is never reinterpreted from
+// AABB/slot/role data.
+const LayoutTransformContractV1 = "granete.local-basis.v1"
+
+// LayoutBasis is the orientation half of the authoritative local→furniture
+// transform: an orthonormal, right-handed basis whose vectors are the
+// furniture-frame directions of the board's local +X/+Y/+Z axes.
+type LayoutBasis struct {
+	X [3]float64 `json:"x"`
+	Y [3]float64 `json:"y"`
+	Z [3]float64 `json:"z"`
+}
+
+// LayoutLocalTransform is the authoritative local→furniture transform of a
+// resolved board (#414):
+//
+//	furniture_point = translationMm + basis · local_point
+//
+// with the local box spanning [0,widthMm]×[0,thicknessMm]×[0,lengthMm] on
+// local X/Y/Z. It is rigid (det=+1): Ruby applies it generically — never a
+// mirror, never role/slot/AABB orientation inference. Local axes follow the
+// engine convention (X=width, Y=thickness, Z=length); the frame decision
+// behind the basis is documented on boardLocalPose.
+type LayoutLocalTransform struct {
+	TranslationMm [3]float64  `json:"translationMm"`
+	Basis         LayoutBasis `json:"basis"`
+}
+
+// LayoutComponent is one resolved board. The contract separates three
+// concerns (#414):
+//
+//   - local part dimensions: LengthMm/WidthMm/ThicknessMm (local box extents
+//     on Z/X/Y respectively — the same values the local frame uses);
+//   - local→furniture placement: LocalTransform (authoritative);
+//   - AABB convenience/compat: Transform (min corner) + DimensionsMm (size),
+//     derived from the local geometry + transform, kept for old plugin
+//     versions and previews.
+//
 // Material fields carry the workshop's chosen board when an option choice
 // resolved it; otherwise the role-palette fallback color is used.
 type LayoutComponent struct {
-	ComponentInstanceID        string          `json:"componentInstanceId"`
-	SlotID                     string          `json:"slotId"`
-	Role                       string          `json:"role,omitempty"`
-	Name                       string          `json:"name"`
-	Kind                       string          `json:"kind"`
-	Transform                  LayoutTransform `json:"transform"`
-	DimensionsMm               [3]float64      `json:"dimensionsMm"`
-	LengthMm                   int             `json:"lengthMm"`
-	WidthMm                    int             `json:"widthMm"`
-	ThicknessMm                int             `json:"thicknessMm"`
-	OptionRole                 string          `json:"optionRole,omitempty"`
-	MaterialID                 string          `json:"materialId,omitempty"`
-	MaterialCode               string          `json:"materialCode,omitempty"`
-	MaterialName               string          `json:"materialName,omitempty"`
-	MaterialColorHex           string          `json:"materialColorHex,omitempty"`
-	MaterialImageURL           string          `json:"materialImageUrl,omitempty"`
-	MaterialTextureURL         string          `json:"materialTextureUrl,omitempty"`
-	MaterialTextureTileWidthMm float64         `json:"materialTextureTileWidthMm,omitempty"`
-	MaterialTextureTileLengthMm float64        `json:"materialTextureTileLengthMm,omitempty"`
-	MaterialRoughness          *float64        `json:"materialRoughness,omitempty"`
-	MaterialMetalness          *float64        `json:"materialMetalness,omitempty"`
-	MaterialClearcoat          *float64        `json:"materialClearcoat,omitempty"`
-	MaterialGrain              bool            `json:"materialGrain,omitempty"`
+	ComponentInstanceID         string               `json:"componentInstanceId"`
+	SlotID                      string               `json:"slotId"`
+	Role                        string               `json:"role,omitempty"`
+	Name                        string               `json:"name"`
+	Kind                        string               `json:"kind"`
+	Transform                   LayoutTransform      `json:"transform"`
+	DimensionsMm                [3]float64           `json:"dimensionsMm"`
+	LocalTransform              LayoutLocalTransform `json:"localTransform"`
+	LengthMm                    int                  `json:"lengthMm"`
+	WidthMm                     int                  `json:"widthMm"`
+	ThicknessMm                 int                  `json:"thicknessMm"`
+	OptionRole                  string               `json:"optionRole,omitempty"`
+	MaterialID                  string               `json:"materialId,omitempty"`
+	MaterialCode                string               `json:"materialCode,omitempty"`
+	MaterialName                string               `json:"materialName,omitempty"`
+	MaterialColorHex            string               `json:"materialColorHex,omitempty"`
+	MaterialImageURL            string               `json:"materialImageUrl,omitempty"`
+	MaterialTextureURL          string               `json:"materialTextureUrl,omitempty"`
+	MaterialTextureTileWidthMm  float64              `json:"materialTextureTileWidthMm,omitempty"`
+	MaterialTextureTileLengthMm float64              `json:"materialTextureTileLengthMm,omitempty"`
+	MaterialRoughness           *float64             `json:"materialRoughness,omitempty"`
+	MaterialMetalness           *float64             `json:"materialMetalness,omitempty"`
+	MaterialClearcoat           *float64             `json:"materialClearcoat,omitempty"`
+	MaterialGrain               bool                 `json:"materialGrain,omitempty"`
 }
 
 // LayoutHardware is one visible hardware placement (handle, hinge, …) resolved
 // to a world-space box anchored on its host board face.
 type LayoutHardware struct {
-	PlacementID            string          `json:"placementId"`
-	HardwareID             string          `json:"hardwareId"`
-	Name                   string          `json:"name"`
-	Shape                  string          `json:"shape"`
-	SizeMm                 float64         `json:"sizeMm,omitempty"`
-	DiameterMm             float64         `json:"diameterMm,omitempty"`
-	ProjectionMm           float64         `json:"projectionMm"`
-	ColorHex               string          `json:"colorHex,omitempty"`
-	HostComponentInstanceID string         `json:"hostComponentInstanceId"`
-	AnchorFace             string          `json:"anchorFace"`
-	Transform              LayoutTransform `json:"transform"`
-	DimensionsMm           [3]float64      `json:"dimensionsMm"`
+	PlacementID             string          `json:"placementId"`
+	HardwareID              string          `json:"hardwareId"`
+	Name                    string          `json:"name"`
+	Shape                   string          `json:"shape"`
+	SizeMm                  float64         `json:"sizeMm,omitempty"`
+	DiameterMm              float64         `json:"diameterMm,omitempty"`
+	ProjectionMm            float64         `json:"projectionMm"`
+	ColorHex                string          `json:"colorHex,omitempty"`
+	HostComponentInstanceID string          `json:"hostComponentInstanceId"`
+	AnchorFace              string          `json:"anchorFace"`
+	Transform               LayoutTransform `json:"transform"`
+	DimensionsMm            [3]float64      `json:"dimensionsMm"`
 }
 
 // FurnitureLayout is the full resolved layout of one furniture definition at
-// concrete dimensions.
+// concrete dimensions. TransformContract pins the local part transform
+// representation (#414); clients must verify it before consuming
+// components[].localTransform and fail safely on unknown values.
 type FurnitureLayout struct {
-	FurnitureDefinitionID string             `json:"furnitureDefinitionId"`
-	DefinitionName        string             `json:"definitionName"`
-	DimensionsMm          [3]int             `json:"dimensionsMm"`
-	Components            []LayoutComponent  `json:"components"`
-	Hardware              []LayoutHardware   `json:"hardware"`
+	FurnitureDefinitionID string            `json:"furnitureDefinitionId"`
+	DefinitionName        string            `json:"definitionName"`
+	TransformContract     string            `json:"transformContract"`
+	DimensionsMm          [3]int            `json:"dimensionsMm"`
+	Components            []LayoutComponent `json:"components"`
+	Hardware              []LayoutHardware  `json:"hardware"`
 }
 
 // layoutBoard is the intermediate resolved board before AABB projection.
@@ -142,6 +192,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 	layout := FurnitureLayout{
 		FurnitureDefinitionID: module.ID,
 		DefinitionName:        module.Name,
+		TransformContract:     LayoutTransformContractV1,
 		DimensionsMm:          [3]int{dims.WidthMm, dims.HeightMm, dims.DepthMm},
 		Components:            []LayoutComponent{},
 		Hardware:              []LayoutHardware{},
@@ -154,7 +205,14 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 
 	for i := range boards {
 		board := &boards[i]
-		min, size := boardAABBWorkshop(board)
+		// #414: the authoritative local→furniture transform is computed from
+		// the SAME effective-thickness-driven board the AABB always used
+		// (#402 resolves T before pose/geometry), and the published AABB is
+		// derived from it — local geometry + transform is the single source.
+		local, min, size, err := boardLocalPose(board)
+		if err != nil {
+			return FurnitureLayout{}, err
+		}
 
 		component := LayoutComponent{
 			ComponentInstanceID: board.id,
@@ -164,6 +222,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 			Kind:                "board",
 			Transform:           LayoutTransform{TranslationMm: min},
 			DimensionsMm:        size,
+			LocalTransform:      local,
 			LengthMm:            int(math.Round(board.lengthMm)),
 			WidthMm:             int(math.Round(board.widthMm)),
 			ThicknessMm:         int(math.Round(board.thicknessMm)),
@@ -587,7 +646,7 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 }
 
 type agregadoUnit struct {
-	index          int
+	index            int
 	x, y, z, w, h, d float64
 }
 
@@ -624,8 +683,8 @@ func agregadoSubspaceUnits(quantity int, w, h, d, x, y, z float64, direction str
 
 // spatialPose is the default pose for a component copy (TS SpatialPose).
 type spatialPose struct {
-	x, y, z                      float64
-	rotateX, rotateY, rotateZ    float64
+	x, y, z                   float64
+	rotateX, rotateY, rotateZ float64
 }
 
 // defaultPoseForPlacement mirrors TS spatialPlacement.ts defaultPoseForPlacement.
@@ -696,42 +755,154 @@ func mulMatVec3(m [9]float64, v [3]float64) [3]float64 {
 	}
 }
 
-// boardAABBWorkshop returns the workshop-frame AABB (min corner + size) of a
-// rotated board whose (x,y,z) is the workshop min corner of the AABB.
+// boardLocalPose derives the authoritative local→furniture transform of a
+// resolved board (#414) plus the workshop AABB, which is DERIVED from that
+// transform so both can never drift apart.
 //
-// The board local box is [width, thickness, length] on local X/Y/Z, and the
-// rotation Euler is authored in the render frame (Y-up). The rotated corners
-// are therefore computed in the render frame and mapped back to workshop
-// coordinates (swap Y/Z), which keeps the convention identical to the web 3D
-// preview.
-func boardAABBWorkshop(board *layoutBoard) (min [3]float64, size [3]float64) {
+// Frame decision (the explicit one allowed by the contract): the engine
+// authors rotation as Euler XYZ in the render frame (Y-up, three.js) while
+// the furniture/workshop frame is X=width, Y=depth, Z=height (Z-up,
+// SketchUp). The render→furniture map is the Y/Z swap S (det=−1, a mirror),
+// so the faithful image of the engine-local frame is LEFT-handed in the
+// furniture frame and cannot be expressed as a rotation — applying it
+// verbatim would mirror part geometry in SketchUp. The published local frame
+// therefore keeps the extents convention (local X=widthMm, Y=thicknessMm,
+// Z=lengthMm) and the board face semantics (+Y toward the front face, +Z
+// toward the top face, as in hardwarePlacement.ts anchors) but mirrors local
+// +X, making the basis right-handed (det=+1). The mirrored local box
+// [0,w]×[0,t]×[0,l] is compensated by shifting the translation one width
+// along the engine-local +X image, so the published box occupies exactly the
+// same physical region as the legacy AABB.
+func boardLocalPose(board *layoutBoard) (lt LayoutLocalTransform, min [3]float64, size [3]float64, err error) {
 	m := eulerXyzMatrix(board.rotX, board.rotY, board.rotZ)
+	renderMin, _ := boardAABBRender(board)
+	// Render position of the local origin (spatialAnchor.ts
+	// groupPositionFromMinCorner): (x − ox, z − oy, y − oz).
+	groupR := [3]float64{board.x - renderMin[0], board.z - renderMin[1], board.y - renderMin[2]}
+	// render (X, Y-up, Z) → furniture (X, Y=depth, Z=height): swap Y/Z.
+	origin := [3]float64{groupR[0], groupR[2], groupR[1]}
 
-	minR := [3]float64{math.Inf(1), math.Inf(1), math.Inf(1)}
-	maxR := [3]float64{math.Inf(-1), math.Inf(-1), math.Inf(-1)}
-	for _, aw := range [2]float64{0, board.widthMm} {
-		for _, at := range [2]float64{0, board.thicknessMm} {
-			for _, al := range [2]float64{0, board.lengthMm} {
-				p := mulMatVec3(m, [3]float64{aw, at, al})
-				for k := 0; k < 3; k++ {
-					if p[k] < minR[k] {
-						minR[k] = p[k]
-					}
-					if p[k] > maxR[k] {
-						maxR[k] = p[k]
-					}
-				}
-			}
-		}
+	// Furniture-frame images of the engine-local axes: columns of S·R.
+	imgX := [3]float64{m[0], m[6], m[3]}
+	imgY := [3]float64{m[1], m[7], m[4]}
+	imgZ := [3]float64{m[2], m[8], m[5]}
+
+	basis := LayoutBasis{
+		X: snapUnitVec3(negVec3(imgX)),
+		Y: snapUnitVec3(imgY),
+		Z: snapUnitVec3(imgZ),
+	}
+	translation := [3]float64{
+		snapMm(origin[0] + imgX[0]*board.widthMm),
+		snapMm(origin[1] + imgX[1]*board.widthMm),
+		snapMm(origin[2] + imgX[2]*board.widthMm),
+	}
+	lt = LayoutLocalTransform{TranslationMm: translation, Basis: basis}
+
+	if err := validateLayoutBasis(basis); err != nil {
+		return lt, min, size, fmt.Errorf("component %s: %w", board.id, err)
 	}
 
-	// Render AABB size (X, Y, Z) → workshop (X, Z, Y): the render group sits at
-	// (x − ox, z − oy, y − oz), so the workshop min corner is (x, y, z) by
-	// construction (spatialAnchor.ts groupPositionFromMinCorner).
-	sizeR := [3]float64{maxR[0] - minR[0], maxR[1] - minR[1], maxR[2] - minR[2]}
-	min = [3]float64{board.x, board.y, board.z}
-	size = [3]float64{snapMm(sizeR[0]), snapMm(sizeR[2]), snapMm(sizeR[1])}
+	min, size = aabbFromLocalTransform(lt, [3]float64{board.widthMm, board.thicknessMm, board.lengthMm})
+	// The pose (x,y,z) is the workshop min corner by construction (TS
+	// spatialAnchor.ts); a derived AABB that disagrees means the transform
+	// stopped describing the engine pose — fail loudly instead of publishing
+	// contradictory geometry.
+	pose := [3]float64{board.x, board.y, board.z}
+	for k := 0; k < 3; k++ {
+		if math.Abs(min[k]-pose[k]) > 1e-6 {
+			return lt, min, size, fmt.Errorf(
+				"component %s: derived AABB min %v disagrees with pose %v",
+				board.id, min, pose,
+			)
+		}
+	}
+	return lt, min, size, nil
+}
+
+// aabbFromLocalTransform returns the furniture-frame AABB (min corner +
+// size) of the local box [0,width]×[0,thickness]×[0,length] under a
+// local→furniture transform.
+func aabbFromLocalTransform(lt LayoutLocalTransform, dims [3]float64) (min [3]float64, size [3]float64) {
+	cols := [3][3]float64{lt.Basis.X, lt.Basis.Y, lt.Basis.Z}
+	for k := 0; k < 3; k++ {
+		lo := lt.TranslationMm[k]
+		hi := lt.TranslationMm[k]
+		for j := 0; j < 3; j++ {
+			span := cols[j][k] * dims[j]
+			if span < 0 {
+				lo += span
+			} else {
+				hi += span
+			}
+		}
+		min[k] = snapMm(lo)
+		size[k] = snapMm(hi - lo)
+	}
 	return min, size
+}
+
+// validateLayoutBasis enforces the published orientation contract: unit,
+// orthogonal, right-handed (det=+1). A mirrored/degenerate basis must fail
+// loudly — it would place parts flipped or collapsed.
+func validateLayoutBasis(b LayoutBasis) error {
+	vecs := map[string][3]float64{"basis.x": b.X, "basis.y": b.Y, "basis.z": b.Z}
+	for name, v := range vecs {
+		if !isFiniteVec3(v) {
+			return fmt.Errorf("%s is not finite", name)
+		}
+		if n := math.Sqrt(dot3(v, v)); math.Abs(n-1) > 1e-6 {
+			return fmt.Errorf("%s is not unit (|v|=%.9f)", name, n)
+		}
+	}
+	if d := dot3(b.X, b.Y); math.Abs(d) > 1e-6 {
+		return fmt.Errorf("basis.x·basis.y = %.9f, basis is not orthogonal", d)
+	}
+	if d := dot3(b.X, b.Z); math.Abs(d) > 1e-6 {
+		return fmt.Errorf("basis.x·basis.z = %.9f, basis is not orthogonal", d)
+	}
+	if d := dot3(b.Y, b.Z); math.Abs(d) > 1e-6 {
+		return fmt.Errorf("basis.y·basis.z = %.9f, basis is not orthogonal", d)
+	}
+	if det := dot3(b.X, cross3(b.Y, b.Z)); math.Abs(det-1) > 1e-6 {
+		return fmt.Errorf("basis determinant = %.9f, want +1 (right-handed)", det)
+	}
+	return nil
+}
+
+func dot3(a, b [3]float64) float64 {
+	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+}
+
+func negVec3(v [3]float64) [3]float64 {
+	return [3]float64{-v[0], -v[1], -v[2]}
+}
+
+func isFiniteVec3(v [3]float64) bool {
+	for k := 0; k < 3; k++ {
+		if math.IsNaN(v[k]) || math.IsInf(v[k], 0) {
+			return false
+		}
+	}
+	return true
+}
+
+// snapUnitVec3 kills trig noise from k·90° rotations (cos 90° = 6.1e-17 → 0)
+// without perturbing genuinely non-axis entries of authored rotations.
+func snapUnitVec3(v [3]float64) [3]float64 {
+	snap := func(x float64) float64 {
+		if math.Abs(x) < 1e-9 {
+			return 0
+		}
+		if math.Abs(x-1) < 1e-9 {
+			return 1
+		}
+		if math.Abs(x+1) < 1e-9 {
+			return -1
+		}
+		return x
+	}
+	return [3]float64{snap(v[0]), snap(v[1]), snap(v[2])}
 }
 
 // snapMm kills trig noise from 90° rotations (18.00000000000012 → 18) the
@@ -893,18 +1064,18 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	}
 
 	return LayoutHardware{
-		PlacementID:            placementID,
-		HardwareID:             hw.ID,
-		Name:                   hw.Name,
-		Shape:                  shape,
-		SizeMm:                 size,
-		DiameterMm:             diameter,
-		ProjectionMm:           projection,
-		ColorHex:               color,
+		PlacementID:             placementID,
+		HardwareID:              hw.ID,
+		Name:                    hw.Name,
+		Shape:                   shape,
+		SizeMm:                  size,
+		DiameterMm:              diameter,
+		ProjectionMm:            projection,
+		ColorHex:                color,
 		HostComponentInstanceID: board.id,
-		AnchorFace:             hp.AnchorFace,
-		Transform:              LayoutTransform{TranslationMm: boxMin},
-		DimensionsMm:           dims,
+		AnchorFace:              hp.AnchorFace,
+		Transform:               LayoutTransform{TranslationMm: boxMin},
+		DimensionsMm:            dims,
 	}, true
 }
 

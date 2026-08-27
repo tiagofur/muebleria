@@ -191,6 +191,8 @@ local Z = lengthMm
 
 Un AABB world-space no sustituye ese frame local. #414 es prerequisite del renderer nativo porque actualmente la rotación existe en el resolver interno pero no viaja en el transform público del layout.
 
+Desde #414 [CURRENT], el layout resuelto publica por pieza el transform local→furniture autoritativo (`localTransform`: base ortonormal diestra + traslación) junto con el marker `transformContract: granete.local-basis.v1`; el AABB legacy se deriva de ese transform y queda como compatibilidad/preview. El parser Ruby (`library/layout_contract.rb`, vía `resolved_native_layout`) valida el contrato y falla seguro ante contratos desconocidos/ausentes o bases inválidas — nunca infiere orientación. El renderer Group actual sigue consumiendo el AABB hasta #415.
+
 ---
 
 ## 8. Materiales y acabados

@@ -122,6 +122,57 @@ func TestFurnitureDefinitionLayoutServesCompleteComposition(t *testing.T) {
 	}
 }
 
+func TestFurnitureDefinitionLayoutServesLocalTransformContract(t *testing.T) {
+	server, token := layoutStubServer(t)
+
+	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// #414: the wire body must carry the transform contract marker and an
+	// authoritative local→furniture transform per board. The exact geometry
+	// parity is pinned in the engine golden
+	// (contracts/sketchupLayoutTransform.contract.json); here we pin the API
+	// surface: marker + every component exposing basis/translation and the
+	// AABB convenience fields staying alongside.
+	var body struct {
+		TransformContract string `json:"transformContract"`
+		Components        []struct {
+			SlotID string `json:"slotId"`
+			LocalTransform struct {
+				TranslationMm [3]float64 `json:"translationMm"`
+				Basis         struct {
+					X [3]float64 `json:"x"`
+					Y [3]float64 `json:"y"`
+					Z [3]float64 `json:"z"`
+				} `json:"basis"`
+			} `json:"localTransform"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode layout: %v", err)
+	}
+	if body.TransformContract != engine.LayoutTransformContractV1 {
+		t.Fatalf("transformContract = %q, want %q", body.TransformContract, engine.LayoutTransformContractV1)
+	}
+	if len(body.Components) == 0 {
+		t.Fatal("layout must carry components")
+	}
+	for _, c := range body.Components {
+		b := c.LocalTransform.Basis
+		if c.LocalTransform.TranslationMm == [3]float64{} && b.X == [3]float64{} && b.Y == [3]float64{} && b.Z == [3]float64{} {
+			t.Fatalf("component %s has no localTransform on the wire", c.SlotID)
+		}
+	}
+}
+
 func TestFurnitureDefinitionLayoutQueryDimsOverride(t *testing.T) {
 	server, token := layoutStubServer(t)
 

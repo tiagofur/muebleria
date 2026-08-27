@@ -4495,6 +4495,46 @@
       "depends_on": [
         "F183"
       ]
+    },
+    {
+      "id": "F185",
+      "title": "Transform local→furniture autoritativo en el layout resuelto para ComponentInstances nativos de SketchUp (#414 / SU-ENT-1)",
+      "description": "El layout resuelto expone por pieza un transform local→furniture suficiente para instanciar un Sketchup::ComponentInstance nativo sin inferir orientación en Ruby (#414, programa #413; prerequisite de #415). Contrato: FurnitureLayout.transformContract=granete.local-basis.v1 (marker de capability/version; desconocido = fail safe) y LayoutComponent.localTransform={translationMm, basis{x,y,z}}: base ortonormal diestra (det=+1) en el frame furniture (workshop Z-up, alineado a SketchUp) con furniture_point = translationMm + basis·local_point y caja local [0,width]×[0,thickness]×[0,length] (convención local X=width/Y=thickness/Z=length conservada). Decisión de frame documentada: la rotación interna vive en el frame render (Y-up) y render→furniture es un espejo (swap Y/Z, det −1); el frame local publicado espeja +X local (conservando semántica de caras: +Y hacia la cara frontal, +Z hacia la superior) para que la base sea diestra y la caja ocupe exactamente la región física del AABB legacy (traslación compensada un ancho a lo largo de la imagen de +X local del engine). Elección de representación: base ortonormal exacta (entradas 0/±1 en placements k·90°) sobre Euler (ambiguo) o quaternion (ruido trigonométrico/orden de w); mapea 1:1 a Geom::Transformation.axes. El AABB legacy (transform/dimensionesMm) pasa a DERIVARSE del transform (aabbFromLocalTransform) con chequeo runtime de consistencia contra el pose del engine. Validación server-side (validateLayoutBasis): unitaria/ortogonal/diestra o error loud; espejos nunca publicados. Material-aware (#402): el transform se computa del board ya resuelto con espesor efectivo del MaterialBoard seleccionado. Ruby: parser LayoutContract (library/layout_contract.rb, vía BaseCatalogProvider#resolved_native_layout) que exige el marker exacto, valida base/triples/escalares y falla loudly (ContractError < LayoutResolutionError) ante contrato ausente/desconocido, basis ausente/malformada/no unitaria/no diestra o dimensiones locales no positivas; AABB es passthrough opcional y NUNCA fuente de orientación; sin tabla slot/role→rotación. Golden compartido contracts/sketchupLayoutTransform.contract.json generado desde el resolver Go (UPDATE_LAYOUT_CONTRACT_GOLDEN=1) y consumido textual por los tests Ruby del parser. No incluye: renderer nativo (#415), rebuild de material (#404), heurísticas Ruby.",
+      "tags": [
+        "backend-go",
+        "sketchup-extension",
+        "architecture",
+        "contract",
+        "parity"
+      ],
+      "created": "2026-08-27",
+      "acceptance": [
+        "FurnitureLayout publica transformContract=granete.local-basis.v1 y cada board localTransform {translationMm, basis}; API sirve ambos en el wire",
+        "Lateral izquierdo, piso/techo horizontales, fondo y puerta exponen dimensiones locales y orientación correctas con base exacta 0/±1 independiente de la forma del AABB",
+        "AABB derivado (8 esquinas) del transform coincide con el publicado dentro de 1e-6, incluyendo dims overrides; el resolver valida consistencia pose/min y falla loud si diverge",
+        "Espesor efectivo del MaterialBoard seleccionado (16/18/6) participa ANTES del transform: thicknessMm, poses dependientes (x=PW-T) y caja mapeada por el transform",
+        "Boards internos de agregado usan el mismo contrato; hosts de herrajes siguen atados a componentInstanceId existente con localTransform válido",
+        "validateLayoutBasis rechaza bases espejo (det −1), no unitarias, no ortogonales y NaN — un espejo nunca se publica ni se aplica",
+        "NEGATIVE PROOF (Go+Ruby): dos boards custom comparten slotId/nombre/AABB y difieren sólo en base; sólo localTransform los distingue; renombrar slot no cambia el transform parseado",
+        "Ruby parser: contrato ausente/desconocido/malformado falla loudly (ContractError < LayoutResolutionError); resolved_native_layout nunca adivina ni cae a AABB/slot; providers estáticos devuelven nil",
+        "contracts/sketchupLayoutTransform.contract.json se genera desde el resolver Go y se consume textual por los tests Ruby (paridad de wire shape)"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/414",
+        "https://github.com/tiagofur/muebleria/issues/413",
+        "docs/adr/0004-sketchup-native-component-entity-model.md",
+        "docs/architecture/sketchup-native-entity-model.md",
+        "docs/architecture/sketchup-interaction-model.md",
+        "docs/architecture/material-aware-furniture-resolution.md",
+        "backend-go/internal/domain/engine/layout.go",
+        "apps/sketchup-extension/src/granete_for_sketchup/library/layout_contract.rb",
+        "contracts/sketchupLayoutTransform.contract.json"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F183",
+        "F184"
+      ]
     }
   ]
 }
