@@ -4311,6 +4311,40 @@
         "web"
       ],
       "created": "2026-08-27"
+    },
+    {
+      "id": "F179",
+      "title": "Suite de Pilot Readiness multi-org — gate automatizado de coexistencia sin fuga de datos",
+      "description": "Suite backend-go/tests/pilotreadiness contra PostgreSQL real (base efímera, migraciones completas) a través de las APIs HTTP sin mocks: dos organizaciones fixture (pilot-a/pilot-b) con onboarding real (platform admin → soporte auditado → invitación → aceptación) y datos de taller por APIs públicas. Cubre: aislamiento cross-org en ambas direcciones (list/get/update/delete/media/settings/catálogo con 404 indistinguible de inexistente), membresías (contexto explícito, roles por membresía activa, unión, baja corta token vivo, revalidación de role change), platform admin (sin acceso a datos de negocio sin support session; sesión de soporte scoped a una org con auditoría start/end; logout y expiración cortan), catálogo clonado independiente (editar A no toca B), ownership/idempotencia (recursos nuevos en la org del caller; payload público no elige organization_id; PUT no reasigna) y backup/restore (pg_dump→pg_restore a base scratch con assertions de ownership + round-trip tar.gz de media). Gate obligatorio pre-deploy scripts/pilot-gate.sh (PILOT_READINESS_GATE=1 prohibe skips). CI instala postgresql-client. Al construirla detectó y cerró 6 bugs reales: SeedCatalog roto contra esquema post-multi-org (+ project_templates.id UUID con slug texto), jsonbRemapKey NULL en arrays vacíos (CloneCatalog explotaba con catálogos reales), TEMP TABLEs de CloneCatalog por sesión (segundo clone en conexión pooled fallaba), POST /api/projects/{id}/events sin fail-closed (una org appendeaba eventos a obra ajena), audit de support_session_ended sin organización (invisible al visor del taller), DELETE material ajeno 500 en vez de 404.",
+      "acceptance": [
+        "Suite identificable y ejecutable: go test ./tests/pilotreadiness/ (14 tests) verde contra PostgreSQL real",
+        "Cross-org A→B y B→A: list/get/update/delete/media/settings/catálogo con 404 uniforme (assertUniform404)",
+        "Membresías: select-org explícito, roles por membresía, unión roles[], baja y role change revalidados en vivo",
+        "Platform admin: consola sí, datos de negocio no; support session scoped + auditada; logout/expiración cortan",
+        "Catálogo clonado: misma base, filas independientes; edición en A deja B intacto",
+        "Ownership: organization_id del caller siempre; sales/manufacturing validados contra membresías; PUT no reasigna",
+        "Backup/restore: restore en base scratch conserva ownership/membresías/settings; media sobrevive round-trip",
+        "scripts/pilot-gate.sh falla (no salta) sin DB; documentado en docs/pilot-readiness.md + deployment §5.3",
+        "go test ./... backend completo verde tras los fixes; CI corre la suite con postgresql-client"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "docs/pilot-readiness.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/verification.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F178"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "testing",
+        "deploy"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }

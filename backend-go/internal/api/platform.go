@@ -368,12 +368,19 @@ func (s *Server) HandlePlatformEndSupportSession(w http.ResponseWriter, r *http.
 	claims := claimsFromRequest(r)
 	sessionID := r.PathValue("sessionId")
 
+	// F179: attribute the end event to the organization the session was
+	// opened into, so the org's audit viewer shows the complete
+	// started/ended trail (an org-less event was invisible there).
+	orgID := ""
+	if ss, err := s.Store.GetOpenSupportSession(r.Context(), sessionID); err == nil && ss != nil {
+		orgID = ss.OrganizationID
+	}
 	ended, err := s.Store.EndSupportSession(r.Context(), sessionID, claims.UserID, "logout")
 	if err != nil {
 		respondWithInternalError(w, err, "support session end")
 		return
 	}
-	s.audit(r.Context(), "support_session_ended", claims.UserID, "", clientIP(r), map[string]interface{}{
+	s.audit(r.Context(), "support_session_ended", claims.UserID, orgID, clientIP(r), map[string]interface{}{
 		"session_id": sessionID, "via": "logout", "found": ended,
 	})
 	respondWithJSON(w, http.StatusOK, map[string]bool{"ended": ended})

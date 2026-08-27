@@ -787,6 +787,12 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.DeactivateMaterialBoard(r.Context(), id)
 		if err != nil {
+			// F179: a missing or cross-org board must surface as 404 (the
+			// scoped UPDATE affects no rows), never as a 500.
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
