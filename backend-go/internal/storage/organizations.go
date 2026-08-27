@@ -322,18 +322,16 @@ func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminU
 // OrgTeamMember is the team listing projection for the active organization.
 type OrgTeamMember struct {
 	UserID           string              `json:"user_id"`
-	Email            string              `json:"email"`
-	Name             string              `json:"name"`
-	Active           bool                `json:"active"`
-	Roles            []domain.UserRole   `json:"roles"`
-	MemberSince      time.Time           `json:"member_since"`
-	LicensePlan      domain.LicensePlan  `json:"license_plan,omitempty"`
-	LicenseExpiresAt *time.Time          `json:"license_expires_at,omitempty"`
+	Email       string            `json:"email"`
+	Name        string            `json:"name"`
+	Active      bool              `json:"active"`
+	Roles       []domain.UserRole `json:"roles"`
+	MemberSince time.Time         `json:"member_since"`
 }
 
 func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID string) ([]OrgTeamMember, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT u.id, u.email, u.name, u.active, m.roles, m.created_at, u.license_plan, u.license_expires_at
+		SELECT u.id, u.email, u.name, u.active, m.roles, m.created_at
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
 		WHERE m.organization_id = $1 AND m.active
@@ -345,7 +343,7 @@ func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID string) 
 	out := []OrgTeamMember{}
 	for rows.Next() {
 		var t OrgTeamMember
-		if err := rows.Scan(&t.UserID, &t.Email, &t.Name, &t.Active, &t.Roles, &t.MemberSince, &t.LicensePlan, &t.LicenseExpiresAt); err != nil {
+		if err := rows.Scan(&t.UserID, &t.Email, &t.Name, &t.Active, &t.Roles, &t.MemberSince); err != nil {
 			return nil, err
 		}
 		out = append(out, t)

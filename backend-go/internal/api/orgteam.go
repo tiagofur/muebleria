@@ -175,11 +175,3 @@ func (s *Server) HandleOrgRevokeInvitation(w http.ResponseWriter, r *http.Reques
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "invitation revoked"})
 }
 
-// primaryUserRole resolves the first canonical role of a set (bridge for the
-// deprecated users.role column).
-func primaryUserRole(roles []domain.UserRole) domain.UserRole {
-	if len(roles) == 0 {
-		return domain.RoleUser
-	}
-	return roles[0]
-}

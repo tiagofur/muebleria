@@ -22,13 +22,11 @@ type Store interface {
 	// GetUserByID loads the user for JWT re-validation of role/active (issue #16).
 	GetUserByID(ctx context.Context, id string) (*domain.User, error)
 	CreateUser(ctx context.Context, u *domain.User) error
-	UpdateUser(ctx context.Context, u *domain.User) error
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	// ListUsersByOrganization scopes the directory to the context's
 	// organization (ADR-0005: org admins never see other orgs' users).
 	ListUsersByOrganization(ctx context.Context) ([]domain.User, error)
 	ApproveUser(ctx context.Context, id string) error
-	UpdateUserRole(ctx context.Context, id string, role domain.UserRole) error
 	RejectUser(ctx context.Context, id string) error
 	// DeleteOrphanInvitedUser cleans up a user created by an invitation
 	// accept that failed before granting any membership.

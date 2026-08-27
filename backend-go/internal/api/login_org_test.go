@@ -21,8 +21,7 @@ func orgTestMembership(userID, orgID, slug string, roles []domain.UserRole) doma
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "Taller " + slug, Slug: slug, Type: domain.OrganizationTypeFactory,
-			Active: true, LicensePlan: domain.LicensePlanTrial,
-		},
+			Active: true, },
 	}
 }
 
@@ -33,8 +32,7 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 		t.Fatalf("hash: %v", err)
 	}
 	u := &domain.User{
-		ID: "u1", Email: "u@example.com", Name: "U", Role: domain.RoleVendedor,
-		Active: true, PasswordHash: hash,
+		ID: "u1", Email: "u@example.com", Name: "U", Active: true, PasswordHash: hash,
 	}
 	st := &stubStore{
 		getUserByEmail: u,

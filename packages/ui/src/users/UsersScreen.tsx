@@ -697,9 +697,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <div
               style={{
-                background: 'hsl(140 60% 95%)',
-                color: 'hsl(140 80% 25%)',
-                border: '1px solid hsl(140 50% 80%)',
+                background: 'var(--success-50, var(--surface-muted))',
+                color: 'var(--success-700, var(--text-primary))',
+                border: '1px solid var(--success-500, var(--border))',
                 padding: 'var(--space-3)',
                 borderRadius: 'var(--radius-md)',
                 fontSize: 'var(--text-sm)',

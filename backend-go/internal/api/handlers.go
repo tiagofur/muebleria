@@ -147,8 +147,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		Email:        req.Email,
 		PasswordHash: hash,
 		Name:         req.Name,
-		Role:         domain.RoleUser, // all self-registered users start as 'user'
-		Active:       false,           // pending admin approval
+		Active:       false, // pending admin approval; membership granted on approval
 	}
 
 	err = s.Store.CreateUser(r.Context(), &u)
@@ -180,38 +179,31 @@ type LoginRequest struct {
 
 // PublicUserDTO is the safe public representation of a user, guaranteeing
 // that internal secrets (such as password hashes) are never serialized (OC-005).
+// PublicUserDTO is the identity projection: roles live in the membership
+// (sent as the `roles` sibling in auth responses) and licensing in the
+// organization — users.role/users.license_* were dropped (000090).
 type PublicUserDTO struct {
-	ID               string             `json:"id"`
-	Email            string             `json:"email"`
-	Name             string             `json:"name"`
-	Role             domain.UserRole    `json:"role"`
-	Active           bool               `json:"active"`
-	PlatformAdmin    bool               `json:"platform_admin"`
-	LicensePlan      domain.LicensePlan `json:"license_plan"`
-	LicenseExpiresAt *time.Time         `json:"license_expires_at,omitempty"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	Name          string    `json:"name"`
+	Active        bool      `json:"active"`
+	PlatformAdmin bool      `json:"platform_admin"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func ToPublicUserDTO(u *domain.User) PublicUserDTO {
 	if u == nil {
 		return PublicUserDTO{}
 	}
-	plan := u.LicensePlan
-	if plan == "" {
-		plan = domain.LicensePlanNone
-	}
 	return PublicUserDTO{
-		ID:               u.ID,
-		Email:            u.Email,
-		Name:             u.Name,
-		Role:             u.Role,
-		Active:           u.Active,
-		PlatformAdmin:    u.PlatformAdmin,
-		LicensePlan:      plan,
-		LicenseExpiresAt: u.LicenseExpiresAt,
-		CreatedAt:        u.CreatedAt,
-		UpdatedAt:        u.UpdatedAt,
+		ID:            u.ID,
+		Email:         u.Email,
+		Name:          u.Name,
+		Active:        u.Active,
+		PlatformAdmin: u.PlatformAdmin,
+		CreatedAt:     u.CreatedAt,
+		UpdatedAt:     u.UpdatedAt,
 	}
 }
 
@@ -227,22 +219,11 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 }
 
 // LicenseDTO is the derived licensing state surfaced to clients (login,
-// refresh, and the SketchUp extension session card).
+// org summary) — computed from the ORGANIZATION license (ADR-0005 §3).
 type LicenseDTO struct {
-	Plan      string               `json:"plan"`
-	ExpiresAt *time.Time           `json:"expires_at,omitempty"`
+	Plan      string              `json:"plan"`
+	ExpiresAt *time.Time          `json:"expires_at,omitempty"`
 	Status    domain.LicenseStatus `json:"status"`
-}
-
-func ToLicenseDTO(u *domain.User) LicenseDTO {
-	if u == nil {
-		return LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone}
-	}
-	return LicenseDTO{
-		Plan:      string(u.LicensePlan),
-		ExpiresAt: u.LicenseExpiresAt,
-		Status:    domain.LicenseStatusAt(u.LicensePlan, u.LicenseExpiresAt, time.Now()),
-	}
 }
 
 type LoginResponse struct {

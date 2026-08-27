@@ -101,7 +101,7 @@ systemctl enable --now docker
 mkdir -p /opt/granete && cd /opt/granete
 
 # Clonar el repositorio
-git clone https://github.com/Gentleman-Programming/muebles.git .
+git clone https://github.com/tiagofur/muebleria.git .
 
 # Crear el archivo .env a partir de la plantilla de producción
 cp .env.production.example .env

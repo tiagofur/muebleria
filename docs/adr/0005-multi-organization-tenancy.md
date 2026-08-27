@@ -136,7 +136,12 @@ documentado (`docs/verification.md` §11).
 3. `workshop_settings` singleton → fila por organización (migración de `id=1`).
 4. Media particionada: `MEDIA_DIR/<org_id>/` (script de migración de archivos).
 5. **Desactivar** lecturas de `users.role` en favor de memberships (columna se
-   retira en migración posterior, no en la misma).
+   retira en migración posterior, no en la misma). ✅ Cumplido: sin lectores
+   ni escritores desde F176/F177, las columnas `users.role` /
+   `users.license_plan` / `users.license_expires_at` se eliminaron en la
+   migración 000090; los roles viajan en `memberships.roles` (claims `roles[]`
+   del token + `roles` hermano en las respuestas de auth) y la licencia es de
+   la organización.
 
 Los tokens vigentes se invalidan una única vez con el bump de versión del JWT.
 

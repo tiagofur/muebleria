@@ -110,7 +110,7 @@ func TestAuthMiddleware(t *testing.T) {
 		byID: map[string]*domain.User{
 			"user-1": {
 				ID: "user-1", Email: "user@test.com",
-				Role: domain.RoleAdmin, Active: true,
+				Active: true,
 			},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
@@ -194,7 +194,7 @@ func TestAuthMiddleware(t *testing.T) {
 func TestAuthMiddleware_OrgLessTokenFailClosed(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{byID: map[string]*domain.User{
-		"p-1": {ID: "p-1", Email: "platform@test.com", Role: domain.RoleAdmin, Active: true, PlatformAdmin: true},
+		"p-1": {ID: "p-1", Email: "platform@test.com", Active: true, PlatformAdmin: true},
 	}}
 
 	var sawRoles []string
@@ -249,7 +249,7 @@ func TestAuthMiddleware_RejectsDeactivatedUser(t *testing.T) {
 	users := &staticUsers{byID: map[string]*domain.User{
 		"user-1": {
 			ID: "user-1", Email: "user@test.com",
-			Role: domain.RoleAdmin, Active: false,
+			Active: false,
 		},
 	}}
 	handler := AuthMiddleware(secret, users)(okHandler())
@@ -276,7 +276,7 @@ func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 		byID: map[string]*domain.User{
 			"a-1": {
 				ID: "a-1", Email: "was-admin@test.com",
-				Role: domain.RoleUser, Active: true,
+				Active: true,
 			},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
@@ -311,8 +311,8 @@ func TestAdminMiddleware(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{
 		byID: map[string]*domain.User{
-			"u-1": {ID: "u-1", Email: "user@test.com", Role: domain.RoleUser, Active: true},
-			"a-1": {ID: "a-1", Email: "admin@test.com", Role: domain.RoleAdmin, Active: true, PlatformAdmin: true},
+			"u-1": {ID: "u-1", Email: "user@test.com", Active: true},
+			"a-1": {ID: "a-1", Email: "admin@test.com", Active: true, PlatformAdmin: true},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
 			"u-1:org-1": {
@@ -471,7 +471,6 @@ func memEntry(userID, orgID string, roles []domain.UserRole, orgActive bool) *do
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "T", Slug: "t", Active: orgActive,
-			LicensePlan: domain.LicensePlanNone,
 		},
 	}
 }
@@ -482,7 +481,7 @@ func TestAuthMiddleware_RevokedMembershipCutsAccess(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{
 		byID: map[string]*domain.User{
-			"u-1": {ID: "u-1", Email: "u@test.com", Role: domain.RoleAdmin, Active: true},
+			"u-1": {ID: "u-1", Email: "u@test.com", Active: true},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
 			"u-1:org-1": memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, true),
@@ -516,7 +515,7 @@ func TestAuthMiddleware_SuspendedOrganizationCutsAccess(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{
 		byID: map[string]*domain.User{
-			"u-1": {ID: "u-1", Email: "u@test.com", Role: domain.RoleAdmin, Active: true},
+			"u-1": {ID: "u-1", Email: "u@test.com", Active: true},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
 			"u-1:org-1": memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, false),
@@ -540,7 +539,7 @@ func TestAuthMiddleware_OrgTokenUsesLiveMembershipRoles(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{
 		byID: map[string]*domain.User{
-			"a-1": {ID: "a-1", Email: "was-admin@test.com", Role: domain.RoleAdmin, Active: true},
+			"a-1": {ID: "a-1", Email: "was-admin@test.com", Active: true},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
 			// Token says admin, membership now says vendedor.
@@ -567,7 +566,7 @@ func TestAuthMiddleware_MultiRoleMembershipUsesPrimaryRole(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{
 		byID: map[string]*domain.User{
-			"m-1": {ID: "m-1", Email: "multi@test.com", Role: domain.RoleUser, Active: true},
+			"m-1": {ID: "m-1", Email: "multi@test.com", Active: true},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
 			"m-1:org-1": memEntry("m-1", "org-1", []domain.UserRole{domain.RoleVendedor, domain.RoleIngeniero}, true),
@@ -599,7 +598,7 @@ func TestRoleMiddleware_MultiRoleTokenPassesUnion(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
 	users := &staticUsers{
 		byID: map[string]*domain.User{
-			"m-1": {ID: "m-1", Email: "multi@test.com", Role: domain.RoleUser, Active: true},
+			"m-1": {ID: "m-1", Email: "multi@test.com", Active: true},
 		},
 		memberships: map[string]*domain.MembershipWithOrg{
 			"m-1:org-1": memEntry("m-1", "org-1", []domain.UserRole{domain.RoleVendedor, domain.RoleIngeniero}, true),
@@ -650,7 +649,7 @@ func TestAuthMiddleware_SupportSessionActsAsOrgAdmin(t *testing.T) {
 	users := &supportSessionUsers{
 		staticUsers: staticUsers{
 			byID: map[string]*domain.User{
-				"pa-1": {ID: "pa-1", Email: "soporte@granete.test", Role: domain.RoleUser, Active: true, PlatformAdmin: true},
+				"pa-1": {ID: "pa-1", Email: "soporte@granete.test", Active: true, PlatformAdmin: true},
 			},
 		},
 		openSession: &domain.SupportSession{
@@ -696,7 +695,7 @@ func TestAuthMiddleware_SupportTokenRequiresPlatformAdmin(t *testing.T) {
 	users := &supportSessionUsers{
 		staticUsers: staticUsers{
 			byID: map[string]*domain.User{
-				"u-1": {ID: "u-1", Email: "u@test.com", Role: domain.RoleVendedor, Active: true},
+				"u-1": {ID: "u-1", Email: "u@test.com", Active: true},
 			},
 		},
 		openSession: &domain.SupportSession{ID: "ss-x", PlatformAdminUserID: "u-1", OrganizationID: "org-9"},

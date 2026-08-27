@@ -16,7 +16,6 @@ func TestUserPasswordHashNeverSerialized(t *testing.T) {
 		Email:        "admin@test.com",
 		PasswordHash: "SUPER-SECRET-HASH-MUST-NOT-LEAK",
 		Name:         "Admin",
-		Role:         RoleAdmin,
 		Active:       true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -39,8 +38,9 @@ func TestUserPasswordHashNeverSerialized(t *testing.T) {
 	if !strings.Contains(body, `"email":"admin@test.com"`) {
 		t.Errorf("expected email in JSON, got: %s", body)
 	}
-	if !strings.Contains(body, `"role":"admin"`) {
-		t.Errorf("expected role in JSON, got: %s", body)
+	// users.role is gone (000090): identity JSON must NOT carry role/license.
+	if strings.Contains(body, `"role"`) || strings.Contains(body, `"license_plan"`) {
+		t.Errorf("deprecated role/license leaked into JSON, got: %s", body)
 	}
 
 	// Also verify the field round-trips through the struct internally (it's

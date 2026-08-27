@@ -1,7 +1,43 @@
 # Sesión
 
-**Feature en curso:** F176 — SEGUNDA OLA MULTI-ORG (paridad RBAC + retiro users.role + #326 red de ventas) COMPLETADO
-**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175 + F176
+**Feature en curso:** F177 — CIERRE DE DEUDAS MULTI-ORG (DROP users.role/license_*, 000090) COMPLETADO
+**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175 + F176 + F177
+**Rama:** `fix/327-multi-org-hardening`
+
+## F177: deudas restantes cerradas
+
+1. **Deprecación real de `users.role` / `users.license_plan` /
+   `users.license_expires_at` (migración 000090, down estructural):** auditoría
+   de todos los lectores/escritores; remoción de punta a punta (domain.User,
+   queries/scans de storage, PublicUserDTO, ToLicenseDTO, UpdateUser/
+   UpdateUserRole, primaryUserRole, seeds de tests). La validación de sectores
+   (F094) ahora usa los roles de MEMBRESÍA en la org del caller (antes el rol
+   global). Tests de licencia de furniture migrados a fixtures de org (la
+   licencia es de la organización). Tests de seguridad actualizados: el
+   payload de usuario NO debe llevar role/license.
+2. **FE sin `user.role`:** AuthUser.role opcional (roles[] de membresía es la
+   fuente; el fallback queda sólo para sesiones persistidas pre-000090);
+   parseAuthResponse/readAuthUser ya no lo exigen; roleLabel con fallback
+   "Miembro".
+3. **Pulidos:** metadata de audit con tooltip pretty-printed; banner de
+   invitación con tokens success; "Salir del soporte (vuelve al login)".
+
+## Verificación F177
+
+- `go test ./...` 8/8 (chain legacy→000090 testeada por multi_org_migration);
+  `pnpm -w typecheck` 7/7; `pnpm -w test` ok (web 312, ui 1435, domain 1128).
+
+## Sin deuda conocida restante
+
+La revisión #325/#326/#327 está completamente cerrada. Único ítem de roadmap
+(no deuda): "Store requests dealership → factory approves" queda como flujo
+futuro según docs/multi-organization-distribution-model.md.
+
+---
+
+## Ola anterior (F176)
+
+**Feature:** F176 — SEGUNDA OLA MULTI-ORG COMPLETADO
 **Rama:** `fix/327-multi-org-hardening`
 
 ## F176: arreglos y mejoras tras el hardening F175

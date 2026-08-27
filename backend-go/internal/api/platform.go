@@ -444,8 +444,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		if name == "" {
 			name = strings.SplitN(inv.Email, "@", 2)[0]
 		}
-		u = &domain.User{Email: inv.Email, PasswordHash: hash, Name: name,
-			Role: primaryUserRole(inv.Roles), Active: true}
+		u = &domain.User{Email: inv.Email, PasswordHash: hash, Name: name, Active: true}
 		if err := s.Store.CreateUser(r.Context(), u); err != nil {
 			respondWithInternalError(w, err, "accept invitation create user")
 			return

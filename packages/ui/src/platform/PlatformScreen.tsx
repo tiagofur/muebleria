@@ -630,8 +630,21 @@ export function PlatformScreen({
                             {ev.actor_user_id || 'Sistema'}
                           </td>
                           <td style={{ fontSize: 'var(--text-xs)' }}>
-                            <pre style={{ margin: 0, padding: '2px 4px', background: 'var(--surface-sunken)', borderRadius: '4px', maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {JSON.stringify(ev.metadata)}
+                            <pre
+                              title={JSON.stringify(ev.metadata ?? {}, null, 2)}
+                              style={{
+                                margin: 0,
+                                padding: '2px 4px',
+                                background: 'var(--surface-sunken)',
+                                borderRadius: '4px',
+                                maxWidth: '360px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: 'var(--text-xs)',
+                              }}
+                            >
+                              {JSON.stringify(ev.metadata ?? {})}
                             </pre>
                           </td>
                           <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>

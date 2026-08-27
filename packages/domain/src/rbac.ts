@@ -731,7 +731,7 @@ export function rolesAllScopedBySector(
 
 /** The actor's effective role set: explicit multi-role or the single role. */
 export function rolesOfUser(user: {
-  role: string | null | undefined;
+  role?: string | null | undefined;
   roles?: readonly (string | null | undefined)[] | null;
 }): readonly string[] {
   const explicit = (user.roles ?? []).filter((r): r is string => r != null);

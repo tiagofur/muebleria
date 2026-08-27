@@ -90,20 +90,18 @@ const (
 	StatusProduced ProjectStatus = "produced"
 )
 
+// User identity. Roles live in memberships (ADR-0005) and licensing in the
+// organization — the deprecated users.role / users.license_* columns were
+// dropped in migration 000090.
 type User struct {
-	ID           string       `json:"id"`
-	Email        string       `json:"email"`
-	PasswordHash string       `json:"-"`
-	Name         string       `json:"name"`
-	// Role is deprecated: memberships are the source of truth (ADR-0004).
-	// Kept synchronized by the approval/role bridges until F170b removes it.
-	Role         UserRole     `json:"role"`
-	Active       bool         `json:"active"`
-	PlatformAdmin bool        `json:"platform_admin"`
-	LicensePlan  LicensePlan  `json:"license_plan"`
-	LicenseExpiresAt *time.Time `json:"license_expires_at,omitempty"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	PasswordHash  string    `json:"-"`
+	Name          string    `json:"name"`
+	Active        bool      `json:"active"`
+	PlatformAdmin bool      `json:"platform_admin"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // UserSector maps an operator to one or more production sectors.

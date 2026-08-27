@@ -16,8 +16,8 @@ import (
 func layoutStubServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanPro}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail:  u,
 		moduleReturnedByID: module,
@@ -207,10 +207,16 @@ func TestFurnitureDefinitionLayoutUnresolvableComposition(t *testing.T) {
 
 func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanNone}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	// Org without an active license → the layout endpoint must block.
+	noLicense := &domain.Organization{
+		ID: "org-1", Name: "Taller Test", Slug: "taller-test",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	server := licenseTestServer(t, u, noLicense)
 	server.Store = &stubStore{
 		getUserByEmail:     u,
+		getOrgByID:         noLicense,
 		moduleReturnedByID: module,
 		listStructures:     catalog.Structures,
 		listComponents:     catalog.Components,
@@ -278,8 +284,8 @@ func TestFurnitureDefinitionLayoutMaterialChoices(t *testing.T) {
 
 func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanTrial}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,
 		listModules:    []domain.Module{*module},
@@ -349,8 +355,8 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 	// The catalog endpoint reports each definition's real composition size so
 	// clients stop guessing "2 piezas" for every cabinet.
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanTrial}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,
 		listModules:    []domain.Module{*module},

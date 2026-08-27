@@ -135,8 +135,6 @@ func runCreate(args []string) {
 		Email:        *email,
 		PasswordHash: hash,
 		Name:         *name,
-		Role:         domain.RoleAdmin,
-		LicensePlan:  domain.LicensePlanTrial,
 		Active:       true,
 	}
 	if err := store.CreateUser(ctx, u); err != nil {

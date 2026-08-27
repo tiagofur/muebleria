@@ -4250,6 +4250,35 @@
         "web"
       ],
       "created": "2026-08-26"
+    },
+    {
+      "id": "F177",
+      "phase": 0,
+      "name": "drop_deprecated_user_columns",
+      "title": "Cierre de deudas multi-org — DROP de users.role/license_* (000090) y pulidos UX",
+      "description": "Última deuda de la revisión multi-org. (1) Deprecación real de users.role / users.license_plan / users.license_expires_at: auditoría de lectores/escritores, remoción de punta a punta (domain.User, storage queries/scans, PublicUserDTO, ToLicenseDTO, UpdateUser/UpdateUserRole, primaryUserRole, seeds) y migración 000090 con down estructural. Los sectores se validan contra los roles de MEMBRESÍA en la org del caller (antes users.role global). La validación de licencias en tests de furniture se migró a fixtures de org. (2) FE: role pasa a ser opcional en AuthUser/parseAuthResponse/readAuthUser (roles[] de membresía es la fuente; fallback sólo para sesiones persistidas viejas), roleLabel con fallback 'Miembro'. (3) Pulidos: metadata de audit con title pretty-printed, banner de invitación con tokens success (sin HSL crudo), copy del botón de salir de soporte avisa que vuelve al login.",
+      "acceptance": [
+        "Sin lectores/escritores de users.role/license_* en el código (grep limpio)",
+        "Migración 000090 up/down; chain legacy 000001→000090 testeada (backfill 000081 corre antes del DROP)",
+        "Sectores validados por roles de membresía (cualquier rol del set habilita el sector)",
+        "AuthUser.role opcional; login funciona sin user.role (roles sibling)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "https://github.com/tiagofur/muebleria/issues/325"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F176"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "migration",
+        "web"
+      ],
+      "created": "2026-08-26"
     }
   ]
 }
