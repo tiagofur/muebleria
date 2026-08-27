@@ -100,6 +100,16 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     );
   }
 
+  async function openInviteModal(user: ReturnType<typeof userEvent.setup>) {
+    // Header action comes first in the DOM; the empty-invitations state
+    // renders another button with the same name.
+    const buttons = await screen.findAllByRole('button', {
+      name: /Invitar Miembro/i,
+    });
+    expect(buttons.length).toBeGreaterThan(0);
+    await user.click(buttons[0]!);
+  }
+
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -110,9 +120,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     const user = userEvent.setup();
     render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
 
-    await user.click(
-      (await screen.findAllByRole('button', { name: /Invitar Miembro/i }))[0],
-    );
+    await openInviteModal(user);
 
     // Invitar crea una membresía con puesto real: 'user' no se ofrece.
     const expected = contract.canonicalRoles.filter((r) => r !== 'user');
@@ -130,9 +138,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     const user = userEvent.setup();
     render(<UsersScreen baseUrl="http://api.test" token="t" orgType="store" />);
 
-    await user.click(
-      (await screen.findAllByRole('button', { name: /Invitar Miembro/i }))[0],
-    );
+    await openInviteModal(user);
 
     expect(screen.getAllByRole('checkbox')).toHaveLength(3);
     for (const r of ['admin', 'vendedor', 'gerente_ventas']) {
