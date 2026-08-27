@@ -11,13 +11,14 @@
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import type { Hardware, HardwarePlacement, ResolvedBoardPart } from '@granete/domain';
+import type { Hardware, HardwarePlacement, OptionGroup, ResolvedBoardPart } from '@granete/domain';
 import { PieceFaceDrillingEditor } from './PieceFaceDrillingEditor';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import {
   type InspectorSectionId,
   useInspectorSectionState,
 } from './useInspectorSectionState';
+import { optionRoleLabel } from '../optionGroups/optionRoleLabel';
 import './partInspector.css';
 
 export type PartInspectorProps = {
@@ -26,6 +27,8 @@ export type PartInspectorProps = {
   readonly onUpdateHardwarePlacement?: (idx: number, patch: Partial<HardwarePlacement>) => void;
   /** F131: hardware catalog — enables the per-face 2D editor with real holes. */
   readonly hardwareCatalog?: readonly Hardware[];
+  /** Option groups — the role row prefers the group name (#403). */
+  readonly optionGroups?: readonly OptionGroup[];
   readonly onClear?: () => void;
   readonly isolateSelected?: boolean;
   readonly onIsolateChange?: (isolate: boolean) => void;
@@ -143,6 +146,7 @@ export function PartInspector({
   onIsolateChange,
   testId = 'part-inspector',
   hardwareCatalog,
+  optionGroups,
 }: PartInspectorProps): ReactNode {
   const sections = useInspectorSectionState();
 
@@ -177,7 +181,13 @@ export function PartInspector({
   ];
 
   const advancedFields: Field[] = [
-    { label: 'Rol', value: part.optionRole || '—', testId: `${testId}-role` },
+    {
+      label: 'Rol',
+      value: part.optionRole
+        ? optionRoleLabel(part.optionRole, optionGroups)
+        : '—',
+      testId: `${testId}-role`,
+    },
     {
       label: 'Posición (X / Y / Z)',
       value: `${formatMm(part.x)} / ${formatMm(part.y)} / ${formatMm(part.z)}`,

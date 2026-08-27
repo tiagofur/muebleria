@@ -254,3 +254,43 @@ func minimalQuoteFixture() (domain.Catalog, domain.Project) {
 	}
 	return catalog, project
 }
+
+// ─── #403 / MT-2: material binding role contract at authoring time ───────────
+
+func TestValidateComponent_SingleBindingRole(t *testing.T) {
+	base := domain.Component{
+		ID: "comp-v", Code: "VAL", Name: "Valida",
+		GeometryKind: "rectangular_board", ThicknessMm: 18, Active: true,
+	}
+
+	// No roles at all -> rejected.
+	if err := ValidateComponent(base); err == nil {
+		t.Fatal("component without optionRoles must be rejected")
+	}
+
+	single := base
+	single.OptionRoles = []string{"FRENTE"}
+	if err := ValidateComponent(single); err != nil {
+		t.Fatalf("single role must pass, got %v", err)
+	}
+
+	padded := base
+	padded.OptionRoles = []string{"", " FRENTE ", "FRENTE"}
+	if err := ValidateComponent(padded); err != nil {
+		t.Fatalf("padded/duplicated entries collapse to one binding, got %v", err)
+	}
+
+	empty := base
+	empty.OptionRoles = []string{"", "   "}
+	err := ValidateComponent(empty)
+	if err == nil || !strings.Contains(err.Error(), "al menos un rol") {
+		t.Fatalf("empty entries must be rejected, got %v", err)
+	}
+
+	ambiguous := base
+	ambiguous.OptionRoles = []string{"FRONT", "BODY"}
+	err = ValidateComponent(ambiguous)
+	if err == nil || !strings.Contains(err.Error(), "una única selección") {
+		t.Fatalf("several distinct roles must be rejected, got %v", err)
+	}
+}

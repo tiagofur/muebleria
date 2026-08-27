@@ -12,7 +12,11 @@ import {
   type ReactNode,
 } from 'react';
 import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@granete/domain';
-import { evaluatePartFormula, previewPartForComponent } from '@granete/domain';
+import {
+  evaluatePartFormula,
+  hasAmbiguousOptionRoles,
+  previewPartForComponent,
+} from '@granete/domain';
 import {
   EntityEditorLayout,
   seedEditorDraftFromBaseline,
@@ -410,6 +414,15 @@ export function ComponentsScreen({
       setEditorTab('options');
       return;
     }
+    // #403 / MT-2: una pieza de tablero sigue una única selección de material.
+    // Un segundo rol se vería configurable pero nunca controlaría la pieza.
+    if (hasAmbiguousOptionRoles(draft.optionRoles.split(','))) {
+      setError(
+        'Elegí un único rol de opción: el motor usa sólo el primero y un rol extra quedaría sin efecto.',
+      );
+      setEditorTab('options');
+      return;
+    }
 
     if (editingId) {
       onUpdate(editingId, draft);
@@ -479,6 +492,7 @@ export function ComponentsScreen({
           canMutate={canMutate}
           onCreate={handleCreateNew}
           onOpenDetail={(item) => setSelectedId(item.id)}
+          optionGroups={optionGroups}
         />
       )}
       renderDetailView={
@@ -490,6 +504,7 @@ export function ComponentsScreen({
                 onEdit={handleEdit}
                 onToggleActive={canMutate ? handleToggleActive : undefined}
                 canMutate={canMutate}
+                optionGroups={optionGroups}
               />
             )
           : undefined

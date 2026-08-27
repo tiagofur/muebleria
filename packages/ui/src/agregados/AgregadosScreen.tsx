@@ -273,6 +273,7 @@ export function AgregadosScreen({
                   onView3D={catalogInput ? (item) => setView3dItem(item) : undefined}
                   onDelete={canMutate && onDelete ? onDelete : undefined}
                   canMutate={canMutate}
+                  optionGroups={optionGroups}
                 />
               )
             : undefined

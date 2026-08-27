@@ -543,6 +543,70 @@ describe('ComponentsScreen', () => {
     );
   });
 
+  it('#403: role selection is exclusive — picking another group replaces the binding', () => {
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear componente/i }));
+    fireEvent.click(screen.getByTestId('component-editor-tab-options'));
+
+    const frente = screen.getByTestId('option-role-FRENTE');
+    const interior = screen.getByTestId('option-role-INTERIOR');
+    fireEvent.click(frente);
+    expect(frente.getAttribute('aria-pressed')).toBe('true');
+    // Second pick REPLACES: a board follows exactly one material selection.
+    fireEvent.click(interior);
+    expect(interior.getAttribute('aria-pressed')).toBe('true');
+    expect(frente.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('#403: legacy draft with several roles surfaces the ambiguity and blocks save', () => {
+    const legacy: Component = {
+      ...mockComponents[0]!,
+      id: 'c-legacy',
+      code: 'COM-LEGACY',
+      optionRoles: ['FRENTE', 'INTERIOR'],
+    };
+    const onUpdate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={[legacy]}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+        openComponentId="c-legacy"
+        openComponentEditId="c-legacy"
+      />,
+    );
+
+    // Both chips render pressed and an inline warning explains the contract.
+    expect(screen.getByTestId('option-role-FRENTE').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('option-role-INTERIOR').getAttribute('aria-pressed')).toBe('true');
+    expect(
+      screen.getByTestId('component-options-ambiguity-warning').textContent,
+    ).toMatch(/un único rol/i);
+
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'COM-LEGACY' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Legacy' },
+    });
+    fireEvent.click(screen.getByTestId('save-btn'));
+    expect(screen.getByTestId('form-error').textContent).toMatch(/único rol/i);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
   it('F109: component editor uses WorkspaceTabs (tablist contract + roving arrows)', async () => {
     const user = userEvent.setup();
     render(

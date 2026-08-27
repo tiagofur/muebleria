@@ -4460,6 +4460,41 @@
         "testing"
       ],
       "created": "2026-08-27"
+    },
+    {
+      "id": "F184",
+      "title": "Roles de binding de material canónicos: un solo rol por tablero + aliases legacy idénticos TS↔Go (#403 / MT-2)",
+      "description": "Elimina la ambigüedad sobre qué selección de material controla cada componente (#403, programa #401). Distinción física/binding enforceada: placement responde qué pieza es; optionRoles[0] (normalizado: trim, sin vacíos, duplicados exactos colapsados) es el único material-binding key. Un board con varios roles distintos ya no se ignora en silencio: falla loudly en los resolvers de ambas pilas (TS materialBindingRole en packages/domain/src/materialRole.ts usado por engine/bom.ts; Go materialBindingRole en backend-go/internal/domain/engine/material_role.go usado por resolve.go y layout.go), se rechaza en autoría (validateComponent TS / ValidateComponent Go conectado a POST/PUT /api/catalog/components con 400 y al editor web con selección exclusiva en la pestaña Opciones + guard al guardar) y los drafts legacy ambiguos muestran aviso inline. Drift de aliases corregido: Go ahora aplica la misma tabla explícita que TS (direct role gana; ZOCLO, PUERTA, PUERTA_*, FRENTE_CAJON pueden heredar FRENTE) vía resolveBoardOptionChoiceID en resolveSelectedBoard y ResolveMaterial — antes Go sólo hacía lookup directo y TS heredaba FRENTE. Tabla de aliases y casos de binding viven en el fixture compartido contracts/materialRoleBinding.contract.json consumido textualmente por packages/domain/src/materialRoleBinding.test.ts y backend-go/internal/domain/engine/regression_403_test.go (paridad TS↔Go del contrato completo, incluyendo negativos: segundo optionRole rechazado, sin inferencia por nombre/placement, puerta normal y frentes de agregado siguiendo el mismo FRONT, roles vacíos rechazados). Labels amigables: optionRoleLabel (packages/ui) muestra OptionGroup.name en detalle/lista de componentes, adder de módulos, detalle de módulo/agregado, lista e inspector de piezas del visor 3D; el código crudo es fallback sólo sin grupo. Sin migración automática de LATERAL/INTERIOR/FONDO/FRENTE (exige mapping/editor explícito); sin materialRole paralelo; no implementa #404 (rebuild SketchUp) ni renderer nativo. Docs: material-aware-furniture-resolution.md §16/§17, catalog-option-selector.md, parametric-furniture-library.md §6.",
+      "tags": [
+        "domain",
+        "backend-go",
+        "catalog",
+        "parity",
+        "testing"
+      ],
+      "created": "2026-08-27",
+      "acceptance": [
+        "Un board con optionRoles [FRONT, BODY] (o sólo entradas vacías) falla loudly en ResolveBom y ResolveFurnitureLayout Go y en resolveBom TS, nombrando los roles en competencia",
+        "validateComponent (TS) y ValidateComponent (Go → POST/PUT /api/catalog/components 400) rechazan bindings vacíos/ambiguos al guardar; el editor web usa selección exclusiva y bloquea drafts legacy ambiguos",
+        "Go aplica la misma tabla de aliases legacy que TS (direct gana; ZOCLO/PUERTA/PUERTA_*/FRENTE_CAJON heredan FRENTE) en resolveSelectedBoard y ResolveMaterial — sin fallback silencioso a espesor nominal por divergencia de lookup",
+        "contracts/materialRoleBinding.contract.json se consume textualmente por los tests de paridad TS y Go",
+        "BODY afecta laterales/piso/techo/entrepaños sin lógica por nombre; una pieza nombrada PuERTA ligada a BACK resuelve BACK; placement puerta ligado a BODY resuelve BODY",
+        "Puerta normal y frentes de cajón de agregado ligados a FRONT siguen la misma elección FRONT",
+        "UI muestra OptionGroup.name (optionRoleLabel) en componentes/módulos/agregados/visor 3D; código crudo sólo sin grupo",
+        "Sin migración automática de roles legacy ni campo materialRole paralelo"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/403",
+        "https://github.com/tiagofur/muebleria/issues/401",
+        "docs/architecture/material-aware-furniture-resolution.md",
+        "contracts/materialRoleBinding.contract.json",
+        "packages/domain/src/materialRole.ts",
+        "backend-go/internal/domain/engine/material_role.go"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F183"
+      ]
     }
   ]
 }

@@ -31,6 +31,7 @@ import {
 } from '../preview3d';
 import type {
   Hardware,
+  OptionGroup,
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
 } from '@granete/domain';
@@ -109,6 +110,8 @@ export type Furniture3DViewerProps = {
    * placements. Optional: when omitted (or no placements), no handles render.
    */
   readonly hardwareCatalog?: readonly Hardware[];
+  /** Option groups — role labels prefer the group name (#403 / MT-2). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 export function Furniture3DViewer({
@@ -136,6 +139,7 @@ export function Furniture3DViewer({
   catalogPhotoViewToken = 0,
   resolvedHardwarePlacements,
   hardwareCatalog,
+  optionGroups,
 }: Furniture3DViewerProps): ReactNode {
   const webglAvailable = useMemo(() => canUseWebGL(), []);
   const [colorMode, setColorMode] = useState<BoardColorMode>(initialColorMode);
@@ -433,6 +437,7 @@ Common causes:
               selectedPartId={selectedPartId}
               onSelectPart={setSelectedPartId}
               testId={`${testId}-part-list`}
+              optionGroups={optionGroups}
             />
             <PartInspector
               part={selectedPart}
@@ -440,6 +445,7 @@ Common causes:
               isolateSelected={isolateSelected}
               onIsolateChange={setIsolateSelected}
               testId={`${testId}-part-inspector`}
+              optionGroups={optionGroups}
             />
           </aside>
         ) : null}

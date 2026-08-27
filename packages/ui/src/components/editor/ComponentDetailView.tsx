@@ -5,10 +5,11 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { Component, EdgeSide } from '@granete/domain';
+import type { Component, EdgeSide, OptionGroup } from '@granete/domain';
 import { ChevronLeft, Eye, EyeOff, Pencil } from 'lucide-react';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { geometrySummary, placementLabel } from '../componentDraft';
+import { optionRoleLabel } from '../../optionGroups/optionRoleLabel';
 import {
   PlankEdgeDiagram,
   type EdgeStates,
@@ -20,6 +21,8 @@ export type ComponentDetailViewProps = {
   readonly onEdit: (c: Component) => void;
   readonly onToggleActive?: (c: Component) => void;
   readonly canMutate: boolean;
+  /** Option groups — chips prefer the workshop-facing group name (#403). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 const EMPTY_EDGES: EdgeStates = {
@@ -79,6 +82,7 @@ export function ComponentDetailView({
   onEdit,
   onToggleActive,
   canMutate,
+  optionGroups,
 }: ComponentDetailViewProps): ReactNode {
   const [confirmToggle, setConfirmToggle] = useState(false);
   useEffect(() => {
@@ -352,11 +356,18 @@ export function ComponentDetailView({
             className="eng-detail__chips"
             data-testid="component-detail-roles"
           >
-            {c.optionRoles.map((role) => (
-              <li key={role} className="eng-detail__chip">
-                {role}
-              </li>
-            ))}
+            {c.optionRoles.map((role) => {
+              const label = optionRoleLabel(role, optionGroups);
+              const hasGroup = label !== role;
+              return (
+                <li key={role} className="eng-detail__chip">
+                  {label}
+                  {hasGroup ? (
+                    <span className="eng-detail__chip-code">{role}</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="eng-detail__empty">Sin roles asignados.</p>

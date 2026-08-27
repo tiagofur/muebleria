@@ -104,8 +104,10 @@ func ResolveEdgeBand(part domain.BoardPart, material domain.MaterialBoard, optio
 }
 
 func ResolveMaterial(part domain.BoardPart, optionChoices map[string]string, materials []domain.MaterialBoard) (*domain.MaterialBoard, error) {
-	choiceID, ok := optionChoices[part.OptionRole]
-	if !ok || choiceID == "" {
+	// #403 / MT-2: same explicit legacy-alias precedence as TS
+	// requireMaterialChoice → resolveBoardOptionChoiceId (material_role.go).
+	choiceID := resolveBoardOptionChoiceID(part.OptionRole, optionChoices)
+	if choiceID == "" {
 		return nil, fmt.Errorf("missing option choice for role '%s' on part %s", part.OptionRole, part.Code)
 	}
 

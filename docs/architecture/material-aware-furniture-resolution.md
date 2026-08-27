@@ -629,6 +629,38 @@ fallo loud para choice desconocido/inactivo o sin espesor válido.
 - Los fixtures de paridad deliberadamente no triviales (§18) siguen siendo
   entrega de #405.
 
+### Material binding roles [CURRENT desde #403 / MT-2]
+
+El contrato de binding único está implementado y enforceado en las dos pilas:
+
+- **Helper canónico**: TS `materialBindingRole` (`packages/domain/src/materialRole.ts`)
+  y Go `materialBindingRole` (`backend-go/internal/domain/engine/material_role.go`).
+  Normaliza `optionRoles` (trim, sin vacíos, duplicados exactos colapsados) y
+  exige exactamente un rol: cero roles o varios roles distintos fallan loudly
+  en `expandComponentInstances`/`expandLayoutInstances` (ambos resolvers de
+  ambas pilas). Un segundo rol nunca se ignora en silencio.
+- **Autoría**: `validateComponent` (TS) y `ValidateComponent` (Go, conectado a
+  `POST/PUT /api/catalog/components` con 400) rechazan bindings vacíos o
+  ambiguos al guardar; el editor web usa selección exclusiva en la pestaña
+  Opciones y bloquea el guardado de drafts legacy ambiguos con un aviso
+  explícito.
+- **Aliases legacy con precedencia idéntica TS↔Go**: direct role gana; si no,
+  `ZOCLO`, `PUERTA`, `PUERTA_*` y `FRENTE_CAJON` pueden heredar la elección
+  `FRENTE` (TS `resolveBoardOptionChoiceId` / Go `resolveBoardOptionChoiceID`).
+  Go ya no resuelve sólo por lookup directo: `resolveSelectedBoard` y
+  `ResolveMaterial` aplican la misma tabla.
+- **Fixture compartido**: `contracts/materialRoleBinding.contract.json` define
+  la tabla de aliases y los casos de binding; los tests de paridad
+  (`packages/domain/src/materialRoleBinding.test.ts` y
+  `backend-go/internal/domain/engine/regression_403_test.go`) lo consumen
+  textualmente, cubriendo además los negativos: sin inferencia por
+  nombre/placement, puerta normal y frentes de agregado siguiendo el mismo
+  `FRONT`, y rechazo de segundo `optionRoles[]`.
+- **Labels**: la UI prefiere `OptionGroup.name` (`optionRoleLabel` en
+  packages/ui) para roles; el código crudo es fallback sólo cuando no existe
+  grupo. La proyección SketchUp (`materialRoles[].label`) ya usaba el nombre
+  del grupo cuando existe.
+
 ### SketchUp [CURRENT, boundary mayormente correcto]
 
 `FurnitureBuilder` consume `resolved_layout.components[].dimensionsMm` y aplica material/textura. El inspector ya envía `materialChoices` al update y el provider incluye `choice.<role>` al solicitar layout.
@@ -667,6 +699,14 @@ La evolución correcta es:
 3. usar OptionGroup names amigables en UI;
 4. promover convenciones como BODY/FRONT/BACK/PLINTH para nuevas bibliotecas cuando representan la intención real;
 5. no inferir por nombres de piezas.
+
+Desde #403 el comportamiento alias de esos roles legacy es una tabla explícita
+y única (`contracts/materialRoleBinding.contract.json`): la elección directa
+del rol gana, y sólo `ZOCLO`, `PUERTA`, `PUERTA_*` y `FRENTE_CAJON` pueden
+heredar la elección `FRENTE`. TS y Go consumen la misma tabla; nunca se
+extiende por nombre/color/textura, y no existe migración automática de
+`LATERAL`/`INTERIOR`/`FONDO`/`FRENTE` hacia BODY/BACK/FRONT: un catálogo
+ambiguo exige mapping/editor explícito.
 
 ---
 

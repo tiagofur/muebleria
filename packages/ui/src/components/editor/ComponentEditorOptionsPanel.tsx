@@ -1,14 +1,19 @@
 /**
  * Component editor — option roles tab.
  *
- * Roles are picked via toggle chips (one per option group) instead of the old
- * touch-hostile native <select multiple>. Each chip shows the group kind
- * (Tablero / Herraje / Canto) as a badge and toggles inclusion on click.
+ * #403 / MT-2: a board component follows exactly ONE material selection, so
+ * role selection is exclusive (clicking a group replaces the current binding;
+ * clicking the active group clears it). Roles are shown as chips with the
+ * group kind badge and the workshop-facing group name. Drafts authored before
+ * this contract may carry several roles: they stay visible and an inline
+ * warning surfaces the ambiguity instead of silently honoring only the first.
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { hasAmbiguousOptionRoles } from '@granete/domain';
 import type { OptionGroup } from '@granete/domain';
 import type { ComponentDraft } from '../componentDraft';
+import { optionRolesSummary } from '../../optionGroups/optionRoleLabel';
 
 export type ComponentEditorOptionsPanelProps = {
   readonly formId: string;
@@ -42,11 +47,13 @@ export function ComponentEditorOptionsPanel({
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
 
+  // Exclusive selection: the binding role is single (#403). Clicking the
+  // active chip clears it; clicking another replaces the previous binding.
   const toggle = (code: string) => {
     const upper = code.toUpperCase();
     const next = selected.includes(upper)
       ? selected.filter((c) => c !== upper)
-      : [...selected, upper];
+      : [upper];
     setDraft((prev) => ({ ...prev, optionRoles: next.join(', ') }));
   };
 
@@ -59,9 +66,22 @@ export function ComponentEditorOptionsPanel({
       data-testid="component-editor-panel-options"
     >
       <p className="component-options__intro">
-        Elegí a qué grupos pertenece esta pieza. Cada grupo define qué material o
-        herraje aplica al componente.
+        Elegí qué selección de material sigue esta pieza. Una pieza de tablero
+        sigue un único rol: todas las piezas con el mismo rol cambian juntas de
+        material.
       </p>
+
+      {hasAmbiguousOptionRoles(draft.optionRoles.split(',')) ? (
+        <p
+          className="component-options__warning"
+          data-testid="component-options-ambiguity-warning"
+          role="alert"
+        >
+          Este componente tiene varios roles declarados (
+          {optionRolesSummary(selected, optionGroups)}). El motor usa sólo el
+          primero y el resto quedaría sin efecto. Dejá un único rol.
+        </p>
+      ) : null}
 
       <div
         className="component-options__chips"

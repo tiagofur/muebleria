@@ -174,10 +174,21 @@ export function effectiveOptionChoices(
 > - Los valores explícitos a nivel de ítem (`itemChoices`) actúan como overrides.
 > - Para **restablecer (reset) un override** y volver a heredar el default de proyecto, se elimina la clave de `itemChoices` (o se asigna vacía/espacio en blanco).
 
-> **Binding de tablero actual:** `Component.optionRoles` persiste como array, pero el
-> único material-binding role es `optionRoles[0]`. La UI no debe prometer semántica
-> multi-role por recorrer todo el array: un segundo grupo `kind="board"` es ambiguo y
-> debe impedirse/diagnosticarse hasta una evolución explícita. Ver
+> **Binding de tablero actual [ENFORCED desde #403 / MT-2]:** `Component.optionRoles`
+> persiste como array, pero el único material-binding role es `optionRoles[0]`
+> (normalizado: trim, sin vacíos, sin duplicados exactos). Un board con varios roles
+> distintos es ambiguo y se rechaza en cuatro capas con la misma semántica:
+>
+> - resolución TS (`materialBindingRole`, `packages/domain/src/materialRole.ts`);
+> - resolución Go (`materialBindingRole`, `backend-go/internal/domain/engine/material_role.go`);
+> - autoría (`validateComponent` TS / `ValidateComponent` Go → API 400);
+> - editor web (selección exclusiva en la pestaña Opciones + guard al guardar).
+>
+> El fixture compartido `contracts/materialRoleBinding.contract.json` define la tabla
+> de aliases legacy (ZOCLO / PUERTA / PUERTA_* / FRENTE_CAJON → FRENTE, choice directo
+> gana) y los casos de binding; TS y Go lo consumen textualmente en sus tests de
+> paridad. La UI muestra el nombre del `OptionGroup` (`optionRoleLabel`), nunca el
+> código crudo cuando existe nombre. Ver
 > [material-aware-furniture-resolution.md](material-aware-furniture-resolution.md) y
 > [#403](https://github.com/tiagofur/muebleria/issues/403).
 

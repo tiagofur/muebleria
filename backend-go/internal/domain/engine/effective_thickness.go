@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -22,13 +21,15 @@ import (
 // bug this rule eliminates.
 
 // resolveSelectedBoard resolves a material binding role through the option
-// choices (role == option group code, value == material id).
+// choices (role == option group code, value == material id), applying the
+// explicit legacy alias precedence (#403 / MT-2 — identical table to TS
+// resolveBoardOptionChoiceId; see material_role.go).
 //
 // nil, nil means "no choice for this role": callers keep the deterministic
 // nominal/palette fallback. An explicit choice pointing at an unknown or
 // inactive material fails loudly — a selection must never silently degrade.
 func resolveSelectedBoard(optionRole string, optionChoices map[string]string, materials []domain.MaterialBoard) (*domain.MaterialBoard, error) {
-	choiceID := strings.TrimSpace(optionChoices[optionRole])
+	choiceID := resolveBoardOptionChoiceID(optionRole, optionChoices)
 	if choiceID == "" {
 		return nil, nil
 	}

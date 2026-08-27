@@ -2425,3 +2425,40 @@ func (s *stubStore) GetUserByEmailAnyState(_ context.Context, email string) (*do
 	}
 	return nil, errors.New("user not found")
 }
+
+// #403 / MT-2 — ambiguous material binding roles are surfaced at authoring
+// time. The validation must reject BEFORE any store call (stubStore panics on
+// unexpected calls, so reaching the store would fail the test).
+func TestHandleComponentsAmbiguousRolesRejected400(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"code":"AMB","name":"Ambigua","placement":"puerta","geometry_kind":"rectangular_board","thickness_mm":18,"option_roles":["FRONT","BODY"],"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/components", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleComponents(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "una única selección") {
+		t.Errorf("error message = %q, want the single-binding contract hint", msg)
+	}
+}
+
+func TestHandleComponentsEmptyRolesRejected400(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"code":"VAC","name":"Vacía","placement":"puerta","geometry_kind":"rectangular_board","thickness_mm":18,"option_roles":["","  "],"active":true}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/catalog/components", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleComponents(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "al menos un rol") {
+		t.Errorf("error message = %q, want the empty-roles hint", msg)
+	}
+}

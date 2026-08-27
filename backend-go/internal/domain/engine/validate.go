@@ -92,3 +92,31 @@ func ValidateModule(module domain.Module) error {
 	}
 	return nil
 }
+
+// ValidateComponent enforces the material binding role contract at authoring
+// time (#403 / MT-2; mirrors packages/domain validateComponent). A board
+// component follows exactly one material selection: optionRoles must be
+// non-empty and contain a single distinct role. Errors are workshop-facing
+// (Spanish) because API handlers surface them to catalog editors.
+func ValidateComponent(comp domain.Component) error {
+	if strings.TrimSpace(comp.Code) == "" {
+		return fmt.Errorf("el código del componente es obligatorio")
+	}
+	if strings.TrimSpace(comp.Name) == "" {
+		return fmt.Errorf("el nombre del componente es obligatorio")
+	}
+	roles := distinctOptionRoles(comp.OptionRoles)
+	if len(roles) == 0 {
+		return fmt.Errorf(
+			"el componente %s necesita al menos un rol de opción (optionRoles vacío)",
+			comp.Code,
+		)
+	}
+	if len(roles) > 1 {
+		return fmt.Errorf(
+			"el componente %s declara varios roles de opción [%s]; una pieza de tablero sigue una única selección de material — dejá un solo rol",
+			comp.Code, strings.Join(roles, ", "),
+		)
+	}
+	return nil
+}

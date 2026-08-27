@@ -25,6 +25,7 @@ import {
   ZOCLO_BOARD_ROLE,
 } from '../plinth';
 import { defaultPoseForPlacement } from '../spatialPlacement';
+import { materialBindingRole } from '../materialRole';
 import { resolveStructureForPin } from '../structures/versioning';
 import type {
   BoardPart,
@@ -356,15 +357,15 @@ function getComponentThickness(
   optionChoices: OptionChoices,
   catalog: Catalog,
 ): number {
-  const role = component.optionRoles[0];
-  if (role) {
-    const choiceId = resolveBoardOptionChoiceId(role, optionChoices);
-    if (choiceId) {
-      const materials = catalog.materials ?? [];
-      const material = materials.find((m) => m.id === choiceId);
-      if (material) {
-        return material.thicknessMm;
-      }
+  // #403 / MT-2: single canonical binding role — multiple distinct roles are
+  // ambiguous and fail loudly instead of silently honoring only the first.
+  const role = materialBindingRole(component);
+  const choiceId = resolveBoardOptionChoiceId(role, optionChoices);
+  if (choiceId) {
+    const materials = catalog.materials ?? [];
+    const material = materials.find((m) => m.id === choiceId);
+    if (material) {
+      return material.thicknessMm;
     }
   }
   return component.geometry.kind === 'rectangular_board'
@@ -402,7 +403,10 @@ function expandComponentInstances(
     }
 
     const edges = instance.overrides?.edges ?? component.defaultEdges;
-    const optionRole = component.optionRoles[0]!;
+    // #403 / MT-2: the material binding role is single — a second declared
+    // role would look configurable while never governing resolution, so an
+    // ambiguous board fails loudly here.
+    const optionRole = materialBindingRole(component);
 
     // Resolve component material thickness
     const T = getComponentThickness(component, optionChoices ?? {}, catalog);
