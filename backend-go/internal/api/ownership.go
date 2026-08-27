@@ -86,3 +86,59 @@ func filterProjectsByOwner(list []domain.Project, actorID string, roles []domain
 	}
 	return out
 }
+
+// authorizeProjectOrgOwnership enforces #327 on create: ownership fields may
+// only point at organizations the caller actively belongs to, and the
+// manufacturing organization must be a factory. Empty values keep the caller's
+// organization default resolved by the storage layer; assigning the caller's
+// own org is always allowed (pilot semantics: one factory acting as both).
+func (s *Server) authorizeProjectOrgOwnership(w http.ResponseWriter, r *http.Request, p *domain.Project) bool {
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		return true
+	}
+	checks := []struct {
+		orgID   string
+		needMfg bool
+	}{
+		{p.SalesOrganizationID, false},
+		{p.ManufacturingOrganizationID, true},
+	}
+	for _, c := range checks {
+		if c.orgID == "" || c.orgID == claims.OrgID {
+			continue
+		}
+		m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, c.orgID)
+		if err != nil || m == nil || !m.Active || !m.Organization.Active {
+			respondWithError(w, http.StatusForbidden, "no podés asignar una organización a la que no pertenecés")
+			return false
+		}
+		if c.needMfg && m.Organization.Type != domain.OrganizationTypeFactory {
+			respondWithError(w, http.StatusForbidden, "la organización de fabricación debe ser una fábrica")
+			return false
+		}
+	}
+	return true
+}
+
+// orgSeesManufacturing reports whether the caller's organization scope may see
+// the project's manufacturing-internal payload: the manufacturing organization
+// always can; pilot rows where both orgs coincide (or the scope is unknown)
+// keep full visibility (#327).
+func orgSeesManufacturing(claims *auth.Claims, p *domain.Project) bool {
+	if p == nil || p.ManufacturingOrganizationID == "" || claims == nil || claims.OrgID == "" {
+		return true
+	}
+	return claims.OrgID == p.ManufacturingOrganizationID
+}
+
+// redactProjectsForCaller applies the sales/manufacturing split (#327) to a
+// project list in place: rows manufactured by another organization lose their
+// manufacturing-internal fields.
+func redactProjectsForCaller(claims *auth.Claims, list []domain.Project) {
+	for i := range list {
+		if !orgSeesManufacturing(claims, &list[i]) {
+			domain.RedactProjectManufacturing(&list[i])
+		}
+	}
+}

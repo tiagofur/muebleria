@@ -106,12 +106,23 @@ func TestCORSMiddleware(t *testing.T) {
 
 func TestAuthMiddleware(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
-	users := &staticUsers{byID: map[string]*domain.User{
-		"user-1": {
-			ID: "user-1", Email: "user@test.com",
-			Role: domain.RoleAdmin, Active: true,
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"user-1": {
+				ID: "user-1", Email: "user@test.com",
+				Role: domain.RoleAdmin, Active: true,
+			},
 		},
-	}}
+		memberships: map[string]*domain.MembershipWithOrg{
+			"user-1:org-1": {
+				Membership: domain.Membership{
+					OrganizationID: "org-1", UserID: "user-1",
+					Roles: []domain.UserRole{domain.RoleAdmin}, Active: true,
+				},
+				Organization: domain.Organization{ID: "org-1", Active: true},
+			},
+		},
+	}
 	middleware := AuthMiddleware(secret, users)
 
 	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,8 +168,8 @@ func TestAuthMiddleware(t *testing.T) {
 		t.Errorf("bad token: expected generic 'invalid token', got leaked %q", msg)
 	}
 
-	// Case 4: Valid Token + active user in DB → 200.
-	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
+	// Case 4: Valid org-scoped Token + active user in DB → 200.
+	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,6 +182,63 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 	if rr.Body.String() != "user@test.com" {
 		t.Errorf("valid token: expected email in body, got %s", rr.Body.String())
+	}
+}
+
+// TestAuthMiddleware_OrgLessTokenFailClosed locks the #327 hardening: an
+// org-less token (platform staff between support sessions, user mid
+// org-selection) may only reach the platform console and auth endpoints.
+// Business routes reject it instead of falling back to the initial
+// organization's data. The legacy users.role bridge is gone: org-less tokens
+// carry NO roles.
+func TestAuthMiddleware_OrgLessTokenFailClosed(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &staticUsers{byID: map[string]*domain.User{
+		"p-1": {ID: "p-1", Email: "platform@test.com", Role: domain.RoleAdmin, Active: true, PlatformAdmin: true},
+	}}
+
+	var sawRoles []string
+	handler := AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if claims, ok := r.Context().Value(UserContextKey).(*auth.Claims); ok && claims != nil {
+			sawRoles = claims.Roles
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	token, err := auth.GenerateToken("p-1", "platform@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Business route → 403, scope required.
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("org-less business route: expected 403, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	// Platform console route → passes through with NO roles (no bridge).
+	req = httptest.NewRequest("GET", "/api/platform/organizations", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	sawRoles = []string{"sentinel"}
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("org-less platform route: expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if len(sawRoles) != 0 {
+		t.Fatalf("org-less token must carry no roles, got %v", sawRoles)
+	}
+
+	// Auth route (refresh/me) → passes through.
+	req = httptest.NewRequest("POST", "/api/auth/refresh", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("org-less auth route: expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
 }
 
@@ -203,19 +271,30 @@ func TestAuthMiddleware_RejectsDeactivatedUser(t *testing.T) {
 // not pass AdminMiddleware even if JWT still says role=admin.
 func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
-	// Token was minted as admin, but DB now says user.
-	users := &staticUsers{byID: map[string]*domain.User{
-		"a-1": {
-			ID: "a-1", Email: "was-admin@test.com",
-			Role: domain.RoleUser, Active: true,
+	// Token was minted as admin, but the live membership says user.
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"a-1": {
+				ID: "a-1", Email: "was-admin@test.com",
+				Role: domain.RoleUser, Active: true,
+			},
 		},
-	}}
+		memberships: map[string]*domain.MembershipWithOrg{
+			"a-1:org-1": {
+				Membership: domain.Membership{
+					OrganizationID: "org-1", UserID: "a-1",
+					Roles: []domain.UserRole{domain.RoleUser}, Active: true,
+				},
+				Organization: domain.Organization{ID: "org-1", Active: true},
+			},
+		},
+	}
 	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("admin-ok"))
 	}))
 
-	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
+	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,19 +309,35 @@ func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 
 func TestAdminMiddleware(t *testing.T) {
 	secret := "super-secret-test-key-0123456789"
-	users := &staticUsers{byID: map[string]*domain.User{
-		"u-1": {ID: "u-1", Email: "user@test.com", Role: domain.RoleUser, Active: true},
-		// Org-less admin view is a platform-staff privilege (ADR-0005);
-		// regular admins act inside their organization.
-		"a-1": {ID: "a-1", Email: "admin@test.com", Role: domain.RoleAdmin, Active: true, PlatformAdmin: true},
-	}}
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"u-1": {ID: "u-1", Email: "user@test.com", Role: domain.RoleUser, Active: true},
+			"a-1": {ID: "a-1", Email: "admin@test.com", Role: domain.RoleAdmin, Active: true, PlatformAdmin: true},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{
+			"u-1:org-1": {
+				Membership: domain.Membership{
+					OrganizationID: "org-1", UserID: "u-1",
+					Roles: []domain.UserRole{domain.RoleUser}, Active: true,
+				},
+				Organization: domain.Organization{ID: "org-1", Active: true},
+			},
+			"a-1:org-1": {
+				Membership: domain.Membership{
+					OrganizationID: "org-1", UserID: "a-1",
+					Roles: []domain.UserRole{domain.RoleAdmin}, Active: true,
+				},
+				Organization: domain.Organization{ID: "org-1", Active: true},
+			},
+		},
+	}
 	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("admin-ok"))
 	}))
 
 	// Non-admin role → 403 JSON.
-	userToken, err := auth.GenerateToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}}, secret)
+	userToken, err := auth.GenerateToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +353,7 @@ func TestAdminMiddleware(t *testing.T) {
 	}
 
 	// Admin role → 200.
-	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
+	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}

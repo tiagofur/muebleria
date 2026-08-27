@@ -2,15 +2,15 @@
 //
 // The authenticated organization travels in the context so storage methods
 // can scope reads and writes WITHOUT changing every handler call site:
-// AuthMiddleware resolves the live membership and injects the scope; storage
-// reads it via OrgFromCtx and appends `organization_id = $n` to queries.
+// AuthMiddleware resolves the live membership, injects the scope and rejects
+// org-less tokens on business routes (fail-closed); storage reads it via
+// OrgFromCtx and appends `organization_id = $n` to queries.
 //
-// Fail-open is deliberate and transitional: requests without a scope (CLI,
-// background jobs, legacy tests) resolve to the initial organization, which
-// is the entire pre-multi-org dataset. As soon as a request carries a scope,
-// isolation is enforced: cross-org reads see nothing and cross-org writes
-// affect nothing. The transitional DEFAULT on organization_id columns is
-// removed once every write path is scoped.
+// The initial-organization fallback below is unreachable from HTTP: the
+// middleware guarantees a scope on every business route. It remains for
+// direct-storage callers only (CLI, migration tooling, tests bootstrapping
+// the initial org). The transitional column DEFAULTs were dropped in
+// migration 000088 — every write now passes the organization explicitly.
 
 package storage
 
@@ -34,8 +34,20 @@ func WithOrgCtx(ctx context.Context, orgID string) context.Context {
 	return context.WithValue(ctx, orgScopeKey{}, orgID)
 }
 
-// OrgFromCtx resolves the organization scope. When absent it falls back to
-// the initial organization (transitional single-workshop semantics).
+// RequireOrgFromCtx resolves the organization scope or fails with
+// ErrNoOrgScope — for callers that must not silently fall back.
+func RequireOrgFromCtx(ctx context.Context) (string, error) {
+	if ctx != nil {
+		if v, ok := ctx.Value(orgScopeKey{}).(string); ok && v != "" {
+			return v, nil
+		}
+	}
+	return "", ErrNoOrgScope
+}
+
+// OrgFromCtx resolves the organization scope. HTTP callers always carry a
+// scope (the middleware rejects org-less business requests); the initial-org
+// fallback only serves direct-storage tooling (CLI/migrations/tests).
 func OrgFromCtx(ctx context.Context) string {
 	if ctx != nil {
 		if v, ok := ctx.Value(orgScopeKey{}).(string); ok && v != "" {

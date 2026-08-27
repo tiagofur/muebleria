@@ -834,6 +834,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filtered := filterProjectsByOwner(list, uid, roles)
+		redactProjectsForCaller(claims, filtered)
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectsList(filtered)
 		}
@@ -853,6 +854,13 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		p.OwnerUserID = domain.ResolveOwnerOnCreateRoles(uid, roles, p.OwnerUserID)
 
+		// #327: ownership may only point at organizations the caller belongs
+		// to (manufacturing must be a factory); empty values default to the
+		// caller's organization in the storage layer.
+		if !s.authorizeProjectOrgOwnership(w, r, &p) {
+			return
+		}
+
 		p.Status = domain.StatusDraft
 		// Product default currency (Mexico).
 		if p.Currency == "" {
@@ -866,6 +874,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			}
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if !orgSeesManufacturing(claims, &p) {
+			domain.RedactProjectManufacturing(&p)
 		}
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&p)
@@ -902,6 +913,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
+		if !orgSeesManufacturing(claims, p) {
+			domain.RedactProjectManufacturing(p)
+		}
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(p)
 		}
@@ -930,6 +944,19 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// only changes through the dedicated installation endpoints (gates,
 		// RBAC and audit). A client-sent copy is ignored, never persisted.
 		p.Installation = existing.Installation
+
+		// #327: organization ownership is server-authoritative. It is
+		// assigned once at create (validated against the caller's
+		// memberships); reassignment requires a dedicated audited flow. A
+		// client-sent copy is ignored, never persisted.
+		p.OrganizationID = existing.OrganizationID
+		p.SalesOrganizationID = existing.SalesOrganizationID
+		p.ManufacturingOrganizationID = existing.ManufacturingOrganizationID
+		// Sales-organization callers never receive the manufacturing payload;
+		// restore the stored copy so their round-trip PUTs cannot wipe it.
+		if !orgSeesManufacturing(claims, existing) {
+			domain.RestoreProjectManufacturing(&p, existing)
+		}
 
 		// F036 status transitions: reopen / mark produced vs general mutate.
 		statusChanging := p.Status != "" && p.Status != existing.Status
@@ -994,19 +1021,22 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !authorizeCloseoutEventAppends(w, existing, p.Events) {
 			return
 		}
-		err = s.Store.UpdateProject(r.Context(), id, &p)
-		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				respondWithError(w, http.StatusNotFound, err.Error())
+			err = s.Store.UpdateProject(r.Context(), id, &p)
+			if err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					respondWithError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				respondWithInternalError(w, err, "handler")
 				return
 			}
-			respondWithInternalError(w, err, "handler")
-			return
-		}
-		if !s.actorCanViewCosts(r) {
-			domain.RedactProjectCosts(&p)
-		}
-		respondWithJSON(w, http.StatusOK, p)
+			if !orgSeesManufacturing(claims, &p) {
+				domain.RedactProjectManufacturing(&p)
+			}
+			if !s.actorCanViewCosts(r) {
+				domain.RedactProjectCosts(&p)
+			}
+			respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanDeleteProject), "no tenés permiso para eliminar cotizaciones") {
@@ -1708,13 +1738,16 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 
 // --- ADMIN: User Management ---
 
-// HandleAdminUsers: GET /api/admin/users — list all users (pending first).
+// HandleAdminUsers: GET /api/admin/users — the organization's directory
+// (pending first). Scoped to the caller's org: an org admin never sees other
+// organizations' users (ADR-0005); the platform console has its own global
+// listing.
 func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	list, err := s.Store.ListUsers(r.Context())
+	list, err := s.Store.ListUsersByOrganization(r.Context())
 	if err != nil {
 		respondWithInternalError(w, err, "handler")
 		return
@@ -1723,7 +1756,9 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleAssignableOwners: GET /api/assignable-owners
-// Active users that can own a customer/project portfolio (admin + gerente).
+// Active members of the current organization that can own a customer/project
+// portfolio (admin + gerente + vendedor). Roles come from the org membership,
+// not the deprecated users.role column.
 func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1733,25 +1768,41 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAssignOwner), "no tenés permiso para asignar responsables") {
 		return
 	}
-	list, err := s.Store.ListUsers(r.Context())
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
+		return
+	}
+	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID)
 	if err != nil {
 		respondWithInternalError(w, err, "handler")
 		return
 	}
-	out := make([]map[string]string, 0, len(list))
-	for _, u := range list {
-		if !u.Active {
+	// Portfolio owners are sales-facing roles (plus admin). When a membership
+	// holds several of them, report the most privileged one for display.
+	ownerRank := map[domain.UserRole]int{
+		domain.RoleAdmin: 0, domain.RoleGerenteVentas: 1,
+		domain.RoleVendedor: 2, domain.RoleUser: 3,
+	}
+	out := make([]map[string]string, 0, len(team))
+	for _, m := range team {
+		if !m.Active {
 			continue
 		}
-		// Portfolio owners are sales-facing roles (plus admin).
-		switch u.Role {
-		case domain.RoleAdmin, domain.RoleGerenteVentas, domain.RoleVendedor, domain.RoleUser:
-			out = append(out, map[string]string{
-				"id":   u.ID,
-				"name": u.Name,
-				"role": string(u.Role),
-			})
+		best, bestRank := "", -1
+		for _, rl := range m.Roles {
+			if rank, ok := ownerRank[rl]; ok && (bestRank == -1 || rank < bestRank) {
+				best, bestRank = string(rl), rank
+			}
 		}
+		if best == "" {
+			continue
+		}
+		out = append(out, map[string]string{
+			"id":   m.UserID,
+			"name": m.Name,
+			"role": best,
+		})
 	}
 	respondWithJSON(w, http.StatusOK, out)
 }

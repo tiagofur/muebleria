@@ -148,18 +148,12 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 					claims.Roles = roles
 					claims.Role = auth.PrimaryRole(roles)
 				} else {
-					// Org-less tokens carry NO business scope. Platform staff
-					// keep a single-role view of users.role for the console
-					// (transitional until F172 UI); everyone else gets zero
-					// roles — org selection is required before any data
-					// access (fail-closed, ADR-0005).
-					if claims.PlatformAdmin {
-						claims.Roles = []string{string(u.Role)}
-						claims.Role = string(u.Role)
-					} else {
-						claims.Roles = nil
-						claims.Role = ""
-					}
+					// Org-less tokens carry NO business scope and NO roles
+					// (fail-closed, ADR-0005): platform staff use the console
+					// routes only; everyone else must select an organization
+					// before any data access (enforced below).
+					claims.Roles = nil
+					claims.Role = ""
 				}
 			}
 
@@ -170,6 +164,19 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 				r.Method != http.MethodGet &&
 				!(r.Method == http.MethodPost && r.URL.Path == "/api/auth/refresh") {
 				respondWithError(w, http.StatusForbidden, "el token de la extensión es de solo lectura")
+				return
+			}
+
+			// Business data requires an explicit organization scope (ADR-0005
+			// fail-closed): org-less tokens (platform staff between support
+			// sessions, users mid org-selection) may only reach the platform
+			// console and auth endpoints. Without this gate the storage layer's
+			// transitional initial-org fallback would expose the initial
+			// organization's data to an unscoped request.
+			if claims.OrgID == "" &&
+				!strings.HasPrefix(r.URL.Path, "/api/platform/") &&
+				!strings.HasPrefix(r.URL.Path, "/api/auth/") {
+				respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
 				return
 			}
 

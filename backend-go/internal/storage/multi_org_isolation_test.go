@@ -35,10 +35,12 @@ func isolationSetup(t *testing.T) (*storage.PostgresStore, string, string) {
 	}
 
 	seed := []string{
-		// Org A (initial): one customer, one project, one board.
-		`INSERT INTO customers (id, name) VALUES ('c1000000-0000-0000-0000-00000000000a', 'Cliente Alfa')`,
-		`INSERT INTO projects (id, name, customer_id, status) VALUES ('c2000000-0000-0000-0000-00000000000a', 'Obra Alfa', 'c1000000-0000-0000-0000-00000000000a', 'draft')`,
-		`INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price) VALUES ('c3000000-0000-0000-0000-00000000000a', 'TAB-ALFA', 'Tablero Alfa', 1830, 2440, 18, 1000)`,
+		// Org A (initial): one customer, one project, one board. The org is
+		// explicit — 000088 dropped the transitional DEFAULT so unscoped
+		// writes fail loudly.
+		`INSERT INTO customers (id, name, organization_id) VALUES ('c1000000-0000-0000-0000-00000000000a', 'Cliente Alfa', '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('c2000000-0000-0000-0000-00000000000a', 'Obra Alfa', 'c1000000-0000-0000-0000-00000000000a', 'draft', '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price, organization_id) VALUES ('c3000000-0000-0000-0000-00000000000a', 'TAB-ALFA', 'Tablero Alfa', 1830, 2440, 18, 1000, '` + multiOrgInitialOrgID + `')`,
 		// Org B: its own rows (same shape, different world).
 		`INSERT INTO customers (id, name, organization_id) VALUES ('c1000000-0000-0000-0000-00000000000b', 'Cliente Beta', '` + orgB + `')`,
 		`INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('c2000000-0000-0000-0000-00000000000b', 'Obra Beta', 'c1000000-0000-0000-0000-00000000000b', 'draft', '` + orgB + `')`,
@@ -183,5 +185,49 @@ func TestIsolation_WorkshopSettings(t *testing.T) {
 	}
 	if wsB.DefaultCurrency != "BRL" {
 		t.Fatalf("org B currency = %q, want BRL", wsB.DefaultCurrency)
+	}
+}
+
+// #327 hardening: the org user directory must be scoped — an org admin never
+// sees other organizations' users. The global ListUsers stays reserved for
+// the platform console.
+func TestIsolation_UserDirectoryByOrganization(t *testing.T) {
+	store, orgA, orgB := isolationSetup(t)
+	ctx := context.Background()
+
+	// Two users: u-a belongs only to org A, u-both belongs to A and B.
+	seed := []string{
+		`INSERT INTO users (id, email, name, role, active, password_hash) VALUES
+		 ('a1000000-0000-0000-0000-0000000000aa', 'a@test.com', 'Usuario A', 'admin', true, 'x'),
+		 ('a1000000-0000-0000-0000-0000000000bb', 'both@test.com', 'Usuario AB', 'user', true, 'x')`,
+		`INSERT INTO memberships (organization_id, user_id, roles) VALUES
+		 ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000aa', '{admin}'),
+		 ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000bb', '{vendedor}'),
+		 ('` + orgB + `', 'a1000000-0000-0000-0000-0000000000bb', '{admin}')`,
+	}
+	for _, s := range seed {
+		if _, err := store.Pool.Exec(ctx, s); err != nil {
+			t.Fatalf("seed: %v (%s)", err, s[:60])
+		}
+	}
+
+	listA, err := store.ListUsersByOrganization(scoped(ctx, orgA))
+	if err != nil {
+		t.Fatalf("list A: %v", err)
+	}
+	listB, err := store.ListUsersByOrganization(scoped(ctx, orgB))
+	if err != nil {
+		t.Fatalf("list B: %v", err)
+	}
+	if len(listA) != 2 {
+		t.Fatalf("org A directory must have 2 members, got %d", len(listA))
+	}
+	if len(listB) != 1 || listB[0].Email != "both@test.com" {
+		t.Fatalf("org B directory must see only its own member, got %d", len(listB))
+	}
+
+	// Unscoped listing fails closed instead of leaking the whole table.
+	if _, err := store.ListUsersByOrganization(ctx); err == nil {
+		t.Fatal("unscoped directory listing must fail (no organization scope)")
 	}
 }

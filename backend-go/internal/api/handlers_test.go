@@ -36,6 +36,7 @@ type stubStore struct {
 	listMaterials        []domain.MaterialBoard
 	lastCreatedCustomer  *domain.Customer
 	lastCreatedProject   *domain.Project
+	lastUpdatedProject   *domain.Project
 	materialReturnedByID *domain.MaterialBoard
 	materialGetByIDErr   error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -241,6 +242,12 @@ func (s *stubStore) ListUsers(context.Context) ([]domain.User, error) {
 	}
 	return []domain.User{}, nil
 }
+func (s *stubStore) ListUsersByOrganization(context.Context) ([]domain.User, error) {
+	if s.listUsers != nil {
+		return s.listUsers, nil
+	}
+	return []domain.User{}, nil
+}
 func (s *stubStore) ApproveUser(context.Context, string) error {
 	s.stubNotUsed("ApproveUser")
 	return nil
@@ -308,8 +315,20 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 				return &m, nil
 			}
 		}
+		return nil, errors.New("membership not found")
 	}
-	return nil, errors.New("membership not found")
+	// Default single-organization world: every stub user is an active admin
+	// of whatever organization the token names, unless the test simulates
+	// explicit memberships (ADR-0005 middleware re-validates per request).
+	return &domain.MembershipWithOrg{
+		Membership: domain.Membership{
+			OrganizationID: organizationID, UserID: userID,
+			Roles: []domain.UserRole{domain.RoleAdmin}, Active: true,
+		},
+		Organization: domain.Organization{
+			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,
+		},
+	}, nil
 }
 
 func (s *stubStore) EnsureMembership(context.Context, string, string, []domain.UserRole) error {
@@ -822,10 +841,12 @@ func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 func (s *stubStore) GetProjectByID(context.Context, string) (*domain.Project, error) {
 	return s.projectReturnedByID, s.projectGetByIDErr
 }
-func (s *stubStore) UpdateProject(context.Context, string, *domain.Project) error {
+func (s *stubStore) UpdateProject(_ context.Context, _ string, p *domain.Project) error {
 	if s.updateProjectErr != nil {
 		return s.updateProjectErr
 	}
+	cp := *p
+	s.lastUpdatedProject = &cp
 	return nil
 }
 func (s *stubStore) DeleteProject(context.Context, string) error {

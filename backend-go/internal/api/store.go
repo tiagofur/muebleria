@@ -24,6 +24,9 @@ type Store interface {
 	CreateUser(ctx context.Context, u *domain.User) error
 	UpdateUser(ctx context.Context, u *domain.User) error
 	ListUsers(ctx context.Context) ([]domain.User, error)
+	// ListUsersByOrganization scopes the directory to the context's
+	// organization (ADR-0005: org admins never see other orgs' users).
+	ListUsersByOrganization(ctx context.Context) ([]domain.User, error)
 	ApproveUser(ctx context.Context, id string) error
 	UpdateUserRole(ctx context.Context, id string, role domain.UserRole) error
 	// SetUserLicense assigns the per-user licensing tier and optional expiry.

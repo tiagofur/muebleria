@@ -128,6 +128,45 @@ func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
 	return list, nil
 }
 
+// ListUsersByOrganization returns only the users holding an ACTIVE membership
+// in the context's organization (ADR-0005: an org admin never sees other
+// organizations' users). The global ListUsers stays reserved for the platform
+// console.
+func (s *PostgresStore) ListUsersByOrganization(ctx context.Context) ([]domain.User, error) {
+	orgID, err := RequireOrgFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	query := `
+		SELECT u.id, u.email, u.name, u.role, u.active, u.platform_admin, u.license_plan, u.license_expires_at, u.created_at, u.updated_at
+		FROM users u
+		JOIN memberships m ON m.user_id = u.id AND m.active
+		JOIN organizations o ON o.id = m.organization_id AND o.active
+		WHERE m.organization_id = $1
+		ORDER BY u.active ASC, u.created_at DESC;
+	`
+	rows, err := s.Pool.Query(ctx, query, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.User
+	for rows.Next() {
+		var u domain.User
+		err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Active, &u.PlatformAdmin,
+			&u.LicensePlan, &u.LicenseExpiresAt, &u.CreatedAt, &u.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	if list == nil {
+		list = []domain.User{}
+	}
+	return list, rows.Err()
+}
+
 // ApproveUser activates a pending user account.
 func (s *PostgresStore) ApproveUser(ctx context.Context, id string) error {
 	// Approval also grants the membership that lets the user log in: while a

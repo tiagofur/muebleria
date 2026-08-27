@@ -1096,24 +1096,19 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 	if techStatus == "" {
 		techStatus = "pending_assignment"
 	}
-	salesOrg := p.SalesOrganizationID
-	if salesOrg == "" {
-		salesOrg = OrgFromCtx(ctx)
-	}
-	mfgOrg := p.ManufacturingOrganizationID
-	if mfgOrg == "" {
-		mfgOrg = OrgFromCtx(ctx)
-	}
+	// #327: sales/manufacturing ownership is NOT writable through the generic
+	// update — it is assigned at create (validated against the caller's
+	// memberships) and reassignment needs a dedicated audited flow.
 	query := `
 		UPDATE projects
 		SET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, commercial_status = $7, notes = $8,
 		    owner_user_id = $9, assigned_engineer_id = $10, technical_status = $11, survey_completed_at = $12, installation_scheduled_date = $13,
 		    kitchen_layout = $14, plan_edit_session = $15, installation_checklist = $16, nesting_import = $17, measure_defaults = $18, engineering_log = $19, cut_plan = $20,
 		    design_revisions = $21, approvals = $22, production_release = $23, change_orders = $24, part_instances = $25, module_units = $26,
-		    sales_organization_id = $27, manufacturing_organization_id = $28, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $29 AND (organization_id = $30 OR sales_organization_id = $30 OR manufacturing_organization_id = $30);
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = $27 AND (organization_id = $28 OR sales_organization_id = $28 OR manufacturing_organization_id = $28);
 	`
-	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), salesOrg, mfgOrg, id, OrgFromCtx(ctx))
+	tag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

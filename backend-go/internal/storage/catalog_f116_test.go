@@ -94,11 +94,13 @@ func TestAgregado_HardDeleteWithUseGuard(t *testing.T) {
 	}
 
 	// Reference it from a module's agregados JSONB → delete must refuse.
+	// organization_id is explicit: 000088 dropped the transitional DEFAULT so
+	// unscoped writes fail loudly.
 	modID := "20000000-0000-0000-0000-000000000002"
 	_, err := pool.Exec(ctx, `
-		INSERT INTO modules (id, code, name, agregados)
-		VALUES ($1, 'TEST-MOD-F116-AGG', 'Test module F116', $2::jsonb)`,
-		modID, fmt.Sprintf(`[{"id":"i1","agregado_id":%q,"quantity":1}]`, a.ID))
+		INSERT INTO modules (id, code, name, agregados, organization_id)
+		VALUES ($1, 'TEST-MOD-F116-AGG', 'Test module F116', $2::jsonb, $3)`,
+		modID, fmt.Sprintf(`[{"id":"i1","agregado_id":%q,"quantity":1}]`, a.ID), storage.InitialOrganizationID)
 	if err != nil {
 		t.Fatalf("seed referencing module: %v", err)
 	}
