@@ -38,6 +38,12 @@ La aplicación móvil **Granete Native** no es un clon reducido de la versión w
 
 ## 2. Usuarios y Casos de Uso (JTBD)
 
+> **Nota de roles:** los títulos de esta sección (Operario, Instalador,
+> Carpintero, Proyectista…) describen *personas/audiencias* de la app móvil,
+> no roles del sistema. Los roles asignables siguen siendo los 8 canónicos de
+> `contracts/roles.json` (p. ej. quien instala en obra es `produccion` con
+> sector instalación); ver `docs/production-flow-v2.md`.
+
 ### 2.1 Operario de Fábrica / Armador en Banco
 - **Escaneo de Piezas:** Escanea la etiqueta QR de una pieza recién cortada para ver al instante: módulo al que pertenece, qué cantos llevan tapacanto (`L1+W2`), medida exacta y material.
 - **Avance de Estado de Piso:** Pasa el estado del ítem (`pending` → `cut` → `edged` → `assembled` → `installed`) en 1 tap.

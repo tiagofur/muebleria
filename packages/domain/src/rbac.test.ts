@@ -7,6 +7,7 @@ import rolesContract from '../../../contracts/roles.json';
 import {
   isValidUserRole,
   navIdsForRole,
+  primaryRoleOf,
   roleCanAccessCustomers,
   roleCanAccessProjects,
   roleCanDeleteProject,
@@ -66,6 +67,19 @@ describe('rbac (F035 / OC-004)', () => {
       // rejected ids render as-is (raw), never as a curated label
       expect(roleLabelEs(r)).toBe(r);
     }
+  });
+
+  it('primaryRoleOf picks by canonical order (display-only, union keeps perms)', () => {
+    expect(primaryRoleOf(['produccion', 'admin'])).toBe('admin');
+    expect(primaryRoleOf(['almacen', 'produccion'])).toBe('produccion');
+    expect(primaryRoleOf(['vendedor'])).toBe('vendedor');
+    // rejected/unknown ids never surface as the primary role
+    for (const r of rolesContract.rejectedRoles) {
+      expect(primaryRoleOf([r])).toBeNull();
+    }
+    expect(primaryRoleOf([])).toBeNull();
+    expect(primaryRoleOf(null)).toBeNull();
+    expect(primaryRoleOf(undefined)).toBeNull();
   });
 
   it('denies catalog ABM to vendedor and produccion', () => {
@@ -514,6 +528,28 @@ describe('pilot onboarding doc pins canonical roles', () => {
   it('never offers a rejected role as assignable', () => {
     for (const r of rolesContract.rejectedRoles) {
       expect(doc).not.toContain(`\`${r}\``);
+    }
+  });
+});
+
+// Guía de uso (primer contacto de pilotos): debe mostrar los 8 roles
+// canónicos con los mismos labels de roleLabelEs y nunca mencionar un rol
+// rechazado — la guía no puede enseñar un rol que la app rechaza.
+describe('guia-de-uso doc pins canonical role labels', () => {
+  const doc = readFileSync(
+    new URL('../../../docs/guia-de-uso.md', import.meta.url),
+    'utf8',
+  );
+
+  it('documents every canonical role with its roleLabelEs label', () => {
+    for (const r of rolesContract.canonicalRoles) {
+      expect(doc).toContain(roleLabelEs(r));
+    }
+  });
+
+  it('never mentions a rejected role', () => {
+    for (const r of rolesContract.rejectedRoles) {
+      expect(doc).not.toContain(r);
     }
   });
 });

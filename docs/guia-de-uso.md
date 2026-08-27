@@ -25,15 +25,18 @@ completa) para explorar todo antes de cargar tus propios datos.
   Usuarios.
 - **Salir:** botón "Salir" arriba a la derecha.
 
-Roles y qué ven:
+Roles y qué ven (los 8 roles canónicos de `contracts/roles.json`):
 
 | Rol | Para quién | Qué hace |
 |-----|-----------|---------|
 | Admin | dueño / sistemas | todo + usuarios + ajustes |
-| Ingeniero | técnica | catálogos, muebles, estructuras, acabados |
+| Sin puesto | cuenta aprobada sin área asignada | inicio y estado de planta; un admin le asigna roles |
 | Vendedor | comercial | cotizaciones, clientes, vitrina (costos según config) |
-| Producción | fábrica | cola y órdenes de producción |
 | Gerente de ventas | comercial | cotizaciones + dashboard |
+| Gerente de producción | planta | producción, órdenes, embarques + dashboard de producción |
+| Ingeniero | técnica | catálogos, muebles, estructuras, acabados |
+| Producción | fábrica | cola y órdenes de producción |
+| Almacén | depósito | embarques, compras/almacén + dashboard de almacén |
 
 ## 3. El mapa de la app
 

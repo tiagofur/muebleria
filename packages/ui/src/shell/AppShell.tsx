@@ -46,6 +46,7 @@ import {
   Warehouse,
   type LucideIcon,
 } from 'lucide-react';
+import { roleLabelEs } from '@granete/domain';
 import { BrandMark } from '../common/BrandMark';
 import {
   CommandPalette,
@@ -131,21 +132,6 @@ export type AppShellProps = {
   /** Called when a non-nav command item is chosen (`id` as provided). */
   readonly onCommandItem?: (id: string) => void;
 };
-
-function roleLabel(role: string | undefined): string {
-  const map: Record<string, string> = {
-    admin: 'Admin',
-    user: 'Sin puesto',
-    vendedor: 'Vendedor',
-    gerente_ventas: 'Gerente de ventas',
-    gerente_produccion: 'Gerente de producción',
-    ingeniero: 'Ingeniero',
-    produccion: 'Producción',
-    almacen: 'Almacén',
-  };
-  if (!role) return 'Miembro';
-  return map[role] ?? role;
-}
 
 /** Optional IA subgroup within a section (Fase 6 UI — design.md §4.1). */
 export type NavItemGroup = 'composition' | 'catalogs';
@@ -750,7 +736,7 @@ export function AppShell({
                 <span className="app-topbar__identity-text">
                   <span className="app-topbar__identity-name">{user.email}</span>
                   <span className="app-topbar__identity-role">
-                    {roleLabel(user.role)}
+                    {user.role ? roleLabelEs(user.role) : 'Miembro'}
                   </span>
                 </span>
               </div>

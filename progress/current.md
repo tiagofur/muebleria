@@ -1,8 +1,46 @@
 # Sesión
 
-**Feature en curso:** F178 — FIXES DEL RE-REVIEW (#325/#326/#327) COMPLETADO
-**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175–F178
-**Rama:** `fix/327-multi-org-hardening`
+**Feature en curso:** Consistencia roles↔onboarding/UI — ronda 2 (residuos post PR #425)
+**Cerrados con evidencia (ledger done):** F169–F178 (olas #325/#326/#327, PR #424) + ronda 1 de roles (PR #425)
+**Rama:** `fix/roles-consistency-residual`
+
+## Roles↔onboarding ronda 2: residuos post PR #425
+
+Objetivo DoD: nadie que siga la documentación o use la UI puede ver o
+asignar un rol que el backend rechaza. El contrato (`contracts/roles.json`,
+8 canónicos + `rejectedRoles`) ya estaba pineado por PR #425; esta ronda
+cerró duplicados y divergencias restantes, sin tocar la matriz RBAC:
+
+1. **Docs:** el bloque `OrganizationRole` conceptual del distribution model
+   lleva advertencia antes y dentro (nunca implementar; el sistema usa los
+   8 canónicos). `guia-de-uso.md` tabla completa 8/8 con labels de
+   `roleLabelEs`. `roadmap_RN.md`: Operario/Instalador/Carpintero son
+   audiencias, no roles. Guard nuevo en `rbac.test.ts`: guia-de-uso debe
+   listar los 8 labels y jamás contener un rol rechazado.
+2. **UI web:** AppShell usa `roleLabelEs` (mapa local eliminado);
+   UsersScreen consume `ASSIGNABLE_ROLES` del dominio (sin copia local que
+   pueda derivar) y el pin de roles pasa a tests de comportamiento del
+   modal de invitación/edición (factory = canónicos, store = comerciales,
+   nunca rechazados). Imports muertos de roleLabelEs removidos.
+3. **Mobile:** authStore lee `LoginResponse.roles` (el DTO ya no trae
+   `user.role` desde 000090 — leía un campo muerto y mostraba
+   "OPERARIO" para todos); sesiones persistidas legacy migran a `roles[]`
+   con saneo por `isValidUserRole`. Nuevo `primaryRoleOf` en domain (pick
+   determinístico por orden canónico, sólo display). Limitación conocida:
+   mobile sin select-org multi-org (issue aparte).
+4. **DB:** down de 000090 restaura `users_role_check` con los 8 canónicos
+   (igual que la era 000051) — un rollback no reabre roles inválidos.
+
+**Clasificación canónica vigente** (sin cambios de contrato): Diseñador→
+`ingeniero` (B); Operario/Carpintero→`produccion`+sectores (B/C);
+Supervisor→capacidad override/approval lane, no rol (C/D); Instalador→
+futuro, instalación es sector (D).
+
+**Verificación (2026-08-27):** `pnpm test` monorepo completo verde
+(domain/ui/storage/web/mobile, incl. 3 tests nuevos de comportamiento de
+UsersScreen y 4 de authStore), `pnpm typecheck` verde, `go test ./...`
+verde (paridad roles×orgType y CHECKs intactos; backend sin cambios
+funcionales).
 
 ## F178: fixes del segundo review a fondo
 
