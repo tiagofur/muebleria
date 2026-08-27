@@ -605,11 +605,29 @@ No usar `T=18` por conveniencia cuando el componente posee una elección de mate
 
 Ese `T` entra en el contexto de geometría y fórmulas.
 
-### Go layout [CURRENT, drift a corregir por #402]
+### Go BOM + Go layout [CURRENT desde #402 / MT-1; drift de espesor corregido]
 
-`backend-go/internal/domain/engine/layout.go` toma actualmente el espesor desde `comp.ThicknessMm` durante `expandLayoutInstances(...)` y resuelve `MaterialBoard` posteriormente al construir `LayoutComponent`.
+Ambos resolvers Go consumen una única ruta canónica de espesor efectivo:
+`backend-go/internal/domain/engine/effective_thickness.go`
+(`resolveSelectedBoard` + `effectiveThicknessMm`), con la precedencia
+`selected active MaterialBoard.thicknessMm > component nominal thickness` y
+fallo loud para choice desconocido/inactivo o sin espesor válido.
 
-También existen contextos legacy/agregado que deben auditarse por hardcoded 18 mm.
+- `resolve.go` (`expandComponentInstances`) resuelve `T` desde el material
+  seleccionado **antes** de evaluar fórmulas length/width, y `ResolvedBoardPart`
+  emite `ThicknessMm` desde el material (paridad con TS `thicknessMm`).
+- `layout.go` (`expandLayoutInstances`) usa el mismo helper antes de fórmulas
+  geométricas, spatial formulas, `defaultPoseForPlacement`, dimensiones del
+  board, AABB y anchors de herrajes; `LayoutComponent.ThicknessMm` y el eje de
+  espesor de `DimensionsMm` salen del mismo `T` efectivo.
+- Componentes internos de agregados resuelven su propio rol de material. El
+  `T: 18` del contexto del box del agregado es el fallback legacy explícito
+  (el box no tiene binding de material propio; paridad con TS
+  `resolveComposedModule`).
+- El stack legacy (`legacyBoardStack`) usa 18 mm sólo cuando el rol no tiene
+  elección; con material seleccionado usa su espesor efectivo.
+- Los fixtures de paridad deliberadamente no triviales (§18) siguen siendo
+  entrega de #405.
 
 ### SketchUp [CURRENT, boundary mayormente correcto]
 

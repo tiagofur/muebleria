@@ -1,69 +1,83 @@
 # Sesión
 
-**Feature en curso:** F182 — AISLAMIENTO CROSS-ORG DE LAS FAMILIAS RESTANTES + GUARDRAILS (COMPLETADA)
-**Cerrados con evidencia (ledger done):** F169–F181 (PRs #419/#424/#427/#428) + F182
-**Rama:** `feat/f182-org-isolation-families` (desde origin/main post-#428)
-**Contexto:** ronda de reconciliación de backlog (11 issues prioritarias + barrido
-completo de abiertas). Cerradas con evidencia: #366, #418, #309, #310, #422, #423.
-#421 quedó PARTIAL con alcance exacto documentado → esta feature lo cierra.
+**Feature en curso:** F183 — ESPESOR EFECTIVO DESDE MATERIAL SELECCIONADO EN GO BOM + LAYOUT (#402 / MT-1) (COMPLETADA)
+**Cerrados con evidencia (ledger done):** F169–F182 (PRs #419/#424/#427/#428) + F183
+**Rama:** `fix/402-go-effective-thickness` (desde origin/main post-#430)
+**Contexto:** programa #401 (material-aware furniture resolution). Prerequisite
+#409 (contrato canónico) mergeado en PR #411. Este slice corrige el drift de
+verdad manufacturera entre TS y los resolvers Go. TS ya era correcto
+(`getComponentThickness` en `packages/domain/src/engine/bom.ts`) y NO se tocó.
 
-## F182: tests de aislamiento de las 11 familias + fix de PKs globales
+## F183: una sola ruta canónica de espesor efectivo en Go
 
-`backend-go/internal/storage/multi_org_isolation_families_test.go` (patrón
-`isolationSetup`/`scoped` de F171) cubre las familias que #421 listaba sin test:
-stock, purchase orders, warranties, internal messages, project picking, project
-templates, ambient materials, ambient categories + los mutadores de proyecto
-(quality, part executions, installation, material planning, site survey) ahora
-también en su pata de **write**: mutar la obra ajena devuelve el mismo sentinel
-not-found que una obra inexistente y el mutator jamás corre; own-org llega al
-mutator.
+El bug: con material seleccionado de 16 mm, el layout Go dibujaba laterales a
+15 mm y piso/techo a 18 mm (espesres nominales del componente), porque
+`resolve.go` expandía el BOM con `T = comp.ThicknessMm` antes de resolver
+materiales y `layout.go` hacía lo mismo para fórmulas/poses/AABB, adjuntando el
+material después sólo como identidad visual.
 
-### Bug real de tenancy encontrado y corregido (migración 000091)
+La corrección (`backend-go/internal/domain/engine/effective_thickness.go`):
 
-`material_stock` y `project_picking` conservaban PKs **globales**
-(`(kind, material_id)` / `(project_id, material)`) tras el scoping multi-org.
-Los `ON CONFLICT ... DO UPDATE` de `UpsertStockMin` y `UpsertProjectPicking`
-resolvían el conflicto contra la row de la OTRA organización y la mutaban
-(min_stock de A cambiado desde contexto de B; ídem status del picking). La
-migración 000091 vuelve ambas PKs org-scoped — igual que todos los demás
-uniques de negocio (verificado contra pg_constraint: eran las dos únicas
-globales residuales sobre tablas scoped) — y se actualizaron los conflict
-targets de los dos upserts. Tests de regresión afirman por SQL directo que el
-upsert cross-org crea la row propia del caller sin tocar la de la víctima.
+- `resolveSelectedBoard(role, choices, materials)`: choice vacía → nil (fallback
+  determinista); unknown/inactive → error loud con el rol en el mensaje.
+- `effectiveThicknessMm(role, nominal, choices, materials)`: precedencia
+  canónica `selected active MaterialBoard.thicknessMm > nominal > legacy sin
+  binding`; además exige `thicknessMm > 0` (el CHECK de la DB lo garantiza para
+  datos reales; runtime defiende contra catálogos hand-crafted).
 
-Explotabilidad era baja (requiere conocer el UUID material/obra ajeno, no
-listable cross-org), pero violaba el contrato "un contexto scoped jamás
-escribe la row de otra org" (ADR-0005).
+Consumidores (ambos usan el MISMO helper — no hay lógica duplicada):
 
-### Guardrails de proceso (trampa de PRs apilados, 2 incidentes: #330/F142 y #420/#418)
+- `resolve.go` `expandComponentInstances`: T efectivo entra en `evalDims`
+  antes de las fórmulas length/width. `ResolvedBoardPart` ahora emite
+  `thickness_mm` desde el material (paridad con TS `thicknessMm`).
+- `layout.go` `expandLayoutInstances`: mismo T en `geomDims`, `spatialDims`
+  (H y T), `defaultPoseForPlacement`, board local dims y AABB.
+  `LayoutComponent.ThicknessMm` y el eje de espesor de `DimensionsMm` salen del
+  mismo T. El loop de identidad visual reusa `resolveSelectedBoard`.
 
-- `docs/verification.md` §4 nuevo subsection "PRs apilados y cierre de issues":
-  confirmar base del PR antes de mergear; cierre manual sólo con contenido
-  verificado en main; referencia al watchdog.
-- `.github/workflows/issue-reconcile.yml`: semanal (lunes 12:00 UTC) +
-  workflow_dispatch. Marca con un comentario (marcador HTML, dedup) las issues
-  abiertas cuyo cierre fue **declarado** (`Closes/Fixes/Resolves #N`) en un PR
-  ya mergeado — a main o a rama intermedia. Filtro elegido tras dry-run contra
-  el backlog real: por referencia plain `#N` marcaría 34/38 issues (ruido de
-  docs/tracking); por closing keywords marca 0 hoy (correcto: las dos trampas
-  conocidas ya están resueltas) y cazaría la próxima. **Nunca cierra solo** —
-  deja la decisión a revisión con evidencia.
+Auditoría de hardcodes 18:
+
+- `expandLayoutAgregado` `parentDims.T: 18` — SE CONSERVA documentado: es el
+  contexto del box del sub-espacio (sin binding de material propio), paridad
+  exacta con TS `resolveComposedModule`. Los componentes INTERNOS del agregado
+  sí resuelven su propio rol (era la fuga real).
+- `legacyBoardStack` — 18 mm sólo cuando el rol no tiene elección; con
+  material seleccionado usa su espesor (board + stacking).
+
+Tests (`regression_402_test.go`, 11 tests): fixture con nominales
+deliberadamente ≠ materiales (lateral 15 / base-top 18 / frente 18 / fondo 15 /
+frente cajón 15; materiales 16/18/6). Caso obligatorio del issue: BODY→16
+resuelve TODO el cuerpo a 16 (`PW-2*T` con T=16, `PD-T` con T=16, lateral
+derecho x=PW−T=584). Mixed BODY=16/FRONT=18/BACK=6 en el mismo mueble.
+Herraje anclado a FRONT sigue la cara recalculada. Agregado 3 frentes.
+ThicknessMm == eje de espesor del AABB por placement. Unknown/inactive/espesor
+0 fallan loud. Sin elección: nominal determinista.
+
+**Verificación rojo→verde:** los 11 tests se corrieron contra el código pre-fix
+y fallaron con el drift exacto (lateral 15/piso 18 pese a material 16;
+`PW-2*T` del frente cajón con T nominal 15 → 570 en vez de 564; herraje sobre
+cara de 18 pese a FRONT 16; legacy siempre 18). Tras el fix: verde.
+
+Fix colateral de fixture: `internal/api/furniture_layout_test.go` — su material
+stub no declaraba `ThicknessMm` (imposible en DB: `CHECK (thickness_mm > 0)`);
+con el fallo loud ahora 422eaba. Se le dio el espesor realista 18.
+
+Docs: `docs/architecture/material-aware-furniture-resolution.md` §16 actualizado
+(Go BOM + layout [CURRENT desde #402]; el T:18 del box de agregado documentado
+como fallback legacy con paridad TS). Ledger: F183 en `feature_list.json`.
 
 ## Verificación
 
-- `go test ./internal/storage/ -run TestIsolation -count=1 -v`: 8 tests nuevos
-  (13 subtests de mutators incl.) + 6 existentes, todos PASS contra
-  PostgreSQL real (docker `muebles-postgres`, base efímera por test).
-- `go test ./internal/storage/ -count=1` (paquete completo, 161+ tests): ok.
-- `go test ./tests/pilotreadiness/ -count=1`: ok (migraciones desde cero
-  incluyen 000091).
-- `go test ./... -count=1` backend completo: exit 0, 9 paquetes ok.
-- `TestMigrations_NoBusinessData` verde (000091 no inserta datos).
-- `feature_list.json`: F182 done; 0 in_progress; validación CI local del
-  esquema implícita (mismas reglas que ci.yml).
-- Watchdog: primera ejecución real (dispatch post-merge #429) falló por una
-  comilla simple sin cerrar en el programa jq del body (detectado por el
-  propio run, no por CI — el job no compila bash). Fix + `bash -n` + dry-run
-  completo contra el repo real con `gh issue comment` neutralizado:
-  "Done: 0 issue(s) flagged" (correcto: ninguna issue abierta tiene cierre
-  declarado en PR mergeado). Re-dispatch tras el fix: verde.
+- `go build ./...` + `go vet ./...`: ok.
+- `go test ./internal/domain/engine/ -run 'EffectiveThickness' -count=1`:
+  11/11 PASS (pre-fix: 11 FAIL con drift numérico).
+- `go test ./... -count=1` backend completo: exit 0 — 9 paquetes ok
+  (api, auth, config, domain, engine, storage contra PostgreSQL real,
+  pilotreadiness, db, cmd/admin).
+- `pnpm --filter @granete/domain test`: 89 archivos / 1134 tests PASS (TS sin
+  cambios, sin regresión).
+
+## Fuera de alcance (explícito del issue)
+
+- #403 (binding por rol/aliases), #404 (SketchUp re-resolve/rebuild),
+  #405 (fixtures de paridad TS↔Go↔SketchUp), renderer SketchUp, Digital Thread.
