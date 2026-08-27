@@ -4178,6 +4178,139 @@
         "devops"
       ],
       "created": "2026-08-26"
+    },
+    {
+      "id": "F175",
+      "phase": 0,
+      "name": "multi_org_hardening_327",
+      "title": "Hardening #325/#326/#327 — enforcement server-side de ownership, fail-closed org-less y redacción sales/manufactura",
+      "description": "Revisión a fondo de la ola multi-org (PR #419) contra issues y docs; cierra los 4 hallazgos críticos. (1) Ownership de proyecto server-authoritative: create valida las orgs asignadas contra las membresías activas del caller (manufacturing debe ser factory) y el update genérico deja de escribir sales/manufacturing_organization_id (columnas fuera del UPDATE; copias del cliente ignoradas). (2) Separación sales vs manufacturing: callers fuera de la org de manufactura reciben el agregado de proyecto con campos manufactureros redactados (engineering_log, cut_plan, part_instances, module_units, production/materials/nesting release, floor events, installation) y sus PUTs restauran la copia almacenada (round-trip no puede borrarlos). (3) Fail-closed: tokens sin org sólo acceden /api/platform/* y /api/auth/* (sin puente users.role); migración 000088 elimina los DEFAULT transicionales de organization_id (43 tablas) para que un INSERT sin scope falle loud; OrgFromCtx fallback reservado a tooling directo. Listado de usuarios scoped por org (ListUsersByOrganization) para /api/admin/users y assignable-owners por membresía. (4) Frontend: hydrateSessionInfo merguea me.roles en el usuario persistido (la unión multi-rol ya no se pierde en reload) y preserva roles existentes si la respuesta no trae.",
+      "acceptance": [
+        "Create de proyecto rechaza orgs sin membresía activa del caller y manufacturing no-factory (403)",
+        "Update de proyecto no reasigna ownership y un PUT de la org sales no borra payload manufacturero",
+        "GET list/detail redacta campos manufactureros para orgs != manufacturing org (test API incluido)",
+        "Token sin org: rutas de negocio 403, consola plataforma y auth permitidas, sin roles heredados",
+        "Migración 000088 up/down: DEFAULTs eliminados; INSERT sin organization_id viola NOT NULL (fail-loud)",
+        "ListUsersByOrganization aísla el directorio por org (test de aislamiento cross-org)",
+        "Hidratación web preserva roles multi-rol tras reload (tests vitest)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/327",
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F173"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "permissions",
+        "web"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F176",
+      "phase": 0,
+      "name": "multi_org_followups_326",
+      "title": "Segunda ola de hardening multi-org — paridad RBAC, retiro del puente users.role y red de ventas de fábrica (#326)",
+      "description": "Continuación de la revisión a fondo (#325/#326/#327) sobre F175. (1) Paridad TS↔Go cerrada con contract fixtures: RoleCanViewCosts Go arreglado (almacen nunca ve costos, COST-02 es vendedor/user only) con pins en ambos lados; ownership.ts gana los 5 helpers multi-role espejo de ownership.go; rolesCanViewCosts unión y showCosts FE migrrado a la unión; contracts/roles.json gana rolesByOrganizationType pineado desde Go y TS (organization.ts espejo de AllowedRolesForOrgType); OrgSummary FE gana type/license. (2) Retiro del puente users.role: /api/staff/* eliminado (usuarios globales sin scope, sin callers); HandleOrgMemberRoles ya no escribe users.role; HandleAdminUserRole re-escopeado a membresía de la org del caller con audit; licencia por usuario retirada (endpoint + SetUserLicense + UI) — la licencia es de la organización. (3) UX: gates AppContent a unión multi-role, OrgPicker con escape de logout, errores de carga visibles en Users/Platform, chip Pendiente/Vencida en invitaciones. (4) Robustez: guard de CloneCatalog sobre todas las tablas, audit de renombres de org, cierre lazy de sesiones de soporte expiradas, cleanup del usuario huérfano en accept-invitation. (5) #326 completo: migración 000089 parent_organization_id, GET/POST /api/factory/organizations (sólo admin de factory; crea store/dealer con catálogo clonado de la fábrica + membresía admin del creador + audit connected_org_created; slug autogenerado único; licencia queda para plataforma), tab Red de Ventas en Ajustes con flujo crear → entrar al taller → invitar equipo.",
+      "acceptance": [
+        "RoleCanViewCosts/almacen idéntico TS↔Go (pins en rbac_test.go y rbac.test.ts)",
+        "ownership multi-role espejado TS↔Go (rbacUnion.test replica TestOwnershipUnion_MultiRole)",
+        "rolesByOrganizationType en contracts/roles.json pineado desde ambos lados",
+        "UsersScreen filtra roles asignables por tipo de org (store/dealer comerciales)",
+        "/api/staff/* eliminado; cambios de roles scoped por membresía sin efecto cross-org",
+        "licencia por usuario eliminada (BE+FE); sólo org license",
+        "factory crea tiendas/distribuidores conectados con catálogo clonado y audit (tests api 6 + storage)",
+        "Red de Ventas operativa en Ajustes (tests render con fetch stubbed)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F175"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "permissions",
+        "web"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F177",
+      "phase": 0,
+      "name": "drop_deprecated_user_columns",
+      "title": "Cierre de deudas multi-org — DROP de users.role/license_* (000090) y pulidos UX",
+      "description": "Última deuda de la revisión multi-org. (1) Deprecación real de users.role / users.license_plan / users.license_expires_at: auditoría de lectores/escritores, remoción de punta a punta (domain.User, storage queries/scans, PublicUserDTO, ToLicenseDTO, UpdateUser/UpdateUserRole, primaryUserRole, seeds) y migración 000090 con down estructural. Los sectores se validan contra los roles de MEMBRESÍA en la org del caller (antes users.role global). La validación de licencias en tests de furniture se migró a fixtures de org. (2) FE: role pasa a ser opcional en AuthUser/parseAuthResponse/readAuthUser (roles[] de membresía es la fuente; fallback sólo para sesiones persistidas viejas), roleLabel con fallback 'Miembro'. (3) Pulidos: metadata de audit con title pretty-printed, banner de invitación con tokens success (sin HSL crudo), copy del botón de salir de soporte avisa que vuelve al login.",
+      "acceptance": [
+        "Sin lectores/escritores de users.role/license_* en el código (grep limpio)",
+        "Migración 000090 up/down; chain legacy 000001→000090 testeada (backfill 000081 corre antes del DROP)",
+        "Sectores validados por roles de membresía (cualquier rol del set habilita el sector)",
+        "AuthUser.role opcional; login funciona sin user.role (roles sibling)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "https://github.com/tiagofur/muebleria/issues/325"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F176"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "migration",
+        "web"
+      ],
+      "created": "2026-08-26"
+    },
+    {
+      "id": "F178",
+      "phase": 0,
+      "name": "rereview_fixes_325_326_327",
+      "title": "Fixes del re-review de #325/#326/#327 — consola plataforma, CLI post-000090, gate de manufactura y regresiones FE",
+      "description": "Segunda revisión a fondo (agentes + verificación manual) tras F175-F177. Backend: B1 UpdateOrganization escaneaba 9 columnas tras 000089 (todo PATCH de la consola plataforma 500 — fix + test de regresión); B2/B3 cmd/admin contra esquema post-000090 (set-license ahora por organización --org slug, seed backfillea owners vía memberships, admin create asegura licencia trial de la org); B4 slug clampeado al CHECK (400 claro); B5 guard de CloneCatalog sobre todas las tablas destino; B6 suspender org corta sesiones de soporte (ended_via='org_suspended') con audit; M1 invitación duplicada → 409. #327: redacción completa del agregado (MaterialPlanning/Quality/Costing), wrapper manufacturingOnly en 31 rutas de sub-recursos (org comercial recibe 404 igual a obra inexistente), tienda no puede ser su propio fabricante (400 sin manufacturing_organization_id desde store/dealer). FE: N5 projectStore resuelve owner con la UNIÓN (resolveOwnerOnCreateRoles/UpdateRoles + rolesOfUser) y deps de callbacks keyeados; gates de ShellView a unión (embarques/instalaciones/export/closeout/isVendedor — ocultos para todos los auth post-DROP); N6 selectOrg bumpea authUserSeq y el memo de authToken se keyea (switch in-app de org ya no sirve el token viejo); N7 error visible al fallar 'Entrar' + botón deshabilitado en orgs suspendidas; N8 sin fallback single-role en saveMultiRoles y res.ok honesto en approve/reject; N9 identidad del shell usa la unión; N10 tab Red de Ventas se resetea si desaparece.",
+      "acceptance": [
+        "PATCH de organización de plataforma funciona (test de regresión storage)",
+        "cmd/admin set-license/seed/admin create funcionan contra 000090",
+        "31 rutas de manufactura devuelven 404 a la org comercial (test wrapper)",
+        "GET proyecto a org comercial sin material_planning/quality/costing/cut_plan (test)",
+        "store/dealer sin fábrica asignada → 400 en create (test)",
+        "Embarques/instalaciones visibles de nuevo para roles autorizados (unión)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/327",
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F177"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "web"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }

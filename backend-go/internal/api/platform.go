@@ -178,6 +178,8 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 	}
 	claims := claimsFromRequest(r)
 
+	var nameChanged bool
+	var previousName string
 	if rawName, ok := raw["name"]; ok {
 		var name string
 		if err := json.Unmarshal(rawName, &name); err != nil {
@@ -188,6 +190,8 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 			respondWithError(w, http.StatusBadRequest, "el nombre no puede estar vacío")
 			return
 		}
+		previousName = org.Name
+		nameChanged = true
 		org.Name = strings.TrimSpace(name)
 	}
 
@@ -242,12 +246,31 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
+	if nameChanged {
+		s.audit(r.Context(), "organization_renamed", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+			"previous_name": previousName,
+			"name":          org.Name,
+		})
+	}
 	if activeChanged {
 		event := "organization_suspended"
 		if org.Active {
 			event = "organization_reactivated"
 		}
-		s.audit(r.Context(), event, claims.UserID, org.ID, clientIP(r), nil)
+		details := map[string]interface{}{}
+		if !org.Active {
+			// Suspending cuts every open support session immediately — the
+			// schema reserves ended_via='org_suspended' for this (000086).
+			ended, err := s.Store.EndOpenSupportSessionsByOrg(r.Context(), org.ID, "org_suspended")
+			if err != nil {
+				respondWithInternalError(w, err, "platform suspend: end support sessions")
+				return
+			}
+			if ended > 0 {
+				details["support_sessions_ended"] = ended
+			}
+		}
+		s.audit(r.Context(), event, claims.UserID, org.ID, clientIP(r), details)
 	}
 	if planChanged || expiryChanged {
 		s.audit(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
@@ -412,6 +435,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	createdUser := false
 	u, err := s.Store.GetUserByEmailAnyState(r.Context(), inv.Email)
 	if err == nil && u != nil {
 		if !auth.CheckPasswordHash(body.Password, u.PasswordHash) || !u.Active {
@@ -433,16 +457,25 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		if name == "" {
 			name = strings.SplitN(inv.Email, "@", 2)[0]
 		}
-		u = &domain.User{Email: inv.Email, PasswordHash: hash, Name: name,
-			Role: primaryUserRole(inv.Roles), Active: true}
+		u = &domain.User{Email: inv.Email, PasswordHash: hash, Name: name, Active: true}
 		if err := s.Store.CreateUser(r.Context(), u); err != nil {
 			respondWithInternalError(w, err, "accept invitation create user")
 			return
 		}
+		createdUser = true
 	}
 
 	if err := s.Store.AcceptInvitationTx(r.Context(), inv.ID, u.ID); err != nil {
-		respondWithInternalError(w, err, "accept invitation")
+		// A user created in THIS request that failed to attach to any org
+		// would be orphaned (active, member of nothing, unable to log in).
+		// Clean it up before failing; existing users are left untouched.
+		if createdUser {
+			_ = s.Store.DeleteOrphanInvitedUser(r.Context(), u.ID)
+		}
+		s.audit(r.Context(), "invitation_accept_failed", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
+			"reason": "invitation no longer open",
+		})
+		respondWithError(w, http.StatusConflict, "la invitación ya no está disponible")
 		return
 	}
 	s.audit(r.Context(), "invitation_accepted", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{

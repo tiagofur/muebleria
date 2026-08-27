@@ -18,6 +18,7 @@
 .cache/
 .env
 .env.*
+!.env.production.example
 .idea/
 .impeccable-live.json
 .impeccable-live/
@@ -56,3 +57,4 @@ tmp/
 # Local AI runtime state
 .atl/
 backend-go/server
+backend-go/admin

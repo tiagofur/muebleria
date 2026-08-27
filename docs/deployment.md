@@ -101,7 +101,7 @@ systemctl enable --now docker
 mkdir -p /opt/granete && cd /opt/granete
 
 # Clonar el repositorio
-git clone https://github.com/Gentleman-Programming/muebles.git .
+git clone https://github.com/tiagofur/muebleria.git .
 
 # Crear el archivo .env a partir de la plantilla de producción
 cp .env.production.example .env
@@ -124,6 +124,7 @@ JWT_SECRET=tu_jwt_secret_generado
 CORS_ALLOWED_ORIGINS=https://app.granete.io
 RATE_LIMIT_RPS=0.5
 RATE_LIMIT_BURST=10
+MEDIA_DIR=/data/media
 ```
 
 Proteger permisos del archivo de configuración:
@@ -143,14 +144,30 @@ docker compose -f docker-compose.prod.yml ps
 
 ### 4.3 Inicializar el Administrador Global (SuperAdmin)
 
-El backend Go no crea cuentas por defecto al arrancar. Ejecuta el CLI administrativo dentro del contenedor:
+El backend Go no crea cuentas por defecto al arrancar. Ejecuta el CLI administrativo dentro del contenedor. Son **dos pasos** separados:
 
 ```bash
+# Paso 1: Crear el usuario admin
 docker compose -f docker-compose.prod.yml exec backend \
-  /app/admin create --email admin@granete.io --name "Super Admin" --role admin --platform-admin
+  /app/admin create --email admin@granete.io --name "Super Admin"
+
+# Paso 2: Promoverlo a platform admin (consola /platform)
+docker compose -f docker-compose.prod.yml exec backend \
+  /app/admin create-platform-admin --email admin@granete.io
 ```
 
-El CLI te solicitará la contraseña de forma segura sin eco en terminal.
+El CLI solicitará la contraseña de forma segura sin eco en terminal.
+
+### 4.4 Verificar que todo funciona
+
+```bash
+# Verificar healthcheck del backend
+docker compose -f docker-compose.prod.yml exec backend \
+  wget -q --spider http://localhost:8080/api/health
+
+# Verificar logs de arranque
+docker compose -f docker-compose.prod.yml logs --tail=20 backend
+```
 
 ---
 
@@ -171,37 +188,36 @@ docker compose -f docker-compose.prod.yml logs -f postgres
 
 ### 5.2 Copias de Seguridad Automatizadas (Backups)
 
-Configurar un cron job nocturno para exportar la base de datos y rotar copias de los últimos 14 días:
+El script versionado `scripts/backup.sh` ejecuta backup de **PostgreSQL y media** con rotación automática.
 
-1. Crear el script de backup en `/usr/local/bin/backup-granete.sh`:
-
-```bash
-cat << 'EOF' > /usr/local/bin/backup-granete.sh
-#!/usr/bin/env bash
-set -euo pipefail
-
-BACKUP_DIR="/var/backups/granete"
-DATE=$(date +'%Y-%m-%d_%H%M%S')
-mkdir -p "$BACKUP_DIR"
-
-cd /opt/granete
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U granete_prod -d granete_prod -F c | gzip > "$BACKUP_DIR/granete_$DATE.sql.gz"
-
-# Eliminar backups de más de 14 días
-find "$BACKUP_DIR" -name "granete_*.sql.gz" -mtime +14 -delete
-
-echo "Backup completado exitosamente: $BACKUP_DIR/granete_$DATE.sql.gz"
-EOF
-
-chmod +x /usr/local/bin/backup-granete.sh
-```
-
-2. Agregar la tarea a crontab:
+1. Copiar el script al VPS (o ejecutarlo desde el repo clonado):
 
 ```bash
-(crontab -l 2>/dev/null; echo "0 3 * * * /usr/local/bin/backup-granete.sh >> /var/log/granete-backup.log 2>&1") | crontab -
+# Desde /opt/granete
+scripts/backup.sh
+
+# Opciones:
+#   --db-only              Solo PostgreSQL
+#   --media-only           Solo archivos media
+#   --retention-days=7     Rotación personalizada
+#   BACKUP_DIR=/otra/ruta  Directorio de destino
 ```
+
+2. Configurar un cron job nocturno:
+
+```bash
+(crontab -l 2>/dev/null; echo "0 3 * * * /opt/granete/scripts/backup.sh >> /var/log/granete-backup.log 2>&1") | crontab -
+```
+
+3. Verificar que el backup funciona:
+
+```bash
+scripts/backup.sh --dry-run  # Solo muestra el plan, no ejecuta
+scripts/backup.sh            # Ejecuta el backup completo
+ls -la /var/backups/granete/  # Ver archivos generados
+```
+
+**Nota importante**: `scripts/backup.sh` cubre PostgreSQL Y archivos media. Antes de este cambio, el backup inline del runbook solo protegía PostgreSQL y afirmaba que era un backup completo sin incluir los archivos de catálogo e imágenes de proyectos. Los scripts versionados corrigen esto.
 
 ### 5.3 Actualización de Versión (Deploy Rolling)
 
@@ -220,21 +236,142 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 docker compose -f docker-compose.prod.yml logs --tail=50 backend
 ```
 
+### 5.4 Rollback
+
+Si una actualización causa problemas, revertir a una versión anterior:
+
+```bash
+cd /opt/granete
+
+# 1. Identificar la versión anterior (commit hash o tag)
+git log --oneline -5
+
+# 2. Revertir al código conocido
+git checkout <commit-hash-or-tag>
+
+# 3. Reconstruir y reiniciar
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+# 4. Verificar que el backend arranca correctamente
+docker compose -f docker-compose.prod.yml logs --tail=20 backend
+
+# 5. Si hay migraciones nuevas en la versión rota que no se pueden revertir,
+#    restaurar la base de datos desde el último backup conocido (ver §6)
+```
+
+**Nota**: Las migraciones de base de datos son unidireccionales. Si la versión rota aplicó migraciones nuevas, el rollback de código puede dejar la DB in-compatible. En ese caso, restaurar desde backup con `scripts/restore.sh` es la ruta segura.
+
 ---
 
 ## 6. Recuperación ante Desastres (Disaster Recovery)
 
-Para restaurar una copia de seguridad:
+Para restaurar una copia de seguridad completa (PostgreSQL + archivos media):
+
+### 6.1 Restauración completa
 
 ```bash
-# 1. Detener el backend para evitar escrituras concurrentes
-docker compose -f docker-compose.prod.yml stop backend
+cd /opt/granete
 
-# 2. Restaurar el dump en PostgreSQL
-gunzip -c /var/backups/granete/granete_YYYY-MM-DD_HHMMSS.sql.gz | \
-  docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_restore -U granete_prod -d granete_prod --clean --if-exists
+# Ver qué backups existen
+ls -la /var/backups/granete/
 
-# 3. Reiniciar el backend
-docker compose -f docker-compose.prod.yml start backend
+# Restaurar (reemplaza DB actual y archivos media)
+scripts/restore.sh /var/backups/granete/granete_YYYY-MM-DD_HHMMSS.sql.gz
 ```
+
+El script `restore.sh` ejecuta automáticamente:
+1. Backup de seguridad de la DB actual (por si acaso).
+2. Detiene el backend para evitar escrituras concurrentes.
+3. Restaura PostgreSQL con `pg_restore`.
+4. Restaura archivos media al volumen Docker.
+5. Corrige permisos de ownership (appuser:appgroup).
+6. Reinicia el backend.
+7. Verifica que el healthcheck responda.
+8. Reporta conteo de tablas y archivos media vs URLs en DB (para detectar huérfanos).
+
+### 6.2 Verificación post-restore
+
+Después de restaurar, verificar manualmente:
+
+1. Abrir la aplicación en el navegador y verificar que carga.
+2. Iniciar sesión como admin.
+3. Revisar que las imágenes de catálogo aparezcan (no broken images).
+4. Si hay URLs huérfanas (archivos perdidos), limpiarlas:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+  /app/admin clean-media --apply
+```
+
+### 6.3 Qué cubre y qué NO cubre el restore
+
+| Componente | Cubierto | Notas |
+|-----------|----------|-------|
+| PostgreSQL (todos los datos) | ✅ | `pg_restore --clean --if-exists` |
+| Archivos media (catálogo, fotos) | ✅ | Volumen `granete_media_data` |
+| Caddy certificates | ❌ | Caddy los regenera automáticamente via ACME |
+| Docker images | ❌ | Re-build con `--build` en el compose |
+| Configuración `.env` | ❌ | Nunca se backup (secrets); re-crear manualmente |
+
+---
+
+## 7. Estrategia de Copias de Seguridad Offsite
+
+Las copias locales en el VPS no protegen contra fallo del disco o pérdida del servidor.
+
+**Recomendaciones para talleres piloto (2–5 instancias):**
+
+```bash
+# Opción A: rsync a un segundo servidor (recomendado)
+# Configurar SSH key-based auth al servidor de backup
+rsync -avz --delete /var/backups/granete/ user@backup-server:/backups/granete/
+
+# Opción B: Upload a bucket S3-compatible (MinIO, Backblaze B2, etc.)
+aws s3 sync /var/backups/granete/ s3://mi-bucket-granete/backups/ \
+  --storage-class STANDARD_IA
+
+# Opción C: Copia a disco USB externo (mínimo viable)
+mount /dev/sdb1 /mnt/usb
+rsync -avz /var/backups/granete/ /mnt/usb/granete-backup/
+umount /mnt/usb
+```
+
+**Frecuencia recomendada**: sincronizar offsite al menos una vez por día (puede ser otro cron job con rsync). Para talleres piloto, un rsync diario al segundo servidor es suficiente.
+
+---
+
+## 8. Variables de Entorno — Referencia
+
+| Variable | Requerida | Default | Descripción |
+|----------|-----------|---------|-------------|
+| `DOMAIN` | Sí | `localhost` | Dominio público (Caddy TLS + CORS) |
+| `POSTGRES_USER` | Sí | `granete_prod` | Usuario PostgreSQL |
+| `POSTGRES_PASSWORD` | Sí | — | Contraseña PostgreSQL (requerida) |
+| `POSTGRES_DB` | Sí | `granete_prod` | Nombre de la base de datos |
+| `JWT_SECRET` | Sí | — | Secreto JWT, >= 32 bytes (requerida) |
+| `CORS_ALLOWED_ORIGINS` | Sí | — | Orígenes CORS permitidos, separados por coma |
+| `RATE_LIMIT_RPS` | No | `0.2` | Requests/segundo para auth endpoints |
+| `RATE_LIMIT_BURST` | No | `5` | Burst máximo para auth endpoints |
+| `MEDIA_DIR` | No | `/data/media` | Ruta del directorio de media dentro del contenedor |
+| `PORT` | No | `8080` | Puerto del backend |
+
+**Generar secretos seguros:**
+```bash
+JWT_SECRET=$(openssl rand -base64 48)
+POSTGRES_PASSWORD=$(openssl rand -base64 32)
+```
+
+**Nota sobre `sslmode`**: La conexión entre el backend y PostgreSQL dentro de Docker usa `sslmode=disable` porque ambos contenedores están en la misma red interna. Esto es seguro. Para conexiones externas a la base de datos (psql desde el host), usar `sslmode=require`.
+
+---
+
+## 9. Seguridad
+
+- **Firewall**: Solo puertos 22, 80, 443 abiertos (UFW).
+- **Secretos**: Nunca en el repositorio. `JWT_SECRET` y `POSTGRES_PASSWORD` generados con `openssl rand`.
+- **Permisos**: `.env` con `chmod 600`, backups con `chmod 700` en directorio.
+- **TLS**: Certificados automáticos via Caddy/ACME. HSTS habilitado (1 año).
+- **CORS**: Allowlist explícita, nunca wildcard.
+- **Rate limiting**: En endpoints de auth (login, register).
+- **Healthcheck**: `/api/health` endpoint sin autenticación para monitoreo.
+- **Admin CLI**: Contraseña sin eco en terminal, no se imprime en logs.

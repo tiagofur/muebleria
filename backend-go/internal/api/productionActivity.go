@@ -535,10 +535,28 @@ func (s *Server) HandleUserSectors(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Validate sectors against user's role (F094 — role↔sector binding).
-		user, err := s.Store.GetUserByID(r.Context(), userID)
-		if err != nil || user == nil {
-			respondWithError(w, http.StatusNotFound, "user not found")
+		// Validate sectors against the user's MEMBERSHIP roles in the caller's
+		// organization (F094 role↔sector binding; users.role is gone — a
+		// sector is valid when any of the member's roles allows it).
+		claims := claimsFromRequest(r)
+		if claims == nil || claims.OrgID == "" {
+			respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
+			return
+		}
+		team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID)
+		if err != nil {
+			respondWithInternalError(w, err, "sectors: load team")
+			return
+		}
+		var memberRoles []domain.UserRole
+		for _, m := range team {
+			if m.UserID == userID {
+				memberRoles = m.Roles
+				break
+			}
+		}
+		if memberRoles == nil {
+			respondWithError(w, http.StatusNotFound, "membresía no encontrada en este taller")
 			return
 		}
 		for _, sec := range req.Sectors {
@@ -546,9 +564,11 @@ func (s *Server) HandleUserSectors(w http.ResponseWriter, r *http.Request) {
 				respondWithError(w, http.StatusBadRequest, "invalid sector: "+sec.Sector)
 				return
 			}
-			if !domain.SectorAllowedForRole(user.Role, domain.ProductionSector(sec.Sector)) {
+			if !domain.AnyRole(memberRoles, func(rl domain.UserRole) bool {
+				return domain.SectorAllowedForRole(rl, domain.ProductionSector(sec.Sector))
+			}) {
 				respondWithError(w, http.StatusBadRequest,
-					"sector '"+sec.Sector+"' is not allowed for role '"+string(user.Role)+"'")
+					"sector '"+sec.Sector+"' is not allowed for the member's roles in this taller")
 				return
 			}
 		}

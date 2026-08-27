@@ -29,18 +29,21 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 	seed := []string{
 		// Catálogo fuente (org inicial): categoría → componente → agregado
 		// (JSONB refs) → módulo (categoría + agregados JSONB) + piezas/herraje/línea.
-		`INSERT INTO module_categories (id, name, parent_id) VALUES ('cccccccc-0000-0000-0000-000000000001', 'Cocinas', NULL)`,
-		`INSERT INTO components (id, code, name, placement, active, length_mm, width_mm, thickness_mm) VALUES ('cccccccc-0000-0000-0000-000000000002', 'COMP-P', 'Panel', 'interior', true, 700, 500, 18)`,
-		`INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active) VALUES ('cccccccc-0000-0000-0000-000000000003', 'HW-BIS', 'Bisagra', 'piece', 12.5, true)`,
-		`INSERT INTO agregados (id, code, name, active, components, hardware_lines)
+		// organization_id es explícito: 000088 eliminó el DEFAULT transicional.
+		`INSERT INTO module_categories (id, name, parent_id, organization_id) VALUES ('cccccccc-0000-0000-0000-000000000001', 'Cocinas', NULL, '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO components (id, code, name, placement, active, length_mm, width_mm, thickness_mm, organization_id) VALUES ('cccccccc-0000-0000-0000-000000000002', 'COMP-P', 'Panel', 'interior', true, 700, 500, 18, '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active, organization_id) VALUES ('cccccccc-0000-0000-0000-000000000003', 'HW-BIS', 'Bisagra', 'piece', 12.5, true, '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO agregados (id, code, name, active, components, hardware_lines, organization_id)
 		 VALUES ('cccccccc-0000-0000-0000-000000000004', 'AGR-PUERTA', 'Puerta', true,
 		 '[{"componentId":"cccccccc-0000-0000-0000-000000000002","quantity":1}]'::jsonb,
-		 '[{"id":"hl1","quantity":2,"option_role":"BISAGRAS","hardware_id":"cccccccc-0000-0000-0000-000000000003"}]'::jsonb)`,
-		`INSERT INTO modules (id, code, name, category_id, agregados)
+		 '[{"id":"hl1","quantity":2,"option_role":"BISAGRAS","hardware_id":"cccccccc-0000-0000-0000-000000000003"}]'::jsonb,
+		 '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO modules (id, code, name, category_id, agregados, organization_id)
 		 VALUES ('cccccccc-0000-0000-0000-000000000005', 'MOD-GAB-01', 'Gabinete', 'cccccccc-0000-0000-0000-000000000001',
-		 '[{"agregado_id":"cccccccc-0000-0000-0000-000000000004","name":"Puerta","quantity":2,"layout_direction":"vertical","gap_mm":3}]'::jsonb)`,
-		`INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role)
-		 VALUES ('cccccccc-0000-0000-0000-000000000006', 'cccccccc-0000-0000-0000-000000000005', 'MOD-GAB-01-P01', '', 1, 700, 500, 'LATERAL')`,
+		 '[{"agregado_id":"cccccccc-0000-0000-0000-000000000004","name":"Puerta","quantity":2,"layout_direction":"vertical","gap_mm":3}]'::jsonb,
+		 '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO board_parts (id, module_id, code, description, quantity, length_mm, width_mm, option_role, organization_id)
+		 VALUES ('cccccccc-0000-0000-0000-000000000006', 'cccccccc-0000-0000-0000-000000000005', 'MOD-GAB-01-P01', '', 1, 700, 500, 'LATERAL', '` + multiOrgInitialOrgID + `')`,
 	}
 	for _, s := range seed {
 		if _, err := pool.Exec(ctx, s); err != nil {

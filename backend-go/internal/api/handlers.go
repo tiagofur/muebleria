@@ -147,8 +147,7 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		Email:        req.Email,
 		PasswordHash: hash,
 		Name:         req.Name,
-		Role:         domain.RoleUser, // all self-registered users start as 'user'
-		Active:       false,           // pending admin approval
+		Active:       false, // pending admin approval; membership granted on approval
 	}
 
 	err = s.Store.CreateUser(r.Context(), &u)
@@ -180,38 +179,31 @@ type LoginRequest struct {
 
 // PublicUserDTO is the safe public representation of a user, guaranteeing
 // that internal secrets (such as password hashes) are never serialized (OC-005).
+// PublicUserDTO is the identity projection: roles live in the membership
+// (sent as the `roles` sibling in auth responses) and licensing in the
+// organization — users.role/users.license_* were dropped (000090).
 type PublicUserDTO struct {
-	ID               string             `json:"id"`
-	Email            string             `json:"email"`
-	Name             string             `json:"name"`
-	Role             domain.UserRole    `json:"role"`
-	Active           bool               `json:"active"`
-	PlatformAdmin    bool               `json:"platform_admin"`
-	LicensePlan      domain.LicensePlan `json:"license_plan"`
-	LicenseExpiresAt *time.Time         `json:"license_expires_at,omitempty"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	Name          string    `json:"name"`
+	Active        bool      `json:"active"`
+	PlatformAdmin bool      `json:"platform_admin"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func ToPublicUserDTO(u *domain.User) PublicUserDTO {
 	if u == nil {
 		return PublicUserDTO{}
 	}
-	plan := u.LicensePlan
-	if plan == "" {
-		plan = domain.LicensePlanNone
-	}
 	return PublicUserDTO{
-		ID:               u.ID,
-		Email:            u.Email,
-		Name:             u.Name,
-		Role:             u.Role,
-		Active:           u.Active,
-		PlatformAdmin:    u.PlatformAdmin,
-		LicensePlan:      plan,
-		LicenseExpiresAt: u.LicenseExpiresAt,
-		CreatedAt:        u.CreatedAt,
-		UpdatedAt:        u.UpdatedAt,
+		ID:            u.ID,
+		Email:         u.Email,
+		Name:          u.Name,
+		Active:        u.Active,
+		PlatformAdmin: u.PlatformAdmin,
+		CreatedAt:     u.CreatedAt,
+		UpdatedAt:     u.UpdatedAt,
 	}
 }
 
@@ -227,22 +219,11 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 }
 
 // LicenseDTO is the derived licensing state surfaced to clients (login,
-// refresh, and the SketchUp extension session card).
+// org summary) — computed from the ORGANIZATION license (ADR-0005 §3).
 type LicenseDTO struct {
-	Plan      string               `json:"plan"`
-	ExpiresAt *time.Time           `json:"expires_at,omitempty"`
+	Plan      string              `json:"plan"`
+	ExpiresAt *time.Time          `json:"expires_at,omitempty"`
 	Status    domain.LicenseStatus `json:"status"`
-}
-
-func ToLicenseDTO(u *domain.User) LicenseDTO {
-	if u == nil {
-		return LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone}
-	}
-	return LicenseDTO{
-		Plan:      string(u.LicensePlan),
-		ExpiresAt: u.LicenseExpiresAt,
-		Status:    domain.LicenseStatusAt(u.LicensePlan, u.LicenseExpiresAt, time.Now()),
-	}
 }
 
 type LoginResponse struct {
@@ -834,6 +815,7 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filtered := filterProjectsByOwner(list, uid, roles)
+		redactProjectsForCaller(claims, filtered)
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectsList(filtered)
 		}
@@ -853,6 +835,13 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		p.OwnerUserID = domain.ResolveOwnerOnCreateRoles(uid, roles, p.OwnerUserID)
 
+		// #327: ownership may only point at organizations the caller belongs
+		// to (manufacturing must be a factory); empty values default to the
+		// caller's organization in the storage layer.
+		if !s.authorizeProjectOrgOwnership(w, r, &p) {
+			return
+		}
+
 		p.Status = domain.StatusDraft
 		// Product default currency (Mexico).
 		if p.Currency == "" {
@@ -866,6 +855,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 			}
 			respondWithInternalError(w, err, "handler")
 			return
+		}
+		if !orgSeesManufacturing(claims, &p) {
+			domain.RedactProjectManufacturing(&p)
 		}
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(&p)
@@ -902,6 +894,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
+		if !orgSeesManufacturing(claims, p) {
+			domain.RedactProjectManufacturing(p)
+		}
 		if !s.actorCanViewCosts(r) {
 			domain.RedactProjectCosts(p)
 		}
@@ -930,6 +925,19 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// only changes through the dedicated installation endpoints (gates,
 		// RBAC and audit). A client-sent copy is ignored, never persisted.
 		p.Installation = existing.Installation
+
+		// #327: organization ownership is server-authoritative. It is
+		// assigned once at create (validated against the caller's
+		// memberships); reassignment requires a dedicated audited flow. A
+		// client-sent copy is ignored, never persisted.
+		p.OrganizationID = existing.OrganizationID
+		p.SalesOrganizationID = existing.SalesOrganizationID
+		p.ManufacturingOrganizationID = existing.ManufacturingOrganizationID
+		// Sales-organization callers never receive the manufacturing payload;
+		// restore the stored copy so their round-trip PUTs cannot wipe it.
+		if !orgSeesManufacturing(claims, existing) {
+			domain.RestoreProjectManufacturing(&p, existing)
+		}
 
 		// F036 status transitions: reopen / mark produced vs general mutate.
 		statusChanging := p.Status != "" && p.Status != existing.Status
@@ -994,19 +1002,22 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !authorizeCloseoutEventAppends(w, existing, p.Events) {
 			return
 		}
-		err = s.Store.UpdateProject(r.Context(), id, &p)
-		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				respondWithError(w, http.StatusNotFound, err.Error())
+			err = s.Store.UpdateProject(r.Context(), id, &p)
+			if err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					respondWithError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				respondWithInternalError(w, err, "handler")
 				return
 			}
-			respondWithInternalError(w, err, "handler")
-			return
-		}
-		if !s.actorCanViewCosts(r) {
-			domain.RedactProjectCosts(&p)
-		}
-		respondWithJSON(w, http.StatusOK, p)
+			if !orgSeesManufacturing(claims, &p) {
+				domain.RedactProjectManufacturing(&p)
+			}
+			if !s.actorCanViewCosts(r) {
+				domain.RedactProjectCosts(&p)
+			}
+			respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanDeleteProject), "no tenés permiso para eliminar cotizaciones") {
@@ -1708,13 +1719,16 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 
 // --- ADMIN: User Management ---
 
-// HandleAdminUsers: GET /api/admin/users — list all users (pending first).
+// HandleAdminUsers: GET /api/admin/users — the organization's directory
+// (pending first). Scoped to the caller's org: an org admin never sees other
+// organizations' users (ADR-0005); the platform console has its own global
+// listing.
 func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	list, err := s.Store.ListUsers(r.Context())
+	list, err := s.Store.ListUsersByOrganization(r.Context())
 	if err != nil {
 		respondWithInternalError(w, err, "handler")
 		return
@@ -1723,7 +1737,9 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleAssignableOwners: GET /api/assignable-owners
-// Active users that can own a customer/project portfolio (admin + gerente).
+// Active members of the current organization that can own a customer/project
+// portfolio (admin + gerente + vendedor). Roles come from the org membership,
+// not the deprecated users.role column.
 func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1733,25 +1749,41 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAssignOwner), "no tenés permiso para asignar responsables") {
 		return
 	}
-	list, err := s.Store.ListUsers(r.Context())
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
+		return
+	}
+	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID)
 	if err != nil {
 		respondWithInternalError(w, err, "handler")
 		return
 	}
-	out := make([]map[string]string, 0, len(list))
-	for _, u := range list {
-		if !u.Active {
+	// Portfolio owners are sales-facing roles (plus admin). When a membership
+	// holds several of them, report the most privileged one for display.
+	ownerRank := map[domain.UserRole]int{
+		domain.RoleAdmin: 0, domain.RoleGerenteVentas: 1,
+		domain.RoleVendedor: 2, domain.RoleUser: 3,
+	}
+	out := make([]map[string]string, 0, len(team))
+	for _, m := range team {
+		if !m.Active {
 			continue
 		}
-		// Portfolio owners are sales-facing roles (plus admin).
-		switch u.Role {
-		case domain.RoleAdmin, domain.RoleGerenteVentas, domain.RoleVendedor, domain.RoleUser:
-			out = append(out, map[string]string{
-				"id":   u.ID,
-				"name": u.Name,
-				"role": string(u.Role),
-			})
+		best, bestRank := "", -1
+		for _, rl := range m.Roles {
+			if rank, ok := ownerRank[rl]; ok && (bestRank == -1 || rank < bestRank) {
+				best, bestRank = string(rl), rank
+			}
 		}
+		if best == "" {
+			continue
+		}
+		out = append(out, map[string]string{
+			"id":   m.UserID,
+			"name": m.Name,
+			"role": best,
+		})
 	}
 	respondWithJSON(w, http.StatusOK, out)
 }
@@ -1774,7 +1806,11 @@ func (s *Server) HandleAdminUserApprove(w http.ResponseWriter, r *http.Request) 
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user approved"})
 }
 
-// HandleAdminUserRole: PUT /api/admin/users/{id}/role
+// HandleAdminUserRole: PUT /api/admin/users/{id}/role — legacy single-role
+// endpoint kept as the FE fallback. Membership-scoped since the users.role
+// bridge removal: it rewrites the target's roles INSIDE the caller's
+// organization only (deprecated users.role is never touched — changing roles
+// in org A must not affect what org B sees).
 func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1783,6 +1819,11 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		respondWithError(w, http.StatusBadRequest, "missing user id")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
 		return
 	}
 	var body struct {
@@ -1795,46 +1836,24 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if !domain.IsValidUserRole(body.Role) {
-		respondWithError(w, http.StatusBadRequest, "invalid role")
-		return
-	}
-	if err := s.Store.UpdateUserRole(r.Context(), id, body.Role); err != nil {
+	org, err := s.Store.GetOrganizationByID(r.Context(), claims.OrgID)
+	if err != nil || org == nil {
 		respondWithInternalError(w, err, "handler")
 		return
 	}
+	roles := []domain.UserRole{body.Role}
+	if !domain.RolesAllowedInOrg(roles, org.Type) {
+		respondWithError(w, http.StatusBadRequest, "roles inválidos para este tipo de taller")
+		return
+	}
+	if err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, id, roles); err != nil {
+		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
+		return
+	}
+	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
+		"target_user_id": id, "roles": roles, "via": "legacy_admin_role",
+	})
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
-}
-
-// HandleAdminUserLicense: PUT /api/admin/users/{id}/license
-// Manually assigns the per-user licensing tier and optional expiry. Expiry is
-// RFC 3339; omitting it (or null) means the license does not expire.
-func (s *Server) HandleAdminUserLicense(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	id := r.PathValue("id")
-	if id == "" {
-		respondWithError(w, http.StatusBadRequest, "missing user id")
-		return
-	}
-	var body struct {
-		LicensePlan      domain.LicensePlan `json:"license_plan"`
-		LicenseExpiresAt *time.Time         `json:"license_expires_at"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	if !domain.IsValidLicensePlan(body.LicensePlan) {
-		respondWithError(w, http.StatusBadRequest, "invalid license_plan")
-		return
-	}
-	if err := s.Store.SetUserLicense(r.Context(), id, body.LicensePlan, body.LicenseExpiresAt); err != nil {
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "license updated"})
 }
 
 // HandleAdminUserReject: DELETE /api/admin/users/{id}

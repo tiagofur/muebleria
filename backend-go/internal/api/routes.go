@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 func RegisterRoutes(server *Server) http.Handler {
@@ -17,8 +15,19 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/auth/register", authRL(http.HandlerFunc(server.HandleRegister)))
 	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
 
+
+	// Health check endpoint (unauthenticated) — used by Docker healthchecks and Caddy depends_on.
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
 	// Endpoints protegidos por JWT (role/active re-checked against DB — #16)
 	authMW := AuthMiddleware(server.JWTSecret, server.Store)
+	// #327: manufacturing subresources (physical execution, MRP, quality,
+	// installation, job costing) are factory-only — the sales org gets 404.
+	mfgOnly := server.manufacturingOnly
 
 	// Refresh: requires a still-valid token; re-issues JWT with current DB role.
 	mux.Handle("POST /api/auth/refresh", authMW(http.HandlerFunc(server.HandleRefresh)))
@@ -37,6 +46,11 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
 	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(http.HandlerFunc(server.HandlePlatformStartSupportSession)))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
+
+	// Factory sales network (#326): a factory admin lists/creates its
+	// connected store/dealer organizations (cloned from the factory catalog).
+	mux.Handle("GET /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
+	mux.Handle("POST /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
 
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/team", authMW(http.HandlerFunc(server.HandleOrgTeam)))
@@ -155,52 +169,52 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
 	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
-	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(http.HandlerFunc(server.HandleProjectFloorScan)))
-	mux.Handle("GET /api/projects/{id}/loading-status", authMW(http.HandlerFunc(server.HandleProjectLoadingStatus)))
-	mux.Handle("PATCH /api/projects/{id}/items/{itemId}/floor-status", authMW(http.HandlerFunc(server.HandleProjectItemFloorStatus)))
-	mux.Handle("GET /api/projects/{id}/floor-events", authMW(http.HandlerFunc(server.HandleProjectFloorEvents)))
+	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorScan))))
+	mux.Handle("GET /api/projects/{id}/loading-status", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectLoadingStatus))))
+	mux.Handle("PATCH /api/projects/{id}/items/{itemId}/floor-status", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectItemFloorStatus))))
+	mux.Handle("GET /api/projects/{id}/floor-events", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorEvents))))
 
 	// Physical production execution (OC-030..OC-034, #301): piece operations
 	// and module unit transitions with server-side gates, RBAC and audit.
-	mux.Handle("GET /api/projects/{id}/part-executions", authMW(http.HandlerFunc(server.HandleProjectPartExecutions)))
-	mux.Handle("PUT /api/projects/{id}/part-executions", authMW(http.HandlerFunc(server.HandleGeneratePartExecutions)))
-	mux.Handle("POST /api/projects/{id}/parts/{partId}/advance", authMW(http.HandlerFunc(server.HandleAdvancePartOperation)))
-	mux.Handle("POST /api/projects/{id}/parts/{partId}/rework", authMW(http.HandlerFunc(server.HandlePartRework)))
-	mux.Handle("POST /api/projects/{id}/units/{unitId}/advance", authMW(http.HandlerFunc(server.HandleAdvanceModuleUnit)))
-	mux.Handle("POST /api/projects/{id}/units/{unitId}/assembly-override", authMW(http.HandlerFunc(server.HandleAssemblyOverride)))
+	mux.Handle("GET /api/projects/{id}/part-executions", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectPartExecutions))))
+	mux.Handle("PUT /api/projects/{id}/part-executions", authMW(mfgOnly(http.HandlerFunc(server.HandleGeneratePartExecutions))))
+	mux.Handle("POST /api/projects/{id}/parts/{partId}/advance", authMW(mfgOnly(http.HandlerFunc(server.HandleAdvancePartOperation))))
+	mux.Handle("POST /api/projects/{id}/parts/{partId}/rework", authMW(mfgOnly(http.HandlerFunc(server.HandlePartRework))))
+	mux.Handle("POST /api/projects/{id}/units/{unitId}/advance", authMW(mfgOnly(http.HandlerFunc(server.HandleAdvanceModuleUnit))))
+	mux.Handle("POST /api/projects/{id}/units/{unitId}/assembly-override", authMW(mfgOnly(http.HandlerFunc(server.HandleAssemblyOverride))))
 
 	// Material planning (OC-050..OC-054, #302): requirements from the released
 	// BOM, reservations, shortage and the evidence-backed materials release.
-	mux.Handle("GET /api/projects/{id}/materials", authMW(http.HandlerFunc(server.HandleProjectMaterials)))
-	mux.Handle("POST /api/projects/{id}/materials/derive", authMW(http.HandlerFunc(server.HandleMaterialsDerive)))
-	mux.Handle("POST /api/projects/{id}/materials/reserve", authMW(http.HandlerFunc(server.HandleMaterialsReserve)))
-	mux.Handle("POST /api/projects/{id}/materials/consume", authMW(http.HandlerFunc(server.HandleMaterialsConsume)))
-	mux.Handle("POST /api/projects/{id}/materials/release", authMW(http.HandlerFunc(server.HandleMaterialsRelease)))
+	mux.Handle("GET /api/projects/{id}/materials", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectMaterials))))
+	mux.Handle("POST /api/projects/{id}/materials/derive", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsDerive))))
+	mux.Handle("POST /api/projects/{id}/materials/reserve", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsReserve))))
+	mux.Handle("POST /api/projects/{id}/materials/consume", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsConsume))))
+	mux.Handle("POST /api/projects/{id}/materials/release", authMW(mfgOnly(http.HandlerFunc(server.HandleMaterialsRelease))))
 
 	// Quality & rework (OC-060..OC-062, #302): issues, rework actions with
 	// job costing and the per-unit QC gate — server-authoritative.
-	mux.Handle("GET /api/projects/{id}/quality", authMW(http.HandlerFunc(server.HandleProjectQuality)))
-	mux.Handle("POST /api/projects/{id}/quality/issue", authMW(http.HandlerFunc(server.HandleQualityIssue)))
-	mux.Handle("POST /api/projects/{id}/quality/issue/{issueId}/transition", authMW(http.HandlerFunc(server.HandleQualityIssueTransition)))
-	mux.Handle("POST /api/projects/{id}/quality/rework", authMW(http.HandlerFunc(server.HandleQualityRework)))
-	mux.Handle("POST /api/projects/{id}/quality/qc/{unitId}", authMW(http.HandlerFunc(server.HandleQualityUnitQc)))
-	mux.Handle("POST /api/projects/{id}/quality/qc/{unitId}/override", authMW(http.HandlerFunc(server.HandleQualityUnitQcOverride)))
+	mux.Handle("GET /api/projects/{id}/quality", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectQuality))))
+	mux.Handle("POST /api/projects/{id}/quality/issue", authMW(mfgOnly(http.HandlerFunc(server.HandleQualityIssue))))
+	mux.Handle("POST /api/projects/{id}/quality/issue/{issueId}/transition", authMW(mfgOnly(http.HandlerFunc(server.HandleQualityIssueTransition))))
+	mux.Handle("POST /api/projects/{id}/quality/rework", authMW(mfgOnly(http.HandlerFunc(server.HandleQualityRework))))
+	mux.Handle("POST /api/projects/{id}/quality/qc/{unitId}", authMW(mfgOnly(http.HandlerFunc(server.HandleQualityUnitQc))))
+	mux.Handle("POST /api/projects/{id}/quality/qc/{unitId}/override", authMW(mfgOnly(http.HandlerFunc(server.HandleQualityUnitQcOverride))))
 
 	// Installation job (OC-070..OC-074, #303): visits, field issues, punch
 	// items and gated closeout — server-authoritative with audit events.
-	mux.Handle("GET /api/projects/{id}/installation", authMW(http.HandlerFunc(server.HandleProjectInstallation)))
-	mux.Handle("PUT /api/projects/{id}/installation", authMW(http.HandlerFunc(server.HandleProjectInstallation)))
-	mux.Handle("POST /api/projects/{id}/installation/closeout", authMW(http.HandlerFunc(server.HandleProjectInstallationCloseout)))
+	mux.Handle("GET /api/projects/{id}/installation", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallation))))
+	mux.Handle("PUT /api/projects/{id}/installation", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallation))))
+	mux.Handle("POST /api/projects/{id}/installation/closeout", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallationCloseout))))
 
 	// Job costing (OC-080..OC-084, #304): baseline frozen from quote snapshot
 	// + release, time entries, other actuals and the estimate vs actual view.
-	mux.Handle("GET /api/projects/{id}/costing", authMW(http.HandlerFunc(server.HandleProjectCosting)))
-	mux.Handle("POST /api/projects/{id}/costing/baseline", authMW(http.HandlerFunc(server.HandleCostingBaseline)))
-	mux.Handle("POST /api/projects/{id}/costing/labor-rate", authMW(http.HandlerFunc(server.HandleCostingLaborRate)))
-	mux.Handle("POST /api/projects/{id}/costing/time", authMW(http.HandlerFunc(server.HandleCostingTime)))
-	mux.Handle("POST /api/projects/{id}/costing/time/{entryId}/void", authMW(http.HandlerFunc(server.HandleCostingTimeVoid)))
-	mux.Handle("POST /api/projects/{id}/costing/other", authMW(http.HandlerFunc(server.HandleCostingOther)))
-	mux.Handle("POST /api/projects/{id}/costing/other/{costId}/void", authMW(http.HandlerFunc(server.HandleCostingOtherVoid)))
+	mux.Handle("GET /api/projects/{id}/costing", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectCosting))))
+	mux.Handle("POST /api/projects/{id}/costing/baseline", authMW(mfgOnly(http.HandlerFunc(server.HandleCostingBaseline))))
+	mux.Handle("POST /api/projects/{id}/costing/labor-rate", authMW(mfgOnly(http.HandlerFunc(server.HandleCostingLaborRate))))
+	mux.Handle("POST /api/projects/{id}/costing/time", authMW(mfgOnly(http.HandlerFunc(server.HandleCostingTime))))
+	mux.Handle("POST /api/projects/{id}/costing/time/{entryId}/void", authMW(mfgOnly(http.HandlerFunc(server.HandleCostingTimeVoid))))
+	mux.Handle("POST /api/projects/{id}/costing/other", authMW(mfgOnly(http.HandlerFunc(server.HandleCostingOther))))
+	mux.Handle("POST /api/projects/{id}/costing/other/{costId}/void", authMW(mfgOnly(http.HandlerFunc(server.HandleCostingOtherVoid))))
 
 	// Structured site survey (OC-040/OC-041, #305): spaces, field measures,
 	// verification and the fabrication-freeze gate — server-authoritative.
@@ -310,38 +324,16 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
 	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
-	mux.Handle("PUT /api/admin/users/{id}/license", adminMW(http.HandlerFunc(server.HandleAdminUserLicense)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 	// Sector assignments of any user — admin only (F094: was plain auth,
 	// letting any authenticated user rewrite anyone's station access).
 	mux.Handle("GET /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
 	mux.Handle("PUT /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
 
-	// Staff management — admin + gerente_produccion (production/warehouse) + gerente_ventas (sales)
-	// Uses {department} wildcard for production/warehouse; sales has its own routes.
-	prodStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteProduccion)
-	salesStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteVentas)
-
-	// Production + Warehouse (gerente_produccion)
-	mux.Handle("GET /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
-	mux.Handle("POST /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
-	mux.Handle("PUT /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
-	mux.Handle("DELETE /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
-	mux.Handle("GET /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-	mux.Handle("PUT /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-
-	mux.Handle("GET /api/staff/warehouse", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
-	mux.Handle("POST /api/staff/warehouse", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
-	mux.Handle("PUT /api/staff/warehouse/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
-	mux.Handle("DELETE /api/staff/warehouse/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
-	mux.Handle("GET /api/staff/warehouse/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-	mux.Handle("PUT /api/staff/warehouse/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-
-	// Sales (gerente_ventas)
-	mux.Handle("GET /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
-	mux.Handle("POST /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
-	mux.Handle("PUT /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
-	mux.Handle("DELETE /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
+	// NOTE: legacy /api/staff/* routes were removed (users.role bridge): they
+	// created/listed GLOBAL users with no organization scope and no caller in
+	// the clients. Team management lives in /api/org/* (memberships, #326) and
+	// /api/admin/users (org-scoped directory).
 
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
 	return CORSMiddleware(server.allowedOrigins)(mux)

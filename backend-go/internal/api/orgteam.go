@@ -65,8 +65,6 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
 		return
 	}
-	// Bridge: keep deprecated users.role aligned with the primary role.
-	_ = s.Store.UpdateUserRole(r.Context(), userID, primaryUserRole(body.Roles))
 
 	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
 		"target_user_id": userID, "roles": body.Roles,
@@ -144,6 +142,12 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 	inv, err := s.Store.CreateInvitation(r.Context(), claims.OrgID, email, body.Roles,
 		hashInvitationToken(token), time.Now().Add(14*24*time.Hour), claims.UserID)
 	if err != nil {
+		if isDuplicateKey(err) {
+			// One open invitation per (org, email) — the partial unique index
+			// rejects a second one; surface it as 409 instead of a 500.
+			respondWithError(w, http.StatusConflict, "ya existe una invitación abierta para ese email")
+			return
+		}
 		respondWithInternalError(w, err, "org create invitation")
 		return
 	}
@@ -177,11 +181,3 @@ func (s *Server) HandleOrgRevokeInvitation(w http.ResponseWriter, r *http.Reques
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "invitation revoked"})
 }
 
-// primaryUserRole resolves the first canonical role of a set (bridge for the
-// deprecated users.role column).
-func primaryUserRole(roles []domain.UserRole) domain.UserRole {
-	if len(roles) == 0 {
-		return domain.RoleUser
-	}
-	return roles[0]
-}

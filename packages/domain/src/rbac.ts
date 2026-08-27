@@ -731,10 +731,22 @@ export function rolesAllScopedBySector(
 
 /** The actor's effective role set: explicit multi-role or the single role. */
 export function rolesOfUser(user: {
-  role: string | null | undefined;
+  role?: string | null | undefined;
   roles?: readonly (string | null | undefined)[] | null;
 }): readonly string[] {
   const explicit = (user.roles ?? []).filter((r): r is string => r != null);
   if (explicit.length > 0) return explicit;
   return user.role != null ? [user.role] : [];
+}
+
+/**
+ * Cost visibility for a multi-role actor (COST-01/COST-02 with union
+ * semantics): one cost-privileged role in the set is enough — mirrors the
+ * server-side actorCanViewCosts / AnyRole(RoleCanViewCosts) in Go.
+ */
+export function rolesCanViewCosts(
+  roles: readonly (string | null | undefined)[],
+  opts?: { vendedorCanViewCosts?: boolean },
+): boolean {
+  return anyRole(roles, (r) => roleCanViewCosts(r, opts));
 }

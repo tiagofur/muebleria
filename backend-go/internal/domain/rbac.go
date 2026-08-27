@@ -101,11 +101,14 @@ func RoleCanMarkProduced(role UserRole) bool {
 
 // RoleCanViewCosts — unit costs, margin, direct cost (COST-01 / F039 + COST-02 / F044).
 // Vendedor and sin puesto only see sale price unless vendedorCanViewCosts is true.
-// Almacén does not see costs (F094 parity with TS rbac.ts).
+// Almacén does not see costs (F094 parity with TS rbac.ts): COST-02 scopes the
+// flag to vendedor/user only, so almacén is denied even with the flag on.
 func RoleCanViewCosts(role UserRole, vendedorCanViewCosts bool) bool {
 	switch role {
-	case RoleVendedor, RoleUser, RoleAlmacen:
+	case RoleVendedor, RoleUser:
 		return vendedorCanViewCosts
+	case RoleAlmacen:
+		return false
 	default:
 		return true
 	}

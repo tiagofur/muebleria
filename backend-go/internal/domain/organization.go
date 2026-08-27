@@ -30,8 +30,11 @@ type Organization struct {
 	LicensePlan      LicensePlan      `json:"license_plan"`
 	LicenseExpiresAt *time.Time       `json:"license_expires_at,omitempty"`
 	Active           bool             `json:"active"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
+	// ParentOrganizationID links a connected store/dealer to its factory
+	// (#326 sales network). Nil for independent organizations.
+	ParentOrganizationID *string   `json:"parent_organization_id,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // Membership is a user's set of roles inside one organization. Roles are a

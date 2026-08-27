@@ -63,14 +63,15 @@ import {
   ensureProductionRevision as ensureProductionRevisionDomain,
   isKitchenLayoutEmpty,
   projectAllowsContentMutation,
-  projectAllowsReopenToDraft,
+  projectAllowsReopenToDraftRoles,
   projectToTemplate,
   pruneKitchenLayoutOrClear,
   recordProductionExport as recordProductionExportDomain,
   releasePlanEditSession as releasePlanEditSessionDomain,
   renewPlanEditSession as renewPlanEditSessionDomain,
-  resolveOwnerOnCreate,
-  resolveOwnerOnUpdate,
+  resolveOwnerOnCreateRoles,
+  resolveOwnerOnUpdateRoles,
+  rolesOfUser,
   advanceFloorStatus,
   appendFloorEvent,
   setProjectItemFloorStatus,
@@ -278,6 +279,7 @@ export interface ProjectStoreDeps {
 export type ProjectActor = {
   readonly id?: string;
   readonly role?: string;
+  readonly roles?: readonly (string | null | undefined)[];
 };
 
 export interface ProjectState {
@@ -342,7 +344,7 @@ export interface ProjectState {
   readonly reopenProject: (
     id: string,
     catalog: Catalog,
-    actorRole?: string | null,
+    actorRoles?: readonly (string | null | undefined)[],
   ) => void;
   readonly restoreProjectVersion: (id: string, version: number) => void;
 
@@ -731,9 +733,9 @@ export function createProjectStore(options: InternalOptions) {
       );
       const updatedCatalog = { ...catalog, customers: resolved.customers };
       const meta = draftToProjectMeta(draft, resolved.customerId);
-      const ownerUserId = resolveOwnerOnCreate(
+      const ownerUserId = resolveOwnerOnCreateRoles(
         actor.id,
-        actor.role,
+        rolesOfUser(actor),
         draft.ownerUserId,
       );
       const base: Project = {
@@ -799,8 +801,8 @@ export function createProjectStore(options: InternalOptions) {
         laborFixedCost: meta.laborFixedCost,
         notes: meta.notes,
         // Keep existing status — meta form no longer changes lifecycle (#257).
-        ownerUserId: resolveOwnerOnUpdate(
-          actor.role,
+        ownerUserId: resolveOwnerOnUpdateRoles(
+          rolesOfUser(actor),
           existing.ownerUserId,
           draft.ownerUserId,
         ),
@@ -1006,11 +1008,11 @@ export function createProjectStore(options: InternalOptions) {
      * #257: quoted → draft (vendedor OK); accepted/produced → draft only if
      * role is admin/gerente (pass actor via optional 3rd arg; store uses workspace).
      */
-    reopenProject: (id, catalog, actorRole?: string | null) => {
+    reopenProject: (id, catalog, actorRoles?: readonly (string | null | undefined)[]) => {
       const project = get().projects.find((p) => p.id === id);
       if (!project) return;
       if (project.status === 'draft') return;
-      if (!projectAllowsReopenToDraft(project.status, actorRole)) {
+      if (!projectAllowsReopenToDraftRoles(project.status, actorRoles)) {
         toast({
           type: 'error',
           message:
@@ -1082,9 +1084,9 @@ export function createProjectStore(options: InternalOptions) {
         catalog.customers ?? [],
         newId,
       );
-      const ownerUserId = resolveOwnerOnCreate(
+      const ownerUserId = resolveOwnerOnCreateRoles(
         actor.id,
-        actor.role,
+        rolesOfUser(actor),
         draft.ownerUserId,
       );
       const project = createProjectFromTemplate(template, {

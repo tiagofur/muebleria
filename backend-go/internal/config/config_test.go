@@ -35,6 +35,7 @@ func TestLoadConfig_RejectsShortSecret(t *testing.T) {
 
 func TestLoadConfig_SuccessWithDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("a", 40))
+	t.Setenv("PORT", "")             // exercise default port
 	t.Setenv("CORS_ALLOWED_ORIGINS", "") // exercise default dev allowlist
 	t.Setenv("RATE_LIMIT_RPS", "")
 	t.Setenv("RATE_LIMIT_BURST", "")

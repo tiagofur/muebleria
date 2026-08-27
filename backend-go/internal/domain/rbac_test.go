@@ -122,6 +122,23 @@ func TestRBAC_ViewCosts(t *testing.T) {
 	if !RoleCanViewCosts(RoleGerenteVentas, false) {
 		t.Fatal("gerente sees costs")
 	}
+	// Parity pin TS↔Go (COST-02 scopes the flag to vendedor/user): almacén is
+	// denied even with the flag on (F094).
+	if RoleCanViewCosts(RoleAlmacen, false) || RoleCanViewCosts(RoleAlmacen, true) {
+		t.Fatal("almacen never sees costs")
+	}
+	// Union semantics: one cost-privileged role in the set is enough
+	// (mirrors actorCanViewCosts in the API layer).
+	if !AnyRole([]UserRole{RoleVendedor, RoleIngeniero}, func(r UserRole) bool {
+		return RoleCanViewCosts(r, false)
+	}) {
+		t.Fatal("union: vendedor+ingeniero sees costs")
+	}
+	if AnyRole([]UserRole{RoleVendedor, RoleAlmacen}, func(r UserRole) bool {
+		return RoleCanViewCosts(r, false)
+	}) {
+		t.Fatal("union: vendedor+almacen stays blocked without privileged roles")
+	}
 }
 
 func TestRBAC_ReopenAndMarkProduced(t *testing.T) {

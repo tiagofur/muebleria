@@ -21,12 +21,12 @@ import (
 // target it explicitly.
 const InitialOrganizationID = "00000000-0000-0000-0000-000000000001"
 
-const organizationColumns = `id, name, slug, type, license_plan, license_expires_at, active, created_at, updated_at`
+const organizationColumns = `id, name, slug, type, license_plan, license_expires_at, active, parent_organization_id, created_at, updated_at`
 
 func scanOrganization(row pgx.Row) (*domain.Organization, error) {
 	var o domain.Organization
 	err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-		&o.Active, &o.CreatedAt, &o.UpdatedAt)
+		&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("organization not found")
@@ -56,7 +56,7 @@ func (s *PostgresStore) ListOrganizations(ctx context.Context) ([]domain.Organiz
 	for rows.Next() {
 		var o domain.Organization
 		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -75,24 +75,46 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 		plan = domain.LicensePlanNone
 	}
 	return s.Pool.QueryRow(ctx, `
-		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, active, parent_organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+organizationColumns,
-		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, o.Active).
+		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, o.Active, o.ParentOrganizationID).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.CreatedAt, &o.UpdatedAt)
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt)
+}
+
+// ListConnectedOrganizations returns the sales network of a factory: the
+// organizations whose parent is the given factory (#326).
+func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOrganizationID string) ([]domain.Organization, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT `+organizationColumns+` FROM organizations WHERE parent_organization_id = $1 ORDER BY created_at`,
+		parentOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Organization{}
+	for rows.Next() {
+		var o domain.Organization
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
 
 const membershipWithOrgColumns = `
 	m.id, m.organization_id, m.user_id, m.roles, m.active, m.created_at, m.updated_at,
-	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.created_at, o.updated_at`
+	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.parent_organization_id, o.created_at, o.updated_at`
 
 func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 	var m domain.MembershipWithOrg
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Active, &m.CreatedAt, &m.UpdatedAt,
 		&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
-		&m.Organization.CreatedAt, &m.Organization.UpdatedAt)
+		&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("membership not found")
@@ -121,7 +143,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Active, &m.CreatedAt, &m.UpdatedAt,
 			&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
-			&m.Organization.CreatedAt, &m.Organization.UpdatedAt); err != nil {
+			&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -270,11 +292,30 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 		Scan(&out.ID, &out.PlatformAdminUserID, &out.OrganizationID, &out.Reason, &out.StartedAt, &out.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// Lazy close: an open-but-expired session is finalized with
+			// ended_via='expiry' so the audit trail records how it ended
+			// (access was already cut per-request by the middleware check).
+			_, _ = s.Pool.Exec(ctx, `
+				UPDATE support_sessions SET ended_at = expires_at, ended_via = 'expiry'
+				WHERE id = $1 AND ended_at IS NULL AND expires_at <= NOW()`, sessionID)
 			return nil, fmt.Errorf("support session not found")
 		}
 		return nil, err
 	}
 	return &out, nil
+}
+
+// EndOpenSupportSessionsByOrg closes every still-open support session of an
+// organization (suspension path — ended_via='org_suspended', B6).
+func (s *PostgresStore) EndOpenSupportSessionsByOrg(ctx context.Context, organizationID, via string) (int64, error) {
+	result, err := s.Pool.Exec(ctx, `
+		UPDATE support_sessions SET ended_at = NOW(), ended_via = $2
+		WHERE organization_id = $1 AND ended_at IS NULL`,
+		organizationID, via)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 // EndSupportSession closes an open session (idempotent for already-ended).
@@ -294,18 +335,16 @@ func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminU
 // OrgTeamMember is the team listing projection for the active organization.
 type OrgTeamMember struct {
 	UserID           string              `json:"user_id"`
-	Email            string              `json:"email"`
-	Name             string              `json:"name"`
-	Active           bool                `json:"active"`
-	Roles            []domain.UserRole   `json:"roles"`
-	MemberSince      time.Time           `json:"member_since"`
-	LicensePlan      domain.LicensePlan  `json:"license_plan,omitempty"`
-	LicenseExpiresAt *time.Time          `json:"license_expires_at,omitempty"`
+	Email       string            `json:"email"`
+	Name        string            `json:"name"`
+	Active      bool              `json:"active"`
+	Roles       []domain.UserRole `json:"roles"`
+	MemberSince time.Time         `json:"member_since"`
 }
 
 func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID string) ([]OrgTeamMember, error) {
 	rows, err := s.Pool.Query(ctx, `
-		SELECT u.id, u.email, u.name, u.active, m.roles, m.created_at, u.license_plan, u.license_expires_at
+		SELECT u.id, u.email, u.name, u.active, m.roles, m.created_at
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
 		WHERE m.organization_id = $1 AND m.active
@@ -317,7 +356,7 @@ func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID string) 
 	out := []OrgTeamMember{}
 	for rows.Next() {
 		var t OrgTeamMember
-		if err := rows.Scan(&t.UserID, &t.Email, &t.Name, &t.Active, &t.Roles, &t.MemberSince, &t.LicensePlan, &t.LicenseExpiresAt); err != nil {
+		if err := rows.Scan(&t.UserID, &t.Email, &t.Name, &t.Active, &t.Roles, &t.MemberSince); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -498,15 +537,6 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 	}
 	defer tx.Rollback(ctx)
 
-	var existing int
-	if err := tx.QueryRow(ctx,
-		`SELECT COUNT(*) FROM modules WHERE organization_id = $1`, dstOrg).Scan(&existing); err != nil {
-		return err
-	}
-	if existing > 0 {
-		return fmt.Errorf("destination catalog is not empty")
-	}
-
 	maps := []struct{ name, table string }{
 		{"tmp_matcat", "material_categories"},
 		{"tmp_modcat", "module_categories"},
@@ -519,6 +549,30 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 		{"tmp_struct", "structures"},
 		{"tmp_optgrp", "option_groups"},
 		{"tmp_modules", "modules"},
+	}
+
+	// The destination must be empty across EVERY table the clone writes —
+	// both the mapped roots and the child tables the steps populate
+	// (ambient_materials, board_parts, structure children…). Checking only
+	// the roots let a destination with stray child rows pass the guard and
+	// fail mid-transaction on UNIQUE(organization_id, code).
+	dstTables := []string{
+		"material_categories", "module_categories", "ambient_categories",
+		"material_boards", "edge_bands", "hardwares", "components", "agregados",
+		"option_groups", "option_group_members", "structures",
+		"structure_components", "structure_presets", "modules",
+		"board_parts", "hardware_lines", "module_components", "module_presets",
+		"ambient_materials",
+	}
+	for _, table := range dstTables {
+		var existing int
+		if err := tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM `+table+` WHERE organization_id = $1`, dstOrg).Scan(&existing); err != nil {
+			return err
+		}
+		if existing > 0 {
+			return fmt.Errorf("destination catalog is not empty: %s", table)
+		}
 	}
 	for _, m := range maps {
 		if _, err := tx.Exec(ctx, fmt.Sprintf(`CREATE TEMP TABLE %s AS
@@ -668,7 +722,9 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 	return tx.Commit(ctx)
 }
 
-// UpdateOrganization persists mutable fields (name/license/active).
+// UpdateOrganization persists mutable fields (name/license/active). The
+// parent link is NOT mutable here — it is set at creation (#326) and only
+// returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
 	return s.Pool.QueryRow(ctx, `
 		UPDATE organizations SET name = $2, license_plan = $3, license_expires_at = $4,
@@ -677,5 +733,5 @@ func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organi
 		RETURNING `+organizationColumns,
 		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, o.Active).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.CreatedAt, &o.UpdatedAt)
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt)
 }

@@ -16,8 +16,8 @@ import (
 func layoutStubServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanPro}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail:  u,
 		moduleReturnedByID: module,
@@ -26,7 +26,7 @@ func layoutStubServer(t *testing.T) (*Server, string) {
 		listAgregados:   catalog.Agregados,
 		listHardwares:   catalog.Hardware,
 	}
-	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
+	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
@@ -207,16 +207,22 @@ func TestFurnitureDefinitionLayoutUnresolvableComposition(t *testing.T) {
 
 func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanNone}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	// Org without an active license → the layout endpoint must block.
+	noLicense := &domain.Organization{
+		ID: "org-1", Name: "Taller Test", Slug: "taller-test",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	server := licenseTestServer(t, u, noLicense)
 	server.Store = &stubStore{
 		getUserByEmail:     u,
+		getOrgByID:         noLicense,
 		moduleReturnedByID: module,
 		listStructures:     catalog.Structures,
 		listComponents:     catalog.Components,
 		listHardwares:      catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
@@ -278,8 +284,8 @@ func TestFurnitureDefinitionLayoutMaterialChoices(t *testing.T) {
 
 func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanTrial}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,
 		listModules:    []domain.Module{*module},
@@ -300,7 +306,7 @@ func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 				OptionIDs: []string{"hw-x"}},
 		},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
@@ -349,8 +355,8 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 	// The catalog endpoint reports each definition's real composition size so
 	// clients stop guessing "2 piezas" for every cabinet.
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true, LicensePlan: domain.LicensePlanTrial}
-	server := licenseTestServer(t, u)
+	u := &domain.User{ID: "u1", Active: true}
+	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,
 		listModules:    []domain.Module{*module},
@@ -358,7 +364,7 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 		listComponents: catalog.Components,
 		listHardwares:  catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)

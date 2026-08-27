@@ -65,11 +65,10 @@ Dirígete a **Equipo** (`/team` o `/users`):
 1. Haz clic en **"+ Invitar Miembro"**.
 2. Ingresa el correo y marca los roles apropiados:
    - **Vendedor (`vendedor`)**: Crea clientes, elabora presupuestos, negocia y comparte cotizaciones PDF/WhatsApp.
-   - **Diseñador (`disenador`)**: Modela en Proyectar 3D, ajusta medidas y herrajes, genera planos y despieces.
-   - **Ingeniero (`ingeniero`)**: Revisa factibilidad técnica, asigna perfiles de máquina y valida log de ingeniería.
-   - **Encargado de Almacén (`almacen`)**: Controla stock de tableros, cantos y herrajes, recepciona órdenes de compra y libera materiales.
-   - **Operario de Taller / Carpintero (`carpintero`)**: Utiliza las pantallas de taller para registrar avance de piezas (Corte, Canteado, CNC, Armado y Control de Calidad).
-   - **Instalador (`instalador`)**: Gestiona visitas en obra, verificación de medidas en sitio y checklist de entrega final.
+   - **Ingeniero (`ingeniero`)**: Modela en Proyectar 3D, ajusta medidas y herrajes, revisa factibilidad técnica y genera planos y despieces.
+   - **Gerente de Producción (`gerente_produccion`)**: Planifica la producción, asigna perfiles de máquina y controla el avance de taller.
+   - **Producción (`produccion`)**: Utiliza las pantallas de taller para registrar avance de piezas (Corte, Canteado, CNC, Armado y Control de Calidad).
+   - **Almacén (`almacen`)**: Controla stock de tableros, cantos y herrajes, recepciona órdenes de compra y libera materiales.
 3. Asigna las **Estaciones Físicas** a cada operario para que su interfaz se adapte al puesto de trabajo que ocupa en la planta.
 
 ### Paso 6: Ejecución de la Primera Obra Piloto

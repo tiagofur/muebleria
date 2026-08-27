@@ -20,7 +20,8 @@ import type {
 import {
   generateProjectMaterialSummary,
   resolveWorkshopSettings,
-  roleCanViewCosts,
+  roleLabelEs,
+  rolesCanViewCosts,
 } from '@granete/domain';
 import { computeModuleCostPreview, computeSelectedProjectBreakdown } from './breakdown';
 import {
@@ -32,13 +33,12 @@ import {
   selectRecentProjects,
   sumMonthlyQuotedTotal,
 } from '@granete/ui';
-import { roleLabelEs } from '@granete/domain';
 import type { SessionMode } from '../session';
 
 export interface QuoteDerivationsDeps {
   readonly workspaceSettings: WorkshopSettings | undefined;
   readonly session: SessionMode;
-  readonly actorRole: string | null | undefined;
+  readonly actorRoles: readonly string[] | null | undefined;
   readonly catalog: Catalog | null;
   readonly modules: readonly Module[];
   readonly materials: readonly MaterialBoard[];
@@ -54,7 +54,7 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
   const {
     workspaceSettings,
     session,
-    actorRole,
+    actorRoles,
     catalog,
     modules,
     materials,
@@ -70,7 +70,7 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
   /** Guest/local: full costs; auth uses COST-01 + COST-02 flag (F039/F044). */
   const showCosts =
     session === 'guest' ||
-    roleCanViewCosts(actorRole, {
+    rolesCanViewCosts(actorRoles ?? [], {
       vendedorCanViewCosts: workshopSettings.vendedorCanViewCosts,
     });
 

@@ -36,6 +36,7 @@ type stubStore struct {
 	listMaterials        []domain.MaterialBoard
 	lastCreatedCustomer  *domain.Customer
 	lastCreatedProject   *domain.Project
+	lastUpdatedProject   *domain.Project
 	materialReturnedByID *domain.MaterialBoard
 	materialGetByIDErr   error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -68,11 +69,16 @@ type stubStore struct {
 	// Auth test hooks
 	getUserByEmail      *domain.User
 	getUserByEmailErr   error
-	setLicense          func(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error
 	createUserErr       error
 	listUsers           []domain.User
 	// Multi-org memberships by user (ADR-0004) for login/select-org tests.
 	membershipsByUser   map[string][]domain.MembershipWithOrg
+	listConnectedOrgs   []domain.Organization
+	getOrgByID          *domain.Organization
+	orgLicensePlan      domain.LicensePlan
+	orgLicenseExpiresAt *time.Time
+	createdOrgs         []*domain.Organization
+	auditEvents         []storage.SecurityAuditEvent
 	createMaterialOK    bool
 	deleteProjectCalled bool
 	// F044 workshop settings (nil → defaults, flag false)
@@ -231,11 +237,13 @@ func (s *stubStore) GetUserByID(context.Context, string) (*domain.User, error) {
 func (s *stubStore) CreateUser(context.Context, *domain.User) error {
 	return s.createUserErr
 }
-func (s *stubStore) UpdateUser(_ context.Context, u *domain.User) error {
-	s.stubNotUsed("UpdateUser")
-	return nil
-}
 func (s *stubStore) ListUsers(context.Context) ([]domain.User, error) {
+	if s.listUsers != nil {
+		return s.listUsers, nil
+	}
+	return []domain.User{}, nil
+}
+func (s *stubStore) ListUsersByOrganization(context.Context) ([]domain.User, error) {
 	if s.listUsers != nil {
 		return s.listUsers, nil
 	}
@@ -245,19 +253,12 @@ func (s *stubStore) ApproveUser(context.Context, string) error {
 	s.stubNotUsed("ApproveUser")
 	return nil
 }
-func (s *stubStore) UpdateUserRole(context.Context, string, domain.UserRole) error {
-	s.stubNotUsed("UpdateUserRole")
-	return nil
-}
-func (s *stubStore) SetUserLicense(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error {
-	if s.setLicense != nil {
-		return s.setLicense(ctx, id, plan, expiresAt)
-	}
-	s.stubNotUsed("SetUserLicense")
-	return nil
-}
 func (s *stubStore) RejectUser(context.Context, string) error {
 	s.stubNotUsed("RejectUser")
+	return nil
+}
+func (s *stubStore) DeleteOrphanInvitedUser(context.Context, string) error {
+	s.stubNotUsed("DeleteOrphanInvitedUser")
 	return nil
 }
 
@@ -268,14 +269,24 @@ func (s *stubStore) RejectUser(context.Context, string) error {
 // organization (ADR-0004), so legacy license tests keep their intent when the
 // org carries the same plan/expiry as the configured user.
 func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Organization, error) {
+	if s.getOrgByID != nil {
+		return s.getOrgByID, nil
+	}
 	if s.getUserByEmail != nil {
+		// Single-user world: an active factory org; the test controls the
+		// license through orgLicensePlan/orgLicenseExpiresAt (user licensing
+		// is gone — ADR-0005 §3).
+		plan := s.orgLicensePlan
+		if plan == "" {
+			plan = domain.LicensePlanTrial
+		}
 		return &domain.Organization{
 			ID:               storage.InitialOrganizationID,
 			Name:             "Taller Test",
 			Slug:             "taller-test",
 			Type:             domain.OrganizationTypeFactory,
-			LicensePlan:      s.getUserByEmail.LicensePlan,
-			LicenseExpiresAt: s.getUserByEmail.LicenseExpiresAt,
+			LicensePlan:      plan,
+			LicenseExpiresAt: s.orgLicenseExpiresAt,
 			Active:           true,
 		}, nil
 	}
@@ -290,10 +301,20 @@ func (s *stubStore) ListOrganizations(context.Context) ([]domain.Organization, e
 	return nil, nil
 }
 
-func (s *stubStore) CreateOrganization(context.Context, *domain.Organization) error {
+func (s *stubStore) CreateOrganization(_ context.Context, o *domain.Organization) error {
+	if o.ID == "" {
+		o.ID = "new-org-1"
+	}
+	s.createdOrgs = append(s.createdOrgs, o)
 	return nil
 }
 
+func (s *stubStore) ListConnectedOrganizations(_ context.Context, _ string) ([]domain.Organization, error) {
+	if s.listConnectedOrgs != nil {
+		return s.listConnectedOrgs, nil
+	}
+	return []domain.Organization{}, nil
+}
 func (s *stubStore) ListMembershipsByUser(_ context.Context, userID string) ([]domain.MembershipWithOrg, error) {
 	if s.membershipsByUser != nil {
 		return s.membershipsByUser[userID], nil
@@ -308,8 +329,20 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 				return &m, nil
 			}
 		}
+		return nil, errors.New("membership not found")
 	}
-	return nil, errors.New("membership not found")
+	// Default single-organization world: every stub user is an active admin
+	// of whatever organization the token names, unless the test simulates
+	// explicit memberships (ADR-0005 middleware re-validates per request).
+	return &domain.MembershipWithOrg{
+		Membership: domain.Membership{
+			OrganizationID: organizationID, UserID: userID,
+			Roles: []domain.UserRole{domain.RoleAdmin}, Active: true,
+		},
+		Organization: domain.Organization{
+			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,
+		},
+	}, nil
 }
 
 func (s *stubStore) EnsureMembership(context.Context, string, string, []domain.UserRole) error {
@@ -324,7 +357,8 @@ func (s *stubStore) SetPlatformAdmin(context.Context, string, bool) error {
 	return nil
 }
 
-func (s *stubStore) InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error {
+func (s *stubStore) InsertSecurityAuditEvent(_ context.Context, ev storage.SecurityAuditEvent) error {
+	s.auditEvents = append(s.auditEvents, ev)
 	return nil
 }
 func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {
@@ -822,10 +856,12 @@ func (s *stubStore) ListProjects(context.Context) ([]domain.Project, error) {
 func (s *stubStore) GetProjectByID(context.Context, string) (*domain.Project, error) {
 	return s.projectReturnedByID, s.projectGetByIDErr
 }
-func (s *stubStore) UpdateProject(context.Context, string, *domain.Project) error {
+func (s *stubStore) UpdateProject(_ context.Context, _ string, p *domain.Project) error {
 	if s.updateProjectErr != nil {
 		return s.updateProjectErr
 	}
+	cp := *p
+	s.lastUpdatedProject = &cp
 	return nil
 }
 func (s *stubStore) DeleteProject(context.Context, string) error {
@@ -1813,7 +1849,7 @@ func TestHandleLogin_Uniform401ForPendingUser(t *testing.T) {
 	srv := &Server{
 		Store: &stubStore{getUserByEmail: &domain.User{
 			ID: "u1", Email: "pending@test.com", PasswordHash: hash,
-			Name: "P", Role: domain.RoleUser, Active: false,
+			Name: "P", Active: false,
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
@@ -1844,7 +1880,7 @@ func TestHandleLogin_Uniform401ForWrongPassword(t *testing.T) {
 	srv := &Server{
 		Store: &stubStore{getUserByEmail: &domain.User{
 			ID: "u1", Email: "ok@test.com", PasswordHash: hash,
-			Name: "O", Role: domain.RoleUser, Active: true,
+			Name: "O", Active: true,
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
@@ -1894,9 +1930,6 @@ func TestHandleRegister_IgnoresRoleInBody(t *testing.T) {
 	}
 	if created == nil {
 		t.Fatal("expected CreateUser to be called")
-	}
-	if created.Role != domain.RoleUser {
-		t.Errorf("role = %q, want %q (self-reg always user)", created.Role, domain.RoleUser)
 	}
 	if created.Active {
 		t.Error("self-reg must start inactive (pending approval)")
@@ -2314,7 +2347,6 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 		Email:        "carlos@carpinteria.com",
 		PasswordHash: "$2a$12$eImiTXuWVxfM37uY4JANjOL.oUvhqp7VOHWcxSGYV7G4j7n",
 		Name:         "Carlos Carpintero",
-		Role:         domain.RoleProduccion,
 		Active:       true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -2341,8 +2373,10 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 	if !strings.Contains(raw, `"email":"carlos@carpinteria.com"`) {
 		t.Errorf("missing email in JSON: %s", raw)
 	}
-	if !strings.Contains(raw, `"role":"produccion"`) {
-		t.Errorf("missing role in JSON: %s", raw)
+	// Roles live in the membership (`roles` sibling in auth responses) — the
+	// user payload itself must NOT carry a role anymore (000090).
+	if strings.Contains(raw, `"role"`) {
+		t.Errorf("user payload must not carry role: %s", raw)
 	}
 }
 
@@ -2355,6 +2389,9 @@ func (s *stubStore) StartSupportSession(context.Context, string, string, string,
 }
 func (s *stubStore) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
 	return nil, errors.New("support session not found")
+}
+func (s *stubStore) EndOpenSupportSessionsByOrg(context.Context, string, string) (int64, error) {
+	return 0, nil
 }
 func (s *stubStore) EndSupportSession(context.Context, string, string, string) (bool, error) {
 	return true, nil

@@ -5,8 +5,9 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { WorkshopSettings } from '@granete/domain';
-import { Settings, SlidersHorizontal, Wrench } from 'lucide-react';
+import { Network, Settings, SlidersHorizontal, Wrench } from 'lucide-react';
 import { PageHeader, submitBusyLabel, WorkspaceTabs, type TabDefinition } from '../common';
+import { SalesNetworkSection } from './SalesNetworkSection';
 import '../catalogs/catalogs.css';
 import './settings.css';
 
@@ -15,9 +16,18 @@ export type SettingsScreenProps = {
   readonly onSave: (settings: WorkshopSettings) => void;
   readonly saving?: boolean;
   readonly onOpenOnboardingTour?: () => void;
+  /**
+   * Sales network of a factory org (#326). Provided only when the active
+   * organization is a factory — renders the "Red de Ventas" tab.
+   */
+  readonly salesNetwork?: {
+    readonly baseUrl: string;
+    readonly token: string;
+    readonly onEnterOrg: (orgId: string, orgName: string) => void;
+  } | null;
 };
 
-type SettingsTabId = 'general' | 'ingenieria';
+type SettingsTabId = 'general' | 'ingenieria' | 'red';
 
 const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
   {
@@ -30,6 +40,11 @@ const SETTINGS_TABS: readonly TabDefinition<SettingsTabId>[] = [
     label: 'Ingeniería y Producción',
     icon: <Wrench size={14} aria-hidden style={{ marginRight: 6 }} />,
   },
+  {
+    id: 'red',
+    label: 'Red de Ventas',
+    icon: <Network size={14} aria-hidden style={{ marginRight: 6 }} />,
+  },
 ];
 
 export function SettingsScreen({
@@ -37,8 +52,16 @@ export function SettingsScreen({
   onSave,
   saving = false,
   onOpenOnboardingTour,
+  salesNetwork = null,
 }: SettingsScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
+
+  // F178 N10: never strand the user on the sales-network tab when it disappears.
+  useEffect(() => {
+    if (!salesNetwork && activeTab === 'red') {
+      setActiveTab('general');
+    }
+  }, [salesNetwork, activeTab]);
 
   // Commercial / General state
   const [margin, setMargin] = useState(String(settings.defaultMarginFactor));
@@ -160,7 +183,7 @@ export function SettingsScreen({
 
       <div style={{ marginBottom: 16 }}>
         <WorkspaceTabs
-          tabs={SETTINGS_TABS}
+          tabs={salesNetwork ? SETTINGS_TABS : SETTINGS_TABS.filter((t) => t.id !== 'red')}
           activeTab={activeTab}
           onTabChange={setActiveTab}
           ariaLabel="Secciones de ajustes del taller"
@@ -339,6 +362,15 @@ export function SettingsScreen({
               </fieldset>
             ) : null}
           </>
+        ) : null}
+
+        {/* TAB 3: RED DE VENTAS (solo fábricas, #326) */}
+        {activeTab === 'red' && salesNetwork ? (
+          <SalesNetworkSection
+            baseUrl={salesNetwork.baseUrl}
+            token={salesNetwork.token}
+            onEnterOrg={salesNetwork.onEnterOrg}
+          />
         ) : null}
 
         {/* TAB 2: INGENIERÍA Y PRODUCCIÓN */}

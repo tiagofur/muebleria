@@ -55,7 +55,7 @@ export function SupportBanner({
           fontSize: 'var(--text-sm)',
         }}
       >
-        {exiting ? 'Saliendo…' : 'Salir del soporte'}
+        {exiting ? 'Saliendo…' : 'Salir del soporte (vuelve al login)'}
       </button>
     </div>
   );

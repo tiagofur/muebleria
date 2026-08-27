@@ -118,11 +118,25 @@ export { effectiveOptionChoices } from './optionChoices';
 
 export {
   canAccessOwnedResource,
+  canAccessOwnedResourceRoles,
   resolveOwnerOnCreate,
+  resolveOwnerOnCreateRoles,
   resolveOwnerOnUpdate,
+  resolveOwnerOnUpdateRoles,
   roleCanAssignOwner,
+  rolesCanAssignOwner,
   roleSeesAllOwners,
+  rolesSeesAllOwners,
 } from './ownership';
+
+export {
+  ORGANIZATION_TYPES,
+  allowedRolesForOrgType,
+  isValidOrganizationType,
+  roleAllowedInOrg,
+  rolesAllowedInOrg,
+} from './organization';
+export type { OrganizationType } from './organization';
 
 export type { ProductRole } from './rbac';
 export {
@@ -179,6 +193,7 @@ export {
   anyRole,
   navIdsForRoles,
   rolesCanAccessNav,
+  rolesCanViewCosts,
   rolesAllScopedBySector,
   rolesOfUser,
 } from './rbac';
@@ -293,6 +308,7 @@ export {
   isProjectClosed,
   projectAllowsContentMutation,
   projectAllowsReopenToDraft,
+  projectAllowsReopenToDraftRoles,
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,

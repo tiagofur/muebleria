@@ -118,6 +118,7 @@ export interface WorkspaceState {
   readonly activeOrg: OrgSummary | null;
   readonly supportInfo: SupportInfo | null;
   readonly supportExiting: boolean;
+  readonly authUserSeq: number;
   readonly guestImportLoading: boolean;
   readonly guestImportError: string | null;
 
@@ -173,6 +174,7 @@ export interface WorkspaceState {
   // --- Selectors ---
   readonly getAuthToken: () => string | null;
   readonly getAuthUser: () => AuthUser | null;
+  readonly getAuthUserSeq: () => number;
   readonly getRepository: () => WorkspaceRepository;
 }
 
@@ -222,6 +224,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         activeOrg: null,
         supportInfo: null,
         supportExiting: false,
+        authUserSeq: 0,
 
         // --- Workspace lifecycle ---
         workspace: null,
@@ -363,6 +366,10 @@ export function createWorkspaceStore(options?: InternalOptions) {
             storeAuthUser(result.user);
             set({
               session: 'auth',
+              // authUserSeq re-keys the authUser/authToken memos in the
+              // shell — without it an in-app org switch (F178 N6) kept
+              // serving the PREVIOUS org's token to child screens.
+              authUserSeq: get().authUserSeq + 1,
               orgSelectionLoading: false,
               orgSelectionError: null,
               pendingOrgSelection: null,
@@ -388,6 +395,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           writeSessionMode('auth');
           set({
             session: 'auth',
+            authUserSeq: get().authUserSeq + 1,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
@@ -425,7 +433,23 @@ export function createWorkspaceStore(options?: InternalOptions) {
               fetchImpl: deps.fetchImpl,
             });
             if (me.user) {
-              storeAuthUser(me.user);
+              // /auth/me devuelve los roles de la membresía como clave
+              // hermana `roles` (el DTO de usuario no los trae). Merge en el
+              // usuario persistido: guardar el DTO tal cual perdería la
+              // unión multi-rol en cada reload (#325). Si la respuesta no
+              // trae roles, se conservan los ya persistidos.
+              const roles = Array.isArray(me.roles)
+                ? me.roles.filter((r): r is string => typeof r === 'string' && r !== '')
+                : [];
+              const persisted = readAuthUser();
+              const nextRoles =
+                roles.length > 0 ? roles : (persisted?.roles ?? []);
+              storeAuthUser(
+                nextRoles.length > 0
+                  ? { ...me.user, roles: nextRoles }
+                  : me.user,
+              );
+              set({ authUserSeq: get().authUserSeq + 1 });
             }
             set({ activeOrg: me.organization ?? null, supportInfo: me.support ?? null });
           } catch {
@@ -668,6 +692,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         // --- Selectors ---
         getAuthToken: () => (get().session === 'auth' ? readAuthToken() : null),
         getAuthUser: () => (get().session === 'auth' ? readAuthUser() : null),
+        getAuthUserSeq: () => get().authUserSeq,
         getRepository: () =>
           deps.repositoryFactory(get().session ?? 'guest', {
             baseUrl: deps.baseUrl,

@@ -86,7 +86,8 @@ export type AppNavId =
 
 export type AppShellSessionUser = {
   readonly email: string;
-  readonly role: string;
+  /** Optional since users.role was dropped (000090); the label falls back. */
+  readonly role?: string;
 };
 
 export type AppShellProps = {
@@ -131,7 +132,7 @@ export type AppShellProps = {
   readonly onCommandItem?: (id: string) => void;
 };
 
-function roleLabel(role: string): string {
+function roleLabel(role: string | undefined): string {
   const map: Record<string, string> = {
     admin: 'Admin',
     user: 'Sin puesto',
@@ -142,6 +143,7 @@ function roleLabel(role: string): string {
     produccion: 'Producción',
     almacen: 'Almacén',
   };
+  if (!role) return 'Miembro';
   return map[role] ?? role;
 }
 

@@ -816,14 +816,14 @@ describe('projectStore — importNestingResult / updateKitchenLayout', () => {
     const store = createProjectStore({ deps });
 
     store.getState().setProjects([makeProject({ status: 'accepted' })]);
-    store.getState().reopenProject('proj-1', seedCatalog(), 'vendedor');
+    store.getState().reopenProject('proj-1', seedCatalog(), ['vendedor']);
     expect(store.getState().projects[0]!.status).toBe('accepted');
 
-    store.getState().reopenProject('proj-1', seedCatalog(), 'admin');
+    store.getState().reopenProject('proj-1', seedCatalog(), ['admin']);
     expect(store.getState().projects[0]!.status).toBe('draft');
 
     store.getState().setProjects([makeProject({ status: 'quoted' })]);
-    store.getState().reopenProject('proj-1', seedCatalog(), 'vendedor');
+    store.getState().reopenProject('proj-1', seedCatalog(), ['vendedor']);
     expect(store.getState().projects[0]!.status).toBe('draft');
   });
 

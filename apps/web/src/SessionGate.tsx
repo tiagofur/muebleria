@@ -29,6 +29,7 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
   const orgSelectionLoading = useWorkspaceStore((s) => s.orgSelectionLoading);
   const orgSelectionError = useWorkspaceStore((s) => s.orgSelectionError);
   const selectOrg = useWorkspaceStore((s) => s.selectOrg);
+  const logout = useWorkspaceStore((s) => s.logout);
 
   const isAcceptInvitation =
     typeof window !== 'undefined' && window.location.pathname === '/accept-invitation';
@@ -65,6 +66,7 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
         onPick={(orgId) => void selectOrg(orgId)}
         loading={orgSelectionLoading}
         error={orgSelectionError}
+        onLogout={logout}
       />
     );
   }

@@ -35,10 +35,12 @@ func isolationSetup(t *testing.T) (*storage.PostgresStore, string, string) {
 	}
 
 	seed := []string{
-		// Org A (initial): one customer, one project, one board.
-		`INSERT INTO customers (id, name) VALUES ('c1000000-0000-0000-0000-00000000000a', 'Cliente Alfa')`,
-		`INSERT INTO projects (id, name, customer_id, status) VALUES ('c2000000-0000-0000-0000-00000000000a', 'Obra Alfa', 'c1000000-0000-0000-0000-00000000000a', 'draft')`,
-		`INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price) VALUES ('c3000000-0000-0000-0000-00000000000a', 'TAB-ALFA', 'Tablero Alfa', 1830, 2440, 18, 1000)`,
+		// Org A (initial): one customer, one project, one board. The org is
+		// explicit — 000088 dropped the transitional DEFAULT so unscoped
+		// writes fail loudly.
+		`INSERT INTO customers (id, name, organization_id) VALUES ('c1000000-0000-0000-0000-00000000000a', 'Cliente Alfa', '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('c2000000-0000-0000-0000-00000000000a', 'Obra Alfa', 'c1000000-0000-0000-0000-00000000000a', 'draft', '` + multiOrgInitialOrgID + `')`,
+		`INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price, organization_id) VALUES ('c3000000-0000-0000-0000-00000000000a', 'TAB-ALFA', 'Tablero Alfa', 1830, 2440, 18, 1000, '` + multiOrgInitialOrgID + `')`,
 		// Org B: its own rows (same shape, different world).
 		`INSERT INTO customers (id, name, organization_id) VALUES ('c1000000-0000-0000-0000-00000000000b', 'Cliente Beta', '` + orgB + `')`,
 		`INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('c2000000-0000-0000-0000-00000000000b', 'Obra Beta', 'c1000000-0000-0000-0000-00000000000b', 'draft', '` + orgB + `')`,
@@ -183,5 +185,133 @@ func TestIsolation_WorkshopSettings(t *testing.T) {
 	}
 	if wsB.DefaultCurrency != "BRL" {
 		t.Fatalf("org B currency = %q, want BRL", wsB.DefaultCurrency)
+	}
+}
+
+// #327 hardening: the org user directory must be scoped — an org admin never
+// sees other organizations' users. The global ListUsers stays reserved for
+// the platform console.
+func TestIsolation_UserDirectoryByOrganization(t *testing.T) {
+	store, orgA, orgB := isolationSetup(t)
+	ctx := context.Background()
+
+	// Two users: u-a belongs only to org A, u-both belongs to A and B.
+	seed := []string{
+		`INSERT INTO users (id, email, name, active, password_hash) VALUES
+		 ('a1000000-0000-0000-0000-0000000000aa', 'a@test.com', 'Usuario A', true, 'x'),
+		 ('a1000000-0000-0000-0000-0000000000bb', 'both@test.com', 'Usuario AB', true, 'x')`,
+		`INSERT INTO memberships (organization_id, user_id, roles) VALUES
+		 ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000aa', '{admin}'),
+		 ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000bb', '{vendedor}'),
+		 ('` + orgB + `', 'a1000000-0000-0000-0000-0000000000bb', '{admin}')`,
+	}
+	for _, s := range seed {
+		if _, err := store.Pool.Exec(ctx, s); err != nil {
+			t.Fatalf("seed: %v (%s)", err, s[:60])
+		}
+	}
+
+	listA, err := store.ListUsersByOrganization(scoped(ctx, orgA))
+	if err != nil {
+		t.Fatalf("list A: %v", err)
+	}
+	listB, err := store.ListUsersByOrganization(scoped(ctx, orgB))
+	if err != nil {
+		t.Fatalf("list B: %v", err)
+	}
+	if len(listA) != 2 {
+		t.Fatalf("org A directory must have 2 members, got %d", len(listA))
+	}
+	if len(listB) != 1 || listB[0].Email != "both@test.com" {
+		t.Fatalf("org B directory must see only its own member, got %d", len(listB))
+	}
+
+	// Unscoped listing fails closed instead of leaking the whole table.
+	if _, err := store.ListUsersByOrganization(ctx); err == nil {
+		t.Fatal("unscoped directory listing must fail (no organization scope)")
+	}
+}
+
+// #326: connected sales organizations — the parent link round-trips and
+// ListConnectedOrganizations returns exactly the factory's network.
+func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
+	store, _, _ := isolationSetup(t)
+	ctx := context.Background()
+
+	factory := &domain.Organization{
+		Name: "Fábrica Alpha", Slug: "fabrica-alpha",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	if err := store.CreateOrganization(ctx, factory); err != nil {
+		t.Fatalf("create factory: %v", err)
+	}
+
+	tienda := &domain.Organization{
+		Name: "Tienda GDL", Slug: "tienda-gdl",
+		Type: domain.OrganizationTypeStore, Active: true,
+		ParentOrganizationID: &factory.ID,
+	}
+	if err := store.CreateOrganization(ctx, tienda); err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+
+	independent := &domain.Organization{
+		Name: "Taller Independiente", Slug: "taller-independiente",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	if err := store.CreateOrganization(ctx, independent); err != nil {
+		t.Fatalf("create independent: %v", err)
+	}
+
+	got, err := store.GetOrganizationByID(ctx, tienda.ID)
+	if err != nil {
+		t.Fatalf("get store: %v", err)
+	}
+	if got.ParentOrganizationID == nil || *got.ParentOrganizationID != factory.ID {
+		t.Fatalf("parent round-trip = %v, want %s", got.ParentOrganizationID, factory.ID)
+	}
+
+	list, err := store.ListConnectedOrganizations(ctx, factory.ID)
+	if err != nil {
+		t.Fatalf("list connected: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != tienda.ID {
+		t.Fatalf("connected list must contain only the store, got %+v", list)
+	}
+	if list[0].ParentOrganizationID == nil || *list[0].ParentOrganizationID != factory.ID {
+		t.Fatalf("connected listing lost the parent link")
+	}
+}
+
+// B1 regression: UpdateOrganization's RETURNING scan must match
+// organizationColumns (parent_organization_id was added by 000089) — a
+// mismatch made every platform org PATCH (rename/license/suspend) 500.
+func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {
+	store, _, _ := isolationSetup(t)
+	ctx := context.Background()
+
+	org := &domain.Organization{
+		Name: "Fábrica Update", Slug: "fabrica-update",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	if err := store.CreateOrganization(ctx, org); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	org.Name = "Fábrica Renombrada"
+	org.Active = false
+	if err := store.UpdateOrganization(ctx, org); err != nil {
+		t.Fatalf("update (rename+suspend): %v", err)
+	}
+	if org.Name != "Fábrica Renombrada" || org.Active {
+		t.Fatalf("scan did not round-trip: %+v", org)
+	}
+
+	got, err := store.GetOrganizationByID(ctx, org.ID)
+	if err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if got.Name != "Fábrica Renombrada" || got.Active {
+		t.Fatalf("update did not persist: %+v", got)
 	}
 }

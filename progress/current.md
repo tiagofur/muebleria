@@ -1,6 +1,194 @@
 # Sesión
 
-**Feature en curso:** F172, F173, F174 — OLA MULTI-ORGANIZACIÓN Y DEPLOYMENT VPS COMPLETADA
+**Feature en curso:** F178 — FIXES DEL RE-REVIEW (#325/#326/#327) COMPLETADO
+**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175–F178
+**Rama:** `fix/327-multi-org-hardening`
+
+## F178: fixes del segundo review a fondo
+
+Re-review con agentes + verificación manual encontró 6 bugs míos de las olas
+anteriores viviendo en rutas sin test; todos cerrados:
+
+1. **B1 consola plataforma rota:** UpdateOrganization escaneaba 9 columnas
+   tras 000089 agregar parent_organization_id — todo PATCH (renombra/
+   licencia/suspender) devolvía 500. Fix + test de regresión storage.
+2. **B2/B3 CLI post-000090:** set-license ahora es por organización
+   (--org slug); seed backfillea owners vía memberships; admin create
+   asegura licencia trial de la ORG (sin writes a users.license_*).
+3. **#327 cierre real de la separación:** redacción completa del agregado
+   (MaterialPlanning/Quality/Costing), wrapper manufacturingOnly en 31 rutas
+   de sub-recursos (org comercial → 404 idéntico a obra inexistente), y una
+   tienda no puede ser su propio fabricante (400 sin mfg asignada).
+4. **B4/B5/B6/M1:** slug clampeado al CHECK (400 claro), guard de
+   CloneCatalog sobre TODAS las tablas destino, suspender org corta
+   sesiones de soporte (ended_via='org_suspended'), invitación dup → 409.
+5. **Regresiones FE del DROP:** ShellView gates a unión (embarques/
+   instalaciones estaban ocultas para TODOS los auth), projectStore resuelve
+   owner con la unión (resolveOwnerOnCreateRoles/UpdateRoles), deps
+   keyeados, N6 selectOrg bumpea authUserSeq + memo de authToken keyeado
+   (el switch in-app servía el token de la org anterior), N7 error visible
+   + Entrar deshabilitado en suspendidas, N8 sin fallback single-role ni
+   toasts falsos, N9 identidad de la unión, N10 tab reset.
+
+## Verificación F178
+
+- go test ./... 8/8; pnpm typecheck 7/7; pnpm test ok (web 312, ui 1435).
+- Tests nuevos: UpdateOrganization round-trip, manufacturingOnly gate
+  (404/200), store-needs-factory (400/201), redacción de subprocesos.
+
+---
+
+## Ola anterior (F177)
+
+**Feature:** F177 — DROP users.role/license_* (000090) COMPLETADO
+**Rama:** `fix/327-multi-org-hardening`
+
+## F177: deudas restantes cerradas
+
+1. **Deprecación real de `users.role` / `users.license_plan` /
+   `users.license_expires_at` (migración 000090, down estructural):** auditoría
+   de todos los lectores/escritores; remoción de punta a punta (domain.User,
+   queries/scans de storage, PublicUserDTO, ToLicenseDTO, UpdateUser/
+   UpdateUserRole, primaryUserRole, seeds de tests). La validación de sectores
+   (F094) ahora usa los roles de MEMBRESÍA en la org del caller (antes el rol
+   global). Tests de licencia de furniture migrados a fixtures de org (la
+   licencia es de la organización). Tests de seguridad actualizados: el
+   payload de usuario NO debe llevar role/license.
+2. **FE sin `user.role`:** AuthUser.role opcional (roles[] de membresía es la
+   fuente; el fallback queda sólo para sesiones persistidas pre-000090);
+   parseAuthResponse/readAuthUser ya no lo exigen; roleLabel con fallback
+   "Miembro".
+3. **Pulidos:** metadata de audit con tooltip pretty-printed; banner de
+   invitación con tokens success; "Salir del soporte (vuelve al login)".
+
+## Verificación F177
+
+- `go test ./...` 8/8 (chain legacy→000090 testeada por multi_org_migration);
+  `pnpm -w typecheck` 7/7; `pnpm -w test` ok (web 312, ui 1435, domain 1128).
+
+## Sin deuda conocida restante
+
+La revisión #325/#326/#327 está completamente cerrada. Único ítem de roadmap
+(no deuda): "Store requests dealership → factory approves" queda como flujo
+futuro según docs/multi-organization-distribution-model.md.
+
+---
+
+## Ola anterior (F176)
+
+**Feature:** F176 — SEGUNDA OLA MULTI-ORG COMPLETADO
+**Rama:** `fix/327-multi-org-hardening`
+
+## F176: arreglos y mejoras tras el hardening F175
+
+1. **Paridad RBAC TS↔Go (contract fixtures):** Go `RoleCanViewCosts` arreglado
+   (almacen jamás ve costos — COST-02 scopea el flag a vendedor/user; Go se
+   contradecía a sí mismo) con pins en ambos test suites; `ownership.ts` gana
+   los 5 helpers multi-role espejo de `ownership.go` (+ tests que replican
+   `TestOwnershipUnion_MultiRole`); `rolesCanViewCosts` unión y
+   `useQuoteDerivations/showCosts` pasa de actorRole single a la unión;
+   `contracts/roles.json` gana `rolesByOrganizationType` pineado desde Go
+   (`organization_test.go`) y TS (`organization.test.ts` vía nuevo espejo
+   `organization.ts`); `OrgSummary` FE gana `type`+`license`.
+2. **Retiro del puente `users.role`:** `/api/staff/*` eliminado (creaba/listaba
+   usuarios globales sin scope, sin callers); `HandleOrgMemberRoles` sin write
+   global; `HandleAdminUserRole` re-escopeado a membresía de la org del caller
+   (valida tipo de org + audit); licencia por usuario retirada de punta a
+   punta (endpoint, `SetUserLicense`, selector en UsersScreen).
+3. **UX:** gates de AppContent a unión multi-role (showAdminUsers,
+   canAssignOwner, force-reopen, plant filter, loaded floor, costing, dashboard
+   mode); OrgPicker con "Cerrar sesión"; errores de carga con Reintentar en
+   Users/Platform; chip Pendiente/Vencida en invitaciones.
+4. **Robustez:** guard de CloneCatalog sobre TODAS las tablas; audit
+   `organization_renamed`; cierre lazy `ended_via='expiry'` de soporte; cleanup
+   del usuario huérfano en accept-invitation (DeleteOrphanInvitedUser + 409).
+5. **#326 completo — red de ventas de fábrica:** migración 000089
+   (`parent_organization_id`), `GET/POST /api/factory/organizations` (sólo
+   admin de org type factory; crea store/dealer con slug autogenerado único,
+   catálogo clonado DESDE la fábrica, membresía admin del creador para invitar
+   equipo, licencia queda platform-managed, audit `connected_org_created`);
+   tab "Red de Ventas" en Ajustes (solo fábricas) con crear → "Entrar al
+   taller e invitar equipo" (selectOrg + nav Equipo). Tests: 6 API + storage
+   parent/listing + render FE con fetch stubbed.
+
+## Verificación F176
+
+- `go test ./...` 8/8; `pnpm -w typecheck` 7/7; `pnpm -w test` ok (domain
+  1128, ui 1435, web 312 al cierre de cada batch).
+
+## Deuda restante (menor)
+
+- Auditar/quitar columnas `users.role`/`users.license_*` (DROP en migración
+  futura cuando nada las lea).
+- FE móvil/desktop sin pantallas de equipo (thin shells, sin impacto).
+- "Store requests dealership → factory approves" (futuro según doc).
+
+---
+
+## Ola anterior (F175)
+
+**Feature:** F175 — HARDENING MULTI-ORG (#325/#326/#327) COMPLETADO
+**Rama:** `fix/327-multi-org-hardening`
+
+## F175: Hardening tras revisión a fondo de la ola multi-org
+
+Revisión sistemática de #325/#326/#327 contra ADR-0005, doc de distribución y
+issues: la capa identidad/membresía/audit estaba sólida, pero #327 quedó al
+50% (columnas + filtrado triple, sin enforcement). Cuatro fixes críticos:
+
+1. **Ownership de proyecto server-authoritative (#327):** `POST /api/projects`
+   valida `sales_organization_id`/`manufacturing_organization_id` contra las
+   membresías activas del caller (manufacturing exige org type `factory`);
+   vacío sigue defaulteando a la org del caller. `UpdateProject` (storage) ya
+   no escribe esas columnas y el handler PUT ignora copias del cliente
+   (server-authoritative, como `installation`). `api/projectOwnership_test.go`
+   cubre: org ajena → 403, mfg no-factory → 403, create válido → 201, PUT no
+   reasigna ownership ni borra payload manufacturero.
+2. **Separación sales vs manufacturing (#327):** `domain.RedactProjectManufacturing`
+   + `RestoreProjectManufacturing`. Callers fuera de la manufacturing org
+   reciben el agregado sin `engineering_log`, `cut_plan`, `part_instances`,
+   `module_units`, `production_release`, `materials_release`, `nesting_import`,
+   floor events ni installation job; su PUT restaura la copia almacenada
+   (round-trip no puede wipear). Aplica a list/get/create/update responses.
+   Sub-recursos siguen protegidos por RBAC (store/dealer no pueden tener roles
+   de producción).
+3. **Fail-closed org-less:** `AuthMiddleware` rechaza tokens sin `claims.OrgID`
+   fuera de `/api/platform/*` y `/api/auth/*` (403 "elegí un taller"), sin el
+   puente transicional `users.role`→roles. Migración `000088` elimina los
+   DEFAULT transicionales de `organization_id` (43 tablas, up/down); INSERT
+   sin scope ahora viola NOT NULL (fail-loud). `OrgFromCtx` fallback queda
+   sólo para tooling directo (CLI/migraciones/tests), documentado en
+   `storage/scope.go`. Directorio de usuarios scoped:
+   `ListUsersByOrganization` (join memberships) para `/api/admin/users`;
+   `assignable-owners` ahora sale de `ListOrgTeam` (roles por membresía, no
+   `users.role`). Test de aislamiento cross-org del directorio incluido.
+4. **Frontend hidratación multi-rol (#325):** `hydrateSessionInfo` merguea
+   `me.roles` en el usuario persistido (antes el DTO sin roles pisaba la
+   unión en cada reload) y preserva roles existentes si la respuesta no trae
+   (`workspaceStore.test.ts`).
+
+Docs actualizados: ADR-0005 §1 (fail-closed + 000088), doc de distribución
+(sección Enforcement). Deuda conocida NO abordada aquí (hallazgos medios de la
+revisión): flujo "factory crea tiendas conectadas" (#326 es hoy platform-only),
+espejo TS de `AllowedRolesForOrgType` + checkboxes filtrados en UsersScreen,
+paridad TS de ownership-union, divergencia `roleCanViewCosts` TS↔Go (almacen),
+puente `users.role` en `/api/staff` y `HandleOrgMemberRoles`.
+
+## Verificación F175
+
+- `go build ./...` + `go vet ./...` limpios.
+- `go test ./...` backend: 8/8 paquetes ok (incluye tests nuevos:
+  `TestAuthMiddleware_OrgLessTokenFailClosed`, `TestProjectOrgOwnership_*` x5,
+  `TestIsolation_UserDirectoryByOrganization`; seeds de isolation/clone/f116
+  adaptados a org explícita post-000088).
+- `pnpm -w typecheck`: 7/7 proyectos ok. `pnpm -w test`: ok (web 312/312 con
+  los 2 tests nuevos de hidratación).
+
+---
+
+## Ola anterior (PR #419)
+
+**Feature:** F172, F173, F174 — OLA MULTI-ORGANIZACIÓN Y DEPLOYMENT VPS COMPLETADA
 **Cerrados con evidencia (ledger done):** F169, F170 (server+cliente), F171, F172 (backend+UI), F173, F174
 **Rama:** `feat/325-multi-organization-core` (PR #419)
 

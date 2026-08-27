@@ -28,7 +28,7 @@ import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips 
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
-import type { ProductRole } from '@granete/domain';
+import { allowedRolesForOrgType, type ProductRole } from '@granete/domain';
 
 export interface UserRow {
   readonly id: string;
@@ -39,8 +39,6 @@ export interface UserRow {
   readonly roles?: readonly string[];
   readonly active: boolean;
   readonly created_at: string;
-  readonly license_plan?: string;
-  readonly license_expires_at?: string | null;
 }
 
 export interface OrgInvitationRow {
@@ -56,6 +54,12 @@ export type UserFilter = 'all' | 'active' | 'pending' | 'invitations';
 export interface UsersScreenProps {
   readonly baseUrl: string;
   readonly token: string;
+  /**
+   * Active organization type (factory/store/dealer). Store/dealer show only
+   * the roles their org type may assign (#326) — mirrors the server-side
+   * RolesAllowedInOrg gate.
+   */
+  readonly orgType?: string | null;
 }
 
 /** Product roles (F035) — admin assigns puesto from panel. */
@@ -70,29 +74,6 @@ const ROLES: readonly ProductRole[] = [
   'almacen',
 ] as const;
 
-/** Per-user license tiers (F166) — admin assigns plan + optional expiry. */
-const LICENSE_PLANS = ['none', 'trial', 'pro'] as const;
-
-const LICENSE_LABELS: Record<(typeof LICENSE_PLANS)[number], string> = {
-  none: 'Sin licencia',
-  trial: 'Prueba',
-  pro: 'Pro',
-};
-
-type LicenseStatus = 'active' | 'expired' | 'none';
-
-function licenseStatus(plan: string | undefined, expiresAt: string | null | undefined): LicenseStatus {
-  if (!plan || plan === 'none') return 'none';
-  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return 'expired';
-  return 'active';
-}
-
-const LICENSE_STATUS_LABELS: Record<LicenseStatus, string> = {
-  active: 'Activa',
-  expired: 'Vencida',
-  none: '—',
-};
-
 const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   user: 'Sin puesto',
   admin: 'Admin',
@@ -104,13 +85,14 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   almacen: 'Almacén',
 };
 
-export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
+export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): ReactNode {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
   const [filter, setFilter] = useState<UserFilter>('active');
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Station sector assignment
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -130,6 +112,13 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
 
+  /** Roles this organization type may assign (#326): factories use the full
+   * canonical set; store/dealer are commercial-only (server re-validates). */
+  const assignableRoles = useMemo(
+    () => ROLES.filter((r) => allowedRolesForOrgType(orgType).includes(r)),
+    [orgType],
+  );
+
   const [rejectingUser, setRejectingUser] = useState<UserRow | null>(null);
 
   const headers = useMemo(
@@ -144,6 +133,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // First try /api/org/team (F172)
       let teamLoaded = false;
@@ -155,7 +145,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
           teamLoaded = true;
         }
       } catch {
-        // fallback
+        // fallback below
       }
 
       if (!teamLoaded) {
@@ -163,6 +153,8 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
         if (res.ok) {
           const data = (await res.json()) as UserRow[];
           setUsers(data);
+        } else {
+          throw new Error('team');
         }
       }
 
@@ -174,8 +166,10 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
           setInvitations(dataInv);
         }
       } catch {
-        // ignore
+        // invitations are supplementary — the member list already loaded
       }
+    } catch {
+      setLoadError('No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.');
     } finally {
       setLoading(false);
     }
@@ -196,24 +190,12 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const approve = async (id: string) => {
     setActionId(id);
     try {
-      await fetch(`${baseUrl}/admin/users/${id}/approve`, { method: 'PUT', headers });
+      const res = await fetch(`${baseUrl}/admin/users/${id}/approve`, { method: 'PUT', headers });
+      if (!res.ok) throw new Error('approve');
       showToast('✓ Usuario aprobado');
       await load();
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const changeRole = async (id: string, role: string) => {
-    setActionId(id);
-    try {
-      await fetch(`${baseUrl}/admin/users/${id}/role`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ role }),
-      });
-      showToast('✓ Rol actualizado');
-      await load();
+    } catch {
+      showToast('No se pudo aprobar el usuario');
     } finally {
       setActionId(null);
     }
@@ -228,14 +210,17 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
         body: JSON.stringify({ roles }),
       });
       if (!res.ok) {
-        // Fallback to legacy single-role endpoint if org endpoint not found
-        const singleRole = roles[0] || 'user';
-        await changeRole(userId, singleRole);
+        // F178 N8: no legacy single-role fallback — it silently downgraded a
+        // multi-role member to roles[0] on ANY error (validation, 5xx…).
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        showToast(body?.error ?? 'No se pudieron guardar los roles');
         return;
       }
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
       await load();
+    } catch {
+      showToast('No se pudieron guardar los roles. Revisá tu conexión.');
     } finally {
       setActionId(null);
     }
@@ -261,30 +246,15 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
     }
   };
 
-  const updateLicense = async (id: string, plan: string, expiresAt: string | null) => {
-    setActionId(id);
-    try {
-      await fetch(`${baseUrl}/admin/users/${id}/license`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          license_plan: plan,
-          license_expires_at: expiresAt || null,
-        }),
-      });
-      showToast('✓ Licencia actualizada');
-      await load();
-    } finally {
-      setActionId(null);
-    }
-  };
-
   const reject = async (id: string) => {
     setActionId(id);
     try {
-      await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
+      const res = await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error('reject');
       showToast('✓ Usuario rechazado');
       await load();
+    } catch {
+      showToast('No se pudo rechazar el usuario');
     } finally {
       setActionId(null);
       setRejectingUser(null);
@@ -420,6 +390,13 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
         <div data-testid="users-loading">
           <PageLoading label="Cargando equipo..." />
         </div>
+      ) : loadError ? (
+        <EmptyState
+          title="No se pudo cargar el equipo"
+          description={loadError}
+          actionLabel="Reintentar"
+          onAction={() => void load()}
+        />
       ) : filter === 'invitations' ? (
         /* INVITATIONS VIEW */
         invitations.length === 0 ? (
@@ -469,7 +446,12 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                       {new Date(inv.created_at).toLocaleDateString()}
                     </td>
                     <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      {new Date(inv.expires_at).toLocaleDateString()}
+                      {new Date(inv.expires_at).toLocaleDateString()}{' '}
+                      {new Date(inv.expires_at).getTime() <= Date.now() ? (
+                        <span className="status-badge status-badge--open">Vencida</span>
+                      ) : (
+                        <span className="status-badge status-badge--active">Pendiente</span>
+                      )}
                     </td>
                     <td className="users-table__align-right">
                       <button
@@ -506,7 +488,6 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                 <th>Roles en el taller</th>
                 <th>Estado</th>
                 <th>Estación / Puesto</th>
-                <th>Licencia</th>
                 <th className="users-table__align-right">Acciones</th>
               </tr>
             </thead>
@@ -571,34 +552,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
                         <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>—</span>
                       )}
                     </td>
-                    <td>
-                      <div className="users-license-cell">
-                        <select
-                          className="users-role-select"
-                          value={u.license_plan || 'none'}
-                          disabled={isWorking}
-                          onChange={(e) =>
-                            void updateLicense(u.user_id || u.id, e.target.value, u.license_expires_at || null)
-                          }
-                          aria-label={`Plan de licencia de ${u.name}`}
-                        >
-                          {LICENSE_PLANS.map((p) => (
-                            <option key={p} value={p}>
-                              {LICENSE_LABELS[p]}
-                            </option>
-                          ))}
-                        </select>
-                        <span
-                          className={`status-badge ${
-                            licenseStatus(u.license_plan, u.license_expires_at) === 'active'
-                              ? 'status-badge--active'
-                              : 'status-badge--open'
-                          }`}
-                        >
-                          {LICENSE_STATUS_LABELS[licenseStatus(u.license_plan, u.license_expires_at)]}
-                        </span>
-                      </div>
-                    </td>
+                    
                     <td className="users-table__align-right">
                       <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
                         {!u.active ? (
@@ -665,8 +619,14 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
             Seleccioná uno o varios roles para este usuario. Las capacidades se combinan por unión de permisos (ADR-0005).
           </p>
 
+          {(orgType === 'store' || orgType === 'dealer') && (
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+              Este taller es comercial: sólo puede asignar roles de ventas y coordinación.
+            </p>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-2)' }}>
-            {ROLES.map((r) => {
+            {assignableRoles.map((r) => {
               const isChecked = selectedRoles.includes(r);
               return (
                 <label
@@ -731,9 +691,9 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <div
               style={{
-                background: 'hsl(140 60% 95%)',
-                color: 'hsl(140 80% 25%)',
-                border: '1px solid hsl(140 50% 80%)',
+                background: 'var(--success-50, var(--surface-muted))',
+                color: 'var(--success-700, var(--text-primary))',
+                border: '1px solid var(--success-500, var(--border))',
                 padding: 'var(--space-3)',
                 borderRadius: 'var(--radius-md)',
                 fontSize: 'var(--text-sm)',
@@ -804,7 +764,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
             <div>
               <label className="label">Roles a asignar *</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
-                {ROLES.filter((r) => r !== 'user').map((r) => {
+                {assignableRoles.filter((r) => r !== 'user').map((r) => {
                   const isChecked = inviteRoles.includes(r);
                   return (
                     <label

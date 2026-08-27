@@ -109,13 +109,16 @@ Factory
 
 Stores represent commercial teams that sell furniture produced by factories.
 
-Allowed roles:
+Allowed roles (canonical, per `contracts/roles.json` →
+`rolesByOrganizationType`):
 
-- owner;
 - admin;
-- sales_manager;
-- sales;
-- installer.
+- user;
+- vendedor (sales);
+- gerente_ventas (sales_manager).
+
+`installer` remains future (see the role mapping above); engineering and
+production operators are factory-only.
 
 Stores should not access factory internal data such as:
 
@@ -125,19 +128,34 @@ Stores should not access factory internal data such as:
 - CNC information;
 - internal BOM details.
 
+**Enforcement (server-side, #327 hardening).** When `sales_organization_id ≠
+manufacturing_organization_id`, the project aggregate payload served to the
+sales organization redacts the manufacturing-internal fields (`engineering_log`,
+`cut_plan`, `part_instances`, `module_units`, `production_release`,
+`materials_release`, `nesting_import`, floor events and the installation job);
+their PUTs restore the stored copy so a round-trip cannot wipe them either.
+Organization ownership is assigned once at create — validated against the
+caller's active memberships, and the manufacturing organization must be of
+type `factory` — and is immutable through the generic update endpoint.
+Sub-resource endpoints keep their own RBAC gates: store/dealer organizations
+cannot hold production roles, so production/warehouse routes fail closed.
+
 ## Factory and Store Relationship
 
 A factory can create and manage connected stores.
 
-Initial flow:
+Initial flow (implemented, #326):
 
 ```
 Factory Admin
     |
-    +-- Create Store
+    +-- Create Store   (Ajustes → Red de Ventas / POST /api/factory/organizations:
+    |                     org store/dealer with parent_organization_id = factory,
+    |                     catalog cloned from the factory, creator becomes admin
+    |                     of the new org; license stays platform-managed)
             |
-            +-- Invite users
-            +-- Assign allowed roles
+            +-- Invite users   (switch into the new org → Equipo → invitations)
+            +-- Assign allowed roles (store/dealer: commercial roles only)
 ```
 
 Future flow:

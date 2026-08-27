@@ -74,6 +74,7 @@ import {
   duplicateProject as deepCopyProject,
   projectToTemplate,
   createProjectFromTemplate,
+  anyRole,
   navIdsForRole,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
@@ -325,6 +326,8 @@ import type { NavigateFunction } from 'react-router-dom';
 export interface ShellViewCtx {
   readonly acquirePlanEditSession: (projectId: string) => boolean;
   readonly actorRole: string | null | undefined;
+  /** Multi-role union (ADR-0005) — gates must use this, not actorRole. */
+  readonly actorRoles: readonly string[];
   readonly addProjectItem: (projectId: string, input: { readonly moduleId: string; readonly quantity: number; readonly optionChoices: OptionChoices; readonly measurePresetId?: string | undefined; readonly baseMode?: ModuleBaseMode | undefined; }) => string | undefined;
   readonly agregados: readonly Agregado[];
   readonly allowedNavIds: ReadonlySet<string>;
@@ -336,6 +339,8 @@ export interface ShellViewCtx {
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly assignableOwners: readonly AssignableOwner[];
   readonly authToken: string | null;
+  /** Active organization type (factory/store/dealer) — org-type role gates. */
+  readonly orgType: string | null | undefined;
   readonly authUser: AuthUser | null;
   readonly backendBreakdown: QuoteBreakdown | null;
   readonly boardOverrides: Readonly<Record<string, unknown>>;
@@ -499,6 +504,8 @@ export interface ShellViewCtx {
   readonly onLogout: () => void;
   readonly onModuleSelectionChange: (moduleId: string | null) => void;
   readonly onNavigate: (id: AppNavId) => void;
+  /** #326: enter a connected sales org (switch org) to invite its team. */
+  readonly onEnterConnectedOrg?: (orgId: string, orgName: string) => void;
   readonly onProjectSelectionChange: (projectId: string | null) => void;
   readonly onShowcaseUseInQuote: (moduleId: string) => void;
   readonly onShowcaseUseProjectAsReference: (projectId: string) => void;
@@ -602,6 +609,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   const {
     acquirePlanEditSession,
     actorRole,
+    actorRoles,
     addProjectItem,
     agregados,
     allowedNavIds,
@@ -613,6 +621,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     assignableOwners,
     authToken,
     authUser,
+    orgType,
     backendBreakdown,
     boardOverrides,
     breakdownError,
@@ -768,6 +777,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     onLogout,
     onModuleSelectionChange,
     onNavigate,
+    onEnterConnectedOrg,
     onProjectSelectionChange,
     onShowcaseUseInQuote,
     onShowcaseUseProjectAsReference,
@@ -861,6 +871,19 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     enterSupportSession,
     isPlatformAdmin,
   } = ctx;
+  // F178: post users.role drop, gates read the union — actorRole alone is
+  // undefined for fresh sessions and hid whole sections (embarques,
+  // instalaciones) for every authenticated user.
+  const canAccessEmbarques = anyRole(actorRoles, roleCanAccessEmbarquesNav);
+  const canAccessShipping = anyRole(actorRoles, roleCanAccessShippingNav);
+  const canStartInstallation = anyRole(actorRoles, (r) =>
+    roleCanAppendProjectEvent(r, 'installation_started'),
+  );
+  const canClientSignOff = anyRole(actorRoles, (r) =>
+    roleCanAppendProjectEvent(r, 'client_signed_off'),
+  );
+  const canExportProductionUnion = anyRole(actorRoles, roleCanExportProduction);
+
   return (
 
     <AppShell
@@ -870,7 +893,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       onLogout={onLogout}
       sessionMode={session}
       user={
-        authUser ? { email: authUser.email, role: authUser.role } : null
+        authUser
+          ? {
+              email: authUser.email,
+              // N9: user.role is gone (000090) — label the union's first role
+              // with the legacy single role as fallback for stale sessions.
+              role: actorRoles[0] ?? authUser.role,
+            }
+          : null
       }
       showAdminUsers={showAdminUsers}
       allowedNavIds={allowedNavIds}
@@ -926,7 +956,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           metrics={isSectorScoped ? undefined : fabricMetrics}
           canAdvance={
             session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
+            (canMarkProduced || canExportProductionUnion)
           }
           onAdvance={handleFloorAdvance}
           onAdvancePart={handleAdvancePart}
@@ -948,7 +978,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         />
         </ScreenBoundary>
       ) : null}
-      {navId === 'shipments' && roleCanAccessEmbarquesNav(actorRole) ? (
+      {navId === 'shipments' && canAccessEmbarques ? (
         <ScreenBoundary screenLabel="Embarques" onGoHome={goHomeFromScreen}>
         {routeShipmentProjectId ? (() => {
           const shipmentProject = projectsForRole.find(
@@ -981,14 +1011,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               }
               canSetFloorStatus={
                 session === 'auth' &&
-                roleCanAccessEmbarquesNav(actorRole)
+                canAccessEmbarques
               }
               onReleaseToDelivery={() => {
                 void handleReleaseToDelivery(shipmentProject.id);
               }}
               canReleaseToDelivery={
                 session === 'auth' &&
-                roleCanAccessEmbarquesNav(actorRole)
+                canAccessEmbarques
               }
               onBack={() => navigate(pathForNav('shipments'))}
             />
@@ -1007,7 +1037,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         )}
         </ScreenBoundary>
       ) : null}
-      {navId === 'installations' && roleCanAccessShippingNav(actorRole) ? (
+      {navId === 'installations' && canAccessShipping ? (
         <ScreenBoundary screenLabel="Instalaciones" onGoHome={goHomeFromScreen}>
         {routeInstallationProjectId ? (() => {
           const installationProject = projectsForRole.find(
@@ -1035,16 +1065,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               customerEmail={installationCustomer?.email}
               canAdvance={
                 session === 'auth' &&
-                (canMarkProduced || roleCanExportProduction(actorRole))
+                (canMarkProduced || canExportProductionUnion)
               }
               onAdvance={handleFloorAdvance}
               canManageJob={
                 session === 'auth' &&
-                roleCanAppendProjectEvent(actorRole, 'installation_started')
+                canStartInstallation
               }
               canCloseout={
                 session === 'auth' &&
-                roleCanAppendProjectEvent(actorRole, 'client_signed_off')
+                canClientSignOff
               }
               jobHandlers={installationJobHandlers}
               onBack={() => navigate(pathForNav('installations'))}
@@ -1213,7 +1243,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
             onExportCutPlanPtx={(plan) => { void handleExportCutPlanPtx(plan); }}
-            canImportNesting={canMarkProduced || roleCanExportProduction(actorRole)}
+            canImportNesting={canMarkProduced || canExportProductionUnion}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
             exportBusy={exportBusy}
             onSendToProduction={() => {
@@ -1309,7 +1339,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             if (location.pathname !== target) navigate(target);
           }}
           onCancelProject={(id) => projectActions.cancelProject(id)}
-          isVendedor={actorRole === 'vendedor'}
+          isVendedor={actorRoles.includes('vendedor')}
           currentUserId={authUser?.id}
           vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
           ownerLabels={ownerLabels}
@@ -1487,7 +1517,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           }}
           canSetFloorStatus={
             session === 'auth' &&
-            (canMarkProduced || roleCanExportProduction(actorRole))
+            (canMarkProduced || canExportProductionUnion)
           }
           onExportCncPilot={(id) => {
             void handleExportCncPilot(id);
@@ -1622,7 +1652,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
 
       {navId === 'users' && showAdminUsers && authToken ? (
-        <UsersScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
+        <UsersScreen
+          baseUrl={DEFAULT_API_BASE}
+          token={authToken}
+          orgType={orgType}
+        />
       ) : null}
       {navId === 'platform' && isPlatformAdmin && authToken ? (
         <PlatformScreen
@@ -1641,6 +1675,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           settings={workshopSettings}
           onSave={saveWorkshopSettings}
           onOpenOnboardingTour={() => setShowOnboardingTour(true)}
+          salesNetwork={
+            orgType === 'factory' && authToken && onEnterConnectedOrg
+              ? {
+                  baseUrl: DEFAULT_API_BASE,
+                  token: authToken,
+                  onEnterOrg: onEnterConnectedOrg,
+                }
+              : null
+          }
         />
       ) : null}
       {navId === 'showcase' ? (

@@ -74,6 +74,7 @@ import {
   navIdsForRoles,
   anyRole,
   rolesAllScopedBySector,
+  rolesCanAssignOwner,
   rolesOfUser,
   resolveOwnerOnCreate,
   resolveOwnerOnUpdate,
@@ -449,6 +450,7 @@ export function AppContent({
   );
   const getAuthToken = useWorkspaceStore((s) => s.getAuthToken);
   const getAuthUser = useWorkspaceStore((s) => s.getAuthUser);
+  const authUserSeq = useWorkspaceStore((s) => s.authUserSeq);
   const getRepository = useWorkspaceStore((s) => s.getRepository);
   const saveWorkshopSettingsAction = useWorkspaceStore(
     (s) => s.saveWorkshopSettings,
@@ -604,14 +606,19 @@ export function AppContent({
 
   const authUser = useMemo(
     () => (session === 'auth' ? getAuthUser() : null),
-    [session, getAuthUser],
+    [session, getAuthUser, authUserSeq],
   );
   const authToken = useMemo(
     () => (session === 'auth' ? getAuthToken() : null),
-    [session, getAuthToken],
+    [session, getAuthToken, authUserSeq],
   );
-  const showAdminUsers = session === 'auth' && isAdminRole(authUser?.role);
-  const canAssignOwner = roleCanAssignOwner(authUser?.role);
+  // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
+  const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
+  const actorRole = session === 'auth' ? (actorRoles[0] ?? null) : null;
+  const showAdminUsers =
+    session === 'auth' && anyRole(actorRoles, (r) => isAdminRole(r));
+  const canAssignOwner =
+    session === 'auth' && rolesCanAssignOwner(actorRoles);
   /** Guest (local) has full tool; auth uses product RBAC (F035). */
   const supportInfo = useWorkspaceStore((st) => st.supportInfo);
   const supportExiting = useWorkspaceStore((st) => st.supportExiting);
@@ -623,9 +630,6 @@ export function AppContent({
   }, [session, hydrateSessionInfo]);
   const enterSupportSession = useWorkspaceStore((st) => st.enterSupportSession);
   const isPlatformAdmin = Boolean(authUser?.platform_admin);
-  const actorRole = session === 'auth' ? authUser?.role : null;
-  // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
-  const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
   const allowedNavIds = useMemo(() => {
     const ids = new Set(navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []));
     if (session === 'auth' && authUser?.platform_admin) {
@@ -766,8 +770,7 @@ export function AppContent({
   /** accepted/produced → draft: admin + gerente only (vendedor never). */
   const canForceReopenClosed =
     session === 'guest' ||
-    actorRole === 'admin' ||
-    actorRole === 'gerente_ventas';
+    anyRole(actorRoles, (r) => r === 'admin' || r === 'gerente_ventas');
   const canMarkProduced =
     session === 'guest' || anyRole(actorRoles, roleCanMarkProduced);
   const canExportProduction =
@@ -776,7 +779,7 @@ export function AppContent({
     session === 'guest' || anyRole(actorRoles, roleCanViewPortfolioDashboard);
   /** F038: producción role only sees plant-ready quotes in project list. */
   const filterProjectsToPlant =
-    session === 'auth' && roleUsesProductionQueue(actorRole);
+    session === 'auth' && anyRole(actorRoles, roleUsesProductionQueue);
   /** PROD-0.1: factory workspace nav (export roles). */
   const useProductionWorkspace =
     session === 'auth' && anyRole(actorRoles, roleCanAccessProductionNav);
@@ -1151,7 +1154,7 @@ export function AppContent({
   } = useQuoteDerivations({
     workspaceSettings: workspace?.settings,
     session,
-    actorRole,
+    actorRoles,
     catalog,
     modules,
     materials,
@@ -1274,11 +1277,11 @@ export function AppContent({
     | 'default'
     | 'sales'
     | 'engineering' => {
-    if (session !== 'auth' || !actorRole) return 'default';
-    if (actorRole === 'vendedor') return 'sales';
-    if (actorRole === 'ingeniero') return 'engineering';
+    if (session !== 'auth' || actorRoles.length === 0) return 'default';
+    if (actorRoles.includes('vendedor')) return 'sales';
+    if (actorRoles.includes('ingeniero')) return 'engineering';
     return 'default';
-  }, [session, actorRole]);
+  }, [session, actorRoles]);
 
   const modulesWithoutPhotoCount = useMemo(
     () => modules.filter((m) => !m.imageUrl).length,
@@ -1399,15 +1402,16 @@ export function AppContent({
       catalogActions.createCustomer(draft, {
         id: authUser?.id,
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
-    [catalogActions, authUser?.id, authUser?.role],
+    [catalogActions, authUser?.id, authUser?.role, authUser?.roles],
   );
   const updateCustomer = useCallback(
     (id: string, draft: CustomerDraft) => {
-      catalogActions.updateCustomer(id, draft, { role: authUser?.role });
+      catalogActions.updateCustomer(id, draft, { role: authUser?.role, roles: authUser?.roles });
     },
-    [catalogActions, authUser?.role],
+    [catalogActions, authUser?.role, authUser?.roles],
   );
   const setCustomerActive = catalogActions.setCustomerActive;
 
@@ -1439,18 +1443,20 @@ export function AppContent({
       projectActions.createProject(draft, catalog, {
         id: authUser?.id,
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
-    [projectActions, catalog, authUser?.id, authUser?.role],
+    [projectActions, catalog, authUser?.id, authUser?.role, authUser?.roles],
   );
   const updateProject = useCallback(
     (id: string, draft: ProjectDraft) => {
       if (!catalog) return;
       projectActions.updateProject(id, draft, catalog, {
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
-    [projectActions, catalog, authUser?.role],
+    [projectActions, catalog, authUser?.role, authUser?.roles],
   );
   const deleteProject = useCallback(
     (id: string) => {
@@ -1488,11 +1494,11 @@ export function AppContent({
     (id: string) => {
       if (!catalog) return;
       // Guest shell acts as full admin for local demo.
-      const role =
-        session === 'guest' ? 'admin' : (authUser?.role ?? null);
-      projectActions.reopenProject(id, catalog, role);
+      const roles =
+        session === 'guest' ? ['admin'] : actorRoles;
+      projectActions.reopenProject(id, catalog, roles);
     },
-    [projectActions, catalog, session, authUser?.role],
+    [projectActions, catalog, session, actorRoles],
   );
   const restoreProjectVersion = useCallback(
     (id: string, version: number) => {
@@ -1508,9 +1514,10 @@ export function AppContent({
       projectActions.createFromTemplate(templateId, draft, catalog, {
         id: authUser?.id,
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
-    [projectActions, catalog, authUser?.id, authUser?.role],
+    [projectActions, catalog, authUser?.id, authUser?.role, authUser?.roles],
   );
   const deleteTemplate = projectActions.deleteTemplate;
   const addProjectItem = projectActions.addProjectItem;
@@ -1569,7 +1576,11 @@ export function AppContent({
       // packaged → loaded is a warehouse (Almacén) transition, not production.
       // Only almacen and admins can advance past packaged.
       if (target === 'loaded') {
-        if (actorRole !== 'admin' && actorRole !== 'gerente_produccion' && actorRole !== 'almacen') {
+        if (
+          !anyRole(actorRoles, (r) =>
+            r === 'admin' || r === 'gerente_produccion' || r === 'almacen',
+          )
+        ) {
           toast({ type: 'error', message: 'La carga de muebles es responsabilidad de Almacén.' });
           return;
         }
@@ -2399,11 +2410,11 @@ export function AppContent({
   );
 
   const canCaptureSurvey =
-    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_captured');
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'survey_captured'));
   const canVerifySurvey =
-    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_verified');
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'survey_verified'));
   const canApproveSurvey =
-    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_measures_approved');
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'survey_measures_approved'));
 
   // OC-091 — transversal workspace navigation from the overview panel.
   const overviewNav = useMemo<ProjectOverviewNav>(
@@ -2434,13 +2445,21 @@ export function AppContent({
 
   const costingView = showCosts;
   const canManageCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_time_recorded');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_time_recorded'));
   const canCaptureCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_baseline_captured');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_baseline_captured'));
   const canRecordOtherCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_other_recorded');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_other_recorded'));
   const canVoidCosting =
-    costingView && session === 'auth' && roleCanAppendProjectEvent(actorRole, 'cost_entry_voided');
+    costingView &&
+    session === 'auth' &&
+    anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'cost_entry_voided'));
 
   const handleFabricClaim = useCallback(async (projectId: string, sector: FabricStation): Promise<void> => {
     const repo = getRepository();
@@ -2680,6 +2699,25 @@ export function AppContent({
     [onEntitySelectionChange],
   );
 
+  // #326: enter a connected sales org — switch the org scope, then land on
+  // the team screen to invite the store team.
+  const selectOrg = useWorkspaceStore((s) => s.selectOrg);
+  const onEnterConnectedOrg = useCallback(
+    async (orgId: string, orgName: string) => {
+      await selectOrg(orgId);
+      if (useWorkspaceStore.getState().activeOrg?.id === orgId) {
+        toast({ type: 'info', message: `Estás en ${orgName}. Invitá al equipo del taller.` });
+        navigate(pathForNav('users'));
+      } else {
+        toast({
+          type: 'error',
+          message: 'No se pudo entrar al taller (¿tenés membresía activa?).',
+        });
+      }
+    },
+    [selectOrg, navigate],
+  );
+
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
@@ -2752,6 +2790,9 @@ export function AppContent({
     assignableOwners,
     authToken,
     authUser,
+    onEnterConnectedOrg,
+    actorRoles,
+    orgType: activeOrg?.type ?? null,
     backendBreakdown,
     boardOverrides,
     breakdownError,
@@ -2862,7 +2903,7 @@ export function AppContent({
     canApproveSurvey,
     overviewNav,
     opsExceptions,
-    canOverrideQc: session === 'auth' && roleCanSuperviseFloor(authUser?.role),
+    canOverrideQc: session === 'auth' && anyRole(actorRoles, roleCanSuperviseFloor),
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,

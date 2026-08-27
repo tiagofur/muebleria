@@ -23,7 +23,12 @@ export type AuthUser = {
   readonly id: string;
   readonly email: string;
   readonly name: string;
-  readonly role: string;
+  /**
+   * Legacy single role — OPTIONAL since users.role was dropped (000090):
+   * auth responses carry the membership roles as the `roles` sibling and
+   * rolesOfUser falls back to this only for stale persisted sessions.
+   */
+  readonly role?: string;
   readonly active: boolean;
   /** Active membership roles (multi-role union, ADR-0005). */
   readonly roles?: readonly string[];
@@ -34,6 +39,13 @@ export type OrgSummary = {
   readonly id: string;
   readonly name: string;
   readonly slug: string;
+  /** Organization type (factory/store/dealer) — drives org-type role gates. */
+  readonly type?: string;
+  readonly license?: {
+    readonly plan?: string;
+    readonly expires_at?: string | null;
+    readonly status?: string;
+  };
 };
 
 export type MembershipChoice = {
@@ -153,18 +165,16 @@ export function readAuthUser(
     const raw = localStore.getItem(USER_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<AuthUser>;
-    if (
-      typeof parsed.id !== 'string' ||
-      typeof parsed.email !== 'string' ||
-      typeof parsed.role !== 'string'
-    ) {
+    if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') {
       return null;
     }
     return {
       id: parsed.id,
       email: parsed.email,
       name: typeof parsed.name === 'string' ? parsed.name : '',
-      role: parsed.role,
+      ...(typeof parsed.role === 'string' && parsed.role !== ''
+        ? { role: parsed.role }
+        : {}),
       active: parsed.active !== false,
       ...(parsed.platform_admin === true ? { platform_admin: true } : {}),
       ...(Array.isArray(parsed.roles) ? { roles: parsed.roles } : {}),
@@ -378,7 +388,7 @@ export function parseAuthResponse(data: unknown): LoginSuccess {
     selection_required?: unknown;
     support?: unknown;
   };
-  if (typeof d.token !== 'string' || !d.token || !d.user || typeof d.user.role !== 'string') {
+  if (typeof d.token !== 'string' || !d.token || !d.user) {
     throw new Error('Respuesta de autenticación inválida');
   }
   const u = d.user;
@@ -400,7 +410,7 @@ export function parseAuthResponse(data: unknown): LoginSuccess {
       id: String(u.id ?? ''),
       email: String(u.email ?? ''),
       name: typeof u.name === 'string' ? u.name : '',
-      role: String(u.role),
+      ...(typeof u.role === 'string' && u.role !== '' ? { role: u.role } : {}),
       active: u.active !== false,
       ...((u as { platform_admin?: unknown }).platform_admin === true ? { platform_admin: true } : {}),
       ...(roles && roles.length > 0 ? { roles } : {}),

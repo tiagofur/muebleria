@@ -18,6 +18,7 @@ export {
   isProjectClosed,
   projectAllowsContentMutation,
   projectAllowsReopenToDraft,
+  projectAllowsReopenToDraftRoles,
   validateAmbientRefs,
   validateBoardPart,
   validateCatalogEntityCodes,
