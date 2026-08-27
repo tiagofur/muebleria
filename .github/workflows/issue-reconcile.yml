@@ -79,7 +79,7 @@ jobs:
               "<!-- issue-reconcile -->\n" +
               "Esta issue sigue abierta, pero su cierre fue declarado (`Closes/Fixes/Resolves`) en PR(s) ya mergeados:\n\n" +
               ([.[] | "- #" + (.number|tostring) + " (base `" + .baseRefName + "`) — " + .title] | join("\n")) + "\n\n" +
-              "Si algún PR se mergeó a una rama intermedia, GitHub no cerró la issue automáticamente aunque el contenido haya llegado a `main` por otra vía. Verificar contra `main`: si el DoD está cumplido, cerrar con un comentario de evidencia; si el trabajo es parcial, actualizar exactamente qué falta (ver `docs/verification.md` §4, \"PRs apilados y cierre de issues\").")"
+              "Si algún PR se mergeó a una rama intermedia, GitHub no cerró la issue automáticamente aunque el contenido haya llegado a `main` por otra vía. Verificar contra `main`: si el DoD está cumplido, cerrar con un comentario de evidencia; si el trabajo es parcial, actualizar exactamente qué falta (ver `docs/verification.md` §4, \"PRs apilados y cierre de issues\").')"
             gh issue comment "$n" --repo "$REPO" --body "$body"
             echo "Flagged #$n ($count merged PR(s) declared closing it)"
             flagged=$((flagged + 1))
