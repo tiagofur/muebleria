@@ -239,7 +239,9 @@ func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 func TestFurnitureDefinitionLayoutMaterialChoices(t *testing.T) {
 	server, token := layoutStubServer(t)
 	server.Store.(*stubStore).listMaterials = []domain.MaterialBoard{
-		{ID: "mat-oak", Code: "ROBLE-CLARO", Name: "Roble Claro", PreviewColor: "#c4a574", Active: true},
+		// ThicknessMm mirrors the DB contract (material_boards.thickness_mm
+		// NOT NULL CHECK > 0): a selected board always carries a real thickness.
+		{ID: "mat-oak", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
 	}
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))

@@ -4429,6 +4429,37 @@
         "db"
       ],
       "created": "2026-08-27"
+    },
+    {
+      "id": "F183",
+      "title": "Espesor efectivo desde el MaterialBoard seleccionado en Go BOM y layout (#402 / MT-1)",
+      "description": "Corrige el drift de verdad manufacturera entre TS y los dos resolvers Go (#402, programa #401, prerequisite #409 mergeado en PR #411): el material seleccionado determina el espesor efectivo ANTES de evaluar fórmulas, poses, dimensiones, AABB y anchors de herrajes. Una única ruta canónica backend-go/internal/domain/engine/effective_thickness.go (resolveSelectedBoard + effectiveThicknessMm) con la precedencia selected active MaterialBoard.thicknessMm > espesor nominal del componente > fallback legacy sólo sin binding, consumida por resolve.go (expandComponentInstances: T efectivo en el contexto de fórmulas length/width; ResolvedBoardPart ahora emite thickness_mm desde el material, paridad con TS) y por layout.go (expandLayoutInstances: mismo T en geomDims/spatialDims/defaultPoseForPlacement/board/AABB; LayoutComponent.ThicknessMm y el eje de espesor de DimensionsMm salen del mismo T). Agregados: los componentes internos resuelven su propio rol (el T:18 del box del agregado queda como fallback legacy documentado, paridad TS); legacyBoardStack usa 18mm sólo sin elección. Choice desconocido/inactivo/sin espesor válido falla loudly antes de emitir geometría (422 en el endpoint de layout). No se tocó Ruby/SketchUp ni TS (ya correcto: getComponentThickness). Regresión obligatoria con nominales≠materiales (lateral 15 / base-top 18 / frente 18 → BODY=16; mixed BODY=16 FRONT=18 BACK=6) en regression_402_test.go: 11 tests que fallaban contra el código pre-fix (15/18mm pese a material 16mm; PW-2*T con T nominal).",
+      "acceptance": [
+        "Componente nominal 15 (lateral) y nominal 18 (piso/techo) con BODY=16mm resuelven ThicknessMm==16 en Go BOM y Go layout",
+        "PW-2*T y PD-T (y pose lateral derecho x=PW-T) evalúan con T=16 seleccionado, no con el nominal",
+        "Mixed roles BODY=16 / FRONT=18 / BACK=6 resuelven espesores distintos en el mismo mueble; el ancho externo queda estable",
+        "Herraje anclado a FRONT sigue la geometría recalculada del frente; LayoutComponent.ThicknessMm == eje de espesor del AABB",
+        "Agregado (3 frentes FRONT nominal 15 con FRONT=18) resuelve 18 y PW-2*T con T=18",
+        "Choice desconocido / inactivo / espesor 0 falla loudly antes de producir geometría válida",
+        "Sin elección: fallback nominal determinista preservado (preview/authoring)",
+        "go build + go vet + go test ./... backend completo verde; pnpm --filter @granete/domain test verde (1134 tests, TS sin cambios)"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/402",
+        "https://github.com/tiagofur/muebleria/issues/401",
+        "docs/architecture/material-aware-furniture-resolution.md",
+        "backend-go/internal/domain/engine/effective_thickness.go"
+      ],
+      "status": "done",
+      "depends_on": [],
+      "tags": [
+        "backend",
+        "engine",
+        "material-aware",
+        "geometry",
+        "testing"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }

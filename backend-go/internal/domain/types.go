@@ -783,6 +783,10 @@ type ResolvedBoardPart struct {
 	Quantity    int              `json:"quantity"`
 	LengthMm    int              `json:"length_mm"`
 	WidthMm     int              `json:"width_mm"`
+	// ThicknessMm is the effective board thickness that produced this piece:
+	// the selected MaterialBoard.thicknessMm (#402 / MT-1), same as TS
+	// ResolvedBoardPart.thicknessMm.
+	ThicknessMm int              `json:"thickness_mm"`
 	Grain       Grain            `json:"grain"`
 	Edges       []EdgeAssignment `json:"edges"`
 	OptionRole  string           `json:"option_role"`

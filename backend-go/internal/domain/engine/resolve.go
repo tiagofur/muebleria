@@ -41,7 +41,7 @@ func ResolveBom(
 
 	rawParts := module.BoardParts
 	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModuleParts(module, catalog, presetID, nil)
+		composed, err := expandComposedModuleParts(module, catalog, presetID, nil, optionChoices)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
@@ -76,7 +76,7 @@ func ResolveBomWithDims(
 
 	rawParts := module.BoardParts
 	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, customDims)
+		composed, err := expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, customDims, optionChoices)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
@@ -106,7 +106,7 @@ func ResolveBomWithPin(
 
 	rawParts := module.BoardParts
 	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModuleParts(module, catalog, measurePresetID, pin)
+		composed, err := expandComposedModuleParts(module, catalog, measurePresetID, pin, optionChoices)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
@@ -152,6 +152,7 @@ func resolveBomFromParts(
 			Quantity:    part.Quantity,
 			LengthMm:    part.LengthMm,
 			WidthMm:     part.WidthMm,
+			ThicknessMm: material.ThicknessMm,
 			Grain:       grain,
 			Edges:       part.Edges,
 			OptionRole:  part.OptionRole,
@@ -228,8 +229,9 @@ func expandComposedModuleParts(
 	catalog domain.Catalog,
 	measurePresetID string,
 	structureRevisionPin *int,
+	optionChoices map[string]string,
 ) ([]domain.BoardPart, error) {
-	return expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, nil)
+	return expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, nil, optionChoices)
 }
 
 func expandComposedModulePartsWithDims(
@@ -238,6 +240,7 @@ func expandComposedModulePartsWithDims(
 	measurePresetID string,
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
+	optionChoices map[string]string,
 ) ([]domain.BoardPart, error) {
 	found, ok := findStructure(catalog, module.StructureID)
 	if !ok {
@@ -265,7 +268,7 @@ func expandComposedModulePartsWithDims(
 	}
 
 	parts := make([]domain.BoardPart, 0)
-	structureParts, err := expandComponentInstances(structure.Components, catalog, dims, "st-")
+	structureParts, err := expandComponentInstances(structure.Components, catalog, dims, "st-", optionChoices)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +280,7 @@ func expandComposedModulePartsWithDims(
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-")
+		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-", optionChoices)
 		if err != nil {
 			return nil, err
 		}
@@ -290,7 +293,7 @@ func expandComposedModulePartsWithDims(
 		}
 	}
 
-	moduleParts, err := expandComponentInstances(module.Components, catalog, dims, "mod-")
+	moduleParts, err := expandComponentInstances(module.Components, catalog, dims, "mod-", optionChoices)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +305,7 @@ func expandComposedModulePartsWithDims(
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-")
+		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-", optionChoices)
 		if err != nil {
 			return nil, err
 		}
@@ -365,6 +368,7 @@ func expandComponentInstances(
 	catalog domain.Catalog,
 	dims formulaDims,
 	idPrefix string,
+	optionChoices map[string]string,
 ) ([]domain.BoardPart, error) {
 	parts := make([]domain.BoardPart, 0)
 	for _, inst := range instances {
@@ -388,6 +392,15 @@ func expandComponentInstances(
 			return nil, fmt.Errorf("component %s has no optionRoles", comp.Code)
 		}
 
+		// #402 / MT-1: the selected board's thickness participates in geometry
+		// BEFORE any formula is evaluated — a selected material never loses to
+		// the component's nominal thickness. One canonical rule feeds both the
+		// BOM and the layout resolver (effective_thickness.go).
+		effectiveT, err := effectiveThicknessMm(optionRole, comp.ThicknessMm, optionChoices, catalog.Materials)
+		if err != nil {
+			return nil, fmt.Errorf("component %s: %w", comp.Code, err)
+		}
+
 		lengthMm := comp.LengthMm
 		widthMm := comp.WidthMm
 		lengthFormula := comp.LengthFormula
@@ -405,7 +418,7 @@ func expandComponentInstances(
 		evalDims := formulaDims{
 			W: dims.W, H: dims.H, D: dims.D,
 			PW: dims.W, PH: dims.H, PD: dims.D,
-			T: comp.ThicknessMm,
+			T: effectiveT,
 			I: 0,
 		}
 		if lengthFormula != "" {

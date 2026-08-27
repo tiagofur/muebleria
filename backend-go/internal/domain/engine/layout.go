@@ -147,7 +147,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 		Hardware:              []LayoutHardware{},
 	}
 
-	boards, err := resolveLayoutBoards(module, catalog, dims)
+	boards, err := resolveLayoutBoards(module, catalog, dims, optionChoices)
 	if err != nil {
 		return FurnitureLayout{}, err
 	}
@@ -170,7 +170,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 			OptionRole:          board.optionRole,
 			MaterialColorHex:    colorForOptionRole(board.optionRole),
 		}
-		if material, err := resolveLayoutMaterial(board.optionRole, optionChoices, catalog); err != nil {
+		if material, err := resolveSelectedBoard(board.optionRole, optionChoices, catalog.Materials); err != nil {
 			return FurnitureLayout{}, err
 		} else if material != nil {
 			component.MaterialID = material.ID
@@ -201,32 +201,11 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 	return layout, nil
 }
 
-// resolveLayoutMaterial resolves a board's role through the workshop's option
-// choices (role == option group code, value == material id). nil, nil means
-// "no choice for this role" (callers keep the palette fallback); an explicit
-// error means the choice exists but points at an unknown/inactive material.
-func resolveLayoutMaterial(role string, optionChoices map[string]string, catalog domain.Catalog) (*domain.MaterialBoard, error) {
-	choiceID := optionChoices[role]
-	if strings.TrimSpace(choiceID) == "" {
-		return nil, nil
-	}
-	for i := range catalog.Materials {
-		m := &catalog.Materials[i]
-		if m.ID == choiceID {
-			if !m.Active {
-				return nil, fmt.Errorf("el material elegido para %s está inactivo: %s", role, m.Code)
-			}
-			return m, nil
-		}
-	}
-	return nil, fmt.Errorf("material no encontrado para la elección de %s: %s", role, choiceID)
-}
-
 // resolveLayoutBoards walks structure + module + agregado component instances
 // (mirrors TS resolveComposedModule) and returns the resolved boards.
-func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims) ([]layoutBoard, error) {
+func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims, optionChoices map[string]string) ([]layoutBoard, error) {
 	if strings.TrimSpace(module.StructureID) == "" {
-		return legacyBoardStack(module)
+		return legacyBoardStack(module, optionChoices, catalog.Materials)
 	}
 
 	structure, ok := findStructure(catalog, module.StructureID)
@@ -243,14 +222,14 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	boards := []layoutBoard{}
 
 	structureInstances := filterInstancesForBaseMode(structure.Components, catalog, baseMode)
-	structureBoards, err := expandLayoutInstances(structureInstances, catalog, dims, "st-", b)
+	structureBoards, err := expandLayoutInstances(structureInstances, catalog, dims, "st-", b, optionChoices)
 	if err != nil {
 		return nil, err
 	}
 	boards = append(boards, structureBoards...)
 
 	moduleInstances := filterInstancesForBaseMode(module.Components, catalog, baseMode)
-	moduleBoards, err := expandLayoutInstances(moduleInstances, catalog, dims, "mod-", b)
+	moduleBoards, err := expandLayoutInstances(moduleInstances, catalog, dims, "mod-", b, optionChoices)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +237,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
 	for _, agrInst := range agregadoInstances {
-		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b)
+		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, optionChoices)
 		if err != nil {
 			return nil, err
 		}
@@ -270,11 +249,17 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 // legacyBoardStack handles pre-composition modules (flat BoardParts without
 // spatial data). Pieces have no authored position, so they are stacked
 // bottom-up by index — completeness over prettiness; real furniture today is
-// composed via structures.
-func legacyBoardStack(module domain.Module) ([]layoutBoard, error) {
+// composed via structures. The 18 mm stacking thickness is the explicit legacy
+// fallback (contract §15) used ONLY when the part's role has no selected
+// material; a selected board drives the real effective thickness (#402).
+func legacyBoardStack(module domain.Module, optionChoices map[string]string, materials []domain.MaterialBoard) ([]layoutBoard, error) {
 	boards := []layoutBoard{}
 	for i, part := range module.BoardParts {
-		thickness := 18.0
+		thicknessMm, err := effectiveThicknessMm(part.OptionRole, 18, optionChoices, materials)
+		if err != nil {
+			return nil, err
+		}
+		thickness := float64(thicknessMm)
 		boards = append(boards, layoutBoard{
 			id:          fmt.Sprintf("legacy-%s-%d", module.ID, i),
 			name:        part.Description,
@@ -325,6 +310,7 @@ func expandLayoutInstances(
 	dims LayoutDims,
 	idPrefix string,
 	baseClearance int,
+	optionChoices map[string]string,
 ) ([]layoutBoard, error) {
 	boards := []layoutBoard{}
 	for _, inst := range instances {
@@ -344,13 +330,22 @@ func expandLayoutInstances(
 			return nil, fmt.Errorf("component %s has no optionRoles", comp.Code)
 		}
 
-		t := float64(comp.ThicknessMm)
+		// #402 / MT-1: resolve the selected board BEFORE geometry — the
+		// effective thickness drives formulas, pose, board size, AABB and
+		// hardware anchors. Same canonical rule as the BOM resolver
+		// (effective_thickness.go); never the nominal thickness when a
+		// material is selected.
+		effectiveT, err := effectiveThicknessMm(optionRole, comp.ThicknessMm, optionChoices, catalog.Materials)
+		if err != nil {
+			return nil, fmt.Errorf("component %s: %w", comp.Code, err)
+		}
+		t := float64(effectiveT)
 
 		// Geometry formulas evaluate against the parent furniture dims.
 		geomDims := formulaDims{
 			W: dims.WidthMm, H: dims.HeightMm, D: dims.DepthMm,
 			PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
-			T: comp.ThicknessMm, B: baseClearance,
+			T: effectiveT, B: baseClearance,
 		}
 		lengthMm := float64(comp.LengthMm)
 		widthMm := float64(comp.WidthMm)
@@ -404,10 +399,11 @@ func expandLayoutInstances(
 
 		for i := 0; i < inst.Quantity; i++ {
 			// Spatial formulas: H = thickness (bom.ts), i = copy index.
+			// H/T carry the effective thickness (#402), like the TS spatial branch.
 			spatialDims := formulaDims{
-				W: int(math.Round(widthMm)), H: comp.ThicknessMm, D: int(math.Round(lengthMm)),
+				W: int(math.Round(widthMm)), H: effectiveT, D: int(math.Round(lengthMm)),
 				PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
-				T: comp.ThicknessMm, B: baseClearance, I: i,
+				T: effectiveT, B: baseClearance, I: i,
 			}
 			pose := defaultPoseForPlacement(placement, float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm), t, i, inst.Quantity)
 
@@ -487,13 +483,20 @@ func pickRotation(compValue int, inst domain.ComponentInstance, placement string
 
 // expandLayoutAgregado mirrors the TS agregado expansion: evaluate the
 // sub-space box + origin, split it into units, expand inner components against
-// each unit's dims and offset by the unit origin.
-func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int) ([]layoutBoard, error) {
+// each unit's dims and offset by the unit origin. Inner components resolve
+// their own material binding role — an agregado never leaks a hardcoded
+// thickness into its children (#402).
+func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string) ([]layoutBoard, error) {
 	agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 	if !ok {
 		return nil, fmt.Errorf("agregado not found: %s", agrInst.AgregadoID)
 	}
 
+	// T here is the sub-space box's own context, not a board piece: the
+	// agregado box has no material binding of its own, so the 18 mm fallback is
+	// the explicit legacy fallback the contract allows (TS resolveComposedModule
+	// keeps the same parentDims T: 18). Piece-level T is resolved per inner
+	// component inside expandLayoutInstances.
 	parentDims := formulaDims{
 		W: dims.WidthMm, H: dims.HeightMm, D: dims.DepthMm,
 		PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
@@ -569,7 +572,7 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 			HeightMm: int(math.Round(unit.h)),
 			DepthMm:  int(math.Round(unit.d)),
 		}
-		unitBoards, err := expandLayoutInstances(agr.Components, catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance)
+		unitBoards, err := expandLayoutInstances(agr.Components, catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance, optionChoices)
 		if err != nil {
 			return nil, err
 		}
