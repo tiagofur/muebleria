@@ -1,0 +1,105 @@
+{
+  "schemaId": "granete.materialRoleBinding.v1",
+  "contract": "#403 / MT-2 — single material binding role per board + explicit legacy alias precedence. Identical semantics required in TS (packages/domain), Go (backend-go engine), web editors and the SketchUp catalog projection. Both stacks test against THIS file; a divergence here is a contract break, not a styling difference.",
+  "aliasPrecedence": "direct role choice wins; otherwise ZOCLO, PUERTA, PUERTA_* and FRENTE_CAJON may inherit the FRENTE choice; never infer by name/color/texture/manufacturer",
+  "aliasCases": [
+    {
+      "name": "direct choice wins",
+      "role": "FRENTE",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "ZOCLO inherits FRENTE when it has no choice",
+      "role": "ZOCLO",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "ZOCLO direct choice beats the FRENTE fallback",
+      "role": "ZOCLO",
+      "choices": { "ZOCLO": "mat-white16", "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-white16"
+    },
+    {
+      "name": "PUERTA inherits FRENTE",
+      "role": "PUERTA",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "PUERTA_ prefix inherits FRENTE",
+      "role": "PUERTA_IZQ",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "alias match is case-insensitive on the role",
+      "role": "puerta",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "FRENTE_CAJON inherits FRENTE",
+      "role": "FRENTE_CAJON",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": "mat-oak18"
+    },
+    {
+      "name": "ZOCLO_PERFIL (hardware strip role) is NOT aliased",
+      "role": "ZOCLO_PERFIL",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": null
+    },
+    {
+      "name": "unrelated board role gets no alias",
+      "role": "INTERIOR",
+      "choices": { "FRENTE": "mat-oak18" },
+      "expectedChoiceId": null
+    },
+    {
+      "name": "no choices at all",
+      "role": "BODY",
+      "choices": {},
+      "expectedChoiceId": null
+    },
+    {
+      "name": "whitespace-only choice counts as absent",
+      "role": "FRENTE",
+      "choices": { "FRENTE": "   " },
+      "expectedChoiceId": null
+    }
+  ],
+  "bindingCases": [
+    {
+      "name": "single role resolves",
+      "optionRoles": ["FRENTE"],
+      "expectRole": "FRENTE"
+    },
+    {
+      "name": "entries are trimmed and empties dropped",
+      "optionRoles": ["", " FRENTE "],
+      "expectRole": "FRENTE"
+    },
+    {
+      "name": "exact duplicates collapse to one binding",
+      "optionRoles": ["FRENTE", "FRENTE"],
+      "expectRole": "FRENTE"
+    },
+    {
+      "name": "several distinct roles are ambiguous and rejected",
+      "optionRoles": ["FRONT", "BODY"],
+      "expectError": true
+    },
+    {
+      "name": "empty list is rejected",
+      "optionRoles": [],
+      "expectError": true
+    },
+    {
+      "name": "only empty entries is rejected",
+      "optionRoles": ["", "   "],
+      "expectError": true
+    }
+  ]
+}

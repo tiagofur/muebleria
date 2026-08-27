@@ -4,6 +4,7 @@
  */
 
 import { ValidationError } from '../errors';
+import { distinctOptionRoles } from '../materialRole';
 import { validateModulePresets } from '../measurePresets';
 import type {
   AmbientMaterial,
@@ -121,12 +122,30 @@ export function validateComponent(component: Component): void {
       });
     }
   }
-  if (!component.optionRoles || component.optionRoles.length === 0) {
-    throw new ValidationError('Component optionRoles must be non-empty', {
-      componentId: component.id,
-      componentCode: component.code,
-      field: 'optionRoles',
-    });
+  const roles = distinctOptionRoles(component.optionRoles);
+  if (roles.length === 0) {
+    throw new ValidationError(
+      'Component optionRoles must be non-empty',
+      {
+        componentId: component.id,
+        componentCode: component.code,
+        field: 'optionRoles',
+      },
+    );
+  }
+  // #403 / MT-2: a board follows exactly one material selection. Multiple
+  // distinct roles are ambiguous (the engine consumes only optionRoles[0]),
+  // so they are rejected at authoring time — not silently half-honored.
+  if (roles.length > 1) {
+    throw new ValidationError(
+      `Component optionRoles must declare a single material binding role (got [${roles.join(', ')}]); remove the extra roles`,
+      {
+        componentId: component.id,
+        componentCode: component.code,
+        field: 'optionRoles',
+        optionRoles: roles,
+      },
+    );
   }
   if (component.defaultEdges.length !== 4) {
     throw new ValidationError(

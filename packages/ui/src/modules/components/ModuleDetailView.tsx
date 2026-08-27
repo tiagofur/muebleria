@@ -363,9 +363,11 @@ export function ModuleDetailView({
               const fixed = line.hardwareId
                 ? hardwareById.get(line.hardwareId)
                 : undefined;
+              // #403: prefer the OptionGroup workshop label over the raw code.
+              const roleLabel = groupLabels?.[line.optionRole] ?? line.optionRole;
               const label = fixed
                 ? `${fixed.code} — ${fixed.name}`
-                : `Rol ${line.optionRole}`;
+                : `Rol ${roleLabel}`;
               return (
                 <li key={line.id} className="eng-detail__instance-row">
                   <span className="eng-detail__instance-code">
@@ -376,7 +378,7 @@ export function ModuleDetailView({
                     <span className="eng-detail__instance-sub">
                       {fixed
                         ? 'Herraje fijo'
-                        : `Por opción (${line.optionRole})`}
+                        : `Por opción (${roleLabel})`}
                     </span>
                   </div>
                   <span className="eng-detail__instance-qty">

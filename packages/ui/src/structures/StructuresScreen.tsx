@@ -525,6 +525,7 @@ export function StructuresScreen({
             onSelect={setNewCompId}
             newCompQty={newCompQty}
             onQtyChange={setNewCompQty}
+            optionGroups={optionGroups}
             onConfirm={() => {
               if (!newCompId) return;
               setDraft((prev) => ({

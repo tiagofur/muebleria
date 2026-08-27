@@ -503,6 +503,13 @@ export {
   type PlinthRunInfo,
 } from './plinth';
 
+export {
+  distinctOptionRoles,
+  hasAmbiguousOptionRoles,
+  materialBindingRole,
+  legacyFrontAliasTargets,
+} from './materialRole';
+
 export { estimateBoardSheets } from './boardSheetEstimate';
 export type { BoardSheetEstimate } from './boardSheetEstimate';
 

@@ -384,12 +384,12 @@ func expandComponentInstances(
 		if inst.Overrides != nil && len(inst.Overrides.Edges) > 0 {
 			edges = inst.Overrides.Edges
 		}
-		optionRole := ""
-		if len(comp.OptionRoles) > 0 {
-			optionRole = comp.OptionRoles[0]
-		}
-		if strings.TrimSpace(optionRole) == "" {
-			return nil, fmt.Errorf("component %s has no optionRoles", comp.Code)
+		// #403 / MT-2: single canonical binding role — multiple distinct
+		// roles are ambiguous and fail loudly instead of silently honoring
+		// only the first (material_role.go, mirrored from TS).
+		optionRole, err := materialBindingRole(comp)
+		if err != nil {
+			return nil, err
 		}
 
 		// #402 / MT-1: the selected board's thickness participates in geometry

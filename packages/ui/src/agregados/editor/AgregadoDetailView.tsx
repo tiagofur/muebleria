@@ -4,9 +4,10 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Agregado, Component, Hardware } from '@granete/domain';
+import type { Agregado, Component, Hardware, OptionGroup } from '@granete/domain';
 import { Box, ChevronLeft, Layers, Pencil, Settings2, Trash2 } from 'lucide-react';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
+import { optionRoleLabel } from '../../optionGroups/optionRoleLabel';
 
 export type AgregadoDetailViewProps = {
   readonly agregado: Agregado;
@@ -17,6 +18,8 @@ export type AgregadoDetailViewProps = {
   readonly onView3D?: (a: Agregado) => void;
   readonly onDelete?: (id: string) => void;
   readonly canMutate: boolean;
+  /** Option groups — role labels prefer the group name (#403). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 function dimsSummary(a: Agregado): string {
@@ -34,6 +37,7 @@ export function AgregadoDetailView({
   onView3D,
   onDelete,
   canMutate,
+  optionGroups,
 }: AgregadoDetailViewProps): ReactNode {
   const compLookup = new Map(catalogComponents.map((c) => [c.id, c]));
   const hwLookup = new Map(catalogHardware.map((h) => [h.id, h]));
@@ -169,7 +173,9 @@ export function AgregadoDetailView({
               return (
                 <li key={`bulk-${idx}`} className="eng-detail__list-item" data-testid={`agregado-detail-bulk-hw-${idx}`}>
                   <span className="eng-detail__list-main eng-detail__mono">
-                    {hw ? `${hw.code} — ${hw.name}` : `Rol: ${line.optionRole}`}
+                    {hw
+                      ? `${hw.code} — ${hw.name}`
+                      : `Rol: ${optionRoleLabel(line.optionRole, optionGroups)}`}
                     <small
                       className="eng-detail__list-meta"
                       style={{

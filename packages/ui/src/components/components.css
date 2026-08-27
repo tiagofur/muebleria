@@ -832,6 +832,17 @@
   color: var(--text-secondary);
 }
 
+/* Legacy drafts declaring several roles: the engine honors only the first (#403). */
+.component-options__warning {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warning-500);
+  border-radius: var(--radius-md);
+  background: var(--warning-50);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
 .component-options__chips {
   display: flex;
   flex-direction: column;

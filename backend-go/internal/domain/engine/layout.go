@@ -322,12 +322,12 @@ func expandLayoutInstances(
 			return nil, fmt.Errorf("component instance quantity must be > 0 for %s", inst.ComponentID)
 		}
 
-		optionRole := ""
-		if len(comp.OptionRoles) > 0 {
-			optionRole = comp.OptionRoles[0]
-		}
-		if strings.TrimSpace(optionRole) == "" {
-			return nil, fmt.Errorf("component %s has no optionRoles", comp.Code)
+		// #403 / MT-2: single canonical binding role — multiple distinct
+		// roles are ambiguous and fail loudly instead of silently honoring
+		// only the first (material_role.go, mirrored from TS).
+		optionRole, err := materialBindingRole(comp)
+		if err != nil {
+			return nil, err
 		}
 
 		// #402 / MT-1: resolve the selected board BEFORE geometry — the

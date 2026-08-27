@@ -382,6 +382,7 @@ export function ModulesScreen({
             onSelect={state.setNewCompId}
             newCompQty={state.newCompQty}
             onQtyChange={state.setNewCompQty}
+            optionGroups={optionGroups}
             onConfirm={() => {
               if (!state.newCompId) return;
               state.setDraft((prev) => ({

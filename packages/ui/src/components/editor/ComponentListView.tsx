@@ -4,7 +4,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Component } from '@granete/domain';
+import type { Component, OptionGroup } from '@granete/domain';
 import { Plus, Puzzle } from 'lucide-react';
 import {
   EmptyState,
@@ -19,6 +19,7 @@ import {
   geometrySummary,
   placementLabel,
 } from '../componentDraft';
+import { optionRolesSummary } from '../../optionGroups/optionRoleLabel';
 
 export type ComponentListViewProps = {
   readonly rows: readonly Component[];
@@ -31,6 +32,8 @@ export type ComponentListViewProps = {
   readonly canMutate: boolean;
   readonly onCreate: () => void;
   readonly onOpenDetail: (item: Component) => void;
+  /** Option groups — role labels prefer the group name (#403). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 export function ComponentListView({
@@ -44,6 +47,7 @@ export function ComponentListView({
   canMutate,
   onCreate,
   onOpenDetail,
+  optionGroups,
 }: ComponentListViewProps): ReactNode {
   const isFilterEmpty =
     rows.length === 0 &&
@@ -174,7 +178,11 @@ export function ComponentListView({
                     Geometría: <strong>{geometrySummary(item)}</strong>
                   </span>
                   <span>
-                    Roles: <strong>{item.optionRoles.join(', ') || '—'}</strong>
+                    Roles:{' '}
+                    <strong>
+                      {optionRolesSummary(item.optionRoles, optionGroups) ||
+                        '—'}
+                    </strong>
                   </span>
                 </div>
                 {item.notes ? (

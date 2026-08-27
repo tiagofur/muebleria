@@ -32,6 +32,7 @@ import {
   resolveBaseClearanceMm,
 } from './kitchenLayout';
 import { resolveModuleMeasurePreset } from './measurePresets';
+import { legacyFrontAliasTargets } from './materialRole';
 import type { ItemCustomDims } from './types';
 import { suggestLegCount } from './workshopRules';
 
@@ -93,25 +94,21 @@ export function resolveModuleBaseClearanceMm(
   return DEFAULT_BASE_CLEARANCE_MM;
 }
 
-/** Material choice for a board part role; ZOCLO inherits FRENTE when empty. */
+/**
+ * Material choice for a board part role. The legacy alias precedence lives in
+ * materialRole.ts (#403): direct role choice wins; otherwise ZOCLO, PUERTA,
+ * PUERTA_* and FRENTE_CAJON may inherit the FRENTE choice. Go mirrors the
+ * same table (backend-go engine/material_role.go + shared contract fixture).
+ */
 export function resolveBoardOptionChoiceId(
   optionRole: string,
   optionChoices: { readonly [code: string]: string | undefined },
 ): string | undefined {
   const direct = optionChoices[optionRole]?.trim();
   if (direct) return direct;
-  if (optionRole === ZOCLO_BOARD_ROLE) {
-    const front = optionChoices[ZOCLO_BOARD_FALLBACK_ROLE]?.trim();
-    if (front) return front;
-  }
-  const roleUpper = optionRole.trim().toUpperCase();
-  if (
-    roleUpper === 'PUERTA' ||
-    roleUpper.startsWith('PUERTA_') ||
-    roleUpper === 'FRENTE_CAJON'
-  ) {
-    const front = optionChoices['FRENTE']?.trim();
-    if (front) return front;
+  for (const alias of legacyFrontAliasTargets(optionRole)) {
+    const inherited = optionChoices[alias]?.trim();
+    if (inherited) return inherited;
   }
   return undefined;
 }

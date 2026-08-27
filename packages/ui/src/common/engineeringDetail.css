@@ -126,6 +126,16 @@
   background: var(--brand-100);
 }
 
+/* Raw group code alongside the friendly label (#403). */
+.eng-detail__chip-code {
+  margin-left: var(--space-2);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border-default);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 /* Compact list (perforations, secondary rows) */
 .eng-detail__list {
   list-style: none;

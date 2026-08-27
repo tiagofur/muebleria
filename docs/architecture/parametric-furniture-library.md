@@ -171,6 +171,31 @@ To protect project durability and manufacturing reproducibility:
 
 ---
 
+## 6. Material binding roles in authored components (#403 / MT-2)
+
+Authoring semantics for `Component.optionRoles` — canonical authority:
+`material-aware-furniture-resolution.md`.
+
+- A rectangular board participating in material selection declares **exactly
+  one** material binding role (`optionRoles[0]` after normalization). Pieces
+  intended to share one finish declare the **same** role: sides/base/top/
+  shelves → `BODY`, doors and drawer fronts → `FRONT`, back → `BACK`, with
+  `PLINTH` and workshop-defined roles available when a real need exists.
+- The physical identity of the piece lives in `placement`/slots and is
+  orthogonal to the binding. Never bind by component name, color, texture,
+  manufacturer or current appearance.
+- Multi-role boards are rejected at authoring time (TS `validateComponent`,
+  Go `ValidateComponent` → API 400) and at resolution time in both engines —
+  a secondary role must never appear configurable while controlling nothing.
+- Legacy fragmented roles (`LATERAL`, `INTERIOR`, `FONDO`, `FRENTE`) are NOT
+  auto-migrated. Ambiguous catalogs require an explicit editor change; the
+  only aliases are the explicit table in
+  `contracts/materialRoleBinding.contract.json` (direct choice wins; `ZOCLO`,
+  `PUERTA`, `PUERTA_*`, `FRENTE_CAJON` may inherit `FRENTE`), identical in
+  TS and Go.
+
+---
+
 ## Related documents
 
 Umbrella views of the same architecture (overview-level, defer to this spec on

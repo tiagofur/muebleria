@@ -3,8 +3,9 @@
  */
 
 import type { ReactNode } from 'react';
-import type { Component } from '@granete/domain';
+import type { Component, OptionGroup } from '@granete/domain';
 import { Modal } from '../../common';
+import { optionRolesSummary } from '../../optionGroups/optionRoleLabel';
 
 export type ModuleComponentAdderModalProps = {
   readonly open: boolean;
@@ -17,6 +18,8 @@ export type ModuleComponentAdderModalProps = {
   readonly newCompQty: number;
   readonly onQtyChange: (qty: number) => void;
   readonly onConfirm: () => void;
+  /** Option groups — role labels prefer the group name (#403). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 export function ModuleComponentAdderModal({
@@ -30,6 +33,7 @@ export function ModuleComponentAdderModal({
   newCompQty,
   onQtyChange,
   onConfirm,
+  optionGroups,
 }: ModuleComponentAdderModalProps): ReactNode {
   return (
     <Modal
@@ -133,7 +137,7 @@ export function ModuleComponentAdderModal({
                       color: 'var(--text-muted)',
                     }}
                   >
-                    {comp.optionRoles.join(', ')}
+                    {optionRolesSummary(comp.optionRoles, optionGroups)}
                   </span>
                 </div>
               </label>

@@ -1933,6 +1933,13 @@ func (s *Server) HandleComponents(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
+		// #403 / MT-2: material binding role contract — a board follows
+		// exactly one material selection; ambiguous roles are surfaced at
+		// authoring time instead of silently half-honored by the engine.
+		if err := engine.ValidateComponent(c); err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		err := s.Store.CreateComponent(r.Context(), &c)
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -1971,6 +1978,11 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 		}
 		var c domain.Component
 		if !decodeJSONBody(w, r, &c) {
+			return
+		}
+		// #403 / MT-2 — same authoring-time contract check as POST.
+		if err := engine.ValidateComponent(c); err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		err := s.Store.UpdateComponent(r.Context(), id, &c)

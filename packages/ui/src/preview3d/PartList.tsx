@@ -3,13 +3,16 @@
  */
 
 import type { ReactNode } from 'react';
-import type { ResolvedBoardPart } from '@granete/domain';
+import type { OptionGroup, ResolvedBoardPart } from '@granete/domain';
+import { optionRoleLabel } from '../optionGroups/optionRoleLabel';
 
 export type PartListProps = {
   readonly parts: readonly ResolvedBoardPart[];
   readonly selectedPartId?: string | null;
   readonly onSelectPart: (partId: string) => void;
   readonly testId?: string;
+  /** Option groups — the role chip prefers the group name (#403). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 export function PartList({
@@ -17,6 +20,7 @@ export function PartList({
   selectedPartId = null,
   onSelectPart,
   testId = 'part-list',
+  optionGroups,
 }: PartListProps): ReactNode {
   if (parts.length === 0) {
     return null;
@@ -41,7 +45,9 @@ export function PartList({
             >
               <span className="part-list__name">{label}</span>
               <span className="part-list__meta">
-                {part.optionRole ? `${part.optionRole} · ` : ''}
+                {part.optionRole
+                  ? `${optionRoleLabel(part.optionRole, optionGroups)} · `
+                  : ''}
                 {Math.round(part.lengthMm)}×{Math.round(part.widthMm)}×
                 {Math.round(part.thicknessMm)}
               </span>
