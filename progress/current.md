@@ -61,3 +61,9 @@ escribe la row de otra org" (ADR-0005).
 - `TestMigrations_NoBusinessData` verde (000091 no inserta datos).
 - `feature_list.json`: F182 done; 0 in_progress; validación CI local del
   esquema implícita (mismas reglas que ci.yml).
+- Watchdog: primera ejecución real (dispatch post-merge #429) falló por una
+  comilla simple sin cerrar en el programa jq del body (detectado por el
+  propio run, no por CI — el job no compila bash). Fix + `bash -n` + dry-run
+  completo contra el repo real con `gh issue comment` neutralizado:
+  "Done: 0 issue(s) flagged" (correcto: ninguna issue abierta tiene cierre
+  declarado en PR mergeado). Re-dispatch tras el fix: verde.
