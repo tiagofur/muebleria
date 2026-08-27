@@ -837,3 +837,56 @@ describe('workspaceStore — loadDemoWorkspace (F118 S6)', () => {
     expect(repo.saved).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Session hydration (#325/#327 hardening)
+// ---------------------------------------------------------------------------
+
+describe('workspaceStore — hydrateSessionInfo', () => {
+  it('merges the membership roles from /auth/me into the persisted user', async () => {
+    // Reload scenario: the persisted user still carries the legacy single
+    // role; /auth/me reports the multi-role membership as a sibling key.
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-h');
+    globalThis.localStorage.setItem(
+      USER_STORAGE_KEY,
+      JSON.stringify({ ...AUTH_USER, role: 'user' }),
+    );
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonOk({
+        user: { ...AUTH_USER, role: 'user' },
+        roles: ['vendedor', 'ingeniero'],
+      }),
+    );
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+
+    await store.getState().hydrateSessionInfo();
+
+    const stored = JSON.parse(
+      globalThis.localStorage.getItem(USER_STORAGE_KEY)!,
+    );
+    expect(stored.roles).toEqual(['vendedor', 'ingeniero']);
+  });
+
+  it('keeps the stored user unchanged when /auth/me reports no roles', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-h2');
+    globalThis.localStorage.setItem(
+      USER_STORAGE_KEY,
+      JSON.stringify({ ...AUTH_USER, roles: ['admin'] }),
+    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk({ user: AUTH_USER }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+
+    await store.getState().hydrateSessionInfo();
+
+    const stored = JSON.parse(
+      globalThis.localStorage.getItem(USER_STORAGE_KEY)!,
+    );
+    expect(stored.roles).toEqual(['admin']);
+  });
+});

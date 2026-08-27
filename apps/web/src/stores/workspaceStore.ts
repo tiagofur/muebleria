@@ -425,7 +425,22 @@ export function createWorkspaceStore(options?: InternalOptions) {
               fetchImpl: deps.fetchImpl,
             });
             if (me.user) {
-              storeAuthUser(me.user);
+              // /auth/me devuelve los roles de la membresía como clave
+              // hermana `roles` (el DTO de usuario no los trae). Merge en el
+              // usuario persistido: guardar el DTO tal cual perdería la
+              // unión multi-rol en cada reload (#325). Si la respuesta no
+              // trae roles, se conservan los ya persistidos.
+              const roles = Array.isArray(me.roles)
+                ? me.roles.filter((r): r is string => typeof r === 'string' && r !== '')
+                : [];
+              const persisted = readAuthUser();
+              const nextRoles =
+                roles.length > 0 ? roles : (persisted?.roles ?? []);
+              storeAuthUser(
+                nextRoles.length > 0
+                  ? { ...me.user, roles: nextRoles }
+                  : me.user,
+              );
             }
             set({ activeOrg: me.organization ?? null, supportInfo: me.support ?? null });
           } catch {
