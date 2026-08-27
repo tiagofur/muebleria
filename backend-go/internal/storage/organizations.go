@@ -305,6 +305,19 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 	return &out, nil
 }
 
+// EndOpenSupportSessionsByOrg closes every still-open support session of an
+// organization (suspension path — ended_via='org_suspended', B6).
+func (s *PostgresStore) EndOpenSupportSessionsByOrg(ctx context.Context, organizationID, via string) (int64, error) {
+	result, err := s.Pool.Exec(ctx, `
+		UPDATE support_sessions SET ended_at = NOW(), ended_via = $2
+		WHERE organization_id = $1 AND ended_at IS NULL`,
+		organizationID, via)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 // EndSupportSession closes an open session (idempotent for already-ended).
 func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminUserID, via string) (bool, error) {
 	result, err := s.Pool.Exec(ctx, `
@@ -538,17 +551,27 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 		{"tmp_modules", "modules"},
 	}
 
-	// The destination must be empty across EVERY cloned table: checking only
-	// modules let a destination with boards/edges pass the guard and then fail
-	// mid-transaction on UNIQUE(organization_id, code).
-	for _, m := range maps {
+	// The destination must be empty across EVERY table the clone writes —
+	// both the mapped roots and the child tables the steps populate
+	// (ambient_materials, board_parts, structure children…). Checking only
+	// the roots let a destination with stray child rows pass the guard and
+	// fail mid-transaction on UNIQUE(organization_id, code).
+	dstTables := []string{
+		"material_categories", "module_categories", "ambient_categories",
+		"material_boards", "edge_bands", "hardwares", "components", "agregados",
+		"option_groups", "option_group_members", "structures",
+		"structure_components", "structure_presets", "modules",
+		"board_parts", "hardware_lines", "module_components", "module_presets",
+		"ambient_materials",
+	}
+	for _, table := range dstTables {
 		var existing int
 		if err := tx.QueryRow(ctx,
-			`SELECT COUNT(*) FROM `+m.table+` WHERE organization_id = $1`, dstOrg).Scan(&existing); err != nil {
+			`SELECT COUNT(*) FROM `+table+` WHERE organization_id = $1`, dstOrg).Scan(&existing); err != nil {
 			return err
 		}
 		if existing > 0 {
-			return fmt.Errorf("destination catalog is not empty: %s", m.table)
+			return fmt.Errorf("destination catalog is not empty: %s", table)
 		}
 	}
 	for _, m := range maps {
@@ -699,7 +722,9 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 	return tx.Commit(ctx)
 }
 
-// UpdateOrganization persists mutable fields (name/license/active).
+// UpdateOrganization persists mutable fields (name/license/active). The
+// parent link is NOT mutable here — it is set at creation (#326) and only
+// returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
 	return s.Pool.QueryRow(ctx, `
 		UPDATE organizations SET name = $2, license_plan = $3, license_expires_at = $4,
@@ -708,5 +733,5 @@ func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organi
 		RETURNING `+organizationColumns,
 		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, o.Active).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.CreatedAt, &o.UpdatedAt)
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt)
 }

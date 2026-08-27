@@ -52,6 +52,9 @@ type Store interface {
 	StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration) (*domain.SupportSession, error)
 	GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error)
 	EndSupportSession(ctx context.Context, sessionID, adminUserID, via string) (bool, error)
+	// EndOpenSupportSessionsByOrg cuts every open support session of an org
+	// (suspension path, ADR-0005 §5).
+	EndOpenSupportSessionsByOrg(ctx context.Context, organizationID, via string) (int64, error)
 
 	// Org team & invitations (#326)
 	ListOrgTeam(ctx context.Context, organizationID string) ([]storage.OrgTeamMember, error)

@@ -142,6 +142,12 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 	inv, err := s.Store.CreateInvitation(r.Context(), claims.OrgID, email, body.Roles,
 		hashInvitationToken(token), time.Now().Add(14*24*time.Hour), claims.UserID)
 	if err != nil {
+		if isDuplicateKey(err) {
+			// One open invitation per (org, email) — the partial unique index
+			// rejects a second one; surface it as 409 instead of a 500.
+			respondWithError(w, http.StatusConflict, "ya existe una invitación abierta para ese email")
+			return
+		}
 		respondWithInternalError(w, err, "org create invitation")
 		return
 	}

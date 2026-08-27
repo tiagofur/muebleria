@@ -2390,6 +2390,9 @@ func (s *stubStore) StartSupportSession(context.Context, string, string, string,
 func (s *stubStore) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
 	return nil, errors.New("support session not found")
 }
+func (s *stubStore) EndOpenSupportSessionsByOrg(context.Context, string, string) (int64, error) {
+	return 0, nil
+}
 func (s *stubStore) EndSupportSession(context.Context, string, string, string) (bool, error) {
 	return true, nil
 }

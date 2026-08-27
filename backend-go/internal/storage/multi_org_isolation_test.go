@@ -282,3 +282,36 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 		t.Fatalf("connected listing lost the parent link")
 	}
 }
+
+// B1 regression: UpdateOrganization's RETURNING scan must match
+// organizationColumns (parent_organization_id was added by 000089) — a
+// mismatch made every platform org PATCH (rename/license/suspend) 500.
+func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {
+	store, _, _ := isolationSetup(t)
+	ctx := context.Background()
+
+	org := &domain.Organization{
+		Name: "Fábrica Update", Slug: "fabrica-update",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	if err := store.CreateOrganization(ctx, org); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	org.Name = "Fábrica Renombrada"
+	org.Active = false
+	if err := store.UpdateOrganization(ctx, org); err != nil {
+		t.Fatalf("update (rename+suspend): %v", err)
+	}
+	if org.Name != "Fábrica Renombrada" || org.Active {
+		t.Fatalf("scan did not round-trip: %+v", org)
+	}
+
+	got, err := store.GetOrganizationByID(ctx, org.ID)
+	if err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if got.Name != "Fábrica Renombrada" || got.Active {
+		t.Fatalf("update did not persist: %+v", got)
+	}
+}

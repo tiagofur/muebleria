@@ -68,7 +68,7 @@ func usage() {
 	fmt.Fprint(os.Stderr, `Usage:
   admin create         --email <email> [--name <name>]
   admin reset-password --email <email>
-  admin set-license    --email <email> [--plan <trial|active|none>]
+  admin set-license    --org <slug> [--plan <trial|pro|none>]   (licencia por taller)
   admin create-platform-admin --email <email>
   admin grant-membership --email <email> [--org <slug>] --role <rol>
   admin create-org --name <nombre> --slug <slug> [--type factory|store|dealer]
@@ -114,13 +114,15 @@ func runCreate(args []string) {
 
 	ctx := context.Background()
 
-	// Idempotent: if the user already exists (any active state), do nothing.
+	// Idempotent: if the user already exists (any active state), just make sure
+	// the admin membership and the initial org's license are in place
+	// (licensing is per organization — ADR-0005 §3).
 	if existing, err := store.GetUserByEmailAnyState(ctx, *email); err == nil && existing != nil {
-		log.Printf("User %q already exists (active=%v); updating license...", *email, existing.Active)
-		_, _ = store.Pool.Exec(ctx, `UPDATE users SET license_plan = $1 WHERE email = $2`, domain.LicensePlanTrial, *email)
+		log.Printf("User %q already exists (active=%v); ensuring membership...", *email, existing.Active)
 		if err := store.EnsureMembership(ctx, storage.InitialOrganizationID, existing.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
 			fatal(fmt.Errorf("ensuring admin membership: %w", err))
 		}
+		ensureInitialOrgLicense(ctx, store)
 		return
 	} else if err != nil && !strings.Contains(err.Error(), "not found") {
 		fatal(fmt.Errorf("checking existing user: %w", err))
@@ -146,8 +148,26 @@ func runCreate(args []string) {
 	if err := store.EnsureMembership(ctx, storage.InitialOrganizationID, u.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
 		fatal(fmt.Errorf("granting admin membership: %w", err))
 	}
+	ensureInitialOrgLicense(ctx, store)
 
 	log.Printf("Admin user created: %s", *email)
+}
+
+// ensureInitialOrgLicense gives the initial organization a working trial
+// license when it has none — licensing lives on the organization (ADR-0005
+// §3); there is no per-user license to set anymore.
+func ensureInitialOrgLicense(ctx context.Context, store *storage.PostgresStore) {
+	org, err := store.GetOrganizationByID(ctx, storage.InitialOrganizationID)
+	if err != nil || org == nil {
+		return
+	}
+	if org.LicensePlan != "" && org.LicensePlan != domain.LicensePlanNone {
+		return
+	}
+	org.LicensePlan = domain.LicensePlanTrial
+	if err := store.UpdateOrganization(ctx, org); err != nil {
+		log.Printf("warning: could not set trial license on the initial org: %v", err)
+	}
 }
 
 // runCreatePlatformAdmin flips the platform staff flag on an existing user
@@ -233,12 +253,12 @@ func runGrantMembership(args []string) {
 
 func runSetLicense(args []string) {
 	fs := flag.NewFlagSet("set-license", flag.ExitOnError)
-	email := fs.String("email", "", "user email (required)")
-	plan := fs.String("plan", string(domain.LicensePlanTrial), "license plan (trial|active|none)")
+	orgSlug := fs.String("org", "inicial", "organization slug (defaults to the initial org)")
+	plan := fs.String("plan", string(domain.LicensePlanTrial), "license plan (trial|pro|none)")
 	_ = fs.Parse(args)
 
-	if err := validateEmail(*email); err != nil {
-		fatal(err)
+	if !domain.IsValidLicensePlan(domain.LicensePlan(*plan)) {
+		fatal(fmt.Errorf("invalid plan %q (trial|pro|none)", *plan))
 	}
 
 	store, closeStore, err := openStore()
@@ -248,15 +268,16 @@ func runSetLicense(args []string) {
 	defer closeStore()
 
 	ctx := context.Background()
-	res, err := store.Pool.Exec(ctx, `UPDATE users SET license_plan = $1 WHERE email = $2`, *plan, *email)
-	if err != nil {
+	org, err := store.GetOrganizationBySlug(ctx, *orgSlug)
+	if err != nil || org == nil {
+		fatal(fmt.Errorf("organization %q not found", *orgSlug))
+	}
+	org.LicensePlan = domain.LicensePlan(*plan)
+	if err := store.UpdateOrganization(ctx, org); err != nil {
 		fatal(fmt.Errorf("updating license: %w", err))
 	}
-	if res.RowsAffected() == 0 {
-		fatal(fmt.Errorf("user %q not found", *email))
-	}
 
-	log.Printf("License set to %q for %s", *plan, *email)
+	log.Printf("License of %q set to %q", org.Name, *plan)
 }
 
 func runResetPassword(args []string) {
@@ -397,12 +418,15 @@ func runSeed(args []string) {
 	}
 
 	log.Println("Backfilling owner_user_id for demo customer and project...")
+	// admins = active members with the admin role in the initial organization
+	// (users.role is gone — 000090).
 	backfillProjectQuery := `
 		UPDATE projects
 		SET owner_user_id = (
-			SELECT id FROM users
-			WHERE role = 'admin' AND active = true
-			ORDER BY created_at ASC
+			SELECT u.id FROM users u
+			JOIN memberships m ON m.user_id = u.id AND m.active AND 'admin' = ANY(m.roles)
+			WHERE u.active = true
+			ORDER BY u.created_at ASC
 			LIMIT 1
 		)
 		WHERE owner_user_id IS NULL;
@@ -410,9 +434,10 @@ func runSeed(args []string) {
 	backfillCustomerQuery := `
 		UPDATE customers
 		SET owner_user_id = (
-			SELECT id FROM users
-			WHERE role = 'admin' AND active = true
-			ORDER BY created_at ASC
+			SELECT u.id FROM users u
+			JOIN memberships m ON m.user_id = u.id AND m.active AND 'admin' = ANY(m.roles)
+			WHERE u.active = true
+			ORDER BY u.created_at ASC
 			LIMIT 1
 		)
 		WHERE owner_user_id IS NULL;

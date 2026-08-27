@@ -48,26 +48,44 @@ func (s *Server) requireFactoryAdmin(w http.ResponseWriter, r *http.Request) (*a
 	return claims, org, true
 }
 
-// slugifyOrgName derives a URL-safe slug from the organization name.
+// organizations.slug CHECK (000080): ^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$
+// — 2..64 chars, no leading/trailing dash.
+const orgSlugMaxLen = 64
+
+// slugifyOrgName derives a URL-safe slug from the organization name, clamped
+// to the column CHECK. Returns "" when the name cannot produce a valid slug.
 func slugifyOrgName(name string) string {
 	s := strings.ToLower(strings.TrimSpace(name))
 	re := regexp.MustCompile(`[^a-z0-9]+`)
 	s = re.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
-	if s == "" {
-		s = "org"
+	if len(s) > orgSlugMaxLen {
+		s = strings.Trim(s[:orgSlugMaxLen], "-")
+	}
+	if len(s) < 2 {
+		return ""
 	}
 	return s
 }
 
-// uniqueOrgSlug appends -2, -3… until the slug is free.
+// uniqueOrgSlug appends -2, -3… until the slug is free, re-clamping so the
+// suffix always fits the column CHECK.
 func (s *Server) uniqueOrgSlug(r *http.Request, base string) string {
 	slug := base
 	for i := 2; ; i++ {
 		if _, err := s.Store.GetOrganizationBySlug(r.Context(), slug); err != nil {
 			return slug
 		}
-		slug = fmt.Sprintf("%s-%d", base, i)
+		suffix := fmt.Sprintf("-%d", i)
+		cut := orgSlugMaxLen - len(suffix)
+		if cut > len(base) {
+			cut = len(base)
+		}
+		candidate := strings.Trim(base[:cut], "-") + suffix
+		if candidate == slug {
+			return candidate // defensive: cannot happen with i incrementing
+		}
+		slug = candidate
 	}
 }
 
@@ -106,10 +124,16 @@ func (s *Server) HandleFactoryOrganizations(w http.ResponseWriter, r *http.Reque
 			respondWithError(w, http.StatusBadRequest, "type inválido (store|dealer)")
 			return
 		}
+		baseSlug := slugifyOrgName(body.Name)
+		if baseSlug == "" {
+			respondWithError(w, http.StatusBadRequest,
+				"el nombre es demasiado corto para generar un identificador de taller (mínimo 2 letras o números)")
+			return
+		}
 
 		child := &domain.Organization{
 			Name:   strings.TrimSpace(body.Name),
-			Slug:   s.uniqueOrgSlug(r, slugifyOrgName(body.Name)),
+			Slug:   s.uniqueOrgSlug(r, baseSlug),
 			Type:   orgType,
 			Active: true,
 			// Licenses are assigned per organization by the platform console;

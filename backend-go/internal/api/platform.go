@@ -257,7 +257,20 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		if org.Active {
 			event = "organization_reactivated"
 		}
-		s.audit(r.Context(), event, claims.UserID, org.ID, clientIP(r), nil)
+		details := map[string]interface{}{}
+		if !org.Active {
+			// Suspending cuts every open support session immediately — the
+			// schema reserves ended_via='org_suspended' for this (000086).
+			ended, err := s.Store.EndOpenSupportSessionsByOrg(r.Context(), org.ID, "org_suspended")
+			if err != nil {
+				respondWithInternalError(w, err, "platform suspend: end support sessions")
+				return
+			}
+			if ended > 0 {
+				details["support_sessions_ended"] = ended
+			}
+		}
+		s.audit(r.Context(), event, claims.UserID, org.ID, clientIP(r), details)
 	}
 	if planChanged || expiryChanged {
 		s.audit(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{

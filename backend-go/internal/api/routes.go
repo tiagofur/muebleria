@@ -15,6 +15,14 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/auth/register", authRL(http.HandlerFunc(server.HandleRegister)))
 	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
 
+
+	// Health check endpoint (unauthenticated) — used by Docker healthchecks and Caddy depends_on.
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
 	// Endpoints protegidos por JWT (role/active re-checked against DB — #16)
 	authMW := AuthMiddleware(server.JWTSecret, server.Store)
 
