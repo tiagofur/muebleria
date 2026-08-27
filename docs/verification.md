@@ -91,6 +91,12 @@ mocks. **Obligatorio antes de deploy:** `scripts/pilot-gate.sh` (en modo gate
 los skips están prohibidos; ver `docs/pilot-readiness.md`). Su pata de
 backup/restore requiere `pg_dump`/`pg_restore` (CI los instala).
 
+Aislamiento a nivel storage: `go test ./internal/storage/ -run TestIsolation`
+(F171 + F182) cubre todas las familias de entidades — list/get/write cross-org
+deben fallar igual que una row inexistente. F182 incluyó la corrección de las
+PKs globales de `material_stock`/`project_picking` (migración 000091), cuyos
+`ON CONFLICT ... DO UPDATE` podían mutar la row de otra organización.
+
 ---
 
 ## 4. CI remoto
@@ -112,6 +118,23 @@ afirman contra el mismo archivo (ver §5).
 
 Una feature que altera workflow/seguridad/persistencia no se considera `verified` si
 sólo existe una afirmación en commit message y no hay evidencia ejecutable.
+
+### PRs apilados y cierre de issues
+
+GitHub sólo cierra una issue (`Closes #N`) cuando el PR se mergea a la rama por
+defecto. Ya ocurrieron dos veces (#330/F142 y #420/#418) que un PR apilado se
+mergeó a su rama intermedia: el contenido llegó a `main` por otro PR, pero la
+issue quedó abierta — o peor, el código quedó huérfano en `main` con el ledger
+diciendo `done`. Reglas:
+
+1. antes de mergear, confirmar que la base del PR es `main` (o retalear y
+   verificar);
+2. si un PR apilado se mergea a una rama intermedia, cerrar la issue
+   manualmente sólo cuando el contenido esté verificado en `main`;
+3. el workflow `.github/workflows/issue-reconcile.yml` (semanal) marca issues
+   abiertas cuyo cierre fue declarado (`Closes/Fixes/Resolves #N`) en un PR ya
+   mergeado — a `main` o a una rama intermedia — para revisar. Nunca cierra
+   solo; las referencias plain `#N` se ignoran a propósito.
 
 ---
 

@@ -1,0 +1,88 @@
+name: Issue Reconcile
+
+# Guardrail para la trampa de PRs apilados: GitHub sólo cierra una issue
+# (`Closes #N`) cuando el PR que la menciona se mergea a la rama por defecto.
+# Un PR apilado mergeado a una rama intermedia deja la issue abierta aunque
+# el trabajo haya llegado a main por otra vía (#420/#418), o peor: el código
+# queda huérfano con el ledger diciendo done (#330/F142). Este watchdog
+# semanal marca las issues ABIERTAS cuyo cierre fue declarado (closing
+# keyword) en un PR ya mergeado — a main o a una rama intermedia — para
+# revisión manual. Nunca cierra nada solo.
+
+on:
+  schedule:
+    - cron: '0 12 * * 1' # Mondays 12:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: issue-reconcile
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    name: Flag open issues whose closing PR was merged
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconcile
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          open_issues="$(gh issue list --repo "$REPO" --state open --limit 500 --json number --jq '.[].number')"
+          if [ -z "$open_issues" ]; then
+            echo "No open issues."
+            exit 0
+          fi
+
+          cutoff="$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          gh pr list --repo "$REPO" --state merged --limit 500 \
+            --json number,title,body,mergedAt,baseRefName > merged.json
+          jq --arg cutoff "$cutoff" '[.[] | select(.mergedAt > $cutoff)]' \
+            merged.json > recent.json
+
+          # Closing keywords aimed at issue $n — the author believed the PR
+          # delivered it. Plain "#n" references are intentionally ignored:
+          # docs/tracking PRs legitimately cite open issues all the time.
+          match() {
+            jq --argjson n "$1" \
+              '[.[] | select((.body // "")
+                | test("(?i)(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[ :]*#"
+                       + ($n|tostring) + "([^0-9]|$)"))]' \
+              recent.json
+          }
+
+          flagged=0
+          for n in $open_issues; do
+            refs="$(match "$n")"
+            count="$(echo "$refs" | jq 'length')"
+            if [ "$count" -eq 0 ]; then
+              continue
+            fi
+
+            # One reconcile comment per issue (marker), so reruns stay quiet.
+            already="$(gh issue view "$n" --repo "$REPO" --json comments \
+              --jq '[.comments[] | select(.body | contains("<!-- issue-reconcile -->"))] | length' \
+              || echo 1)"
+            if [ "$already" -ne 0 ]; then
+              echo "#$n already flagged, skipping"
+              continue
+            fi
+
+            body="$(echo "$refs" | jq -r '
+              "## Reconciliación automática\n\n" +
+              "<!-- issue-reconcile -->\n" +
+              "Esta issue sigue abierta, pero su cierre fue declarado (`Closes/Fixes/Resolves`) en PR(s) ya mergeados:\n\n" +
+              ([.[] | "- #" + (.number|tostring) + " (base `" + .baseRefName + "`) — " + .title] | join("\n")) + "\n\n" +
+              "Si algún PR se mergeó a una rama intermedia, GitHub no cerró la issue automáticamente aunque el contenido haya llegado a `main` por otra vía. Verificar contra `main`: si el DoD está cumplido, cerrar con un comentario de evidencia; si el trabajo es parcial, actualizar exactamente qué falta (ver `docs/verification.md` §4, \"PRs apilados y cierre de issues\").")"
+            gh issue comment "$n" --repo "$REPO" --body "$body"
+            echo "Flagged #$n ($count merged PR(s) declared closing it)"
+            flagged=$((flagged + 1))
+          done
+
+          echo "Done: $flagged issue(s) flagged."
