@@ -188,10 +188,17 @@ cd /opt/granete
 docker compose -f docker-compose.prod.yml exec -T postgres \
   pg_dump -U granete_prod -d granete_prod -F c | gzip > "$BACKUP_DIR/granete_$DATE.sql.gz"
 
+# Backup del volumen de medios (imágenes de catálogo por organización)
+docker run --rm \
+  -v granete_media_data:/data:ro \
+  -v "$BACKUP_DIR":/backup \
+  alpine tar czf "/backup/granete_media_$DATE.tar.gz" -C /data .
+
 # Eliminar backups de más de 14 días
 find "$BACKUP_DIR" -name "granete_*.sql.gz" -mtime +14 -delete
+find "$BACKUP_DIR" -name "granete_media_*.tar.gz" -mtime +14 -delete
 
-echo "Backup completado exitosamente: $BACKUP_DIR/granete_$DATE.sql.gz"
+echo "Backup completado exitosamente: $BACKUP_DIR/granete_$DATE.sql.gz + media"
 EOF
 
 chmod +x /usr/local/bin/backup-granete.sh

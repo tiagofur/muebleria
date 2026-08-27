@@ -18,6 +18,7 @@
 .cache/
 .env
 .env.*
+!.env.production.example
 .idea/
 .impeccable-live.json
 .impeccable-live/
