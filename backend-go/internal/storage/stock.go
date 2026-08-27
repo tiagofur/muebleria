@@ -46,7 +46,7 @@ func (s *PostgresStore) UpsertStockMin(ctx context.Context, kind domain.StockMat
 	err := s.Pool.QueryRow(ctx, `
 		INSERT INTO material_stock (kind, material_id, quantity, min_stock, organization_id)
 		VALUES ($1, $2, 0, $3, $4)
-		ON CONFLICT (kind, material_id) DO UPDATE SET
+		ON CONFLICT (kind, material_id, organization_id) DO UPDATE SET
 			min_stock = EXCLUDED.min_stock,
 			updated_at = CURRENT_TIMESTAMP
 		RETURNING kind, material_id, quantity, min_stock, updated_at

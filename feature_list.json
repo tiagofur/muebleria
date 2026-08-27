@@ -4399,6 +4399,36 @@
         "testing"
       ],
       "created": "2026-08-27"
+    },
+    {
+      "id": "F182",
+      "title": "Aislamiento cross-org de las familias restantes + guardrails de reconciliación de issues",
+      "description": "Cierre del backlog de #421 tras la auditoría de reconciliación: suite multi_org_isolation_families_test.go cubre las 11 familias sin test de aislamiento (stock, purchase orders, installation, warranties, internal messages, material planning, site survey, project picking, project templates, ambient materials, ambient categories) más la pata de WRITE de los mutadores de proyecto (quality, part executions — antes sólo lectura): list/get/write cross-org fallan igual que una row inexistente y el mutator jamás corre para una obra ajena. Al construirla se detectó un bug real de tenancy: las PKs globales de material_stock (kind, material_id) y project_picking (project_id, material) hacían que los ON CONFLICT ... DO UPDATE de UpsertStockMin/UpsertProjectPicking pudieran mutar la row de OTRA organización desde un contexto ajeno — migración 000091 las vuelve org-scoped (como todos los demás uniques de negocio) y se actualizaron los conflict targets. Guardrails de proceso para la trampa de PRs apilados detectada dos veces (#330/F142, #420/#418): docs/verification.md §4 'PRs apilados y cierre de issues' + workflow issue-reconcile.yml semanal que marca (sin cerrar) issues abiertas cuyo cierre fue declarado (Closes/Fixes/Resolves) en un PR ya mergeado — a main o a rama intermedia; referencias plain ignoradas a propósito (dry-run: 0 falsos positivos sobre el backlog actual).",
+      "acceptance": [
+        "go test ./internal/storage/ -run TestIsolation verde: 11 familias nuevas + writes de mutators con not-found indistinguible de inexistente",
+        "Regresión 000091: upsert cross-org de min-stock/picking crea la row propia del caller y NO muta la de la otra org (afirmado por SQL directo)",
+        "Migración 000091 aditiva sin datos de negocio (TestMigrations_NoBusinessData sigue verde); down restaura las PKs previas",
+        "go test ./... backend completo verde (storage + pilotreadiness con migraciones desde cero)",
+        "docs/verification.md documenta el guardrail de PRs apilados y cómo correr la suite de aislamiento",
+        "issue-reconcile.yml: semanal + dispatch manual, filtro por closing keywords, un solo comentario marcado por issue, nunca cierra solo; dry-run contra el backlog real: 0 flags"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/421",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/verification.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F179"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "testing",
+        "db"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }
