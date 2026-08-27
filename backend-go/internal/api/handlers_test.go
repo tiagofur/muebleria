@@ -259,6 +259,10 @@ func (s *stubStore) RejectUser(context.Context, string) error {
 	s.stubNotUsed("RejectUser")
 	return nil
 }
+func (s *stubStore) DeleteOrphanInvitedUser(context.Context, string) error {
+	s.stubNotUsed("DeleteOrphanInvitedUser")
+	return nil
+}
 
 // --- Organizations / memberships / security audit (ADR-0004) ---
 

@@ -30,6 +30,9 @@ type Store interface {
 	ApproveUser(ctx context.Context, id string) error
 	UpdateUserRole(ctx context.Context, id string, role domain.UserRole) error
 	RejectUser(ctx context.Context, id string) error
+	// DeleteOrphanInvitedUser cleans up a user created by an invitation
+	// accept that failed before granting any membership.
+	DeleteOrphanInvitedUser(ctx context.Context, id string) error
 
 	// Organizations / memberships / security audit (ADR-0004)
 	GetOrganizationByID(ctx context.Context, id string) (*domain.Organization, error)

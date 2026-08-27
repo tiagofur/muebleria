@@ -270,6 +270,12 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 		Scan(&out.ID, &out.PlatformAdminUserID, &out.OrganizationID, &out.Reason, &out.StartedAt, &out.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// Lazy close: an open-but-expired session is finalized with
+			// ended_via='expiry' so the audit trail records how it ended
+			// (access was already cut per-request by the middleware check).
+			_, _ = s.Pool.Exec(ctx, `
+				UPDATE support_sessions SET ended_at = expires_at, ended_via = 'expiry'
+				WHERE id = $1 AND ended_at IS NULL AND expires_at <= NOW()`, sessionID)
 			return nil, fmt.Errorf("support session not found")
 		}
 		return nil, err
@@ -498,15 +504,6 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 	}
 	defer tx.Rollback(ctx)
 
-	var existing int
-	if err := tx.QueryRow(ctx,
-		`SELECT COUNT(*) FROM modules WHERE organization_id = $1`, dstOrg).Scan(&existing); err != nil {
-		return err
-	}
-	if existing > 0 {
-		return fmt.Errorf("destination catalog is not empty")
-	}
-
 	maps := []struct{ name, table string }{
 		{"tmp_matcat", "material_categories"},
 		{"tmp_modcat", "module_categories"},
@@ -519,6 +516,20 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 		{"tmp_struct", "structures"},
 		{"tmp_optgrp", "option_groups"},
 		{"tmp_modules", "modules"},
+	}
+
+	// The destination must be empty across EVERY cloned table: checking only
+	// modules let a destination with boards/edges pass the guard and then fail
+	// mid-transaction on UNIQUE(organization_id, code).
+	for _, m := range maps {
+		var existing int
+		if err := tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM `+m.table+` WHERE organization_id = $1`, dstOrg).Scan(&existing); err != nil {
+			return err
+		}
+		if existing > 0 {
+			return fmt.Errorf("destination catalog is not empty: %s", m.table)
+		}
 	}
 	for _, m := range maps {
 		if _, err := tx.Exec(ctx, fmt.Sprintf(`CREATE TEMP TABLE %s AS

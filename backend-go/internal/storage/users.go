@@ -236,6 +236,16 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, u *domain.User) error {
 }
 
 
+// DeleteOrphanInvitedUser removes a just-created user that failed to attach
+// to any organization (invitation revoked/expired mid-accept). Refuses when
+// the user already holds memberships — a user that belongs nowhere cannot
+// log into any organization.
+func (s *PostgresStore) DeleteOrphanInvitedUser(ctx context.Context, id string) error {
+	_, err := s.Pool.Exec(ctx,
+		`DELETE FROM users WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1)`, id)
+	return err
+}
+
 // RejectUser deletes a pending user (hard delete — not yet approved).
 func (s *PostgresStore) RejectUser(ctx context.Context, id string) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1 AND active = false`, id)
