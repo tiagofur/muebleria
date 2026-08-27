@@ -62,6 +62,7 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Reconciliación docs↔código | `docs/documentation-sync-2026-08-21.md` |
 | Convenciones | `docs/conventions.md` |
 | Verificación | `docs/verification.md` |
+| Pilot readiness multi-org (gate pre-deploy) | `docs/pilot-readiness.md` |
 | Rutas | `apps/web/src/routes.ts` → `NAV_PATHS` |
 | Permisos | `packages/domain/src/rbac.ts` + enforcement backend |
 | Implementación actual | código + tests |

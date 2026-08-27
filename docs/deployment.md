@@ -229,10 +229,14 @@ cd /opt/granete
 # 1. Obtener los últimos cambios de git
 git pull origin main
 
-# 2. Reconstruir frontend y backend y reiniciar servicios
+# 2. PASO OBLIGATORIO: gate de Pilot Readiness (aislamiento multi-org + backup/restore).
+#    Sin DB alcanzable FALLA — nunca desplegar con el gate en rojo (docs/pilot-readiness.md).
+scripts/pilot-gate.sh --fresh-container   # o --dsn postgres://… contra una base de staging
+
+# 3. Reconstruir frontend y backend y reiniciar servicios
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 
-# 3. Las migraciones de base de datos se ejecutan automáticamente en el arranque del backend
+# 4. Las migraciones de base de datos se ejecutan automáticamente en el arranque del backend
 docker compose -f docker-compose.prod.yml logs --tail=50 backend
 ```
 

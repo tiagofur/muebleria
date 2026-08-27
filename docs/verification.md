@@ -83,6 +83,14 @@ pnpm typecheck
 Ejecutar `go test` sobre el paquete afectado y, antes de cierre de feature server-side,
 la suite backend razonablemente completa definida por el repo.
 
+### Multi-org / Pilot Readiness
+
+`backend-go/tests/pilotreadiness/` (F179) prueba aislamiento y operaciones
+básicas de dos organizaciones contra PostgreSQL real vía las APIs HTTP — sin
+mocks. **Obligatorio antes de deploy:** `scripts/pilot-gate.sh` (en modo gate
+los skips están prohibidos; ver `docs/pilot-readiness.md`). Su pata de
+backup/restore requiere `pg_dump`/`pg_restore` (CI los instala).
+
 ---
 
 ## 4. CI remoto
@@ -94,6 +102,8 @@ Operational Core OC-002 implementa los required checks en `.github/workflows/ci.
 2. pnpm install + typecheck + test (pnpm según packageManager)
 3. go test -v ./... con service container de Postgres (DATABASE_URL), para que
    los tests de integración de storage corran en vez de saltarse con t.Skip
+   (incluye la suite de Pilot Readiness; el job instala postgresql-client
+   para su pata de backup/restore)
 ```
 
 Fixture de paridad vivo: `contracts/roles.json` — los tests de roles en
