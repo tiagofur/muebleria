@@ -168,6 +168,7 @@ export {
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,
   roleLabelEs,
+  primaryRoleOf,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleCanAccessProductionDashboard,

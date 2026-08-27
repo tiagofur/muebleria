@@ -43,7 +43,14 @@ Future types may include installer companies or service partners.
 
 Roles belong to memberships, not users.
 
+> **Conceptual vocabulary — never implement these identifiers.** The union
+> below names distribution-model concepts only. Implemented memberships carry
+> the 8 canonical operational roles of `contracts/roles.json` (OC-004); TS,
+> Go and the database reject every other value. Use the mapping table below.
+
 ```ts
+// Conceptual only — NOT the membership contract. Real roles are the
+// canonical 8 from contracts/roles.json (see mapping below).
 type OrganizationRole =
   | "owner"
   | "admin"

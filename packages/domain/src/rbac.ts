@@ -486,6 +486,22 @@ export function roleLabelEs(role: string | null | undefined): string {
   return map[role] ?? role;
 }
 
+/**
+ * Deterministic display pick for multi-role members (union semantics keep
+ * every permission — this is ONLY for labels/badges, never for gating).
+ * Chooses by canonical USER_ROLES order; null when the set holds no
+ * canonical role. TS-only helper (display), so no Go parity fixture.
+ */
+export function primaryRoleOf(
+  roles: readonly (string | null | undefined)[] | null | undefined,
+): UserRole | null {
+  if (!roles) return null;
+  for (const canonical of USER_ROLES) {
+    if (roles.includes(canonical)) return canonical;
+  }
+  return null;
+}
+
 /** Nav section ids that a role may open (guest = all). */
 export function navIdsForRole(role: string | null | undefined): ReadonlySet<string> {
   if (role == null) {

@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { ArrowLeft, Send, HelpCircle, MessageSquare } from 'lucide-react-native';
+import { primaryRoleOf } from '@granete/domain';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -44,7 +45,7 @@ export function ProjectChatScreen({
       projectId,
       content,
       user?.name || 'Taller',
-      user?.role || 'produccion',
+      primaryRoleOf(user?.roles ?? []) ?? 'produccion',
       isTechnicalQuery ? 'technical_query' : 'comment'
     );
     setIsTechnicalQuery(false);

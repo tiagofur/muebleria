@@ -23,6 +23,7 @@ import {
   PenTool,
   CheckSquare,
 } from 'lucide-react-native';
+import { primaryRoleOf, roleLabelEs } from '@granete/domain';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -76,7 +77,10 @@ export function HomeScreen({
     ]);
   };
 
-  const roleLabel = user?.role ? user.role.toUpperCase().replace('_', ' ') : 'OPERARIO';
+  // Multi-role session: the badge shows the canonical primary role with the
+  // same label every other surface uses (roleLabelEs).
+  const primaryRole = primaryRoleOf(user?.roles);
+  const roleLabel = primaryRole ? roleLabelEs(primaryRole) : 'Miembro';
 
   return (
     <View style={styles.container}>

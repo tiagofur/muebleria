@@ -28,7 +28,12 @@ import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips 
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
-import { allowedRolesForOrgType, roleLabelEs, type ProductRole } from '@granete/domain';
+import {
+  allowedRolesForOrgType,
+  ASSIGNABLE_ROLES,
+  roleLabelEs,
+  type ProductRole,
+} from '@granete/domain';
 
 export interface UserRow {
   readonly id: string;
@@ -62,21 +67,11 @@ export interface UsersScreenProps {
   readonly orgType?: string | null;
 }
 
-/** Product roles (F035) — admin assigns puesto from panel. */
-const ROLES: readonly ProductRole[] = [
-  'user',
-  'admin',
-  'vendedor',
-  'gerente_ventas',
-  'gerente_produccion',
-  'ingeniero',
-  'produccion',
-  'almacen',
-] as const;
-
 // Friendly labels come from the domain (roleLabelEs) so every surface —
 // chips, modals, invitations, org picker, platform console — shows the same
-// name for the same canonical role.
+// name for the same canonical role. The assignable list itself is also the
+// domain's canonical ASSIGNABLE_ROLES (contract-pinned), filtered per org
+// type — this screen keeps no local copy to drift out of sync.
 export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): ReactNode {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
@@ -107,7 +102,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   /** Roles this organization type may assign (#326): factories use the full
    * canonical set; store/dealer are commercial-only (server re-validates). */
   const assignableRoles = useMemo(
-    () => ROLES.filter((r) => allowedRolesForOrgType(orgType).includes(r)),
+    () =>
+      ASSIGNABLE_ROLES.filter((r) =>
+        allowedRolesForOrgType(orgType).includes(r),
+      ),
     [orgType],
   );
 

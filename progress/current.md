@@ -1,83 +1,46 @@
 # Sesión
 
-**Feature en curso:** F179 — SUITE DE PILOT READINESS MULTI-ORG COMPLETADA
-**Cerrados con evidencia (ledger done):** F169–F178 (olas #325/#326/#327) + F179
-**Rama:** `feat/pilot-readiness-suite`
+**Feature en curso:** Consistencia roles↔onboarding/UI — ronda 2 (residuos post PR #425)
+**Cerrados con evidencia (ledger done):** F169–F178 (olas #325/#326/#327, PR #424) + ronda 1 de roles (PR #425)
+**Rama:** `fix/roles-consistency-residual`
 
-## F179: Pilot Readiness — gate automatizado de coexistencia multi-org
+## Roles↔onboarding ronda 2: residuos post PR #425
 
-**DoD:** "Taller A y Taller B pueden coexistir en la misma instalación y un
-regression de aislamiento hace fallar el gate antes de desplegar."
+Objetivo DoD: nadie que siga la documentación o use la UI puede ver o
+asignar un rol que el backend rechaza. El contrato (`contracts/roles.json`,
+8 canónicos + `rejectedRoles`) ya estaba pineado por PR #425; esta ronda
+cerró duplicados y divergencias restantes, sin tocar la matriz RBAC:
 
-**Qué:** `backend-go/tests/pilotreadiness/` (14 tests) contra PostgreSQL real
-(base efímera `muebles_pilot_readiness` + migraciones completas) a través de
-las APIs HTTP — sin mocks, sin stubStore. Fixtures conceptuales `pilot-a` /
-`pilot-b` (sin datos reales). Bootstrap = onboarding real de pilotos: platform
-admin crea orgs con catálogo clonado → sesión de soporte auditada → invitación
-→ owner acepta → datos de taller por APIs (settings/cliente/tablero/proyecto/
-media/foto/evento/quality issue). SQL directo sólo para bootstrap sin API
-(platform admin, seed) y assertions justificadas (columnas ownership,
-time-travel expiración soporte).
+1. **Docs:** el bloque `OrganizationRole` conceptual del distribution model
+   lleva advertencia antes y dentro (nunca implementar; el sistema usa los
+   8 canónicos). `guia-de-uso.md` tabla completa 8/8 con labels de
+   `roleLabelEs`. `roadmap_RN.md`: Operario/Instalador/Carpintero son
+   audiencias, no roles. Guard nuevo en `rbac.test.ts`: guia-de-uso debe
+   listar los 8 labels y jamás contener un rol rechazado.
+2. **UI web:** AppShell usa `roleLabelEs` (mapa local eliminado);
+   UsersScreen consume `ASSIGNABLE_ROLES` del dominio (sin copia local que
+   pueda derivar) y el pin de roles pasa a tests de comportamiento del
+   modal de invitación/edición (factory = canónicos, store = comerciales,
+   nunca rechazados). Imports muertos de roleLabelEs removidos.
+3. **Mobile:** authStore lee `LoginResponse.roles` (el DTO ya no trae
+   `user.role` desde 000090 — leía un campo muerto y mostraba
+   "OPERARIO" para todos); sesiones persistidas legacy migran a `roles[]`
+   con saneo por `isValidUserRole`. Nuevo `primaryRoleOf` en domain (pick
+   determinístico por orden canónico, sólo display). Limitación conocida:
+   mobile sin select-org multi-org (issue aparte).
+4. **DB:** down de 000090 restaura `users_role_check` con los 8 canónicos
+   (igual que la era 000051) — un rollback no reabre roles inválidos.
 
-**Cobertura:** cross-org en ambas direcciones (list/get/update/delete/media/
-settings/catálogo, 404 indistinguishable de inexistente vía assertUniform404
-incl. rutas mfgOnly); membresías (select-org explícito, roles por membresía
-activa admin≠vendedor, unión roles[], desactivación corta token vivo en la
-próxima request, role change revalidado); platform admin (token org-less sin
-datos de negocio, support session scoped a una org + auditoría start/end en el
-trail del taller, logout y expiración cortan); catálogo clonado independiente
-(renombrar/precio en A, B intacto); ownership/idempotencia (recursos nuevos en
-la org del caller, payload no elige organization_id ni por campo desconocido
-ni por sales/manufacturing, PUT no reasigna); backup/restore (pg_dump -Fc →
-pg_restore a base scratch con assertions de ownership/membresías/settings +
-round-trip tar.gz del árbol media validando cada URL referenciada por la DB).
+**Clasificación canónica vigente** (sin cambios de contrato): Diseñador→
+`ingeniero` (B); Operario/Carpintero→`produccion`+sectores (B/C);
+Supervisor→capacidad override/approval lane, no rol (C/D); Instalador→
+futuro, instalación es sector (D).
 
-**Gate:** `scripts/pilot-gate.sh` — obligatorio pre-deploy (docs/deployment.md
-§5.3). `PILOT_READINESS_GATE=1` prohibe skips: sin DB FALLA (verificado:
-dial refused → FAIL), nunca verde falso. Modos `--dsn` y `--fresh-container`
-(postgres 16 efímero). CI instala postgresql-client en el job backend-go.
-init.sh NO lo fuerza (dependencia docker nueva no responsable); la suite corre
-igual en `go test ./...` cuando hay DB.
-
-**Bugs reales encontrados por la suite (todos cerrados con fix):**
-
-1. **SeedCatalog roto post-multi-org** (000083/000088): INSERTs sin
-   organization_id + `ON CONFLICT (code)` sobre unique `(organization_id,
-   code)` — `cmd/admin seed` y `POST /api/seed` fallaban en instalación
-   fresca. Además `project_templates.id` (UUID) recibía el slug texto
-   `"tmpl-cocina-estandar-3m"` — nunca pudo insertar. Fix: org explícito por
-   OrgFromCtx en todos los INSERTs/lookups del seed + UUID determinístico
-   `seedProjectTemplate`.
-2. **jsonbRemapKey NULL en arrays vacíos**: `jsonb_agg` sin filas → NULL, pero
-   `structures.agregados`/`modules.agregados` son NOT NULL ('[]' es el valor
-   común real) — CloneCatalog explotaba con cualquier catálogo real. Fix:
-   COALESCE(..., '[]').
-3. **TEMP TABLEs de CloneCatalog vivían por sesión**: sin ON COMMIT DROP, el
-   segundo clone reutilizando una conexión pooled del servidor caía con
-   "relation already exists" (el onboarding del segundo taller piloto en un
-   server vivo). Fix: `CREATE TEMP TABLE ... ON COMMIT DROP`.
-4. **POST /api/projects/{id}/events sin fail-closed**: no verificaba la obra
-   en scope → una org appendeaba eventos al lifecycle log de una obra ajena
-   (ListProjectEvents filtra sólo por project_id). Fix: GetProjectByID scoped
-   antes de appendear (404 uniforme).
-5. **Audit de support_session_ended sin organización**: quedaba invisible en
-   el visor de audit del taller (sólo se veía el start). Fix: atribuir la org
-   de la sesión al evento end.
-6. **DELETE /api/catalog/materials/{id} ajeno → 500** (DeactivateMaterialBoard
-   not-found sin mapear). Fix: 404 como el PUT.
-
-**Verificación (2026-08-27):** `go vet ./...` limpio; `go test ./...` backend
-9/9 paquetes ok (api 3.9s, storage 6.5s, pilotreadiness 5.3s) contra el
-docker postgres de dev (5445); `scripts/pilot-gate.sh` end-to-end PASS y
-fallo-verificado sin DB; pnpm typecheck/test no aplican (sin cambios TS —
-verificado que no se tocó ningún archivo packages/ apps/).
-
----
-
-## Ola anterior (F175–F178)
-
-**Feature:** F178 — FIXES DEL RE-REVIEW (#325/#326/#327) COMPLETADO
-**Rama:** `fix/327-multi-org-hardening`
+**Verificación (2026-08-27):** `pnpm test` monorepo completo verde
+(domain/ui/storage/web/mobile, incl. 3 tests nuevos de comportamiento de
+UsersScreen y 4 de authStore), `pnpm typecheck` verde, `go test ./...`
+verde (paridad roles×orgType y CHECKs intactos; backend sin cambios
+funcionales).
 
 ## F178: fixes del segundo review a fondo
 
