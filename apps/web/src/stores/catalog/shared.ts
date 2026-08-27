@@ -139,12 +139,12 @@ export interface CatalogState {
   // --- Customers ---
   readonly createCustomer: (
     draft: CustomerDraft,
-    actor: { readonly id?: string; readonly role?: string },
+    actor: { readonly id?: string; readonly role?: string; readonly roles?: readonly (string | null | undefined)[] },
   ) => void;
   readonly updateCustomer: (
     id: string,
     draft: CustomerDraft,
-    actor: { readonly role?: string },
+    actor: { readonly role?: string; readonly roles?: readonly (string | null | undefined)[] },
   ) => void;
   readonly setCustomerActive: (id: string, active: boolean) => void;
   /** Cross-store: persists resolved customers from project flows. */

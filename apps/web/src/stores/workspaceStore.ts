@@ -118,6 +118,7 @@ export interface WorkspaceState {
   readonly activeOrg: OrgSummary | null;
   readonly supportInfo: SupportInfo | null;
   readonly supportExiting: boolean;
+  readonly authUserSeq: number;
   readonly guestImportLoading: boolean;
   readonly guestImportError: string | null;
 
@@ -173,6 +174,7 @@ export interface WorkspaceState {
   // --- Selectors ---
   readonly getAuthToken: () => string | null;
   readonly getAuthUser: () => AuthUser | null;
+  readonly getAuthUserSeq: () => number;
   readonly getRepository: () => WorkspaceRepository;
 }
 
@@ -222,6 +224,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         activeOrg: null,
         supportInfo: null,
         supportExiting: false,
+        authUserSeq: 0,
 
         // --- Workspace lifecycle ---
         workspace: null,
@@ -388,6 +391,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           writeSessionMode('auth');
           set({
             session: 'auth',
+            authUserSeq: get().authUserSeq + 1,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
@@ -441,6 +445,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
                   ? { ...me.user, roles: nextRoles }
                   : me.user,
               );
+              set({ authUserSeq: get().authUserSeq + 1 });
             }
             set({ activeOrg: me.organization ?? null, supportInfo: me.support ?? null });
           } catch {
@@ -683,6 +688,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         // --- Selectors ---
         getAuthToken: () => (get().session === 'auth' ? readAuthToken() : null),
         getAuthUser: () => (get().session === 'auth' ? readAuthUser() : null),
+        getAuthUserSeq: () => get().authUserSeq,
         getRepository: () =>
           deps.repositoryFactory(get().session ?? 'guest', {
             baseUrl: deps.baseUrl,

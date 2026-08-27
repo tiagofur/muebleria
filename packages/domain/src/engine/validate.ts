@@ -467,3 +467,15 @@ export function projectAllowsReopenToDraft(
   }
   return false;
 }
+
+/** Multi-role union variant of projectAllowsReopenToDraft. */
+export function projectAllowsReopenToDraftRoles(
+  status: ProjectStatus | string | null | undefined,
+  roles?: readonly (string | null | undefined)[],
+): boolean {
+  if (status === 'quoted') return true;
+  if (status === 'accepted' || status === 'produced') {
+    return (roles ?? []).some((r) => r === 'admin' || r === 'gerente_ventas');
+  }
+  return false;
+}

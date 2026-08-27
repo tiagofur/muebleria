@@ -308,6 +308,7 @@ export {
   isProjectClosed,
   projectAllowsContentMutation,
   projectAllowsReopenToDraft,
+  projectAllowsReopenToDraftRoles,
   captureQuoteSnapshot,
   transitionProjectStatus,
   generateCutRows,

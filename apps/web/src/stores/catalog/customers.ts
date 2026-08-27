@@ -18,7 +18,7 @@ export function createCustomersActions(ctx: CatalogStoreCtx): CustomersSlice {
     createCustomer: (draft, actor) => {
       const ownerUserId = resolveOwnerOnCreate(
         actor.id,
-        actor.role,
+        actor.roles?.[0] ?? actor.role,
         draft.ownerUserId,
       );
       const item: Customer = {

@@ -450,6 +450,7 @@ export function AppContent({
   );
   const getAuthToken = useWorkspaceStore((s) => s.getAuthToken);
   const getAuthUser = useWorkspaceStore((s) => s.getAuthUser);
+  const authUserSeq = useWorkspaceStore((s) => s.authUserSeq);
   const getRepository = useWorkspaceStore((s) => s.getRepository);
   const saveWorkshopSettingsAction = useWorkspaceStore(
     (s) => s.saveWorkshopSettings,
@@ -605,15 +606,15 @@ export function AppContent({
 
   const authUser = useMemo(
     () => (session === 'auth' ? getAuthUser() : null),
-    [session, getAuthUser],
+    [session, getAuthUser, authUserSeq],
   );
   const authToken = useMemo(
     () => (session === 'auth' ? getAuthToken() : null),
     [session, getAuthToken],
   );
-  const actorRole = session === 'auth' ? authUser?.role : null;
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
+  const actorRole = session === 'auth' ? (actorRoles[0] ?? null) : null;
   const showAdminUsers =
     session === 'auth' && anyRole(actorRoles, (r) => isAdminRole(r));
   const canAssignOwner =
@@ -1401,13 +1402,14 @@ export function AppContent({
       catalogActions.createCustomer(draft, {
         id: authUser?.id,
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
     [catalogActions, authUser?.id, authUser?.role],
   );
   const updateCustomer = useCallback(
     (id: string, draft: CustomerDraft) => {
-      catalogActions.updateCustomer(id, draft, { role: authUser?.role });
+      catalogActions.updateCustomer(id, draft, { role: authUser?.role, roles: authUser?.roles });
     },
     [catalogActions, authUser?.role],
   );
@@ -1441,6 +1443,7 @@ export function AppContent({
       projectActions.createProject(draft, catalog, {
         id: authUser?.id,
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
     [projectActions, catalog, authUser?.id, authUser?.role],
@@ -1450,6 +1453,7 @@ export function AppContent({
       if (!catalog) return;
       projectActions.updateProject(id, draft, catalog, {
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
     [projectActions, catalog, authUser?.role],
@@ -1490,11 +1494,11 @@ export function AppContent({
     (id: string) => {
       if (!catalog) return;
       // Guest shell acts as full admin for local demo.
-      const role =
-        session === 'guest' ? 'admin' : (authUser?.role ?? null);
-      projectActions.reopenProject(id, catalog, role);
+      const roles =
+        session === 'guest' ? ['admin'] : actorRoles;
+      projectActions.reopenProject(id, catalog, roles);
     },
-    [projectActions, catalog, session, authUser?.role],
+    [projectActions, catalog, session, actorRoles],
   );
   const restoreProjectVersion = useCallback(
     (id: string, version: number) => {
@@ -1510,6 +1514,7 @@ export function AppContent({
       projectActions.createFromTemplate(templateId, draft, catalog, {
         id: authUser?.id,
         role: authUser?.role,
+        roles: authUser?.roles,
       });
     },
     [projectActions, catalog, authUser?.id, authUser?.role],
@@ -2405,11 +2410,11 @@ export function AppContent({
   );
 
   const canCaptureSurvey =
-    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_captured');
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'survey_captured'));
   const canVerifySurvey =
-    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_verified');
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'survey_verified'));
   const canApproveSurvey =
-    session === 'auth' && roleCanAppendProjectEvent(authUser?.role, 'survey_measures_approved');
+    session === 'auth' && anyRole(actorRoles, (r) => roleCanAppendProjectEvent(r, 'survey_measures_approved'));
 
   // OC-091 — transversal workspace navigation from the overview panel.
   const overviewNav = useMemo<ProjectOverviewNav>(
@@ -2892,7 +2897,7 @@ export function AppContent({
     canApproveSurvey,
     overviewNav,
     opsExceptions,
-    canOverrideQc: session === 'auth' && roleCanSuperviseFloor(authUser?.role),
+    canOverrideQc: session === 'auth' && anyRole(actorRoles, roleCanSuperviseFloor),
     handleLoadCocinaLopezDemo,
     handleOverridesChange,
     handleReceivePurchaseOrder,

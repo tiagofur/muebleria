@@ -57,3 +57,4 @@ tmp/
 # Local AI runtime state
 .atl/
 backend-go/server
+backend-go/admin
