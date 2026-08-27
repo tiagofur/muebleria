@@ -429,6 +429,11 @@ Ve bultos/unidades y completeness.
 
 Ve unidades, ambiente, ubicación, planos, visitas, issues y punch.
 
+> "Instalador" es la persona/estación, no un rol del sistema: la pantalla
+> Instalaciones la trabajan usuarios con rol `produccion`,
+> `gerente_produccion` o `admin` (no existe un rol `instalador` en
+> `contracts/roles.json`).
+
 ---
 
 ## 18. Definition of Done de la migración física
