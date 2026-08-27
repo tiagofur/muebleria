@@ -1,8 +1,35 @@
 # Sesión
 
-**Feature en curso:** F180 — POLÍTICA CERO DATOS-DEMO EN MIGRACIONES/ARRANQUE COMPLETADA
-**Cerrados con evidencia (ledger done):** F169–F179 + F180
-**Rama:** `fix/seed-explicit-only`
+**Feature en curso:** F181 — CLEAN-DEMO-DATA + SEED NO DESTRUCTIVO COMPLETADA
+**Cerrados con evidencia (ledger done):** F169–F180 (PR #427/#428) + F181
+**Rama:** `fix/seed-explicit-only` (rebaseada sobre main post-#427)
+
+## F181: comando de limpieza del demo + cierre del footgun del CLI seed
+
+`admin clean-demo-data [--apply] [--org <slug>]` — dry-run por defecto
+(transacción con rollback; reporte idéntico al apply). Borra el rastro del
+seed (TAB-*/HER-*/MOD-*/COM-*/CAN-*/EST-*, option groups, clientes "Cliente
+Plantilla"/"Cliente Demo", obra "Demo plantilla", template "Cocina estándar
+3 m") por organización —o en todas—, y SOLO lo que ningún row sobreviviente
+referencie: lo usado por obras/plantillas/módulos reales queda y se reporta
+como skipped con el motivo. CloneCatalog preserva códigos → la limpieza
+también sirve en orgs clonadas.
+
+**Footgun cerrado en el camino:** `admin seed` arrancaba con TRUNCATE GLOBAL
+(destruía el catálogo de TODAS las orgs antes de sembrar) y su backfill de
+owners asignaba el primer admin de cualquier org a rows de todas. Ahora
+siembra una org (--org, default inicial) sin truncar, backfill scoped, y el
+reset explícito es clean-demo-data.
+
+**Tests:** ciclo completo seed→dry(no toca)→apply(demo a 0, org intacta)
+→re-seed (guard de deriva de listas seed↔clean) + protección de obra real
+(módulo MOD-GAB-01 y tablero TAB-ARA-BLA elegidos por una obra real
+sobreviven y se reportan). Smoke CLI end-to-end contra base scratch:
+40 rows demo → 0.
+
+**Verificación (2026-08-27):** TestCleanDemoData + TestMigrations_NoBusinessData
+PASS; go vet + go test ./... verde (9/9 + pilotreadiness tras rebase sobre
+main post-#427).
 
 ## F180: ninguna migración/arranque/init inserta ítems; seed explícito y pineado
 
