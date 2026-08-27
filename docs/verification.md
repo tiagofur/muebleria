@@ -234,7 +234,11 @@ Para auth/RBAC:
 - round-trip legacy → nuevo schema;
 - backfill conservador;
 - ningún default inventa hechos históricos;
-- rollback/compat strategy documentada para entidades críticas.
+- rollback/compat strategy documentada para entidades críticas;
+- **migraciones y arranque jamás insertan datos de negocio** (catálogo, CRM,
+  cotizaciones) — pineado por `TestMigrations_NoBusinessData`; el seed demo es
+  un comando explícito (`cmd/admin seed` / `POST /api/seed`,
+  `docs/deployment.md` §4.5).
 
 ---
 

@@ -1,8 +1,46 @@
 # Sesión
 
-**Feature en curso:** Consistencia roles↔onboarding/UI — ronda 2 (residuos post PR #425)
-**Cerrados con evidencia (ledger done):** F169–F178 (olas #325/#326/#327, PR #424) + ronda 1 de roles (PR #425)
-**Rama:** `fix/roles-consistency-residual`
+**Feature en curso:** F180 — POLÍTICA CERO DATOS-DEMO EN MIGRACIONES/ARRANQUE COMPLETADA
+**Cerrados con evidencia (ledger done):** F169–F179 + F180
+**Rama:** `fix/seed-explicit-only`
+
+## F180: ninguna migración/arranque/init inserta ítems; seed explícito y pineado
+
+Pedido: no querer inserciones de items (materiales, componentes, muebles,
+clientes, cotizaciones…) en init.sh, arranque del backend ni migraciones
+obligatorias — la base de prueba acumula basura con el tiempo.
+
+**Auditoría (estado real):**
+
+1. **Migraciones:** los únicos INSERT en .up.sql son estructurales — org
+   inicial determinística + backfill memberships/user_sectors (000050/52/81),
+   singleton de defaults de workshop_settings (000013) y 1 evento de audit.
+   Cero ítems de negocio (el comentario viejo de seed.go sobre 000016 era
+   stale: 000016 sólo crea la tabla components).
+2. **Arranque del backend:** cmd/server sólo corre migraciones fail-closed;
+   el seed de admin fue removido del boot (nota en el main.go).
+3. **init.sh:** nunca escribe la DB; los tests usan bases efímeras
+   (pilotreadiness/multiorg/clone se dropean solas) o self-cleanup por fila.
+4. **Seed:** ya era un comando explícito — `cmd/admin seed` y
+   `POST /api/seed` (gateado por rol que muta módulos), sin ningún caller
+   automático en apps/packages. La "basura" histórica de la DB dev viene de
+   corridas manuales del seed, no de un path automático.
+
+**Blindaje para que no regrese:**
+
+- `TestMigrations_NoBusinessData` (storage): fresh DB + RunMigrations → 0
+  filas en 40+ tablas de negocio; excepciones estructurales explícitas
+  (exactamente 1 organización inicial; ≤1 workshop_settings de defaults).
+- `docs/deployment.md` §4.5: comando de seed documentado (CLI/API),
+  idempotencia, y cuándo NO usarlo (pilotos reales → clonar catálogo base).
+- `verification.md` §11 + `AGENTS.md` reglas duras fijan la política.
+
+**Verificación (2026-08-27):** TestMigrations_NoBusinessData PASS contra el
+docker dev (5445); `go test ./...` backend verde.
+
+---
+
+## Sesión anterior (roles ronda 2 / F178, PR #426)
 
 ## Roles↔onboarding ronda 2: residuos post PR #425
 

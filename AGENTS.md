@@ -166,6 +166,10 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 - **pnpm only** para monorepo JS.
 - **No `.env` en git.**
 - **No SQL destructivo** sin confirmación explícita y backup apropiado.
+- **Migraciones/arranque sin datos de negocio:** ninguna migración ni el boot
+  insertan ítems (materiales, módulos, clientes, cotizaciones…); el seed demo
+  es un comando explícito (`cmd/admin seed` / `POST /api/seed`), pineado por
+  `TestMigrations_NoBusinessData`.
 - **No `git stash` como depósito.** Commit/push en rama.
 - **No mezclar trabajo no relacionado en commits.**
 - **Antes de cerrar: push.**

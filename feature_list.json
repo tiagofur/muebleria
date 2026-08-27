@@ -4345,6 +4345,33 @@
         "deploy"
       ],
       "created": "2026-08-27"
+    },
+    {
+      "id": "F180",
+      "title": "Política cero datos-demo en migraciones/arranque — seed explícito y pineado",
+      "description": "Auditoría de las tres superficies de inserción tras el pedido explícito de no acumular basura en bases de prueba: (1) migraciones obligatorias — los únicos INSERTs son estructurales (organización inicial 000081 + backfill de memberships/user_sectors/workshop_settings defaults + 1 evento de audit), cero ítems de negocio; (2) arranque del backend — sólo migraciones fail-closed, el seed de admin fue removido del boot hace tiempo (nota en cmd/server); (3) init.sh — nunca escribe en la DB (los tests usan bases efímeras o self-cleanup). El catálogo demo ya vive únicamente en comandos explícitos (cmd/admin seed, POST /api/seed gateado por rol) sin ningún caller automático en el frontend. Para que la política no regrese: TestMigrations_NoBusinessData pinea que un RunMigrations fresco deja 0 filas en 40+ tablas de negocio (catálogo, CRM, compras, identidad) con excepciones estructurales documentadas (1 organización inicial, ≤1 singleton de workshop_settings); docs/deployment.md §4.5 documenta el comando de seed y la política; verification §11 y AGENTS.md reglas duras la fijan.",
+      "acceptance": [
+        "Fresh DB + RunMigrations → 0 filas en tablas de catálogo/CRM/compras/identidad (test de regresión)",
+        "Excepciones estructurales explícitas: 1 organización inicial, ≤1 workshop_settings de defaults",
+        "Comando de seed documentado (deployment §4.5): CLI + API, idempotencia y cuándo NO usarlo",
+        "Política registrada en verification §11 y AGENTS.md reglas duras",
+        "go test ./... backend verde"
+      ],
+      "references": [
+        "docs/deployment.md",
+        "docs/verification.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F179"
+      ],
+      "tags": [
+        "db",
+        "backend",
+        "docs",
+        "testing"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }
