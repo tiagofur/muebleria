@@ -101,7 +101,6 @@ import {
   type WarrantyTicket,
   type ItemFloorStatus,
   ITEM_FLOOR_STATUS_LABELS_ES,
-  roleLabelEs,
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleIsScopedBySector,

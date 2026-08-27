@@ -2,7 +2,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { roleLabelEs } from '@granete/domain';
+import { UsersScreen } from './UsersScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -14,11 +18,9 @@ describe('UsersScreen (F026 admin approval)', () => {
     expect(src).toContain('/role');
     expect(src).toContain("method: 'PUT'");
     expect(src).toContain("method: 'DELETE'");
-    expect(src).toContain("'user'");
-    expect(src).toContain("'admin'");
-    expect(src).toContain("'gerente_ventas'");
-    expect(src).toContain("'ingeniero'");
-    expect(src).toContain("'produccion'");
+    // Los roles ofrecidos los pinea el contrato (ASSIGNABLE_ROLES) y los
+    // cubren los tests de comportamiento de abajo; aquí sólo vigilamos que
+    // no vuelvan labels legacy hardcodeadas al source.
     expect(src).not.toContain("'disenador'");
     expect(src).not.toContain("'carpintero'");
   });
@@ -67,23 +69,93 @@ describe('UsersScreen (#326 roles por tipo de organización)', () => {
 });
 
 describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
-  it('offers exactly the canonical roles in the multi-role and invitation modals', () => {
-    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
-    const rolesMatch = src.match(/const ROLES: readonly ProductRole\[\] = \[([\s\S]*?)\] as const;/);
-    expect(rolesMatch).not.toBeNull();
-    const rolesBlock = rolesMatch?.[1] ?? '';
-    expect(rolesBlock).not.toBe('');
-    const offered = Array.from(rolesBlock.matchAll(/'(?<id>[a-z_]+)'/g)).map(
-      (m) => m.groups?.id ?? '',
+  const contract = JSON.parse(
+    readFileSync(join(here, '../../../..', 'contracts/roles.json'), 'utf8'),
+  ) as { canonicalRoles: string[]; rejectedRoles: string[] };
+
+  const member = {
+    id: 'u1',
+    user_id: 'u1',
+    name: 'Ana Pérez',
+    email: 'ana@taller.com',
+    roles: ['vendedor'],
+    active: true,
+  };
+
+  // Behavior (no source grep): la pantalla debe ofrecer exactamente lo que
+  // el backend acepta — el contrato canónico filtrado por tipo de org.
+  function stubTeamEndpoints() {
+    const jsonOk = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/org/team')) return jsonOk([member]);
+        return jsonOk([]);
+      }),
+    );
+  }
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('invitation modal offers exactly the canonical roles minus user (factory)', async () => {
+    stubTeamEndpoints();
+    const user = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await user.click(
+      (await screen.findAllByRole('button', { name: /Invitar Miembro/i }))[0],
     );
 
-    const contract = JSON.parse(
-      readFileSync(join(here, '../../../..', 'contracts/roles.json'), 'utf8'),
-    ) as { canonicalRoles: string[]; rejectedRoles: string[] };
-
-    expect([...offered].sort()).toEqual([...contract.canonicalRoles].sort());
+    // Invitar crea una membresía con puesto real: 'user' no se ofrece.
+    const expected = contract.canonicalRoles.filter((r) => r !== 'user');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(expected.length);
+    for (const r of expected) {
+      expect(screen.getByRole('checkbox', { name: roleLabelEs(r) })).toBeTruthy();
+    }
     for (const rejected of contract.rejectedRoles) {
-      expect(offered).not.toContain(rejected);
+      expect(screen.queryByText(rejected, { exact: false })).toBeNull();
+    }
+  });
+
+  it('invitation modal only offers the commercial roles a store may assign', async () => {
+    stubTeamEndpoints();
+    const user = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="store" />);
+
+    await user.click(
+      (await screen.findAllByRole('button', { name: /Invitar Miembro/i }))[0],
+    );
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+    for (const r of ['admin', 'vendedor', 'gerente_ventas']) {
+      expect(screen.getByRole('checkbox', { name: roleLabelEs(r) })).toBeTruthy();
+    }
+    for (const r of ['gerente_produccion', 'ingeniero', 'produccion', 'almacen']) {
+      expect(screen.queryByRole('checkbox', { name: roleLabelEs(r) })).toBeNull();
+    }
+  });
+
+  it('member role editor offers the full canonical set including user (factory)', async () => {
+    stubTeamEndpoints();
+    const user = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await user.click(await screen.findByTitle('Modificar roles'));
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(contract.canonicalRoles.length);
+    for (const r of contract.canonicalRoles) {
+      expect(screen.getByRole('checkbox', { name: roleLabelEs(r) })).toBeTruthy();
+    }
+    for (const rejected of contract.rejectedRoles) {
+      expect(screen.queryByText(rejected, { exact: false })).toBeNull();
     }
   });
 
