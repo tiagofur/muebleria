@@ -169,6 +169,52 @@ docker compose -f docker-compose.prod.yml exec backend \
 docker compose -f docker-compose.prod.yml logs --tail=20 backend
 ```
 
+### 4.5 Datos demo (opcional y explícito)
+
+**Política:** ni las migraciones ni el arranque del backend insertan NUNCA
+datos de negocio (materiales, componentes, módulos, clientes, cotizaciones…).
+Una instalación fresca queda vacía y lista para el onboarding real del taller
+(`docs/pilot-onboarding.md`). Esto está pineado por
+`TestMigrations_NoBusinessData` — ninguna migración puede volver a sembrar
+ítems.
+
+El catálogo demo (plantilla: tableros, herrajes, módulos, clientes y obra
+"Demo plantilla") existe sólo como **comando explícito**, para cuando quieras
+una base con datos para probar o expandir:
+
+```bash
+# Dentro del contenedor (o en local contra la DB destino):
+docker compose -f docker-compose.prod.yml exec backend /app/admin seed
+#   o, desde el repo:  cd backend-go && go run ./cmd/admin seed
+
+# Por API (requiere sesión de taller con rol que muta catálogo):
+curl -X POST https://TU_HOST/api/seed -H "Authorization: Bearer <token>"
+```
+
+El seed es idempotente (si la organización ya tiene tableros, no duplica) y
+sembría UNA organización: `admin seed --org <slug>` (por defecto la inicial).
+Para un taller piloto real NO lo corras: el flujo canónico es clonar el
+catálogo base desde la consola de plataforma.
+
+**Limpiar el demo** (F181): `admin clean-demo-data [--apply] [--org <slug>]`.
+Dry-run por defecto — reporta exactamente qué borraría sin tocar nada; con
+`--apply` elimina todos los rows del seed (catálogo demo, clientes "Cliente
+Plantilla"/"Cliente Demo", obra "Demo plantilla", template "Cocina estándar
+3 m") en la organización indicada —o en todas—. Cualquier row demo que data
+REAL referencie (obras, plantillas o módulos del usuario) se conserva y se
+reporta como skipped. Ejemplo de ciclo completo sobre una base de prueba:
+
+```bash
+go run ./cmd/admin clean-demo-data            # 1. revisar el reporte
+go run ./cmd/admin clean-demo-data --apply    # 2. borrar el demo
+go run ./cmd/admin seed                       # 3. (opcional) volver a sembrar
+```
+
+> Histórico: `admin seed` comenzaba con un `TRUNCATE` global que borraba el
+> catálogo de TODAS las organizaciones antes de sembrar (y su backfill de
+> owners cruzaba orgs). Desde F181 ya no trunca — respeta lo existente y el
+> reset explícito es `clean-demo-data`.
+
 ---
 
 ## 5. Mantenimiento y Operaciones Diarias

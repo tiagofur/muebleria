@@ -1,8 +1,73 @@
 # Sesión
 
-**Feature en curso:** Consistencia roles↔onboarding/UI — ronda 2 (residuos post PR #425)
-**Cerrados con evidencia (ledger done):** F169–F178 (olas #325/#326/#327, PR #424) + ronda 1 de roles (PR #425)
-**Rama:** `fix/roles-consistency-residual`
+**Feature en curso:** F181 — CLEAN-DEMO-DATA + SEED NO DESTRUCTIVO COMPLETADA
+**Cerrados con evidencia (ledger done):** F169–F180 (PR #427/#428) + F181
+**Rama:** `fix/seed-explicit-only` (rebaseada sobre main post-#427)
+
+## F181: comando de limpieza del demo + cierre del footgun del CLI seed
+
+`admin clean-demo-data [--apply] [--org <slug>]` — dry-run por defecto
+(transacción con rollback; reporte idéntico al apply). Borra el rastro del
+seed (TAB-*/HER-*/MOD-*/COM-*/CAN-*/EST-*, option groups, clientes "Cliente
+Plantilla"/"Cliente Demo", obra "Demo plantilla", template "Cocina estándar
+3 m") por organización —o en todas—, y SOLO lo que ningún row sobreviviente
+referencie: lo usado por obras/plantillas/módulos reales queda y se reporta
+como skipped con el motivo. CloneCatalog preserva códigos → la limpieza
+también sirve en orgs clonadas.
+
+**Footgun cerrado en el camino:** `admin seed` arrancaba con TRUNCATE GLOBAL
+(destruía el catálogo de TODAS las orgs antes de sembrar) y su backfill de
+owners asignaba el primer admin de cualquier org a rows de todas. Ahora
+siembra una org (--org, default inicial) sin truncar, backfill scoped, y el
+reset explícito es clean-demo-data.
+
+**Tests:** ciclo completo seed→dry(no toca)→apply(demo a 0, org intacta)
+→re-seed (guard de deriva de listas seed↔clean) + protección de obra real
+(módulo MOD-GAB-01 y tablero TAB-ARA-BLA elegidos por una obra real
+sobreviven y se reportan). Smoke CLI end-to-end contra base scratch:
+40 rows demo → 0.
+
+**Verificación (2026-08-27):** TestCleanDemoData + TestMigrations_NoBusinessData
+PASS; go vet + go test ./... verde (9/9 + pilotreadiness tras rebase sobre
+main post-#427).
+
+## F180: ninguna migración/arranque/init inserta ítems; seed explícito y pineado
+
+Pedido: no querer inserciones de items (materiales, componentes, muebles,
+clientes, cotizaciones…) en init.sh, arranque del backend ni migraciones
+obligatorias — la base de prueba acumula basura con el tiempo.
+
+**Auditoría (estado real):**
+
+1. **Migraciones:** los únicos INSERT en .up.sql son estructurales — org
+   inicial determinística + backfill memberships/user_sectors (000050/52/81),
+   singleton de defaults de workshop_settings (000013) y 1 evento de audit.
+   Cero ítems de negocio (el comentario viejo de seed.go sobre 000016 era
+   stale: 000016 sólo crea la tabla components).
+2. **Arranque del backend:** cmd/server sólo corre migraciones fail-closed;
+   el seed de admin fue removido del boot (nota en el main.go).
+3. **init.sh:** nunca escribe la DB; los tests usan bases efímeras
+   (pilotreadiness/multiorg/clone se dropean solas) o self-cleanup por fila.
+4. **Seed:** ya era un comando explícito — `cmd/admin seed` y
+   `POST /api/seed` (gateado por rol que muta módulos), sin ningún caller
+   automático en apps/packages. La "basura" histórica de la DB dev viene de
+   corridas manuales del seed, no de un path automático.
+
+**Blindaje para que no regrese:**
+
+- `TestMigrations_NoBusinessData` (storage): fresh DB + RunMigrations → 0
+  filas en 40+ tablas de negocio; excepciones estructurales explícitas
+  (exactamente 1 organización inicial; ≤1 workshop_settings de defaults).
+- `docs/deployment.md` §4.5: comando de seed documentado (CLI/API),
+  idempotencia, y cuándo NO usarlo (pilotos reales → clonar catálogo base).
+- `verification.md` §11 + `AGENTS.md` reglas duras fijan la política.
+
+**Verificación (2026-08-27):** TestMigrations_NoBusinessData PASS contra el
+docker dev (5445); `go test ./...` backend verde.
+
+---
+
+## Sesión anterior (roles ronda 2 / F178, PR #426)
 
 ## Roles↔onboarding ronda 2: residuos post PR #425
 

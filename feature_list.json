@@ -4345,6 +4345,60 @@
         "deploy"
       ],
       "created": "2026-08-27"
+    },
+    {
+      "id": "F180",
+      "title": "Política cero datos-demo en migraciones/arranque — seed explícito y pineado",
+      "description": "Auditoría de las tres superficies de inserción tras el pedido explícito de no acumular basura en bases de prueba: (1) migraciones obligatorias — los únicos INSERTs son estructurales (organización inicial 000081 + backfill de memberships/user_sectors/workshop_settings defaults + 1 evento de audit), cero ítems de negocio; (2) arranque del backend — sólo migraciones fail-closed, el seed de admin fue removido del boot hace tiempo (nota en cmd/server); (3) init.sh — nunca escribe en la DB (los tests usan bases efímeras o self-cleanup). El catálogo demo ya vive únicamente en comandos explícitos (cmd/admin seed, POST /api/seed gateado por rol) sin ningún caller automático en el frontend. Para que la política no regrese: TestMigrations_NoBusinessData pinea que un RunMigrations fresco deja 0 filas en 40+ tablas de negocio (catálogo, CRM, compras, identidad) con excepciones estructurales documentadas (1 organización inicial, ≤1 singleton de workshop_settings); docs/deployment.md §4.5 documenta el comando de seed y la política; verification §11 y AGENTS.md reglas duras la fijan.",
+      "acceptance": [
+        "Fresh DB + RunMigrations → 0 filas en tablas de catálogo/CRM/compras/identidad (test de regresión)",
+        "Excepciones estructurales explícitas: 1 organización inicial, ≤1 workshop_settings de defaults",
+        "Comando de seed documentado (deployment §4.5): CLI + API, idempotencia y cuándo NO usarlo",
+        "Política registrada en verification §11 y AGENTS.md reglas duras",
+        "go test ./... backend verde"
+      ],
+      "references": [
+        "docs/deployment.md",
+        "docs/verification.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F179"
+      ],
+      "tags": [
+        "db",
+        "backend",
+        "docs",
+        "testing"
+      ],
+      "created": "2026-08-27"
+    },
+    {
+      "id": "F181",
+      "title": "cmd/admin clean-demo-data — limpieza segura del catálogo demo + seed no destructivo",
+      "description": "Comando de limpieza del seed demo pedido para recuperar bases de prueba sin basura: storage.CleanDemoData corre en una transacción (dry-run por defecto = rollback, reporte idéntico al apply) y sólo borra rows demo (identificados por códigos/nombres exactos del seed — CloneCatalog preserva códigos, así que sirve por-org tras clonar) que NINGÚN row sobreviviente referencie: obras/plantillas reales vía project_items o items JSONB de templates, módulos del usuario vía module/structure_components, choices de obras reales para tableros/herrajes, option_role por código para grupos, default_edge_band_id para cantos, customer_id para clientes. Los referenciados se reportan como skipped con motivo. CLI: admin clean-demo-data [--apply] [--org]. En el camino se cerró un footgun del CLI seed: runSeed hacía TRUNCATE GLOBAL de todas las orgs antes de sembrar y su backfill de owners asignaba el primer admin de cualquier org a rows de todas — ahora siembra una org (--org, default inicial) sin truncar y backfillea scoped; el reset explícito pasa a ser clean-demo-data. Test del ciclo completo: seed→dry(no toca)→apply(todo demo a 0, org intacta)→re-seed (guard de deriva de listas seed↔clean) + protección de obra real (módulo/tablero demo usados por una obra real sobreviven y se reportan). Smoke end-to-end del CLI verificado contra base scratch (40 rows → 0).",
+      "acceptance": [
+        "admin clean-demo-data dry-run reporta sin modificar la base (verificado CLI + test)",
+        "apply elimina todo el rastro del seed por org; org y data real intactas",
+        "Rows demo referenciados por obras/plantillas/módulos reales se conservan y se reportan",
+        "admin seed ya no trunca globalmente: siembra --org y backfillea owners dentro de la org",
+        "Test del ciclo seed→clean→re-seed pasa (guard de deriva de listas) + protección de obra real",
+        "go test ./... backend verde"
+      ],
+      "references": [
+        "docs/deployment.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F180"
+      ],
+      "tags": [
+        "db",
+        "backend",
+        "cli",
+        "testing"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }
