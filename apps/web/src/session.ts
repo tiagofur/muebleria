@@ -34,6 +34,13 @@ export type OrgSummary = {
   readonly id: string;
   readonly name: string;
   readonly slug: string;
+  /** Organization type (factory/store/dealer) — drives org-type role gates. */
+  readonly type?: string;
+  readonly license?: {
+    readonly plan?: string;
+    readonly expires_at?: string | null;
+    readonly status?: string;
+  };
 };
 
 export type MembershipChoice = {

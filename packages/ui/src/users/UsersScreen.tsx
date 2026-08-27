@@ -28,7 +28,7 @@ import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips 
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
-import type { ProductRole } from '@granete/domain';
+import { allowedRolesForOrgType, type ProductRole } from '@granete/domain';
 
 export interface UserRow {
   readonly id: string;
@@ -56,6 +56,12 @@ export type UserFilter = 'all' | 'active' | 'pending' | 'invitations';
 export interface UsersScreenProps {
   readonly baseUrl: string;
   readonly token: string;
+  /**
+   * Active organization type (factory/store/dealer). Store/dealer show only
+   * the roles their org type may assign (#326) — mirrors the server-side
+   * RolesAllowedInOrg gate.
+   */
+  readonly orgType?: string | null;
 }
 
 /** Product roles (F035) — admin assigns puesto from panel. */
@@ -104,7 +110,7 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   almacen: 'Almacén',
 };
 
-export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
+export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): ReactNode {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
   const [filter, setFilter] = useState<UserFilter>('active');
@@ -129,6 +135,13 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
   const [copiedLink, setCopiedLink] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+
+  /** Roles this organization type may assign (#326): factories use the full
+   * canonical set; store/dealer are commercial-only (server re-validates). */
+  const assignableRoles = useMemo(
+    () => ROLES.filter((r) => allowedRolesForOrgType(orgType).includes(r)),
+    [orgType],
+  );
 
   const [rejectingUser, setRejectingUser] = useState<UserRow | null>(null);
 
@@ -665,8 +678,14 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
             Seleccioná uno o varios roles para este usuario. Las capacidades se combinan por unión de permisos (ADR-0005).
           </p>
 
+          {(orgType === 'store' || orgType === 'dealer') && (
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+              Este taller es comercial: sólo puede asignar roles de ventas y coordinación.
+            </p>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-2)' }}>
-            {ROLES.map((r) => {
+            {assignableRoles.map((r) => {
               const isChecked = selectedRoles.includes(r);
               return (
                 <label
@@ -804,7 +823,7 @@ export function UsersScreen({ baseUrl, token }: UsersScreenProps): ReactNode {
             <div>
               <label className="label">Roles a asignar *</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
-                {ROLES.filter((r) => r !== 'user').map((r) => {
+                {assignableRoles.filter((r) => r !== 'user').map((r) => {
                   const isChecked = inviteRoles.includes(r);
                   return (
                     <label

@@ -738,3 +738,15 @@ export function rolesOfUser(user: {
   if (explicit.length > 0) return explicit;
   return user.role != null ? [user.role] : [];
 }
+
+/**
+ * Cost visibility for a multi-role actor (COST-01/COST-02 with union
+ * semantics): one cost-privileged role in the set is enough — mirrors the
+ * server-side actorCanViewCosts / AnyRole(RoleCanViewCosts) in Go.
+ */
+export function rolesCanViewCosts(
+  roles: readonly (string | null | undefined)[],
+  opts?: { vendedorCanViewCosts?: boolean },
+): boolean {
+  return anyRole(roles, (r) => roleCanViewCosts(r, opts));
+}

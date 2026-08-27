@@ -336,6 +336,8 @@ export interface ShellViewCtx {
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly assignableOwners: readonly AssignableOwner[];
   readonly authToken: string | null;
+  /** Active organization type (factory/store/dealer) — org-type role gates. */
+  readonly orgType: string | null | undefined;
   readonly authUser: AuthUser | null;
   readonly backendBreakdown: QuoteBreakdown | null;
   readonly boardOverrides: Readonly<Record<string, unknown>>;
@@ -613,6 +615,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     assignableOwners,
     authToken,
     authUser,
+    orgType,
     backendBreakdown,
     boardOverrides,
     breakdownError,
@@ -1622,7 +1625,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       ) : null}
 
       {navId === 'users' && showAdminUsers && authToken ? (
-        <UsersScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
+        <UsersScreen
+          baseUrl={DEFAULT_API_BASE}
+          token={authToken}
+          orgType={orgType}
+        />
       ) : null}
       {navId === 'platform' && isPlatformAdmin && authToken ? (
         <PlatformScreen

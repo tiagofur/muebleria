@@ -18,5 +18,29 @@
     "supported": true,
     "semantics": "union",
     "adr": "docs/adr/0005-multi-organization-tenancy.md"
+  },
+  "rolesByOrganizationType": {
+    "factory": [
+      "admin",
+      "user",
+      "vendedor",
+      "gerente_ventas",
+      "gerente_produccion",
+      "ingeniero",
+      "produccion",
+      "almacen"
+    ],
+    "store": [
+      "admin",
+      "user",
+      "vendedor",
+      "gerente_ventas"
+    ],
+    "dealer": [
+      "admin",
+      "user",
+      "vendedor",
+      "gerente_ventas"
+    ]
   }
 }

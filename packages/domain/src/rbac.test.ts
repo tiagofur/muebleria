@@ -178,6 +178,13 @@ describe('rbac (F035 / OC-004)', () => {
     expect(roleCanViewCosts(null)).toBe(true);
   });
 
+  it('almacen never sees costs, even with the flag on (parity pin TS↔Go, F094)', () => {
+    expect(roleCanViewCosts('almacen')).toBe(false);
+    expect(
+      roleCanViewCosts('almacen', { vendedorCanViewCosts: true }),
+    ).toBe(false);
+  });
+
   it('vendedor sees costs only when workshop flag is on (F044 / COST-02)', () => {
     expect(roleCanViewCosts('vendedor', { vendedorCanViewCosts: false })).toBe(
       false,

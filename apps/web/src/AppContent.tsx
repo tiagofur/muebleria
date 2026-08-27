@@ -1151,7 +1151,7 @@ export function AppContent({
   } = useQuoteDerivations({
     workspaceSettings: workspace?.settings,
     session,
-    actorRole,
+    actorRoles,
     catalog,
     modules,
     materials,
@@ -2752,6 +2752,7 @@ export function AppContent({
     assignableOwners,
     authToken,
     authUser,
+    orgType: activeOrg?.type ?? null,
     backendBreakdown,
     boardOverrides,
     breakdownError,
