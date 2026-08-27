@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { PageHeader, Modal, PageLoading, EmptyState } from '../common';
 import { WorkspaceTabs } from '../common/Tabs';
+import { roleLabelEs } from '@granete/domain';
 import './platform.css';
 
 export interface PlatformScreenProps {
@@ -548,11 +549,11 @@ export function PlatformScreen({
                                     key={m.organization_id}
                                     className="platform-chip"
                                     style={{ background: 'var(--surface-sunken)', fontSize: 'var(--text-xs)' }}
-                                    title={`Roles: ${(m.roles || []).join(', ')}`}
+                                    title={`Roles: ${(m.roles || []).map(roleLabelEs).join(', ')}`}
                                   >
                                     {m.organization_name || m.organization_id}
                                     <span style={{ opacity: 0.7, marginLeft: '4px' }}>
-                                      ({(m.roles || []).join(', ')})
+                                      ({(m.roles || []).map(roleLabelEs).join(', ')})
                                     </span>
                                   </span>
                                 ))

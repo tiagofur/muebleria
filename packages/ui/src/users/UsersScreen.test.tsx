@@ -65,3 +65,31 @@ describe('UsersScreen (#326 roles por tipo de organización)', () => {
     expect(src).toContain('orgType');
   });
 });
+
+describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
+  it('offers exactly the canonical roles in the multi-role and invitation modals', () => {
+    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
+    const rolesMatch = src.match(/const ROLES: readonly ProductRole\[\] = \[([\s\S]*?)\] as const;/);
+    expect(rolesMatch).not.toBeNull();
+    const rolesBlock = rolesMatch?.[1] ?? '';
+    expect(rolesBlock).not.toBe('');
+    const offered = Array.from(rolesBlock.matchAll(/'(?<id>[a-z_]+)'/g)).map(
+      (m) => m.groups?.id ?? '',
+    );
+
+    const contract = JSON.parse(
+      readFileSync(join(here, '../../../..', 'contracts/roles.json'), 'utf8'),
+    ) as { canonicalRoles: string[]; rejectedRoles: string[] };
+
+    expect([...offered].sort()).toEqual([...contract.canonicalRoles].sort());
+    for (const rejected of contract.rejectedRoles) {
+      expect(offered).not.toContain(rejected);
+    }
+  });
+
+  it('renders friendly labels through the domain roleLabelEs (single source)', () => {
+    const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
+    expect(src).toContain('roleLabelEs');
+    expect(src).not.toContain('ROLE_LABELS');
+  });
+});

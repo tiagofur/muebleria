@@ -28,7 +28,7 @@ import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips 
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
-import { allowedRolesForOrgType, type ProductRole } from '@granete/domain';
+import { allowedRolesForOrgType, roleLabelEs, type ProductRole } from '@granete/domain';
 
 export interface UserRow {
   readonly id: string;
@@ -74,17 +74,9 @@ const ROLES: readonly ProductRole[] = [
   'almacen',
 ] as const;
 
-const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
-  user: 'Sin puesto',
-  admin: 'Admin',
-  vendedor: 'Vendedor',
-  gerente_ventas: 'Gerente de ventas',
-  gerente_produccion: 'Gerente de producción',
-  ingeniero: 'Ingeniero',
-  produccion: 'Producción',
-  almacen: 'Almacén',
-};
-
+// Friendly labels come from the domain (roleLabelEs) so every surface —
+// chips, modals, invitations, org picker, platform console — shows the same
+// name for the same canonical role.
 export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): ReactNode {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
@@ -324,7 +316,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)', alignItems: 'center' }}>
         {rolesList.map((r) => (
           <span key={r} className="meta-chip">
-            {ROLE_LABELS[r as ProductRole] || r}
+            {roleLabelEs(r)}
           </span>
         ))}
       </div>
@@ -437,7 +429,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
                         {inv.roles.map((r) => (
                           <span key={r} className="meta-chip">
-                            {ROLE_LABELS[r as ProductRole] || r}
+                            {roleLabelEs(r)}
                           </span>
                         ))}
                       </div>
@@ -654,7 +646,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       }
                     }}
                   />
-                  <span style={{ fontWeight: isChecked ? 600 : 400 }}>{ROLE_LABELS[r]}</span>
+                  <span style={{ fontWeight: isChecked ? 600 : 400 }}>{roleLabelEs(r)}</span>
                 </label>
               );
             })}
@@ -792,7 +784,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           }
                         }}
                       />
-                      <span>{ROLE_LABELS[r]}</span>
+                      <span>{roleLabelEs(r)}</span>
                     </label>
                   );
                 })}
