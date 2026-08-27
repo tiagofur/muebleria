@@ -517,3 +517,25 @@ describe('pilot onboarding doc pins canonical roles', () => {
     }
   });
 });
+
+// Guía de uso (primer contacto de pilotos): debe mostrar los 8 roles
+// canónicos con los mismos labels de roleLabelEs y nunca mencionar un rol
+// rechazado — la guía no puede enseñar un rol que la app rechaza.
+describe('guia-de-uso doc pins canonical role labels', () => {
+  const doc = readFileSync(
+    new URL('../../../docs/guia-de-uso.md', import.meta.url),
+    'utf8',
+  );
+
+  it('documents every canonical role with its roleLabelEs label', () => {
+    for (const r of rolesContract.canonicalRoles) {
+      expect(doc).toContain(roleLabelEs(r));
+    }
+  });
+
+  it('never mentions a rejected role', () => {
+    for (const r of rolesContract.rejectedRoles) {
+      expect(doc).not.toContain(r);
+    }
+  });
+});
