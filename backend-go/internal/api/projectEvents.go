@@ -127,6 +127,16 @@ func (s *Server) HandleProjectEvents(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusBadRequest, "tipo de evento desconocido: "+req.Type)
 			return
 		}
+		// F179 (ADR-0005 §1): fail closed on missing/foreign projects BEFORE
+		// appending — GetProjectByID is org-scoped, so a token of another
+		// organization gets the same 404 as for a nonexistent obra. Without
+		// this gate the insert wrote an event row into a foreign project's
+		// lifecycle log (ListProjectEvents filters by project_id only).
+		project, perr := s.Store.GetProjectByID(r.Context(), projectID)
+		if perr != nil || project == nil {
+			respondWithError(w, http.StatusNotFound, "obra no encontrada")
+			return
+		}
 		// RBAC (OC-010..OC-024): appending a lifecycle event is a role-gated
 		// action, not just "any authenticated user".
 		if !requirePermission(w,
@@ -137,11 +147,6 @@ func (s *Server) HandleProjectEvents(w http.ResponseWriter, r *http.Request) {
 		// OC-074: closeout events are gated by the real project state —
 		// installed units alone never close a project.
 		if req.Type == "client_signed_off" || req.Type == "project_closed" {
-			project, perr := s.Store.GetProjectByID(r.Context(), projectID)
-			if perr != nil || project == nil {
-				respondWithError(w, http.StatusNotFound, "obra no encontrada")
-				return
-			}
 			if failing := domain.ValidateCloseoutEventAppend(project.ModuleUnits, project.Items, project.Installation, req.Type); len(failing) > 0 {
 				respondWithError(w, http.StatusConflict, "gates de cierre pendientes: "+strings.Join(failing, ", "))
 				return
