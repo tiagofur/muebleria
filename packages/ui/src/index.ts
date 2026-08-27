@@ -178,8 +178,10 @@ export {
 } from './shell';
 
 export {
+  SalesNetworkSection,
   SettingsScreen,
   type SettingsScreenProps,
+  type ConnectedOrgRow,
 } from './settings';
 
 export {

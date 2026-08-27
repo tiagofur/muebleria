@@ -2694,6 +2694,20 @@ export function AppContent({
     [onEntitySelectionChange],
   );
 
+  // #326: enter a connected sales org — switch the org scope, then land on
+  // the team screen to invite the store team.
+  const selectOrg = useWorkspaceStore((s) => s.selectOrg);
+  const onEnterConnectedOrg = useCallback(
+    async (orgId: string, orgName: string) => {
+      await selectOrg(orgId);
+      if (useWorkspaceStore.getState().activeOrg?.id === orgId) {
+        toast({ type: 'info', message: `Estás en ${orgName}. Invitá al equipo del taller.` });
+        navigate(pathForNav('users'));
+      }
+    },
+    [selectOrg, navigate],
+  );
+
   const onNavigate = useCallback(
     (id: AppNavId) => {
       if (id === 'users' && !showAdminUsers) return;
@@ -2766,6 +2780,7 @@ export function AppContent({
     assignableOwners,
     authToken,
     authUser,
+    onEnterConnectedOrg,
     orgType: activeOrg?.type ?? null,
     backendBreakdown,
     boardOverrides,

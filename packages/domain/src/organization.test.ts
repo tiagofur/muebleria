@@ -13,7 +13,7 @@ import {
 } from './organization';
 
 const contractByType = rolesContract.rolesByOrganizationType as Record<
-  string,
+  'factory' | 'store' | 'dealer',
   string[]
 >;
 

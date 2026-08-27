@@ -501,6 +501,8 @@ export interface ShellViewCtx {
   readonly onLogout: () => void;
   readonly onModuleSelectionChange: (moduleId: string | null) => void;
   readonly onNavigate: (id: AppNavId) => void;
+  /** #326: enter a connected sales org (switch org) to invite its team. */
+  readonly onEnterConnectedOrg?: (orgId: string, orgName: string) => void;
   readonly onProjectSelectionChange: (projectId: string | null) => void;
   readonly onShowcaseUseInQuote: (moduleId: string) => void;
   readonly onShowcaseUseProjectAsReference: (projectId: string) => void;
@@ -771,6 +773,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     onLogout,
     onModuleSelectionChange,
     onNavigate,
+    onEnterConnectedOrg,
     onProjectSelectionChange,
     onShowcaseUseInQuote,
     onShowcaseUseProjectAsReference,
@@ -1648,6 +1651,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           settings={workshopSettings}
           onSave={saveWorkshopSettings}
           onOpenOnboardingTour={() => setShowOnboardingTour(true)}
+          salesNetwork={
+            orgType === 'factory' && authToken && onEnterConnectedOrg
+              ? {
+                  baseUrl: DEFAULT_API_BASE,
+                  token: authToken,
+                  onEnterOrg: onEnterConnectedOrg,
+                }
+              : null
+          }
         />
       ) : null}
       {navId === 'showcase' ? (

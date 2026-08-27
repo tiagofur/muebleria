@@ -231,3 +231,54 @@ func TestIsolation_UserDirectoryByOrganization(t *testing.T) {
 		t.Fatal("unscoped directory listing must fail (no organization scope)")
 	}
 }
+
+// #326: connected sales organizations — the parent link round-trips and
+// ListConnectedOrganizations returns exactly the factory's network.
+func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
+	store, _, _ := isolationSetup(t)
+	ctx := context.Background()
+
+	factory := &domain.Organization{
+		Name: "Fábrica Alpha", Slug: "fabrica-alpha",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	if err := store.CreateOrganization(ctx, factory); err != nil {
+		t.Fatalf("create factory: %v", err)
+	}
+
+	tienda := &domain.Organization{
+		Name: "Tienda GDL", Slug: "tienda-gdl",
+		Type: domain.OrganizationTypeStore, Active: true,
+		ParentOrganizationID: &factory.ID,
+	}
+	if err := store.CreateOrganization(ctx, tienda); err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+
+	independent := &domain.Organization{
+		Name: "Taller Independiente", Slug: "taller-independiente",
+		Type: domain.OrganizationTypeFactory, Active: true,
+	}
+	if err := store.CreateOrganization(ctx, independent); err != nil {
+		t.Fatalf("create independent: %v", err)
+	}
+
+	got, err := store.GetOrganizationByID(ctx, tienda.ID)
+	if err != nil {
+		t.Fatalf("get store: %v", err)
+	}
+	if got.ParentOrganizationID == nil || *got.ParentOrganizationID != factory.ID {
+		t.Fatalf("parent round-trip = %v, want %s", got.ParentOrganizationID, factory.ID)
+	}
+
+	list, err := store.ListConnectedOrganizations(ctx, factory.ID)
+	if err != nil {
+		t.Fatalf("list connected: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != tienda.ID {
+		t.Fatalf("connected list must contain only the store, got %+v", list)
+	}
+	if list[0].ParentOrganizationID == nil || *list[0].ParentOrganizationID != factory.ID {
+		t.Fatalf("connected listing lost the parent link")
+	}
+}

@@ -21,12 +21,12 @@ import (
 // target it explicitly.
 const InitialOrganizationID = "00000000-0000-0000-0000-000000000001"
 
-const organizationColumns = `id, name, slug, type, license_plan, license_expires_at, active, created_at, updated_at`
+const organizationColumns = `id, name, slug, type, license_plan, license_expires_at, active, parent_organization_id, created_at, updated_at`
 
 func scanOrganization(row pgx.Row) (*domain.Organization, error) {
 	var o domain.Organization
 	err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-		&o.Active, &o.CreatedAt, &o.UpdatedAt)
+		&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("organization not found")
@@ -56,7 +56,7 @@ func (s *PostgresStore) ListOrganizations(ctx context.Context) ([]domain.Organiz
 	for rows.Next() {
 		var o domain.Organization
 		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -75,24 +75,46 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 		plan = domain.LicensePlanNone
 	}
 	return s.Pool.QueryRow(ctx, `
-		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, active, parent_organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+organizationColumns,
-		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, o.Active).
+		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, o.Active, o.ParentOrganizationID).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.CreatedAt, &o.UpdatedAt)
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt)
+}
+
+// ListConnectedOrganizations returns the sales network of a factory: the
+// organizations whose parent is the given factory (#326).
+func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOrganizationID string) ([]domain.Organization, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT `+organizationColumns+` FROM organizations WHERE parent_organization_id = $1 ORDER BY created_at`,
+		parentOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Organization{}
+	for rows.Next() {
+		var o domain.Organization
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
+			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
 
 const membershipWithOrgColumns = `
 	m.id, m.organization_id, m.user_id, m.roles, m.active, m.created_at, m.updated_at,
-	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.created_at, o.updated_at`
+	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.parent_organization_id, o.created_at, o.updated_at`
 
 func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 	var m domain.MembershipWithOrg
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Active, &m.CreatedAt, &m.UpdatedAt,
 		&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
-		&m.Organization.CreatedAt, &m.Organization.UpdatedAt)
+		&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("membership not found")
@@ -121,7 +143,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Active, &m.CreatedAt, &m.UpdatedAt,
 			&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
-			&m.Organization.CreatedAt, &m.Organization.UpdatedAt); err != nil {
+			&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

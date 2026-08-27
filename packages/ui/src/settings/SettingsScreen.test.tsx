@@ -129,3 +129,66 @@ describe('SettingsScreen (#37 / F044)', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/margen/i);
   });
 });
+
+describe('SettingsScreen — Red de Ventas (#326)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('no muestra el tab de red de ventas sin salesNetwork (no-fábrica)', () => {
+    render(<SettingsScreen settings={base} onSave={() => {}} />);
+    expect(screen.queryByRole('tab', { name: /Red de Ventas/i })).toBeNull();
+  });
+
+  it('muestra el tab de red de ventas para fábricas y entra a la org conectada', async () => {
+    const user = userEvent.setup();
+    const onEnterOrg = vi.fn();
+    const jsonOk = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/factory/organizations') && (!init || init.method === undefined)) {
+        return jsonOk([]);
+      }
+      if (url.endsWith('/factory/organizations') && init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            organization: {
+              id: 'org-store-9', name: 'Tienda Monterrey', slug: 'tienda-monterrey',
+              type: 'store', active: true,
+            },
+            catalog_cloned: true,
+            membership_granted: true,
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return jsonOk({});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <SettingsScreen
+        settings={base}
+        onSave={() => {}}
+        salesNetwork={{ baseUrl: 'http://test/api', token: 't', onEnterOrg }}
+      />,
+    );
+    await user.click(screen.getByRole('tab', { name: /Red de Ventas/i }));
+    expect(screen.getByTestId('sales-network')).toBeTruthy();
+    expect(screen.getByTestId('sales-network-create')).toBeTruthy();
+
+    // Crear una tienda conectada
+    await user.type(await screen.findByLabelText(/Nombre/i), 'Tienda Monterrey');
+    await user.click(screen.getByRole('button', { name: /Crear organización/i }));
+
+    const created = await screen.findByTestId('sales-network-created');
+    expect(created).toBeTruthy();
+    await user.click(screen.getByTestId('sales-network-enter'));
+    expect(onEnterOrg).toHaveBeenCalledWith('org-store-9', 'Tienda Monterrey');
+  });
+});

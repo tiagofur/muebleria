@@ -73,6 +73,10 @@ type stubStore struct {
 	listUsers           []domain.User
 	// Multi-org memberships by user (ADR-0004) for login/select-org tests.
 	membershipsByUser   map[string][]domain.MembershipWithOrg
+	listConnectedOrgs   []domain.Organization
+	getOrgByID          *domain.Organization
+	createdOrgs         []*domain.Organization
+	auditEvents         []storage.SecurityAuditEvent
 	createMaterialOK    bool
 	deleteProjectCalled bool
 	// F044 workshop settings (nil → defaults, flag false)
@@ -271,6 +275,9 @@ func (s *stubStore) DeleteOrphanInvitedUser(context.Context, string) error {
 // organization (ADR-0004), so legacy license tests keep their intent when the
 // org carries the same plan/expiry as the configured user.
 func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Organization, error) {
+	if s.getOrgByID != nil {
+		return s.getOrgByID, nil
+	}
 	if s.getUserByEmail != nil {
 		return &domain.Organization{
 			ID:               storage.InitialOrganizationID,
@@ -293,10 +300,20 @@ func (s *stubStore) ListOrganizations(context.Context) ([]domain.Organization, e
 	return nil, nil
 }
 
-func (s *stubStore) CreateOrganization(context.Context, *domain.Organization) error {
+func (s *stubStore) CreateOrganization(_ context.Context, o *domain.Organization) error {
+	if o.ID == "" {
+		o.ID = "new-org-1"
+	}
+	s.createdOrgs = append(s.createdOrgs, o)
 	return nil
 }
 
+func (s *stubStore) ListConnectedOrganizations(_ context.Context, _ string) ([]domain.Organization, error) {
+	if s.listConnectedOrgs != nil {
+		return s.listConnectedOrgs, nil
+	}
+	return []domain.Organization{}, nil
+}
 func (s *stubStore) ListMembershipsByUser(_ context.Context, userID string) ([]domain.MembershipWithOrg, error) {
 	if s.membershipsByUser != nil {
 		return s.membershipsByUser[userID], nil
@@ -339,7 +356,8 @@ func (s *stubStore) SetPlatformAdmin(context.Context, string, bool) error {
 	return nil
 }
 
-func (s *stubStore) InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error {
+func (s *stubStore) InsertSecurityAuditEvent(_ context.Context, ev storage.SecurityAuditEvent) error {
+	s.auditEvents = append(s.auditEvents, ev)
 	return nil
 }
 func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {

@@ -36,6 +36,11 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(http.HandlerFunc(server.HandlePlatformStartSupportSession)))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
 
+	// Factory sales network (#326): a factory admin lists/creates its
+	// connected store/dealer organizations (cloned from the factory catalog).
+	mux.Handle("GET /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
+	mux.Handle("POST /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
+
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/team", authMW(http.HandlerFunc(server.HandleOrgTeam)))
 	mux.Handle("PUT /api/org/members/{userId}/roles", authMW(http.HandlerFunc(server.HandleOrgMemberRoles)))

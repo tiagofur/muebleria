@@ -40,6 +40,8 @@ type Store interface {
 	ListOrganizations(ctx context.Context) ([]domain.Organization, error)
 	CreateOrganization(ctx context.Context, o *domain.Organization) error
 	ListMembershipsByUser(ctx context.Context, userID string) ([]domain.MembershipWithOrg, error)
+	// ListConnectedOrganizations returns the sales network of a factory (#326).
+	ListConnectedOrganizations(ctx context.Context, parentOrganizationID string) ([]domain.Organization, error)
 	GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error)
 	EnsureMembership(ctx context.Context, organizationID, userID string, roles []domain.UserRole) error
 	SetMembershipRoles(ctx context.Context, userID string, roles []domain.UserRole) error
