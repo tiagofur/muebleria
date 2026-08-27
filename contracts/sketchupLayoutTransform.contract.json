@@ -1,0 +1,326 @@
+{
+  "furnitureDefinitionId": "mod-1",
+  "definitionName": "Base Una Puerta 600",
+  "transformContract": "granete.local-basis.v1",
+  "dimensionsMm": [
+    600,
+    720,
+    560
+  ],
+  "components": [
+    {
+      "componentInstanceId": "st-comp-side-copy-0",
+      "slotId": "lateral_izquierdo",
+      "role": "LATERAL",
+      "name": "Lateral",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          0,
+          0,
+          0
+        ]
+      },
+      "dimensionsMm": [
+        18,
+        560,
+        684
+      ],
+      "localTransform": {
+        "translationMm": [
+          0,
+          560,
+          0
+        ],
+        "basis": {
+          "x": [
+            0,
+            -1,
+            0
+          ],
+          "y": [
+            1,
+            0,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 684,
+      "widthMm": 560,
+      "thicknessMm": 18,
+      "optionRole": "LATERAL",
+      "materialColorHex": "#c8b89a"
+    },
+    {
+      "componentInstanceId": "st-comp-side-r-copy-0",
+      "slotId": "lateral_derecho",
+      "role": "LATERAL",
+      "name": "Lateral Derecho",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          582,
+          0,
+          0
+        ]
+      },
+      "dimensionsMm": [
+        18,
+        560,
+        684
+      ],
+      "localTransform": {
+        "translationMm": [
+          582,
+          560,
+          0
+        ],
+        "basis": {
+          "x": [
+            0,
+            -1,
+            0
+          ],
+          "y": [
+            1,
+            0,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 684,
+      "widthMm": 560,
+      "thicknessMm": 18,
+      "optionRole": "LATERAL",
+      "materialColorHex": "#c8b89a"
+    },
+    {
+      "componentInstanceId": "st-comp-base-copy-0",
+      "slotId": "base",
+      "role": "INTERIOR",
+      "name": "Piso",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          18,
+          0,
+          0
+        ]
+      },
+      "dimensionsMm": [
+        564,
+        542,
+        18
+      ],
+      "localTransform": {
+        "translationMm": [
+          18,
+          0,
+          0
+        ],
+        "basis": {
+          "x": [
+            0,
+            1,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            1
+          ],
+          "z": [
+            1,
+            0,
+            0
+          ]
+        }
+      },
+      "lengthMm": 564,
+      "widthMm": 542,
+      "thicknessMm": 18,
+      "optionRole": "INTERIOR",
+      "materialColorHex": "#d4c4a8"
+    },
+    {
+      "componentInstanceId": "st-comp-top-copy-0",
+      "slotId": "superior",
+      "role": "INTERIOR",
+      "name": "Techo",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          18,
+          0,
+          702
+        ]
+      },
+      "dimensionsMm": [
+        564,
+        542,
+        18
+      ],
+      "localTransform": {
+        "translationMm": [
+          18,
+          0,
+          702
+        ],
+        "basis": {
+          "x": [
+            0,
+            1,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            1
+          ],
+          "z": [
+            1,
+            0,
+            0
+          ]
+        }
+      },
+      "lengthMm": 564,
+      "widthMm": 542,
+      "thicknessMm": 18,
+      "optionRole": "INTERIOR",
+      "materialColorHex": "#d4c4a8"
+    },
+    {
+      "componentInstanceId": "st-comp-back-copy-0",
+      "slotId": "trasera",
+      "role": "FONDO",
+      "name": "Fondo",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          15,
+          0,
+          15
+        ]
+      },
+      "dimensionsMm": [
+        690,
+        15,
+        570
+      ],
+      "localTransform": {
+        "translationMm": [
+          15,
+          0,
+          15
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 570,
+      "widthMm": 690,
+      "thicknessMm": 15,
+      "optionRole": "FONDO",
+      "materialColorHex": "#8b7355"
+    },
+    {
+      "componentInstanceId": "mod-comp-door-copy-0",
+      "slotId": "puerta",
+      "role": "FRENTE",
+      "name": "Puerta",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          2,
+          560,
+          2
+        ]
+      },
+      "dimensionsMm": [
+        596,
+        18,
+        716
+      ],
+      "localTransform": {
+        "translationMm": [
+          2,
+          560,
+          2
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 716,
+      "widthMm": 596,
+      "thicknessMm": 18,
+      "optionRole": "FRENTE",
+      "materialColorHex": "#c4a574"
+    }
+  ],
+  "hardware": [
+    {
+      "placementId": "mod-comp-door-copy-0-hw-0",
+      "hardwareId": "hw-handle",
+      "name": "Manija 160",
+      "shape": "bar-pull",
+      "sizeMm": 160,
+      "diameterMm": 32,
+      "projectionMm": 37,
+      "colorHex": "#c0c0c0",
+      "hostComponentInstanceId": "mod-comp-door-copy-0",
+      "anchorFace": "front",
+      "transform": {
+        "translationMm": [
+          542,
+          578,
+          282
+        ]
+      },
+      "dimensionsMm": [
+        32,
+        37,
+        160
+      ]
+    }
+  ]
+}

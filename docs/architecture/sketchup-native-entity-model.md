@@ -320,6 +320,38 @@ Therefore #414 extends the resolved layout with authoritative orientation/transf
 
 The transport may use quaternion, rigid matrix, orthonormal basis or an equally deterministic form. AABB may remain as convenience/backward compatibility.
 
+### Implemented contract (#414) [CURRENT]
+
+The resolved layout publishes, per board, the authoritative local→furniture transform:
+
+```json
+{
+  "transformContract": "granete.local-basis.v1",
+  "components": [
+    {
+      "componentInstanceId": "st-comp-side-copy-0",
+      "slotId": "lateral_izquierdo",
+      "lengthMm": 684,
+      "widthMm": 560,
+      "thicknessMm": 18,
+      "localTransform": {
+        "translationMm": [0, 560, 0],
+        "basis": { "x": [0, -1, 0], "y": [1, 0, 0], "z": [0, 0, 1] }
+      },
+      "transform": { "translationMm": [0, 0, 0] },
+      "dimensionsMm": [18, 560, 684]
+    }
+  ]
+}
+```
+
+- **Representation:** orthonormal **right-handed basis** — `basis.x/y/z` are the furniture-frame directions of the local +X/+Y/+Z axes — plus `translationMm`. Chosen over Euler (ambiguous order) and quaternion (w-order ambiguity, trig noise): basis entries are exactly 0/±1 for every standard 90° placement and map 1:1 onto `Geom::Transformation.axes`.
+- **Semantics:** `furniture_point = translationMm + basis · local_point`, with the local box spanning `[0,widthMm]×[0,thicknessMm]×[0,lengthMm]` on X/Y/Z (engine convention kept).
+- **Frame decision:** the engine authors rotation in the render frame (Y-up, three.js); render→furniture is the Y/Z swap, a mirror (det −1). The faithful image of the render-local frame is therefore left-handed — a mirror, not a rotation. The published local frame keeps the extents convention and the board face semantics (+Y toward the front face, +Z toward the top face) but mirrors local +X, so the basis is right-handed (det +1) and the box still occupies exactly the physical region of the legacy AABB (translation compensates the mirror by one width along the engine-local +X image).
+- **Compatibility:** `transform` (AABB min corner) + `dimensionsMm` (AABB size) remain on the wire for old plugin versions and previews; they are **derived** from the local geometry + transform, so they cannot drift from it. `transformContract` pins the representation; the Ruby parser (`apps/sketchup-extension/src/granete_for_sketchup/library/layout_contract.rb`, exposed via `resolved_native_layout`) accepts only `granete.local-basis.v1` and fails loudly on missing/unknown contracts or non-orthonormal/left-handed bases — it never guesses orientation from slotId/role/name/AABB.
+- **Golden:** `contracts/sketchupLayoutTransform.contract.json` is generated from the Go resolver output and consumed verbatim by the Ruby parser tests (regenerate with `UPDATE_LAYOUT_CONTRACT_GOLDEN=1`).
+- Hardware placements keep the AABB-only shape with `hostComponentInstanceId`; they are resolved server-side against the final host board geometry (material-aware flow §11).
+
 ### Scale
 
 Managed productive parts must not use non-uniform SketchUp scaling as a substitute for parametric regeneration.

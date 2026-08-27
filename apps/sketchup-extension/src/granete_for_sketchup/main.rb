@@ -17,6 +17,7 @@ module Granete
         transport/http_adapter
         metadata/store
         library/catalog_provider
+        library/layout_contract
         assets/asset_resolver
         assets/asset_loader
         assets/texture_cache
