@@ -17,8 +17,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -27,8 +28,6 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 	"golang.org/x/term"
 )
-
-
 
 func main() {
 	log.SetFlags(0)
@@ -55,6 +54,8 @@ func main() {
 		runSeed(os.Args[2:])
 	case "clean-media":
 		runCleanMedia(os.Args[2:])
+	case "clean-demo-data":
+		runCleanDemoData(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -73,8 +74,9 @@ func usage() {
   admin grant-membership --email <email> [--org <slug>] --role <rol>
   admin create-org --name <nombre> --slug <slug> [--type factory|store|dealer]
                    [--admin-email <email>] [--license trial|pro|none]
-  admin seed
+  admin seed [--org <slug>]
   admin clean-media [--apply]
+  admin clean-demo-data [--apply] [--org <slug>]   (borra el catálogo demo del seed)
 
 Environment:
   DATABASE_URL    Postgres DSN (defaults to local dev).
@@ -85,6 +87,13 @@ clean-media scans material_boards.image_url, material_boards.preview_texture_url
 hardwares.image_url and modules.image_url, and reports any URL whose file is
 missing on disk. Pass --apply to set those columns to '' so the catalog shows
 "Sin foto" instead of a broken <img>. Default is dry-run (no DB changes).
+
+clean-demo-data removes the demo/plantilla rows planted by 'admin seed'
+(catalogo TAB-*/HER-*/MOD-*/COM-*/CAN-*/EST-*, option groups, clientes
+"Cliente Plantilla"/"Cliente Demo", obra "Demo plantilla", template
+"Cocina estándar 3 m"). Default is dry-run; pass --apply to delete. Rows
+referenced by REAL data (obras, plantillas o módulos del usuario) are kept
+and reported. --org limits to one organization (default: every org).
 `)
 }
 
@@ -371,7 +380,15 @@ func fatal(err error) {
 	os.Exit(1)
 }
 
+// runSeed planta el catálogo demo en UNA organización (F181: antes hacía
+// TRUNCATE global de todas las orgs y backfilleaba owners cruzando orgs —
+// un footgun destructivo). Respetar a SeedCatalog: si la org ya tiene
+// tableros no duplica nada. Para "resetear" el demo usá clean-demo-data.
 func runSeed(args []string) {
+	fs := flag.NewFlagSet("seed", flag.ExitOnError)
+	orgSlug := fs.String("org", "inicial", "organization slug to seed (defaults to the initial org)")
+	_ = fs.Parse(args)
+
 	store, closeStore, err := openStore()
 	if err != nil {
 		fatal(err)
@@ -379,84 +396,56 @@ func runSeed(args []string) {
 	defer closeStore()
 
 	ctx := context.Background()
-
-	log.Println("Cleaning database tables...")
-	truncateQuery := `
-		TRUNCATE TABLE 
-			board_parts, 
-			components, 
-			customers, 
-			edge_bands, 
-			hardware_lines, 
-			hardwares, 
-			material_boards, 
-			module_categories, 
-			module_components, 
-			module_presets, 
-			modules, 
-			option_group_members, 
-			option_groups, 
-			project_item_choices, 
-			project_items, 
-			project_level_choices, 
-			projects, 
-			quote_snapshots, 
-			snapshot_prices, 
-			structure_components, 
-			structure_presets, 
-			structures, 
-			workshop_settings 
-		CASCADE;
-	`
-	if _, err := store.Pool.Exec(ctx, truncateQuery); err != nil {
-		fatal(fmt.Errorf("cleaning tables: %w", err))
+	org, err := store.GetOrganizationBySlug(ctx, *orgSlug)
+	if err != nil || org == nil {
+		fatal(fmt.Errorf("organization %q not found", *orgSlug))
 	}
+	scoped := storage.WithOrgCtx(ctx, org.ID)
 
-	log.Println("Seeding database with demo data...")
-	if err := store.SeedCatalog(ctx); err != nil {
+	log.Printf("Seeding demo data into %q...", org.Slug)
+	if err := store.SeedCatalog(scoped); err != nil {
 		fatal(fmt.Errorf("seeding catalog: %w", err))
 	}
 
-	log.Println("Backfilling owner_user_id for demo customer and project...")
-	// admins = active members with the admin role in the initial organization
-	// (users.role is gone — 000090).
+	// Backfill owner_user_id de los rows demo SIN tocar otras organizaciones
+	// (admins = miembros activos con rol admin en la org sembrada).
 	backfillProjectQuery := `
 		UPDATE projects
 		SET owner_user_id = (
 			SELECT u.id FROM users u
-			JOIN memberships m ON m.user_id = u.id AND m.active AND 'admin' = ANY(m.roles)
+			JOIN memberships m ON m.user_id = u.id AND m.active AND m.organization_id = $1 AND 'admin' = ANY(m.roles)
 			WHERE u.active = true
 			ORDER BY u.created_at ASC
 			LIMIT 1
 		)
-		WHERE owner_user_id IS NULL;
+		WHERE owner_user_id IS NULL AND organization_id = $1;
 	`
 	backfillCustomerQuery := `
 		UPDATE customers
 		SET owner_user_id = (
 			SELECT u.id FROM users u
-			JOIN memberships m ON m.user_id = u.id AND m.active AND 'admin' = ANY(m.roles)
+			JOIN memberships m ON m.user_id = u.id AND m.active AND m.organization_id = $1 AND 'admin' = ANY(m.roles)
 			WHERE u.active = true
 			ORDER BY u.created_at ASC
 			LIMIT 1
 		)
-		WHERE owner_user_id IS NULL;
+		WHERE owner_user_id IS NULL AND organization_id = $1;
 	`
 
-	if _, err := store.Pool.Exec(ctx, backfillProjectQuery); err != nil {
+	if _, err := store.Pool.Exec(scoped, backfillProjectQuery, org.ID); err != nil {
 		fatal(fmt.Errorf("backfilling project owner: %w", err))
 	}
-	if _, err := store.Pool.Exec(ctx, backfillCustomerQuery); err != nil {
+	if _, err := store.Pool.Exec(scoped, backfillCustomerQuery, org.ID); err != nil {
 		fatal(fmt.Errorf("backfilling customer owner: %w", err))
 	}
 
-	log.Println("✓ Database seeded successfully with demo data linked to admin.")
+	log.Printf("✓ %q seeded (idempotente: si ya había catálogo, no se duplicó).", org.Slug)
 }
 
 // runCleanMedia scans catalog image_url / preview_texture_url columns for URLs
 // whose underlying file no longer exists on disk (typical after losing the
 // media directory: git clean, re-clone, machine change). Without --apply it
-// only reports; with --apply it sets the dangling column to ''.
+// only reports; with --apply it sets the dangling column to ”.
 //
 // This is the recovery path for the historical "se pierden las imágenes"
 // symptom: the file is gone but the DB row still references it, so the catalog
@@ -597,7 +586,6 @@ func mediaFilenameFromURL(raw string) string {
 	return name
 }
 
-
 // slugPattern matches the URL-safe slug enforced by the organizations table.
 var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$`)
 
@@ -635,9 +623,9 @@ func runCreateOrg(args []string) {
 	ctx := context.Background()
 	org := &domain.Organization{
 		Name: *name, Slug: *slug,
-		Type: domain.OrganizationType(*orgType),
+		Type:        domain.OrganizationType(*orgType),
 		LicensePlan: domain.LicensePlan(*license),
-		Active: true,
+		Active:      true,
 	}
 	if err := store.CreateOrganization(ctx, org); err != nil {
 		fatal(fmt.Errorf("creating organization: %w", err))
@@ -675,4 +663,67 @@ func runCreateOrg(args []string) {
 		log.Printf("Admin membership granted to %s", *adminEmail)
 	}
 	log.Printf("NOTE: the catalog starts empty; base-catalog cloning arrives with the platform console (F172).")
+}
+
+// runCleanDemoData removes the demo seed rows (F181). Dry-run by default:
+// CleanDemoData runs inside a transaction that is rolled back, so the report
+// is exactly what --apply would delete. Rows referenced by surviving data are
+// kept and reported as skipped.
+func runCleanDemoData(args []string) {
+	fs := flag.NewFlagSet("clean-demo-data", flag.ExitOnError)
+	apply := fs.Bool("apply", false, "delete the demo rows (default: dry-run, report only)")
+	orgSlug := fs.String("org", "", "organization slug (default: every organization)")
+	_ = fs.Parse(args)
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		fatal(err)
+	}
+	defer closeStore()
+
+	ctx := context.Background()
+	var orgs []domain.Organization
+	if *orgSlug != "" {
+		org, err := store.GetOrganizationBySlug(ctx, *orgSlug)
+		if err != nil || org == nil {
+			fatal(fmt.Errorf("organization %q not found", *orgSlug))
+		}
+		orgs = []domain.Organization{*org}
+	} else {
+		orgs, err = store.ListOrganizations(ctx)
+		if err != nil {
+			fatal(fmt.Errorf("listing organizations: %w", err))
+		}
+	}
+
+	totalDeleted := 0
+	for _, org := range orgs {
+		res, err := store.CleanDemoData(ctx, org.ID, *apply)
+		if err != nil {
+			fatal(fmt.Errorf("cleaning org %q: %w", org.Slug, err))
+		}
+		log.Printf("== %s (slug %s)", res.OrgName, org.Slug)
+		if len(res.Deleted) == 0 && len(res.Skipped) == 0 {
+			log.Printf("   nada que limpiar (sin rows demo)")
+			continue
+		}
+		tables := make([]string, 0, len(res.Deleted))
+		for t := range res.Deleted {
+			tables = append(tables, t)
+		}
+		sort.Strings(tables)
+		for _, t := range tables {
+			totalDeleted += res.Deleted[t]
+			log.Printf("   - %s: %d", t, res.Deleted[t])
+		}
+		for _, sk := range res.Skipped {
+			log.Printf("   ! %s", sk)
+		}
+	}
+
+	if !*apply {
+		log.Printf("DRY-RUN: sin cambios. Total que --apply borraría: %d rows. Revisá la lista y repetí con --apply.", totalDeleted)
+		return
+	}
+	log.Printf("Listo: %d rows demo eliminados (los referenciados por data real se conservaron).", totalDeleted)
 }
