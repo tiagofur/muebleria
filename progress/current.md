@@ -1,7 +1,58 @@
 # Sesión
 
-**Feature en curso:** F175 — HARDENING MULTI-ORG (#325/#326/#327) COMPLETADO
-**Cerrados con evidencia (ledger done):** F169–F174 (ola anterior, PR #419) + F175
+**Feature en curso:** F176 — SEGUNDA OLA MULTI-ORG (paridad RBAC + retiro users.role + #326 red de ventas) COMPLETADO
+**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175 + F176
+**Rama:** `fix/327-multi-org-hardening`
+
+## F176: arreglos y mejoras tras el hardening F175
+
+1. **Paridad RBAC TS↔Go (contract fixtures):** Go `RoleCanViewCosts` arreglado
+   (almacen jamás ve costos — COST-02 scopea el flag a vendedor/user; Go se
+   contradecía a sí mismo) con pins en ambos test suites; `ownership.ts` gana
+   los 5 helpers multi-role espejo de `ownership.go` (+ tests que replican
+   `TestOwnershipUnion_MultiRole`); `rolesCanViewCosts` unión y
+   `useQuoteDerivations/showCosts` pasa de actorRole single a la unión;
+   `contracts/roles.json` gana `rolesByOrganizationType` pineado desde Go
+   (`organization_test.go`) y TS (`organization.test.ts` vía nuevo espejo
+   `organization.ts`); `OrgSummary` FE gana `type`+`license`.
+2. **Retiro del puente `users.role`:** `/api/staff/*` eliminado (creaba/listaba
+   usuarios globales sin scope, sin callers); `HandleOrgMemberRoles` sin write
+   global; `HandleAdminUserRole` re-escopeado a membresía de la org del caller
+   (valida tipo de org + audit); licencia por usuario retirada de punta a
+   punta (endpoint, `SetUserLicense`, selector en UsersScreen).
+3. **UX:** gates de AppContent a unión multi-role (showAdminUsers,
+   canAssignOwner, force-reopen, plant filter, loaded floor, costing, dashboard
+   mode); OrgPicker con "Cerrar sesión"; errores de carga con Reintentar en
+   Users/Platform; chip Pendiente/Vencida en invitaciones.
+4. **Robustez:** guard de CloneCatalog sobre TODAS las tablas; audit
+   `organization_renamed`; cierre lazy `ended_via='expiry'` de soporte; cleanup
+   del usuario huérfano en accept-invitation (DeleteOrphanInvitedUser + 409).
+5. **#326 completo — red de ventas de fábrica:** migración 000089
+   (`parent_organization_id`), `GET/POST /api/factory/organizations` (sólo
+   admin de org type factory; crea store/dealer con slug autogenerado único,
+   catálogo clonado DESDE la fábrica, membresía admin del creador para invitar
+   equipo, licencia queda platform-managed, audit `connected_org_created`);
+   tab "Red de Ventas" en Ajustes (solo fábricas) con crear → "Entrar al
+   taller e invitar equipo" (selectOrg + nav Equipo). Tests: 6 API + storage
+   parent/listing + render FE con fetch stubbed.
+
+## Verificación F176
+
+- `go test ./...` 8/8; `pnpm -w typecheck` 7/7; `pnpm -w test` ok (domain
+  1128, ui 1435, web 312 al cierre de cada batch).
+
+## Deuda restante (menor)
+
+- Auditar/quitar columnas `users.role`/`users.license_*` (DROP en migración
+  futura cuando nada las lea).
+- FE móvil/desktop sin pantallas de equipo (thin shells, sin impacto).
+- "Store requests dealership → factory approves" (futuro según doc).
+
+---
+
+## Ola anterior (F175)
+
+**Feature:** F175 — HARDENING MULTI-ORG (#325/#326/#327) COMPLETADO
 **Rama:** `fix/327-multi-org-hardening`
 
 ## F175: Hardening tras revisión a fondo de la ola multi-org

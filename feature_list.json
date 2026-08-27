@@ -4214,6 +4214,42 @@
         "web"
       ],
       "created": "2026-08-26"
+    },
+    {
+      "id": "F176",
+      "phase": 0,
+      "name": "multi_org_followups_326",
+      "title": "Segunda ola de hardening multi-org — paridad RBAC, retiro del puente users.role y red de ventas de fábrica (#326)",
+      "description": "Continuación de la revisión a fondo (#325/#326/#327) sobre F175. (1) Paridad TS↔Go cerrada con contract fixtures: RoleCanViewCosts Go arreglado (almacen nunca ve costos, COST-02 es vendedor/user only) con pins en ambos lados; ownership.ts gana los 5 helpers multi-role espejo de ownership.go; rolesCanViewCosts unión y showCosts FE migrrado a la unión; contracts/roles.json gana rolesByOrganizationType pineado desde Go y TS (organization.ts espejo de AllowedRolesForOrgType); OrgSummary FE gana type/license. (2) Retiro del puente users.role: /api/staff/* eliminado (usuarios globales sin scope, sin callers); HandleOrgMemberRoles ya no escribe users.role; HandleAdminUserRole re-escopeado a membresía de la org del caller con audit; licencia por usuario retirada (endpoint + SetUserLicense + UI) — la licencia es de la organización. (3) UX: gates AppContent a unión multi-role, OrgPicker con escape de logout, errores de carga visibles en Users/Platform, chip Pendiente/Vencida en invitaciones. (4) Robustez: guard de CloneCatalog sobre todas las tablas, audit de renombres de org, cierre lazy de sesiones de soporte expiradas, cleanup del usuario huérfano en accept-invitation. (5) #326 completo: migración 000089 parent_organization_id, GET/POST /api/factory/organizations (sólo admin de factory; crea store/dealer con catálogo clonado de la fábrica + membresía admin del creador + audit connected_org_created; slug autogenerado único; licencia queda para plataforma), tab Red de Ventas en Ajustes con flujo crear → entrar al taller → invitar equipo.",
+      "acceptance": [
+        "RoleCanViewCosts/almacen idéntico TS↔Go (pins en rbac_test.go y rbac.test.ts)",
+        "ownership multi-role espejado TS↔Go (rbacUnion.test replica TestOwnershipUnion_MultiRole)",
+        "rolesByOrganizationType en contracts/roles.json pineado desde ambos lados",
+        "UsersScreen filtra roles asignables por tipo de org (store/dealer comerciales)",
+        "/api/staff/* eliminado; cambios de roles scoped por membresía sin efecto cross-org",
+        "licencia por usuario eliminada (BE+FE); sólo org license",
+        "factory crea tiendas/distribuidores conectados con catálogo clonado y audit (tests api 6 + storage)",
+        "Red de Ventas operativa en Ajustes (tests render con fetch stubbed)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "https://github.com/tiagofur/muebleria/issues/325",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F175"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "permissions",
+        "web"
+      ],
+      "created": "2026-08-26"
     }
   ]
 }

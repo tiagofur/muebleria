@@ -141,15 +141,18 @@ cannot hold production roles, so production/warehouse routes fail closed.
 
 A factory can create and manage connected stores.
 
-Initial flow:
+Initial flow (implemented, #326):
 
 ```
 Factory Admin
     |
-    +-- Create Store
+    +-- Create Store   (Ajustes → Red de Ventas / POST /api/factory/organizations:
+    |                     org store/dealer with parent_organization_id = factory,
+    |                     catalog cloned from the factory, creator becomes admin
+    |                     of the new org; license stays platform-managed)
             |
-            +-- Invite users
-            +-- Assign allowed roles
+            +-- Invite users   (switch into the new org → Equipo → invitations)
+            +-- Assign allowed roles (store/dealer: commercial roles only)
 ```
 
 Future flow:
