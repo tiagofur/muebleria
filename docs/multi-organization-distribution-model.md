@@ -109,13 +109,16 @@ Factory
 
 Stores represent commercial teams that sell furniture produced by factories.
 
-Allowed roles:
+Allowed roles (canonical, per `contracts/roles.json` →
+`rolesByOrganizationType`):
 
-- owner;
 - admin;
-- sales_manager;
-- sales;
-- installer.
+- user;
+- vendedor (sales);
+- gerente_ventas (sales_manager).
+
+`installer` remains future (see the role mapping above); engineering and
+production operators are factory-only.
 
 Stores should not access factory internal data such as:
 

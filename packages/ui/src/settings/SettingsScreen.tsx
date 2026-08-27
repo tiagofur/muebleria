@@ -56,6 +56,13 @@ export function SettingsScreen({
 }: SettingsScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
 
+  // F178 N10: never strand the user on the sales-network tab when it disappears.
+  useEffect(() => {
+    if (!salesNetwork && activeTab === 'red') {
+      setActiveTab('general');
+    }
+  }, [salesNetwork, activeTab]);
+
   // Commercial / General state
   const [margin, setMargin] = useState(String(settings.defaultMarginFactor));
   const [labor, setLabor] = useState(String(settings.defaultLaborFixedCost));

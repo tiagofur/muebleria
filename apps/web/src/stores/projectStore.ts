@@ -69,8 +69,9 @@ import {
   recordProductionExport as recordProductionExportDomain,
   releasePlanEditSession as releasePlanEditSessionDomain,
   renewPlanEditSession as renewPlanEditSessionDomain,
-  resolveOwnerOnCreate,
-  resolveOwnerOnUpdate,
+  resolveOwnerOnCreateRoles,
+  resolveOwnerOnUpdateRoles,
+  rolesOfUser,
   advanceFloorStatus,
   appendFloorEvent,
   setProjectItemFloorStatus,
@@ -732,9 +733,9 @@ export function createProjectStore(options: InternalOptions) {
       );
       const updatedCatalog = { ...catalog, customers: resolved.customers };
       const meta = draftToProjectMeta(draft, resolved.customerId);
-      const ownerUserId = resolveOwnerOnCreate(
+      const ownerUserId = resolveOwnerOnCreateRoles(
         actor.id,
-        actor.roles?.[0] ?? actor.role,
+        rolesOfUser(actor),
         draft.ownerUserId,
       );
       const base: Project = {
@@ -800,8 +801,8 @@ export function createProjectStore(options: InternalOptions) {
         laborFixedCost: meta.laborFixedCost,
         notes: meta.notes,
         // Keep existing status — meta form no longer changes lifecycle (#257).
-        ownerUserId: resolveOwnerOnUpdate(
-          actor.role,
+        ownerUserId: resolveOwnerOnUpdateRoles(
+          rolesOfUser(actor),
           existing.ownerUserId,
           draft.ownerUserId,
         ),
@@ -1083,9 +1084,9 @@ export function createProjectStore(options: InternalOptions) {
         catalog.customers ?? [],
         newId,
       );
-      const ownerUserId = resolveOwnerOnCreate(
+      const ownerUserId = resolveOwnerOnCreateRoles(
         actor.id,
-        actor.roles?.[0] ?? actor.role,
+        rolesOfUser(actor),
         draft.ownerUserId,
       );
       const project = createProjectFromTemplate(template, {

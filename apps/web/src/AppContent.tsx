@@ -610,7 +610,7 @@ export function AppContent({
   );
   const authToken = useMemo(
     () => (session === 'auth' ? getAuthToken() : null),
-    [session, getAuthToken],
+    [session, getAuthToken, authUserSeq],
   );
   // Multi-role union (ADR-0005): fallback al rol único para sesiones viejas.
   const actorRoles = session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : [];
@@ -1405,13 +1405,13 @@ export function AppContent({
         roles: authUser?.roles,
       });
     },
-    [catalogActions, authUser?.id, authUser?.role],
+    [catalogActions, authUser?.id, authUser?.role, authUser?.roles],
   );
   const updateCustomer = useCallback(
     (id: string, draft: CustomerDraft) => {
       catalogActions.updateCustomer(id, draft, { role: authUser?.role, roles: authUser?.roles });
     },
-    [catalogActions, authUser?.role],
+    [catalogActions, authUser?.role, authUser?.roles],
   );
   const setCustomerActive = catalogActions.setCustomerActive;
 
@@ -1446,7 +1446,7 @@ export function AppContent({
         roles: authUser?.roles,
       });
     },
-    [projectActions, catalog, authUser?.id, authUser?.role],
+    [projectActions, catalog, authUser?.id, authUser?.role, authUser?.roles],
   );
   const updateProject = useCallback(
     (id: string, draft: ProjectDraft) => {
@@ -1456,7 +1456,7 @@ export function AppContent({
         roles: authUser?.roles,
       });
     },
-    [projectActions, catalog, authUser?.role],
+    [projectActions, catalog, authUser?.role, authUser?.roles],
   );
   const deleteProject = useCallback(
     (id: string) => {
@@ -1517,7 +1517,7 @@ export function AppContent({
         roles: authUser?.roles,
       });
     },
-    [projectActions, catalog, authUser?.id, authUser?.role],
+    [projectActions, catalog, authUser?.id, authUser?.role, authUser?.roles],
   );
   const deleteTemplate = projectActions.deleteTemplate;
   const addProjectItem = projectActions.addProjectItem;
@@ -2708,6 +2708,11 @@ export function AppContent({
       if (useWorkspaceStore.getState().activeOrg?.id === orgId) {
         toast({ type: 'info', message: `Estás en ${orgName}. Invitá al equipo del taller.` });
         navigate(pathForNav('users'));
+      } else {
+        toast({
+          type: 'error',
+          message: 'No se pudo entrar al taller (¿tenés membresía activa?).',
+        });
       }
     },
     [selectOrg, navigate],
@@ -2786,6 +2791,7 @@ export function AppContent({
     authToken,
     authUser,
     onEnterConnectedOrg,
+    actorRoles,
     orgType: activeOrg?.type ?? null,
     backendBreakdown,
     boardOverrides,

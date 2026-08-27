@@ -195,6 +195,8 @@ export function SalesNetworkSection({
                 type="button"
                 className="btn btn--secondary btn--small"
                 onClick={() => onEnterOrg(o.id, o.name)}
+                disabled={!o.active}
+                title={o.active ? undefined : 'Taller suspendido: la plataforma debe reactivarlo'}
               >
                 Entrar
               </button>

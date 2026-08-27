@@ -1,7 +1,46 @@
 # Sesión
 
-**Feature en curso:** F177 — CIERRE DE DEUDAS MULTI-ORG (DROP users.role/license_*, 000090) COMPLETADO
-**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175 + F176 + F177
+**Feature en curso:** F178 — FIXES DEL RE-REVIEW (#325/#326/#327) COMPLETADO
+**Cerrados con evidencia (ledger done):** F169–F174 (PR #419) + F175–F178
+**Rama:** `fix/327-multi-org-hardening`
+
+## F178: fixes del segundo review a fondo
+
+Re-review con agentes + verificación manual encontró 6 bugs míos de las olas
+anteriores viviendo en rutas sin test; todos cerrados:
+
+1. **B1 consola plataforma rota:** UpdateOrganization escaneaba 9 columnas
+   tras 000089 agregar parent_organization_id — todo PATCH (renombra/
+   licencia/suspender) devolvía 500. Fix + test de regresión storage.
+2. **B2/B3 CLI post-000090:** set-license ahora es por organización
+   (--org slug); seed backfillea owners vía memberships; admin create
+   asegura licencia trial de la ORG (sin writes a users.license_*).
+3. **#327 cierre real de la separación:** redacción completa del agregado
+   (MaterialPlanning/Quality/Costing), wrapper manufacturingOnly en 31 rutas
+   de sub-recursos (org comercial → 404 idéntico a obra inexistente), y una
+   tienda no puede ser su propio fabricante (400 sin mfg asignada).
+4. **B4/B5/B6/M1:** slug clampeado al CHECK (400 claro), guard de
+   CloneCatalog sobre TODAS las tablas destino, suspender org corta
+   sesiones de soporte (ended_via='org_suspended'), invitación dup → 409.
+5. **Regresiones FE del DROP:** ShellView gates a unión (embarques/
+   instalaciones estaban ocultas para TODOS los auth), projectStore resuelve
+   owner con la unión (resolveOwnerOnCreateRoles/UpdateRoles), deps
+   keyeados, N6 selectOrg bumpea authUserSeq + memo de authToken keyeado
+   (el switch in-app servía el token de la org anterior), N7 error visible
+   + Entrar deshabilitado en suspendidas, N8 sin fallback single-role ni
+   toasts falsos, N9 identidad de la unión, N10 tab reset.
+
+## Verificación F178
+
+- go test ./... 8/8; pnpm typecheck 7/7; pnpm test ok (web 312, ui 1435).
+- Tests nuevos: UpdateOrganization round-trip, manufacturingOnly gate
+  (404/200), store-needs-factory (400/201), redacción de subprocesos.
+
+---
+
+## Ola anterior (F177)
+
+**Feature:** F177 — DROP users.role/license_* (000090) COMPLETADO
 **Rama:** `fix/327-multi-org-hardening`
 
 ## F177: deudas restantes cerradas

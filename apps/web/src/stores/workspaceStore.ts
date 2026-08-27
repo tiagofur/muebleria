@@ -366,6 +366,10 @@ export function createWorkspaceStore(options?: InternalOptions) {
             storeAuthUser(result.user);
             set({
               session: 'auth',
+              // authUserSeq re-keys the authUser/authToken memos in the
+              // shell — without it an in-app org switch (F178 N6) kept
+              // serving the PREVIOUS org's token to child screens.
+              authUserSeq: get().authUserSeq + 1,
               orgSelectionLoading: false,
               orgSelectionError: null,
               pendingOrgSelection: null,

@@ -190,24 +190,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const approve = async (id: string) => {
     setActionId(id);
     try {
-      await fetch(`${baseUrl}/admin/users/${id}/approve`, { method: 'PUT', headers });
+      const res = await fetch(`${baseUrl}/admin/users/${id}/approve`, { method: 'PUT', headers });
+      if (!res.ok) throw new Error('approve');
       showToast('✓ Usuario aprobado');
       await load();
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const changeRole = async (id: string, role: string) => {
-    setActionId(id);
-    try {
-      await fetch(`${baseUrl}/admin/users/${id}/role`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ role }),
-      });
-      showToast('✓ Rol actualizado');
-      await load();
+    } catch {
+      showToast('No se pudo aprobar el usuario');
     } finally {
       setActionId(null);
     }
@@ -222,14 +210,17 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         body: JSON.stringify({ roles }),
       });
       if (!res.ok) {
-        // Fallback to legacy single-role endpoint if org endpoint not found
-        const singleRole = roles[0] || 'user';
-        await changeRole(userId, singleRole);
+        // F178 N8: no legacy single-role fallback — it silently downgraded a
+        // multi-role member to roles[0] on ANY error (validation, 5xx…).
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        showToast(body?.error ?? 'No se pudieron guardar los roles');
         return;
       }
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
       await load();
+    } catch {
+      showToast('No se pudieron guardar los roles. Revisá tu conexión.');
     } finally {
       setActionId(null);
     }
@@ -258,9 +249,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const reject = async (id: string) => {
     setActionId(id);
     try {
-      await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
+      const res = await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error('reject');
       showToast('✓ Usuario rechazado');
       await load();
+    } catch {
+      showToast('No se pudo rechazar el usuario');
     } finally {
       setActionId(null);
       setRejectingUser(null);

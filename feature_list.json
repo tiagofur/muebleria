@@ -4279,6 +4279,38 @@
         "web"
       ],
       "created": "2026-08-26"
+    },
+    {
+      "id": "F178",
+      "phase": 0,
+      "name": "rereview_fixes_325_326_327",
+      "title": "Fixes del re-review de #325/#326/#327 — consola plataforma, CLI post-000090, gate de manufactura y regresiones FE",
+      "description": "Segunda revisión a fondo (agentes + verificación manual) tras F175-F177. Backend: B1 UpdateOrganization escaneaba 9 columnas tras 000089 (todo PATCH de la consola plataforma 500 — fix + test de regresión); B2/B3 cmd/admin contra esquema post-000090 (set-license ahora por organización --org slug, seed backfillea owners vía memberships, admin create asegura licencia trial de la org); B4 slug clampeado al CHECK (400 claro); B5 guard de CloneCatalog sobre todas las tablas destino; B6 suspender org corta sesiones de soporte (ended_via='org_suspended') con audit; M1 invitación duplicada → 409. #327: redacción completa del agregado (MaterialPlanning/Quality/Costing), wrapper manufacturingOnly en 31 rutas de sub-recursos (org comercial recibe 404 igual a obra inexistente), tienda no puede ser su propio fabricante (400 sin manufacturing_organization_id desde store/dealer). FE: N5 projectStore resuelve owner con la UNIÓN (resolveOwnerOnCreateRoles/UpdateRoles + rolesOfUser) y deps de callbacks keyeados; gates de ShellView a unión (embarques/instalaciones/export/closeout/isVendedor — ocultos para todos los auth post-DROP); N6 selectOrg bumpea authUserSeq y el memo de authToken se keyea (switch in-app de org ya no sirve el token viejo); N7 error visible al fallar 'Entrar' + botón deshabilitado en orgs suspendidas; N8 sin fallback single-role en saveMultiRoles y res.ok honesto en approve/reject; N9 identidad del shell usa la unión; N10 tab Red de Ventas se resetea si desaparece.",
+      "acceptance": [
+        "PATCH de organización de plataforma funciona (test de regresión storage)",
+        "cmd/admin set-license/seed/admin create funcionan contra 000090",
+        "31 rutas de manufactura devuelven 404 a la org comercial (test wrapper)",
+        "GET proyecto a org comercial sin material_planning/quality/costing/cut_plan (test)",
+        "store/dealer sin fábrica asignada → 400 en create (test)",
+        "Embarques/instalaciones visibles de nuevo para roles autorizados (unión)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/327",
+        "https://github.com/tiagofur/muebleria/issues/326",
+        "docs/multi-organization-distribution-model.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F177"
+      ],
+      "tags": [
+        "multi-org",
+        "backend",
+        "security",
+        "web"
+      ],
+      "created": "2026-08-27"
     }
   ]
 }
