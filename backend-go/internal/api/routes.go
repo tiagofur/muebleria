@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 func RegisterRoutes(server *Server) http.Handler {
@@ -310,38 +308,16 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
 	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
-	mux.Handle("PUT /api/admin/users/{id}/license", adminMW(http.HandlerFunc(server.HandleAdminUserLicense)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 	// Sector assignments of any user — admin only (F094: was plain auth,
 	// letting any authenticated user rewrite anyone's station access).
 	mux.Handle("GET /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
 	mux.Handle("PUT /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
 
-	// Staff management — admin + gerente_produccion (production/warehouse) + gerente_ventas (sales)
-	// Uses {department} wildcard for production/warehouse; sales has its own routes.
-	prodStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteProduccion)
-	salesStaffMW := RoleMiddleware(server.JWTSecret, server.Store, domain.RoleAdmin, domain.RoleGerenteVentas)
-
-	// Production + Warehouse (gerente_produccion)
-	mux.Handle("GET /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
-	mux.Handle("POST /api/staff/production", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
-	mux.Handle("PUT /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
-	mux.Handle("DELETE /api/staff/production/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
-	mux.Handle("GET /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-	mux.Handle("PUT /api/staff/production/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-
-	mux.Handle("GET /api/staff/warehouse", prodStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
-	mux.Handle("POST /api/staff/warehouse", prodStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
-	mux.Handle("PUT /api/staff/warehouse/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
-	mux.Handle("DELETE /api/staff/warehouse/{id}", prodStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
-	mux.Handle("GET /api/staff/warehouse/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-	mux.Handle("PUT /api/staff/warehouse/{id}/sectors", prodStaffMW(http.HandlerFunc(server.HandleUserSectors)))
-
-	// Sales (gerente_ventas)
-	mux.Handle("GET /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffByRole)))
-	mux.Handle("POST /api/staff/sales", salesStaffMW(http.HandlerFunc(server.HandleStaffCreate)))
-	mux.Handle("PUT /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffUpdate)))
-	mux.Handle("DELETE /api/staff/sales/{id}", salesStaffMW(http.HandlerFunc(server.HandleStaffDelete)))
+	// NOTE: legacy /api/staff/* routes were removed (users.role bridge): they
+	// created/listed GLOBAL users with no organization scope and no caller in
+	// the clients. Team management lives in /api/org/* (memberships, #326) and
+	// /api/admin/users (org-scoped directory).
 
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
 	return CORSMiddleware(server.allowedOrigins)(mux)

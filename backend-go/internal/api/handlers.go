@@ -1825,7 +1825,11 @@ func (s *Server) HandleAdminUserApprove(w http.ResponseWriter, r *http.Request) 
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user approved"})
 }
 
-// HandleAdminUserRole: PUT /api/admin/users/{id}/role
+// HandleAdminUserRole: PUT /api/admin/users/{id}/role — legacy single-role
+// endpoint kept as the FE fallback. Membership-scoped since the users.role
+// bridge removal: it rewrites the target's roles INSIDE the caller's
+// organization only (deprecated users.role is never touched — changing roles
+// in org A must not affect what org B sees).
 func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1834,6 +1838,11 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		respondWithError(w, http.StatusBadRequest, "missing user id")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
 		return
 	}
 	var body struct {
@@ -1846,46 +1855,24 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if !domain.IsValidUserRole(body.Role) {
-		respondWithError(w, http.StatusBadRequest, "invalid role")
-		return
-	}
-	if err := s.Store.UpdateUserRole(r.Context(), id, body.Role); err != nil {
+	org, err := s.Store.GetOrganizationByID(r.Context(), claims.OrgID)
+	if err != nil || org == nil {
 		respondWithInternalError(w, err, "handler")
 		return
 	}
+	roles := []domain.UserRole{body.Role}
+	if !domain.RolesAllowedInOrg(roles, org.Type) {
+		respondWithError(w, http.StatusBadRequest, "roles inválidos para este tipo de taller")
+		return
+	}
+	if err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, id, roles); err != nil {
+		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
+		return
+	}
+	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
+		"target_user_id": id, "roles": roles, "via": "legacy_admin_role",
+	})
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
-}
-
-// HandleAdminUserLicense: PUT /api/admin/users/{id}/license
-// Manually assigns the per-user licensing tier and optional expiry. Expiry is
-// RFC 3339; omitting it (or null) means the license does not expire.
-func (s *Server) HandleAdminUserLicense(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	id := r.PathValue("id")
-	if id == "" {
-		respondWithError(w, http.StatusBadRequest, "missing user id")
-		return
-	}
-	var body struct {
-		LicensePlan      domain.LicensePlan `json:"license_plan"`
-		LicenseExpiresAt *time.Time         `json:"license_expires_at"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	if !domain.IsValidLicensePlan(body.LicensePlan) {
-		respondWithError(w, http.StatusBadRequest, "invalid license_plan")
-		return
-	}
-	if err := s.Store.SetUserLicense(r.Context(), id, body.LicensePlan, body.LicenseExpiresAt); err != nil {
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "license updated"})
 }
 
 // HandleAdminUserReject: DELETE /api/admin/users/{id}

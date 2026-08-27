@@ -47,22 +47,21 @@ describe('UsersScreen (F026 admin approval)', () => {
   });
 });
 
-describe('UsersScreen (F166 license management)', () => {
-  it('exposes per-user license plan and expiry through the admin endpoint', () => {
+describe('UsersScreen (licencia por organización, ADR-0005)', () => {
+  it('no muta licencias por usuario: la licencia vive en la organización', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
-    expect(src).toContain('/license');
-    expect(src).toContain('license_plan');
-    expect(src).toContain('license_expires_at');
-    expect(src).toContain("'none'");
-    expect(src).toContain("'trial'");
-    expect(src).toContain("'pro'");
-    expect(src).toContain('Vencimiento');
+    expect(src).not.toContain('/license');
+    expect(src).not.toContain('license_plan');
+    expect(src).not.toContain('LICENSE_PLANS');
+    // El plan/trial/pro se gestiona desde la consola de plataforma (org).
   });
+});
 
-  it('derives license status client-side without claiming server authority', () => {
+describe('UsersScreen (#326 roles por tipo de organización)', () => {
+  it('filtra los roles asignables según el tipo de org activa', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
-    expect(src).toContain('licenseStatus');
-    expect(src).toContain('Activa');
-    expect(src).toContain('Vencida');
+    expect(src).toContain('allowedRolesForOrgType');
+    expect(src).toContain('assignableRoles');
+    expect(src).toContain('orgType');
   });
 });

@@ -39,8 +39,6 @@ export interface UserRow {
   readonly roles?: readonly string[];
   readonly active: boolean;
   readonly created_at: string;
-  readonly license_plan?: string;
-  readonly license_expires_at?: string | null;
 }
 
 export interface OrgInvitationRow {
@@ -75,29 +73,6 @@ const ROLES: readonly ProductRole[] = [
   'produccion',
   'almacen',
 ] as const;
-
-/** Per-user license tiers (F166) — admin assigns plan + optional expiry. */
-const LICENSE_PLANS = ['none', 'trial', 'pro'] as const;
-
-const LICENSE_LABELS: Record<(typeof LICENSE_PLANS)[number], string> = {
-  none: 'Sin licencia',
-  trial: 'Prueba',
-  pro: 'Pro',
-};
-
-type LicenseStatus = 'active' | 'expired' | 'none';
-
-function licenseStatus(plan: string | undefined, expiresAt: string | null | undefined): LicenseStatus {
-  if (!plan || plan === 'none') return 'none';
-  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return 'expired';
-  return 'active';
-}
-
-const LICENSE_STATUS_LABELS: Record<LicenseStatus, string> = {
-  active: 'Activa',
-  expired: 'Vencida',
-  none: '—',
-};
 
 const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   user: 'Sin puesto',
@@ -269,24 +244,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
       await load();
     } catch {
       showToast('No se pudo actualizar el estado del miembro');
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const updateLicense = async (id: string, plan: string, expiresAt: string | null) => {
-    setActionId(id);
-    try {
-      await fetch(`${baseUrl}/admin/users/${id}/license`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          license_plan: plan,
-          license_expires_at: expiresAt || null,
-        }),
-      });
-      showToast('✓ Licencia actualizada');
-      await load();
     } finally {
       setActionId(null);
     }
@@ -519,7 +476,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                 <th>Roles en el taller</th>
                 <th>Estado</th>
                 <th>Estación / Puesto</th>
-                <th>Licencia</th>
                 <th className="users-table__align-right">Acciones</th>
               </tr>
             </thead>
@@ -584,34 +540,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                         <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>—</span>
                       )}
                     </td>
-                    <td>
-                      <div className="users-license-cell">
-                        <select
-                          className="users-role-select"
-                          value={u.license_plan || 'none'}
-                          disabled={isWorking}
-                          onChange={(e) =>
-                            void updateLicense(u.user_id || u.id, e.target.value, u.license_expires_at || null)
-                          }
-                          aria-label={`Plan de licencia de ${u.name}`}
-                        >
-                          {LICENSE_PLANS.map((p) => (
-                            <option key={p} value={p}>
-                              {LICENSE_LABELS[p]}
-                            </option>
-                          ))}
-                        </select>
-                        <span
-                          className={`status-badge ${
-                            licenseStatus(u.license_plan, u.license_expires_at) === 'active'
-                              ? 'status-badge--active'
-                              : 'status-badge--open'
-                          }`}
-                        >
-                          {LICENSE_STATUS_LABELS[licenseStatus(u.license_plan, u.license_expires_at)]}
-                        </span>
-                      </div>
-                    </td>
+                    
                     <td className="users-table__align-right">
                       <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
                         {!u.active ? (

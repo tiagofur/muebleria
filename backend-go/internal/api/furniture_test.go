@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -331,44 +330,6 @@ func TestExtensionTokenIsReadOnly(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code == http.StatusForbidden {
 		t.Fatalf("web token must not be read-only restricted")
-	}
-}
-
-func TestAdminUserLicenseEndpoint(t *testing.T) {
-	var gotPlan domain.LicensePlan
-	var gotExpiry *time.Time
-	server := &Server{
-		Store: &stubStore{setLicense: func(_ context.Context, _ string, p domain.LicensePlan, e *time.Time) error {
-			gotPlan, gotExpiry = p, e
-			return nil
-		}},
-		JWTSecret: furnitureTestSecret,
-	}
-
-	expiry := time.Now().Add(90 * 24 * time.Hour).UTC().Truncate(time.Second)
-	body, _ := json.Marshal(map[string]any{
-		"license_plan": "pro", "license_expires_at": expiry.Format(time.RFC3339),
-	})
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/api/admin/users/u1/license", bytes.NewReader(body))
-	req.SetPathValue("id", "u1")
-	server.HandleAdminUserLicense(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
-	}
-	if gotPlan != domain.LicensePlanPro || gotExpiry == nil || !gotExpiry.Equal(expiry) {
-		t.Fatalf("stored plan=%v expiry=%v want=%v", gotPlan, gotExpiry, expiry)
-	}
-
-	rec2 := httptest.NewRecorder()
-	body2, _ := json.Marshal(map[string]any{"license_plan": "enterprise"})
-	req2 := httptest.NewRequest(http.MethodPut, "/api/admin/users/u1/license", bytes.NewReader(body2))
-	req2.SetPathValue("id", "u1")
-	server.HandleAdminUserLicense(rec2, req2)
-
-	if rec2.Code != http.StatusBadRequest {
-		t.Fatalf("invalid plan status = %d", rec2.Code)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -236,20 +235,6 @@ func (s *PostgresStore) UpdateUser(ctx context.Context, u *domain.User) error {
 	return nil
 }
 
-// SetUserLicense sets the per-user licensing tier and optional expiry.
-// A NULL expiry means the license does not expire (managed manually).
-func (s *PostgresStore) SetUserLicense(ctx context.Context, id string, plan domain.LicensePlan, expiresAt *time.Time) error {
-	result, err := s.Pool.Exec(ctx,
-		`UPDATE users SET license_plan = $1, license_expires_at = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-		plan, expiresAt, id)
-	if err != nil {
-		return err
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found")
-	}
-	return nil
-}
 
 // RejectUser deletes a pending user (hard delete — not yet approved).
 func (s *PostgresStore) RejectUser(ctx context.Context, id string) error {

@@ -65,8 +65,6 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
 		return
 	}
-	// Bridge: keep deprecated users.role aligned with the primary role.
-	_ = s.Store.UpdateUserRole(r.Context(), userID, primaryUserRole(body.Roles))
 
 	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
 		"target_user_id": userID, "roles": body.Roles,
