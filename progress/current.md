@@ -1,6 +1,105 @@
-# Sesión
+# Sesión activa
 
-Sin sesión activa.
+## Organization Foundation v2 — planning & reconciliation (#446/#447) — 2026-08-28
+
+Rama `docs/446-organization-foundation-v2`. Draft PR #463.
+
+Objetivo de la sesión: detener la expansión de nuevas familias persistentes hasta
+cerrar correctamente Usuarios, Multi-Taller, tenant isolation y la Red de Ventas,
+reconciliando el MVP de #325–#327 con el Digital Thread #384, catálogo #443 e
+instalación #303.
+
+### Decisión sobre `feature_list.json`
+
+Este PR es arquitectura/gobernanza y no implementa runtime. Por eso no crea una
+feature `F191` artificial ni marca comportamiento futuro como `in_progress`.
+El siguiente ID del ledger se asignará al primer slice implementable después del
+merge de #447 — #448 o la feature que el orquestador active según el orden de #446.
+
+### Auditoría y reconciliación del backlog
+
+- #325, #326, #327, #421/#422 y #303 permanecen cerradas como baseline válido;
+  no se reabren ni se declaran inútiles.
+- No se encontró una issue abierta equivalente a RLS, membership lifecycle,
+  last-admin, provisioning atómico u OrganizationRelationship.
+- #443 fue adaptada para mantenerse catalog-local y consumir el contrato común
+  de #448/#449; publication/subscription pertenece a #454.
+- #384 recibió coordinación; conserva ownership de Project/FurnitureInstance/
+  revisions/ProductionRelease.
+- #385 fue adaptada para esperar Foundation Gate A y empezar con RLS, generated
+  API, durable audit e upgrade fixtures desde su primera migration.
+- #303 sigue siendo la única verdad de InstallationJob/visits/issues/punch;
+  #457 sólo añade ownership/asignación cross-org.
+
+### Issues creadas
+
+- #446 — META Organization Foundation v2.
+- #447 — canonical docs + ADR-0006.
+- #448 — generated OpenAPI/errors/versioning/idempotency.
+- #449 — tenant transactions + PostgreSQL RLS.
+- #450 — invitation-first User/Membership/Invitation lifecycle.
+- #451 — safe Team administration, last admin, offboarding, seats/sectors.
+- #452 — Organization lifecycle + atomic provisioning.
+- #453 — OrganizationRelationship + authorization.
+- #454 — versioned CatalogPublication/subscription/overlays.
+- #455 — wholesale/retail partner pricing.
+- #456 — QuoteRevision → ManufacturingOrder handoff.
+- #457 — InstallationOrder ownership/partner assignment over #303.
+- #458 — tenant-safe React session/Team/Platform.
+- #459 — complete Sales Network UX.
+- #460 — bounded sessions, MFA, media/auth hardening.
+- #461 — durable audit/outbox/observability.
+- #462 — mandatory Foundation Gate A and Network Gate B.
+
+#446 contiene invariantes, dependency graph, fases, trabajo paralelo permitido,
+E2E global y Definition of Done.
+
+### Documentación en esta rama
+
+Creado:
+
+- `docs/architecture/organization-foundation-v2.md`;
+- `docs/adr/0006-membership-lifecycle-and-organization-relationships.md`.
+
+Reconciliado:
+
+- `docs/adr/0005-multi-organization-tenancy.md`;
+- `docs/multi-organization-distribution-model.md`;
+- `docs/architecture.md`;
+- `AGENTS.md`;
+- este registro de sesión.
+
+### Decisiones principales
+
+1. `User` es identidad global; acceso, roles y sectores viven en `Membership`.
+2. Onboarding B2B invitation-first; retirar aprobación global/InitialOrganization.
+3. Toda org active conserva un admin mediante gate transaccional race-safe.
+4. PostgreSQL FORCE RLS pasa a ser requisito Gate A, no hardening posterior.
+5. Organization provisioning es idempotente y nunca deja active parcial.
+6. Cross-org usa `OrganizationRelationship`; seller no pertenece a factory.
+7. Factory catalog se publica por versions; store usa subscription + overlays.
+8. FactoryCost, wholesale y retail tienen ownership/visibilidad separados.
+9. Store submit crea ManufacturingOrder factory-owned mediante command idempotente.
+10. Installation assignment puede pertenecer a factory/store/partner y reutiliza #303.
+11. Go↔React usa OpenAPI generated, typed errors, ETag/If-Match e idempotency.
+12. Critical mutation y audit/outbox confirman juntos.
+13. React server state se keyea por organization y no usa fallback legacy.
+14. Sesión absoluta de 18h de #441/#445 permanece; refresh no es sliding.
+15. Gate A precede nuevas familias persistentes, incluyendo DT-1 #385; Gate B
+    precede declarar Red de Ventas operable.
+
+### Alcance de PR #463
+
+Sólo documentación, issues y governance. No cambia runtime, migrations, API ni UI.
+
+### Próximo paso autorizado
+
+Después del merge de #463/#447, iniciar #448 y asignar entonces la feature activa
+en `feature_list.json`. #449, #450 y la foundation de #461 pueden avanzar en
+paralelo únicamente después de #448 y con coordinación explícita de migrations.
+No iniciar child issues que salten hard prerequisites.
+
+---
 
 ## F190 — validación real nativa + OpenCutList (#417) — 2026-08-28
 

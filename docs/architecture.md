@@ -3,8 +3,10 @@
 > Los agentes revisores evalúan código contra este archivo.
 > Si un criterio no está aquí, no es un requisito de arquitectura.
 >
-> **Actualizado 2026-08-26:** este contrato conserva la arquitectura original de
-> paquetes y añade ownership explícito del digital thread Quote ↔ Project Furniture ↔ Design Revision ↔ Production Release.
+> **Actualizado 2026-08-28:** este contrato conserva la arquitectura original de
+> paquetes, el Digital Thread Quote ↔ Project Furniture ↔ Design Revision ↔
+> Production Release y añade Organization Foundation v2: identidad, membresías,
+> RLS, relationships y ownership cross-org explícito.
 
 ---
 
@@ -12,37 +14,58 @@
 
 1. **Dominio primero.** Los cálculos (BOM, costos, validaciones, routing, estados
    derivados) viven en `packages/domain` o en el backend autoritativo cuando el
-   dato requiere seguridad/concurrencia.
-2. **UI no calcula dominio.** React presenta, compone y dispara acciones.
+   dato requiere seguridad, persistencia o concurrencia.
+2. **UI no calcula dominio.** React presenta, compone y dispara commands.
 3. **Adapters serializan; no inventan reglas.** Excel/DXF/PDF/QR convierten DTOs ya
    resueltos.
 4. **Storage es un puerto.** Shells y UI consumen repositories/adapters, no detalles
    físicos de persistencia.
 5. **Apps son shells delgados.** Web/Desktop/Mobile cablean plataforma y navegación.
-6. **Una autoridad por concepto.** Evitar duplicar máquinas de estado o reglas sin
-   contrato de paridad.
+6. **Una autoridad por concepto.** Evitar duplicar máquinas de estado, identidades o
+   políticas sin contrato de paridad.
 7. **Eventos para hechos.** Hitos operativos se registran de forma auditable; los
    dashboards derivan, no fabrican verdad.
-8. **Revisión explícita.** Producción siempre debe poder responder qué revisión/BOM
-   está ejecutando.
+8. **Revisión explícita.** Producción siempre debe responder qué revisión/BOM está
+   ejecutando.
 9. **Authoring no es manufacturing truth.** Proyectar y SketchUp capturan intención;
    Granete resuelve, valida y libera el resultado industrial.
 10. **Project owns physical furniture identity.** `FurnitureInstance` es la identidad
-   estable de una unidad física a través de cotización, diseño y manufactura. `QuoteLine`,
-   `DesignRevisionItem`, entidades SketchUp y filas productivas la referencian; no la
-   sustituyen.
-11. **Historial comercial y diseño son inmutables al publicarse/aceptarse.** Cambios
-   crean nuevas revisiones; reconciliation detecta diferencias y nunca sincroniza
-   silenciosamente.
+    estable de una unidad física a través de cotización, diseño y manufactura.
+    `QuoteLine`, `DesignRevisionItem`, entidades SketchUp y filas productivas la
+    referencian; no la sustituyen.
+11. **Historial comercial y diseño son inmutables al publicarse/aceptarse.** Los
+    cambios crean nuevas revisiones; reconciliation detecta diferencias y nunca
+    sincroniza silenciosamente.
 12. **Release exacto.** `ProductionRelease` fija una `DesignRevision` y fingerprint/
-   revisión de manufactura exactos; nunca consume `latest` implícitamente.
-13. **Material antes que geometría.** En piezas de tablero, el `MaterialBoard` seleccionado
-   determina el espesor efectivo antes de fórmulas, poses, anchors y AABB; el acabado se
-   propaga por material-binding role. Ver
-   `docs/architecture/material-aware-furniture-resolution.md`.
+    revisión de manufactura exactos; nunca consume `latest` implícitamente.
+13. **Material antes que geometría.** En piezas de tablero, el `MaterialBoard`
+    seleccionado determina el espesor efectivo antes de fórmulas, poses, anchors y
+    AABB; el acabado se propaga por material-binding role.
+14. **Identidad global; acceso por membresía.** `User` no es fábrica, tienda ni
+    puesto. Roles, sectores y lifecycle de acceso pertenecen a `Membership`.
+15. **`organization_id` no es autorización.** Middleware, application services,
+    repositories scoped, PostgreSQL RLS y tests forman una defensa por capas.
+16. **La colaboración cross-org usa relationships.** Un vendedor de tienda no recibe
+    una membresía artificial en la fábrica; la autorización proviene de una
+    `OrganizationRelationship` activa y capability-scoped.
+17. **Ownership por contexto.** Venta, manufactura e instalación no comparten un
+    mega-agregado mutable: `SalesQuote`, `ManufacturingOrder` e
+    `InstallationOrder`/assignment tienen autoridad explícita.
+18. **Commit de negocio y evidencia crítica juntos.** Mutaciones sensibles y su
+    audit/outbox se confirman en la misma transacción.
+19. **Contratos ejecutables entre capas.** OpenAPI generado, typed errors,
+    version/ETag e idempotency reemplazan casts manuales y reglas por texto.
+20. **Éxito honesto.** UI no anuncia éxito antes del commit autoritativo salvo una
+    mutación optimista completa con rollback e idempotencia.
 
-Fuente normativa de 10–12: `docs/architecture/project-design-digital-thread.md` +
-`docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md`.
+Fuentes normativas:
+
+- principios 10–12:
+  `docs/architecture/project-design-digital-thread.md` + ADR-0003;
+- principio 13:
+  `docs/architecture/material-aware-furniture-resolution.md`;
+- principios 14–20:
+  `docs/architecture/organization-foundation-v2.md` + ADR-0006.
 
 ---
 
@@ -50,23 +73,91 @@ Fuente normativa de 10–12: `docs/architecture/project-design-digital-thread.md
 
 ```text
 packages/
-  domain/     → tipos, motor de resolución, cálculos, validaciones
+  domain/     → tipos, motor de resolución, cálculos, validaciones puras
   ui/         → componentes React compartidos
   excel/      → Excel/PDF/DXF/labels y otros outputs
-  storage/    → puertos/repositorios/mappers
+  storage/    → puertos/repositorios/mappers/clientes generados
 apps/
   web/        → shell React + Vite
   desktop/    → shell Electron
   mobile/     → shell React Native + Expo
-backend-go/   → API, auth, persistencia relacional, reglas servidor-autoritativas
+backend-go/   → API, application services, auth, Postgres, enforcement autoritativo
 ```
 
-Los nombres de paquete no tienen que coincidir 1:1 con los bounded contexts; el
+Los nombres de paquete no tienen que coincidir 1:1 con los bounded contexts. El
 ownership conceptual sí debe ser explícito.
+
+El backend no debe convertirse en handlers que llaman directamente queries sin
+frontera de negocio. Para commands sensibles se usa:
+
+```text
+HTTP Handler
+  → Application Service / Command
+    → Domain Policy
+      → Transaction / Repository
+        → Audit/Outbox
+```
 
 ---
 
 ## 3. Bounded contexts del producto
+
+### Identity
+
+Propietario de:
+
+- identidad global `User`;
+- credenciales, recovery, verificación de email;
+- account status;
+- sessions/devices;
+- MFA/step-up;
+- `platform_admin`.
+
+No es propietario de roles, sectores, cartera o tipo de organización.
+
+### Organization Access
+
+Propietario de:
+
+- `Membership`;
+- roles múltiples y capabilities efectivas;
+- membership lifecycle `active | suspended | left`;
+- sectores organization-scoped;
+- `Invitation` y acceptance;
+- last-admin invariant;
+- seats y offboarding;
+- revocación de sessions por membership.
+
+Un administrador de taller administra membresías, no identidades globales.
+
+### Organizations
+
+Propietario de:
+
+- `Organization` y tipo;
+- lifecycle `provisioning | active | suspended | offboarding | terminated |
+  provisioning_failed`;
+- licencia y entitlements;
+- provisioning/readiness;
+- settings y namespaces de media;
+- suspensión, reactivación, export y terminación.
+
+Una organización no pasa a `active` hasta completar admin bootstrap, settings,
+entitlements, catálogo strategy, policies y readiness.
+
+### Sales Network
+
+Propietario de:
+
+- `OrganizationRelationship`;
+- relationship status, capabilities, terms, territory y vigencia;
+- `CatalogPublication`, subscription y store overlays;
+- wholesale/retail price policies;
+- handoff cross-org;
+- projections comerciales compartidas;
+- ownership/asignación de instalación.
+
+Una relationship concede sólo actions nombradas. No abre el tenant contrario.
 
 ### Sales
 
@@ -76,11 +167,14 @@ Propietario de:
 - opportunity/quote;
 - `QuoteRevision` y snapshot comercial;
 - commercial status;
-- pricing;
+- retail pricing/discount approval;
 - ownership comercial.
 
 No es propietario de identidad física ni execution física. `QuoteLine.quantity` es
 agrupación comercial y puede mapear a múltiples `FurnitureInstance`.
+
+En Red de Ventas, Sales fija `CatalogPublication` y price-policy versions usadas;
+no consume FactoryCost.
 
 ### Projects
 
@@ -88,7 +182,7 @@ Propietario transversal de:
 
 - Project/Job;
 - identidad estable `FurnitureInstance`;
-- `Design` y lifecycle de diseños de proyecto;
+- `Design` y lifecycle de diseños del proyecto;
 - lifecycle events;
 - coordinación de versions/revisions;
 - approvals;
@@ -96,7 +190,12 @@ Propietario transversal de:
 - archivos/timeline;
 - stage derivado.
 
-No crear una identidad paralela tipo `ProjectFurniture`: reutilizar `FurnitureInstance`.
+No crear una identidad paralela tipo `ProjectFurniture`: reutilizar
+`FurnitureInstance`.
+
+Projects no convierte `Project` en el owner de permisos globales de ventas,
+manufactura e instalación. Los contextos cross-org lo referencian con autoridad
+acotada.
 
 ### Design / Authoring
 
@@ -110,7 +209,8 @@ revisiones coordinada por Projects:
 - preview + artifact metadata;
 - semantic manifest.
 
-`Design` es agnóstico al cliente. No crear `SketchUpProject` como aggregate empresarial.
+`Design` es agnóstico al cliente. No crear `SketchUpProject` como aggregate
+empresarial.
 
 ### Survey
 
@@ -182,7 +282,11 @@ Propietario de:
 - crews;
 - field issues;
 - punch list;
-- sign-off.
+- sign-off/closeout.
+
+El workflow operativo de #303 permanece único. Sales Network define qué
+organización está asignada y qué data grant purpose-scoped recibe; no crea otro
+ledger de visitas/punch.
 
 ### Costing
 
@@ -192,6 +296,8 @@ Propietario de:
 - actual material/labor/other costs;
 - variance;
 - job profitability.
+
+FactoryCost no se expone a una tienda para calcular retail.
 
 ### After Sales
 
@@ -203,7 +309,9 @@ Propietario de:
 
 ---
 
-## 4. Flujo de datos principal
+## 4. Flujos de datos principales
+
+### 4.1 Taller/fábrica integrada
 
 ```text
 Sales / QuoteRevision
@@ -233,8 +341,34 @@ Materials Ready  Logistics
                Warranty
 ```
 
-Quote-first y design-first deben converger al mismo `Project`/`FurnitureInstance`, no a
+Quote-first y design-first convergen al mismo `Project`/`FurnitureInstance`, no a
 dos modelos de identidad distintos.
+
+### 4.2 Red de Ventas
+
+```text
+Store SalesQuote / immutable QuoteRevision
+      ↓ pinned relationship + catalog + price + furniture refs
+SubmitQuoteToFactory (idempotent command)
+      ↓
+Factory-owned ManufacturingOrder
+      ↓ factory review / clarification / accept / schedule
+Exact DesignRevision + ProductionRelease
+      ↓
+Manufacturing execution
+      ↓ commercial status projection to Store
+InstallationOrder assigned to Factory / Store / Partner
+      ↓ references existing InstallationJob
+Visits → Issues → Punch → Sign-off
+```
+
+Reglas:
+
+- seller de tienda no necesita membership en fábrica;
+- generic Project PUT no realiza el handoff;
+- recibir/aceptar ManufacturingOrder no crea `ProductionRelease` automáticamente;
+- catálogo/precio/diseño no usan `latest` implícito;
+- Store recibe projection comercial, no BOM/costos/CNC internos.
 
 ---
 
@@ -250,8 +384,9 @@ Corte, CNC y Enchape trabajan **piezas físicas**.
 
 Armado, QC, Empaque, Carga e Instalación trabajan **muebles/unidades/bultos**.
 
-No implementar una feature nueva que profundice CNC/enchape usando únicamente
-`ProjectItem.floorStatus` como verdad física sin considerar esta migración.
+No profundizar CNC/enchape usando únicamente `ProjectItem.floorStatus` como verdad
+física. No hacer que el nuevo `ManufacturingOrder` duplique part/unit execution:
+debe vincular el workflow productivo existente.
 
 ---
 
@@ -262,9 +397,10 @@ No implementar una feature nueva que profundice CNC/enchape usando únicamente
 | `domain` | stdlib TS y módulos internos domain | react, electron, fs, xlsx |
 | `ui` | domain, react | electron, fs, xlsx; fórmulas de negocio |
 | `excel` | libs de serialización + DTOs/domain types | react, electron; lógica de workflow |
-| `storage` | IO permitido + domain types | react, electron, xlsx; decisiones UI |
+| `storage` | IO permitido + domain types/generated client | decisiones UI o dominio |
 | `apps/*` | paquetes anteriores | lógica de dominio nueva inline |
-| backend | domain/server modules propios | decisiones de presentación |
+| backend handlers | application services + DTO mapping | queries/decisiones dispersas ad hoc |
+| application services | policies + repositories + transaction runner | presentation concerns |
 
 ### Authoring clients externos
 
@@ -273,108 +409,264 @@ Para Granete for SketchUp rige:
 > **SketchUp owns authoring/interaction; Granete owns manufacturing truth.**
 
 La extensión puede capturar interaction state, transforms, parameters, stable IDs y
-semantic metadata. Debe conservar el `furnitureInstanceId` del Project. No puede usar
+semantic metadata. Debe conservar `furnitureInstanceId`. No puede usar
 `persistent_id`, posición, definition name o geometry hash como business identity.
 
 La extensión no implementa BOM, drilling rules, nesting, kerf, stale/release gates ni
 postprocessing. Granete valida el
-[`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva la
-autoridad descrita en el
-[`ADR-0001`](adr/0001-sketchup-authoring-granete-manufacturing-truth.md).
+[`SketchUp Manufacturing Contract`](sketchup-manufacturing-contract.md) y conserva
+la autoridad descrita en ADR-0001.
 
-El binding Project/Design, versionado de `.skp`, semantic manifest, duplicate identity
-handling y reconciliation se rigen por
-[`Project Design Digital Thread`](architecture/project-design-digital-thread.md) y
-[`ADR-0003`](adr/0003-project-owned-furniture-identity-and-versioned-design.md).
+El binding Project/Design, versionado de `.skp`, semantic manifest, duplicate
+identity handling y reconciliation se rigen por Project Design Digital Thread y
+ADR-0003.
 
-Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa reglas
-de ingeniería. Ver la [estrategia del programa](sketchup-granete-strategy.md).
+Un machine adapter serializa DTOs resueltos y capabilities declaradas; no inventa
+reglas de ingeniería.
 
 ---
 
-## 7. Autoridad TS vs Go
-
-El proyecto ya tiene lógica en TypeScript y Go. La duplicación indiscriminada se vuelve
-costosa a medida que crece el dominio.
+## 7. Autoridad TypeScript vs Go
 
 ### Server authoritative
 
 Preferentemente Go/backend para:
 
-- auth/permisos efectivos;
-- creación/duplicación cross-client de identidad Project `FurnitureInstance`;
-- lifecycle mutations compartidas;
+- auth, sessions, permissions y capabilities efectivas;
+- organization/membership/relationship lifecycle;
+- last-admin, seats, offboarding y provisioning;
+- tenant transaction context y RLS integration;
+- creation/duplication cross-client de `FurnitureInstance`;
 - revision numbering/concurrency;
-- publish/finalize de revisiones;
+- publish/finalize de revisiones, catálogo y price books;
+- idempotency, ETag/If-Match y command state machines;
+- quote→ManufacturingOrder/Installation assignment;
 - stock/reservations/PO/receipts;
-- auditoría;
+- auditoría/outbox;
 - execution física multiusuario;
 - job costing persistente;
-- gates que deben ser imposibles de saltar desde otro cliente.
+- gates imposibles de saltar desde otro cliente.
 
 ### TypeScript domain authoritative/interactivo
 
-Preferentemente TS para:
+Preferentemente TypeScript para:
 
 - editor y resolución interactiva;
 - geometría/layout;
 - BOM preview;
 - optimización/cut plan;
 - machining calculations puras;
-- reconciliation/fingerprint pure logic cuando no dependa de seguridad/concurrencia;
+- reconciliation/fingerprint pure logic sin seguridad/concurrencia;
 - preparación de DTOs/export;
-- validaciones puras reutilizables.
+- validaciones puras reutilizables;
+- presentation derivations que conservan Data Truth Contract.
 
 ### Lógica duplicada
 
 Cuando una regla deba existir en ambos lados:
 
-> usar **contract fixtures** compartidos y fallar CI si TS y Go divergen.
+> usar contract fixtures compartidos y fallar CI si TS y Go divergen.
 
-No declarar “paridad” sólo por inspección manual. Para espesor efectivo, roles y
-propagación de acabados, el contrato normativo es
-[`material-aware-furniture-resolution.md`](architecture/material-aware-furniture-resolution.md).
+No declarar paridad sólo por inspección manual. OpenAPI generado cubre el shape de
+transporte; fixtures cubren semántica de dominio duplicada.
 
 ---
 
-## 8. Eventos y estados
+## 8. Multi-organización, RLS y transacciones
 
-### Hechos
+Fuentes: ADR-0005, ADR-0006 y
+`docs/architecture/organization-foundation-v2.md`.
 
-Persistir eventos append-only para acciones relevantes.
+### 8.1 Contexto de actor
 
-Para el digital thread deben poder auditarse, al menos cuando se implementen:
+El backend construye el actor desde credenciales revalidadas:
+
+```text
+userId
+sessionId
+membershipId
+organizationId
+roles[]
+capabilities[]
+supportSessionId?
+platformAdmin
+```
+
+IDs enviados en el body se validan contra ese contexto; nunca crean autoridad.
+
+### 8.2 Capas de aislamiento
+
+Toda ruta de negocio usa:
+
+1. auth/session válida;
+2. membership/organization live;
+3. capability/RBAC;
+4. resource ownership/relationship policy;
+5. repository scoped;
+6. PostgreSQL RLS;
+7. pruebas API y SQL directo.
+
+Cross-org responde 404 cuando la existencia es sensible.
+
+### 8.3 Clasificación de tablas
+
+Cada tabla es:
+
+```text
+tenant-owned
+explicitly shared
+platform-global
+append-only ledger/audit
+```
+
+Toda migration nueva registra clase, policy e índices. CI falla si una tabla tenant
+no tiene policy inventory.
+
+### 8.4 Tenant transaction runner
+
+Los commands establecen contexto con `SET LOCAL` dentro de la transacción. El rol
+runtime:
+
+- no posee tablas protegidas;
+- no tiene `BYPASSRLS`;
+- no desactiva RLS;
+- es diferente del rol de migración.
+
+El contexto no puede sobrevivir a rollback/commit ni contaminar otra request del
+pool.
+
+### 8.5 Recursos compartidos
+
+Un recurso sales/manufacturing/installation shared nombra las organizaciones y/o
+relationship exactas. No se habilita mediante un bypass global. Support usa un
+contexto scoped de una sola organización y conserva el actor real.
+
+### 8.6 InitialOrganizationID
+
+No se usa como fallback runtime. Sólo puede existir en migrations/fixtures/tooling
+explícito. Un path de negocio sin scope falla loud.
+
+---
+
+## 9. API, errores, concurrencia e idempotencia
+
+### OpenAPI
+
+Los DTOs de Identity, Organization Access, Organizations, Platform y Sales Network
+se generan desde OpenAPI. React no usa `res.json() as Type` como prueba de contrato.
+
+### Error envelope
+
+```json
+{
+  "code": "LAST_ADMIN",
+  "message": "La organización debe conservar al menos un administrador activo.",
+  "fieldErrors": {},
+  "requestId": "req_...",
+  "retryable": false,
+  "details": {}
+}
+```
+
+La UI decide por `code`, no por substring del mensaje localizado.
+
+### Optimistic concurrency
+
+Recursos mutables exponen version/ETag. Writes usan `If-Match` o el equivalente
+canónico. Stale write devuelve 409/412 estructurado; nunca sobrescribe.
+
+### Idempotency
+
+Creates/commands críticos usan `Idempotency-Key`. Misma key y mismo command devuelve
+el mismo resultado. Misma key con payload diferente falla `IDEMPOTENCY_CONFLICT`.
+
+### Commands
+
+Acciones sensibles usan endpoints/servicios explícitos:
+
+```text
+ChangeMembershipRoles
+SuspendMembership
+TransferOrganizationAdmin
+ProvisionOrganization
+SuspendOrganization
+ProposeRelationship
+PublishCatalog
+PublishPriceBook
+SubmitQuoteToFactory
+AcceptManufacturingOrder
+AssignInstallationOrganization
+```
+
+No esconder transitions en un `PUT` genérico del aggregate completo.
+
+---
+
+## 10. Eventos, audit y estados
+
+### Hechos de dominio
+
+Persistir eventos append-only para acciones relevantes. Digital Thread debe poder
+auditar, cuando se implemente:
 
 - `furniture_instance_created` / `duplicated` / `removed`;
 - `design_created`;
 - `design_revision_published` / `approved`;
 - `production_release_created`.
 
+Organization Foundation añade, entre otros:
+
+- invitation lifecycle;
+- membership role/status/admin transfer/offboarding;
+- organization provisioning/lifecycle/license;
+- relationship/policy lifecycle;
+- catalog/price publication;
+- quote submission/order decision;
+- installation assignment;
+- session/MFA/support lifecycle.
+
+### Audit durable
+
+Para mutaciones críticas:
+
+```text
+BEGIN
+business mutation
+audit/outbox record
+COMMIT
+```
+
+Best-effort se reserva a telemetría no crítica. Audit no reemplaza
+`project_events`, floor events ni `stock_movements`.
+
 ### Estados derivados
 
-`ProjectStage`, KPIs y summaries deben derivarse de fuentes reales cuando sea posible.
-
-Estados como `quoted_not_modeled` o `modeled_not_quoted` deben derivarse de la comparación
-de revisiones cuando sea posible, no guardarse como otro estado mutable sin necesidad.
+`ProjectStage`, KPIs y summaries derivan de fuentes reales cuando sea posible.
+No guardar otro mutable status si una comparación de revisiones/eventos lo resuelve.
 
 ### No mezclar
 
-Mantener dimensiones diferentes separadas:
+Mantener dimensiones separadas:
 
-- Commercial status;
+- account status;
+- membership status;
+- organization/relationship status;
+- commercial status;
+- quote/order state;
 - Project stage;
-- Design/reconciliation state;
-- Part execution;
-- Module/unit execution;
-- Quality/installation sub-workflows.
+- design/reconciliation state;
+- ProductionRelease;
+- part execution;
+- module/unit execution;
+- quality/installation sub-workflows.
 
-No crear un enum “super status” que intente representar todo.
+No crear un enum “super status”.
 
 ---
 
-## 9. Data Truth Contract
+## 11. Data Truth Contract
 
-Todo dato agregado debe ser una de:
+Todo dato agregado es:
 
 ```text
 actual
@@ -383,147 +675,208 @@ forecast
 proxy
 ```
 
-La capa que calcula la métrica debe conservar esa semántica o devolver `null` cuando no
-pueda afirmar un valor real.
+La capa que calcula conserva esa semántica o devuelve `null` cuando no puede afirmar
+un valor real.
 
-### Prohibido
+Prohibido:
 
-- multiplicar módulos por una constante y exponer el resultado como piezas reales;
+- multiplicar módulos por una constante y presentarlo como piezas reales;
 - usar `createdAt` como fecha de anticipo/almacén sin etiquetarlo;
-- ocultar que un consumo es estimado.
+- convertir un endpoint fallido en KPI cero;
+- presentar provisioning/sync fallido como lista vacía;
+- inventar SLA/capacidad/comisión para llenar un dashboard.
 
 ---
 
-## 10. Exports
+## 12. Exports
 
-Los adapters de salida sólo serializan una revisión coherente.
+Los adapters de salida serializan una revisión coherente.
 
-Todo output físico relevante debe poder identificar, directa o indirectamente:
+Todo output físico relevante identifica, directa o indirectamente:
 
 - project/job;
-- `designRevisionId` cuando el output proviene de diseño aprobado;
-- production revision;
-- BOM fingerprint o equivalente;
-- pieza/unidad cuando corresponda.
+- `designRevisionId` cuando proviene de diseño aprobado;
+- manufacturing/production revision;
+- BOM fingerprint;
+- pieza/unidad cuando corresponda;
+- organization/ManufacturingOrder cuando el origen es cross-org.
 
-Un pack no puede mezclar documentos de revisiones distintas.
-
----
-
-## 11. Seguridad
-
-### DTOs públicos
-
-Nunca serializar directamente entidades internas con secretos por comodidad. Login,
-refresh y endpoints de usuario deben usar DTOs explícitos sin hashes/credenciales.
-
-### Tokens
-
-Evitar tokens de sesión de larga vida en query strings. Media autenticada debe migrar a
-URLs firmadas, tokens específicos de media o fetch autenticado cuando sea viable.
-
-### RBAC
-
-Aplicar least privilege. Para Design preferir capabilities (`design:view/create/edit/
-publish/approve`) en vez de checks dispersos por nombres de rol. Ingeniería autoriza/
-libera; Producción registra hechos físicos; supervisores corrigen mediante override
-auditado.
-
-### Multi-organización y aislamiento de talleres
-
-El sistema es multi-organización (ADR-0005): los datos de negocio llevan
-`organization_id` y el acceso se resuelve vía membresías. Reglas:
-
-- el scope de organización se inyecta por middleware en todo request autenticado
-  y el storage siempre filtra/escribe con ese scope;
-- el acceso cross-org responde 404 (no confirma existencia con 403);
-- tests de aislamiento cross-org son obligatorios en CI para toda ruta nueva
-  que toque datos de negocio;
-- `users.platform_admin` no ve datos de negocio de talleres: el soporte se
-  presta mediante sesiones de soporte acotadas, con razón, banner visible y
-  registro del actor real.
-
-### Auditoría de seguridad
-
-`security_audit_events` es append-only y registra como mínimo: login
-success/fail, invitación creada/aceptada/revocada, cambios de roles/membresía,
-organización creada/suspendida, cambios de licencia y sesión de soporte
-start/end. Los eventos de dominio operativos siguen en sus ledgers propios
-(`project_events`, floor events, `stock_movements`).
+Un pack no mezcla documentos de revisiones distintas. Una tienda no recibe un pack
+manufacturero por poseer la cotización comercial.
 
 ---
 
-## 12. Arquitectura Cliente-Servidor implementada
+## 13. Seguridad
 
-El sistema soporta arquitectura multiusuario Go + Postgres con:
+### DTOs públicos y visibilidad
 
-1. `APIWorkspaceRepository` / adapters HTTP;
+Nunca serializar entidades internas por comodidad. Cada actor recibe una projection
+allowlisted. Hiding fields en React no es autorización.
+
+Store no recibe FactoryCost, suppliers, stock, BOM/CNC internos, job costing ni notas
+de producción. Assigned installer recibe sólo customer/site/design data necesaria
+para su job.
+
+### Sesiones y tokens
+
+- absolute session lifetime permanece 18h según #441/#445;
+- refresh/rotation técnica no lo vuelve sliding;
+- web/mobile/SketchUp/support usan token types distintos;
+- sessions son revocables por membership/organization;
+- soporte exige razón, scope, actor real y MFA/step-up;
+- validar algoritmo exacto, issuer, audience, version y session id;
+- media no acepta un JWT de sesión genérico por query: usa URL/token
+  resource-scoped o fetch autenticado.
+
+### RBAC/capabilities
+
+Aplicar least privilege. React usa capabilities para UX, Go decide. Managers sólo
+administran el subconjunto permitido; nadie se autoeleva por payload.
+
+### Last administrator
+
+Toda organización active conserva un admin membership active. Role change,
+suspension, leave y lifecycle comparten un gate transaccional race-safe.
+
+### Trusted proxy/rate limiting
+
+Sólo proxies configurados aportan forwarding headers. Sensitive endpoints tienen
+rate limit y abuse metrics por claves apropiadas; no confiar sólo en IP in-memory
+para despliegues multi-instance.
+
+### Supply chain
+
+CI incorpora según el programa:
+
+- dependency review/OSV;
+- `govulncheck`;
+- static security analysis;
+- CodeQL;
+- container scan;
+- secret scanning;
+- SBOM/provenance cuando aplique.
+
+---
+
+## 14. Arquitectura cliente-servidor y estado React
+
+El sistema multiusuario actual usa:
+
+1. generated API client / repositories;
 2. backend Go;
-3. Postgres relacional;
-4. JWT y CORS allowlist;
-5. storage de entidades operativas en evolución.
+3. PostgreSQL relacional + RLS;
+4. sesiones scoped;
+5. object/file storage para media/artefactos;
+6. outbox/workers donde una operación externa lo requiera.
 
-La frase histórica “Etapa 2 futura” deja de usarse: el backend es parte activa de la
-arquitectura actual.
+### React server state
 
-Los artefactos 3D pesados (`.skp`, previews y similares) deben modelarse como file/object
-storage con metadata relacional, no como verdad de dominio embebida en el archivo binario.
+Remote state se keyea por tenant:
+
+```text
+['organization', organizationId, 'memberships', filters]
+['organization', organizationId, 'relationships', filters]
+['organization', organizationId, 'orders', filters]
+```
+
+TanStack Query o equivalente gestiona server state. Zustand queda para session,
+local UI y editor drafts; no es la autoridad de listas remotas.
+
+Switch de organización:
+
+- considera drafts sin guardar;
+- cambia scope de sesión;
+- elimina/aisla caches, stores y media URLs del tenant previo;
+- recalcula roles/capabilities/routes;
+- sigue una política explícita entre tabs;
+- nunca mezcla silenciosamente datos A y B.
+
+### Estados honestos
+
+UI distingue loading, stale, partial failure, empty, no-results, permission denied,
+provisioning, suspended, conflict y offline. Falla de `/org/team` no llama un
+fallback legacy. Success sólo después del resultado canónico.
+
+### Artefactos 3D
+
+`.skp`, previews y binarios viven en file/object storage con metadata relacional.
+El archivo no es la única verdad de dominio.
 
 ---
 
-## 13. Errores de dominio
+## 15. Errores de dominio y operacionales
 
-Las funciones puras lanzan `DomainError`/subtipos accionables o devuelven resultados
-estructurados cuando el flujo necesita manejar múltiples issues.
+Funciones puras lanzan `DomainError`/subtipos o resultados estructurados cuando el
+flujo necesita varios issues. UI muestra mensaje localizado, nunca stack traces.
 
-UI muestra mensaje localizado; nunca stack traces.
+Errores persistentes (QC, shortage, field issue, stale revision, conflict de
+membership/relationship/order) no viven sólo como toast: se convierten en trabajo,
+blocker o typed result.
 
-Errores operacionales persistentes (QC, shortage, field issue, stale revision, design
-revision conflict) no deben existir sólo como excepciones/toasts: se convierten en
-entidades/trabajo o resultado estructurado cuando aplique.
-
-Una working copy cuyo `baseRevisionId` ya no coincide con la revisión actual debe fallar
-cerrado con conflicto explícito; nunca overwrite silencioso.
+Una working copy cuyo `baseRevisionId` ya no coincide falla cerrado con conflicto
+explícito; nunca overwrite silencioso. Lo mismo aplica a membership, organization,
+relationship, publication y price policy stale.
 
 ---
 
-## 14. Fuentes ejecutables
+## 16. Fuentes ejecutables y canónicas
 
 - rutas: `apps/web/src/routes.ts` (`NAV_PATHS`);
-- RBAC: `packages/domain/src/rbac.ts` + enforcement backend;
-- lógica de dominio: `packages/domain`;
-- almacenamiento server: `backend-go`;
+- RBAC/capabilities: `packages/domain/src/rbac.ts`, contracts y enforcement Go;
+- lógica pura: `packages/domain`;
+- almacenamiento/server: `backend-go`;
+- API Organization Foundation: OpenAPI generado por #448 cuando se implemente;
 - UX: `docs/design.md` + `docs/operational-ux.md`;
 - producto: `docs/prd-v2.md`;
-- plan: `docs/operational-core-v1.md`.
+- plan: `docs/operational-core-v1.md`;
+- Organization Foundation:
+  `docs/architecture/organization-foundation-v2.md` + ADR-0006;
+- tenancy baseline: ADR-0005;
+- distribución: `docs/multi-organization-distribution-model.md`;
+- gates: #462 + `docs/pilot-readiness.md` cuando se amplíe;
 - programa SketchUp: `docs/sketchup-granete-strategy.md`;
-- boundary SketchUp/Granete:
-  `docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md`;
-- contract conceptual: `docs/sketchup-manufacturing-contract.md`;
-- selector visual de opciones de catálogo: `docs/architecture/catalog-option-selector.md`;
-- espesor efectivo y propagación por material role: `docs/architecture/material-aware-furniture-resolution.md`;
+- boundary SketchUp/Granete: ADR-0001;
+- selector visual de opciones: `docs/architecture/catalog-option-selector.md`;
+- material-aware resolution:
+  `docs/architecture/material-aware-furniture-resolution.md`;
 - furniture semantics: `docs/architecture/domain-model.md`;
-- Quote ↔ Project Furniture ↔ Design ↔ Production digital thread:
-  `docs/architecture/project-design-digital-thread.md`;
-- decisión de identidad/versionado: `docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md`.
+- Digital Thread: `docs/architecture/project-design-digital-thread.md` + ADR-0003.
 
 ---
 
-## 15. Qué NO hacer
+## 17. Qué NO hacer
 
 - no calcular costos/requirements/workflow en React;
 - no hardcodear materiales en módulos cuando deben ser roles/opciones;
 - no mezclar herrajes en outputs de corte;
 - no escribir workspace parcialmente;
 - no añadir dependencias a `domain` sin necesidad;
-- no crear un nuevo status global para resolver una inconsistencia de ownership;
+- no crear un status global para tapar ownership incorrecto;
 - no inventar KPIs;
-- no ejecutar producción contra una revisión stale sin override explícito;
-- no duplicar reglas TS/Go sin fixtures de paridad;
-- no mover BOM, drilling, preflight o postprocessing a Ruby/SketchUp;
-- no usar `QuoteLine`, `DesignRevisionItem`, `SketchUp persistent_id` o geometría como identidad física del mueble;
-- no crear `ProjectFurniture` si representa el mismo concepto que `FurnitureInstance`;
+- no ejecutar producción contra revisión stale sin override;
+- no duplicar reglas TS/Go sin fixtures;
+- no mover BOM/drilling/preflight/postprocessing a Ruby/SketchUp;
+- no usar `QuoteLine`, `DesignRevisionItem`, SketchUp IDs o geometría como identidad física;
+- no crear `ProjectFurniture` si duplica `FurnitureInstance`;
 - no sobrescribir `DesignRevision` publicada ni `QuoteRevision` aceptada;
-- no sincronizar Quote ↔ Design silenciosamente; usar reconciliation explícita;
-- no liberar `latest design`; pin exact `designRevisionId`;
+- no sincronizar Quote ↔ Design silenciosamente;
+- no liberar `latest design`;
+- no usar `user.companyId`, `user.isFactory` o roles globales;
+- no tratar public register como solicitud al taller inicial;
+- no ocultar fallas de API mediante fallback legacy;
+- no dejar organización active con provisioning incompleto;
+- no proteger último admin sólo en UI o con check pre-transacción;
+- no usar tenant/body IDs como autorización;
+- no usar rol DB runtime con `BYPASSRLS`;
+- no establecer tenant context fuera de una transacción pool-safe;
+- no autorizar fábrica obligando a cada seller a ser miembro de ella;
+- no usar clone overwrite mutable como publicación de catálogo;
+- no mezclar FactoryCost, wholesale y retail en un solo `marginFactor`;
+- no resolver catálogo/precio/diseño/release aceptado desde `latest`;
+- no usar generic Project PUT como submit cross-org;
+- no restringir instalación para siempre al manufacturer si existe assignment autorizado;
+- no mantener DTOs Go/React paralelos con casts ciegos;
+- no usar best-effort audit para mutaciones críticas;
+- no mostrar success antes del commit;
+- no declarar readiness con un gate que omite DB, RLS, outbox o browser;
 - no construir un ERP financiero completo ni CAD libre dentro de este core.
