@@ -1,156 +1,356 @@
 # ADR-0005 — Multi-Organization Tenancy (row-level) con membresías multi-rol y soporte de plataforma auditado
 
-- **Status:** Accepted
+- **Status:** Accepted; extended by ADR-0006
 - **Date:** 2026-08-26
 - **Decision owners:** Product + Engineering
 - **Tracking:** [#325](https://github.com/tiagofur/muebleria/issues/325),
   [#326](https://github.com/tiagofur/muebleria/issues/326),
   [#327](https://github.com/tiagofur/muebleria/issues/327)
 - **Extiende:** `docs/multi-organization-distribution-model.md`
+- **Extensión vigente:** `docs/adr/0006-membership-lifecycle-and-organization-relationships.md`
+- **Contrato canónico vigente:** `docs/architecture/organization-foundation-v2.md`
 
-## Decisión
+## Estado de esta decisión
+
+ADR-0005 conserva la autoridad histórica y arquitectónica sobre estas decisiones:
+
+- base PostgreSQL compartida con tenancy por fila;
+- `Organization` + `Membership` + `User`;
+- roles múltiples por membresía;
+- licencia por organización;
+- `platform_admin` separado del acceso de negocio;
+- sesiones de soporte scoped y auditadas;
+- `organization_id` obligatorio en las tablas de negocio;
+- catálogos con ownership explícito por organización para el MVP inicial.
+
+ADR-0006 no revierte esas decisiones. Las completa después del review del MVP
+multi-organización y pasa a ser la autoridad más reciente para:
+
+- lifecycle explícito de `User`, `Membership`, `Invitation` y `Organization`;
+- onboarding B2B invitation-first;
+- invariante transaccional de último administrador;
+- PostgreSQL RLS obligatorio dentro del Foundation Gate;
+- aprovisionamiento idempotente y atómico;
+- `OrganizationRelationship` como autoridad de colaboración;
+- catálogo publicado/versionado y pricing partner;
+- separación `SalesQuote` / `ManufacturingOrder` / `InstallationOrder`;
+- contratos OpenAPI generados, sesiones revocables y auditoría durable.
+
+Cuando este ADR use vocabulario del MVP como `active BOOLEAN`, catálogo clonado
+o `parent_organization_id`, debe leerse como descripción de la primera
+implementación, no como límite del modelo objetivo.
+
+## Decisión original
 
 > **Granete pasa de single-workshop a multi-organización con tenancy row-level:
 > una base compartida, `organization_id` en las tablas de negocio, membresías con
 > roles múltiples por usuario, un `platform_admin` con acceso de soporte auditado
-> por organización, y catálogos clonados por taller.**
+> por organización, y catálogos con ownership por taller.**
 
-### 1. Tenancy row-level (base compartida + `organization_id`)
+## 1. Tenancy row-level
 
-Elección entre: DB por taller, schema por taller, o filas compartidas con
-`organization_id`. Se decide **filas compartidas**:
+Se evaluaron tres alternativas:
 
-- los pilotos (2–5 talleres) y el objetivo a 12 meses (15–30) no justifican la
-  carga operativa de N bases o N schemas (migraciones y pools por tenant);
-- es el mismo modelo interno de monday.com / ServiceTitan: el subdominio o la
-  marca por tenant es una capa de presentación, el aislamiento vive en el dato;
+1. una base por taller;
+2. un schema por taller;
+3. filas compartidas con `organization_id`.
 
-**"tenant_id no es autorización".** La columna sola no protege nada. El
-aislamiento lo garantiza:
+Se eligió **row-level tenancy en una base compartida** porque los pilotos y la
+escala objetivo inicial no justifican operar N bases o N schemas, y porque este
+modelo permite evolucionar a subdominios, redes comerciales y soporte central
+sin cambiar la topología de datos.
 
-1. scope de organización inyectado por middleware en **todo** request autenticado;
-2. storage que siempre filtra/escribe con ese scope (revisión ruta por ruta);
-3. tests de aislamiento cross-org obligatorios en CI (taller A jamás lee ni
-   escribe datos de taller B: 404, no 403 que confirme existencia).
+La columna por sí sola nunca fue considerada autorización. El baseline se
+implementó con:
 
-**Fail-closed desde el hardening #327:** los tokens sin organización (staff de
-plataforma entre sesiones, usuarios a mitad de la selección) sólo alcanzan la
-consola `/api/platform/*` y `/api/auth/*`; toda ruta de negocio los rechaza y
-no heredan roles del `users.role` deprecado. Los DEFAULT transicionales de
-`organization_id` a la org inicial se eliminaron (migración 000088): un INSERT
-sin scope falla loud. El fallback a la org inicial queda reservado a tooling
-directo de storage (CLI/migraciones/tests).
+1. organización activa inyectada por middleware en todo request de negocio;
+2. storage Go que lee/escribe con ese scope;
+3. tokens sin organización fail-closed;
+4. 404 cross-org para no confirmar existencia;
+5. tests de aislamiento con PostgreSQL real;
+6. eliminación de DEFAULTs transicionales de `organization_id`.
 
-**RLS de Postgres queda como hardening posterior** (issue separado, antes de
-superar ~10 organizaciones activas): `SET app.organization_id` por transacción +
-políticas por tabla como defensa en profundidad contra bugs de la capa Go.
+### Extensión ADR-0006: RLS deja de ser posterior
 
-### 2. Modelo de identidad
+En la versión original, PostgreSQL RLS quedó diferido como hardening para una
+escala posterior. El review que originó #446 cambió esa prioridad: RLS debe
+estar activo **antes de crear nuevas familias persistentes de negocio**.
 
-```
-Organization (id, slug, type, license_plan, active)
-     |
-Membership (org_id, user_id, roles[], active)   UNIQUE(user_id, org_id)
-     |
-User (id, email, ..., platform_admin)
+El target vigente añade:
+
+```sql
+SET LOCAL app.organization_id = '<uuid>';
+SET LOCAL app.user_id = '<uuid>';
 ```
 
-- **Prohibido** `user.companyId` / `user.isFactory` / `user.isStore` (ya establecido
-  por el doc de distribución). Un usuario pertenece a N organizaciones vía membresías.
-- `users.role` actual queda deprecado: la fuente de verdad pasa a ser
-  `memberships.roles`. La migración backfill crea una membresía por usuario existente
-  con su rol actual.
-- **Roles múltiples por membresía** (`roles TEXT[]`): permisos = unión de
-  capacidades. Resuelve al "hace todo" de carpinterías chicas (una persona =
-  vendedor + ingeniero + producción) sin desarmar la matriz RBAC: las funciones
-  `roleCanX(role)` pasan a `rolesCanX(roles[])` con semántica de unión, espejadas
-  TS ↔ Go vía `contracts/roles.json`. Combinaciones sensibles (p. ej. vendedor +
-  rol con vista de costos) son asignación explícita del admin del taller y el
-  flag `workshop_settings.vendedor_can_view_costs` sigue mandando.
-- Los roles operativos siguen siendo los 8 canónicos (OC-004). El
-  `OrganizationRole` conceptual del doc de distribución (owner/admin/sales_manager/
-  sales/designer/production_manager/installer) **no** crea roles nuevos: se mapea
-  sobre los existentes (ver tabla en el doc de distribución).
+por transacción, junto con `ENABLE/FORCE ROW LEVEL SECURITY`, policies por
+clase de tabla y un rol de runtime sin ownership ni `BYPASSRLS`.
 
-### 3. Licencia por organización
+Go authorization, queries scoped y tests siguen siendo obligatorios. RLS es una
+segunda barrera independiente contra una omisión futura en un repository.
 
-`license_plan`/`license_expires_at` se mudan de `users` a `organizations`: el
-taller paga, no la persona. El gate de la extensión SketchUp verifica la licencia
-de la organización del token. La migración copia la licencia de los usuarios
-existentes a la organización inicial.
+## 2. Modelo de identidad y membresías
 
-### 4. Catálogo base clonado por taller
+El modelo base permanece:
 
-Al crear una organización se **clona** el catálogo base de la plataforma
-(tableros, herrajes, módulos, estructuras, componentes, categorías, acabados) en
-filas propias con `organization_id`. Todas las filas de catálogo quedan con
-dueño — no hay resolución "base + añadidos" en runtime. El catálogo base de la
-plataforma es plantilla; una herramienta futura de "publicar cambios base"
-sincronizará cuando exista necesidad real. `workshop_settings` pasa de singleton
-a una fila por organización.
+```text
+Organization
+    |
+Membership  UNIQUE(user_id, organization_id)
+    |
+User
+```
 
-### 5. Super admin de plataforma y "entrar a taller"
+Principios vigentes:
 
-- `users.platform_admin BOOLEAN`: acceso a la consola de plataforma
-  (organizaciones, licencias, usuarios, auditoría, invitaciones). **No ve datos
-  de negocio de ningún taller** desde la consola.
-- **Sesión de soporte**: `POST /api/platform/organizations/{id}/support-session`
-  con razón obligatoria emite un token corto (1–2 h) con contexto
-  `support.org_id` + rol efectivo `admin` de ese taller. No suplanta a un usuario
-  real: toda escritura registra al platform_admin como actor real. La UI muestra
-  banner persistente mientras dure. Eventos `support_session_started/ended` en la
-  auditoría de seguridad. Termina con logout explícito o expiración.
-- Patrón estándar de la industria: token corto scoped + banner visible + audit
-  completo + razón obligatoria; nunca re-usar el token normal del admin.
+- prohibido `user.companyId`, `user.isFactory` o `user.isStore`;
+- un usuario puede pertenecer a varias organizaciones;
+- roles viven en `memberships.roles[]`;
+- permisos efectivos son la unión de capacidades de esos roles;
+- licencia pertenece a la organización;
+- `platform_admin` no es un rol de membresía.
 
-### 6. Tokens y expansión estilo monday.com
+Las columnas legacy `users.role`, `users.license_plan` y
+`users.license_expires_at` fueron retiradas en la migración 000090.
 
-- JWT v2 con `{sub, email, client, ver, org_id, roles[], platform_admin,
-  support?}`. El bump de `ver` invalida tokens previos (re-login documentado).
-- Auth siempre por header `Authorization: Bearer` (web/mobile/extensión), nunca
-  cookies por dominio. **Por qué:** habilita agregar subdominio por taller
-  (`taller.granete.app`) después como pura capa de routing (DNS wildcard + TLS +
-  regla en el proxy), sin migraciones ni rework de auth.
-- `organizations.slug` UNIQUE URL-safe reservado desde el día 1; login acepta
-  `?org=slug` como pre-selección. Branding por org y SSO por org: post-piloto.
+### Extensión ADR-0006: lifecycle separado
 
-### 7. Auditoría de seguridad (nueva)
+El MVP usó booleanos `users.active` y `memberships.active`. El target vigente
+separa explícitamente:
 
-Tabla append-only `security_audit_events` con eventos mínimos: login
-success/fail, invitación creada/aceptada/revocada, cambio de roles/membresía,
-organización creada/suspendida, sesión de soporte start/end, cambios de licencia.
-Requisito de #326 ("invitations and memberships are auditable") y condición para
-exponer múltiples talleres en producción.
+```text
+User.account_status      active | disabled
+Membership.status        active | suspended | left
+Invitation.status        pending | delivered | opened | accepted | expired | revoked
+```
 
-## Estrategia de migración
+Un administrador de taller administra la membresía, no elimina o aprueba una
+identidad global. La aceptación de invitación crea/reactiva exactamente una
+membresía y entra a esa organización. El bridge que aprobaba usuarios en
+`InitialOrganizationID` debe desaparecer.
 
-Principios: aditivo, backfill conservador, sin SQL destructivo, rollback
-documentado (`docs/verification.md` §11).
+Toda organización activa conserva al menos una membresía activa con rol
+`admin`; cambios concurrentes pasan por un mismo gate transaccional.
 
-1. **Crear** `organizations`, `memberships`, `invitations`,
-   `security_audit_events` (sin tocar flujos existentes).
-2. **Backfill org inicial**: crear la organización #1 ("Taller inicial") y
-   asignarle TODAS las filas existentes de negocio (`organization_id` nullable →
-   backfill → `NOT NULL`). No inventa hechos: la deployment actual ES un solo
-   taller; la membresía de cada usuario preserva su rol vigente.
-3. `workshop_settings` singleton → fila por organización (migración de `id=1`).
-4. Media particionada: `MEDIA_DIR/<org_id>/` (script de migración de archivos).
-5. **Desactivar** lecturas de `users.role` en favor de memberships (columna se
-   retira en migración posterior, no en la misma). ✅ Cumplido: sin lectores
-   ni escritores desde F176/F177, las columnas `users.role` /
-   `users.license_plan` / `users.license_expires_at` se eliminaron en la
-   migración 000090; los roles viajan en `memberships.roles` (claims `roles[]`
-   del token + `roles` hermano en las respuestas de auth) y la licencia es de
-   la organización.
+## 3. Roles múltiples y capacidades
 
-Los tokens vigentes se invalidan una única vez con el bump de versión del JWT.
+Los ocho roles canónicos continúan definidos por `contracts/roles.json`. Una
+membresía puede contener varios roles porque en talleres pequeños una persona
+puede vender, diseñar y participar en producción.
 
-## Consecuencias
+La semántica de unión permanece, pero ADR-0006 añade dos restricciones:
 
-- **Positivo:** pilotos aislados en un solo VPS; el dueño (platform_admin) da
-  soporte real con trazabilidad; crecimiento a red fábrica↔tienda (#327) y a
-  subdominios sin rediseño; multi-rol sin romper RBAC.
-- **Negativo/riesgos:** revisión exhaustiva de queries (toda ruta debe scoping);
-  tokens vigentes requieren re-login; RLS pospuesto exige disciplina de tests de
-  aislamiento hasta llegar; clonar catálogo duplica filas (aceptable a esta
-  escala).
+- administrar personas requiere capabilities explícitas; no basta con ocultar
+  controles en React;
+- nadie puede otorgar roles fuera del subconjunto que está autorizado a
+  administrar.
+
+Roles y sectores son organization-scoped. Un sector de producción en Factory A
+no viaja con el mismo usuario a Store B.
+
+## 4. Licencia y entitlements por organización
+
+La licencia pertenece al taller, no a la persona. Esto permanece vigente para
+web, mobile y SketchUp.
+
+ADR-0006 amplía la licencia con entitlements verificables server-side, por
+ejemplo:
+
+- máximo de miembros activos;
+- máximo de partners;
+- asientos SketchUp;
+- acceso a manufactura;
+- acceso a Red de Ventas;
+- auditoría avanzada.
+
+La UI puede mostrar consumo, pero no es el enforcement.
+
+## 5. Catálogo con ownership por organización
+
+El MVP eligió clonar el catálogo base al crear una organización. Esa decisión
+permitió que cada fila tuviera un owner y evitó una resolución runtime
+`base + overrides` incompleta.
+
+Para talleres independientes, la copia continúa siendo un bootstrap válido.
+Para una **Red de Ventas**, ADR-0006 reemplaza el clone divergente como autoridad
+permanente por:
+
+```text
+Factory Catalog
+  → immutable CatalogPublication
+    → StoreCatalogSubscription
+      → Store commercial overlays
+```
+
+Las publicaciones y precios usados por una cotización se fijan por versión.
+Los overlays de tienda no pueden mutar BOM, machining o manufacturing truth.
+La persistencia per-entity dentro de un catálogo sigue coordinada por #443;
+la publicación cross-org pertenece a #454.
+
+## 6. Platform admin y soporte
+
+`users.platform_admin` permite administrar la plataforma, no leer datos de
+negocio de todos los talleres.
+
+Para entrar a una organización se usa una sesión de soporte:
+
+- organización exacta;
+- razón obligatoria;
+- expiración corta;
+- banner persistente;
+- actor real preservado;
+- validación de la sesión en cada request;
+- terminación por logout, expiry o suspensión de la organización.
+
+ADR-0006 añade MFA/step-up obligatorio para iniciar soporte, sesiones server-side
+revocables y auditoría durable. Soporte no es un bypass de RLS ni de la relación
+entre organizaciones.
+
+## 7. Tokens y sesiones
+
+El baseline definió JWT v2 con:
+
+```text
+sub, email, client, ver, org_id, roles[], platform_admin, support?
+```
+
+Los access tokens viajan por `Authorization: Bearer`, lo que conserva
+compatibilidad con web, mobile, SketchUp y futuros subdominios.
+
+### Extensión ADR-0006: transporte y lifetime por cliente
+
+La afirmación anterior no exige guardar un bearer token de larga vida en
+`localStorage` ni prohíbe una cookie protegida para una credencial de refresh.
+El target vigente separa credenciales por cliente y usa sesiones revocables.
+
+La decisión de #441/#445 permanece:
+
+```text
+absoluteSessionExpiresAt = issuedAt + 18h
+```
+
+Una rotación técnica nunca vuelve la sesión sliding o indefinida. Web, mobile,
+SketchUp y soporte no intercambian sus token types.
+
+Los JWT de sesión dejan de aceptarse en query string para media; se usan URLs
+firmadas o tokens resource-scoped de corta duración.
+
+## 8. Organización y Red de Ventas
+
+El MVP añadió `parent_organization_id` para que una fábrica creara tiendas o
+distribuidores conectados. Fue suficiente para probar:
+
+- creación de una organización hija;
+- bootstrap del creador como admin;
+- clonación de catálogo;
+- cambio de organización e invitación del equipo.
+
+ADR-0006 establece que ese parent link no es el modelo contractual final.
+La autoridad pasa a `OrganizationRelationship`, con:
+
+- source/target;
+- tipo de relación;
+- status;
+- capabilities;
+- términos y vigencia;
+- políticas de catálogo/precio/territorio;
+- version y auditoría.
+
+Un vendedor de tienda actúa mediante su membresía en la tienda y la relación
+activa. No necesita pertenecer también a la fábrica.
+
+## 9. Ownership comercial, manufacturero e instalación
+
+ADR-0005/#327 introdujeron `sales_organization_id` y
+`manufacturing_organization_id`, redacción de payload manufacturero y 404 en
+subrecursos internos. Esas defensas siguen siendo valiosas durante la migración.
+
+El target de ADR-0006 evita depender para siempre de una blacklist de campos en
+un mega-agregado:
+
+```text
+SalesQuote / QuoteRevision       sales organization
+ManufacturingOrder              manufacturing organization
+InstallationOrder assignment    assigned service organization
+```
+
+Los objetos pueden referenciar el mismo `Project`, `FurnitureInstance` y
+`DesignRevision` definidos por #384, pero cada contexto conserva su autoridad.
+El submit tienda→fábrica es un command idempotente; el generic Project PUT no
+reasigna fabricante ni simula un handoff.
+
+## 10. Auditoría de seguridad
+
+La tabla append-only introducida en el MVP permanece. ADR-0006 cambia la
+garantía de escritura:
+
+- telemetría no crítica puede ser best-effort;
+- mutaciones críticas de identity/membership/organization/relationship/session,
+  catálogo/precio y órdenes deben confirmar audit/outbox en la misma
+  transacción.
+
+El read model es tipado, paginado y humano. No se serializan passwords, JWTs,
+refresh secrets, raw invitation tokens o payloads completos de clientes.
+
+## 11. Estrategia de migración original y extensión
+
+El programa original creó organizations/memberships/invitations/audit, hizo
+backfill de la instalación single-workshop, agregó `organization_id`, migró
+settings/media y retiró las columnas legacy de User. Ese trabajo permanece como
+baseline y no se reabre.
+
+Organization Foundation v2 añade una secuencia posterior:
+
+1. contrato canónico/OpenAPI e inventario;
+2. tenant transaction runner + RLS + eliminación del fallback runtime;
+3. membership/invitation lifecycle invitation-first;
+4. last admin, offboarding, seats y session revocation;
+5. organization lifecycle/provisioning;
+6. Team/Platform React tenant-safe;
+7. Foundation Gate A;
+8. relationships, publications y partner pricing;
+9. ManufacturingOrder e InstallationOrder assignment;
+10. Network Gate B.
+
+Compatibilidad tiene una issue y criterio de eliminación. No se conserva un
+fallback silencioso “por si acaso”.
+
+## 12. Consecuencias
+
+### Positivas
+
+- se conserva una sola base operable para pilotos y crecimiento inicial;
+- memberships y licencias siguen modelando correctamente a talleres pequeños;
+- el platform admin da soporte sin obtener acceso global de negocio;
+- RLS reduce el blast radius de un bug de repository;
+- el onboarding y offboarding dejan de depender de identidades globales;
+- la Red de Ventas puede crecer a múltiples fábricas, tiendas e instaladores;
+- catálogo, precios y órdenes quedan versionados y explicables;
+- nuevas tablas empiezan con el tenant contract correcto.
+
+### Costos y riesgos
+
+- RLS y transacciones explícitas requieren revisar queries, roles e índices;
+- los endpoints de aprobación/team legacy deben migrarse y retirarse;
+- catálogos clonados requieren reconciliación, no overwrite automático;
+- separar ownership cross-org exige adapters temporales alrededor de Project;
+- Gate A retrasa deliberadamente nuevas tablas del Digital Thread.
+
+Se aceptan estos costos porque corregirlos después de crear FurnitureInstance,
+DesignRevision, publicaciones y órdenes sería más costoso y riesgoso.
+
+## 13. Verificación vigente
+
+La decisión se considera operable sólo con los gates ejecutables de #462:
+
+- PostgreSQL real, migrations fresh + upgrade fixture;
+- API y SQL directo bajo app role/RLS;
+- invitaciones, memberships, last-admin y provisioning bajo concurrencia/fallos;
+- switch tenant en browser;
+- seller de tienda sin membership en fábrica;
+- pinning de catálogo/precio/revisión;
+- visibilidad store/factory/installer;
+- outbox retry sin duplicados;
+- guard contra rutas y fallbacks legacy.
+
+Un gate sin DB, RLS o browser requerido falla; nunca se omite en verde.
