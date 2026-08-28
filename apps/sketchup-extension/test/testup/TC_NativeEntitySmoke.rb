@@ -152,7 +152,8 @@ module Granete
         assert_equal transform_before, top.transformation.to_a
         assert_equal 'white-16', store.read(top).dig('intent', 'materialChoices', 'FRENTE')
 
-        model.undo
+        # SketchUp exposes Undo as an action, not Model#undo.
+        Sketchup.send_action('editUndo:')
         restored = granete_furniture_instances.first
         assert_in_delta 18 * MM, find_child(restored, 'Puerta').definition.bounds.height, 1e-3
         assert_equal identity_before, store.read(restored)['identity']
