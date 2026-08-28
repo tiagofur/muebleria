@@ -2,6 +2,26 @@
 
 Sin sesión activa.
 
+## Mega Presentation Hardening — cierre post-auditoría — 2026-08-28
+
+Rama `fix/audit-pre-demo`: corregidos los hallazgos P0/P1 de sesión, paridad
+Go/TS de `B`, opciones de zócalo y aceptación de cotizaciones, guía de
+liberación para Producción, composición del seed demo, validación UUID de
+proyectos, serialización de saves, deduplicación de toasts y mitigación
+cross-tab. La decisión de sesión es un token finito de **18 h**, sin refresh
+proactivo; un `401` productivo expira la sesión local.
+
+Reporte y evidencia por hallazgo:
+`progress/audit-presentation-hardening-2026-08-28.md`. Seguimientos: #442
+(paridad completa de base en Go), #443 (persistencia por entidad + concurrencia
+optimista), #444 (regresión visual WebGL) y reutilización de #27 (pickers
+buscables). El umbrella del hardening es #441.
+
+La verificación runtime en navegador quedó bloqueada porque la app local exige
+credenciales válidas; no se alteró ninguna cuenta. La limpieza demo **no se
+ejecutó**: requiere `pg_dump`, detalle exacto y confirmación inmediata antes de
+cualquier operación destructiva.
+
 ## F190 — validación real nativa + OpenCutList (#417) — 2026-08-28
 
 Rama `test/417-native-ocl-validation`. Slice de validación test-only (cero
