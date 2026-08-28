@@ -7,7 +7,7 @@
 
 - [ ] Existen los archivos base: `AGENTS.md`, `init.sh`, `feature_list.json`,
       `progress/current.md`, `CHECKPOINTS.md`.
-- [ ] Existen los 4 docs: `docs/prd.md`, `docs/architecture.md`,
+- [ ] Existen los 4 docs: `docs/prd-v2.md`, `docs/architecture.md`,
       `docs/conventions.md`, `docs/verification.md`.
 - [ ] Existen los 3 skills: `.agents/skills/leader/SKILL.md`,
       `.agents/skills/implementer/SKILL.md`, `.agents/skills/reviewer/SKILL.md`.

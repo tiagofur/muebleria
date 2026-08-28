@@ -120,7 +120,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 ├── init.sh                     # Verificación e inicialización del entorno
 │
 ├── docs/
-│   ├── prd.md                  # Producto: qué, por qué, fórmulas, requisitos
+│   ├── prd-v2.md               # Producto: qué, por qué, fórmulas, requisitos
 │   ├── architecture.md         # Cómo está estructurado el código
 │   ├── conventions.md          # Estilo, nombres, tests, errores
 │   └── verification.md         # Cómo demostrar que funciona
@@ -138,18 +138,19 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 ├── Plantilla_Muebles.xlsx      # Fuente de dominio (fórmulas, datos de referencia)
 ├── Plantilla_Optimizer.xlsx    # Contrato de salida (formato de export de corte)
 │
-├── packages/                   # (se crea en F001)
+├── packages/                   # Lógica compartida
 │   ├── domain/                 # Motor: tipos, resolución BOM, costos, validaciones
 │   ├── ui/                     # Componentes React compartidos
 │   ├── excel/                  # Writer del Optimizer.xlsx
-│   └── storage/                # Persistencia JSON local
+│   └── storage/                # Persistencia JSON local y API mappers
 │
-├── apps/                       # (se crea en F001)
+├── apps/                       # Aplicaciones cliente
 │   ├── web/                    # Shell React + Vite
-│   └── desktop/                # Shell Electron
+│   ├── desktop/                # Shell Electron
+│   ├── mobile/                 # App móvil React Native / Expo
+│   └── sketchup-extension/     # Extensión Ruby para SketchUp
 │
-└── archive/
-    └── notes-demo/             # Harness original (Python, referencia)
+└── backend-go/                 # API REST Go + PostgreSQL
 ```
 
 ---

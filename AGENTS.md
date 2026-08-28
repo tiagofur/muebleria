@@ -98,10 +98,6 @@ Luego:
 5. no tomes automáticamente el `pending` de menor id si contradice la prioridad
    vigente del roadmap/Operational Core o existe una sesión activa.
 
-> **Deuda conocida:** `init.sh` tiene un fallo de guardrail documentado en
-> `docs/verification.md` / OC-001. Hasta corregirlo, revisa también la salida real de
-> install/tests y no asumas que exit 0 prueba todo.
-
 ---
 
 ## 3. Mapa del repositorio

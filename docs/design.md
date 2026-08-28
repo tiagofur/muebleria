@@ -1030,13 +1030,17 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 
 ### 6.7 Órdenes (cola + hub de obra)
 
-- **Ruta nav:** `orders` (sección PRODUCCIÓN, label **Órdenes**). M2 puede consolidar dashboards — ver `docs/roadmap-screens/00-overview.md`
-- **Paths:**
-  - `/orders` — cola de trabajo
-  - `/orders/:projectId` — hub de orden (OP)
-  - `/orders/:projectId/:tab` — sub-vista, slugs en inglés (`summary`, `floor`, `labels`, `hardware`, `documents`; legacy `exports` → documentos)
-- **Código:** `ProductionWorkspace` → `ProductionQueue` | `ProductionOrderHub` (`packages/ui/src/production/`)
-- **Doc de producto:** `docs/production-module.md` (reglas R1–R7, roadmap)
+- **Ruta nav:** `orders` (sección PRODUCCIÓN, label **Órdenes**). M2 puede consolidar dashboards — ver `docs/history/roadmap-screens/00-overview.md`
+- **Componentes:** `ProductionOrdersScreen.tsx` (lista y filtros) y `ProductionOrderHub.tsx` (detalle por obra).
+- **Consumo de datos:** `useProductionOrders()` y `useProductionOrder(id)`.
+- **Estructura del workspace (`/orders/:id/:tab`):**
+  1. Tab **Piso** (`floor`): avance físico por ítem con `ItemFloorStatusControl`, QR scan helper y filtros por estado.
+  2. Tab **Despacho** (`dispatch`): checklist de bultos/piezas por módulo para el flete con progreso porcentual y confirmación de embarque.
+  3. Tab **Etiquetas** (`labels`): selector de tipo (módulo / pieza / bulto) con preview en vivo, descarga ZPL térmico (Zebra) y PDF A4.
+  4. Tab **Herrajes** (`hardware`): lista de herrajes requeridos agrupados por módulo y consolidados para compras/almacén.
+  5. Tab **Documentos** (`documents`): pack ZIP maestro de producción (incluye Optimizer, herrajes, elevaciones, hojas de armado, cut-list CSV configurable y etiquetas).
+- **Feedback visual:** cada acción de piso (marcar cortado, encintar, armar, embalar) muestra un toast de confirmación y actualiza el progreso global de la orden en el header.
+- **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `docs/history/roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
 - **Patrón:** workspace de fábrica con chrome propio (`.prod-hub__header` — ver §4.1a workspaces)
 - **Contenido:**
   - Cola: tabs «Para fabricar» (sin claim de corte) / «Ya en producción» (con claim); la card abre la orden con click en su cuerpo (F150: título stretched, sin botón «Abrir orden») y descansa limpia: **Pack** (primaria compacta `btn--small`) y Marcar en producción se revelan en hover/focus, siempre visibles en touch (F151). Chip de **sector activo + %** por obra (F093, `ProjectFloorStageChip`)
@@ -1056,7 +1060,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/production/FabricScreen.tsx`
 - **Patrón:** tabs de estación (corte → encintado → armado → embalaje) con roving tabindex + cola por estación + toggle Cola/Métricas (gerente)
 - **Contenido v1 (actual):** lista de ítems en cola por estación con avance one-tap (`onAdvance` → server con scoping + evento F092); Operador sector-scoped ve solo sus tabs
-- **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `docs/roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
+- **v2 APROBADA (JD 2026-08-18, pendiente de implementación):** board **por obra** con bloque de métricas por estación (Corte: tableros por acabado m²/piezas/planchas + surtido de almacén; Encintado: cintillas ML/piezas/lados; Armado: muebles; Embalaje: módulos), claim "Empezar [estación]" obra×estación (D9) y avance batch. **Spec completa: `docs/history/roadmap-screens/03-fabrica.md`** — implementar contra esa spec, no contra v1
 - **RBAC nav:** `roleCanAccessNav` y guards de ruta (fuente ejecutable)
 - **Icono:** `Factory`
 
