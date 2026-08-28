@@ -4647,7 +4647,7 @@
         "apps/sketchup-extension/src/granete_for_sketchup/ui/dialog_controller.rb",
         "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F183",
         "F184",

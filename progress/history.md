@@ -1471,3 +1471,7 @@ Además: TestUp descubre tests vía `public_instance_methods` — un test bajo
 Implementado en `fix/404-material-native-rebuild`: el controller fusiona elecciones parciales con `materialChoices` persistidos; `FurnitureBuilder` exige `NativeLayout`, aísla definiciones compartidas con copy-on-write, reconstruye ComponentInstances dentro de una única operación undoable y escribe metadata al final preservando identidad, binding y transform. Se agregaron pruebas de propagación BODY/FRONT, herrajes, rollback, definición compartida y round-trip del diálogo. El alcance de obra se etiqueta como temporal de sesión; no se implementa persistencia Project/Design ni migración legacy #416.
 
 Verificación: `./init.sh` verde (typecheck, 3219 tests TS, Go y Ruby/RBZ); `bundle exec rake unit boundary` verde (162/1477 + 3/801); tests focalizados Ruby verdes (5/53 y 19/95). Se agregó smoke TestUp para host real cubriendo rebuild material, Undo y save/reopen; su ejecución requiere SketchUp + RBZ instalado y queda pendiente de host CI.
+
+### F188 — addendum host smoke real (2026-08-28)
+
+Ejecutado contra SketchUp 2026.2 macOS (Ruby 3.2.2) + TestUp 2.5.4 y RBZ recién construido. Resultado **18/18 tests, 264 assertions, 0 fallos, 0 errores**. La evidencia JSON queda preservada en `progress/host_smoke_F188_testup_ci.json`. El smoke verificó rebuild material nativo, aislamiento, identidad/transform, Undo y save/reopen; el ajuste necesario fue usar `Sketchup.send_action('editUndo:')` porque el host no expone `Model#undo`.
