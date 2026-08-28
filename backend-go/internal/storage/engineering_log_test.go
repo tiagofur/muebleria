@@ -42,12 +42,13 @@ func uuidv4(t *testing.T) string {
 }
 
 func TestProject_EngineeringLogRoundTrip(t *testing.T) {
-	store, _ := connectStore(t)
+	store, pool := connectStore(t)
 	ctx := context.Background()
 
 	id := uuidv4(t)
+	customerID := uuidv4(t)
 	customer := &domain.Customer{
-		ID:     uuidv4(t),
+		ID:     customerID,
 		Name:   "Ingeniería Log S.A.",
 		Email:  "eng@example.com",
 		Active: true,
@@ -55,6 +56,10 @@ func TestProject_EngineeringLogRoundTrip(t *testing.T) {
 	if err := store.CreateCustomer(ctx, customer); err != nil {
 		t.Fatalf("CreateCustomer: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = store.DeleteProject(ctx, id)
+		_, _ = pool.Exec(ctx, `DELETE FROM customers WHERE id = $1`, customerID)
+	})
 
 	created := &domain.Project{
 		ID:           id,

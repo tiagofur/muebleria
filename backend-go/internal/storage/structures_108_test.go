@@ -156,6 +156,9 @@ func TestStructureRevisionPinRoundTrip(t *testing.T) {
 	if err := store.CreateCustomer(ctx, customer); err != nil {
 		t.Fatalf("CreateCustomer: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = store.Pool.Exec(ctx, `DELETE FROM customers WHERE id = $1`, customer.ID)
+	})
 
 	mod := &domain.Module{
 		Code: "MOD-PIN-" + time.Now().Format("20060102-150405.000000"),

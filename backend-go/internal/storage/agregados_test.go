@@ -17,11 +17,14 @@ func TestAgregados_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
 }
 
 func TestAgregados_CRUDRoundTrip(t *testing.T) {
-	store, _ := connectStore(t)
+	store, pool := connectStore(t)
 	ctx := context.Background()
 
 	id := uniqueID("agr-test")
 	code := uniqueID("AGR-CAJON")
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, id)
+	})
 
 	in := &domain.Agregado{
 		ID:          id,
@@ -137,6 +140,7 @@ func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 		t.Fatalf("CreateStructure failed: %v", err)
 	}
 	structID := structIn.ID
+	t.Cleanup(func() { _ = store.DeleteStructure(ctx, structID) })
 
 	structGot, err := store.GetStructureByID(ctx, structID)
 	if err != nil {
@@ -186,6 +190,7 @@ func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 		t.Fatalf("CreateModule failed: %v", err)
 	}
 	modID := modIn.ID
+	t.Cleanup(func() { _ = store.DeleteModule(ctx, modID) })
 
 	modGot, err := store.GetModuleByID(ctx, modID)
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 )
 
 func TestProjectItem_CustomDimsRoundTrip(t *testing.T) {
-	store, _ := connectStore(t)
+	store, pool := connectStore(t)
 	ctx := context.Background()
 
 	customer := &domain.Customer{
@@ -29,7 +29,7 @@ func TestProjectItem_CustomDimsRoundTrip(t *testing.T) {
 		t.Fatalf("CreateCustomer: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = store.DeactivateCustomer(ctx, customer.ID)
+		_, _ = pool.Exec(ctx, `DELETE FROM customers WHERE id = $1`, customer.ID)
 	})
 
 	// Módulo propio (patrón structures_108): la FK de project_items no puede
