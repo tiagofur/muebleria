@@ -1,13 +1,20 @@
 # Sesión activa
 
-## F191 — Organization Foundation v2 planning & reconciliation (#446/#447) — 2026-08-28
+## Organization Foundation v2 — planning & reconciliation (#446/#447) — 2026-08-28
 
-Rama `docs/446-organization-foundation-v2`.
+Rama `docs/446-organization-foundation-v2`. Draft PR #463.
 
 Objetivo de la sesión: detener la expansión de nuevas familias persistentes hasta
 cerrar correctamente Usuarios, Multi-Taller, tenant isolation y la Red de Ventas,
 reconciliando el MVP de #325–#327 con el Digital Thread #384, catálogo #443 e
 instalación #303.
+
+### Decisión sobre `feature_list.json`
+
+Este PR es arquitectura/gobernanza y no implementa runtime. Por eso no crea una
+feature `F191` artificial ni marca comportamiento futuro como `in_progress`.
+El siguiente ID del ledger se asignará al primer slice implementable después del
+merge de #447 — #448 o la feature que el orquestador active según el orden de #446.
 
 ### Auditoría y reconciliación del backlog
 
@@ -60,7 +67,7 @@ Reconciliado:
 - `docs/multi-organization-distribution-model.md`;
 - `docs/architecture.md`;
 - `AGENTS.md`;
-- este ledger de sesión.
+- este registro de sesión.
 
 ### Decisiones principales
 
@@ -81,16 +88,16 @@ Reconciliado:
 15. Gate A precede nuevas familias persistentes, incluyendo DT-1 #385; Gate B
     precede declarar Red de Ventas operable.
 
-### Alcance de este PR
+### Alcance de PR #463
 
 Sólo documentación, issues y governance. No cambia runtime, migrations, API ni UI.
 
 ### Próximo paso autorizado
 
-Implementar #447 hasta mergear el contrato/ADR y readback. Después iniciar #448.
-#449, #450 y la foundation de #461 pueden avanzar en paralelo únicamente después
-de #448 y con coordinación explícita de migrations. No iniciar child issues que
-salten hard prerequisites.
+Después del merge de #463/#447, iniciar #448 y asignar entonces la feature activa
+en `feature_list.json`. #449, #450 y la foundation de #461 pueden avanzar en
+paralelo únicamente después de #448 y con coordinación explícita de migrations.
+No iniciar child issues que salten hard prerequisites.
 
 ---
 
