@@ -1475,3 +1475,17 @@ Verificación: `./init.sh` verde (typecheck, 3219 tests TS, Go y Ruby/RBZ); `bun
 ### F188 — addendum host smoke real (2026-08-28)
 
 Ejecutado contra SketchUp 2026.2 macOS (Ruby 3.2.2) + TestUp 2.5.4 y RBZ recién construido. Resultado **18/18 tests, 264 assertions, 0 fallos, 0 errores**. La evidencia JSON queda preservada en `progress/host_smoke_F188_testup_ci.json`. El smoke verificó rebuild material nativo, aislamiento, identidad/transform, Undo y save/reopen; el ajuste necesario fue usar `Sketchup.send_action('editUndo:')` porque el host no expone `Model#undo`.
+
+## F189 — paridad TS ↔ Go ↔ SketchUp de materiales (#405 / MT-4) — 2026-08-28
+
+Se agregó `contracts/materialThicknessParity.contract.json`, consumido por TS,
+Go y Ruby, con nominales 15/18 mm deliberadamente distintos de materiales
+16/18/6 mm. La suite cubre A–D: all-16, roles mixtos, FRONT 18→16 y fallo
+seguro; incluye una puerta, tres frentes de cajón, fórmulas con `T`, placement
+`PW-T`, herraje dependiente, identidad/transform, metadata y rollback. El
+negative proof falla si Go vuelve a priorizar `Component.ThicknessMm`.
+
+Verificación: domain 91 archivos / 1152 tests + typecheck; Go completo verde
+incluido PostgreSQL; Ruby/RBZ 164 tests / 1578 assertions + boundary 3/801 +
+RuboCop. Review ronda 1 pidió agregar escenario C Go; corregido con comparación
+BOM/layout before/after por IDs. Ronda 2 APPROVED (`progress/review_F189.md`).
