@@ -388,6 +388,12 @@ function expandComponentInstances(
   const B = Math.max(0, baseClearanceMm);
 
   const parts: BoardPart[] = [];
+  // #434: copy ids must be unique per component across the whole expansion —
+  // two entries pointing at the same component used to re-emit
+  // `<id>-copy-0` twice (colliding identity on the wire). The counter is
+  // global per component within this list; the per-entry loop index below
+  // still drives spatial formulas/poses (existing #414 semantics).
+  const copyCounters = new Map<string, number>();
   for (const instance of instances) {
     const component = catalog.components?.find(
       (c) => c.id === instance.componentId,
@@ -448,6 +454,8 @@ function expandComponentInstances(
       instance.placementOverride?.trim() || component.placement || 'custom';
 
     for (let i = 0; i < instance.quantity; i++) {
+      const copyIndex = copyCounters.get(component.id) ?? 0;
+      copyCounters.set(component.id, copyIndex + 1);
       const spatialDims = { W: widthMm, H, D: lengthMm, PW, PH, PD, T, B, i };
       const placementPose = defaultPoseForPlacement(
         placement,
@@ -495,7 +503,7 @@ function expandComponentInstances(
           : placementPose.rotateZ);
 
       parts.push({
-        id: `${idPrefix}${component.id}-copy-${i}`,
+        id: `${idPrefix}${component.id}-copy-${copyIndex}`,
         description: component.name,
         quantity: 1,
         lengthMm,

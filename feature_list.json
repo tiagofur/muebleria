@@ -4581,6 +4581,37 @@
       "depends_on": [
         "F185"
       ]
+    },
+    {
+      "id": "F187",
+      "title": "componentInstanceId único: contador global de copies por componente en la expansión de composición (#434)",
+      "description": "Fix de identidad en la expansión de componentes resueltos (#434, hallazgo lateral de F186/#415): cuando una estructura/agregado contiene dos entradas apuntando al mismo ComponentID, ambas re-emitían `{prefix}{id}-copy-0` → componentInstanceId duplicado en el layout resuelto (metadata del renderer nativo y hosts de herraje hostComponentInstanceId quedarían ambiguos). Fix espejo TS↔Go con paridad exacta: el índice de copy del ID pasa a un contador GLOBAL por componente dentro de cada expansión (expandComponentInstances en packages/domain/src/engine/bom.ts; expandLayoutInstances en backend-go/internal/domain/engine/layout.go), mientras que el índice por entrada del loop sigue gobernando fórmulas espaciales/poses (semántica #414 intacta; cero cambio de comportamiento para autoring sin duplicados — golden sin drift). defID/componentDefinitionId sigue compartido por todas las copias (#346). Tests paridad: TS engine.test.ts (dos entradas qty 1+2 del mismo componente → copy-0/1/2 únicos, población total 4) y Go TestLayoutComponentDefinitionIdentity (mismo escenario, aserción de no-colisión + defID compartido).",
+      "tags": [
+        "domain",
+        "backend-go",
+        "engine",
+        "parity",
+        "contract"
+      ],
+      "created": "2026-08-27",
+      "acceptance": [
+        "Dos entradas del mismo componente en una lista de estructura/agregado producen componentInstanceIds únicos (copy-0/1/2) en TS y Go",
+        "Autoring sin duplicados no cambia comportamiento ni ids (golden sketchupLayoutTransform.contract.json sin drift)",
+        "componentDefinitionId sigue compartido por todas las copias del mismo componente",
+        "El índice de fórmulas espaciales/poses sigue siendo el de la entrada (semántica #414 documentada en ambos engines)",
+        "Paridad TS↔Go verificada con tests equivalentes en packages/domain y backend-go"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/434",
+        "packages/domain/src/engine/bom.ts",
+        "backend-go/internal/domain/engine/layout.go",
+        "packages/domain/src/engine.test.ts",
+        "backend-go/internal/domain/engine/layout_transform_test.go"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F186"
+      ]
     }
   ]
 }

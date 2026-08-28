@@ -2257,6 +2257,44 @@ describe('resolveComposedModule', () => {
     expect(ent2.id).not.toBe(ent1.id);
   });
 
+  it('#434 keeps copy ids unique when the same component appears in multiple entries', () => {
+    const catalog = {
+      ...catalogWithComponents(),
+      components: [mockComponentCostado, mockComponentBase],
+    };
+    const dims = { width: 600, height: 720, depth: 560 };
+
+    const result = resolveComposedModule({
+      structure: {
+        ...MOCK_STRUCTURE,
+        // Two entries pointing at the same component: the copy counter is
+        // global per component, so ids can no longer collide on -copy-0.
+        components: [
+          { componentId: 'comp-costado', quantity: 1 },
+          { componentId: 'comp-costado', quantity: 2 },
+          { componentId: 'comp-base', quantity: 1 },
+        ],
+      },
+      componentInstances: [],
+      catalog,
+      dims,
+    });
+
+    const costadoIds = result.boardParts
+      .filter((p) => p.id.startsWith('comp-costado-copy'))
+      .map((p) => p.id)
+      .sort();
+    expect(costadoIds).toEqual([
+      'comp-costado-copy-0',
+      'comp-costado-copy-1',
+      'comp-costado-copy-2',
+    ]);
+    // All copies still resolve as one board population (no identity-driven
+    // duplication beyond the authored quantity).
+    expect(result.boardParts).toHaveLength(4);
+  });
+
+
   it('uses instance edge overrides when provided', () => {
     const catalog = {
       ...catalogWithComponents(),
