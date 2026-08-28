@@ -847,6 +847,9 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 		if !s.authorizeProjectOrgOwnership(w, r, &p) {
 			return
 		}
+		if !validateProjectPayloadRequiredIDs(w, &p) {
+			return
+		}
 
 		p.Status = domain.StatusDraft
 		// Product default currency (Mexico).
@@ -873,6 +876,31 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// validateProjectPayloadRequiredIDs rejects client payloads whose NOT NULL
+// uuid columns arrive as empty strings. They used to reach SQL and blow up
+// as 500 22P02 "error interno del servidor" (pre-demo audit P1-5); a clear
+// 400 lets the client fix the payload. Malformed non-empty ids keep their
+// pre-existing behavior.
+func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project) bool {
+	if strings.TrimSpace(p.CustomerID) == "" {
+		respondWithError(w, http.StatusBadRequest, "la cotización necesita un cliente válido")
+		return false
+	}
+	for i := range p.Items {
+		if strings.TrimSpace(p.Items[i].ModuleID) == "" {
+			respondWithError(w, http.StatusBadRequest, "hay una línea de la cotización sin mueble válido")
+			return false
+		}
+		for role, choice := range p.Items[i].OptionChoices {
+			if strings.TrimSpace(choice) == "" {
+				respondWithError(w, http.StatusBadRequest, "opción vacía ("+role+") en una línea de la cotización")
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
@@ -943,6 +971,9 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		// restore the stored copy so their round-trip PUTs cannot wipe it.
 		if !orgSeesManufacturing(claims, existing) {
 			domain.RestoreProjectManufacturing(&p, existing)
+		}
+		if !validateProjectPayloadRequiredIDs(w, &p) {
+			return
 		}
 
 		// F036 status transitions: reopen / mark produced vs general mutate.

@@ -1350,6 +1350,67 @@ func TestHandleProjectByIDUpdateNotFoundReturns404(t *testing.T) {
 	}
 }
 
+// Pre-demo audit P1-5: PUT with empty-string uuid fields (e.g. the minimal
+// {"status":"accepted"} payload or a round-trip with unset optionals) used to
+// reach SQL as "" on NOT NULL uuid columns and surface as 500 22P02
+// "error interno del servidor". It must be a 400 that names the field.
+func TestHandleProjectByIDUpdateEmptyCustomerReturns400(t *testing.T) {
+	srv := &Server{Store: &stubStore{projectReturnedByID: &domain.Project{
+		ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "u1", Status: domain.StatusDraft,
+	}}}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "admin", string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectByID(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "cliente") {
+		t.Errorf("error message = %q, want it to mention 'cliente'", msg)
+	}
+}
+
+func TestHandleProjectByIDUpdateEmptyModuleIDReturns400(t *testing.T) {
+	srv := &Server{Store: &stubStore{projectReturnedByID: &domain.Project{
+		ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "u1", Status: domain.StatusDraft,
+	}}}
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"i1","module_id":"","quantity":1,"option_choices":{"FRENTE":""}}]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "admin", string(domain.RoleAdmin))
+	req.SetPathValue("id", "p1")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectByID(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "mueble") {
+		t.Errorf("error message = %q, want it to mention 'mueble'", msg)
+	}
+}
+
+func TestHandleProjectsCreateEmptyCustomerReturns400(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+	body := strings.NewReader(`{"name":"X","customer_id":"","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "admin", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjects(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if msg := errorBody(t, rr); !strings.Contains(msg, "cliente") {
+		t.Errorf("error message = %q, want it to mention 'cliente'", msg)
+	}
+}
+
 func withClaims(req *http.Request, userID, role string) *http.Request {
 	claims := &auth.Claims{UserID: userID, Role: role, Email: userID + "@test.com"}
 	return req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
