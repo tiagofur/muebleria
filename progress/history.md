@@ -1544,9 +1544,9 @@ una sola entidad, una sola llamada de persistencia y un solo create.
 La verificación runtime en navegador quedó pendiente porque la app local exige
 credenciales válidas; no se creó, cambió ni restableció ninguna cuenta. No se
 afirma evidencia runtime de logout, cálculo, aceptación, navegación, despiece
-ni doble-click. La limpieza demo **no se ejecutó**: antes de cualquier borrado
-requiere `pg_dump`, detalle exacto de candidatos/conteos y confirmación
-explícita inmediata.
+ni doble-click. La limpieza demo se **omitió por decisión explícita del
+usuario**: los datos se conservan para pruebas, no queda una limpieza pendiente
+y no se tocó la base de datos ni el backup.
 
 Reporte por hallazgo:
 `progress/audit-presentation-hardening-2026-08-28.md`. Seguimientos: #442

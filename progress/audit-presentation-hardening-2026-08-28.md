@@ -3,9 +3,10 @@
 Los hallazgos P0/P1 de la auditoría previa a la demo quedaron corregidos en la
 rama `fix/audit-pre-demo`. La política de sesión cambió respecto del plan
 inicial: el access token es finito por **18 horas** y no se renueva de forma
-proactiva. La validación runtime en navegador y la limpieza de datos demo
-quedaron pendientes por límites operativos explícitos, no se presentan como
-evidencia ejecutada.
+proactiva. La validación runtime en navegador quedó pendiente por un límite
+operativo explícito y no se presenta como evidencia ejecutada. La limpieza de
+datos demo se omitió por decisión del usuario: esos datos se conservan para
+pruebas.
 
 ## Decisiones cerradas
 
@@ -14,7 +15,7 @@ evidencia ejecutada.
 | Sesión web | JWT de acceso finito por 18 h. No hay refresh proactivo: renovarlo antes del vencimiento convertiría una sesión de jornada en una sesión renovable indefinidamente. |
 | Revocación | Cada request autenticado sigue revalidando usuario activo, membresía y organización en el servidor. Un `401` de negocio expira la sesión local; los endpoints `/auth/` conservan su UX propia. |
 | Sincronización entre pestañas | `BroadcastChannel` sólo reduce la ventana stale: anuncia un guardado exitoso y la otra pestaña recarga al volver a estar visible. No ofrece concurrencia optimista ni evita todos los lost updates. |
-| Limpieza demo | No se ejecutó. Requiere `pg_dump`, revisión de los conteos exactos y confirmación explícita inmediatamente antes de cualquier borrado. |
+| Datos demo | Se conservan para pruebas por decisión explícita del usuario. La limpieza se omitió y ya no es una tarea pendiente. No se tocó la base de datos ni el backup. |
 
 ## Hallazgos corregidos
 
@@ -42,7 +43,7 @@ evidencia ejecutada.
   las suites Vitest correspondientes y typecheck del slice de Producción.
 - No se sustituye evidencia runtime por tests unitarios: son capas distintas.
 
-## Verificación runtime y limpieza
+## Verificación runtime y datos demo
 
 La re-verificación en navegador de los repros exactos quedó **bloqueada** porque
 la app local exige credenciales válidas. No se creó, cambió ni restableció
@@ -51,13 +52,9 @@ reproducido en runtime el logout por token inválido, el cálculo del módulo co
 zócalo, la aceptación desde Proyectar, la guía de Producción, el despiece demo
 ni el doble-click de Guardar.
 
-La limpieza demo tampoco se ejecutó. El próximo intento debe, en este orden:
-
-1. generar y verificar un `pg_dump` en `/tmp`;
-2. mostrar los candidatos y conteos exactos que serían eliminados;
-3. pedir confirmación explícita en ese momento;
-4. ejecutar la limpieza sólo tras esa confirmación;
-5. verificar conteos y las vistas Home, Cotizaciones e Ingeniería.
+La limpieza demo se **omitió por decisión explícita del usuario** porque los
+datos se conservan para pruebas. No queda como trabajo pendiente de este cierre
+y no se ejecutó ninguna operación sobre la base de datos ni sobre el backup.
 
 ## Seguimiento fuera de alcance
 
