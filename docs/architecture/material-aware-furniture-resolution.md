@@ -629,8 +629,10 @@ fallo loud para choice desconocido/inactivo o sin espesor válido.
   `resolveComposedModule`).
 - El stack legacy (`legacyBoardStack`) usa 18 mm sólo cuando el rol no tiene
   elección; con material seleccionado usa su espesor efectivo.
-- Los fixtures de paridad deliberadamente no triviales (§18) siguen siendo
-  entrega de #405.
+- La regresión #405 vive en
+  `contracts/materialThicknessParity.contract.json`, consumido textualmente
+  por TypeScript, Go y Ruby. El contrato fija nominales 15/18 mm contra
+  materiales 16/18/6 mm para que volver a `Component.thicknessMm` rompa CI.
 
 ### Material binding roles [CURRENT desde #403 / MT-2]
 
@@ -730,7 +732,13 @@ La regla de `AGENTS.md` aplica especialmente aquí:
 
 > Si una regla vive en TS y Go, planear contract fixture de paridad.
 
-El fixture canónico de #405 debe usar espesores deliberadamente diferentes de los nominales para impedir tests falsamente verdes.
+El fixture canónico de #405 es
+`contracts/materialThicknessParity.contract.json` y usa espesores
+deliberadamente diferentes de los nominales para impedir tests falsamente
+verdes. Lo consumen
+`packages/domain/src/materialThicknessParity.test.ts`,
+`backend-go/internal/domain/engine/regression_405_test.go` y
+`apps/sketchup-extension/test/unit/material_rebuild_test.rb`.
 
 Ejemplo mínimo:
 

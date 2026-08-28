@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "comment": "Canonical #405 parity contract. Nominal thicknesses intentionally conflict with selected materials so reverting to Component.thicknessMm fails TS, Go and SketchUp regressions.",
+  "furnitureDimensionsMm": [600, 720, 560],
+  "nominalThicknessMm": {
+    "Lateral": 15,
+    "Lateral Derecho": 15,
+    "Piso": 18,
+    "Techo": 18,
+    "Entrepaño": 18,
+    "Puerta": 18,
+    "Fondo": 15,
+    "Frente Cajón": 15
+  },
+  "materials": {
+    "white16": { "id": "mat-white16", "thicknessMm": 16, "active": true },
+    "front18": { "id": "mat-oak18", "thicknessMm": 18, "active": true },
+    "back6": { "id": "mat-back6", "thicknessMm": 6, "active": true },
+    "inactive": { "id": "mat-ma-inactive", "thicknessMm": 18, "active": false }
+  },
+  "scenarios": {
+    "all16": {
+      "choices": { "BODY": "mat-white16", "FRONT": "mat-white16", "BACK": "mat-back6" },
+      "expectedRoles": {
+        "BODY": { "materialId": "mat-white16", "thicknessMm": 16, "expectedCount": 5 },
+        "FRONT": { "materialId": "mat-white16", "thicknessMm": 16, "expectedCount": 4 },
+        "BACK": { "materialId": "mat-back6", "thicknessMm": 6, "expectedCount": 1 }
+      },
+      "expectedFormulaResults": {
+        "Lateral.lengthMm": 688,
+        "Piso.lengthMm": 568,
+        "Piso.widthMm": 544,
+        "Lateral Derecho.xMm": 584,
+        "Frente Cajón.widthMm": 568,
+        "frontHardware.yMm": 576
+      }
+    },
+    "mixed": {
+      "choices": { "BODY": "mat-white16", "FRONT": "mat-oak18", "BACK": "mat-back6" },
+      "expectedRoles": {
+        "BODY": { "materialId": "mat-white16", "thicknessMm": 16, "expectedCount": 5 },
+        "FRONT": { "materialId": "mat-oak18", "thicknessMm": 18, "expectedCount": 4 },
+        "BACK": { "materialId": "mat-back6", "thicknessMm": 6, "expectedCount": 1 }
+      }
+    },
+    "frontUpdate": {
+      "beforeChoices": { "BODY": "mat-white16", "FRONT": "mat-oak18", "BACK": "mat-back6" },
+      "afterChoices": { "BODY": "mat-white16", "FRONT": "mat-white16", "BACK": "mat-back6" },
+      "affectedRole": "FRONT",
+      "expectedAffectedCount": 4,
+      "expectedUnaffectedRoles": ["BODY", "BACK"],
+      "expectedHardwareYBeforeMm": 578,
+      "expectedHardwareYAfterMm": 576
+    },
+    "failure": {
+      "choices": { "BODY": "mat-white16", "FRONT": "mat-ma-inactive", "BACK": "mat-back6" },
+      "expectedRejectedRole": "FRONT"
+    }
+  }
+}
