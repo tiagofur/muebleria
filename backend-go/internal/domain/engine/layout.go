@@ -93,7 +93,14 @@ type LayoutLocalTransform struct {
 // Material fields carry the workshop's chosen board when an option choice
 // resolved it; otherwise the role-palette fallback color is used.
 type LayoutComponent struct {
-	ComponentInstanceID         string               `json:"componentInstanceId"`
+	ComponentInstanceID string `json:"componentInstanceId"`
+	// ComponentDefinitionID is the stable reusable authoring-definition ID of
+	// the #346 contract (#415): every copy of one component shares it while
+	// keeping its own ComponentInstanceID. It is Granete-owned identity —
+	// never the host-generated SketchUp definition GUID and never implicitly
+	// the catalog component ID (catalogComponentId, when a schema publishes
+	// it, stays a separate field).
+	ComponentDefinitionID       string               `json:"componentDefinitionId"`
 	SlotID                      string               `json:"slotId"`
 	Role                        string               `json:"role,omitempty"`
 	Name                        string               `json:"name"`
@@ -152,6 +159,7 @@ type FurnitureLayout struct {
 // layoutBoard is the intermediate resolved board before AABB projection.
 type layoutBoard struct {
 	id          string
+	defID       string // stable authoring-definition ID (#346/#415), shared by all copies of one component
 	name        string
 	placement   string
 	optionRole  string
@@ -215,19 +223,20 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 		}
 
 		component := LayoutComponent{
-			ComponentInstanceID: board.id,
-			SlotID:              board.placement,
-			Role:                board.optionRole,
-			Name:                board.name,
-			Kind:                "board",
-			Transform:           LayoutTransform{TranslationMm: min},
-			DimensionsMm:        size,
-			LocalTransform:      local,
-			LengthMm:            int(math.Round(board.lengthMm)),
-			WidthMm:             int(math.Round(board.widthMm)),
-			ThicknessMm:         int(math.Round(board.thicknessMm)),
-			OptionRole:          board.optionRole,
-			MaterialColorHex:    colorForOptionRole(board.optionRole),
+			ComponentInstanceID:   board.id,
+			ComponentDefinitionID: board.defID,
+			SlotID:                board.placement,
+			Role:                  board.optionRole,
+			Name:                  board.name,
+			Kind:                  "board",
+			Transform:             LayoutTransform{TranslationMm: min},
+			DimensionsMm:          size,
+			LocalTransform:        local,
+			LengthMm:              int(math.Round(board.lengthMm)),
+			WidthMm:               int(math.Round(board.widthMm)),
+			ThicknessMm:           int(math.Round(board.thicknessMm)),
+			OptionRole:            board.optionRole,
+			MaterialColorHex:      colorForOptionRole(board.optionRole),
 		}
 		if material, err := resolveSelectedBoard(board.optionRole, optionChoices, catalog.Materials); err != nil {
 			return FurnitureLayout{}, err
@@ -319,8 +328,14 @@ func legacyBoardStack(module domain.Module, optionChoices map[string]string, mat
 			return nil, err
 		}
 		thickness := float64(thicknessMm)
+		// Legacy flat parts have no reusable authoring definition: each part
+		// IS its own single-instance definition, so defID == id is the
+		// documented intent (composed components instead share defID across
+		// copies with distinct -copy-N instance IDs).
+		id := fmt.Sprintf("legacy-%s-%d", module.ID, i)
 		boards = append(boards, layoutBoard{
-			id:          fmt.Sprintf("legacy-%s-%d", module.ID, i),
+			id:          id,
+			defID:       id,
 			name:        part.Description,
 			placement:   "custom",
 			optionRole:  part.OptionRole,
@@ -495,6 +510,7 @@ func expandLayoutInstances(
 
 			board := layoutBoard{
 				id:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, i),
+				defID:       fmt.Sprintf("%s%s", idPrefix, comp.ID),
 				name:        comp.Name,
 				placement:   placement,
 				optionRole:  optionRole,

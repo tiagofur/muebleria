@@ -22,11 +22,11 @@ class PersistenceRoundtripTest < Minitest::Test
       { 'widthMm' => 800, 'heightMm' => 720, 'depthMm' => 590, 'shelfCount' => 2, 'doorCount' => 1 }
     )
 
-    main_group = @model.active_entities.groups.first
+    furniture = @model.active_entities.instances.first
     instance_id = insert_result['instance_id']
 
-    # 1. Verify Root FurnitureInstance persistence
-    restored_furniture_meta = @store.read(main_group)
+    # 1. Verify Root FurnitureInstance persistence (native ComponentInstance)
+    restored_furniture_meta = @store.read(furniture)
     refute_nil restored_furniture_meta
     assert_equal 'com.granete.sketchup_extension', restored_furniture_meta['namespace']
     assert_equal 'furnitureInstance', restored_furniture_meta['kind']
@@ -36,14 +36,18 @@ class PersistenceRoundtripTest < Minitest::Test
     assert_equal 800, restored_furniture_meta.dig('intent', 'parameters', 'widthMm')
     assert_equal 2, restored_furniture_meta.dig('intent', 'parameters', 'shelfCount')
 
-    # 2. Verify Subgroup ComponentInstance persistence
-    components = main_group.entities.groups
+    # 2. Verify nested ComponentInstance persistence
+    components = furniture.definition.entities.instances
     refute_empty components
-    shelf_components = components.select do |g|
-      meta = @store.read(g)
+    shelf_components = components.select do |part|
+      meta = @store.read(part)
       meta && meta['kind'] == 'componentInstance' && meta.dig('intent',
                                                               'semanticRole')&.start_with?('shelf')
     end
     assert_equal 2, shelf_components.length
+    # Every child keeps its owning furniture reference recoverable.
+    shelf_components.each do |part|
+      assert_equal instance_id, @store.read(part).dig('identity', 'furnitureInstanceRef')
+    end
   end
 end

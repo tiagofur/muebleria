@@ -59,16 +59,18 @@ Reglas UX:
 
 ### 3.1 Runtime actual [CURRENT]
 
-La implementación vigente del `FurnitureBuilder` todavía utiliza:
+Desde #415 el `FurnitureBuilder` materializa la jerarquía nativa:
 
 ```text
-Furniture Group
-├── Board Group + generated faces/pushpull
-├── Board Group + generated faces/pushpull
-└── hardware Group / loaded asset
+Furniture Sketchup::ComponentInstance (definición aislada por instancia)
+├── Board/Part Sketchup::ComponentInstance (geometría local en origen)
+├── Board/Part Sketchup::ComponentInstance
+└── Hardware Sketchup::ComponentInstance (asset o fallback)
 ```
 
-El layout remoto publica cajas/AABB suficientes para ese renderer MVP. Esto es estado actual verificable, **no** arquitectura objetivo.
+El renderer Group + AABB pre-#415 es representación legacy: los `.skp` que la
+llevan se migran explícitamente (#416) y un update contra un Group legacy
+falla cerrado con puntero a #416.
 
 ### 3.2 Arquitectura aprobada [TARGET]
 
@@ -85,13 +87,13 @@ Furniture Sketchup::ComponentInstance
 
 No existe una “jerarquía estricta de tres niveles”. El nesting es **semántico**. Un nivel intermedio sólo existe cuando representa un agregado/subassembly real que necesita identidad, selección, configuración o movimiento propio.
 
-### 3.3 Regla de transición
+### 3.3 Regla de transición (cerrada con #415)
 
-Hasta cerrar #415:
-
-- los tests/documentos pueden describir el renderer Group como CURRENT;
-- ninguna feature nueva debe elevar Groups/AABB boxes a autoridad de largo plazo;
-- #389, #391 y #404 deben apuntar al modelo nativo, no crear caminos finales paralelos basados en Groups.
+- el renderer nativo es CURRENT (#415); el renderer Group es legacy y sólo
+  vuelve a aparecer vía migración #416 o adopción #397;
+- ninguna feature nueva puede elevar Groups/AABB boxes a autoridad de largo plazo;
+- #389, #391 y #404 apuntan al modelo nativo; no se crean caminos finales
+  paralelos basados en Groups.
 
 ---
 
@@ -157,7 +159,7 @@ resolved components + hardware
 Ruby materializes SketchUp host representation
 ```
 
-Hoy el DTO expone AABB suficiente para el renderer Group. #414 amplía el contrato con local geometry + authoritative orientation/transform para el renderer nativo.
+El DTO publica el contrato #414 completo (local geometry + transform autoritativo + AABB derivado como compatibilidad); desde #415 el renderer nativo lo consume vía `resolved_native_layout`.
 
 ### 6.3 Placement exterior
 
@@ -191,7 +193,7 @@ local Z = lengthMm
 
 Un AABB world-space no sustituye ese frame local. #414 es prerequisite del renderer nativo porque actualmente la rotación existe en el resolver interno pero no viaja en el transform público del layout.
 
-Desde #414 [CURRENT], el layout resuelto publica por pieza el transform local→furniture autoritativo (`localTransform`: base ortonormal diestra + traslación) junto con el marker `transformContract: granete.local-basis.v1`; el AABB legacy se deriva de ese transform y queda como compatibilidad/preview. El parser Ruby (`library/layout_contract.rb`, vía `resolved_native_layout`) valida el contrato y falla seguro ante contratos desconocidos/ausentes o bases inválidas — nunca infiere orientación. El renderer Group actual sigue consumiendo el AABB hasta #415.
+Desde #414 [CURRENT], el layout resuelto publica por pieza el transform local→furniture autoritativo (`localTransform`: base ortonormal diestra + traslación) junto con el marker `transformContract: granete.local-basis.v1`; el AABB legacy se deriva de ese transform y queda como compatibilidad/preview. El parser Ruby (`library/layout_contract.rb`, vía `resolved_native_layout`) valida el contrato y falla seguro ante contratos desconocidos/ausentes o bases inválidas — nunca infiere orientación. Desde #415 [CURRENT] el renderer nativo construye cada pieza como ComponentInstance con `Geom::Transformation.axes(translationMm, basis)` y geometría local en origen; el AABB del wire es sólo preview/compat.
 
 ---
 
@@ -369,7 +371,7 @@ Detalles de almacenamiento/transporte de sesión son implementación y pueden ev
 
 ## 17. Legacy Group models
 
-El renderer Group actual puede haber generado modelos con metadata Granete válida. #416 migra esa representación hacia el target nativo.
+El renderer Group legacy (pre-#415) puede haber generado modelos con metadata Granete válida. #416 migra esa representación al target nativo; hasta entonces, editarlos desde la extensión falla cerrado.
 
 No confundir:
 
@@ -415,12 +417,15 @@ Granete BOM          = manufacturing authority
 
 ## 20. Current implementation debts explícitas
 
-Hasta completar los programas abiertos:
+Cerrados con evidencia (no reabrir como deuda):
 
 - #402: Go usa selected `MaterialBoard.thicknessMm` antes de geometry;
 - #403: binding/alias semantics alineadas TS/Go;
 - #414: authoritative local part transform/orientation en layout;
-- #415: Group renderer → native ComponentInstances;
+- #415: Group renderer → native ComponentInstances.
+
+Programas aún abiertos:
+
 - #404: material update reconstruye el target nativo atómicamente;
 - #416: legacy Groups tienen migration path;
 - #388/#389/#390/#391: Project-owned identity sustituye legacy local identity donde corresponda.
@@ -458,7 +463,7 @@ OpenCutList smoke pertenece a #417 y nunca sustituye las pruebas de BOM Granete.
 ## 22. Reglas finales
 
 1. **SketchUp interaction, Granete truth.**
-2. **Current Group renderer != canonical target.**
+2. **El renderer Group legacy (pre-#415) no es el modelo canónico; el renderer nativo (#415) es el CURRENT.**
 3. **Managed furniture + physical parts -> native ComponentInstances.**
 4. **Semantic nesting, not fixed three-level wrappers.**
 5. **Business IDs != SketchUp GUID/persistent IDs.**

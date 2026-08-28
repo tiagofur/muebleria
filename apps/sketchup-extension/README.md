@@ -119,6 +119,21 @@ Windows example for a future matrix run:
 TestUp emits JSON to stdout. Preserve that output with the host version and
 RBZ SHA-256; never replace unavailable host evidence with a simulated pass.
 
+### Native entity suite (#415)
+
+Besides `TC_BootstrapSmoke`, the run includes `TC_NativeEntitySmoke`: it
+inserts a contract-shaped resolved layout (the fixture mirrors
+`contracts/sketchupLayoutTransform.contract.json`) through the **installed**
+builder and asserts, in the real host, that managed furniture and every
+board/hardware are native `Sketchup::ComponentInstance`s, that part
+definitions hold local geometry at origin sized by the #414 local extents,
+that the lateral instance transform matches the published basis+translation,
+that moving/rotating the furniture never rewrites child geometry, that two
+units diverge without shared-definition effects, that rename keeps Granete
+identity, that no native GUID appears as business identity, and that a
+mirrored basis (or an aborted operation) leaves no partial hierarchy. The
+suite self-cleans its entities and generated definitions on teardown.
+
 ## Configuration and security boundary
 
 The bootstrap injects two independent ports:

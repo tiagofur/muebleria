@@ -32,9 +32,9 @@ Read together with:
 
 ## 2. Current runtime vs target
 
-### 2.1 Current runtime [CURRENT]
+### 2.1 Legacy runtime (pre-#415)
 
-As of this decision, `FurnitureBuilder` creates:
+Until #415, `FurnitureBuilder` created:
 
 ```text
 SketchUp Model
@@ -46,9 +46,11 @@ SketchUp Model
     └── Group / loaded asset  # hardware fallback/asset
 ```
 
-The current renderer is intentionally simple and has been useful for validating the server-resolved layout path. It is a visual MVP, not the desired long-term native model.
+That visual MVP was replaced by #415. Existing `.skp` files carrying it are
+legacy managed representation migrated explicitly by #416 (updating a legacy
+Group through the current extension fails closed with a #416 pointer).
 
-### 2.2 Target runtime [TARGET]
+### 2.2 Implemented runtime (#415) [CURRENT]
 
 ```text
 SketchUp Model
@@ -68,13 +70,22 @@ SketchUp Model
         └── Hardware SU ComponentInstance
 ```
 
-A physical managed part becomes a native SketchUp object with:
-
-- a ComponentDefinition containing local geometry;
-- a ComponentInstance transformation;
-- meaningful local axes;
-- stable Granete contract metadata;
-- predictable selection/Outliner behavior.
+`FurnitureBuilder` implements this hierarchy in one undoable SketchUp
+operation per insert/rebuild: the top-level definition is generated and
+isolated per furniture instance, board definitions carry the local box
+`[0,width]×[0,thickness]×[0,length]` at origin, and each nested instance's
+transform is built directly from the #414 `localTransform`
+(`Geom::Transformation.axes(translation, basis.x, basis.y, basis.z)`). Rebuilds
+reuse the existing top-level instance (identity + world transform preserved),
+clear its definition's children, rebind against freshly generated
+definitions, and run a scoped cleanup that removes only orphaned
+Granete-prefixed board/hardware definitions. The generic offline authoring
+fallback renders the same native hierarchy with an identity basis by
+construction. Child metadata carries `componentInstanceId` +
+`componentDefinitionId` (published by the server per board, shared by every
+copy of one component) + `furnitureInstanceRef` + slot/role/material-binding
+role; the optional `catalogComponentId` stays a separate passthrough namespace
+and native host GUIDs/persistent_ids are never stored as business identity.
 
 ---
 
@@ -351,6 +362,7 @@ The resolved layout publishes, per board, the authoritative local→furniture tr
 - **Compatibility:** `transform` (AABB min corner) + `dimensionsMm` (AABB size) remain on the wire for old plugin versions and previews; they are **derived** from the local geometry + transform, so they cannot drift from it. `transformContract` pins the representation; the Ruby parser (`apps/sketchup-extension/src/granete_for_sketchup/library/layout_contract.rb`, exposed via `resolved_native_layout`) accepts only `granete.local-basis.v1` and fails loudly on missing/unknown contracts or non-orthonormal/left-handed bases — it never guesses orientation from slotId/role/name/AABB.
 - **Golden:** `contracts/sketchupLayoutTransform.contract.json` is generated from the Go resolver output and consumed verbatim by the Ruby parser tests (regenerate with `UPDATE_LAYOUT_CONTRACT_GOLDEN=1`).
 - Hardware placements keep the AABB-only shape with `hostComponentInstanceId`; they are resolved server-side against the final host board geometry (material-aware flow §11).
+- Since #415 the same wire publishes `components[].componentDefinitionId`: the #346 stable authoring-definition ID, shared by every copy of one component (`{idPrefix}{componentId}` per the Go resolver, e.g. `st-comp-side` for `st-comp-side-copy-0`), never the host SU definition GUID and never aliased with the optional `catalogComponentId`. The Ruby renderer stores it verbatim in child metadata.
 
 ### Scale
 

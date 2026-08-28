@@ -4535,6 +4535,52 @@
         "F183",
         "F184"
       ]
+    },
+    {
+      "id": "F186",
+      "title": "Renderer nativo SketchUp: muebles y tableros como jerarquía de ComponentInstances (#415 / SU-ENT-2)",
+      "description": "Reemplaza el renderer final basado en Groups/AABB-boxes por la jerarquía nativa de ADR-0004 (#415, programa #413). FurnitureBuilder inserta cada mueble gestionado como Sketchup::ComponentInstance top-level con ComponentDefinition generada y AISLADA por FurnitureInstance (V1: FI-A y FI-B de la misma Granete FurnitureDefinition divergen sin efectos de definición compartida); cada tablero/herraje gestionado es un ComponentInstance anidado cuya definición porta geometría LOCAL en origen (caja [0,width]×[0,thickness]×[0,length], convención engine) y cuyo transform se construye 1:1 desde el contrato #414 (Geom::Transformation.axes(translationMm, basis.x/y/z)): sin bakeo de AABB world, sin escala no-uniforme para dimensiones productivas, sin inferencia de orientación. Move/rotar muebles toca sólo el transform top-level; el rebuild (update_furniture) reutiliza la instancia top-level (identidad + world transform preservadas), limpia los children de su definición, re-renderiza y ejecuta cleanup scoped (sólo definiciones Granete Parte/Herraje sin instancias vivas; jamás purge broad). Inserción/rebuild = una sola operación undoable de SketchUp; fallo ⇒ abort sin jerarquía parcial (metadata se escribe sólo tras jerarquía válida). Herraje: asset .skp instancia como ComponentInstance con metadata Granete (AssetLoader ahora devuelve la instancia); fallback generado también nativo. El path genérico offline renderiza la misma jerarquía nativa con base identidad por construcción. IDENTIDAD: el layout Go publica ahora components[].componentDefinitionId (#346 authoring-definition ID estable, compartido por todas las copias de un componente, p.ej. st-comp-side para st-comp-side-copy-0); el parser Ruby (layout_contract.rb: LayoutBoardTransform + NativeLayout con boards+hardware+material passthrough, validación opaca fail-safe) lo preserva verbatim y el metadata de child lleva componentInstanceId, componentDefinitionId, catalogComponentId opcional (namespace separado, nunca alias), furnitureInstanceRef, slot/role/materialBindingRole y hostComponentInstanceId de herrajes. Nunca GUID/persistent_id/nombre de host como identidad de negocio; rename no cambia IDs; el observer de selección resuelve mueble top-level, child semántico por drill-down y recupera el mueble dueño vía metadata. El controller consume resolved_native_layout (fail-safe ante contrato ausente/desconocido; bodies crudos rechazados por el builder). Tests: matriz obligatoria + negative proofs (Group-only regression, world-AABB baked, non-uniform scale, shared mutable definition, GUID como business ID, slot/role→rotación) en native_entity_renderer_test.rb contra el golden real del resolver; stubs de test modelan ComponentDefinition/ComponentInstance/Transformation.axes/abort-rollback; TestUp TC_NativeEntitySmoke + fixture native_layout.json para host validation real (pendiente de ejecutar en host: requiere GUI + RBZ instalado, documentado en README). No incluye: migración legacy Group (#416), validación OpenCutList (#417), material rebuild (#404) salvo wiring mínimo, Digital Thread #385+.",
+      "tags": [
+        "sketchup-extension",
+        "backend-go",
+        "architecture",
+        "contract",
+        "renderer"
+      ],
+      "created": "2026-08-27",
+      "acceptance": [
+        "Mueble insertado gestionado es Sketchup::ComponentInstance top-level (sin wrapper Group en ningún nivel) y cada tablero físico gestionado es ComponentInstance anidado con geometría sólida local",
+        "Ejes/dimensiones locales matchean #414 tras placements estándar y rotación world del mueble: transform de instancia == axes(translationMm, basis) exacta; bases 90° con entradas 0/±1",
+        "FI-A y FI-B desde la misma Granete FurnitureDefinition divergen independientemente: definiciones host distintas, rebuild de FI-A no muta children/geometría de FI-B",
+        "componentDefinitionId publicado por el servidor (Go) es identidad de contrato estable, compartido por copias con componentInstanceId distintos, y nunca es GUID nativo ni alias de catalogComponentId",
+        "Referencia de catálogo opcional viaja como namespace separado (catalogComponentId) y nunca reemplaza la authoring-definition identity",
+        "Rename de mueble/pieza no altera IDs (metadata estable); selección resuelve furniture top-level, child semántico y mueble dueño recuperable vía metadata/InstancePath",
+        "Move/rotar usa el transform top-level sin reescribir geometría/transforms de children; rebuild preserva identidad de negocio y world transform",
+        "Materiales siguen siendo rendering (sin espesor/orientación industrial en Ruby); herraje asset y fallback preservan semántica nativa con metadata Granete",
+        "Insert/rebuild es una operación coherente: fallo ⇒ abort sin jerarquía parcial ni definiciones huérfanas; metadata aceptada sólo tras jerarquía válida; cleanup scoped de definiciones generadas",
+        "NEGATIVE PROOF (Ruby, golden-driven): tests fallan si se vuelve a Group-only rendering, si se hornea world AABB en la definición, si dimensiones productivas usan escala no-uniforme, si una definición compartida mutable cruza furnitures, si un GUID nativo reemplaza ID Granete o si Ruby infiere orientación",
+        "Go: layout_transform_test cubre componentDefinitionId (no vacío, ≠ instanceId, compartido por 3 copias quantity) y golden regenerado consume el campo; API sirve el campo en el wire",
+        "Host smoke TestUp TC_NativeEntitySmoke + fixture incluidos (README actualizado); ejecución en host real queda registrada como pendiente (requiere GUI + RBZ instalado), sin simular evidencia"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/415",
+        "https://github.com/tiagofur/muebleria/issues/413",
+        "https://github.com/tiagofur/muebleria/issues/414",
+        "https://github.com/tiagofur/muebleria/issues/346",
+        "docs/adr/0004-sketchup-native-component-entity-model.md",
+        "docs/architecture/sketchup-native-entity-model.md",
+        "docs/architecture/sketchup-interaction-model.md",
+        "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb",
+        "apps/sketchup-extension/src/granete_for_sketchup/library/layout_contract.rb",
+        "apps/sketchup-extension/test/unit/native_entity_renderer_test.rb",
+        "apps/sketchup-extension/test/testup/TC_NativeEntitySmoke.rb",
+        "backend-go/internal/domain/engine/layout.go",
+        "contracts/sketchupLayoutTransform.contract.json"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F185"
+      ]
     }
   ]
 }

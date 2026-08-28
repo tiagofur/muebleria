@@ -47,6 +47,11 @@ module Granete
             {
               'type' => 'component',
               'instanceId' => meta.dig('identity', 'instanceRef'),
+              # Drill-down keeps the owning furniture recoverable (#415):
+              # metadata carries the furniture reference — InstancePath in the
+              # host walks the same ownership.
+              'furnitureInstanceId' => meta.dig('identity', 'furnitureInstanceRef'),
+              'componentDefinitionId' => meta.dig('identity', 'componentDefinitionId'),
               'role' => meta.dig('intent', 'semanticRole'),
               'name' => entity.respond_to?(:name) ? entity.name : 'Componente'
             }

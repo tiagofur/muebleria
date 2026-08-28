@@ -3,17 +3,21 @@
 module Granete
   module SketchUpExtension
     module Assets
+      # Loads a hardware .skp asset as a native ComponentInstance nested in
+      # the given container (the furniture's isolated definition). Returns the
+      # created Sketchup::ComponentInstance, or nil when the asset cannot be
+      # resolved/loaded so the caller falls back to generated geometry.
       class AssetLoader
         def initialize(resolver: nil)
           @resolver = resolver || AssetResolver.new
         end
 
-        def load_asset_instance(model, asset_id, target_group, transform_mm = [0, 0, 0])
+        def load_asset_instance(model, asset_id, target_container, transform_mm = [0, 0, 0])
           skp_path = @resolver.resolve_skp_path(asset_id)
-          return false unless skp_path && File.exist?(skp_path)
+          return nil unless skp_path && File.exist?(skp_path)
 
           definition = model.definitions.load(skp_path)
-          return false unless definition
+          return nil unless definition
 
           scale_to_inch = 1.0 / 25.4
           transform = ::Geom::Transformation.translation(
@@ -24,10 +28,9 @@ module Granete
             )
           )
 
-          instance = target_group.entities.add_instance(definition, transform)
-          !instance.nil?
+          target_container.entities.add_instance(definition, transform)
         rescue StandardError
-          false
+          nil
         end
       end
     end

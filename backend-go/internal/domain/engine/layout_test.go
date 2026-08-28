@@ -321,6 +321,15 @@ func TestResolveFurnitureLayoutLegacyModuleStacksAllPieces(t *testing.T) {
 	if layout.Components[0].Name != "Lateral Izq" || layout.Components[2].Name != "Piso" {
 		t.Fatalf("legacy piece names not preserved: %+v", layout.Components)
 	}
+	// #415 identity on the legacy path: each flat part IS its own
+	// single-instance definition, so componentDefinitionId == componentInstanceId
+	// is the documented intent (composed components share defID across copies).
+	for _, c := range layout.Components {
+		if c.ComponentDefinitionID == "" || c.ComponentDefinitionID != c.ComponentInstanceID {
+			t.Fatalf("legacy component %s must publish defID == instanceID (single-instance definition), got %q",
+				c.ComponentInstanceID, c.ComponentDefinitionID)
+		}
+	}
 }
 
 func TestResolveFurnitureLayoutCostOnlyHardwareRendersNothing(t *testing.T) {

@@ -28,12 +28,33 @@ class ApplicationTest < Minitest::Test
 
     def request(req = {}, *)
       if req['path'].to_s.include?('/layout')
-        { 'status' => 200, 'body' => { 'components' => [], 'hardware' => [] } }
+        # Contract-shaped layout (#414): the native renderer path requires
+        # granete.local-basis.v1 and fails closed on legacy AABB bodies.
+        { 'status' => 200, 'body' => LAYOUT_CONTRACT_BODY }
       else
         { 'status' => 200, 'body' => WORKSHOP_CONTRACT }
       end
     end
   end
+
+  LAYOUT_CONTRACT_BODY = {
+    'furnitureDefinitionId' => 'kitchen-base-standard',
+    'definitionName' => 'Gabinete Base Estándar',
+    'transformContract' => 'granete.local-basis.v1',
+    'dimensionsMm' => [800, 720, 590],
+    'components' => [
+      { 'componentInstanceId' => 'st-side-copy-0', 'componentDefinitionId' => 'st-side',
+        'slotId' => 'lateral_izquierdo', 'name' => 'Lateral', 'kind' => 'board',
+        'transform' => { 'translationMm' => [0, 0, 0] }, 'dimensionsMm' => [18, 590, 720],
+        'localTransform' => {
+          'translationMm' => [0, 590, 0],
+          'basis' => { 'x' => [0, -1, 0], 'y' => [1, 0, 0], 'z' => [0, 0, 1] }
+        },
+        'lengthMm' => 720, 'widthMm' => 590, 'thicknessMm' => 18,
+        'optionRole' => 'LATERAL', 'materialColorHex' => '#c8b89a' }
+    ],
+    'hardware' => []
+  }.freeze
 
   class FakeCatalogAuth
     def configured?
@@ -168,17 +189,18 @@ class ApplicationTest < Minitest::Test
     )
 
     model = SketchupStub.active_model
-    group = model.active_entities.groups.first
-    refute_nil group, 'insert must create furniture geometry in the active model'
+    furniture = model.active_entities.instances.first
+    refute_nil furniture, 'insert must create furniture geometry in the active model'
+    assert_instance_of SketchupStub::ComponentInstanceStub, furniture
 
-    raw = group.get_attribute('com.granete.sketchup_extension', 'bootstrap_intent.v1')
+    raw = furniture.get_attribute('com.granete.sketchup_extension', 'bootstrap_intent.v1')
     refute_nil raw, 'production wiring must persist furniture metadata without manual injection'
     metadata = JSON.parse(raw)
     assert_equal 'furnitureInstance', metadata['kind']
     assert_equal 'kitchen-base-standard', metadata.dig('intent', 'furnitureDefinitionId')
     assert_equal 800, metadata.dig('intent', 'parameters', 'widthMm')
 
-    model.selection.add(group)
+    model.selection.add(furniture)
 
     selection_script = dialog.executed_scripts.reverse.find { |s| s.include?('onSelectionChange') }
     refute_nil selection_script, 'selecting inserted furniture must reach the dialog'

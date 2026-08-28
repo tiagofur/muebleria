@@ -2,39 +2,147 @@
 
 # rubocop:disable all
 
+# Faithful-enough SketchUp API stub for unit tests. Models the host concepts
+# the native entity model (#413/#415) depends on: ComponentDefinition vs
+# ComponentInstance, definition-scoped entities, Geom::Transformation with
+# axes/composition, per-entity attribute dictionaries, persistent_id and
+# definition GUID locators, plus an undo journal so start/abort_operation
+# rolls structural mutations back like the real host does.
 module Geom
-  class Point3d
-    attr_reader :x, :y, :z
-
-    def initialize(x_pos = 0, y_pos = 0, z_pos = 0)
-      @x = x_pos
-      @y = y_pos
-      @z = z_pos
+  Point3d = Struct.new(:x, :y, :z) do
+    def to_a
+      [x, y, z]
     end
   end
 
-  class Vector3d
-    attr_reader :x, :y, :z
-
-    def initialize(x_pos = 0, y_pos = 0, z_pos = 0)
-      @x = x_pos
-      @y = y_pos
-      @z = z_pos
+  Vector3d = Struct.new(:x, :y, :z) do
+    def to_a
+      [x, y, z]
     end
   end
 
+  # 4x4 rigid transform, row-major like SketchUp's to_a:
+  # [Xx Yx Zx Tx  Xy Yy Zy Ty  Xz Yz Zz Tz  0 0 0 1]
+  # (a * b) applies b first, then a — SketchUp composition semantics.
   class Transformation
-    def self.translation(vector)
-      new(vector)
+    attr_reader :matrix
+
+    def self.identity
+      new
     end
 
-    def initialize(vector = nil)
-      @vector = vector
+    def self.translation(vector)
+      t = new
+      t.matrix[3] = vector.x.to_f
+      t.matrix[7] = vector.y.to_f
+      t.matrix[11] = vector.z.to_f
+      t
+    end
+
+    # Maps the local axes onto xaxis/yaxis/zaxis with the given origin:
+    # world_point = origin + xaxis·local_x + yaxis·local_y + zaxis·local_z.
+    def self.axes(origin, xaxis, yaxis, zaxis)
+      t = new
+      t.set_column(0, xaxis)
+      t.set_column(1, yaxis)
+      t.set_column(2, zaxis)
+      t.matrix[3] = origin.x.to_f
+      t.matrix[7] = origin.y.to_f
+      t.matrix[11] = origin.z.to_f
+      t
+    end
+
+    def initialize
+      @matrix = [1.0, 0.0, 0.0, 0.0,
+                 0.0, 1.0, 0.0, 0.0,
+                 0.0, 0.0, 1.0, 0.0,
+                 0.0, 0.0, 0.0, 1.0]
+      yield self if block_given?
+    end
+
+    def set_column(index, vector)
+      @matrix[index] = vector.x.to_f
+      @matrix[4 + index] = vector.y.to_f
+      @matrix[8 + index] = vector.z.to_f
+    end
+
+    def [](row, col)
+      @matrix[(row * 4) + col]
+    end
+
+    def to_a
+      @matrix.dup
+    end
+
+    def origin
+      Point3d.new(@matrix[3], @matrix[7], @matrix[11])
+    end
+
+    def xaxis
+      Vector3d.new(@matrix[0], @matrix[4], @matrix[8])
+    end
+
+    def yaxis
+      Vector3d.new(@matrix[1], @matrix[5], @matrix[9])
+    end
+
+    def zaxis
+      Vector3d.new(@matrix[2], @matrix[6], @matrix[10])
+    end
+
+    def *(other)
+      product = self.class.new
+      4.times do |r|
+        4.times do |c|
+          sum = 0.0
+          4.times { |k| sum += self[r, k] * other[k, c] }
+          product.matrix[(r * 4) + c] = sum
+        end
+      end
+      product
+    end
+
+    def transform(point)
+      x = (self[0, 0] * point.x) + (self[0, 1] * point.y) + (self[0, 2] * point.z) + self[0, 3]
+      y = (self[1, 0] * point.x) + (self[1, 1] * point.y) + (self[1, 2] * point.z) + self[1, 3]
+      z = (self[2, 0] * point.x) + (self[2, 1] * point.y) + (self[2, 2] * point.z) + self[2, 3]
+      Point3d.new(x, y, z)
+    end
+
+    def ==(other)
+      return false unless other.is_a?(Transformation)
+
+      to_a.zip(other.to_a).all? { |a, b| (a - b).abs <= 1e-9 }
+    end
+
+    def eql?(other)
+      self == other
+    end
+
+    def hash
+      to_a.map { |v| v.round(9) }.hash
     end
   end
 end
 
+# Host base classes so runtime `is_a?` guards behave exactly like the real
+# API: in SketchUp a Group also responds to #definition, so entity TYPE is
+# the only host-accurate native/legacy discriminator (#415/#416). Defined
+# before the stubs so they can subclass; the Sketchup module below reopens
+# this one with the rest of the host surface.
+module Sketchup
+  class ComponentInstance
+  end
+
+  class Group
+  end
+end
+
 module SketchupStub
+  @entity_seq = 0
+  @guid_seq = 0
+  @undo_frames = []
+
   class Menu
     attr_reader :items
 
@@ -50,9 +158,11 @@ module SketchupStub
 
   class FaceStub
     attr_accessor :normal
+    attr_reader :points
 
-    def initialize
+    def initialize(points = [])
       @normal = Geom::Vector3d.new(0, 0, 1)
+      @points = points
     end
 
     def reverse!
@@ -113,37 +223,123 @@ module SketchupStub
     end
   end
 
-  class GroupStub
-    attr_accessor :name, :material
-    attr_reader :entities, :attributes
-
-    def initialize(name = "")
-      @name = name
-      @material = nil
-      @entities = EntitiesStub.new
-      @attributes = {}
+  module AttributeContainer
+    def attributes
+      @attributes ||= {}
     end
 
     def set_attribute(dictionary, key, value)
-      @attributes[[dictionary, key]] = value
+      attributes[[dictionary, key]] = value
     end
 
     def get_attribute(dictionary, key)
-      @attributes[[dictionary, key]]
+      attributes[[dictionary, key]]
+    end
+  end
+
+  class GroupStub < Sketchup::Group
+    include AttributeContainer
+
+    attr_accessor :name, :material
+    attr_reader :entities
+
+    def initialize(name = "")
+      super()
+      @name = name
+      @material = nil
+      @entities = EntitiesStub.new
+    end
+
+    # Host-faithful: a real SketchUp Group also wraps a ComponentDefinition,
+    # so respond_to?(:definition) must never be used as a native check.
+    def definition
+      @group_definition ||= ComponentDefinitionStub.new(@name)
     end
   end
 
   class ComponentDefinitionStub
+    include AttributeContainer
+
     attr_accessor :name
+    attr_reader :entities, :instances, :guid
 
     def initialize(name = "")
       @name = name
+      @entities = EntitiesStub.new
+      @instances = []
+      @guid = "su-def-guid-#{SketchupStub.next_guid}"
+    end
+
+    def add_instance(transform)
+      instance = ComponentInstanceStub.new(self, transform)
+      @instances << instance
+      instance
+    end
+
+    def remove_instance(instance)
+      @instances.delete(instance)
+    end
+
+    # Undo-journal re-registration: keeps instance object identity stable
+    # across rollback instead of recreating objects.
+    def add_instance_noreg(instance)
+      @instances.push(instance) unless @instances.include?(instance)
+    end
+  end
+
+  class ComponentInstanceStub < Sketchup::ComponentInstance
+    include AttributeContainer
+
+    attr_accessor :name, :material, :transformation
+    attr_reader :definition, :persistent_id
+
+    def initialize(definition, transform)
+      super()
+      @definition = definition
+      @transformation = transform
+      @name = ""
+      @material = nil
+      @persistent_id = SketchupStub.next_persistent_id
+    end
+
+    def valid?
+      true
     end
   end
 
   class DefinitionListStub
+    include Enumerable
+
     def initialize
       @definitions = {}
+    end
+
+    def each(&block)
+      @definitions.each_value(&block)
+    end
+
+    def [](name)
+      @definitions[name]
+    end
+
+    def add(name)
+      definition = @definitions[name]
+      return definition if definition
+
+      definition = ComponentDefinitionStub.new(name)
+      @definitions[name] = definition
+      SketchupStub.record_undo { @definitions.delete(name) }
+      definition
+    end
+
+    def remove(definition)
+      name = definition.respond_to?(:name) ? definition.name : definition
+      return false unless @definitions.key?(name)
+
+      removed = @definitions[name]
+      SketchupStub.record_undo { @definitions[name] = removed }
+      @definitions.delete(name)
+      true
     end
 
     def load(path)
@@ -196,54 +392,91 @@ module SketchupStub
   class EntitiesStub
     include Enumerable
 
-    attr_reader :groups, :faces
+    attr_reader :groups, :instances, :faces
 
     def initialize
       @groups = []
+      @instances = []
       @faces = []
     end
 
     def each(&block)
-      (@groups + @faces).each(&block)
+      (@groups + @instances + @faces).each(&block)
     end
 
     def add(item)
-      if item.is_a?(GroupStub)
-        @groups << item
-      elsif item.is_a?(FaceStub)
-        @faces << item
+      case item
+      when GroupStub then @groups << item
+      when ComponentInstanceStub then @instances << item
+      when FaceStub then @faces << item
       end
       item
     end
 
     def add_group
       group = GroupStub.new
+      SketchupStub.record_undo { @groups.delete(group) }
       @groups << group
       group
     end
 
-    def add_face(_points)
-      face = FaceStub.new
+    def add_face(points)
+      face = FaceStub.new(points)
+      SketchupStub.record_undo { @faces.delete(face) }
       @faces << face
       face
     end
 
-    def add_instance(definition, _transform)
-      group = GroupStub.new(definition.name)
-      @groups << group
-      group
+    def add_instance(definition, transform)
+      instance = definition.add_instance(transform)
+      SketchupStub.record_undo do
+        @instances.delete(instance)
+        definition.remove_instance(instance)
+      end
+      @instances << instance
+      instance
     end
 
     def clear!
+      groups = @groups.dup
+      instances = @instances.dup
+      faces = @faces.dup
+      parents = instances.map { |i| [i, i.definition] }
+      SketchupStub.record_undo do
+        @groups.replace(groups)
+        @faces.replace(faces)
+        @instances.replace(instances)
+        parents.each { |instance, definition| definition.add_instance_noreg(instance) }
+      end
+      # detaching an instance from the scene also unregisters it from its
+      # definition's live instance list, like the real host reports.
+      instances.each { |instance| instance.definition.remove_instance(instance) }
       @groups.clear
+      @instances.clear
       @faces.clear
+      true
     end
 
     def erase_entities(entities)
-      Array(entities).each do |entity|
-        @groups.delete(entity)
-        @faces.delete(entity)
+      list = Array(entities)
+      SketchupStub.record_undo do
+        list.each do |entity|
+          case entity
+          when GroupStub then @groups.push(entity)
+          when ComponentInstanceStub
+            @instances.push(entity)
+            entity.definition.add_instance_noreg(entity)
+          when FaceStub then @faces.push(entity)
+          end
+        end
       end
+      list.each do |entity|
+        @groups.delete(entity)
+        @instances.delete(entity)
+        @faces.delete(entity)
+        entity.definition.remove_instance(entity) if entity.is_a?(ComponentInstanceStub)
+      end
+      true
     end
   end
 
@@ -262,16 +495,19 @@ module SketchupStub
       @active_entities
     end
 
-    def start_operation(name, disable_ui)
+    def start_operation(name, disable_ui = true)
       @operations << [:start, name, disable_ui]
+      SketchupStub.begin_undo_frame
     end
 
     def commit_operation
       @operations << :commit
+      SketchupStub.commit_undo_frame
     end
 
     def abort_operation
       @operations << :abort
+      SketchupStub.abort_undo_frame
     end
   end
 
@@ -289,7 +525,36 @@ module SketchupStub
       @preferences = Hash.new { |hash, key| hash[key] = {} }
       @toolbars = []
       @send_actions = []
+      @entity_seq = 0
+      @guid_seq = 0
+      @undo_frames = []
       UI::HtmlDialog.reset! if defined?(UI::HtmlDialog)
+    end
+
+    # --- undo journal: structural mutations roll back on abort_operation ---
+
+    def begin_undo_frame
+      @undo_frames << []
+    end
+
+    def commit_undo_frame
+      @undo_frames.pop
+    end
+
+    def abort_undo_frame
+      @undo_frames.pop&.reverse_each(&:call)
+    end
+
+    def record_undo(&block)
+      @undo_frames.last&.push(block)
+    end
+
+    def next_persistent_id
+      @entity_seq += 1
+    end
+
+    def next_guid
+      @guid_seq += 1
     end
 
     def read_default(namespace, key, default = nil)

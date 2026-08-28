@@ -307,6 +307,53 @@ func TestLayoutLocalTransformAgregadoChildren(t *testing.T) {
 	}
 }
 
+// #415 — authoring-definition identity on the wire. componentDefinitionId is
+// the #346 stable reusable definition ID: every copy of one component shares
+// it while keeping a distinct componentInstanceId. It is Granete-owned
+// identity and stays a separate field from any future catalogComponentId —
+// the SketchUp renderer (#415) stores it verbatim in namespaced metadata and
+// never substitutes the host-generated SU definition GUID.
+func TestLayoutComponentDefinitionIdentity(t *testing.T) {
+	module, catalog := oneDoorCabinetCatalog()
+
+	layout, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve layout: %v", err)
+	}
+	for _, c := range layout.Components {
+		if c.ComponentDefinitionID == "" {
+			t.Fatalf("component %s publishes no componentDefinitionId", c.ComponentInstanceID)
+		}
+		if c.ComponentDefinitionID == c.ComponentInstanceID {
+			t.Fatalf("component %s collapses definition and instance identity", c.ComponentInstanceID)
+		}
+	}
+
+	// Three copies of one component (one entry, quantity 3): same definition
+	// identity, distinct concrete instances (the #346 two-shelves rule).
+	st := catalog.Structures[0]
+	st.Components[0].Quantity = 3
+	catalog.Structures[0] = st
+	copied, err := ResolveFurnitureLayout(module, catalog, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve copied layout: %v", err)
+	}
+	var copies []LayoutComponent
+	for _, c := range copied.Components {
+		if c.ComponentDefinitionID == "st-comp-side" {
+			copies = append(copies, c)
+		}
+	}
+	if len(copies) != 3 {
+		t.Fatalf("expected 3 copies of st-comp-side, got %d", len(copies))
+	}
+	for i := 1; i < len(copies); i++ {
+		if copies[i].ComponentInstanceID == copies[0].ComponentInstanceID {
+			t.Fatalf("copies share componentInstanceId %s", copies[i].ComponentInstanceID)
+		}
+	}
+}
+
 // Hardware host references stay tied to componentInstanceId after the
 // transform contract change, and every host carries a localTransform.
 func TestLayoutLocalTransformHardwareHostIdentity(t *testing.T) {
@@ -454,7 +501,8 @@ func TestLayoutTransformContractSerializationGolden(t *testing.T) {
 	}
 	for i := range fromGolden.Components {
 		g, c := fromGolden.Components[i], layout.Components[i]
-		if g.ComponentInstanceID != c.ComponentInstanceID || g.LocalTransform != c.LocalTransform ||
+		if g.ComponentInstanceID != c.ComponentInstanceID || g.ComponentDefinitionID != c.ComponentDefinitionID ||
+			g.LocalTransform != c.LocalTransform ||
 			g.Transform != c.Transform || g.DimensionsMm != c.DimensionsMm ||
 			g.LengthMm != c.LengthMm || g.WidthMm != c.WidthMm || g.ThicknessMm != c.ThicknessMm {
 			t.Fatalf("component %d drifted from golden: golden=%+v live=%+v", i, g, c)

@@ -5,15 +5,16 @@ require 'json'
 module Granete
   module SketchUpExtension
     module Model
-      # Paints groups with namespaced SketchUp materials so the workshop's
+      # Paints entities with namespaced SketchUp materials so the workshop's
       # board choices and photographic textures are visible in the model. No-op
-      # when the runtime exposes no materials API (pure stubs).
+      # when the runtime exposes no materials API (pure stubs). Rendering only:
+      # a material here is never manufacturing truth.
       module MaterialApplier
         DEFAULT_TILE_MM = 600.0
         MM_TO_INCHES = 1.0 / 25.4
 
         class << self
-          def apply(model, group, name, color_hex, texture_path: nil, tile_width_mm: nil, tile_length_mm: nil,
+          def apply(model, target, name, color_hex, texture_path: nil, tile_width_mm: nil, tile_length_mm: nil,
                     grain: nil)
             return unless model.respond_to?(:materials)
 
@@ -23,7 +24,7 @@ module Granete
 
             apply_color(material, color_hex)
             apply_texture(material, texture_path, tile_width_mm, tile_length_mm)
-            group.material = material if group.respond_to?(:material=)
+            target.material = material if target.respond_to?(:material=)
           end
 
           private
@@ -70,11 +71,147 @@ module Granete
         end
       end
 
-      # Pure visual adapter and renderer for SketchUp.
-      # Consumes resolved component layouts from @granete/domain or generic slot definitions.
-      # Contains ZERO manufacturing rules, zero machining calculation, and zero category-specific logic.
-      class FurnitureBuilder
+      # Local solid geometry + authoritative transform application (#414 →
+      # #415). Pure host mechanics: build the definition-local box at origin
+      # and turn the contract basis/translation into a Geom::Transformation.
+      # Never world/AABB coordinates, never a mirror, never a scale.
+      module LocalGeometry
+        MM_TO_INCHES = 1.0 / 25.4
+
+        module_function
+
+        # furniture_point = translationMm + basis · local_point. The basis is
+        # orthonormal right-handed (parser-validated), so this is a pure
+        # rigid placement — mirrors and non-uniform scale are impossible here.
+        def axes_transform(translation_mm, basis)
+          Geom::Transformation.axes(
+            Geom::Point3d.new(translation_mm[0] * MM_TO_INCHES,
+                              translation_mm[1] * MM_TO_INCHES,
+                              translation_mm[2] * MM_TO_INCHES),
+            Geom::Vector3d.new(basis['x'][0], basis['x'][1], basis['x'][2]),
+            Geom::Vector3d.new(basis['y'][0], basis['y'][1], basis['y'][2]),
+            Geom::Vector3d.new(basis['z'][0], basis['z'][1], basis['z'][2])
+          )
+        end
+
+        def translation_only(translation_mm)
+          Geom::Transformation.translation(
+            Geom::Vector3d.new(translation_mm[0] * MM_TO_INCHES,
+                               translation_mm[1] * MM_TO_INCHES,
+                               translation_mm[2] * MM_TO_INCHES)
+          )
+        end
+
+        # Builds the LOCAL solid box at the definition origin: the local box
+        # spans [0,width]×[0,thickness]×[0,length] on X/Y/Z (engine
+        # convention the #414 basis maps onto the furniture frame). World/AABB
+        # coordinates are never baked into definition geometry.
+        def build_local_box(definition, width_mm, thickness_mm, length_mm)
+          w = width_mm * MM_TO_INCHES
+          t = thickness_mm * MM_TO_INCHES
+          l = length_mm * MM_TO_INCHES
+
+          pts = [
+            Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(w, 0, 0),
+            Geom::Point3d.new(w, t, 0), Geom::Point3d.new(0, t, 0)
+          ]
+          face = definition.entities.add_face(pts)
+          return unless face
+
+          face.reverse! if face.respond_to?(:normal) && face.normal.respond_to?(:z) && face.normal.z.negative?
+          face.pushpull(l) if l.positive?
+        end
+      end
+
+      # Generic authoring fallback for catalogs that cannot resolve layouts
+      # (offline/static): locally authored axis-aligned boards with identity
+      # basis by construction — not an orientation guess — still rendered as
+      # native ComponentInstances.
+      module GenericAuthoringRenderer
         DEFAULT_THICKNESS_MM = 18.0
+        PART_DEFINITION_PREFIX = 'Granete · Parte · '
+
+        def render_generic_parametric_layout(model, furniture_definition, instance_id, _definition, parameters)
+          width_mm = (parameters['widthMm'] || parameters['lengthMm'] || 600.0).to_f
+          height_mm = (parameters['heightMm'] || 720.0).to_f
+          depth_mm = (parameters['depthMm'] || 590.0).to_f
+          thickness_mm = DEFAULT_THICKNESS_MM
+          count = 2
+
+          create_generic_component(model, furniture_definition, instance_id, 'left_side', 'Lateral Izquierdo',
+                                   [0, 0, 0], [thickness_mm, depth_mm, height_mm])
+          create_generic_component(model, furniture_definition, instance_id, 'right_side', 'Lateral Derecho',
+                                   [width_mm - thickness_mm, 0, 0], [thickness_mm, depth_mm, height_mm])
+
+          count += render_generic_shelves(model, furniture_definition, instance_id, parameters,
+                                          width_mm, height_mm, depth_mm, thickness_mm)
+          count += render_generic_doors(model, furniture_definition, instance_id, parameters,
+                                        width_mm, height_mm, depth_mm, thickness_mm)
+          count
+        end
+
+        private
+
+        def render_generic_shelves(model, furniture_definition, instance_id, parameters,
+                                   width_mm, height_mm, depth_mm, thickness_mm)
+          shelf_count = (parameters['shelfCount'] || 0).to_i
+          return 0 if shelf_count <= 0
+
+          spacing = height_mm / (shelf_count + 1)
+          (1..shelf_count).each do |i|
+            create_generic_component(model, furniture_definition, instance_id, "shelf_#{i}", "Entrepaño #{i}",
+                                     [thickness_mm, 0, spacing * i],
+                                     [width_mm - (2 * thickness_mm), depth_mm, thickness_mm])
+          end
+          shelf_count
+        end
+
+        def render_generic_doors(model, furniture_definition, instance_id, parameters,
+                                 width_mm, height_mm, depth_mm, thickness_mm)
+          door_count = (parameters['doorCount'] || 0).to_i
+          return 0 if door_count <= 0
+
+          create_generic_component(model, furniture_definition, instance_id, 'door_1', 'Puerta',
+                                   [0, depth_mm, 0], [width_mm, thickness_mm, height_mm])
+          1
+        end
+
+        def create_generic_component(model, parent_definition, furniture_instance_id, slot_id, name, pos_mm, dims_mm)
+          comp_id = "comp-#{furniture_instance_id}-#{slot_id}"
+          component_definition = model.definitions.add("#{PART_DEFINITION_PREFIX}#{name} · #{comp_id}")
+          LocalGeometry.build_local_box(component_definition, dims_mm[0], dims_mm[1], dims_mm[2])
+          instance = parent_definition.entities.add_instance(component_definition,
+                                                             LocalGeometry.translation_only(pos_mm))
+          instance.name = name
+          MetadataWriter.write_component(@metadata_store, instance, comp_id, slot_id,
+                                         furniture_ref: furniture_instance_id)
+          instance
+        end
+      end
+
+      # Native SketchUp renderer (#415 / ADR-0004). Every managed furniture is
+      # a top-level Sketchup::ComponentInstance with an isolated generated
+      # ComponentDefinition; every managed board/hardware is a nested
+      # ComponentInstance whose definition holds LOCAL geometry at origin and
+      # whose transform is the authoritative #414 local→furniture placement.
+      #
+      # This is a pure visual adapter: ZERO manufacturing rules, zero
+      # thickness calculation, zero orientation inference (no slot/role/AABB
+      # rotation table exists), zero world-AABB baking and zero non-uniform
+      # scaling for productive dimensions. Granete IDs live in namespaced
+      # metadata and never derive from host GUID/persistent_id/name.
+      class FurnitureBuilder
+        include GenericAuthoringRenderer
+
+        MM_TO_INCHES = 1.0 / 25.4
+        DEFAULT_HARDWARE_DIMS_MM = [96.0, 32.0, 25.0].freeze
+
+        FURNITURE_DEFINITION_PREFIX = 'Granete · Mueble · '
+        PART_DEFINITION_PREFIX = 'Granete · Parte · '
+        HARDWARE_DEFINITION_PREFIX = 'Granete · Herraje · '
+        LEGACY_REPRESENTATION_ERROR =
+          'El mueble usa la representación legacy (Group) y aún no fue migrado a ' \
+          'ComponentInstance nativo (#416). Reinsertá el mueble desde la biblioteca.'
 
         def initialize(metadata_store: nil, asset_loader: nil, texture_cache: nil)
           @metadata_store = metadata_store
@@ -87,73 +224,73 @@ module Granete
           instance_id = generate_instance_id
 
           model.start_operation("Insertar Mueble #{definition['name']}", true)
-          entities = model.active_entities
-          main_group = entities.add_group
-          main_group.name = "#{definition['name']} (#{instance_id})"
+          begin
+            furniture_definition = create_furniture_definition(model, definition, instance_id)
+            furniture = model.active_entities.add_instance(furniture_definition,
+                                                           Geom::Transformation.identity)
+            furniture.name = "#{definition['name']} (#{instance_id})"
+            counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
+                                   resolved_layout)
+            MetadataWriter.write_furniture(@metadata_store, furniture, instance_id, definition, parameters,
+                                           material_choices: material_choices)
+            model.commit_operation
+          rescue StandardError => e
+            model.abort_operation
+            return { 'success' => false, 'error' => e.message }
+          end
 
-          counts = render_layout(model, main_group, instance_id, definition, parameters, resolved_layout)
-          MetadataWriter.write_furniture(@metadata_store, main_group, instance_id, definition, parameters,
-                                         material_choices: material_choices)
-
-          model.commit_operation
-          prepare_placement(model, main_group)
-
-          {
-            'success' => true,
-            'instance_id' => instance_id,
-            'name' => definition['name'],
-            'component_count' => counts['total'],
-            'board_count' => counts['boards'],
-            'hardware_count' => counts['hardware'],
-            'parameters' => parameters
-          }
-        rescue StandardError => e
-          model.abort_operation
-          { 'success' => false, 'error' => e.message }
+          prepare_placement(model, furniture)
+          build_result(instance_id, definition, parameters, counts)
         end
 
-        def update_furniture(model, group, definition, raw_parameters = {}, resolved_layout: nil,
+        # Rebuilds the furniture INSIDE its existing isolated host definition:
+        # the top-level instance (identity + world transform) is never
+        # replaced, only its definition's children are regenerated. Child
+        # persistent_ids may change; Granete contract IDs are the durable link.
+        def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,
                              material_choices: nil)
+          # Host-accurate native check: in SketchUp a Group ALSO responds to
+          # #definition, so entity type — not duck typing — is the only safe
+          # discriminator. Legacy Group representations fail closed (#416).
+          unless furniture.is_a?(::Sketchup::ComponentInstance)
+            return { 'success' => false, 'error' => LEGACY_REPRESENTATION_ERROR }
+          end
+
           parameters = normalize_parameters(definition, raw_parameters)
-          existing_meta = @metadata_store&.read(group)
+          existing_meta = @metadata_store&.read(furniture)
           instance_id = existing_meta&.dig('identity', 'instanceRef') || generate_instance_id
 
           model.start_operation("Editar Mueble #{definition['name']}", true)
-          group.entities.clear!
+          begin
+            furniture_definition = furniture.definition
+            furniture_definition.entities.clear!
+            counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
+                                   resolved_layout)
+            MetadataWriter.write_furniture(@metadata_store, furniture, instance_id, definition, parameters,
+                                           material_choices: material_choices)
+            purge_orphan_generated_definitions(model)
+            model.commit_operation
+          rescue StandardError => e
+            model.abort_operation
+            return { 'success' => false, 'error' => e.message }
+          end
 
-          counts = render_layout(model, group, instance_id, definition, parameters, resolved_layout)
-          MetadataWriter.write_furniture(@metadata_store, group, instance_id, definition, parameters,
-                                         material_choices: material_choices)
-
-          model.commit_operation
-
-          {
-            'success' => true,
-            'instance_id' => instance_id,
-            'name' => definition['name'],
-            'component_count' => counts['total'],
-            'board_count' => counts['boards'],
-            'hardware_count' => counts['hardware'],
-            'parameters' => parameters
-          }
-        rescue StandardError => e
-          model.abort_operation
-          { 'success' => false, 'error' => e.message }
+          build_result(instance_id, definition, parameters, counts)
         end
 
         private
 
-        # Placement assist after commit: the group spawns at the workshop-frame
-        # origin, so keep it selected and hand the user the Move tool to land it
-        # where intended (interim step toward north-star drag/placement).
-        # Never fails the reported insertion: selection and tool activation are
-        # UI state, not model geometry.
-        def prepare_placement(model, group)
+        # Placement assist after commit: the furniture spawns at the
+        # workshop-frame origin, so keep it selected and hand the user the
+        # Move tool to land it where intended (interim step toward north-star
+        # drag/placement). Never fails the reported insertion: selection and
+        # tool activation are UI state, not model geometry.
+        def prepare_placement(model, furniture)
           selection = model.respond_to?(:selection) ? model.selection : nil
           return unless selection
 
           selection.clear
-          selection.add(group)
+          selection.add(furniture)
           ::Sketchup.send_action('selectMoveTool:') if defined?(::Sketchup) && ::Sketchup.respond_to?(:send_action)
         rescue StandardError
           nil
@@ -173,160 +310,153 @@ module Granete
           params
         end
 
-        def render_layout(model, main_group, instance_id, definition, parameters, resolved_layout)
-          if resolved_layout && resolved_layout['components']
-            render_resolved_components(model, main_group, instance_id, resolved_layout['components'],
-                                       resolved_layout['hardware'] || [])
-          else
-            count = render_generic_parametric_layout(main_group, instance_id, definition, parameters)
+        def build_result(instance_id, definition, parameters, counts)
+          {
+            'success' => true,
+            'instance_id' => instance_id,
+            'name' => definition['name'],
+            'component_count' => counts['total'],
+            'board_count' => counts['boards'],
+            'hardware_count' => counts['hardware'],
+            'parameters' => parameters
+          }
+        end
+
+        # The top-level host definition is isolated per FurnitureInstance
+        # (ADR-0004 §6): two units of the same Granete FurnitureDefinition
+        # each get their own generated definition, so a rebuild of FI-A can
+        # never mutate FI-B through a shared definition.
+        def create_furniture_definition(model, definition, instance_id)
+          model.definitions.add("#{FURNITURE_DEFINITION_PREFIX}#{definition['name']} · #{instance_id}")
+        end
+
+        def render_layout(model, furniture_definition, instance_id, definition, parameters, resolved_layout)
+          case resolved_layout
+          when Library::NativeLayout
+            render_native_layout(model, furniture_definition, instance_id, resolved_layout)
+          when nil
+            count = render_generic_parametric_layout(model, furniture_definition, instance_id,
+                                                     definition, parameters)
             { 'total' => count, 'boards' => count, 'hardware' => 0 }
+          else
+            raise ArgumentError,
+                  'resolved_layout debe ser un Library::NativeLayout parseado vía LayoutContract.parse! ' \
+                  '(contrato granete.local-basis.v1); el renderer no consume bodies crudos ni infiere AABBs'
           end
         end
 
-        # Renders the server-resolved composition. Each board and each visible
-        # hardware placement arrives as a pre-baked AABB (translationMm is the
-        # min corner in workshop space) — no composition math happens here.
-        # Components are painted with SketchUp materials when the layout
-        # carries a color (real board choice or role palette).
-        def render_resolved_components(model, main_group, instance_id, components, hardware)
-          components.each do |c|
-            render_resolved_board(model, main_group, instance_id, c)
+        # Server-resolved composition (#414 contract already validated by the
+        # parser): local solid geometry at origin + authoritative transform.
+        def render_native_layout(model, furniture_definition, instance_id, native_layout)
+          native_layout.boards.each do |board|
+            render_native_board(model, furniture_definition, instance_id, board)
           end
-
-          hardware.each_with_index do |h, index|
-            render_resolved_hardware(model, main_group, instance_id, h, index)
+          native_layout.hardware.each do |placement|
+            render_native_hardware(model, furniture_definition, instance_id, placement)
           end
-
-          { 'total' => components.length + hardware.length,
-            'boards' => components.length,
-            'hardware' => hardware.length }
+          {
+            'total' => native_layout.boards.length + native_layout.hardware.length,
+            'boards' => native_layout.boards.length,
+            'hardware' => native_layout.hardware.length
+          }
         end
 
-        def render_resolved_board(model, main_group, instance_id, component)
-          slot_id = component['slotId'] || component['role'] || 'slot'
-          name = component['name'] || slot_id
-          pos = component.dig('transform', 'translationMm') || [0, 0, 0]
-          dims = component['dimensionsMm'] || [100, 100, 18]
-
-          group = create_hierarchical_component(
-            main_group, instance_id, slot_id, name,
-            pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
+        def render_native_board(model, parent_definition, furniture_instance_id, board)
+          name = board.name || board.slot_id || board.component_instance_id
+          board_definition = model.definitions.add(
+            "#{PART_DEFINITION_PREFIX}#{name} · #{board.component_instance_id}"
           )
-          material_name = component['materialName'] || component['optionRole'] || slot_id
-          texture_url = component['materialTextureUrl'] || component['materialImageUrl']
+          LocalGeometry.build_local_box(board_definition, board.width_mm, board.thickness_mm, board.length_mm)
+
+          instance = parent_definition.entities.add_instance(
+            board_definition, LocalGeometry.axes_transform(board.translation, board.basis)
+          )
+          instance.name = name
+
+          paint_board(model, instance, board)
+          MetadataWriter.write_component(
+            @metadata_store, instance, board.component_instance_id, board.slot_id,
+            component_definition_id: board.component_definition_id,
+            catalog_component_id: board.catalog_component_id,
+            furniture_ref: furniture_instance_id,
+            role: board.role,
+            material_binding_role: board.option_role
+          )
+          instance
+        end
+
+        def render_native_hardware(model, parent_definition, furniture_instance_id, placement)
+          name = placement.name || 'Herraje'
+          pos = placement.translation || [0.0, 0.0, 0.0]
+
+          asset_id = placement.asset_id || placement.hardware_id
+          if @asset_loader && asset_id
+            instance = @asset_loader.load_asset_instance(model, asset_id, parent_definition, pos)
+            return attach_hardware_metadata(instance, placement, name, furniture_instance_id) if instance
+          end
+
+          dims = placement.dimensions || DEFAULT_HARDWARE_DIMS_MM
+          hardware_definition = model.definitions.add(
+            "#{HARDWARE_DEFINITION_PREFIX}#{name} · #{placement.placement_id}"
+          )
+          LocalGeometry.build_local_box(hardware_definition, dims[0], dims[1], dims[2])
+          instance = parent_definition.entities.add_instance(hardware_definition,
+                                                             LocalGeometry.translation_only(pos))
+          instance.name = name
+          MaterialApplier.apply(model, instance, name, placement.color_hex)
+          attach_hardware_metadata(instance, placement, name, furniture_instance_id)
+        end
+
+        def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
+          instance.name = name
+          MetadataWriter.write_component(
+            @metadata_store, instance, placement.placement_id,
+            "hardware_#{placement.placement_id}",
+            furniture_ref: furniture_instance_id,
+            host_component_instance_id: placement.host_component_instance_id
+          )
+          instance
+        end
+
+        # Visual painting from the resolved material preview fields. Rendering
+        # only — the material's industrial thickness/truth never lives here.
+        def paint_board(model, instance, board)
+          material_name = board.material_name || board.option_role || board.slot_id || 'Tablero'
+          texture_url = board.material_texture_url || board.material_image_url
           texture_path = @texture_cache&.resolve_texture(texture_url)
           MaterialApplier.apply(
-            model, group, material_name, component['materialColorHex'],
+            model, instance, material_name, board.material_color_hex,
             texture_path: texture_path,
-            tile_width_mm: component['materialTextureTileWidthMm'],
-            tile_length_mm: component['materialTextureTileLengthMm'],
-            grain: component['materialGrain']
+            tile_width_mm: board.material_texture_tile_width_mm,
+            tile_length_mm: board.material_texture_tile_length_mm,
+            grain: board.material_grain
           )
-          group
         end
 
-        def render_resolved_hardware(model, main_group, instance_id, placement, index)
-          name = placement['name'] || 'Herraje'
-          pos = placement.dig('transform', 'translationMm') || [0, 0, 0]
-          dims = placement['dimensionsMm'] || [96, 32, 25]
+        # Scoped generated-definition cleanup (ADR-0004 §22): only Granete
+        # BOARD/HARDWARE definitions with zero live instances are removed after
+        # a rebuild. Never a broad purge — user/third-party definitions stay.
+        def purge_orphan_generated_definitions(model)
+          definitions = model.respond_to?(:definitions) ? model.definitions : nil
+          return unless definitions.respond_to?(:each) && definitions.respond_to?(:remove)
 
-          asset_id = placement['assetId'] || placement['hardwareId'] || placement['code']
-          return if @asset_loader && asset_id && @asset_loader.load_asset_instance(model, asset_id, main_group, pos)
-
-          group = create_hierarchical_component(
-            main_group, instance_id, "hardware_#{placement['placementId'] || index}", name,
-            pos[0], pos[1], pos[2], dims[0], dims[1], dims[2]
-          )
-          MaterialApplier.apply(model, group, name, placement['colorHex'])
-          group
-        end
-
-        def render_generic_parametric_layout(main_group, instance_id, _definition, parameters)
-          width_mm = (parameters['widthMm'] || parameters['lengthMm'] || 600.0).to_f
-          height_mm = (parameters['heightMm'] || 720.0).to_f
-          depth_mm = (parameters['depthMm'] || 590.0).to_f
-          thickness_mm = DEFAULT_THICKNESS_MM
-          count = 2
-
-          create_hierarchical_component(
-            main_group, instance_id, 'left_side', 'Lateral Izquierdo',
-            0, 0, 0, thickness_mm, depth_mm, height_mm
-          )
-          create_hierarchical_component(
-            main_group, instance_id, 'right_side', 'Lateral Derecho',
-            width_mm - thickness_mm, 0, 0, thickness_mm, depth_mm, height_mm
-          )
-
-          count += render_generic_shelves(main_group, instance_id, parameters, width_mm, height_mm, depth_mm,
-                                          thickness_mm)
-          count += render_generic_doors(main_group, instance_id, parameters, width_mm, height_mm, depth_mm,
-                                        thickness_mm)
-          count
-        end
-
-        def render_generic_shelves(main_group, instance_id, parameters, width_mm, height_mm, depth_mm, thickness_mm)
-          shelf_count = (parameters['shelfCount'] || 0).to_i
-          return 0 if shelf_count <= 0
-
-          spacing = height_mm / (shelf_count + 1)
-          (1..shelf_count).each do |i|
-            create_hierarchical_component(
-              main_group, instance_id, "shelf_#{i}", "Entrepaño #{i}",
-              thickness_mm, 0, spacing * i, width_mm - (2 * thickness_mm), depth_mm, thickness_mm
-            )
+          orphans = definitions.select do |definition|
+            (definition.name.to_s.start_with?(PART_DEFINITION_PREFIX) ||
+             definition.name.to_s.start_with?(HARDWARE_DEFINITION_PREFIX)) &&
+              definition.respond_to?(:instances) && definition.instances.empty?
           end
-          shelf_count
-        end
-
-        def render_generic_doors(main_group, instance_id, parameters, width_mm, height_mm, depth_mm, thickness_mm)
-          door_count = (parameters['doorCount'] || 0).to_i
-          return 0 if door_count <= 0
-
-          create_hierarchical_component(
-            main_group, instance_id, 'door_1', 'Puerta',
-            0, depth_mm, 0, width_mm, thickness_mm, height_mm
-          )
-          1
-        end
-
-        def create_hierarchical_component(main_group, furniture_instance_id, slot_id, name, x_mm, y_mm, z_mm, dx_mm,
-                                          dy_mm, dz_mm)
-          comp_group = main_group.entities.add_group
-          comp_group.name = name
-          comp_id = "comp-#{furniture_instance_id}-#{slot_id}"
-
-          MetadataWriter.write_component(@metadata_store, comp_group, comp_id, slot_id)
-          build_box_geometry(comp_group, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
-          comp_group
-        end
-
-        def build_box_geometry(comp_group, x_mm, y_mm, z_mm, dx_mm, dy_mm, dz_mm)
-          s = 1.0 / 25.4
-          x = x_mm * s
-          y = y_mm * s
-          z = z_mm * s
-          dx = dx_mm * s
-          dy = dy_mm * s
-          dz = dz_mm * s
-
-          pts = [
-            Geom::Point3d.new(x, y, z), Geom::Point3d.new(x + dx, y, z),
-            Geom::Point3d.new(x + dx, y + dy, z), Geom::Point3d.new(x, y + dy, z)
-          ]
-          face = comp_group.entities.add_face(pts)
-          return unless face
-
-          face.reverse! if face.respond_to?(:normal) && face.normal.respond_to?(:z) && face.normal.z.negative?
-          face.pushpull(dz) if dz.positive?
+          orphans.each { |definition| definitions.remove(definition) }
         end
       end
 
       # Writes the semantic metadata dictionaries (furniture + component
-      # levels) through the metadata store.
+      # levels) through the metadata store. Granete contract IDs are
+      # namespaced authoring identity: host GUID/persistent_id/name are never
+      # stored as business identity and rename never mutates them.
       module MetadataWriter
         module_function
 
-        def write_furniture(store, main_group, instance_id, definition, parameters, material_choices: nil)
+        def write_furniture(store, furniture, instance_id, definition, parameters, material_choices: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -350,22 +480,42 @@ module Granete
           if material_choices.is_a?(Hash) && !material_choices.empty?
             metadata_payload['intent']['materialChoices'] = material_choices
           end
-          store.write(main_group, metadata_payload)
+          store.write(furniture, metadata_payload)
         end
 
-        def write_component(store, comp_group, comp_id, slot_id)
+        # component_definition_id is the #346 stable authoring-definition ID
+        # (Granete-owned, never the host SU definition GUID);
+        # catalog_component_id is the optional catalog reference — a separate
+        # namespace that never aliases the authoring definition.
+        def write_component(store, entity, comp_id, slot_id, component_definition_id: nil,
+                            catalog_component_id: nil, furniture_ref: nil, role: nil,
+                            material_binding_role: nil, host_component_instance_id: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
 
-          comp_meta = {
-            'namespace' => 'com.granete.sketchup_extension',
-            'metadataVersion' => 1,
-            'kind' => 'componentInstance',
-            'identity' => { 'instanceRef' => comp_id, 'projectRef' => proj_ref },
-            'intent' => { 'semanticRole' => slot_id }
+          identity = {
+            'instanceRef' => comp_id,
+            'componentInstanceId' => comp_id,
+            'projectRef' => proj_ref
           }
-          store.write(comp_group, comp_meta)
+          identity['furnitureInstanceRef'] = furniture_ref if furniture_ref
+          identity['componentDefinitionId'] = component_definition_id if component_definition_id
+          identity['catalogComponentId'] = catalog_component_id if catalog_component_id
+
+          intent = {}
+          intent['semanticRole'] = slot_id if slot_id
+          intent['role'] = role if role
+          intent['materialBindingRole'] = material_binding_role if material_binding_role
+          intent['hostComponentInstanceId'] = host_component_instance_id if host_component_instance_id
+
+          store.write(entity, {
+                        'namespace' => 'com.granete.sketchup_extension',
+                        'metadataVersion' => 1,
+                        'kind' => 'componentInstance',
+                        'identity' => identity,
+                        'intent' => intent
+                      })
         end
       end
     end
