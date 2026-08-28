@@ -664,11 +664,20 @@ El contrato de binding único está implementado y enforceado en las dos pilas:
   grupo. La proyección SketchUp (`materialRoles[].label`) ya usaba el nombre
   del grupo cuando existe.
 
-### SketchUp [CURRENT, boundary mayormente correcto]
+### SketchUp [CURRENT desde #404 / MT-3]
 
-`FurnitureBuilder` consume `resolved_layout.components[].dimensionsMm` y aplica material/textura. El inspector ya envía `materialChoices` al update y el provider incluye `choice.<role>` al solicitar layout.
+El inspector fusiona el role modificado con los `materialChoices` persistidos y
+el provider solicita un layout completo nuevo con `choice.<role>`. Un cambio
+material sin `NativeLayout` válido falla antes de abrir una operación SketchUp:
+no cae al renderer genérico ni acepta un cambio paint-only.
 
-El trabajo de #404 consiste en convertir esa ruta existente en un contrato de propagación, atomicidad e identidad completamente probado; no mover la regla física a Ruby.
+`FurnitureBuilder` reconstruye los ComponentInstances nativos desde las
+dimensiones/transforms resueltos, aísla mediante copy-on-write cualquier
+definición top-level compartida accidentalmente, preserva identity/bindings y
+world transform, y escribe la metadata fusionada al final de la misma operación
+undoable. Un abort restaura jerarquía, definición y metadata anteriores. Ruby no
+calcula espesor ni orientación y Groups legacy continúan fallando cerrado; #416
+permanece fuera de este flujo.
 
 ---
 

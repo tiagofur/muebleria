@@ -229,7 +229,13 @@ module SketchupStub
     end
 
     def set_attribute(dictionary, key, value)
-      attributes[[dictionary, key]] = value
+      attribute_key = [dictionary, key]
+      previous = attributes[attribute_key]
+      existed = attributes.key?(attribute_key)
+      SketchupStub.record_undo do
+        existed ? attributes[attribute_key] = previous : attributes.delete(attribute_key)
+      end
+      attributes[attribute_key] = value
     end
 
     def get_attribute(dictionary, key)
@@ -305,6 +311,26 @@ module SketchupStub
     def valid?
       true
     end
+
+    # Host-faithful ComponentInstance#make_unique: isolate this instance from
+    # any siblings that share its definition while preserving object identity
+    # and transformation. The builder immediately replaces the copied contents,
+    # so the stub only needs a distinct definition container.
+    def make_unique
+      return self if @definition.instances.length <= 1
+
+      previous_definition = @definition
+      unique_definition = SketchupStub.active_model.definitions.add(previous_definition.name)
+      previous_definition.remove_instance(self)
+      unique_definition.add_instance_noreg(self)
+      @definition = unique_definition
+      SketchupStub.record_undo do
+        unique_definition.remove_instance(self)
+        previous_definition.add_instance_noreg(self)
+        @definition = previous_definition
+      end
+      self
+    end
   end
 
   class DefinitionListStub
@@ -323,13 +349,19 @@ module SketchupStub
     end
 
     def add(name)
-      definition = @definitions[name]
-      return definition if definition
-
-      definition = ComponentDefinitionStub.new(name)
-      @definitions[name] = definition
-      SketchupStub.record_undo { @definitions.delete(name) }
+      unique = unique_name(name)
+      definition = ComponentDefinitionStub.new(unique)
+      @definitions[unique] = definition
+      SketchupStub.record_undo { @definitions.delete(unique) }
       definition
+    end
+
+    def unique_name(base_name)
+      return base_name unless @definitions.key?(base_name)
+
+      index = 2
+      index += 1 while @definitions.key?("#{base_name} ##{index}")
+      "#{base_name} ##{index}"
     end
 
     def remove(definition)

@@ -126,6 +126,47 @@ module Granete
                      top_b.definition.entities.grep(Sketchup::ComponentInstance).map(&:name)
       end
 
+      def test_material_change_rebuilds_natively_and_round_trips_through_undo_and_save
+        result, top = insert_fixture_furniture
+        assert result['success'], "insert failed: #{result['error']}"
+        store = Granete::SketchUpExtension::Metadata::Store.new(model)
+        identity_before = store.read(top)['identity']
+        transform_before = top.transformation.to_a
+        door_before = find_child(top, 'Puerta')
+        assert_in_delta 18 * MM, door_before.definition.bounds.height, 1e-3
+
+        changed = native_layout_body
+        changed['components'].each do |component|
+          next unless component['role'] == 'FRENTE'
+
+          component['dimensionsMm'][1] = 16
+          component['thicknessMm'] = 16
+        end
+        resolved = parse_layout(changed)
+        update = builder.update_furniture(model, top, definition, {},
+                                          resolved_layout: resolved,
+                                          material_choices: { 'FRENTE' => 'white-16' })
+        assert update['success'], "update failed: #{update['error']}"
+        assert_in_delta 16 * MM, find_child(top, 'Puerta').definition.bounds.height, 1e-3
+        assert_equal identity_before, store.read(top)['identity']
+        assert_equal transform_before, top.transformation.to_a
+        assert_equal 'white-16', store.read(top).dig('intent', 'materialChoices', 'FRENTE')
+
+        model.undo
+        restored = granete_furniture_instances.first
+        assert_in_delta 18 * MM, find_child(restored, 'Puerta').definition.bounds.height, 1e-3
+        assert_equal identity_before, store.read(restored)['identity']
+
+        path = File.join(Dir.tmpdir, "granete-material-#{Process.pid}.skp")
+        assert model.save(path)
+        assert Sketchup.open_file(path)
+        reopened = granete_furniture_instances.first
+        refute_nil reopened
+        assert_equal identity_before, store.read(reopened)['identity']
+      ensure
+        File.delete(path) if path && File.exist?(path)
+      end
+
       def test_rename_keeps_granete_identity_in_metadata
         _result, top = insert_fixture_furniture
         store = Granete::SketchUpExtension::Metadata::Store.new(model)

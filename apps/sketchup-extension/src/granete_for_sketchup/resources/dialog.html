@@ -1739,7 +1739,7 @@
                   </label>
                   <label class="selector-scope-option">
                     <input type="radio" name="selector-scope" value="project" />
-                    <span>Valor por defecto de la obra</span>
+                    <span>Usar en esta sesión (temporal)</span>
                   </label>
                 </div>
               </div>
@@ -3300,7 +3300,7 @@
               } else {
                 var mat = materialById(materialId);
                 var toastMsg = isProjectScope
-                  ? "✓ Default de obra actualizado: " + (mat ? mat.name : materialId)
+                  ? "✓ Acabado temporal de sesión: " + (mat ? mat.name : materialId)
                   : "✓ Acabado actualizado: " + (mat ? mat.name : materialId);
                 showToast("success", toastMsg);
               }
@@ -3319,12 +3319,12 @@
 
               var matLib = materialById(materialId);
               var toastLibMsg = isProjectScope
-                ? "✓ Default de obra actualizado: " + (matLib ? matLib.name : materialId)
+                ? "✓ Acabado temporal de sesión: " + (matLib ? matLib.name : materialId)
                 : "✓ Acabado seleccionado: " + (matLib ? matLib.name : materialId);
               showToast("success", toastLibMsg);
             } else if (isProjectScope) {
               var matProj = materialById(materialId);
-              showToast("success", "✓ Default de obra actualizado: " + (matProj ? matProj.name : materialId));
+              showToast("success", "✓ Acabado temporal de sesión: " + (matProj ? matProj.name : materialId));
             }
           }
         };

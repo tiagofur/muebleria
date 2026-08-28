@@ -425,7 +425,12 @@ If an immutable shared SU part definition no longer matches, the affected instan
 
 ### Relationship to #404
 
-#404 owns material-change re-resolve/rebuild behavior, but its final target is #415's native hierarchy. Implementing #404 as final Group-only architecture would create immediate rework.
+#404 [CURRENT] owns material-change re-resolve/rebuild behavior on #415's
+native hierarchy. It merges unchanged material intent, requires a fresh valid
+native layout, copy-on-write isolates any accidentally shared top-level
+definition, and commits regenerated children plus accepted metadata as one
+undoable operation. Group representations remain fail-closed; #416 is not part
+of this path.
 
 ---
 
@@ -784,7 +789,10 @@ Material binding role is semantic intent and independent from SketchUp names.
 
 ### #404
 
-Hard prerequisite #415. Rebuild updates native ComponentInstances/definitions safely.
+Implemented after hard prerequisite #415. Rebuild updates native
+ComponentInstances/definitions safely, preserves business/Project context and
+world transform, and aborts back to the previous hierarchy and metadata on
+failure.
 
 ### #405
 

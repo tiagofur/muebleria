@@ -3,8 +3,14 @@
 require 'stringio'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
+require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
+require_relative '../../src/granete_for_sketchup/assets/asset_loader'
+require_relative '../../src/granete_for_sketchup/assets/texture_cache'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
+require_relative '../../src/granete_for_sketchup/library/layout_contract'
+require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
+require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
@@ -118,7 +124,7 @@ class DialogControllerTest < Minitest::Test
 
   # Builder double capturing the resolved layout kwarg.
   class BuilderSpy
-    attr_reader :insert_layout, :update_layout
+    attr_reader :insert_layout, :update_layout, :material_choices
 
     def insert_furniture(_model, _definition, _parameters = {}, resolved_layout: nil, material_choices: nil)
       @insert_layout = resolved_layout
@@ -189,6 +195,38 @@ class DialogControllerTest < Minitest::Test
     assert_equal 'kitchen-base-standard', catalog.requested_definition_id
     assert_equal({ 'widthMm' => 900 }, catalog.requested_parameters)
     refute_nil builder.update_layout
+  end
+
+  def test_material_update_merges_changed_role_with_persisted_choices_before_resolving
+    catalog = LayoutResolvingCatalog.new
+    builder = BuilderSpy.new
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new,
+      catalog_provider: catalog, furniture_builder: builder,
+      metadata_store_factory: ->(_model) { @store }
+    )
+    furniture = native_furniture('inst-material-01')
+    metadata = @store.read(furniture)
+    metadata['intent']['materialChoices'] = {
+      'BODY' => 'mat-white-16', 'FRONT' => 'mat-white-16', 'BACK' => 'mat-back-6'
+    }
+    @store.write(furniture, metadata)
+    @model.selection.add(furniture)
+
+    dialog = controller.show
+    dialog.callbacks.fetch('update_furniture').call(
+      nil,
+      'instanceId' => 'inst-material-01',
+      'definitionId' => 'kitchen-base-standard',
+      'parameters' => { 'widthMm' => 600 },
+      'materialChoices' => { 'FRONT' => 'mat-oak-18' }
+    )
+
+    expected = {
+      'BODY' => 'mat-white-16', 'FRONT' => 'mat-oak-18', 'BACK' => 'mat-back-6'
+    }
+    assert_equal expected, catalog.requested_choices
+    assert_equal expected, builder.material_choices
   end
 
   class FailingLayoutCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider

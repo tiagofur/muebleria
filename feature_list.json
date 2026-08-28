@@ -4612,6 +4612,49 @@
       "depends_on": [
         "F186"
       ]
+    },
+    {
+      "id": "F188",
+      "title": "Cambio de material: re-resolución y rebuild nativo atómico en SketchUp (#404 / MT-3)",
+      "description": "Completa el flujo material-aware de SketchUp sobre la jerarquía nativa de #415: un cambio de material role fusiona la nueva elección con la intención existente, solicita un layout completo nuevo a Granete y sólo entonces reconstruye los ComponentInstances gestionados dentro de una operación atómica. El rebuild preserva la instancia top-level, su transform exterior, business identity y binding Project/Design; aísla una definición top-level compartida antes de mutarla; regenera geometría local/transforms/herrajes únicamente desde el contrato resuelto #414; y persiste metadata sólo si la reconstrucción termina correctamente. Una actualización material sin NativeLayout válido falla cerrado. Los Groups legacy continúan fuera de alcance y fallan cerrado (#416 no se implementa).",
+      "tags": [
+        "sketchup-extension",
+        "material-aware",
+        "native-components",
+        "atomicity",
+        "identity"
+      ],
+      "created": "2026-08-27",
+      "acceptance": [
+        "Cambiar BODY actualiza todos los ComponentInstances ligados a BODY sin alterar la intención FRONT/BACK; cambiar FRONT alcanza puerta normal y frentes de cajón de agregados",
+        "La elección 16→18 mm produce geometría local, definiciones y transforms recibidos del layout server-side; Ruby no calcula espesor/orientación ni usa non-uniform scale",
+        "Los herrajes se regeneran desde el layout nuevo y siguen la geometría recalculada de su host componentInstanceId",
+        "La instancia top-level, business IDs, Project/Design binding y world transform sobreviven; los materialChoices no modificados se preservan y hacen round-trip",
+        "Una definición top-level compartida accidentalmente se aísla antes del rebuild para que FI-A no modifique FI-B",
+        "Fallo de resolución o rebuild conserva jerarquía y metadata válidas anteriores; metadata aceptada se escribe después de construir y la edición es una sola operación Undo",
+        "Una actualización de material sin NativeLayout válido falla cerrado; no cae al renderer genérico/offline",
+        "Legacy Group sigue fallando cerrado con referencia a #416; no se agrega migración ni heurística Group→ComponentInstance"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/404",
+        "https://github.com/tiagofur/muebleria/issues/401",
+        "https://github.com/tiagofur/muebleria/issues/415",
+        "docs/architecture/material-aware-furniture-resolution.md",
+        "docs/architecture/sketchup-native-entity-model.md",
+        "docs/architecture/sketchup-interaction-model.md",
+        "docs/adr/0001-sketchup-authoring-granete-manufacturing-truth.md",
+        "docs/adr/0004-sketchup-native-component-entity-model.md",
+        "apps/sketchup-extension/src/granete_for_sketchup/ui/dialog_controller.rb",
+        "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F183",
+        "F184",
+        "F185",
+        "F186",
+        "F187"
+      ]
     }
   ]
 }

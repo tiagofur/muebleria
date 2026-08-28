@@ -107,7 +107,7 @@ module Granete
             { 'success' => false, 'error' => 'Definición no encontrada' }
           elsif target_entity
             params = payload['parameters'] || payload[:parameters] || {}
-            choices = payload['materialChoices'] || payload[:materialChoices]
+            choices = merged_material_choices(target_entity, payload)
             layout = resolve_layout_for(definition, params, choices)
             furniture_builder_for(active_model).update_furniture(
               active_model, target_entity, definition, params,
@@ -118,6 +118,21 @@ module Granete
           else
             { 'success' => false, 'error' => 'Instancia no encontrada en el modelo' }
           end
+        end
+
+        # A selector changes one role, while the server must resolve the whole
+        # furniture with the complete accepted authoring intent. Preserve every
+        # persisted role that was not included in this edit; never make an omitted
+        # role silently fall back to nominal geometry.
+        def merged_material_choices(target_entity, payload)
+          store = @metadata_store_factory.call(active_model)
+          persisted = store.read(target_entity)&.dig('intent', 'materialChoices') || {}
+          requested = payload['materialChoices'] || payload[:materialChoices] || {}
+          unless persisted.is_a?(Hash) && requested.is_a?(Hash)
+            raise ArgumentError, 'materialChoices debe ser un objeto role → materialId'
+          end
+
+          persisted.merge(requested)
         end
 
         def find_target_furniture_entity(instance_id)

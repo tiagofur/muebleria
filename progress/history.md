@@ -1465,3 +1465,9 @@ insert fallaba; ⇒ `Transformation.new`), el template default trae geometría
 no toca contenido ajeno) y `BoundingBox#to_a` no existe (⇒ min/max).
 Además: TestUp descubre tests vía `public_instance_methods` — un test bajo
 `private` jamás se descubre/corre.
+
+## F188 — cambio de material y rebuild nativo atómico en SketchUp (#404 / MT-3) — 2026-08-28
+
+Implementado en `fix/404-material-native-rebuild`: el controller fusiona elecciones parciales con `materialChoices` persistidos; `FurnitureBuilder` exige `NativeLayout`, aísla definiciones compartidas con copy-on-write, reconstruye ComponentInstances dentro de una única operación undoable y escribe metadata al final preservando identidad, binding y transform. Se agregaron pruebas de propagación BODY/FRONT, herrajes, rollback, definición compartida y round-trip del diálogo. El alcance de obra se etiqueta como temporal de sesión; no se implementa persistencia Project/Design ni migración legacy #416.
+
+Verificación: `./init.sh` verde (typecheck, 3219 tests TS, Go y Ruby/RBZ); `bundle exec rake unit boundary` verde (162/1477 + 3/801); tests focalizados Ruby verdes (5/53 y 19/95). Se agregó smoke TestUp para host real cubriendo rebuild material, Undo y save/reopen; su ejecución requiere SketchUp + RBZ instalado y queda pendiente de host CI.
