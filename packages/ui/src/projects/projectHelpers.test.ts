@@ -648,6 +648,47 @@ describe('quickAddPayloadForModule (F141 biblioteca de Proyectar)', () => {
       ).baseMode,
     ).toBe('plinth_strip');
   });
+
+  // P0-2b (pre-demo audit): inserting a plinth module from the Proyectar
+  // library without a ZOCLO choice created an unresolvable quote line that
+  // exploded on accept. The engine falls back to FRENTE, so seeding only
+  // fires when neither default exists.
+  const groupsWithZoclo: OptionGroup[] = [
+    ...groups,
+    { id: 'gz', code: 'ZOCLO', name: 'Zócalo', kind: 'board', required: false, optionIds: ['mat-z'] },
+  ];
+
+  it('seeds ZOCLO for plinth_board modules without ZOCLO/FRENTE project defaults', () => {
+    const payload = quickAddPayloadForModule(
+      { ...moduleConPresets, baseMode: 'plinth_board' },
+      { optionGroups: groupsWithZoclo },
+    );
+    expect(payload.optionChoices.ZOCLO).toBe('mat-z');
+  });
+
+  it('does not seed ZOCLO when a FRENTE project default exists (engine fallback)', () => {
+    const payload = quickAddPayloadForModule(
+      { ...moduleConPresets, baseMode: 'plinth_board' },
+      { optionGroups: groupsWithZoclo, projectLevelChoices: { FRENTE: 'mat-c' } },
+    );
+    expect(payload.optionChoices.ZOCLO).toBeUndefined();
+  });
+
+  it('does not seed ZOCLO when a ZOCLO project default exists', () => {
+    const payload = quickAddPayloadForModule(
+      { ...moduleConPresets, baseMode: 'plinth_board' },
+      { optionGroups: groupsWithZoclo, projectLevelChoices: { ZOCLO: 'mat-z' } },
+    );
+    expect(payload.optionChoices.ZOCLO).toBeUndefined();
+  });
+
+  it('does not seed ZOCLO for non-plinth modules', () => {
+    const payload = quickAddPayloadForModule(
+      { ...moduleConPresets, baseMode: 'plinth_strip' },
+      { optionGroups: groupsWithZoclo },
+    );
+    expect(payload.optionChoices.ZOCLO).toBeUndefined();
+  });
 });
 
 describe('canShowProjectPricePreview', () => {
@@ -717,6 +758,72 @@ describe('canShowProjectPricePreview', () => {
       ],
     };
     const gate = canShowProjectPricePreview(project, [moduleGab], groups);
+    expect(gate.ok).toBe(true);
+  });
+
+  // P0-2b: a plinth_board module without FRENTE among its roles synthesizes
+  // a ZOCLO-AUTO part — the preview gate must demand ZOCLO (or a FRENTE
+  // fallback) BEFORE accept/export explodes with ResolutionError.
+  const modulePlinthSinFrente: Module = {
+    ...moduleGab,
+    baseMode: 'plinth_board',
+    hardwareLines: [
+      { id: 'h1', quantity: 2, optionRole: 'BISAGRA' },
+      { id: 'h2', quantity: 1, optionRole: 'INTERIOR' },
+    ],
+  };
+  const groupsZoclo: OptionGroup[] = [
+    ...groups,
+    { id: 'gz', code: 'ZOCLO', name: 'Zócalo', kind: 'board', required: false, optionIds: ['mat-z'] },
+  ];
+
+  it('blocks a plinth item without ZOCLO nor FRENTE (synthesized zoclo)', () => {
+    const project: Project = {
+      ...baseProject(),
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a', BISAGRA: 'hw-1' },
+        },
+      ],
+    };
+    const gate = canShowProjectPricePreview(project, [modulePlinthSinFrente], groupsZoclo);
+    expect(gate.ok).toBe(false);
+    expect(gate.missingGroups).toContain('ZOCLO');
+  });
+
+  it('opens the plinth gate with an explicit ZOCLO choice', () => {
+    const project: Project = {
+      ...baseProject(),
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a', BISAGRA: 'hw-1', ZOCLO: 'mat-z' },
+        },
+      ],
+    };
+    const gate = canShowProjectPricePreview(project, [modulePlinthSinFrente], groupsZoclo);
+    expect(gate.ok).toBe(true);
+  });
+
+  it('opens the plinth gate with a project-level FRENTE fallback', () => {
+    const project: Project = {
+      ...baseProject(),
+      projectLevelChoices: { FRENTE: 'mat-c' },
+      items: [
+        {
+          id: 'i1',
+          moduleId: 'm1',
+          quantity: 1,
+          optionChoices: { INTERIOR: 'mat-a', BISAGRA: 'hw-1' },
+        },
+      ],
+    };
+    const gate = canShowProjectPricePreview(project, [modulePlinthSinFrente], groupsZoclo);
     expect(gate.ok).toBe(true);
   });
 

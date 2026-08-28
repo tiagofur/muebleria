@@ -40,6 +40,7 @@ import {
 } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { Modal } from '../../common';
+import { plinthZocloNeedsChoice } from '../../optionGroups/optionGroupHelpers';
 import {
   defaultChoicesForNewItem,
   emptyAddItemDraft,
@@ -192,6 +193,8 @@ export function ProjectAddItemModal({
   const selectModuleForAdd = (moduleId: string) => {
     const mod = modules.find((m) => m.id === moduleId);
     // Prefill only groups without a project-level default (F029 inherit).
+    // P0-2b: plinth modules also seed ZOCLO when no ZOCLO/FRENTE default
+    // exists, so the inserted line resolves.
     const seeded = mod
       ? defaultChoicesForNewItem(
           mod,
@@ -199,6 +202,7 @@ export function ProjectAddItemModal({
           catalogComponents,
           catalogStructures,
           catalogAgregados,
+          projectLevelChoices,
         )
       : {};
     const projectLevel = projectLevelChoices ?? {};
@@ -248,6 +252,15 @@ export function ProjectAddItemModal({
         setItemError(`Falta elegir: ${group.name} (${group.code}).`);
         return;
       }
+    }
+    // P0-2b: el zócalo sintetizado del plinth necesita ZOCLO o el fallback
+    // FRENTE — sin esto la línea se inserta y explota al aceptar/exportar.
+    if (plinthZocloNeedsChoice(mod, effective)) {
+      const zocloGroup = optionGroups.find((g) => g.code === 'ZOCLO');
+      setItemError(
+        `Falta elegir: ${zocloGroup?.name ?? 'zócalo'} (ZOCLO) — o definí un frente por defecto.`,
+      );
+      return;
     }
 
     if ((mod.presets?.length ?? 0) > 0) {

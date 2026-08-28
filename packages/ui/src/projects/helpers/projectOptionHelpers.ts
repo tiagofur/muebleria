@@ -26,11 +26,13 @@ import {
 import {
   canShowPricePreview,
   membersForKind,
+  plinthZocloNeedsChoice,
   requiredGroupCodesForModule,
   selectableGroupCodesForModule,
   type CatalogMember,
   type PricePreviewGateResult,
 } from '../../optionGroups/optionGroupHelpers';
+import { ZOCLO_BOARD_ROLE } from '@granete/domain';
 
 /**
  * OPT-04 / PRJ-03: option picker values for a group — only group members (by kind + optionIds).
@@ -116,6 +118,12 @@ export function canShowProjectPricePreview(
       item.optionChoices,
       project.projectLevelChoices,
     );
+    // P0-2b: a plinth_board item without ZOCLO nor FRENTE explodes on accept
+    // with an unresolvable synthesized zoclo — surface it at the preview gate.
+    if (plinthZocloNeedsChoice(mod, effective)) {
+      missing.add(ZOCLO_BOARD_ROLE);
+      continue;
+    }
     const gate = canShowPricePreview(required, effective);
     if (!gate.ok) {
       for (const code of gate.missingGroups) {
@@ -261,6 +269,10 @@ export function findModuleById(
 /**
  * Build default choices for a new line item from module required groups (first option each).
  * Pure selection — does not compute prices. Does not mutate Module (PRJ-09).
+ *
+ * `projectLevelChoices` (P0-2b): a plinth_board module also seeds ZOCLO when
+ * neither a project-level ZOCLO nor FRENTE default exists — the engine's
+ * ZOCLO→FRENTE fallback keeps the line resolvable with either.
  */
 export function defaultChoicesForNewItem(
   module: Module,
@@ -268,6 +280,7 @@ export function defaultChoicesForNewItem(
   catalogComponents?: readonly Component[],
   catalogStructures?: readonly Structure[],
   catalogAgregados?: readonly Agregado[],
+  projectLevelChoices?: Readonly<Record<string, string>>,
 ): OptionChoices {
   const required = requiredGroupCodesForModule(
     module,
@@ -283,6 +296,12 @@ export function defaultChoicesForNewItem(
     const first = group?.optionIds[0];
     if (first) {
       choices[code] = first;
+    }
+  }
+  if (plinthZocloNeedsChoice(module, projectLevelChoices ?? {})) {
+    const first = byCode.get(ZOCLO_BOARD_ROLE)?.optionIds[0];
+    if (first) {
+      choices[ZOCLO_BOARD_ROLE] = first;
     }
   }
   return choices;
@@ -328,6 +347,7 @@ export function quickAddPayloadForModule(
     ctx.catalogComponents,
     ctx.catalogStructures,
     ctx.catalogAgregados,
+    ctx.projectLevelChoices,
   );
   const projectLevel = ctx.projectLevelChoices ?? {};
   const optionChoices: Record<string, string> = {};
