@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Project } from '@granete/domain';
 import { ProductionWorkspace } from './ProductionWorkspace';
@@ -32,11 +32,13 @@ function baseProject(overrides: Partial<Project> = {}): Project {
 function renderWorkspace(
   projects: readonly Project[],
   lookupProject?: (id: string) => Project | undefined,
+  onOpenWarehouse?: () => void,
 ) {
   return render(
     <ProductionWorkspace
       projects={projects}
       lookupProject={lookupProject}
+      onOpenWarehouse={onOpenWarehouse}
       orderProjectId="p1"
       orderTab="resumen"
       onOrderTabChange={() => {}}
@@ -56,10 +58,18 @@ function renderWorkspace(
 describe('ProductionWorkspace order routing (P0-2c)', () => {
   it('guides to material release when accepted but not released', () => {
     const acceptedNoRelease = baseProject(); // accepted, sin materialsRelease
-    renderWorkspace([], (id) => (id === 'p1' ? acceptedNoRelease : undefined));
+    const onOpenWarehouse = vi.fn();
+    renderWorkspace(
+      [],
+      (id) => (id === 'p1' ? acceptedNoRelease : undefined),
+      onOpenWarehouse,
+    );
     const guidance = screen.getByTestId('prod-order-pending-release');
     expect(guidance.textContent).toContain('Falta liberar materiales');
     expect(guidance.textContent).toContain('Almacén');
+    expect(guidance.textContent).toContain('Paso 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Ir a Almacén' }));
+    expect(onOpenWarehouse).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the real missing-order state for unknown ids', () => {

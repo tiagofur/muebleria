@@ -109,6 +109,8 @@ export type ProductionWorkspaceProps = {
    * release step.
    */
   readonly lookupProject?: (projectId: string) => Project | undefined;
+  /** Navigate to the warehouse queue where materials can be released. */
+  readonly onOpenWarehouse?: () => void;
 };
 
 export function ProductionWorkspace({
@@ -147,6 +149,7 @@ export function ProductionWorkspace({
   onExportAssemblySheets,
   activeClaims = [],
   lookupProject,
+  onOpenWarehouse,
 }: ProductionWorkspaceProps): ReactNode {
   const [productionScopeId, setProductionScopeId] =
     useState<string>(PRODUCTION_SCOPE_ALL);
@@ -170,9 +173,11 @@ export function ProductionWorkspace({
               variant="empty"
               icon={Factory}
               title="Falta liberar materiales"
-              description="La cotización está aceptada, pero Almacén todavía no liberó los materiales al piso. Liberá los materiales para que la obra entre a la cola de producción."
-              actionLabel="Ver cotización"
-              onAction={() => onOpenDesign(unfiltered.id)}
+              description="Paso 1: abrí Almacén y completá el picking. Paso 2: liberá los materiales al piso. La obra entrará automáticamente a la cola de producción."
+              actionLabel={onOpenWarehouse ? 'Ir a Almacén' : 'Ver cotización'}
+              onAction={() =>
+                onOpenWarehouse ? onOpenWarehouse() : onOpenDesign(unfiltered.id)
+              }
               secondaryActionLabel="Volver a la cola"
               onSecondaryAction={onBackToQueue}
             />

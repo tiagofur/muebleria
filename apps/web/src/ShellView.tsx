@@ -1396,6 +1396,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           lookupProject={(id) =>
             (filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).find((p) => p.id === id)
           }
+          onOpenWarehouse={() => navigate(pathForNav('warehouse'))}
           orderProjectId={routeProductionOrderId}
           orderTab={routeProductionOrderTab}
           onOrderTabChange={(tab) => {
