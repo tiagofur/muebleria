@@ -279,6 +279,63 @@ describe('projectStore — updateProject', () => {
 
     expect(savedProjects).toHaveLength(0);
   });
+
+  it('draft to draft does not resolve prices even with an incomplete catalog', () => {
+    const { deps, savedProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().setProjects([makeProject()]);
+    const incomplete: Catalog = {
+      materials: [],
+      edges: [],
+      hardware: [],
+      categories: [],
+      optionGroups: [],
+      modules: [],
+    };
+
+    expect(() =>
+      store.getState().updateProject(
+        'proj-1',
+        { ...projectDraft, name: 'Still draft', customerId: 'c1' },
+        incomplete,
+        { role: 'admin' },
+      ),
+    ).not.toThrow();
+    expect(savedProjects).toHaveLength(1);
+  });
+});
+
+describe('projectStore — changeProjectStatus resolution errors', () => {
+  it('toasts ResolutionError and keeps project state intact', () => {
+    const { deps, savedProjects, toasts } = makeDeps();
+    const store = createProjectStore({ deps });
+    const catalog = seedCatalog();
+    const module = catalog.modules[0]!;
+    const original = makeProject({
+      items: [
+        {
+          id: 'item-invalid',
+          moduleId: module.id,
+          quantity: 1,
+          optionChoices: {},
+        },
+      ],
+    });
+    store.getState().setProjects([original]);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    store.getState().changeProjectStatus('proj-1', 'accepted', catalog);
+
+    expect(store.getState().projects[0]).toBe(original);
+    expect(savedProjects).toHaveLength(0);
+    expect(toasts).toContainEqual(
+      expect.objectContaining({
+        type: 'error',
+        message: expect.stringContaining('faltan materiales/herrajes'),
+      }),
+    );
+    errorSpy.mockRestore();
+  });
 });
 
 describe('projectStore — deleteProject', () => {
