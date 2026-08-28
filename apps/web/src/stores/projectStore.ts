@@ -74,6 +74,7 @@ import {
   rolesOfUser,
   advanceFloorStatus,
   appendFloorEvent,
+  ResolutionError,
   setProjectItemFloorStatus,
   transitionProjectStatus,
   snapshotOnStatusChange,
@@ -636,6 +637,29 @@ export function createProjectStore(options: InternalOptions) {
   const toast: ToastFn = (input) => getUiStoreState().toast(input);
 
   /**
+   * P0-2b (pre-demo audit): status transitions freeze prices through the
+   * engine, and a line with missing option choices throws ResolutionError
+   * synchronously. The throw used to bubble out of the click handler — the
+   * ConfirmDialog stayed open with zero feedback and the user retried
+   * forever. Toast an actionable message instead; callers keep their state.
+   */
+  function toastTransitionError(action: string, err: unknown): void {
+    console.error(`Error al ${action}:`, err);
+    if (err instanceof ResolutionError) {
+      toast({
+        type: 'error',
+        message:
+          'No se pudo cambiar el estado: faltan materiales/herrajes por elegir en los muebles. Revisá la lista de muebles y completá las opciones.',
+      });
+      return;
+    }
+    toast({
+      type: 'error',
+      message: `No se pudo cambiar el estado: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+
+  /**
    * Replace the physical executions of a project and re-derive the legacy
    * item floor statuses from the physical truth (OC-034 bridge — same
    * derivation the server persists on every advance). Persists through the
@@ -749,12 +773,18 @@ export function createProjectStore(options: InternalOptions) {
         updatedAt: now,
       };
       // Capture snapshot if created already as quoted/accepted (PRD §7.4).
-      const project = transitionProjectStatus(
-        base,
-        meta.status,
-        updatedCatalog,
-        now,
-      );
+      let project: Project;
+      try {
+        project = transitionProjectStatus(
+          base,
+          meta.status,
+          updatedCatalog,
+          now,
+        );
+      } catch (err) {
+        toastTransitionError('crear la cotización', err);
+        return;
+      }
 
       // F062 bug fix: persist customers via catalogStore (catalogStore owns catalog).
       getCatalogStoreState().upsertCustomers(resolved.customers);
@@ -884,7 +914,13 @@ export function createProjectStore(options: InternalOptions) {
         optionGroups: [],
         modules: [],
       };
-      const withTransition = transitionProjectStatus(project, 'produced', cat, now);
+      let withTransition: Project;
+      try {
+        withTransition = transitionProjectStatus(project, 'produced', cat, now);
+      } catch (err) {
+        toastTransitionError('marcar la producción', err);
+        return;
+      }
       const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({ type: 'success', message: '✓ Marcada en producción' });
@@ -933,7 +969,13 @@ export function createProjectStore(options: InternalOptions) {
       };
       // Guard guarantees engineeringLog exists and is documented.
       const log = recordSentToProduction(project.engineeringLog!, byUserId, now);
-      const withTransition = transitionProjectStatus(project, 'produced', cat, now);
+      let withTransition: Project;
+      try {
+        withTransition = transitionProjectStatus(project, 'produced', cat, now);
+      } catch (err) {
+        toastTransitionError('enviar a producción', err);
+        return;
+      }
       const updated = snapshotOnStatusChange(withTransition, 'produced');
       patch(set, get, (ps) =>
         ps.map((p) =>
@@ -992,7 +1034,13 @@ export function createProjectStore(options: InternalOptions) {
         optionGroups: [],
         modules: [],
       };
-      const withTransition = transitionProjectStatus(project, status, cat, now);
+      let withTransition: Project;
+      try {
+        withTransition = transitionProjectStatus(project, status, cat, now);
+      } catch (err) {
+        toastTransitionError('cambiar el estado de la cotización', err);
+        return;
+      }
       const updated = snapshotOnStatusChange(withTransition, status);
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       const label =
@@ -1031,7 +1079,13 @@ export function createProjectStore(options: InternalOptions) {
         optionGroups: [],
         modules: [],
       };
-      const withTransition = transitionProjectStatus(project, 'draft', cat, now);
+      let withTransition: Project;
+      try {
+        withTransition = transitionProjectStatus(project, 'draft', cat, now);
+      } catch (err) {
+        toastTransitionError('reabrir la cotización', err);
+        return;
+      }
       const updated = snapshotOnStatusChange(withTransition, 'draft');
       patch(set, get, (ps) => ps.map((p) => (p.id === id ? updated : p)));
       toast({

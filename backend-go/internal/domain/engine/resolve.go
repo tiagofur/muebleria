@@ -267,8 +267,18 @@ func expandComposedModulePartsWithDims(
 		return nil, err
 	}
 
+	// Plinth/toe-kick height B must reach part formulas (TS parity: TS
+	// resolveComposedModule passes B into expandComponentInstances —
+	// bom.ts geomDims). Without it every formula using B resolves to 0 and
+	// CalcBoardLineCost rejects the part.
+	baseMode := module.BaseMode
+	if baseMode == "" {
+		baseMode = "none"
+	}
+	baseClearance := baseClearanceForLayout(module, baseMode)
+
 	parts := make([]domain.BoardPart, 0)
-	structureParts, err := expandComponentInstances(structure.Components, catalog, dims, "st-", optionChoices)
+	structureParts, err := expandComponentInstances(structure.Components, catalog, dims, "st-", optionChoices, baseClearance)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +290,7 @@ func expandComposedModulePartsWithDims(
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-", optionChoices)
+		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-", optionChoices, baseClearance)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +303,7 @@ func expandComposedModulePartsWithDims(
 		}
 	}
 
-	moduleParts, err := expandComponentInstances(module.Components, catalog, dims, "mod-", optionChoices)
+	moduleParts, err := expandComponentInstances(module.Components, catalog, dims, "mod-", optionChoices, baseClearance)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +315,7 @@ func expandComposedModulePartsWithDims(
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-", optionChoices)
+		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-", optionChoices, baseClearance)
 		if err != nil {
 			return nil, err
 		}
@@ -369,6 +379,7 @@ func expandComponentInstances(
 	dims formulaDims,
 	idPrefix string,
 	optionChoices map[string]string,
+	baseClearance int,
 ) ([]domain.BoardPart, error) {
 	parts := make([]domain.BoardPart, 0)
 	for _, inst := range instances {
@@ -413,12 +424,14 @@ func expandComponentInstances(
 				widthFormula = inst.Overrides.WidthFormula
 			}
 		}
-		// Parent dims + part thickness (TS geomDims: W/H/D, PW/PH/PD, T).
-		// Length/width formulas evaluate once with i=0 (same as typical non-spatial use).
+		// Parent dims + part thickness + plinth height B (TS geomDims parity:
+		// W/H/D, PW/PH/PD, T, B). Length/width formulas evaluate once with
+		// i=0 (same as typical non-spatial use).
 		evalDims := formulaDims{
 			W: dims.W, H: dims.H, D: dims.D,
 			PW: dims.W, PH: dims.H, PD: dims.D,
 			T: effectiveT,
+			B: baseClearance,
 			I: 0,
 		}
 		if lengthFormula != "" {

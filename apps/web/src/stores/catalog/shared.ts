@@ -8,6 +8,7 @@
  */
 
 import { useWorkspaceStore } from '../workspaceStore';
+import { notifyCatalogMutated } from '../../crossTabSync';
 
 import type {
   Agregado,
@@ -233,7 +234,7 @@ export interface CatalogStoreCtx {
     updater: (catalog: Catalog) => Catalog,
     message: string | null,
     type?: 'success' | 'info',
-  ): void;
+  ): Promise<void>;
 
   /**
    * Awaits a patch and reports whether the save landed. Use in async actions
@@ -263,36 +264,74 @@ export function makeCatalogStoreCtx(
   const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
   const baseUrl = deps.baseUrl;
 
+  // P1-4 (pre-demo audit): double-clicks fire several patches before the
+  // first save finishes; concurrent saveCatalog fan-outs interleave and the
+  // upsert POSTs duplicate rows (audit repro: one "Guardar" triple-click
+  // created the same customer twice 3 ms apart). Serialize saves per store:
+  // a queued save re-reads the latest catalog, so by the time it runs the
+  // first save already created the entity and the upsert PUTs instead of
+  // POSTing a duplicate.
+  let saveInFlight: Promise<void> | null = null;
+
   function patch(updater: (catalog: Catalog) => Catalog): Promise<void> {
     const prev = get().catalog;
     if (!prev) return Promise.resolve();
     const nextCatalog = updater(prev);
     set({ catalog: nextCatalog });
-    return saveCatalog(nextCatalog).then(
-      () => undefined,
-      (err: unknown) => {
-        console.error('Error al guardar catálogo:', err);
-        // F118 S2: no error toasts from saves that raced a logout — the
-        // login screen must stay clean.
-        if (useWorkspaceStore.getState().session === null) {
-          return Promise.reject(err);
-        }
-        toast({
-          type: 'error',
-          message: 'Error de conexión al sincronizar cambios',
-        });
-        // Reject so callers do not toast "guardado" on failed sync.
-        return Promise.reject(err);
-      },
-    );
+    const task = (): Promise<void> =>
+      saveCatalog(get().catalog ?? nextCatalog).then(
+        () => {
+          // P0-3 mitigation: tell other tabs their catalog copy is stale.
+          notifyCatalogMutated();
+        },
+        (err: unknown) => {
+          console.error('Error al guardar catálogo:', err);
+          // F118 S2: no error toasts from saves that raced a logout — the
+          // login screen must stay clean.
+          if (useWorkspaceStore.getState().session === null) {
+            throw err;
+          }
+          toast({
+            type: 'error',
+            message: 'Error de conexión al sincronizar cambios',
+          });
+          // Reject so callers do not toast "guardado" on failed sync.
+          throw err;
+        },
+      );
+    if (!saveInFlight) {
+      // Idle: start immediately (same timing as the pre-serialization code).
+      const run = task();
+      // The chain tracker observes the failure (so it never surfaces as an
+      // unhandled rejection) and frees the slot once the save settles.
+      const tracked = run.catch(() => undefined);
+      saveInFlight = tracked;
+      void tracked.then(() => {
+        if (saveInFlight === tracked) saveInFlight = null;
+      });
+      return run;
+    }
+    // Busy: queue after the in-flight save settles; then(task, task) runs the
+    // next save on success OR failure — errors must not poison the chain. The
+    // queued save re-reads the latest catalog, so the entity the first save
+    // created is already there and the upsert PUTs (no duplicate).
+    const run = saveInFlight.then(task, task);
+    const tracked = run.catch(() => undefined);
+    saveInFlight = tracked;
+    void tracked.then(() => {
+      // An older save must never clear a newer queued tail. Otherwise a
+      // mutation arriving while that newer save runs starts concurrently.
+      if (saveInFlight === tracked) saveInFlight = null;
+    });
+    return run;
   }
 
   function saveAndToast(
     updater: (catalog: Catalog) => Catalog,
     message: string | null,
     type: 'success' | 'info' = 'success',
-  ): void {
-    void patch(updater).then(
+  ): Promise<void> {
+    return patch(updater).then(
       () => {
         if (message) toast({ type, message });
       },

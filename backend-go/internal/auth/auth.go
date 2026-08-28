@@ -17,9 +17,12 @@ const BcryptCost = 12
 // MinPasswordLen is the minimum accepted password length on register (issue #19).
 const MinPasswordLen = 8
 
-// AccessTokenTTL is how long a JWT remains valid before re-login or refresh
-// (issue #16). Role/active are also re-checked against the DB on every request.
-const AccessTokenTTL = 15 * time.Minute
+// AccessTokenTTL is how long a JWT remains valid before re-login (issue #16).
+// One login per workday (18h covers a full shift plus overtime): 15-minute
+// tokens kicked users out mid-design and mid-client session. Revocation does
+// NOT wait for expiry — Role/active/membership/org are re-checked against the
+// DB on every request, and manual logout clears the token immediately.
+const AccessTokenTTL = 18 * time.Hour
 
 // SupportTokenTTL bounds platform support sessions ("entrar a taller"):
 // short-lived by design, independent of the web/extension token kinds.

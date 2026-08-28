@@ -196,11 +196,13 @@ interface ResolvedDeps {
 }
 
 export function createWorkspaceStore(options?: InternalOptions) {
-  const rawFetch = options?.deps?.fetchImpl ?? globalThis.fetch;
-  const safeFetch: typeof fetch =
-    typeof rawFetch === 'function' && typeof rawFetch.bind === 'function'
-      ? rawFetch.bind(globalThis)
-      : rawFetch;
+  const injectedFetch = options?.deps?.fetchImpl;
+  // Production resolves fetch at call time. The singleton store is created
+  // while modules load, before main.tsx installs the global 401 interceptor;
+  // capturing fetch here would bypass that safety net forever. Tests keep a
+  // stable injected function so their dependency isolation remains explicit.
+  const safeFetch: typeof fetch = (...args) =>
+    (injectedFetch ?? globalThis.fetch)(...args);
   const deps: ResolvedDeps = {
     baseUrl: options?.deps?.baseUrl ?? DEFAULT_API_BASE,
     fetchImpl: safeFetch,

@@ -1067,3 +1067,148 @@ describe('catalogStore — F116 bugfixes', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1-4 (pre-demo audit): save serialization
+// ---------------------------------------------------------------------------
+
+describe('catalogStore — save serialization (P1-4)', () => {
+  it('rapid patches never interleave saveCatalog calls', async () => {
+    let active = 0;
+    let maxConcurrent = 0;
+    const saved: Catalog[] = [];
+    const { deps } = makeDeps({
+      saveCatalog: async (c) => {
+        active++;
+        maxConcurrent = Math.max(maxConcurrent, active);
+        await new Promise((r) => setTimeout(r, 0));
+        active--;
+        saved.push(c);
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    // Triple-click: three mutations before any save settles.
+    store.getState().createMaterial(materialDraft);
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-NEW-2' });
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-NEW-3' });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(saved.length).toBeGreaterThan(0);
+    expect(maxConcurrent).toBe(1);
+    // The last save carries the whole accumulated catalog.
+    const last = saved[saved.length - 1]!;
+    expect(last.materials.filter((m) => m.code.startsWith('MAT-NEW')).length).toBe(3);
+  });
+
+  it('a failed save does not poison the chain — the next mutation still saves', async () => {
+    let calls = 0;
+    const saved: Catalog[] = [];
+    const { deps } = makeDeps({
+      saveCatalog: async (c) => {
+        calls++;
+        if (calls === 1) throw new Error('boom');
+        saved.push(c);
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    store.getState().createMaterial(materialDraft);
+    await new Promise((r) => setTimeout(r, 0));
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-NEW-2' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(calls).toBe(2);
+    expect(saved.length).toBe(1);
+  });
+
+  it('keeps C behind B after A settles', async () => {
+    const releases: Array<() => void> = [];
+    let active = 0;
+    let maxConcurrent = 0;
+    let started = 0;
+    const { deps } = makeDeps({
+      saveCatalog: async () => {
+        started++;
+        active++;
+        maxConcurrent = Math.max(maxConcurrent, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    store.getState().createMaterial(materialDraft); // A starts.
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-B' }); // B queues.
+    expect(started).toBe(1);
+
+    releases.shift()!();
+    await vi.waitFor(() => expect(started).toBe(2)); // B is active after A settled.
+
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-C' });
+    expect(started).toBe(2); // C must stay queued, never overlap B.
+    expect(maxConcurrent).toBe(1);
+
+    releases.shift()!();
+    await vi.waitFor(() => expect(started).toBe(3));
+    expect(maxConcurrent).toBe(1);
+
+    releases.shift()!();
+    await Promise.resolve();
+  });
+
+  it('deduplicates an in-flight customer submission with production-like UUIDs', async () => {
+    const known = new Set(seedCatalog().customers?.map((customer) => customer.id));
+    let customerCreates = 0;
+    let releaseSave: (() => void) | undefined;
+    const generatedIds: string[] = [];
+    const saveCatalog = vi.fn(async (catalog: Catalog) => {
+      for (const customer of catalog.customers ?? []) {
+        if (known.has(customer.id)) continue;
+        customerCreates++;
+        known.add(customer.id);
+      }
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+    });
+    const { deps } = makeDeps({
+      newId: () => {
+        const id = `customer-${generatedIds.length + 1}`;
+        generatedIds.push(id);
+        return id;
+      },
+      saveCatalog,
+    });
+    const store = createCatalogStore({ deps });
+    const initialCatalog = seedCatalog();
+    const initialCount = initialCatalog.customers?.length ?? 0;
+    store.getState().setCatalog(initialCatalog);
+    const draft = {
+      name: 'Cliente doble click',
+      email: '',
+      phone: '',
+      address: '',
+      notes: '',
+      ownerUserId: '',
+    };
+
+    store.getState().createCustomer(draft, { id: 'seller-1', role: 'vendedor' });
+    store.getState().createCustomer(draft, { id: 'seller-1', role: 'vendedor' });
+
+    expect(generatedIds).toEqual(['customer-1', 'customer-2']);
+    expect(store.getState().catalog?.customers).toHaveLength(initialCount + 1);
+    expect(saveCatalog).toHaveBeenCalledTimes(1);
+    expect(customerCreates).toBe(1);
+
+    releaseSave?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(customerCreates).toBe(1);
+  });
+});

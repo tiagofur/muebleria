@@ -32,6 +32,7 @@ const fx = contract as unknown as {
   readonly scenarios: readonly {
     readonly id: string;
     readonly description: string;
+    readonly moduleId?: string;
     readonly agregadoQty: number;
     readonly customDims?: { widthMm: number; heightMm: number; depthMm: number };
     readonly optionChoicesOverride?: Record<string, string>;
@@ -56,8 +57,11 @@ const fx = contract as unknown as {
   };
 };
 
-function moduleForScenario(agregadoQty: number): Module {
-  const base = fx.catalog.modules.find((m) => m.id === 'm-bajo')!;
+function moduleForScenario(
+  agregadoQty: number,
+  moduleId?: string,
+): Module {
+  const base = fx.catalog.modules.find((m) => m.id === (moduleId ?? 'm-bajo'))!;
   if (agregadoQty > 0) {
     return {
       ...base,
@@ -69,10 +73,12 @@ function moduleForScenario(agregadoQty: number): Module {
 
 function projectForScenario(
   scenario: (typeof fx.scenarios)[number],
+  moduleId?: string,
 ): Project {
   const baseItem = fx.project.items[0]!;
   const item: ProjectItem = {
     ...baseItem,
+    ...(moduleId ? { moduleId } : {}),
     ...(scenario.optionChoicesOverride
       ? {
           optionChoices: {
@@ -99,8 +105,8 @@ function partSignatureKey(p: {
 describe('contract diseño→BOM→precio (fixture compartido TS/Go)', () => {
   for (const scenario of fx.scenarios) {
     it(`${scenario.id}: ${scenario.description}`, () => {
-      const module = moduleForScenario(scenario.agregadoQty);
-      const project = projectForScenario(scenario);
+      const module = moduleForScenario(scenario.agregadoQty, scenario.moduleId);
+      const project = projectForScenario(scenario, scenario.moduleId);
       const item = project.items[0]!;
 
       // 1) BOM: piezas por firma (description + dims + material) y multiplicidad.

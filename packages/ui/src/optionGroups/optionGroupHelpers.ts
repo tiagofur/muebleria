@@ -207,6 +207,25 @@ export function requiredGroupCodesForModule(
   return [...new Set(required)];
 }
 
+/**
+ * F087 / pre-demo audit P0-2b: a plinth_board module consumes a ZOCLO board
+ * choice even when no component declares the role — the engine synthesizes
+ * the ZOCLO-AUTO part. The engine falls back to the FRENTE choice when ZOCLO
+ * is unset, so the line resolves with either; without both the quote accepts
+ * (and exports) explode with ResolutionError. This tells the UI when the
+ * zoclo still needs a choice the same way the engine sees it.
+ */
+export function plinthZocloNeedsChoice(
+  module: Pick<ModuleLikeForRoles, 'baseMode'>,
+  effectiveChoices: Readonly<Record<string, string | undefined>>,
+): boolean {
+  if (module.baseMode !== 'plinth_board') return false;
+  return (
+    !effectiveChoices[ZOCLO_BOARD_ROLE]?.trim() &&
+    !effectiveChoices['FRENTE']?.trim()
+  );
+}
+
 function collectUsedOptionRoles(
   module: ModuleLikeForRoles,
   catalogComponents?: readonly Component[],

@@ -101,6 +101,16 @@ export type ProductionWorkspaceProps = {
   readonly onExportAssemblySheets?: (projectId: string) => void | Promise<void>;
   /** Active cutting/floor claims — used to filter the "Ya en producción" queue. */
   readonly activeClaims?: readonly FabricActiveClaim[];
+  /**
+   * P0-2c (pre-demo audit): resolves an order id against the UNFILTERED
+   * project list. An accepted project without materialsRelease is filtered
+   * out of the queue; without this lookup the order screen dead-ended with
+   * "Orden no encontrada" instead of explaining the missing warehouse
+   * release step.
+   */
+  readonly lookupProject?: (projectId: string) => Project | undefined;
+  /** Navigate to the warehouse queue where materials can be released. */
+  readonly onOpenWarehouse?: () => void;
 };
 
 export function ProductionWorkspace({
@@ -138,6 +148,8 @@ export function ProductionWorkspace({
   onExportCncPilot,
   onExportAssemblySheets,
   activeClaims = [],
+  lookupProject,
+  onOpenWarehouse,
 }: ProductionWorkspaceProps): ReactNode {
   const [productionScopeId, setProductionScopeId] =
     useState<string>(PRODUCTION_SCOPE_ALL);
@@ -149,6 +161,45 @@ export function ProductionWorkspace({
 
   if (orderProjectId) {
     if (!orderProject) {
+      // P0-2c: the queue filter (isProductionReady) hides accepted projects
+      // without materialsRelease and non-accepted ones. Resolve the id
+      // against the unfiltered list and explain the real next step instead
+      // of claiming the order does not exist.
+      const unfiltered = lookupProject?.(orderProjectId);
+      if (unfiltered && projectAllowsProductionOrder(unfiltered)) {
+        return (
+          <section className="prod-hub" data-testid="prod-order-pending-release">
+            <EmptyState
+              variant="empty"
+              icon={Factory}
+              title="Falta liberar materiales"
+              description="Paso 1: abrí Almacén y completá el picking. Paso 2: liberá los materiales al piso. La obra entrará automáticamente a la cola de producción."
+              actionLabel={onOpenWarehouse ? 'Ir a Almacén' : 'Ver cotización'}
+              onAction={() =>
+                onOpenWarehouse ? onOpenWarehouse() : onOpenDesign(unfiltered.id)
+              }
+              secondaryActionLabel="Volver a la cola"
+              onSecondaryAction={onBackToQueue}
+            />
+          </section>
+        );
+      }
+      if (unfiltered && !projectAllowsProductionOrder(unfiltered)) {
+        return (
+          <section className="prod-hub" data-testid="prod-order-not-ready">
+            <EmptyState
+              variant="empty"
+              icon={Factory}
+              title="Aún no está en fábrica"
+              description="La orden de producción se habilita cuando la cotización está aceptada o ya en producción."
+              actionLabel="Ver cotización / diseño"
+              onAction={() => onOpenDesign(unfiltered.id)}
+              secondaryActionLabel="Volver a la cola"
+              onSecondaryAction={onBackToQueue}
+            />
+          </section>
+        );
+      }
       return (
         <section className="prod-hub" data-testid="prod-order-missing">
           <EmptyState

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -369,13 +370,13 @@ func TestAdminMiddleware(t *testing.T) {
 	}
 }
 
-func TestAccessTokenTTLIsFifteenMinutes(t *testing.T) {
-	if auth.AccessTokenTTL != 15*60*1e9 && auth.AccessTokenTTL.Minutes() != 15 {
-		// Use Minutes() for clarity
-		t.Errorf("AccessTokenTTL = %v, want 15m (issue #16)", auth.AccessTokenTTL)
-	}
-	if auth.AccessTokenTTL.Minutes() != 15 {
-		t.Errorf("AccessTokenTTL = %v, want 15 minutes", auth.AccessTokenTTL)
+func TestAccessTokenTTLCoversAWorkday(t *testing.T) {
+	// Pre-demo hardening: 15-minute tokens kicked users out mid-design/mid-
+	// client session (audit P0-1). Product call: one login per workday; the
+	// middleware still re-validates user/membership/org from the DB on every
+	// request, so revocation stays immediate and manual logout ends the day.
+	if auth.AccessTokenTTL != 18*time.Hour {
+		t.Errorf("AccessTokenTTL = %v, want 18h", auth.AccessTokenTTL)
 	}
 }
 

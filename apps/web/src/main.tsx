@@ -15,10 +15,29 @@ import '@granete/ui/common/tabs.css';
 import '@granete/ui/common/entityCard.css';
 import '@granete/ui/common/engineeringDetail.css';
 import { App } from './App';
+import { installAuth401Interceptor } from './auth401';
+import { installCrossTabRefresh } from './crossTabSync';
+import { useWorkspaceStore } from './stores/workspaceStore';
 import './app.css';
 
 // #366 — claves legacy muebles_* → granete_* antes de que nada lea storage.
 migrateLegacyStorageKeys();
+
+// P0-1 (pre-demo audit): 401 en endpoints de negocio ⇒ logout con el mensaje
+// de sesión expirada, nunca el toast engañoso "Error de conexión".
+installAuth401Interceptor(() => useWorkspaceStore.getState().markSessionExpired());
+
+// P0-3 (mitigación): otra pestaña mutó el catálogo ⇒ esta pestaña refresca
+// del server al volver a ella, en vez de pisar cambios con su copia vieja.
+installCrossTabRefresh(async () => {
+  const ws = useWorkspaceStore.getState();
+  if (ws.session !== 'auth') return;
+  await ws.loadWorkspace();
+  const after = useWorkspaceStore.getState();
+  if (after.session === 'auth' && after.workspaceLoadError) {
+    throw new Error(after.workspaceLoadError);
+  }
+});
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

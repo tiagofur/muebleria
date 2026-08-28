@@ -1513,3 +1513,43 @@ determinista `5fb741e9…` = instalado); host smoke final TestUp CI 28/28 tests,
 resultados/limitaciones OCL en `docs/sketchup-opencutlist-interop.md`. Flake
 único no reproducido del test F188 de undo (`editUndo:` síncrono en sondas);
 relanzamientos rápidos de SketchUp pueden crashear — corridas espaciadas.
+
+## Mega Presentation Hardening — cierre post-auditoría (#441) — 2026-08-28
+
+La rama `fix/audit-pre-demo-hardening` corrigió los hallazgos P0/P1 previos a
+la demo: sesión de jornada, paridad Go/TS de la dimensión `B`, opciones de
+zócalo y aceptación de cotizaciones, guía de liberación para Producción,
+composición del seed demo, validación UUID, guard semántico contra doble-submit,
+serialización de saves, deduplicación de toasts y mitigación cross-tab.
+
+Decisión de sesión: access token finito de **18 h**, sin refresh proactivo; un
+`401` productivo expira la sesión local. La mitigación cross-tab usa
+`BroadcastChannel` como señal de frescura y recarga al volver a la pestaña; no
+reemplaza la persistencia por entidad ni la concurrencia optimista de #443.
+
+Commits clave: `4272aa4` (B en BOM Go), `af278f9` + `ab6a7a0` (TTL/401),
+`e1beccf` + `55e170f` (cotización), `a838bdb` + `f01b876` (Producción),
+`1c1c71d` + `31cc72f` (seed), `e9ba809` + `8a2d7c9` (UUID), `bbf440b`
+(serialización/toasts), `e60eaff` (cross-tab) y `6009328` (deduplicación real
+de dos submits equivalentes mientras el primero sigue pendiente, aun con UUIDs
+distintos como en producción).
+
+Gates registrados: Vitest completo — domain 1153, UI 1451, storage 161, excel
+93, web 331, desktop 17 y mobile 48 tests; typecheck directo de los siete
+workspaces verde; `go test ./... -count=1` verde, incluido PostgreSQL; y
+`git diff --check origin/main...HEAD` verde. La corrección `6009328` reemplazó
+el falso repro con ID estable por un test que genera dos IDs distintos y exige
+una sola entidad, una sola llamada de persistencia y un solo create.
+
+La verificación runtime en navegador quedó pendiente porque la app local exige
+credenciales válidas; no se creó, cambió ni restableció ninguna cuenta. No se
+afirma evidencia runtime de logout, cálculo, aceptación, navegación, despiece
+ni doble-click. La limpieza demo se **omitió por decisión explícita del
+usuario**: los datos se conservan para pruebas, no queda una limpieza pendiente
+y no se tocó la base de datos ni el backup.
+
+Reporte por hallazgo:
+`progress/audit-presentation-hardening-2026-08-28.md`. Seguimientos: #442
+(paridad completa de base en Go), #443 (persistencia por entidad + concurrencia
+optimista), #444 (regresión visual WebGL) y #27 (pickers buscables reutilizado,
+sin duplicar alcance).

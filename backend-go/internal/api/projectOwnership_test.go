@@ -56,7 +56,7 @@ func TestProjectOrgOwnership_CreateRejectsForeignOrg(t *testing.T) {
 			"u1": {membershipFor("u1", orgSales, domain.OrganizationTypeStore, domain.RoleVendedor)},
 		},
 	}}
-	body := strings.NewReader(`{"name":"Cocina","currency":"MXN","manufacturing_organization_id":"` + orgOther + `"}`)
+	body := strings.NewReader(`{"name":"Cocina","customer_id":"11111111-1111-1111-1111-111111111111","currency":"MXN","manufacturing_organization_id":"` + orgOther + `"}`)
 	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgSales, string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -82,7 +82,7 @@ func TestProjectOrgOwnership_CreateRejectsNonFactoryMfg(t *testing.T) {
 		},
 	}}
 	// Caller IS a member of orgStoreFriend, but it is a store, not a factory.
-	body := strings.NewReader(`{"name":"Cocina","currency":"MXN","manufacturing_organization_id":"` + orgStoreFriend + `"}`)
+	body := strings.NewReader(`{"name":"Cocina","customer_id":"11111111-1111-1111-1111-111111111111","currency":"MXN","manufacturing_organization_id":"` + orgStoreFriend + `"}`)
 	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgSales, string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -108,7 +108,7 @@ func TestProjectOrgOwnership_CreateAllowsOwnFactoryMembership(t *testing.T) {
 		},
 	}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"name":"Cocina","currency":"MXN","sales_organization_id":"` + orgSales + `","manufacturing_organization_id":"` + orgFactory + `"}`)
+	body := strings.NewReader(`{"name":"Cocina","customer_id":"11111111-1111-1111-1111-111111111111","currency":"MXN","sales_organization_id":"` + orgSales + `","manufacturing_organization_id":"` + orgFactory + `"}`)
 	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgSales, string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -213,7 +213,7 @@ func TestProjectOrgOwnership_UpdatePreservesOwnershipAndManufacturing(t *testing
 	store := &stubStore{projectReturnedByID: existing}
 	srv := &Server{Store: store}
 	// The sales caller attempts to repoint both orgs at orgEvil.
-	body := strings.NewReader(`{"id":"p1","name":"Hack","currency":"MXN","owner_user_id":"u1","status":"draft","items":[],` +
+	body := strings.NewReader(`{"id":"p1","name":"Hack","customer_id":"11111111-1111-1111-1111-111111111111","currency":"MXN","owner_user_id":"u1","status":"draft","items":[],` +
 		`"sales_organization_id":"` + orgEvil + `","manufacturing_organization_id":"` + orgEvil + `"}`)
 	req := withOrgClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "u1", orgSales, string(domain.RoleVendedor))
 	req.SetPathValue("id", "p1")
@@ -294,7 +294,7 @@ func TestProjectOrgOwnership_StoreNeedsFactory(t *testing.T) {
 	srv := &Server{Store: store}
 
 	// No mfg assigned → store would become its own manufacturer → 400.
-	body := strings.NewReader(`{"name":"Cocina tienda","currency":"MXN"}`)
+	body := strings.NewReader(`{"name":"Cocina tienda","customer_id":"11111111-1111-1111-1111-111111111111","currency":"MXN"}`)
 	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgStore, string(domain.RoleAdmin))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -304,7 +304,7 @@ func TestProjectOrgOwnership_StoreNeedsFactory(t *testing.T) {
 	}
 
 	// Explicit factory mfg → allowed.
-	body = strings.NewReader(`{"name":"Cocina tienda","currency":"MXN","manufacturing_organization_id":"` + orgFactory + `"}`)
+	body = strings.NewReader(`{"name":"Cocina tienda","customer_id":"11111111-1111-1111-1111-111111111111","currency":"MXN","manufacturing_organization_id":"` + orgFactory + `"}`)
 	req = withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "u1", orgStore, string(domain.RoleAdmin))
 	req.Header.Set("Content-Type", "application/json")
 	rr = httptest.NewRecorder()

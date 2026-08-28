@@ -703,8 +703,13 @@ function ProjectDetailViewInner(): ReactNode {
         confirmLabel={pendingConfirm?.confirmLabel ?? 'Confirmar'}
         tone="primary"
         onConfirm={() => {
-          pendingConfirm?.onConfirm();
-          setPendingConfirm(null);
+          // P0-2b: the store action toasts its own errors now, but a throw
+          // must never leave the dialog stuck open — close in finally.
+          try {
+            pendingConfirm?.onConfirm();
+          } finally {
+            setPendingConfirm(null);
+          }
         }}
         onClose={() => setPendingConfirm(null)}
       />
