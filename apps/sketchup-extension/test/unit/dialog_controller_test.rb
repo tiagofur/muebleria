@@ -91,7 +91,9 @@ class DialogControllerTest < Minitest::Test
     assert_includes insert_script, 'Gabinete Base Estándar'
   end
 
-  # Catalog double whose server resolves layouts (RemoteCatalogProvider shape).
+  # Catalog double whose server resolves layouts (RemoteCatalogProvider
+  # shape). The body carries the #414 transform contract the controller's
+  # resolved_native_layout path requires — no AABB-only legacy bodies.
   class LayoutResolvingCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
     attr_reader :requested_definition_id, :requested_parameters, :requested_choices
 
@@ -99,9 +101,17 @@ class DialogControllerTest < Minitest::Test
       @requested_definition_id = definition_id
       @requested_parameters = parameters
       @requested_choices = choices
-      { 'components' => [{ 'slotId' => 'puerta', 'name' => 'Puerta',
-                           'transform' => { 'translationMm' => [2, 560, 2] },
-                           'dimensionsMm' => [596, 18, 716] }],
+      { 'transformContract' => 'granete.local-basis.v1',
+        'components' => [
+          { 'componentInstanceId' => 'st-door-0', 'componentDefinitionId' => 'st-door',
+            'slotId' => 'puerta', 'name' => 'Puerta',
+            'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716],
+            'localTransform' => {
+              'translationMm' => [2, 560, 2],
+              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+            },
+            'lengthMm' => 716, 'widthMm' => 596, 'thicknessMm' => 18 }
+        ],
         'hardware' => [] }
     end
   end
@@ -144,8 +154,20 @@ class DialogControllerTest < Minitest::Test
     assert_equal({ 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 }, catalog.requested_parameters)
     assert_equal({ 'FRENTE' => 'mat-oak' }, catalog.requested_choices)
     refute_nil builder.insert_layout
-    slots = builder.insert_layout['components'].map { |c| c['slotId'] }
-    assert_equal ['puerta'], slots
+    assert_equal 'granete.local-basis.v1', builder.insert_layout.transform_contract
+    assert_equal ['puerta'], builder.insert_layout.boards.map(&:slot_id)
+  end
+
+  # Managed furniture in the native representation: top-level
+  # ComponentInstance with furniture metadata, as the real builder inserts.
+  def native_furniture(instance_ref, definition_id = 'kitchen-base-standard')
+    definition = @model.definitions.add("Granete · Mueble · #{instance_ref}")
+    furniture = @model.active_entities.add_instance(definition, Geom::Transformation.identity)
+    Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
+      @store, furniture, instance_ref,
+      { 'furniture_definition_id' => definition_id }, {}
+    )
+    furniture
   end
 
   def test_update_fetches_and_forwards_the_server_resolved_layout
@@ -156,8 +178,7 @@ class DialogControllerTest < Minitest::Test
       catalog_provider: catalog, furniture_builder: builder, metadata_store: @store
     )
     dialog = controller.show
-    target = Sketchup.active_model.selection
-    target.add(SketchupStub::GroupStub.new('selected'))
+    @model.selection.add(native_furniture('inst-01'))
 
     dialog.callbacks.fetch('update_furniture').call(
       nil,
@@ -225,11 +246,7 @@ class DialogControllerTest < Minitest::Test
 
   def test_update_furniture_callback_updates_instance
     dialog = @controller.show
-    group = SketchupStub::GroupStub.new('cabinet')
-    @model.entities.add(group)
-    Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
-      @store, group, 'inst-01', { 'furniture_definition_id' => 'kitchen-base-standard' }, {}
-    )
+    native_furniture('inst-01')
 
     payload = {
       'instanceId' => 'inst-01',

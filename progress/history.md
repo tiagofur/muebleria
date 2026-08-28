@@ -1414,3 +1414,54 @@ textual por los tests Ruby (incl. negative proof Go+Ruby: mismo slot/nombre/
 AABB, bases distintas). Verificación: go test ./... OK; pnpm test (3.000+)
 + typecheck OK; rake verify OK. Docs: native-entity-model §8, interaction-model
 §7, material-aware §16 actualizados. Ledger F185 done.
+
+## F186 — renderer nativo SketchUp ComponentInstances (#415 / SU-ENT-2) — 2026-08-27
+
+Feature F186 (issue #415, programa #413, ADR-0004): reemplazo del renderer
+final Group/AABB por la jerarquía nativa de ComponentInstances. FurnitureBuilder
+inserta muebles gestionados como `Sketchup::ComponentInstance` top-level con
+definición generada y aislada por FurnitureInstance (FI-A/FI-B divergen sin
+efectos compartidos); tableros y herrajes son ComponentInstances anidados con
+geometría LOCAL en origen ([0,width]×[0,thickness]×[0,length]) y transform
+construido 1:1 desde el contrato #414 (`Geom::Transformation.axes(translation,
+basis.x/y/z)`): sin AABB world bakeado, sin escala no-uniforme productiva, sin
+inferencia de orientación (negative proofs golden-driven en
+`native_entity_renderer_test.rb`). Rebuild = una operación undoable que
+preserva identidad+world transform del top-level, limpia children de su
+definición y ejecuta cleanup scoped (sólo definiciones Granete Parte/Herraje
+sin instancias; jamás purge broad); fallo ⇒ abort sin jerarquía parcial
+(metadata tras jerarquía válida). Legacy Group falla cerrado por TIPO
+(`is_a?(Sketchup::ComponentInstance)`; en el host Group también responde a
+#definition) con puntero #416. Identidad: el layout Go publica
+`components[].componentDefinitionId` (#346, compartido por copias, ≠ GUID
+nativo, ≠ catalogComponentId opcional); metadata de child lleva
+componentInstanceId/componentDefinitionId/catalogComponentId/furnitureInstanceRef
++ slot/role/materialBindingRole (+ hostComponentInstanceId en herrajes);
+rename no cambia IDs; observer recupera mueble dueño vía metadata; controller
+consume `resolved_native_layout` (fail-safe, bodies crudos rechazados).
+Herraje asset (AssetLoader devuelve instancia) y fallback también nativos;
+path genérico offline igual nativo (base identidad). Stubs de test modelan
+ComponentDefinition/Instance/Transformation.axes + journal de rollback.
+Host validation: `TC_NativeEntitySmoke` (11 tests) + fixture
+`native_layout.json`; ejecución en host real PENDIENTE (GUI + RBZ instalado;
+no simulada, trackeada por #417/README). Hallazgo lateral → issue #434
+(componentInstanceId colisionante con entradas duplicadas; paridad TS↔Go).
+Verificación: rake verify OK (156+3 tests, RBZ sha256 245785d0…); go test
+./... OK (incl. TestLayoutComponentDefinitionIdentity + legacy defID==id);
+pnpm typecheck/test OK. Review: round 1 CHANGES_REQUESTED (H1-H4) → fixes →
+round 2 APPROVED (progress/review_F186.md). Ledger F186 done. Docs:
+native-entity-model §2/§8, interaction-model §3/§6/§7/§17/§20/§22.
+
+### F186 — addendum host smoke real (2026-08-27)
+
+Ejecutado en host real: SketchUp 2026.2 macOS (Ruby 3.2.2) + TestUp 2.5.4 +
+RBZ instalado `efeab3fb…` vía `-RubyStartupArg TestUp:CI:Config`. Resultado
+final **17/17 tests (7 bootstrap + 10 native entity), 251 assertions,
+Success**; JSON preservado en `progress/host_smoke_F186_testup_ci.json` y
+README actualizado. El host real expuso 3 issues corregidos en el slice:
+`Geom::Transformation.identity` no existe en el host (bug runtime: todo
+insert fallaba; ⇒ `Transformation.new`), el template default trae geometría
+(persona ComponentInstance ⇒ smoke scopea a definiciones Granete · y cleanup
+no toca contenido ajeno) y `BoundingBox#to_a` no existe (⇒ min/max).
+Además: TestUp descubre tests vía `public_instance_methods` — un test bajo
+`private` jamás se descubre/corre.

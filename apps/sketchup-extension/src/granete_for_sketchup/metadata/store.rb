@@ -102,6 +102,13 @@ module Granete
             assert_opaque_string(intent['furnitureDefinitionId'], 'intent.furnitureDefinitionId',
                                  max_length: 256)
           end
+          # #346/#415 identity passthrough: role, material binding role and
+          # hardware host are opaque Granete IDs, never host locators.
+          %w[role materialBindingRole hostComponentInstanceId].each do |key|
+            next unless intent.key?(key)
+
+            assert_opaque_string(intent[key], "intent.#{key}", max_length: 256)
+          end
           if intent.key?('parameters') && !intent['parameters'].is_a?(Hash)
             raise InvalidMetadataError, 'intent.parameters must be an object'
           end

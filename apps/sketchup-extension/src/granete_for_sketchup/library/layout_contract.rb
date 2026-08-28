@@ -6,38 +6,300 @@ module Granete
       # One resolved board with its authoritative local→furniture transform
       # (#414). AABB accessors are convenience/preview passthrough and may
       # be nil — orientation lives exclusively in basis/translation.
+      # componentDefinitionId is the #346 stable authoring-definition ID
+      # published by the server (#415): shared by every copy of one
+      # component, Granete-owned, and never the host SU definition GUID.
+      # catalogComponentId is the optional, separately-namespaced catalog
+      # reference — the two identities never alias each other.
       class LayoutBoardTransform
-        attr_reader :component_instance_id, :slot_id, :name,
-                    :width_mm, :thickness_mm, :length_mm,
-                    :translation, :basis, :aabb_min, :aabb_size
+        attr_reader :component_instance_id, :slot_id, :name
 
-        def initialize(component_instance_id:, slot_id:, name:,
-                       width_mm:, thickness_mm:, length_mm:,
-                       translation:, basis:, aabb_min: nil, aabb_size: nil)
+        def initialize(component_instance_id:, slot_id:, name:, dims:,
+                       local_transform:, identity: {}, material: {}, aabb: {})
           @component_instance_id = component_instance_id
           @slot_id = slot_id
           @name = name
-          @width_mm = width_mm
-          @thickness_mm = thickness_mm
-          @length_mm = length_mm
+          @dims = dims
+          @local_transform = local_transform
+          @identity = identity
+          @material = material
+          @aabb = aabb
+        end
+
+        def width_mm
+          @dims['width']
+        end
+
+        def thickness_mm
+          @dims['thickness']
+        end
+
+        def length_mm
+          @dims['length']
+        end
+
+        def translation
+          @local_transform['translation']
+        end
+
+        def basis
+          @local_transform['basis']
+        end
+
+        def component_definition_id
+          @identity['componentDefinitionId']
+        end
+
+        def catalog_component_id
+          @identity['catalogComponentId']
+        end
+
+        def role
+          @identity['role']
+        end
+
+        def option_role
+          @identity['optionRole']
+        end
+
+        def aabb_min
+          @aabb['min']
+        end
+
+        def aabb_size
+          @aabb['size']
+        end
+
+        def material_id
+          @material['materialId']
+        end
+
+        def material_code
+          @material['materialCode']
+        end
+
+        def material_name
+          @material['materialName']
+        end
+
+        def material_color_hex
+          @material['materialColorHex']
+        end
+
+        def material_image_url
+          @material['materialImageUrl']
+        end
+
+        def material_texture_url
+          @material['materialTextureUrl']
+        end
+
+        def material_texture_tile_width_mm
+          @material['materialTextureTileWidthMm']
+        end
+
+        def material_texture_tile_length_mm
+          @material['materialTextureTileLengthMm']
+        end
+
+        def material_grain
+          @material['materialGrain']
+        end
+      end
+
+      # A visible hardware placement. Hardware keeps the resolved AABB shape
+      # (#414 decision: the server anchors it against the final host board);
+      # identity stays tied to componentInstanceId via
+      # host_component_instance_id.
+      class LayoutHardwarePlacement
+        attr_reader :placement_id, :hardware_id, :asset_id, :name,
+                    :host_component_instance_id, :translation, :dimensions, :color_hex
+
+        def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
+                       host_component_instance_id: nil, translation: nil, dimensions: nil,
+                       color_hex: nil)
+          @placement_id = placement_id
+          @hardware_id = hardware_id
+          @asset_id = asset_id
+          @name = name
+          @host_component_instance_id = host_component_instance_id
           @translation = translation
-          @basis = basis
-          @aabb_min = aabb_min
-          @aabb_size = aabb_size
+          @dimensions = dimensions
+          @color_hex = color_hex
         end
       end
 
       # A parsed resolved layout: contract marker + board transforms.
       class NativeLayout
-        attr_reader :transform_contract, :boards
+        attr_reader :transform_contract, :boards, :hardware, :furniture_definition_id,
+                    :definition_name, :dimensions_mm
 
-        def initialize(transform_contract, boards)
+        def initialize(transform_contract, boards, hardware = [],
+                       furniture_definition_id: nil, definition_name: nil, dimensions_mm: nil)
           @transform_contract = transform_contract
           @boards = boards
+          @hardware = hardware
+          @furniture_definition_id = furniture_definition_id
+          @definition_name = definition_name
+          @dimensions_mm = dimensions_mm
         end
 
         def find_board(component_instance_id)
           boards.find { |board| board.component_instance_id == component_instance_id }
+        end
+      end
+
+      # Low-level coercions shared by the contract parsers: every malformed
+      # input fails loudly — the extension never guesses or repairs a
+      # server payload.
+      module ContractCoercions
+        module_function
+
+        def numeric_triple(raw, label)
+          unless raw.is_a?(Array) && raw.length == 3 && raw.all?(Numeric)
+            raise LayoutContract::ContractError, "#{label} debe ser un triple numérico [x, y, z]"
+          end
+
+          values = raw.map { |v| Float(v) }
+          raise LayoutContract::ContractError, "#{label} contiene valores no finitos" unless values.all?(&:finite?)
+
+          values
+        end
+
+        def optional_triple(raw, label)
+          return nil if raw.nil?
+
+          numeric_triple(raw, label)
+        end
+
+        def positive_number(raw, label)
+          unless raw.is_a?(Numeric) && Float(raw).finite? && Float(raw).positive?
+            raise LayoutContract::ContractError, "#{label} debe ser un número positivo"
+          end
+
+          Float(raw)
+        end
+
+        def optional_positive_number(raw, label)
+          return nil if raw.nil?
+
+          positive_number(raw, label)
+        end
+
+        def optional_boolean(raw, label)
+          return nil if raw.nil?
+
+          raise LayoutContract::ContractError, "#{label} debe ser booleano" unless [true, false].include?(raw)
+
+          raw
+        end
+
+        # Contract IDs are opaque server-owned strings: preserve them verbatim
+        # (never derive/repair them client-side), reject anything malformed.
+        def optional_opaque_string(raw, label)
+          return nil if raw.nil?
+
+          unless raw.is_a?(String) && !raw.strip.empty?
+            raise LayoutContract::ContractError, "#{label} debe ser un string opaco no vacío"
+          end
+
+          raw
+        end
+
+        def dot(vec_a, vec_b)
+          (vec_a[0] * vec_b[0]) + (vec_a[1] * vec_b[1]) + (vec_a[2] * vec_b[2])
+        end
+
+        def cross(vec_a, vec_b)
+          [(vec_a[1] * vec_b[2]) - (vec_a[2] * vec_b[1]),
+           (vec_a[2] * vec_b[0]) - (vec_a[0] * vec_b[2]),
+           (vec_a[0] * vec_b[1]) - (vec_a[1] * vec_b[0])]
+        end
+      end
+
+      # Parsing + enforcement of the published orientation contract: unit,
+      # orthogonal, right-handed (det = +1) basis. A mirrored or collapsed
+      # basis would flip/collapse the board in SketchUp — reject, never repair.
+      module BasisValidation
+        VECTOR_TOLERANCE = 1e-4
+
+        module_function
+
+        def parse(raw, id)
+          raise LayoutContract::ContractError, "Componente #{id}: falta localTransform.basis" unless raw.is_a?(Hash)
+
+          basis = {
+            'x' => ContractCoercions.numeric_triple(raw['x'], "basis.x de #{id}"),
+            'y' => ContractCoercions.numeric_triple(raw['y'], "basis.y de #{id}"),
+            'z' => ContractCoercions.numeric_triple(raw['z'], "basis.z de #{id}")
+          }
+          validate!(basis, id)
+          basis
+        end
+
+        def validate!(basis, id)
+          basis.each do |axis, v|
+            norm = Math.sqrt(ContractCoercions.dot(v, v))
+            next if (norm - 1.0).abs <= VECTOR_TOLERANCE
+
+            raise LayoutContract::ContractError, "Componente #{id}: basis.#{axis} no es unitario (|v|=#{norm})"
+          end
+          %w[x y z].each do |a|
+            %w[x y z].each do |b|
+              next if a >= b
+
+              d = ContractCoercions.dot(basis[a], basis[b])
+              next if d.abs <= VECTOR_TOLERANCE
+
+              raise LayoutContract::ContractError,
+                    "Componente #{id}: basis.#{a}·basis.#{b} = #{d}, no es ortonormal"
+            end
+          end
+          det = ContractCoercions.dot(basis['x'], ContractCoercions.cross(basis['y'], basis['z']))
+          return if (det - 1.0).abs <= VECTOR_TOLERANCE
+
+          raise LayoutContract::ContractError,
+                "Componente #{id}: base no es diestra (det=#{det}); un espejo nunca se aplica"
+        end
+      end
+
+      # Hardware parsing of the resolved layout (#414 decision): hardware
+      # keeps the server-resolved AABB placement — already anchored against
+      # the final host board — so the renderer applies a plain translation,
+      # never an orientation guess.
+      module HardwareContractParsing
+        module_function
+
+        def parse(raw)
+          return [] if raw.nil?
+          raise LayoutContract::ContractError, 'hardware debe ser una lista' unless raw.is_a?(Array)
+
+          raw.map { |entry| parse_placement(entry) }
+        end
+
+        def parse_placement(raw)
+          raise LayoutContract::ContractError, 'Herraje de composición inválido' unless raw.is_a?(Hash)
+
+          placement_id = ContractCoercions.optional_opaque_string(raw['placementId'], 'placementId de herraje')
+          raise LayoutContract::ContractError, 'Herraje sin placementId' if placement_id.nil?
+
+          LayoutHardwarePlacement.new(
+            placement_id: placement_id,
+            hardware_id: ContractCoercions.optional_opaque_string(raw['hardwareId'],
+                                                                  "hardwareId de #{placement_id}"),
+            asset_id: ContractCoercions.optional_opaque_string(raw['assetId'],
+                                                               "assetId de #{placement_id}"),
+            name: ContractCoercions.optional_opaque_string(raw['name'], "name de #{placement_id}"),
+            host_component_instance_id: ContractCoercions.optional_opaque_string(
+              raw['hostComponentInstanceId'], "hostComponentInstanceId de #{placement_id}"
+            ),
+            translation: ContractCoercions.optional_triple(raw.dig('transform', 'translationMm'),
+                                                           "translationMm de #{placement_id}"),
+            dimensions: ContractCoercions.optional_triple(raw['dimensionsMm'],
+                                                          "dimensionsMm de #{placement_id}"),
+            color_hex: ContractCoercions.optional_opaque_string(raw['colorHex'],
+                                                                "colorHex de #{placement_id}")
+          )
         end
       end
 
@@ -59,7 +321,9 @@ module Granete
       # malformed basis fails loudly so clients never place pieces on a guess.
       module LayoutContract
         SUPPORTED_TRANSFORM_CONTRACT = 'granete.local-basis.v1'
-        VECTOR_TOLERANCE = 1e-4
+        IDENTITY_KEYS = %w[componentDefinitionId catalogComponentId role optionRole].freeze
+        MATERIAL_STRING_KEYS = %w[materialId materialCode materialName materialColorHex
+                                  materialImageUrl materialTextureUrl].freeze
 
         class ContractError < LayoutResolutionError; end
 
@@ -83,7 +347,18 @@ module Granete
             raise ContractError, 'La composición resuelta no trae componentes'
           end
 
-          NativeLayout.new(contract, components.map { |raw| parse_board(raw) })
+          NativeLayout.new(contract,
+                           components.map { |raw| parse_board(raw) },
+                           HardwareContractParsing.parse(body['hardware']),
+                           furniture_definition_id: ContractCoercions.optional_opaque_string(
+                             body['furnitureDefinitionId'], 'furnitureDefinitionId'
+                           ),
+                           definition_name: ContractCoercions.optional_opaque_string(
+                             body['definitionName'], 'definitionName'
+                           ),
+                           dimensions_mm: ContractCoercions.optional_triple(
+                             body['dimensionsMm'], 'dimensionsMm'
+                           ))
         end
 
         def parse_board(raw)
@@ -100,89 +375,51 @@ module Granete
 
           LayoutBoardTransform.new(
             component_instance_id: id,
-            slot_id: raw['slotId'],
+            slot_id: ContractCoercions.optional_opaque_string(raw['slotId'], "slotId de #{id}"),
             name: raw['name'],
-            width_mm: positive_number(raw['widthMm'], "widthMm de #{id}"),
-            thickness_mm: positive_number(raw['thicknessMm'], "thicknessMm de #{id}"),
-            length_mm: positive_number(raw['lengthMm'], "lengthMm de #{id}"),
-            translation: numeric_triple(local['translationMm'], "translationMm de #{id}"),
-            basis: parse_basis(local['basis'], id),
-            aabb_min: optional_triple(raw.dig('transform', 'translationMm'), "AABB min de #{id}"),
-            aabb_size: optional_triple(raw['dimensionsMm'], "AABB size de #{id}")
+            dims: {
+              'width' => ContractCoercions.positive_number(raw['widthMm'], "widthMm de #{id}"),
+              'thickness' => ContractCoercions.positive_number(raw['thicknessMm'], "thicknessMm de #{id}"),
+              'length' => ContractCoercions.positive_number(raw['lengthMm'], "lengthMm de #{id}")
+            },
+            local_transform: {
+              'translation' => ContractCoercions.numeric_triple(local['translationMm'],
+                                                                "translationMm de #{id}"),
+              'basis' => BasisValidation.parse(local['basis'], id)
+            },
+            identity: parse_identity_fields(raw, id),
+            material: parse_material_fields(raw, id),
+            aabb: parse_aabb_fields(raw, id)
           )
         end
 
-        def parse_basis(raw, id)
-          raise ContractError, "Componente #{id}: falta localTransform.basis" unless raw.is_a?(Hash)
+        def parse_identity_fields(raw, id)
+          IDENTITY_KEYS.to_h do |key|
+            [key, ContractCoercions.optional_opaque_string(raw[key], "#{key} de #{id}")]
+          end
+        end
 
-          basis = {
-            'x' => numeric_triple(raw['x'], "basis.x de #{id}"),
-            'y' => numeric_triple(raw['y'], "basis.y de #{id}"),
-            'z' => numeric_triple(raw['z'], "basis.z de #{id}")
+        def parse_material_fields(raw, id)
+          material = MATERIAL_STRING_KEYS.to_h do |key|
+            [key, ContractCoercions.optional_opaque_string(raw[key], "#{key} de #{id}")]
+          end
+          material['materialTextureTileWidthMm'] = ContractCoercions.optional_positive_number(
+            raw['materialTextureTileWidthMm'], "materialTextureTileWidthMm de #{id}"
+          )
+          material['materialTextureTileLengthMm'] = ContractCoercions.optional_positive_number(
+            raw['materialTextureTileLengthMm'], "materialTextureTileLengthMm de #{id}"
+          )
+          material['materialGrain'] = ContractCoercions.optional_boolean(raw['materialGrain'],
+                                                                         "materialGrain de #{id}")
+          material
+        end
+
+        def parse_aabb_fields(raw, id)
+          {
+            'min' => ContractCoercions.optional_triple(raw.dig('transform', 'translationMm'),
+                                                       "AABB min de #{id}"),
+            'size' => ContractCoercions.optional_triple(raw['dimensionsMm'], "AABB size de #{id}")
           }
-          validate_basis!(basis, id)
-          basis
-        end
-
-        # The published orientation contract, enforced client-side too: unit,
-        # orthogonal, right-handed (det = +1). A mirrored or collapsed basis
-        # would flip/collapse the board in SketchUp — reject, never repair.
-        def validate_basis!(basis, id)
-          basis.each do |axis, v|
-            norm = Math.sqrt(dot(v, v))
-            next if (norm - 1.0).abs <= VECTOR_TOLERANCE
-
-            raise ContractError, "Componente #{id}: basis.#{axis} no es unitario (|v|=#{norm})"
-          end
-          %w[x y z].each do |a|
-            %w[x y z].each do |b|
-              next if a >= b
-
-              d = dot(basis[a], basis[b])
-              next if d.abs <= VECTOR_TOLERANCE
-
-              raise ContractError, "Componente #{id}: basis.#{a}·basis.#{b} = #{d}, no es ortonormal"
-            end
-          end
-          det = dot(basis['x'], cross(basis['y'], basis['z']))
-          return if (det - 1.0).abs <= VECTOR_TOLERANCE
-
-          raise ContractError, "Componente #{id}: base no es diestra (det=#{det}); un espejo nunca se aplica"
-        end
-
-        def numeric_triple(raw, label)
-          unless raw.is_a?(Array) && raw.length == 3 && raw.all?(Numeric)
-            raise ContractError, "#{label} debe ser un triple numérico [x, y, z]"
-          end
-
-          values = raw.map { |v| Float(v) }
-          raise ContractError, "#{label} contiene valores no finitos" unless values.all?(&:finite?)
-
-          values
-        end
-
-        def optional_triple(raw, label)
-          return nil if raw.nil?
-
-          numeric_triple(raw, label)
-        end
-
-        def positive_number(raw, label)
-          unless raw.is_a?(Numeric) && Float(raw).finite? && Float(raw).positive?
-            raise ContractError, "#{label} debe ser un número positivo"
-          end
-
-          Float(raw)
-        end
-
-        def dot(vec_a, vec_b)
-          (vec_a[0] * vec_b[0]) + (vec_a[1] * vec_b[1]) + (vec_a[2] * vec_b[2])
-        end
-
-        def cross(vec_a, vec_b)
-          [(vec_a[1] * vec_b[2]) - (vec_a[2] * vec_b[1]),
-           (vec_a[2] * vec_b[0]) - (vec_a[0] * vec_b[2]),
-           (vec_a[0] * vec_b[1]) - (vec_a[1] * vec_b[0])]
         end
       end
     end

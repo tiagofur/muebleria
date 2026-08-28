@@ -22,13 +22,13 @@ class SelectionObserverTest < Minitest::Test
     )
   end
 
-  def test_inspects_selected_furniture_instance_and_extracts_parameters
+  def test_top_level_click_identifies_the_furniture
     definition = @provider.find_definition('kitchen-base-standard')
     @builder.insert_furniture(@model, definition, { 'widthMm' => 800, 'shelfCount' => 2 })
-    main_group = @model.active_entities.groups.first
+    furniture = @model.active_entities.instances.first
 
     @model.selection.add_observer(@observer)
-    @model.selection.add(main_group)
+    @model.selection.add(furniture)
 
     refute_nil @last_selected_data
     assert_equal 'furniture', @last_selected_data['type']
@@ -37,11 +37,11 @@ class SelectionObserverTest < Minitest::Test
     assert_equal 800, @last_selected_data['parameters']['widthMm']
   end
 
-  def test_inspects_selected_component_instance
+  def test_drill_down_reaches_the_semantic_child_and_its_owner_furniture
     definition = @provider.find_definition('kitchen-base-standard')
-    @builder.insert_furniture(@model, definition, { 'widthMm' => 600 })
-    main_group = @model.active_entities.groups.first
-    left_panel = main_group.entities.groups.first
+    result = @builder.insert_furniture(@model, definition, { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    left_panel = furniture.definition.entities.instances.first
 
     @model.selection.add_observer(@observer)
     # Insert leaves the new furniture selected (placement assist); picking a
@@ -52,6 +52,27 @@ class SelectionObserverTest < Minitest::Test
     refute_nil @last_selected_data
     assert_equal 'component', @last_selected_data['type']
     assert_equal 'left_side', @last_selected_data['role']
+    # The owning furniture stays recoverable from the semantic child (#415):
+    # drill-down context without losing the managed unit.
+    assert_equal result['instance_id'], @last_selected_data['furnitureInstanceId']
+  end
+
+  def test_renamed_entities_keep_resolving_semantic_identity
+    definition = @provider.find_definition('kitchen-base-standard')
+    result = @builder.insert_furniture(@model, definition, { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    left_panel = furniture.definition.entities.instances.first
+
+    # Names are UX labels; rename must not break selection resolution.
+    furniture.name = 'Módulo renombrado'
+    left_panel.name = 'Costado renombrado'
+
+    @model.selection.add_observer(@observer)
+    @model.selection.clear
+    @model.selection.add(left_panel)
+
+    assert_equal 'component', @last_selected_data['type']
+    assert_equal result['instance_id'], @last_selected_data['furnitureInstanceId']
   end
 
   def test_clears_selection_when_empty

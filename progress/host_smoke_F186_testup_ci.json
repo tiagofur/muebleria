@@ -1,0 +1,158 @@
+{
+  "status": {
+    "code": "Success",
+    "color": "green"
+  },
+  "metadata": {
+    "generated_by": "TestUp::CIJsonReporter",
+    "version": "1.0.0",
+    "ruby_version": "3.2.2",
+    "ruby_patchlevel": 53,
+    "ruby_platform": "arm64-darwin",
+    "time": "2026-08-28T04:24:32Z",
+    "options": {
+      "io": "TestUp::Console",
+      "filter": " /^(Granete::SketchUpExtension::TC_BootstrapSmoke#test_default_ports_fail_closed|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_floor_and_runtime_are_available|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_observer_is_registered_while_extension_runs|Granete::SketchUpExtension::TC_BootstrapSmoke#test_installed_extension_is_registered_enabled_and_current|Granete::SketchUpExtension::TC_BootstrapSmoke#test_local_dialog_can_open_close_and_open_again|Granete::SketchUpExtension::TC_BootstrapSmoke#test_logging_redacts_sensitive_values|Granete::SketchUpExtension::TC_BootstrapSmoke#test_non_manufacturable_metadata_round_trips_in_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_abort_operation_leaves_no_partial_hierarchy|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_broken_contract_fails_closed_without_touching_the_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_furniture_move_and_rotation_never_rewrite_child_geometry|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_host_locators_never_become_business_identity|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_inserted_furniture_and_boards_are_native_component_instances|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_lateral_transform_matches_the_414_basis_and_translation|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_legacy_group_representation_fails_closed_with_migration_pointer|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_part_definitions_hold_local_geometry_at_origin|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_rename_keeps_granete_identity_in_metadata|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_two_furniture_units_diverge_without_shared_definition_effects)$/",
+      "verbose": true,
+      "testup_ci": true,
+      "seed": 10531,
+      "args": "\"-n /^(Granete::SketchUpExtension::TC_BootstrapSmoke#test_default_ports_fail_closed|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_floor_and_runtime_are_available|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_observer_is_registered_while_extension_runs|Granete::SketchUpExtension::TC_BootstrapSmoke#test_installed_extension_is_registered_enabled_and_current|Granete::SketchUpExtension::TC_BootstrapSmoke#test_local_dialog_can_open_close_and_open_again|Granete::SketchUpExtension::TC_BootstrapSmoke#test_logging_redacts_sensitive_values|Granete::SketchUpExtension::TC_BootstrapSmoke#test_non_manufacturable_metadata_round_trips_in_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_abort_operation_leaves_no_partial_hierarchy|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_broken_contract_fails_closed_without_touching_the_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_furniture_move_and_rotation_never_rewrite_child_geometry|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_host_locators_never_become_business_identity|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_inserted_furniture_and_boards_are_native_component_instances|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_lateral_transform_matches_the_414_basis_and_translation|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_legacy_group_representation_fails_closed_with_migration_pointer|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_part_definitions_hold_local_geometry_at_origin|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_rename_keeps_granete_identity_in_metadata|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_two_furniture_units_diverge_without_shared_definition_effects)$/\" --verbose --testup_ci --seed 10531"
+    }
+  },
+  "statistics": {
+    "total": 17,
+    "assertions": 251,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "passes": 17
+  },
+  "timings": {
+    "total_seconds": 2.5932789999933448,
+    "runs_per_second": 6.5554072662616045,
+    "assertions_per_second": 96.78866022539192
+  },
+  "fails": [],
+  "skips": [],
+  "passes": [
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_rename_keeps_granete_identity_in_metadata",
+      "assertions": 2,
+      "time": 0.21110699999553617
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_two_furniture_units_diverge_without_shared_definition_effects",
+      "assertions": 5,
+      "time": 0.23171499998716172
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_abort_operation_leaves_no_partial_hierarchy",
+      "assertions": 3,
+      "time": 0.09781999999540858
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_furniture_move_and_rotation_never_rewrite_child_geometry",
+      "assertions": 33,
+      "time": 0.14068399999814574
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_host_locators_never_become_business_identity",
+      "assertions": 130,
+      "time": 0.1445640000019921
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_inserted_furniture_and_boards_are_native_component_instances",
+      "assertions": 20,
+      "time": 0.1492980000039097
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_legacy_group_representation_fails_closed_with_migration_pointer",
+      "assertions": 7,
+      "time": 0.17108600000210572
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_broken_contract_fails_closed_without_touching_the_model",
+      "assertions": 4,
+      "time": 0.12171500000113156
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_lateral_transform_matches_the_414_basis_and_translation",
+      "assertions": 16,
+      "time": 0.16030400000454392
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_part_definitions_hold_local_geometry_at_origin",
+      "assertions": 4,
+      "time": 0.2701470000029076
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_logging_redacts_sensitive_values",
+      "assertions": 6,
+      "time": 0.0001500000071246177
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_non_manufacturable_metadata_round_trips_in_model",
+      "assertions": 2,
+      "time": 0.11320700000214856
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_default_ports_fail_closed",
+      "assertions": 4,
+      "time": 0.00044099999649915844
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_host_observer_is_registered_while_extension_runs",
+      "assertions": 3,
+      "time": 0.001365000003715977
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_host_floor_and_runtime_are_available",
+      "assertions": 6,
+      "time": 0.0020660000009229407
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_installed_extension_is_registered_enabled_and_current",
+      "assertions": 4,
+      "time": 3.9999998989515007e-05
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_local_dialog_can_open_close_and_open_again",
+      "assertions": 2,
+      "time": 0.025450000001001172
+    }
+  ]
+}

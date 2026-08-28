@@ -1,86 +1,130 @@
 # Sesión
 
-**Feature en curso:** F185 — TRANSFORM LOCAL→FURNITURE AUTORITATIVO EN EL LAYOUT RESUELTO (#414 / SU-ENT-1) (COMPLETADA; ver `progress/history.md` y `progress/review_F185.md`)
-**Cerrados con evidencia (ledger done):** F169–F184 (PRs #419/#424/#427/#428/#431/#432)
-**Rama:** `feat/414-local-transform-contract` (desde origin/main post-#432)
+**Feature en curso:** F186 — RENDERER NATIVO SKETCHUP (#415 / SU-ENT-2)
+(COMPLETADA; review round 2 APPROVED en `progress/review_F186.md`; ver
+`progress/history.md`)
+**Cerrados con evidencia (ledger done):** F169–F185 (PRs #419/#424/#427/#428/#431/#432/#433)
+**Rama:** `feat/415-native-component-renderer` (desde origin/main post-#433)
 **Inicio:** 2026-08-27
 **Contexto:** programa #413 (SketchUp native entity model). Prerequisites
-verificados mergeados: #418 docs+ADR-0004 (PR #420), #402 espesor efectivo en
-Go layout (PR #431), #403 binding roles (PR #432). Este slice desbloquea #415
-(renderer nativo) y es exclusivamente contract/resolver/parsing.
+verificados mergeados: #418 docs+ADR-0004 (PR #420), #414 transform local→
+furniture autoritativo + parser Ruby (PR #433, F185). Este slice reemplaza el
+renderer final Group/AABB por la jerarquía nativa y desbloquea #416/#417/#404.
 
 ## Problema
 
-`LayoutComponent` publicaba dimensiones locales (`lengthMm/widthMm/thicknessMm`)
-y un AABB world (`transform.translationMm` + `dimensionsMm`), pero la rotación
-sólo existía en el `layoutBoard` interno (`rotX/rotY/rotZ`, Euler XYZ en el
-frame render Y-up). Suficiente para cajas pre-horneadas; insuficiente para
-crear una `ComponentDefinition` nativa con ejes locales estables y posicionar
-la instancia — Ruby habría tenido que inferir orientación por slot/role/AABB.
+`FurnitureBuilder` materializaba muebles como `Group` + Groups hijos con
+cajas pre-horneadas AABB world (`transform.translationMm` = min corner).
+Suficiente como MVP visual, pero sin ejes locales estables, sin semántica
+definition/instance, sin aislamiento entre unidades, sin selección nativa de
+pieza ni Outliner significativo — y sin identidad de authoring-definition en
+metadata.
 
 ## Diseño entregado
 
-1. **Marker de contrato:** `FurnitureLayout.transformContract =
-   "granete.local-basis.v1"` (`LayoutTransformContractV1`). Cliente que no lo
-   reconoce debe fallar seguro — nunca reinterpretar campos nuevos.
-2. **Transform autoritativo:** `LayoutComponent.localTransform =
-   {translationMm, basis{x,y,z}}` con
-   `furniture_point = translationMm + basis · local_point` y caja local
-   `[0,width]×[0,thickness]×[0,length]` (convención local X=width/Y=thickness/
-   Z=length CONSERVADA).
-3. **Representación: base ortonormal diestra** (det=+1). Sobre Euler (orden
-   ambiguo — prohibido exportarlo por comodidad) y quaternion (orden de w +
-   ruido trig en 90°): las entradas son exactamente 0/±1 en los placements
-   estándar y mapea 1:1 a `Geom::Transformation.axes` en Ruby.
-4. **Decisión de frame (la explícita que el issue permite):** la rotación
-   interna vive en el frame render (Y-up); render→furniture es el swap Y/Z —
-   un espejo (det −1). La imagen fiel del frame local del engine sería
-   LEFT-handed: no es una rotación y espejaría geometría en SketchUp. El frame
-   local publicado conserva extents y semántica de caras (+Y hacia la cara
-   frontal, +Z hacia la superior — paridad con hardwarePlacement.ts) pero
-   espeja +X local; la traslación compensa un ancho a lo largo de la imagen de
-   +X local, así la caja ocupa EXACTAMENTE la región física del AABB legacy.
-   Implementado en `boardLocalPose` (layout.go).
-5. **AABB derivado:** `aabbFromLocalTransform` — el AABB publicado se deriva
-   del transform (única fuente, imposible que diverjan) + chequeo runtime
-   contra el pose del engine (desacuerdo > 1e-6 ⇒ error loud). Los tests
-   preexistentes que clavaban valores AABB pasan sin cambios.
-6. **Validación server-side:** `validateLayoutBasis` exige unitaria/ortogonal/
-   diestra (det +1) y finita; espejos/colapsos/NaN nunca se publican.
-7. **Material-aware (#402):** el transform se computa del board YA resuelto
-   con espesor efectivo del MaterialBoard seleccionado (mismo T en fórmulas,
-   pose, caja local, transform y AABB).
-8. **Ruby parser:** `library/layout_contract.rb` (`LayoutContract.parse!` +
-   `BaseCatalogProvider#resolved_native_layout`). Exige el marker exacto,
-   valida basis (unitaria/ortogonal/diestra, tolerancia 1e-4), triples y
-   escalares positivos; falla loudly (`ContractError < LayoutResolutionError`)
-   ante contrato ausente/desconocido o payload malformado. AABB es passthrough
-   opcional y NUNCA fuente de orientación. Cero tabla slot/role→rotación.
-   El renderer Group actual NO se tocó (sigue AABB; #415 lo cambia).
-9. **Golden compartido:** `contracts/sketchupLayoutTransform.contract.json`
-   generado desde el resolver Go (`UPDATE_LAYOUT_CONTRACT_GOLDEN=1`), consumido
-   textual por los tests Ruby del parser — paridad real de wire shape.
+1. **Jerarquía nativa (ADR-0004 §1–2):** mueble =
+   `Sketchup::ComponentInstance` top-level con `ComponentDefinition` generada
+   y aislada por FurnitureInstance (`Granete · Mueble · {nombre} · {inst}`);
+   cada tablero/herraje = ComponentInstance anidado cuya definición porta la
+   caja LOCAL en origen `[0,width]×[0,thickness]×[0,length]` (convención
+   engine X=width/Y=thickness/Z=length) y cuyo transform es EXACTAMENTE
+   `Geom::Transformation.axes(translationMm, basis.x/y/z)` del contrato #414.
+   Cero bakeo de world AABB, cero escala no-uniforme, cero tabla
+   slot/role→rotación (negative proofs lo clavan).
+2. **Update/rebuild:** reutiliza la instancia top-level existente (identidad +
+   world transform intactas), `definition.entities.clear!`, re-render dentro
+   de la misma definición y cleanup scoped post-commit: sólo definiciones con
+   prefijo `Granete · Parte/Herraje ·` y cero instancias vivas se remueven
+   (`definitions.remove`; jamás `purge_unused`). Legacy Group como target ⇒
+   fail closed con puntero a #416.
+3. **Atomicidad:** una sola operación SketchUp por insert/rebuild; abort en
+   cualquier fallo (los stubs de test implementan journal de rollback para
+   verificar que no queda jerarquía/definición parcial); metadata se escribe
+   sólo después de la jerarquía válida; el builder rechaza bodies crudos
+   (`ArgumentError`: sólo `Library::NativeLayout` parseado).
+4. **Identidad (#346/#415):** el layout Go ahora publica
+   `components[].componentDefinitionId` (`{idPrefix}{componentId}`, p.ej.
+   `st-comp-side` para `st-comp-side-copy-0`; compartido por todas las copias
+   de un componente, estable entre rebuilds; legacy boards: id propio). El
+   parser Ruby (`layout_contract.rb`: `LayoutBoardTransform` con
+   identity/material/aabb agrupados, `LayoutHardwarePlacement`,
+   `NativeLayout` con hardware+dims, `ContractCoercions`/`BasisValidation`/
+   `HardwareContractParsing` extraídos para los budgets de lint) preserva
+   verbatim `componentDefinitionId`/`catalogComponentId` (opcional, namespace
+   separado) + material passthrough. Metadata de child:
+   `componentInstanceId` + `componentDefinitionId` + `furnitureInstanceRef`
+   + slot/role/materialBindingRole (+ hostComponentInstanceId en herrajes).
+   GUID/persistent_id/nombre de host NUNCA son identidad (negative proof:
+   el JSON de metadata no contiene ningún GUID de definición).
+5. **Selección:** observer resuelve furniture top-level / child semántico y
+   expone `furnitureInstanceId` + `componentDefinitionId` desde metadata
+   (rename-safe). Controller consume `resolved_native_layout` (fail-safe ante
+   contrato ausente/desconocido; sin fallback AABB).
+6. **Herrajes:** AssetLoader devuelve la instancia creada (dentro de la
+   definición del mueble) y el builder le ata metadata Granete; fallback
+   generado también es ComponentInstance nativo con color/preview.
+7. **Path genérico offline:** misma jerarquía nativa con base identidad por
+   construcción (laterales/estantes/puertas autorados localmente).
+8. **Host validation EJECUTADO EN HOST REAL:** TestUp 2.5.4 + RBZ
+   `efeab3fb…` instalados en SketchUp 2026.2 (macOS, Ruby 3.2.2), corridos
+   vía `-RubyStartupArg TestUp:CI:Config`. Resultado final:
+   **17/17 (7 TC_BootstrapSmoke + 10 TC_NativeEntitySmoke), 251 assertions,
+   status Success** — evidencia preservada en
+   `progress/host_smoke_F186_testup_ci.json` + README (tabla compatibilidad).
+   El host real expuso y el slice corrigió 3 issues que los stubs enmascaraban:
+   (a) `Geom::Transformation.identity` NO existe en el host (bug de runtime:
+   todo insert fallaría) ⇒ `Transformation.new`; (b) el template default del
+   documento trae geometría (persona = ComponentInstance) ⇒ el smoke scpea
+   lookups a definiciones `Granete · Mueble ·` y el cleanup NO toca contenido
+   del template; (c) `BoundingBox#to_a` no existe en el host ⇒ min/max.
+   El smoke además requiere métodos de test PÚBLICOS (TestUp descubre vía
+   public_instance_methods): un test bajo `private` no se descubre (hallazgo).
 
 ## Evidencia
 
-- `go test ./...` backend-go completo: OK (incl. layout_test.go previo sin
-  cambios — paridad AABB exacta — y regression_402/403).
-- Tests nuevos Go (`layout_transform_test.go`): marker; boards canónicos
-  (lateral/piso/techo/fondo/puerta con bases ancladas); paridad AABB derivada
-  (8 esquinas, con dims overrides); espesor mixto 16/18/6 antes del transform;
-  agregado (3 frentes cajón, identidad); host de herraje atado a
-  componentInstanceId con transform válido; NEGATIVE PROOF (dos customs con
-  mismo slot/nombre/AABB y bases distintas); validateLayoutBasis negativos
-  (espejo/no-unitaria/NaN/skew); golden serialization API.
-- API test: endpoint sirve transformContract + localTransform en el wire.
-- Ruby `bundle exec rake verify` (syntax+lint+unit+boundary+RBZ): OK.
-  Tests Ruby del parser: golden servido, fail-safe contrato ausente/desconocido/
-  malformado, negative proof (slot renombrado no cambia transform; AABB
-  opcional), integración provider + estáticos nil.
-- `pnpm test`/typecheck TS: sin cambios de código TS (verificación de no-regresión).
+- `bundle exec rake verify` (syntax+lint+unit+boundary+RBZ): OK — 159 runs /
+  2217 assertions, RBZ final sha256 `efeab3fb…` (tras fixes de review + host smoke).
+- Tests nuevos `native_entity_renderer_test.rb` (matriz obligatoria +
+  negative proofs, golden-driven) y `furniture_builder_test.rb` reescrito
+  (native), `persistence_roundtrip/selection_observer/dialog_controller/
+  application` adaptados. Boundary ownership (vocabulario manufacturing)
+  sigue verde.
+- `go test ./...` backend-go: OK (incl. `TestLayoutComponentDefinitionIdentity`
+  — defId compartido por 3 copias quantity, ≠ instanceId — y golden
+  regenerado con el campo).
+- `pnpm typecheck` + `pnpm test`: OK (sin cambios TS; no-regresión).
+- Host smoke real: **OK 17/17** (runs intermedios 1–3 documentados arriba;
+  JSON final preservado).
 
-## No-goals respetados (issue #414)
+## Review round 1 (progress/review_F186.md) — CHANGES_REQUESTED → atendido
 
-- Renderer nativo (#415): no tocado; FurnitureBuilder sigue con AABB.
-- Material rebuild (#404): no tocado.
-- Heurísticas Ruby: no existen; el parser no lee slot/role/AABB para orientación.
+- **H1 trabajo sin commit:** se commit/push al cierre de esta ronda.
+- **H2 fail-closed legacy no host-accurate:** en el host real `Group` también
+  responde a `#definition`, así que `respond_to?(:definition)` dejaba pasar
+  Groups legacy como híbridos. Fix: guard por TIPO (`is_a?(::Sketchup::
+  ComponentInstance)`); stubs ahora modelan `Sketchup::ComponentInstance`/
+  `Sketchup::Group` como bases de `ComponentInstanceStub`/`GroupStub` y
+  `GroupStub#definition` existe (host-faithful). Test unitario reforzado
+  (responde a definition y ES Group, aún así rechazado; sin operación
+  iniciada) + caso real agregado a `TC_NativeEntitySmoke`.
+- **H3 doc contradictoria:** `sketchup-interaction-model.md` §3.1/§3.3/§6.2/§7/
+  §17/§22-2 actualizados: renderer nativo es CURRENT post-#415, Group es
+  legacy (#416/#397).
+- **H4 defID legacy sin cobertura:** documentado en `legacyBoardStack` (cada
+  pieza flat ES su definición single-instance ⇒ defID == id es el intento) +
+  aserción en `TestResolveFurnitureLayoutLegacyModuleStacksAllPieces`.
+
+## Hallazgo lateral (fuera de alcance)
+
+Entradas duplicadas del mismo componente (dos `ComponentInstance` de catálogo
+apuntando al mismo `ComponentID`) generan `componentInstanceId` colisionantes
+(`-copy-0` dos veces) — paridad TS↔Go (`bom.ts:498` idéntico), preexistente,
+no introducido por #415. **Registrado como issue #434.**
+
+## No-goals respetados (issue #415)
+
+- Migración legacy Group (#416): sólo fail-closed con puntero.
+- OpenCutList (#417): no tocado.
+- Material rebuild (#404): sólo wiring mínimo (controller consume layout
+  parseado; sin re-resolve en Ruby).
+- Digital Thread #385+: no tocado (instanceRef compat se mantiene).
