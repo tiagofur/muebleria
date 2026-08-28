@@ -4695,6 +4695,52 @@
         "F184",
         "F188"
       ]
+    },
+    {
+      "id": "F190",
+      "title": "Validación real SketchUp nativo + interoperabilidad OpenCutList (#417 / SU-ENT-4)",
+      "description": "Slice de validación en host real sobre la jerarquía nativa de #415 usando un gabinete canónico de carpintería (BODY 16 / FRONT 18 / BACK 6, puerta + agregado cajonero con tres frentes que comparten un componentDefinitionId de autorado, herraje visible con manija y bisagras) creado desde cero con la representación nativa actual; #416/legacy queda fuera. TC_NativeValidationSmoke prueba en SketchUp 2026.2 real: jerarquía full-native de 13 hijos con boxes sólidos de 6 caras, espesor por rol como extents LOCALES, ejes locales intactos tras mover + dos quarter turns mientras el AABB mundial cambia, bases ortonormales diestras sin escala no-uniforme, aislamiento FI-B (FRONT→16) vs FI-A, registro V1 explícito de definiciones de parte únicas por instancia con authoring ID compartido, identidad Granete independiente de persistent_id/GUID, nombres Outliner semánticos que el rename no muta, y binding herraje→puerta. TC_OpenCutListInteropSmoke construye FI-A + FI-B, guarda y reabre el .skp y ejecuta el CutlistGenerateWorker público de OpenCutList 7.1.0: reconoce los 20 tableros como partes con dimensiones auto-orientadas exactas (lateral 688×544×16, puerta 596×459×18, fondo 600×720×6), espesor por rol incluyendo la divergencia deliberada 18/16 entre muebles, un grupo por material Granete y nesting sin explosión. Evidencia de compatibilidad únicamente: el boundary test prohíbe términos opencutlist/ladb/cutlist/bom en src/ y el BOM Granete permanece autoritativo (docs/sketchup-opencutlist-interop.md).",
+      "tags": [
+        "sketchup-extension",
+        "native-components",
+        "validation",
+        "interop",
+        "opencutlist",
+        "host-smoke",
+        "test-only"
+      ],
+      "created": "2026-08-28",
+      "acceptance": [
+        "Fixture canónico pasa todos los checks estructurales de SketchUp en host real (28/28 TestUp CI, 968 assertions)",
+        "Mueble rotado/movido preserva ejes locales de tableros: transforms y geometría de definición intactos, mundo movido por composición",
+        "FI-A y FI-B siguen rebuildables de forma independiente; FRONT 18→16 en FI-B no toca jerarquía ni metadata de FI-A",
+        "El fixture material-aware 16/18/6 no regresa a rendering Group/AABB-only: sin Groups, sin caras sueltas, sin escala no-uniforme, sin world-baking en definiciones",
+        "OpenCutList 7.1.0 documentado con versión, resultado esperado y diferencias (docs/sketchup-opencutlist-interop.md + progress/opencutlist_smoke_F190.json)",
+        "Ningún output de terceros se usa como prueba autoritativa de BOM; las assertions comparan la lectura OCL contra la verdad del fixture Granete",
+        "Los tests de regresión fallan si los tableros físicos gestionados vuelven a wrappers Group (counts de clase + 6 caras + extents locales por rol)",
+        "El smoke de host verifica jerarquía Outliner/Outliner-names y selección estructural en SketchUp real, no sólo stubs Ruby",
+        "Negative proof: sin código de compatibilidad OpenCutList en runtime (boundary ownership test con términos ladb/opencutlist prohibidos)"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/417",
+        "https://github.com/tiagofur/muebleria/issues/413",
+        "docs/architecture/sketchup-native-entity-model.md",
+        "docs/sketchup-opencutlist-interop.md",
+        "docs/adr/0004-sketchup-native-component-entity-model.md",
+        "docs/verification.md",
+        "apps/sketchup-extension/test/fixtures/cabinet_validation_layout.json",
+        "apps/sketchup-extension/test/testup/TC_NativeValidationSmoke.rb",
+        "apps/sketchup-extension/test/testup/TC_OpenCutListInteropSmoke.rb",
+        "progress/host_smoke_F190_testup_ci.json",
+        "progress/opencutlist_smoke_F190.json"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F185",
+        "F186",
+        "F188",
+        "F189"
+      ]
     }
   ]
 }

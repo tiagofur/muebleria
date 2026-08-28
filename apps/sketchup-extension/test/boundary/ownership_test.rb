@@ -11,7 +11,9 @@ class OwnershipTest < Minitest::Test
     drilling
     joint
     kerf
+    ladb
     nesting
+    opencutlist
     part
     parts
     postprocessing

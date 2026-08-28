@@ -1489,3 +1489,27 @@ Verificación: domain 91 archivos / 1152 tests + typecheck; Go completo verde
 incluido PostgreSQL; Ruby/RBZ 164 tests / 1578 assertions + boundary 3/801 +
 RuboCop. Review ronda 1 pidió agregar escenario C Go; corregido con comparación
 BOM/layout before/after por IDs. Ronda 2 APPROVED (`progress/review_F189.md`).
+
+## F190 — validación real SketchUp nativo + OpenCutList (#417 / SU-ENT-4) — 2026-08-28
+
+Validación en host real de la jerarquía nativa (#415/ADR-0004) con un gabinete
+canónico de carpintería creado desde cero (legacy #416 excluido por decisión).
+`TC_NativeValidationSmoke` (9 tests) prueba jerarquía full-native 13 hijos,
+espesores por rol como extents locales 16/18/6, ejes locales tras mover + dos
+quarter turns, bases rígidas diestras sin escala, aislamiento FI-B FRONT→16 vs
+FI-A, registro V1 de definiciones únicas con authoring ID compartido, identidad
+Granete independiente de persistent_id/GUID, nombres Outliner semánticos
+rename-safe y binding herraje→puerta. `TC_OpenCutListInteropSmoke` reabre un
+.skp con FI-A + FI-B y corre el worker público de OpenCutList 7.1.0: 20 tableros
+reconocidos como partes con dimensiones exactas, espesor por rol con la
+divergencia 18/16, grupos por material Granete y nesting sin explosión —
+evidencia de compatibilidad únicamente, con boundary test anti-contaminación
+(`opencutlist`/`ladb` prohibidos en src/).
+
+Verificación: rake verify verde (170 unit / 3 boundary / RuboCop / RBZ
+determinista `5fb741e9…` = instalado); host smoke final TestUp CI 28/28 tests,
+968 assertions, Success (seed 29189); evidencia en
+`progress/host_smoke_F190_testup_ci.json` + `progress/opencutlist_smoke_F190.json`;
+resultados/limitaciones OCL en `docs/sketchup-opencutlist-interop.md`. Flake
+único no reproducido del test F188 de undo (`editUndo:` síncrono en sondas);
+relanzamientos rápidos de SketchUp pueden crashear — corridas espaciadas.

@@ -1,0 +1,401 @@
+{
+  "opencutlistVersion": "7.1.0",
+  "sketchupVersion": "26.2.242",
+  "rubyVersion": "3.2.2",
+  "graneteFixture": "cabinet_validation_layout.json",
+  "model": "FI-A (FRONT oak 18) + FI-B (FRONT rebuilt white 16), saved+reopened .skp",
+  "errors": [
+
+  ],
+  "tips": [
+    "tab.cutlist.tip.no_typed_materials"
+  ],
+  "groups": [
+    {
+      "material": "Granete · Bisagra Inferior",
+      "type": "unknow",
+      "partCount": 2,
+      "parts": [
+        {
+          "name": "Granete · Herraje · Bisagra Inferior · gab-front-door-copy-0-hw-hinge-b",
+          "length": "96 mm",
+          "width": "35 mm",
+          "thickness": "32 mm",
+          "count": 1,
+          "entityNames": {
+            "Bisagra Inferior": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Herraje · Bisagra Inferior · gab-front-door-copy-0-hw-hinge-b#2",
+          "length": "96 mm",
+          "width": "35 mm",
+          "thickness": "32 mm",
+          "count": 1,
+          "entityNames": {
+            "Bisagra Inferior": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "material": "Granete · Bisagra Superior",
+      "type": "unknow",
+      "partCount": 2,
+      "parts": [
+        {
+          "name": "Granete · Herraje · Bisagra Superior · gab-front-door-copy-0-hw-hinge-t",
+          "length": "96 mm",
+          "width": "35 mm",
+          "thickness": "32 mm",
+          "count": 1,
+          "entityNames": {
+            "Bisagra Superior": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Herraje · Bisagra Superior · gab-front-door-copy-0-hw-hinge-t#2",
+          "length": "96 mm",
+          "width": "35 mm",
+          "thickness": "32 mm",
+          "count": 1,
+          "entityNames": {
+            "Bisagra Superior": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "material": "Granete · HDF Fondo 6",
+      "type": "unknow",
+      "partCount": 2,
+      "parts": [
+        {
+          "name": "Granete · Parte · Fondo · gab-back-copy-#2",
+          "length": "720 mm",
+          "width": "600 mm",
+          "thickness": "6 mm",
+          "count": 1,
+          "entityNames": {
+            "Fondo": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Fondo · gab-back-copy-0",
+          "length": "720 mm",
+          "width": "600 mm",
+          "thickness": "6 mm",
+          "count": 1,
+          "entityNames": {
+            "Fondo": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "material": "Granete · Manija Puerta 160",
+      "type": "unknow",
+      "partCount": 2,
+      "parts": [
+        {
+          "name": "Granete · Herraje · Manija Puerta 160 · gab-front-door-copy-0-hw-handle",
+          "length": "160 mm",
+          "width": "37 mm",
+          "thickness": "32 mm",
+          "count": 1,
+          "entityNames": {
+            "Manija Puerta 160": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Herraje · Manija Puerta 160 · gab-front-door-copy-0-hw-handle#2",
+          "length": "160 mm",
+          "width": "37 mm",
+          "thickness": "32 mm",
+          "count": 1,
+          "entityNames": {
+            "Manija Puerta 160": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "material": "Granete · MDF Blanco 16",
+      "type": "unknow",
+      "partCount": 14,
+      "parts": [
+        {
+          "name": "Granete · Parte · Lateral Derecho · gab-body-side-r-copy-#2",
+          "length": "688 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Lateral Derecho": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Lateral Derecho · gab-body-side-r-copy-0",
+          "length": "688 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Lateral Derecho": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Lateral Izquierdo · gab-body-side-l-copy-#2",
+          "length": "688 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Lateral Izquierdo": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Lateral Izquierdo · gab-body-side-l-copy-0",
+          "length": "688 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Lateral Izquierdo": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Puerta · gab-front-door-copy-#2",
+          "length": "596 mm",
+          "width": "459 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Puerta": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Frente Cajón 1 · gab-drawer-front-copy-#2",
+          "length": "596 mm",
+          "width": "84 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Frente Cajón 1": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Frente Cajón 2 · gab-drawer-front-copy-#2",
+          "length": "596 mm",
+          "width": "84 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Frente Cajón 2": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Frente Cajón 3 · gab-drawer-front-copy-#2",
+          "length": "596 mm",
+          "width": "84 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Frente Cajón 3": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Entrepaño · gab-body-shelf-copy-#2",
+          "length": "568 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Entrepaño": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Entrepaño · gab-body-shelf-copy-0",
+          "length": "568 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Entrepaño": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Piso · gab-body-bottom-copy-#2",
+          "length": "568 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Piso": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Piso · gab-body-bottom-copy-0",
+          "length": "568 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Piso": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Techo · gab-body-top-copy-#2",
+          "length": "568 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Techo": [
+              "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Techo · gab-body-top-copy-0",
+          "length": "568 mm",
+          "width": "544 mm",
+          "thickness": "16 mm",
+          "count": 1,
+          "entityNames": {
+            "Techo": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "material": "Granete · Roble Macizo 18",
+      "type": "unknow",
+      "partCount": 4,
+      "parts": [
+        {
+          "name": "Granete · Parte · Puerta · gab-front-door-copy-0",
+          "length": "596 mm",
+          "width": "459 mm",
+          "thickness": "18 mm",
+          "count": 1,
+          "entityNames": {
+            "Puerta": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Frente Cajón 1 · gab-drawer-front-copy-0",
+          "length": "596 mm",
+          "width": "84 mm",
+          "thickness": "18 mm",
+          "count": 1,
+          "entityNames": {
+            "Frente Cajón 1": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Frente Cajón 2 · gab-drawer-front-copy-1",
+          "length": "596 mm",
+          "width": "84 mm",
+          "thickness": "18 mm",
+          "count": 1,
+          "entityNames": {
+            "Frente Cajón 2": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        },
+        {
+          "name": "Granete · Parte · Frente Cajón 3 · gab-drawer-front-copy-2",
+          "length": "596 mm",
+          "width": "84 mm",
+          "thickness": "18 mm",
+          "count": 1,
+          "entityNames": {
+            "Frente Cajón 3": [
+              "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "selectionLength": 0,
+    "activeEntitiesCount": 3,
+    "topLevel": [
+      {
+        "class": "Sketchup::ComponentInstance",
+        "name": "",
+        "definition": "Sree",
+        "visible": true,
+        "layer": "Layer0",
+        "definitionInstances": 1
+      },
+      {
+        "class": "Sketchup::ComponentInstance",
+        "name": "Gabinete Base Puerta y Cajones 600 (inst-1317e96d)",
+        "definition": "Granete · Mueble · Gabinete Base Puerta y Cajones 600 · inst-1317e96d",
+        "visible": true,
+        "layer": "Layer0",
+        "definitionInstances": 1
+      },
+      {
+        "class": "Sketchup::ComponentInstance",
+        "name": "Gabinete Base Puerta y Cajones 600 (inst-8650ae41)",
+        "definition": "Granete · Mueble · Gabinete Base Puerta y Cajones 600 · inst-8650ae41",
+        "visible": true,
+        "layer": "Layer0",
+        "definitionInstances": 1
+      }
+    ],
+    "oclInstanceCount": 26,
+    "oclIgnoredInstanceCount": 0
+  }
+}

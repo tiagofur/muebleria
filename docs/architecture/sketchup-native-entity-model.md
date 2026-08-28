@@ -713,6 +713,18 @@ Granete BOM        = authoritative manufacturing result
 
 No compatibility claim is made before evidence.
 
+### Evidence (#417) [CURRENT]
+
+Validated 2026-08-28 on SketchUp 2026.2 macOS against **OpenCutList 7.1.0**
+(canonical cabinet FI-A 16/18/6 + rebuilt sibling FI-B, saved and reopened
+`.skp`): all 20 board ComponentInstances across both furniture units are
+recognized as parts with auto-oriented final dimensions exactly matching the
+Granete local geometry (lateral 688×544×16, door 596×459×18, back 600×720×6),
+thickness follows the material role per part name, each Granete material forms
+its own group, and nesting needs no explosion. Conventions and limitations are
+recorded in `docs/sketchup-opencutlist-interop.md`; run evidence lives in
+`progress/opencutlist_smoke_F190.json` and `progress/host_smoke_F190_testup_ci.json`.
+
 ---
 
 ## 19. Legacy Group representation migration

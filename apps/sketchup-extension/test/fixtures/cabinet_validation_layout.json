@@ -1,0 +1,600 @@
+{
+  "furnitureDefinitionId": "gab-cajonero-600",
+  "definitionName": "Gabinete Base Puerta y Cajones 600",
+  "transformContract": "granete.local-basis.v1",
+  "dimensionsMm": [
+    600,
+    720,
+    560
+  ],
+  "components": [
+    {
+      "componentInstanceId": "gab-body-side-l-copy-0",
+      "componentDefinitionId": "gab-body-side-l",
+      "slotId": "lateral_izquierdo",
+      "role": "LATERAL",
+      "name": "Lateral Izquierdo",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          0,
+          0,
+          16
+        ]
+      },
+      "dimensionsMm": [
+        16,
+        544,
+        688
+      ],
+      "localTransform": {
+        "translationMm": [
+          0,
+          544,
+          16
+        ],
+        "basis": {
+          "x": [
+            0,
+            -1,
+            0
+          ],
+          "y": [
+            1,
+            0,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 688,
+      "widthMm": 544,
+      "thicknessMm": 16,
+      "optionRole": "BODY",
+      "materialId": "mat-white16",
+      "materialCode": "MDG-BLANCO-16",
+      "materialName": "MDF Blanco 16",
+      "materialColorHex": "#f2f0eb"
+    },
+    {
+      "componentInstanceId": "gab-body-side-r-copy-0",
+      "componentDefinitionId": "gab-body-side-r",
+      "slotId": "lateral_derecho",
+      "role": "LATERAL",
+      "name": "Lateral Derecho",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          584,
+          0,
+          16
+        ]
+      },
+      "dimensionsMm": [
+        16,
+        544,
+        688
+      ],
+      "localTransform": {
+        "translationMm": [
+          584,
+          544,
+          16
+        ],
+        "basis": {
+          "x": [
+            0,
+            -1,
+            0
+          ],
+          "y": [
+            1,
+            0,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 688,
+      "widthMm": 544,
+      "thicknessMm": 16,
+      "optionRole": "BODY",
+      "materialId": "mat-white16",
+      "materialCode": "MDG-BLANCO-16",
+      "materialName": "MDF Blanco 16",
+      "materialColorHex": "#f2f0eb"
+    },
+    {
+      "componentInstanceId": "gab-body-bottom-copy-0",
+      "componentDefinitionId": "gab-body-bottom",
+      "slotId": "piso",
+      "role": "INTERIOR",
+      "name": "Piso",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          16,
+          0,
+          0
+        ]
+      },
+      "dimensionsMm": [
+        568,
+        544,
+        16
+      ],
+      "localTransform": {
+        "translationMm": [
+          584,
+          0,
+          0
+        ],
+        "basis": {
+          "x": [
+            -1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            1
+          ],
+          "z": [
+            0,
+            1,
+            0
+          ]
+        }
+      },
+      "lengthMm": 544,
+      "widthMm": 568,
+      "thicknessMm": 16,
+      "optionRole": "BODY",
+      "materialId": "mat-white16",
+      "materialCode": "MDG-BLANCO-16",
+      "materialName": "MDF Blanco 16",
+      "materialColorHex": "#f2f0eb"
+    },
+    {
+      "componentInstanceId": "gab-body-top-copy-0",
+      "componentDefinitionId": "gab-body-top",
+      "slotId": "techo",
+      "role": "INTERIOR",
+      "name": "Techo",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          16,
+          0,
+          704
+        ]
+      },
+      "dimensionsMm": [
+        568,
+        544,
+        16
+      ],
+      "localTransform": {
+        "translationMm": [
+          584,
+          0,
+          704
+        ],
+        "basis": {
+          "x": [
+            -1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            1
+          ],
+          "z": [
+            0,
+            1,
+            0
+          ]
+        }
+      },
+      "lengthMm": 544,
+      "widthMm": 568,
+      "thicknessMm": 16,
+      "optionRole": "BODY",
+      "materialId": "mat-white16",
+      "materialCode": "MDG-BLANCO-16",
+      "materialName": "MDF Blanco 16",
+      "materialColorHex": "#f2f0eb"
+    },
+    {
+      "componentInstanceId": "gab-body-shelf-copy-0",
+      "componentDefinitionId": "gab-body-shelf",
+      "slotId": "entrepano",
+      "role": "INTERIOR",
+      "name": "Entrepaño",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          16,
+          0,
+          352
+        ]
+      },
+      "dimensionsMm": [
+        568,
+        544,
+        16
+      ],
+      "localTransform": {
+        "translationMm": [
+          584,
+          0,
+          352
+        ],
+        "basis": {
+          "x": [
+            -1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            1
+          ],
+          "z": [
+            0,
+            1,
+            0
+          ]
+        }
+      },
+      "lengthMm": 544,
+      "widthMm": 568,
+      "thicknessMm": 16,
+      "optionRole": "BODY",
+      "materialId": "mat-white16",
+      "materialCode": "MDG-BLANCO-16",
+      "materialName": "MDF Blanco 16",
+      "materialColorHex": "#f2f0eb"
+    },
+    {
+      "componentInstanceId": "gab-back-copy-0",
+      "componentDefinitionId": "gab-back",
+      "slotId": "fondo",
+      "role": "FONDO",
+      "name": "Fondo",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          0,
+          554,
+          0
+        ]
+      },
+      "dimensionsMm": [
+        600,
+        6,
+        720
+      ],
+      "localTransform": {
+        "translationMm": [
+          0,
+          554,
+          0
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 720,
+      "widthMm": 600,
+      "thicknessMm": 6,
+      "optionRole": "BACK",
+      "materialId": "mat-back6",
+      "materialCode": "HDF-6",
+      "materialName": "HDF Fondo 6",
+      "materialColorHex": "#ded9cf"
+    },
+    {
+      "componentInstanceId": "gab-front-door-copy-0",
+      "componentDefinitionId": "gab-front-door",
+      "slotId": "puerta",
+      "role": "FRENTE",
+      "name": "Puerta",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          2,
+          560,
+          2
+        ]
+      },
+      "dimensionsMm": [
+        596,
+        18,
+        459
+      ],
+      "localTransform": {
+        "translationMm": [
+          2,
+          560,
+          2
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 459,
+      "widthMm": 596,
+      "thicknessMm": 18,
+      "optionRole": "FRONT",
+      "materialId": "mat-oak18",
+      "materialCode": "ROBLE-MACIZO-18",
+      "materialName": "Roble Macizo 18",
+      "materialColorHex": "#c4a574"
+    },
+    {
+      "componentInstanceId": "gab-drawer-front-copy-0",
+      "componentDefinitionId": "gab-drawer-front",
+      "slotId": "cajonero_frente_1",
+      "role": "FRENTE",
+      "name": "Frente Cajón 1",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          2,
+          560,
+          463
+        ]
+      },
+      "dimensionsMm": [
+        596,
+        18,
+        84
+      ],
+      "localTransform": {
+        "translationMm": [
+          2,
+          560,
+          463
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 84,
+      "widthMm": 596,
+      "thicknessMm": 18,
+      "optionRole": "FRONT",
+      "materialId": "mat-oak18",
+      "materialCode": "ROBLE-MACIZO-18",
+      "materialName": "Roble Macizo 18",
+      "materialColorHex": "#c4a574"
+    },
+    {
+      "componentInstanceId": "gab-drawer-front-copy-1",
+      "componentDefinitionId": "gab-drawer-front",
+      "slotId": "cajonero_frente_2",
+      "role": "FRENTE",
+      "name": "Frente Cajón 2",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          2,
+          560,
+          549
+        ]
+      },
+      "dimensionsMm": [
+        596,
+        18,
+        84
+      ],
+      "localTransform": {
+        "translationMm": [
+          2,
+          560,
+          549
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 84,
+      "widthMm": 596,
+      "thicknessMm": 18,
+      "optionRole": "FRONT",
+      "materialId": "mat-oak18",
+      "materialCode": "ROBLE-MACIZO-18",
+      "materialName": "Roble Macizo 18",
+      "materialColorHex": "#c4a574"
+    },
+    {
+      "componentInstanceId": "gab-drawer-front-copy-2",
+      "componentDefinitionId": "gab-drawer-front",
+      "slotId": "cajonero_frente_3",
+      "role": "FRENTE",
+      "name": "Frente Cajón 3",
+      "kind": "board",
+      "transform": {
+        "translationMm": [
+          2,
+          560,
+          635
+        ]
+      },
+      "dimensionsMm": [
+        596,
+        18,
+        84
+      ],
+      "localTransform": {
+        "translationMm": [
+          2,
+          560,
+          635
+        ],
+        "basis": {
+          "x": [
+            1,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            1,
+            0
+          ],
+          "z": [
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "lengthMm": 84,
+      "widthMm": 596,
+      "thicknessMm": 18,
+      "optionRole": "FRONT",
+      "materialId": "mat-oak18",
+      "materialCode": "ROBLE-MACIZO-18",
+      "materialName": "Roble Macizo 18",
+      "materialColorHex": "#c4a574"
+    }
+  ],
+  "hardware": [
+    {
+      "placementId": "gab-front-door-copy-0-hw-handle",
+      "hardwareId": "hw-manija-160",
+      "name": "Manija Puerta 160",
+      "shape": "bar-pull",
+      "sizeMm": 160,
+      "diameterMm": 32,
+      "projectionMm": 37,
+      "colorHex": "#c0c0c0",
+      "hostComponentInstanceId": "gab-front-door-copy-0",
+      "anchorFace": "front",
+      "transform": {
+        "translationMm": [
+          480,
+          578,
+          392
+        ]
+      },
+      "dimensionsMm": [
+        32,
+        37,
+        160
+      ]
+    },
+    {
+      "placementId": "gab-front-door-copy-0-hw-hinge-t",
+      "hardwareId": "hw-bisagra-cubrecanto",
+      "name": "Bisagra Superior",
+      "shape": "box",
+      "colorHex": "#b0b0b0",
+      "hostComponentInstanceId": "gab-front-door-copy-0",
+      "anchorFace": "back",
+      "transform": {
+        "translationMm": [
+          40,
+          562,
+          448
+        ]
+      },
+      "dimensionsMm": [
+        96,
+        32,
+        35
+      ]
+    },
+    {
+      "placementId": "gab-front-door-copy-0-hw-hinge-b",
+      "hardwareId": "hw-bisagra-cubrecanto",
+      "name": "Bisagra Inferior",
+      "shape": "box",
+      "colorHex": "#b0b0b0",
+      "hostComponentInstanceId": "gab-front-door-copy-0",
+      "anchorFace": "back",
+      "transform": {
+        "translationMm": [
+          40,
+          562,
+          64
+        ]
+      },
+      "dimensionsMm": [
+        96,
+        32,
+        35
+      ]
+    }
+  ]
+}
