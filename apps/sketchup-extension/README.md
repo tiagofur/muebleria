@@ -134,6 +134,29 @@ identity, that no native GUID appears as business identity, and that a
 mirrored basis (or an aborted operation) leaves no partial hierarchy. The
 suite self-cleans its entities and generated definitions on teardown.
 
+### Validation + OpenCutList suites (#417)
+
+`TC_NativeValidationSmoke` renders the canonical carpentry cabinet
+(`test/fixtures/cabinet_validation_layout.json`: BODY 16 / FRONT 18 / BACK 6,
+door + three-drawer-front aggregate sharing one authoring
+`componentDefinitionId`, visible hardware) and asserts in the real host: the
+full 13-child native hierarchy with six-face solid local boxes, role
+thicknesses as LOCAL extents (16/18/6), local axes and transforms unchanged
+across move + two quarter turns while world bounds move, rigid right-handed
+instance bases (no non-uniform scale), FI-B FRONT→16 isolation from FI-A,
+the V1 record (unique part definitions per instance, shared authoring ID
+across drawer-front copies), Granete identity surviving regeneration with no
+host locator leakage, semantic Outliner names that rename never mutates, and
+hardware→door binding metadata. `TC_OpenCutListInteropSmoke` builds FI-A plus
+the rebuilt FI-B, saves and **reopens** the `.skp`, pins decimal-millimeter
+units, then runs the installed OpenCutList's own
+`CutlistGenerateWorker` (its UI command's synchronous path, no dialogs) and
+asserts its reading against the Granete fixture truth — part recognition,
+per-role thicknesses, material grouping, nesting without explosion. That
+evidence is compatibility-only; results and conventions live in
+`docs/sketchup-opencutlist-interop.md`. The suites fail closed when the RBZ,
+the checkout guard or OpenCutList 7.x is not present.
+
 ## Configuration and security boundary
 
 The bootstrap injects two independent ports:
@@ -159,7 +182,7 @@ SketchUp operation. It is not a BOM, release, machine, or fabrication contract.
 
 | Host | Embedded Ruby | CEF | Status |
 |---|---:|---:|---|
-| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…`; in-host smoke 2026-08-27 (#415): TestUp CI 17/17 (7 bootstrap + 10 native entity), RBZ SHA-256 `efeab3fb…` |
+| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…`; in-host smoke 2026-08-27 (#415): TestUp CI 17/17 (7 bootstrap + 10 native entity), RBZ SHA-256 `efeab3fb…`; in-host smoke 2026-08-28 (#417): TestUp CI **28/28** (7 bootstrap + 11 native entity + 9 native validation + 1 OpenCutList 7.1.0 interop), 968 assertions, RBZ SHA-256 `5fb741e9…` |
 | SketchUp 2024/2025 macOS | 3.2.2 | 112/128 | Planned compatibility — not a target, no implied support |
 | SketchUp 2024/2025/2026.2 Windows | 3.2.2 | 112–137 | Planned compatibility — not a target, no implied support |
 
