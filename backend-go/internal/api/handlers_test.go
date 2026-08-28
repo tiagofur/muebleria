@@ -67,10 +67,10 @@ type stubStore struct {
 	deleteMaterialCategoryCalled  bool
 	deleteMaterialCategoryErrHook error
 	// Auth test hooks
-	getUserByEmail      *domain.User
-	getUserByEmailErr   error
-	createUserErr       error
-	listUsers           []domain.User
+	getUserByEmail    *domain.User
+	getUserByEmailErr error
+	createUserErr     error
+	listUsers         []domain.User
 	// Multi-org memberships by user (ADR-0004) for login/select-org tests.
 	membershipsByUser   map[string][]domain.MembershipWithOrg
 	listConnectedOrgs   []domain.Organization
@@ -1284,7 +1284,7 @@ func TestHandleCustomersCreateSuccess(t *testing.T) {
 
 func TestHandleProjectsDuplicateKeyReturns409(t *testing.T) {
 	srv := &Server{Store: &stubStore{createProjectErr: dupErr("error creating project")}}
-	body := strings.NewReader(`{"id":"77777777-8888-9999-0000-111111111111","name":"Dup","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0}`)
+	body := strings.NewReader(`{"id":"77777777-8888-9999-0000-111111111111","name":"Dup","customer_id":"10000000-0000-0000-0000-000000000001","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1306,7 +1306,7 @@ func TestHandleProjectsDuplicateKeyReturns409(t *testing.T) {
 func TestHandleProjectsCreateEchoesClientId(t *testing.T) {
 	srv := &Server{Store: &stubStore{createProjectErr: nil}}
 	const sentID = "88888888-9999-0000-1111-222222222222"
-	body := strings.NewReader(`{"id":"` + sentID + `","name":"Nuevo","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0}`)
+	body := strings.NewReader(`{"id":"` + sentID + `","name":"Nuevo","customer_id":"10000000-0000-0000-0000-000000000001","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0}`)
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/projects", body), "v1", string(domain.RoleVendedor))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1334,7 +1334,7 @@ func TestHandleProjectsCreateEchoesClientId(t *testing.T) {
 // treated it as success, and POST /calculate 404'd on a phantom FE-only id.
 func TestHandleProjectByIDUpdateNotFoundReturns404(t *testing.T) {
 	srv := &Server{Store: &stubStore{projectGetByIDErr: errors.New("no rows in result set")}}
-	body := strings.NewReader(`{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","name":"Ghost","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
+	body := strings.NewReader(`{"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","name":"Ghost","customer_id":"10000000-0000-0000-0000-000000000001","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", body), "admin", string(domain.RoleAdmin))
 	req.SetPathValue("id", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 	req.Header.Set("Content-Type", "application/json")
@@ -1378,7 +1378,7 @@ func TestHandleProjectByIDUpdateEmptyModuleIDReturns400(t *testing.T) {
 	srv := &Server{Store: &stubStore{projectReturnedByID: &domain.Project{
 		ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "u1", Status: domain.StatusDraft,
 	}}}
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"i1","module_id":"","quantity":1,"option_choices":{"FRENTE":""}}]}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"i1","module_id":"","quantity":1,"option_choices":{"FRENTE":""}}]}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "admin", string(domain.RoleAdmin))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -1408,6 +1408,59 @@ func TestHandleProjectsCreateEmptyCustomerReturns400(t *testing.T) {
 	}
 	if msg := errorBody(t, rr); !strings.Contains(msg, "cliente") {
 		t.Errorf("error message = %q, want it to mention 'cliente'", msg)
+	}
+}
+
+func TestHandleProjectByIDUpdateMalformedRequiredUUIDsReturn400(t *testing.T) {
+	const validCustomer = "10000000-0000-0000-0000-000000000001"
+	const validModule = "20000000-0000-0000-0000-000000000001"
+	const validChoice = "30000000-0000-0000-0000-000000000001"
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "customer",
+			body: `{"id":"p1","name":"P","customer_id":"not-a-uuid","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[]}`,
+			want: "cliente",
+		},
+		{
+			name: "module",
+			body: `{"id":"p1","name":"P","customer_id":"` + validCustomer + `","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"i1","module_id":"bad-module","quantity":1,"option_choices":{}}]}`,
+			want: "mueble",
+		},
+		{
+			name: "item choice",
+			body: `{"id":"p1","name":"P","customer_id":"` + validCustomer + `","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"i1","module_id":"` + validModule + `","quantity":1,"option_choices":{"FRENTE":"bad-choice"}}]}`,
+			want: "opción inválida",
+		},
+		{
+			name: "project choice",
+			body: `{"id":"p1","name":"P","customer_id":"` + validCustomer + `","currency":"UYU","margin_factor":1.35,"labor_fixed_cost":0,"project_level_choices":{"FRENTE":"bad-choice"},"items":[{"id":"i1","module_id":"` + validModule + `","quantity":1,"option_choices":{"FRENTE":"` + validChoice + `"}}]}`,
+			want: "opción global inválida",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := &Server{Store: &stubStore{projectReturnedByID: &domain.Project{
+				ID: "p1", Name: "P", CustomerID: validCustomer, OwnerUserID: "u1", Status: domain.StatusDraft,
+			}}}
+			req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", strings.NewReader(tt.body)), "admin", string(domain.RoleAdmin))
+			req.SetPathValue("id", "p1")
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+
+			srv.HandleProjectByID(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusBadRequest, rr.Body.String())
+			}
+			if msg := errorBody(t, rr); !strings.Contains(msg, tt.want) {
+				t.Errorf("error message = %q, want it to mention %q", msg, tt.want)
+			}
+		})
 	}
 }
 
@@ -1529,7 +1582,7 @@ func TestOwnership_AdminReassignProjectOwner(t *testing.T) {
 		},
 	}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"owner_user_id":"v2"}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"owner_user_id":"v2"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "admin", string(domain.RoleAdmin))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -1677,7 +1730,7 @@ func TestF036_VendedorCannotReopenAcceptedProject(t *testing.T) {
 		},
 	}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"draft","owner_user_id":"v1"}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"draft","owner_user_id":"v1"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "v1", string(domain.RoleVendedor))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -1696,7 +1749,7 @@ func TestF036_VendedorCanReopenQuotedProject(t *testing.T) {
 		},
 	}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"draft","owner_user_id":"v1"}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"draft","owner_user_id":"v1"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "v1", string(domain.RoleVendedor))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -1715,7 +1768,7 @@ func TestF036_ProduccionCanMarkProduced(t *testing.T) {
 		},
 	}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"produced","owner_user_id":"v1"}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"produced","owner_user_id":"v1"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "prod1", string(domain.RoleProduccion))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -1868,7 +1921,7 @@ func TestF036_VendedorCannotMarkProduced(t *testing.T) {
 		},
 	}
 	srv := &Server{Store: store}
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"produced","owner_user_id":"v1"}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[],"status":"produced","owner_user_id":"v1"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "v1", string(domain.RoleVendedor))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -2037,7 +2090,7 @@ func TestF108_ClosingQuotePinsStructureRevision(t *testing.T) {
 	rev := 3
 	catalog := &domain.Catalog{
 		Modules: []domain.Module{
-			{ID: "m1", Code: "MOD-1", Name: "M", StructureID: "st1"},
+			{ID: "20000000-0000-0000-0000-000000000001", Code: "MOD-1", Name: "M", StructureID: "st1"},
 		},
 		Structures: []domain.Structure{
 			{ID: "st1", Code: "EST-1", Name: "Cuerpo", Active: true, Revision: rev},
@@ -2048,14 +2101,14 @@ func TestF108_ClosingQuotePinsStructureRevision(t *testing.T) {
 			ID: "p1", Name: "P", CustomerID: "c1", OwnerUserID: "adm1",
 			Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
 			Items: []domain.ProjectItem{
-				{ID: "it1", ModuleID: "m1", Quantity: 1},
+				{ID: "it1", ModuleID: "20000000-0000-0000-0000-000000000001", Quantity: 1},
 			},
 		},
 		catalogOverride: catalog,
 	}
 	srv := &Server{Store: store}
 	// Move draft → quoted (closed). The item has no incoming pin.
-	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"c1","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"it1","module_id":"m1","quantity":1}],"status":"quoted","owner_user_id":"adm1"}`)
+	body := strings.NewReader(`{"id":"p1","name":"P","customer_id":"10000000-0000-0000-0000-000000000001","currency":"MXN","margin_factor":1.35,"labor_fixed_cost":0,"items":[{"id":"it1","module_id":"20000000-0000-0000-0000-000000000001","quantity":1}],"status":"quoted","owner_user_id":"adm1"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/projects/p1", body), "adm1", string(domain.RoleAdmin))
 	req.SetPathValue("id", "p1")
 	req.Header.Set("Content-Type", "application/json")
@@ -2444,7 +2497,7 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 // --- F172 stubs: platform / org team / invitations / support sessions ---
 
 func (s *stubStore) UpdateOrganization(context.Context, *domain.Organization) error { return nil }
-func (s *stubStore) CloneCatalog(context.Context, string, string) error            { return nil }
+func (s *stubStore) CloneCatalog(context.Context, string, string) error             { return nil }
 func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration) (*domain.SupportSession, error) {
 	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte"}, nil
 }

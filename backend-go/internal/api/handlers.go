@@ -221,8 +221,8 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 // LicenseDTO is the derived licensing state surfaced to clients (login,
 // org summary) — computed from the ORGANIZATION license (ADR-0005 §3).
 type LicenseDTO struct {
-	Plan      string              `json:"plan"`
-	ExpiresAt *time.Time          `json:"expires_at,omitempty"`
+	Plan      string               `json:"plan"`
+	ExpiresAt *time.Time           `json:"expires_at,omitempty"`
 	Status    domain.LicenseStatus `json:"status"`
 }
 
@@ -231,7 +231,7 @@ type LoginResponse struct {
 	User    PublicUserDTO `json:"user"`
 	License LicenseDTO    `json:"license"`
 	// Roles are the active membership's roles (union semantics client-side).
-	Roles   []domain.UserRole `json:"roles,omitempty"`
+	Roles []domain.UserRole `json:"roles,omitempty"`
 	// Organization is the active organization when the token is org-scoped.
 	Organization *OrgSummaryDTO `json:"organization,omitempty"`
 	// Memberships lists the user's selectable organizations.
@@ -243,17 +243,17 @@ type LoginResponse struct {
 
 // OrgSummaryDTO is the organization projection clients need (selector, banner).
 type OrgSummaryDTO struct {
-	ID       string                  `json:"id"`
-	Name     string                  `json:"name"`
-	Slug     string                  `json:"slug"`
-	Type     domain.OrganizationType `json:"type"`
-	License  LicenseDTO              `json:"license"`
+	ID      string                  `json:"id"`
+	Name    string                  `json:"name"`
+	Slug    string                  `json:"slug"`
+	Type    domain.OrganizationType `json:"type"`
+	License LicenseDTO              `json:"license"`
 }
 
 type MembershipDTO struct {
-	OrganizationID string                  `json:"organization_id"`
-	Roles          []domain.UserRole      `json:"roles"`
-	Organization   OrgSummaryDTO          `json:"organization"`
+	OrganizationID string            `json:"organization_id"`
+	Roles          []domain.UserRole `json:"roles"`
+	Organization   OrgSummaryDTO     `json:"organization"`
 }
 
 func toOrgSummaryDTO(o domain.Organization) OrgSummaryDTO {
@@ -534,8 +534,8 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		User:  ToPublicUserDTO(u),
 		Roles: claimsRolesUserRoles(claims),
 		License: LicenseDTO{
-			Plan:      string(domain.LicensePlanNone),
-			Status:    domain.LicenseStatusNone,
+			Plan:   string(domain.LicensePlanNone),
+			Status: domain.LicenseStatusNone,
 		},
 	}
 	if claims.OrgID != "" {
@@ -878,26 +878,49 @@ func (s *Server) HandleProjects(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// validateProjectPayloadRequiredIDs rejects client payloads whose NOT NULL
-// uuid columns arrive as empty strings. They used to reach SQL and blow up
-// as 500 22P02 "error interno del servidor" (pre-demo audit P1-5); a clear
-// 400 lets the client fix the payload. Malformed non-empty ids keep their
-// pre-existing behavior.
+func isValidUUID(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 36 {
+		return false
+	}
+	for i := range value {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if value[i] != '-' {
+				return false
+			}
+			continue
+		}
+		c := value[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// validateProjectPayloadRequiredIDs rejects malformed UUIDs before they reach
+// Postgres and become 22P02 internal errors (pre-demo audit P1-5).
 func validateProjectPayloadRequiredIDs(w http.ResponseWriter, p *domain.Project) bool {
-	if strings.TrimSpace(p.CustomerID) == "" {
+	if !isValidUUID(p.CustomerID) {
 		respondWithError(w, http.StatusBadRequest, "la cotización necesita un cliente válido")
 		return false
 	}
 	for i := range p.Items {
-		if strings.TrimSpace(p.Items[i].ModuleID) == "" {
+		if !isValidUUID(p.Items[i].ModuleID) {
 			respondWithError(w, http.StatusBadRequest, "hay una línea de la cotización sin mueble válido")
 			return false
 		}
 		for role, choice := range p.Items[i].OptionChoices {
-			if strings.TrimSpace(choice) == "" {
-				respondWithError(w, http.StatusBadRequest, "opción vacía ("+role+") en una línea de la cotización")
+			if !isValidUUID(choice) {
+				respondWithError(w, http.StatusBadRequest, "opción inválida ("+role+") en una línea de la cotización")
 				return false
 			}
+		}
+	}
+	for role, choice := range p.ProjectLevelChoices {
+		if !isValidUUID(choice) {
+			respondWithError(w, http.StatusBadRequest, "opción global inválida ("+role+") en la cotización")
+			return false
 		}
 	}
 	return true
@@ -1039,22 +1062,22 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 		if !authorizeCloseoutEventAppends(w, existing, p.Events) {
 			return
 		}
-			err = s.Store.UpdateProject(r.Context(), id, &p)
-			if err != nil {
-				if strings.Contains(err.Error(), "not found") {
-					respondWithError(w, http.StatusNotFound, err.Error())
-					return
-				}
-				respondWithInternalError(w, err, "handler")
+		err = s.Store.UpdateProject(r.Context(), id, &p)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			if !orgSeesManufacturing(claims, &p) {
-				domain.RedactProjectManufacturing(&p)
-			}
-			if !s.actorCanViewCosts(r) {
-				domain.RedactProjectCosts(&p)
-			}
-			respondWithJSON(w, http.StatusOK, p)
+			respondWithInternalError(w, err, "handler")
+			return
+		}
+		if !orgSeesManufacturing(claims, &p) {
+			domain.RedactProjectManufacturing(&p)
+		}
+		if !s.actorCanViewCosts(r) {
+			domain.RedactProjectCosts(&p)
+		}
+		respondWithJSON(w, http.StatusOK, p)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanDeleteProject), "no tenés permiso para eliminar cotizaciones") {
