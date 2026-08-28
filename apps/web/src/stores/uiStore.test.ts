@@ -107,6 +107,18 @@ describe('uiStore — toast queue', () => {
     useUiStore.getState().toast({ type: 'error', message: 'otro mensaje' });
     expect(useUiStore.getState().items).toHaveLength(3);
   });
+
+  it('refreshes the auto-dismiss timer for an identical live toast', () => {
+    useUiStore.getState().toast({ type: 'error', message: 'retry me' });
+    vi.advanceTimersByTime(TOAST_DURATION_MS - 100);
+
+    useUiStore.getState().toast({ type: 'error', message: 'retry me' });
+    vi.advanceTimersByTime(101);
+
+    expect(useUiStore.getState().items[0]?.phase).not.toBe('exit');
+    vi.advanceTimersByTime(TOAST_DURATION_MS - 101);
+    expect(useUiStore.getState().items[0]?.phase).toBe('exit');
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -1124,4 +1124,74 @@ describe('catalogStore — save serialization (P1-4)', () => {
     expect(calls).toBe(2);
     expect(saved.length).toBe(1);
   });
+
+  it('keeps C behind B after A settles', async () => {
+    const releases: Array<() => void> = [];
+    let active = 0;
+    let maxConcurrent = 0;
+    let started = 0;
+    const { deps } = makeDeps({
+      saveCatalog: async () => {
+        started++;
+        active++;
+        maxConcurrent = Math.max(maxConcurrent, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+
+    store.getState().createMaterial(materialDraft); // A starts.
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-B' }); // B queues.
+    expect(started).toBe(1);
+
+    releases.shift()!();
+    await vi.waitFor(() => expect(started).toBe(2)); // B is active after A settled.
+
+    store.getState().createMaterial({ ...materialDraft, code: 'MAT-C' });
+    expect(started).toBe(2); // C must stay queued, never overlap B.
+    expect(maxConcurrent).toBe(1);
+
+    releases.shift()!();
+    await vi.waitFor(() => expect(started).toBe(3));
+    expect(maxConcurrent).toBe(1);
+
+    releases.shift()!();
+    await Promise.resolve();
+  });
+
+  it('rapid duplicate createCustomer produces one create for the stable id', async () => {
+    const known = new Set(seedCatalog().customers?.map((customer) => customer.id));
+    let customerCreates = 0;
+    const { deps } = makeDeps({
+      newId: () => 'customer-stable-id',
+      saveCatalog: async (catalog) => {
+        for (const customer of catalog.customers ?? []) {
+          if (known.has(customer.id)) continue;
+          customerCreates++;
+          await Promise.resolve();
+          known.add(customer.id);
+        }
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(seedCatalog());
+    const draft = {
+      name: 'Cliente doble click',
+      email: '',
+      phone: '',
+      address: '',
+      notes: '',
+      ownerUserId: '',
+    };
+
+    store.getState().createCustomer(draft, { id: 'seller-1', role: 'vendedor' });
+    store.getState().createCustomer(draft, { id: 'seller-1', role: 'vendedor' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(customerCreates).toBe(1);
+  });
 });

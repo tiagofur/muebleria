@@ -8,6 +8,7 @@
  */
 
 import { useWorkspaceStore } from '../workspaceStore';
+import { notifyCatalogMutated } from '../../crossTabSync';
 
 import type {
   Agregado,
@@ -279,7 +280,10 @@ export function makeCatalogStoreCtx(
     set({ catalog: nextCatalog });
     const task = (): Promise<void> =>
       saveCatalog(get().catalog ?? nextCatalog).then(
-        () => undefined,
+        () => {
+          // P0-3 mitigation: tell other tabs their catalog copy is stale.
+          notifyCatalogMutated();
+        },
         (err: unknown) => {
           console.error('Error al guardar catálogo:', err);
           // F118 S2: no error toasts from saves that raced a logout — the
@@ -300,11 +304,11 @@ export function makeCatalogStoreCtx(
       const run = task();
       // The chain tracker observes the failure (so it never surfaces as an
       // unhandled rejection) and frees the slot once the save settles.
-      saveInFlight = run
-        .finally(() => {
-          saveInFlight = null;
-        })
-        .catch(() => undefined);
+      const tracked = run.catch(() => undefined);
+      saveInFlight = tracked;
+      void tracked.then(() => {
+        if (saveInFlight === tracked) saveInFlight = null;
+      });
       return run;
     }
     // Busy: queue after the in-flight save settles; then(task, task) runs the
@@ -312,11 +316,13 @@ export function makeCatalogStoreCtx(
     // queued save re-reads the latest catalog, so the entity the first save
     // created is already there and the upsert PUTs (no duplicate).
     const run = saveInFlight.then(task, task);
-    saveInFlight = run
-      .finally(() => {
-        saveInFlight = null;
-      })
-      .catch(() => undefined);
+    const tracked = run.catch(() => undefined);
+    saveInFlight = tracked;
+    void tracked.then(() => {
+      // An older save must never clear a newer queued tail. Otherwise a
+      // mutation arriving while that newer save runs starts concurrently.
+      if (saveInFlight === tracked) saveInFlight = null;
+    });
     return run;
   }
 
