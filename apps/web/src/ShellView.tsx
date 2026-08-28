@@ -1393,6 +1393,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       {navId === 'orders' && useProductionWorkspace ? (
         <ProductionWorkspace
           projects={(filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).filter(isProductionReady)}
+          lookupProject={(id) =>
+            (filterProjectsToPlant ? projectsForRole : filterProductionVisible(projects)).find((p) => p.id === id)
+          }
           orderProjectId={routeProductionOrderId}
           orderTab={routeProductionOrderTab}
           onOrderTabChange={(tab) => {
