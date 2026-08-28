@@ -387,6 +387,12 @@ func expandLayoutInstances(
 	optionChoices map[string]string,
 ) ([]layoutBoard, error) {
 	boards := []layoutBoard{}
+	// #434: copy ids must be unique per component across the whole expansion —
+	// two entries pointing at the same component used to re-emit
+	// `<id>-copy-0` twice (colliding identity on the wire). The counter is
+	// global per component within this list; the per-entry loop index below
+	// still drives spatial formulas/poses (existing #414 semantics).
+	copyCounters := map[string]int{}
 	for _, inst := range instances {
 		comp, ok := findComponent(catalog, inst.ComponentID)
 		if !ok {
@@ -472,6 +478,8 @@ func expandLayoutInstances(
 		}
 
 		for i := 0; i < inst.Quantity; i++ {
+			copyIndex := copyCounters[comp.ID]
+			copyCounters[comp.ID] = copyIndex + 1
 			// Spatial formulas: H = thickness (bom.ts), i = copy index.
 			// H/T carry the effective thickness (#402), like the TS spatial branch.
 			spatialDims := formulaDims{
@@ -509,7 +517,7 @@ func expandLayoutInstances(
 			rotZ := pickRotation(comp.RotateZ, inst, placement, pose.rotateZ, 2)
 
 			board := layoutBoard{
-				id:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, i),
+				id:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, copyIndex),
 				defID:       fmt.Sprintf("%s%s", idPrefix, comp.ID),
 				name:        comp.Name,
 				placement:   placement,

@@ -329,10 +329,13 @@ func TestLayoutComponentDefinitionIdentity(t *testing.T) {
 		}
 	}
 
-	// Three copies of one component (one entry, quantity 3): same definition
-	// identity, distinct concrete instances (the #346 two-shelves rule).
+	// Copies of one component keep distinct concrete instance IDs (the #346
+	// two-shelves rule) — including when the component appears in MULTIPLE
+	// entries of the same list (#434: the copy counter is global per
+	// component, so duplicate entries can no longer collide on -copy-0).
 	st := catalog.Structures[0]
-	st.Components[0].Quantity = 3
+	st.Components[0].Quantity = 2
+	st.Components = append(st.Components, domain.ComponentInstance{ComponentID: "comp-side", Quantity: 1})
 	catalog.Structures[0] = st
 	copied, err := ResolveFurnitureLayout(module, catalog, nil, nil)
 	if err != nil {
@@ -347,10 +350,12 @@ func TestLayoutComponentDefinitionIdentity(t *testing.T) {
 	if len(copies) != 3 {
 		t.Fatalf("expected 3 copies of st-comp-side, got %d", len(copies))
 	}
-	for i := 1; i < len(copies); i++ {
-		if copies[i].ComponentInstanceID == copies[0].ComponentInstanceID {
-			t.Fatalf("copies share componentInstanceId %s", copies[i].ComponentInstanceID)
+	seen := map[string]bool{}
+	for _, c := range copies {
+		if seen[c.ComponentInstanceID] {
+			t.Fatalf("colliding componentInstanceId: %s", c.ComponentInstanceID)
 		}
+		seen[c.ComponentInstanceID] = true
 	}
 }
 
