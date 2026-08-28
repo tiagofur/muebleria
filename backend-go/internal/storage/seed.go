@@ -56,12 +56,22 @@ var (
 	// Structure
 	seedStruct    = "a0000007-0000-0000-0000-000000000001"
 	seedStructPre = "a0000007-0000-0000-0000-000000000002"
+	// Composed GAB body (EST-GAB-01) — parity with TS fixture struct-gab-01.
+	seedStructGab    = "a0000007-0000-0000-0000-000000000003"
+	seedStructGabPre = "a0000007-0000-0000-0000-000000000004"
 	// Components (different prefix from migration 000016's a1…)
 	seedCompPuerta    = "a0000008-0000-0000-0000-000000000001"
 	seedCompEntrepano = "a0000008-0000-0000-0000-000000000002"
 	seedCompCostado   = "a0000008-0000-0000-0000-000000000003"
 	seedCompBase      = "a0000008-0000-0000-0000-000000000004"
 	seedCompZoclo     = "a0000008-0000-0000-0000-000000000005"
+	// Composed GAB components — parity with TS fixture comp-gab-*.
+	seedCompGabCostado   = "a0000008-0000-0000-0000-000000000006"
+	seedCompGabRespaldo  = "a0000008-0000-0000-0000-000000000007"
+	seedCompGabPiso      = "a0000008-0000-0000-0000-000000000008"
+	seedCompGabManguete  = "a0000008-0000-0000-0000-000000000009"
+	seedCompGabPuerta    = "a0000008-0000-0000-0000-00000000000a"
+	seedCompGabEntrepano = "a0000008-0000-0000-0000-00000000000b"
 	// Project
 	seedProj     = "a0000009-0000-0000-0000-000000000001"
 	seedProjItem = "a0000009-0000-0000-0000-000000000002"
@@ -300,6 +310,11 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 			{id: "a00000c0-0001-0000-0000-000000000005", qty: 4, optRole: "FIXED", hwID: seedHwSoporte},
 		})
 	if err != nil {
+		return err
+	}
+	// Composed body for MOD-GAB-01 (parity with the TS fixture) — must run in
+	// the same tx so a fresh seed never exposes the flat-only module.
+	if err := ensureComposedGabModule(ctx, tx, org, now); err != nil {
 		return err
 	}
 
@@ -654,6 +669,11 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	if err := seedPlinthModulesTx(ctx, tx, org, now); err != nil {
 		return err
 	}
+	// Upgrade existing installations: the flat MOD-GAB-01 must become composed
+	// so Demo plantilla resolves a real despiece (audit P0-2d).
+	if err := ensureComposedGabModule(ctx, tx, org, now); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -823,5 +843,139 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, 
 		}
 	}
 
+	return nil
+}
+
+// ensureComposedGabModule converts the legacy flat MOD-GAB-01 into a composed
+// module (structure EST-GAB-01 + components), mirroring the TS fixture
+// plantillaDemo (struct-gab-01 / comp-gab-*). The TS engine no longer
+// resolves legacy flat board_parts rows — without this conversion the Demo
+// plantilla project resolves an empty despiece and its quote prices hardware
+// only (pre-demo audit P0-2d). The flat board_parts rows stay in place: both
+// engines prefer the composed path once structure_id is set.
+//
+// Idempotent: safe on fresh seeds and on the upgrade path (existing DBs).
+func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	allEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: true},
+		{Side: "W1", Enabled: true}, {Side: "W2", Enabled: true},
+	})
+	noEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: false}, {Side: "L2", Enabled: false},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},
+	})
+	lOnlyEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: true},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: false},
+	})
+	w2OnlyEdges, _ := json.Marshal([]domain.EdgeAssignment{
+		{Side: "L1", Enabled: false}, {Side: "L2", Enabled: false},
+		{Side: "W1", Enabled: false}, {Side: "W2", Enabled: true},
+	})
+
+	// Body + module-level components with the fixture's formulas. Width/length
+	// formulas keep the legacy 31 mm reveal arithmetic (PH-31 / PW-31 …).
+	comps := []struct {
+		id, code, name, placement      string
+		lengthMm, widthMm, thicknessMm int
+		lengthFormula, widthFormula    string
+		edges                          []byte
+		roles                          []string
+	}{
+		{seedCompGabCostado, "COM-GAB-COS", "Costado Gabinete", "lateral_izquierdo",
+			720, 590, 18, "PH", "PD", allEdges, []string{"INTERIOR"}},
+		{seedCompGabRespaldo, "COM-GAB-RES", "Respaldo Gabinete", "trasera",
+			689, 269, 18, "PH - 31", "PW - 31", noEdges, []string{"INTERIOR"}},
+		{seedCompGabPiso, "COM-GAB-PIS", "Piso Gabinete", "base",
+			269, 590, 18, "PW - 31", "PD", lOnlyEdges, []string{"INTERIOR"}},
+		{seedCompGabManguete, "COM-GAB-MAN", "Manguete", "frontal",
+			269, 120, 18, "PW - 31", "120", lOnlyEdges, []string{"INTERIOR"}},
+		{seedCompGabPuerta, "COM-GAB-PUE", "Puerta Gabinete", "puerta",
+			717, 296, 18, "PH - 3", "PW - 4", allEdges, []string{"FRENTE"}},
+		{seedCompGabEntrepano, "COM-GAB-ENT", "Entrepaño Gabinete", "interno",
+			520, 269, 18, "PH - 200", "PW - 31", w2OnlyEdges, []string{"INTERIOR"}},
+	}
+	for _, c := range comps {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
+				length_formula, width_formula, default_edges, option_roles, active, created_at, updated_at)
+			VALUES ($1,$14,$2,$3,$4,'rectangular_board',$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10,$11,true,$12,$13)
+			ON CONFLICT (organization_id, code) DO NOTHING`,
+			c.id, c.code, c.name, c.placement, c.lengthMm, c.widthMm, c.thicknessMm,
+			c.lengthFormula, c.widthFormula, c.edges, c.roles, now, now, org)
+		if err != nil {
+			return fmt.Errorf("ensure gab component %s: %w", c.code, err)
+		}
+	}
+
+	// Structure body 300×720×590 with its commercial preset.
+	_, err := tx.Exec(ctx, `
+		INSERT INTO structures (id, organization_id, code, name, width_mm, height_mm, depth_mm, notes, active, created_at, updated_at)
+		VALUES ($1,$4,'EST-GAB-01','Cuerpo Gabinete 1 Puerta',300,720,590,'',true,$2,$3)
+		ON CONFLICT (organization_id, code) DO NOTHING`,
+		seedStructGab, now, now, org)
+	if err != nil {
+		return fmt.Errorf("ensure gab structure: %w", err)
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO structure_presets (id, organization_id, structure_id, name, width_mm, height_mm, depth_mm)
+		VALUES ($1,$3,$2,'300×720×590',300,720,590)
+		ON CONFLICT (id) DO NOTHING`,
+		seedStructGabPre, seedStructGab, org)
+	if err != nil {
+		return fmt.Errorf("ensure gab structure preset: %w", err)
+	}
+
+	// Structure body: costado×2 + respaldo + piso + manguete×2.
+	structLinks := []struct {
+		componentID string
+		quantity    int
+		placement   string
+	}{
+		{seedCompGabCostado, 2, "lateral_izquierdo"},
+		{seedCompGabRespaldo, 1, "trasera"},
+		{seedCompGabPiso, 1, "base"},
+		{seedCompGabManguete, 2, "frontal"},
+	}
+	for _, l := range structLinks {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO structure_components (organization_id, structure_id, component_id, quantity, placement_override)
+			SELECT $5,$1,$2,$3,$4
+			WHERE NOT EXISTS (SELECT 1 FROM structure_components WHERE structure_id = $1 AND component_id = $2)`,
+			seedStructGab, l.componentID, l.quantity, l.placement, org)
+		if err != nil {
+			return fmt.Errorf("ensure gab structure_components %s: %w", l.componentID, err)
+		}
+	}
+
+	// Point MOD-GAB-01 at the composed body. Guarded by organization so the
+	// update is a no-op for workshops that already composed their own GAB.
+	_, err = tx.Exec(ctx, `
+		UPDATE modules SET structure_id = $1, updated_at = $2
+		WHERE id = $3 AND organization_id = $4 AND structure_id IS NULL`,
+		seedStructGab, now, seedModGab, org)
+	if err != nil {
+		return fmt.Errorf("ensure gab module structure_id: %w", err)
+	}
+
+	// Module-level components beyond the body: puerta×1 + entrepaño×1.
+	modLinks := []struct {
+		componentID string
+		quantity    int
+		placement   string
+	}{
+		{seedCompGabPuerta, 1, "puerta"},
+		{seedCompGabEntrepano, 1, "interno"},
+	}
+	for _, l := range modLinks {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO module_components (organization_id, module_id, component_id, quantity, placement_override)
+			SELECT $5,$1,$2,$3,$4
+			WHERE NOT EXISTS (SELECT 1 FROM module_components WHERE module_id = $1 AND component_id = $2)`,
+			seedModGab, l.componentID, l.quantity, l.placement, org)
+		if err != nil {
+			return fmt.Errorf("ensure gab module_components %s: %w", l.componentID, err)
+		}
+	}
 	return nil
 }
