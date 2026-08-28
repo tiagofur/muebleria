@@ -1,5 +1,13 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installAuth401Interceptor } from './auth401';
+import {
+  __resetAuth401InterceptorForTests,
+  installAuth401Interceptor,
+} from './auth401';
+import { createWorkspaceStore } from './stores/workspaceStore';
+import { TOKEN_STORAGE_KEY, USER_STORAGE_KEY } from './session';
 
 function memoryStorage(initial: Record<string, string> = {}): Storage {
   const map = new Map<string, string>(Object.entries(initial));
@@ -33,6 +41,7 @@ const jsonResponse = (status: number) =>
 
 describe('installAuth401Interceptor (P0-1 safety net)', () => {
   afterEach(() => {
+    __resetAuth401InterceptorForTests();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -82,5 +91,60 @@ describe('installAuth401Interceptor (P0-1 safety net)', () => {
     fetch.mockImplementation(async () => jsonResponse(401));
     const res = await window.fetch('http://localhost:8080/api/projects');
     expect(res.status).toBe(401);
+  });
+
+  it('resets installation state and restores fetch between tests', async () => {
+    const first = setup('tok-1');
+    first.fetch.mockImplementation(async () => jsonResponse(401));
+    await window.fetch('http://localhost:8080/api/projects');
+    expect(first.onExpired).toHaveBeenCalledTimes(1);
+
+    __resetAuth401InterceptorForTests();
+
+    const second = setup('tok-1');
+    second.fetch.mockImplementation(async () => jsonResponse(401));
+    await window.fetch('http://localhost:8080/api/projects');
+    expect(second.onExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it('intercepts a productive store call even when the store was created first', async () => {
+    const originalFetch = vi.fn(async () => jsonResponse(401));
+    vi.stubGlobal('fetch', originalFetch);
+    const local = memoryStorage();
+    const session = memoryStorage();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: local,
+    });
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: session,
+    });
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://localhost:8080/api' },
+    });
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-productivo');
+    window.localStorage.setItem(
+      USER_STORAGE_KEY,
+      JSON.stringify({
+        id: 'user-1',
+        email: 'admin@test',
+        name: 'Admin',
+        role: 'admin',
+        active: true,
+      }),
+    );
+    store.setState({ session: 'auth' });
+    const onExpired = vi.fn();
+    installAuth401Interceptor(onExpired);
+
+    await store.getState().loadAssignableOwners();
+
+    expect(originalFetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/assignable-owners',
+      expect.any(Object),
+    );
+    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(store.getState().session).toBeNull();
   });
 });

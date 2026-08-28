@@ -21,6 +21,7 @@ type OnSessionExpired = () => void;
 
 let installed = false;
 let lastFiredForToken: string | null = null;
+let restoreFetch: (() => void) | null = null;
 
 function requestUrl(init: RequestInfo | URL): string {
   if (typeof init === 'string') return init;
@@ -35,10 +36,11 @@ export function installAuth401Interceptor(
   if (installed || typeof window === 'undefined') return;
   installed = true;
   const readToken = opts.readToken ?? (() => window.localStorage.getItem('granete_token'));
-  const original = window.fetch.bind(window);
+  const original = window.fetch;
+  const originalBound = original.bind(window);
 
   window.fetch = async (...args: Parameters<typeof window.fetch>): Promise<Response> => {
-    const res = await original(...args);
+    const res = await originalBound(...args);
     if (res.status !== 401) return res;
     const url = requestUrl(args[0]);
     // /auth/* handles its own unauthorized UX (login errors, boot expiry).
@@ -49,4 +51,16 @@ export function installAuth401Interceptor(
     onExpired();
     return res;
   };
+  const installedFetch = window.fetch;
+  restoreFetch = () => {
+    if (window.fetch === installedFetch) window.fetch = original;
+  };
+}
+
+/** Reset module singletons and restore fetch. Tests only. */
+export function __resetAuth401InterceptorForTests(): void {
+  restoreFetch?.();
+  restoreFetch = null;
+  installed = false;
+  lastFiredForToken = null;
 }
