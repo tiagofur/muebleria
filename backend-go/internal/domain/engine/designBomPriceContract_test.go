@@ -127,15 +127,17 @@ type fxPreset struct {
 }
 
 type fxModule struct {
-	ID            string           `json:"id"`
-	Code          string           `json:"code"`
-	Name          string           `json:"name"`
-	StructureID   string           `json:"structureId"`
-	ExternalDims  fxDims           `json:"externalDims"`
-	Presets       []fxPreset       `json:"presets"`
-	Components    []fxInstance     `json:"components"`
-	HardwareLines []fxHardwareLine `json:"hardwareLines"`
-	Active        bool             `json:"active"`
+	ID              string           `json:"id"`
+	Code            string           `json:"code"`
+	Name            string           `json:"name"`
+	StructureID     string           `json:"structureId"`
+	BaseMode        string           `json:"baseMode"`
+	BaseClearanceMm *int             `json:"baseClearanceMm"`
+	ExternalDims    fxDims           `json:"externalDims"`
+	Presets         []fxPreset       `json:"presets"`
+	Components      []fxInstance     `json:"components"`
+	HardwareLines   []fxHardwareLine `json:"hardwareLines"`
+	Active          bool             `json:"active"`
 }
 
 type fxCatalog struct {
@@ -187,6 +189,7 @@ type fxExpected struct {
 type fxScenario struct {
 	ID                    string            `json:"id"`
 	Description           string            `json:"description"`
+	ModuleID              string            `json:"moduleId"`
 	AgregadoQty           int               `json:"agregadoQty"`
 	CustomDims            *fxItemCustomDims `json:"customDims"`
 	OptionChoicesOverride map[string]string `json:"optionChoicesOverride"`
@@ -285,12 +288,30 @@ func (f *fixture) catalogWithModule(mod domain.Module) domain.Catalog {
 	return c
 }
 
-func (f *fixture) moduleForScenario(qty int) domain.Module {
+func (f *fixture) moduleForScenario(sc fxScenario) domain.Module {
 	m := f.Catalog.Modules[0]
+	if sc.ModuleID != "" {
+		found := false
+		for _, cand := range f.Catalog.Modules {
+			if cand.ID == sc.ModuleID {
+				m = cand
+				found = true
+				break
+			}
+		}
+		if !found {
+			// El escenario nombra un módulo inexistente: fallar acá es mejor
+			// que resolver silenciosamente contra el primero.
+			panic(fmt.Sprintf("scenario %s: module %q not in fixture", sc.ID, sc.ModuleID))
+		}
+	}
 	mod := domain.Module{
 		ID: m.ID, Code: m.Code, Name: m.Name,
-		StructureID: m.StructureID,
-		WidthMm:     m.ExternalDims.Width, HeightMm: m.ExternalDims.Height, DepthMm: m.ExternalDims.Depth,
+		StructureID:     m.StructureID,
+		BaseMode:        m.BaseMode,
+		BaseClearanceMm: m.BaseClearanceMm,
+		WidthMm:         m.ExternalDims.Width, HeightMm: m.ExternalDims.Height, DepthMm: m.ExternalDims.Depth,
+		Components:    toInstances(m.Components),
 		HardwareLines: toHardwareLines(m.HardwareLines),
 	}
 	for _, p := range m.Presets {
@@ -298,8 +319,8 @@ func (f *fixture) moduleForScenario(qty int) domain.Module {
 			ID: p.ID, Name: p.Name, WidthMm: p.Width, HeightMm: p.Height, DepthMm: p.Depth,
 		})
 	}
-	if qty > 0 {
-		mod.Agregados = []domain.ModuleAgregadoInstance{{AgregadoID: "agr-cajon", Quantity: qty}}
+	if sc.AgregadoQty > 0 {
+		mod.Agregados = []domain.ModuleAgregadoInstance{{AgregadoID: "agr-cajon", Quantity: sc.AgregadoQty}}
 	}
 	return mod
 }
@@ -335,7 +356,7 @@ func TestDesignBomPriceContract(t *testing.T) {
 	for _, sc := range f.Scenarios {
 		sc := sc
 		t.Run(sc.ID, func(t *testing.T) {
-			mod := f.moduleForScenario(sc.AgregadoQty)
+			mod := f.moduleForScenario(sc)
 			catalog := f.catalogWithModule(mod)
 
 			choices := map[string]string{}
@@ -346,7 +367,7 @@ func TestDesignBomPriceContract(t *testing.T) {
 				choices[k] = v
 			}
 			item := domain.ProjectItem{
-				ID: baseItem.ID, ModuleID: baseItem.ModuleID,
+				ID: baseItem.ID, ModuleID: mod.ID,
 				Quantity: baseItem.Quantity, OptionChoices: choices,
 				MeasurePresetID: baseItem.MeasurePresetID,
 				CustomDims:      sc.CustomDims.toDomain(),

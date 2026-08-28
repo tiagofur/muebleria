@@ -61,6 +61,14 @@
         "optionIds": ["mat-a", "mat-b"]
       },
       {
+        "id": "og-zoclo",
+        "code": "ZOCLO",
+        "name": "Zócalo",
+        "kind": "board",
+        "required": false,
+        "optionIds": ["mat-a", "mat-b"]
+      },
+      {
         "id": "og-jal",
         "code": "JALADERA",
         "name": "Jaladera",
@@ -146,6 +154,28 @@
         ],
         "optionRoles": ["INTERIOR"],
         "active": true
+      },
+      {
+        "id": "comp-zoclo",
+        "code": "ZOCLO-F",
+        "name": "Zócalo frontal",
+        "placement": "frontal",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 600,
+          "widthMm": 100,
+          "thicknessMm": 18,
+          "lengthFormula": "PW",
+          "widthFormula": "B"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["ZOCLO"],
+        "active": true
       }
     ],
     "agregados": [
@@ -174,6 +204,26 @@
           { "id": "p800", "name": "800", "width": 800, "height": 720, "depth": 560 }
         ],
         "components": [],
+        "hardwareLines": [
+          { "id": "hl-jal", "quantity": 2, "optionRole": "JALADERA" }
+        ],
+        "active": true
+      },
+      {
+        "id": "m-bajo-zoclo",
+        "code": "BA-ZOC",
+        "name": "Bajo carcasa con zócalo",
+        "structureId": "st-carcase",
+        "baseMode": "plinth_board",
+        "baseClearanceMm": 100,
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [
+          { "id": "p600", "name": "600", "width": 600, "height": 720, "depth": 560 },
+          { "id": "p800", "name": "800", "width": 800, "height": 720, "depth": 560 }
+        ],
+        "components": [
+          { "componentId": "comp-zoclo", "quantity": 1 }
+        ],
         "hardwareLines": [
           { "id": "hl-jal", "quantity": 2, "optionRole": "JALADERA" }
         ],
@@ -248,6 +298,25 @@
         "hardwareTotal": 20,
         "directCost": 205.76,
         "salePrice": 308.64
+      }
+    },
+    {
+      "id": "plinth-b",
+      "description": "Zócalo melamínico (baseMode plinth_board, B=100): la fórmula B resuelve la altura del zócalo — paridad TS/Go del camino BOM.",
+      "moduleId": "m-bajo-zoclo",
+      "agregadoQty": 0,
+      "optionChoicesOverride": { "ZOCLO": "mat-a" },
+      "expected": {
+        "parts": [
+          { "description": "Frente", "lengthMm": 720, "widthMm": 600, "materialId": "mat-a", "count": 1 },
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "materialId": "mat-a", "count": 2 },
+          { "description": "Zócalo frontal", "lengthMm": 600, "widthMm": 100, "materialId": "mat-a", "count": 1 }
+        ],
+        "hardwareTotals": { "hw-jal": 2 },
+        "materialsCost": 129.84,
+        "hardwareTotal": 20,
+        "directCost": 149.84,
+        "salePrice": 224.76
       }
     },
     {
