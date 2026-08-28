@@ -226,7 +226,7 @@ material choice
 
 ### 8.3 Rebuild
 
-#404 implementa:
+#404 [CURRENT] implementa:
 
 ```text
 change material role
@@ -236,7 +236,11 @@ change material role
 → persist accepted metadata
 ```
 
-#404 depende de #415 para no consolidar el Group renderer como target final.
+La implementación fusiona la elección cambiada con la intención persistida,
+exige un `NativeLayout` válido para cambios materiales, aísla una definición
+top-level compartida antes de mutarla y confirma geometry + metadata en una sola
+operación. Un fallo conserva el último estado válido. #404 depende de #415 para
+no consolidar el Group renderer como target final.
 
 ### 8.4 Scope
 
@@ -422,11 +426,11 @@ Cerrados con evidencia (no reabrir como deuda):
 - #402: Go usa selected `MaterialBoard.thicknessMm` antes de geometry;
 - #403: binding/alias semantics alineadas TS/Go;
 - #414: authoritative local part transform/orientation en layout;
-- #415: Group renderer → native ComponentInstances.
+- #415: Group renderer → native ComponentInstances;
+- #404: material update re-resuelve y reconstruye el target nativo atómicamente.
 
 Programas aún abiertos:
 
-- #404: material update reconstruye el target nativo atómicamente;
 - #416: legacy Groups tienen migration path;
 - #388/#389/#390/#391: Project-owned identity sustituye legacy local identity donde corresponda.
 
