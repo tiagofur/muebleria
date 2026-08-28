@@ -27,12 +27,15 @@ import (
 // lista contra el seed real: el ciclo seed→clean→seed debe dejar la base
 // como si el seed nunca hubiera corrido.
 var (
-	demoCustomerNames    = []string{"Cliente Plantilla", "Cliente Demo"}
-	demoProjectName      = "Demo plantilla"
-	demoTemplateName     = "Cocina estándar 3 m"
-	demoModuleCodes      = []string{"MOD-GAB-01", "MOD-CAJ-01", "MOD-COMP-001", "MOD-BAJO-ZOCLO-600", "MOD-BAJO-PERFIL-600"}
-	demoStructureCodes   = []string{"EST-COMP-600"}
-	demoComponentCodes   = []string{"COM-PUE-01", "COM-ENT-01", "COM-COS-01", "COM-BAS-01", "COM-ZOC-01"}
+	demoCustomerNames  = []string{"Cliente Plantilla", "Cliente Demo"}
+	demoProjectName    = "Demo plantilla"
+	demoTemplateName   = "Cocina estándar 3 m"
+	demoModuleCodes    = []string{"MOD-GAB-01", "MOD-CAJ-01", "MOD-COMP-001", "MOD-BAJO-ZOCLO-600", "MOD-BAJO-PERFIL-600"}
+	demoStructureCodes = []string{"EST-COMP-600", "EST-GAB-01"}
+	demoComponentCodes = []string{
+		"COM-PUE-01", "COM-ENT-01", "COM-COS-01", "COM-BAS-01", "COM-ZOC-01",
+		"COM-GAB-COS", "COM-GAB-RES", "COM-GAB-PIS", "COM-GAB-MAN", "COM-GAB-PUE", "COM-GAB-ENT",
+	}
 	demoHardwareCodes    = []string{"HER-BIS-CL", "HER-JAL-INOX", "HER-PATA-REG", "HER-TOR-4X50", "HER-CORR-500", "HER-SOP-ENT", "HER-TAQ-8X30", "HER-MIN-15", "HER-PLACA-BIS", "HER-ZOC-ALU", "HER-ZOC-BRO", "HER-ZOC-NEG"}
 	demoBoardCodes       = []string{"TAB-ARA-BLA", "TAB-MAD-FRE", "TAB-MDF-3"}
 	demoEdgeCodes        = []string{"CAN-ARA-BLA", "CAN-MAD-FRE", "CAN-MDF-3"}

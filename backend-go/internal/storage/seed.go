@@ -15,20 +15,20 @@ import (
 // migration 000016, so we stay clear.
 var (
 	// Edge bands
-	seedEdgeArauco    = "a0000001-0000-0000-0000-000000000001"
-	seedEdgeMaderado  = "a0000001-0000-0000-0000-000000000002"
-	seedEdgeMdf       = "a0000001-0000-0000-0000-000000000003"
+	seedEdgeArauco   = "a0000001-0000-0000-0000-000000000001"
+	seedEdgeMaderado = "a0000001-0000-0000-0000-000000000002"
+	seedEdgeMdf      = "a0000001-0000-0000-0000-000000000003"
 	// Materials
 	seedMatArauco   = "a0000002-0000-0000-0000-000000000001"
 	seedMatMaderado = "a0000002-0000-0000-0000-000000000002"
 	seedMatMdf      = "a0000002-0000-0000-0000-000000000003"
 	// Hardware
-	seedHwBisagra   = "a0000003-0000-0000-0000-000000000001"
-	seedHwJaladera  = "a0000003-0000-0000-0000-000000000002"
-	seedHwPata      = "a0000003-0000-0000-0000-000000000003"
-	seedHwTornillo  = "a0000003-0000-0000-0000-000000000004"
-	seedHwCorredera = "a0000003-0000-0000-0000-000000000005"
-	seedHwSoporte   = "a0000003-0000-0000-0000-000000000006"
+	seedHwBisagra     = "a0000003-0000-0000-0000-000000000001"
+	seedHwJaladera    = "a0000003-0000-0000-0000-000000000002"
+	seedHwPata        = "a0000003-0000-0000-0000-000000000003"
+	seedHwTornillo    = "a0000003-0000-0000-0000-000000000004"
+	seedHwCorredera   = "a0000003-0000-0000-0000-000000000005"
+	seedHwSoporte     = "a0000003-0000-0000-0000-000000000006"
 	seedHwZocloPerfil = "a0000003-0000-0000-0000-000000000007"
 	seedHwZocloBronce = "a0000003-0000-0000-0000-000000000008"
 	seedHwZocloNegro  = "a0000003-0000-0000-0000-000000000009"
@@ -37,20 +37,20 @@ var (
 	seedHwTaquete  = "a0000003-0000-0000-0000-000000000011"
 	seedHwMinifix  = "a0000003-0000-0000-0000-000000000012"
 	// Option groups
-	seedOGInterior  = "a0000004-0000-0000-0000-000000000001"
-	seedOGFrente    = "a0000004-0000-0000-0000-000000000002"
-	seedOGFondo     = "a0000004-0000-0000-0000-000000000003"
-	seedOGBisagra   = "a0000004-0000-0000-0000-000000000004"
-	seedOGCorredera = "a0000004-0000-0000-0000-000000000005"
+	seedOGInterior    = "a0000004-0000-0000-0000-000000000001"
+	seedOGFrente      = "a0000004-0000-0000-0000-000000000002"
+	seedOGFondo       = "a0000004-0000-0000-0000-000000000003"
+	seedOGBisagra     = "a0000004-0000-0000-0000-000000000004"
+	seedOGCorredera   = "a0000004-0000-0000-0000-000000000005"
 	seedOGZoclo       = "a0000004-0000-0000-0000-000000000006"
 	seedOGZocloPerfil = "a0000004-0000-0000-0000-000000000007"
 	// Customers
 	seedCustPlantilla1 = "a0000005-0000-0000-0000-000000000001"
 	seedCustPlantilla2 = "a0000005-0000-0000-0000-000000000002"
 	// Modules
-	seedModGab     = "a0000006-0000-0000-0000-000000000001"
-	seedModCaj     = "a0000006-0000-0000-0000-000000000002"
-	seedModComp    = "a0000006-0000-0000-0000-000000000003"
+	seedModGab        = "a0000006-0000-0000-0000-000000000001"
+	seedModCaj        = "a0000006-0000-0000-0000-000000000002"
+	seedModComp       = "a0000006-0000-0000-0000-000000000003"
 	seedModBajoZoclo  = "a0000006-0000-0000-0000-000000000004"
 	seedModBajoPerfil = "a0000006-0000-0000-0000-000000000005"
 	// Structure
@@ -193,10 +193,10 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// --- MATERIAL BOARDS ---
 	for _, m := range []struct {
 		id, code, name, previewColor string
-		w, l, t                       int
-		grain                         bool
-		boardPrice                    float64
-		defaultEdgeID                 string
+		w, l, t                      int
+		grain                        bool
+		boardPrice                   float64
+		defaultEdgeID                string
 	}{
 		{seedMatArauco, "TAB-ARA-BLA", "ARAUCO BLANCO", "#F5F5F0", 1830, 2440, 15, false, 714.43, seedEdgeArauco},
 		{seedMatMaderado, "TAB-MAD-FRE", "MADERADO FRENTE", "#C4A574", 1830, 2440, 18, true, 1294.91, seedEdgeMaderado},
@@ -474,7 +474,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	}
 	// Commercial multi-size options for quote (H09 / #104).
 	for _, pr := range []struct {
-		name string
+		name    string
 		w, h, d int
 	}{
 		{"Ancho 300", 300, 720, 560},
@@ -788,16 +788,16 @@ func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Ti
 // --- helpers ---
 
 type boardPartSeed struct {
-	id, code, desc                    string
-	qty, len, wid                     int
-	role, lenFormula, widFormula      string
-	l1, l2, w1, w2                    bool
+	id, code, desc               string
+	qty, len, wid                int
+	role, lenFormula, widFormula string
+	l1, l2, w1, w2               bool
 }
 
 type hwLineSeed struct {
-	id                                          string
-	qty                                         int
-	descOverride, optRole, hwID                 string
+	id                          string
+	qty                         int
+	descOverride, optRole, hwID string
 }
 
 func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, baseLaborCost, w, h, d int,
@@ -856,6 +856,32 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, 
 //
 // Idempotent: safe on fresh seeds and on the upgrade path (existing DBs).
 func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	var moduleID string
+	var currentStructureID *string
+	err := tx.QueryRow(ctx, `
+		SELECT id, structure_id FROM modules
+		WHERE organization_id = $1 AND code = 'MOD-GAB-01'`, org).Scan(&moduleID, &currentStructureID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil
+		}
+		return fmt.Errorf("find MOD-GAB-01: %w", err)
+	}
+	if currentStructureID != nil && *currentStructureID != "" {
+		return nil
+	}
+	var existingModuleComponents int
+	if err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM module_components WHERE organization_id = $1 AND module_id = $2`,
+		org, moduleID).Scan(&existingModuleComponents); err != nil {
+		return fmt.Errorf("count MOD-GAB-01 components: %w", err)
+	}
+	// A flat module with custom module-level composition is not the legacy
+	// seed shape. Never graft demo composition onto workshop-owned content.
+	if existingModuleComponents > 0 {
+		return nil
+	}
+
 	allEdges, _ := json.Marshal([]domain.EdgeAssignment{
 		{Side: "L1", Enabled: true}, {Side: "L2", Enabled: true},
 		{Side: "W1", Enabled: true}, {Side: "W2", Enabled: true},
@@ -895,33 +921,52 @@ func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now tim
 		{seedCompGabEntrepano, "COM-GAB-ENT", "Entrepaño Gabinete", "interno",
 			520, 269, 18, "PH - 200", "PW - 31", w2OnlyEdges, []string{"INTERIOR"}},
 	}
+	componentIDs := make(map[string]string, len(comps))
 	for _, c := range comps {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
 				length_formula, width_formula, default_edges, option_roles, active, created_at, updated_at)
-			VALUES ($1,$14,$2,$3,$4,'rectangular_board',$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10,$11,true,$12,$13)
+			VALUES (CASE WHEN EXISTS (SELECT 1 FROM components WHERE id = $1) THEN gen_random_uuid() ELSE $1::uuid END,
+				$14,$2,$3,$4,'rectangular_board',$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10,$11,true,$12,$13)
 			ON CONFLICT (organization_id, code) DO NOTHING`,
 			c.id, c.code, c.name, c.placement, c.lengthMm, c.widthMm, c.thicknessMm,
 			c.lengthFormula, c.widthFormula, c.edges, c.roles, now, now, org)
 		if err != nil {
 			return fmt.Errorf("ensure gab component %s: %w", c.code, err)
 		}
+		var componentID string
+		if err := tx.QueryRow(ctx,
+			`SELECT id FROM components WHERE organization_id = $1 AND code = $2`,
+			org, c.code).Scan(&componentID); err != nil {
+			return fmt.Errorf("resolve gab component %s: %w", c.code, err)
+		}
+		componentIDs[c.code] = componentID
 	}
 
 	// Structure body 300×720×590 with its commercial preset.
-	_, err := tx.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
 		INSERT INTO structures (id, organization_id, code, name, width_mm, height_mm, depth_mm, notes, active, created_at, updated_at)
-		VALUES ($1,$4,'EST-GAB-01','Cuerpo Gabinete 1 Puerta',300,720,590,'',true,$2,$3)
+		VALUES (CASE WHEN EXISTS (SELECT 1 FROM structures WHERE id = $1) THEN gen_random_uuid() ELSE $1::uuid END,
+			$4,'EST-GAB-01','Cuerpo Gabinete 1 Puerta',300,720,590,'',true,$2,$3)
 		ON CONFLICT (organization_id, code) DO NOTHING`,
 		seedStructGab, now, now, org)
 	if err != nil {
 		return fmt.Errorf("ensure gab structure: %w", err)
 	}
+	var structureID string
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM structures WHERE organization_id = $1 AND code = 'EST-GAB-01'`,
+		org).Scan(&structureID); err != nil {
+		return fmt.Errorf("resolve gab structure: %w", err)
+	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO structure_presets (id, organization_id, structure_id, name, width_mm, height_mm, depth_mm)
-		VALUES ($1,$3,$2,'300×720×590',300,720,590)
-		ON CONFLICT (id) DO NOTHING`,
-		seedStructGabPre, seedStructGab, org)
+		SELECT CASE WHEN EXISTS (SELECT 1 FROM structure_presets WHERE id = $1) THEN gen_random_uuid() ELSE $1::uuid END,
+			$3,$2,'300×720×590',300,720,590
+		WHERE NOT EXISTS (
+			SELECT 1 FROM structure_presets WHERE organization_id = $3 AND structure_id = $2 AND name = '300×720×590'
+		)`,
+		seedStructGabPre, structureID, org)
 	if err != nil {
 		return fmt.Errorf("ensure gab structure preset: %w", err)
 	}
@@ -932,17 +977,17 @@ func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now tim
 		quantity    int
 		placement   string
 	}{
-		{seedCompGabCostado, 2, "lateral_izquierdo"},
-		{seedCompGabRespaldo, 1, "trasera"},
-		{seedCompGabPiso, 1, "base"},
-		{seedCompGabManguete, 2, "frontal"},
+		{componentIDs["COM-GAB-COS"], 2, "lateral_izquierdo"},
+		{componentIDs["COM-GAB-RES"], 1, "trasera"},
+		{componentIDs["COM-GAB-PIS"], 1, "base"},
+		{componentIDs["COM-GAB-MAN"], 2, "frontal"},
 	}
 	for _, l := range structLinks {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO structure_components (organization_id, structure_id, component_id, quantity, placement_override)
 			SELECT $5,$1,$2,$3,$4
 			WHERE NOT EXISTS (SELECT 1 FROM structure_components WHERE structure_id = $1 AND component_id = $2)`,
-			seedStructGab, l.componentID, l.quantity, l.placement, org)
+			structureID, l.componentID, l.quantity, l.placement, org)
 		if err != nil {
 			return fmt.Errorf("ensure gab structure_components %s: %w", l.componentID, err)
 		}
@@ -953,7 +998,7 @@ func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now tim
 	_, err = tx.Exec(ctx, `
 		UPDATE modules SET structure_id = $1, updated_at = $2
 		WHERE id = $3 AND organization_id = $4 AND structure_id IS NULL`,
-		seedStructGab, now, seedModGab, org)
+		structureID, now, moduleID, org)
 	if err != nil {
 		return fmt.Errorf("ensure gab module structure_id: %w", err)
 	}
@@ -964,15 +1009,15 @@ func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now tim
 		quantity    int
 		placement   string
 	}{
-		{seedCompGabPuerta, 1, "puerta"},
-		{seedCompGabEntrepano, 1, "interno"},
+		{componentIDs["COM-GAB-PUE"], 1, "puerta"},
+		{componentIDs["COM-GAB-ENT"], 1, "interno"},
 	}
 	for _, l := range modLinks {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO module_components (organization_id, module_id, component_id, quantity, placement_override)
 			SELECT $5,$1,$2,$3,$4
 			WHERE NOT EXISTS (SELECT 1 FROM module_components WHERE module_id = $1 AND component_id = $2)`,
-			seedModGab, l.componentID, l.quantity, l.placement, org)
+			moduleID, l.componentID, l.quantity, l.placement, org)
 		if err != nil {
 			return fmt.Errorf("ensure gab module_components %s: %w", l.componentID, err)
 		}
