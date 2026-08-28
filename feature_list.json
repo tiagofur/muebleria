@@ -4655,6 +4655,46 @@
         "F186",
         "F187"
       ]
+    },
+    {
+      "id": "F189",
+      "title": "Paridad TS ↔ Go ↔ SketchUp para espesor y propagación de materiales (#405 / MT-4)",
+      "description": "Suite contractual de regresión que fija la semántica material-aware en las tres capas. Un fixture JSON compartido usa nominales 15/18 mm que contradicen materiales 16/18/6 mm y define escenarios all-16, roles mixtos, FRONT 18→16 y fallo. TypeScript y Go resuelven el mismo contrato y comparan invariantes de material, espesor, fórmulas, poses, agregados y herrajes; SketchUp consume layouts resueltos y prueba rebuild nativo, identidad/transform, metadata y rollback sin reescribir espesor localmente.",
+      "tags": [
+        "domain",
+        "backend-go",
+        "sketchup-extension",
+        "material-aware",
+        "parity",
+        "contract"
+      ],
+      "created": "2026-08-28",
+      "acceptance": [
+        "Un fixture contractual compartido pinnea nominales 15/18 y materiales BODY/FRONT/BACK 16/18/6; TS, Go y Ruby lo consumen textualmente",
+        "TS y Go BOM/layout demuestran que el material seleccionado gana antes de fórmulas, poses, dimensiones y herrajes",
+        "BODY, FRONT y BACK permanecen aislados; una puerta y tres frentes de cajón de agregado siguen FRONT",
+        "FRONT 18→16 reconstruye las cuatro piezas y el herraje, preservando identity, world transform, dimensiones exteriores y metadata",
+        "Material inválido/fallo conserva el último mueble válido y no abre/commitea una reconstrucción parcial",
+        "La prueba negativa falla explícitamente si Go vuelve a usar Component.ThicknessMm nominal"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/405",
+        "https://github.com/tiagofur/muebleria/issues/401",
+        "docs/architecture/material-aware-furniture-resolution.md",
+        "docs/architecture/smart-furniture-engine.md",
+        "docs/architecture/sketchup-interaction-model.md",
+        "docs/verification.md",
+        "contracts/materialThicknessParity.contract.json",
+        "packages/domain/src/materialThicknessParity.test.ts",
+        "backend-go/internal/domain/engine/regression_405_test.go",
+        "apps/sketchup-extension/test/unit/material_rebuild_test.rb"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F183",
+        "F184",
+        "F188"
+      ]
     }
   ]
 }

@@ -16,6 +16,83 @@ class MaterialRebuildTest < Minitest::Test
     @builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
     @definition = Granete::SketchUpExtension::Library::CatalogProvider.new
                                                                       .find_definition('kitchen-base-standard')
+    contract_path = File.join(PROJECT_ROOT, '..', '..', 'contracts', 'materialThicknessParity.contract.json')
+    @parity_contract = JSON.parse(File.read(contract_path))
+  end
+
+  def test_shared_405_contract_scenarios_a_and_b_build_resolved_dimensions_without_rewriting
+    %w[all16 mixed].each do |scenario_name|
+      scenario = @parity_contract.fetch('scenarios').fetch(scenario_name)
+      layout = contract_native_layout(scenario)
+      result = @builder.insert_furniture(
+        @model, @definition, {}, resolved_layout: layout, material_choices: scenario.fetch('choices')
+      )
+      assert result['success'], result['error']
+
+      furniture = furniture_instances.last
+      parts = managed_parts(furniture)
+      scenario.fetch('expectedRoles').each do |role, expected|
+        role_parts = parts.select { |part| material_role(part) == role }
+        assert_equal expected.fetch('expectedCount'), role_parts.length, "wrong #{role} count in #{scenario_name}"
+        role_parts.each do |part|
+          assert_in_delta expected.fetch('thicknessMm') * MM, local_thickness(part), 1e-9
+          component_id = @store.read(part).dig('identity', 'componentInstanceId')
+          resolved_board = layout.find_board(component_id)
+          refute_nil resolved_board, "built child #{component_id} must map to the resolved layout"
+          assert_equal expected.fetch('materialId'), resolved_board.material_id
+        end
+      end
+      assert_equal(4, parts.count { |part| material_role(part) == 'FRONT' })
+      assert_equal scenario.fetch('choices'), @store.read(furniture).dig('intent', 'materialChoices')
+    end
+  end
+
+  def test_shared_405_contract_scenario_c_rebuilds_only_front_and_preserves_identity
+    scenarios = @parity_contract.fetch('scenarios')
+    update = scenarios.fetch('frontUpdate')
+    @builder.insert_furniture(
+      @model, @definition, {}, resolved_layout: contract_native_layout(scenarios.fetch('mixed')),
+                               material_choices: update.fetch('beforeChoices')
+    )
+    furniture = furniture_instances.first
+    original_instance_ref = @store.read(furniture).dig('identity', 'instanceRef')
+    moved = Geom::Transformation.axes(
+      Geom::Point3d.new(100 * MM, 50 * MM, 0),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(-1, 0, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+    furniture.transformation = moved
+    before_operations = @model.operations.length
+    before_unaffected = semantic_role_snapshot(furniture, update.fetch('expectedUnaffectedRoles'))
+    before_handle = managed_parts(furniture).find { |part| part.name == 'Handle' }
+    assert_in_delta update.fetch('expectedHardwareYBeforeMm') * MM,
+                    before_handle.transformation.origin.y, 1e-9
+
+    result = @builder.update_furniture(
+      @model, furniture, @definition, {}, resolved_layout: contract_native_layout(scenarios.fetch('all16')),
+                                          material_choices: { 'FRONT' => 'mat-white16' }
+    )
+    assert result['success'], result['error']
+    assert_same furniture, furniture_instances.first
+    assert_equal moved, furniture.transformation
+    assert_equal original_instance_ref, @store.read(furniture).dig('identity', 'instanceRef')
+    assert_equal update.fetch('afterChoices'), @store.read(furniture).dig('intent', 'materialChoices')
+    assert_equal [[:start, 'Editar Mueble Gabinete Base Estándar', true], :commit],
+                 @model.operations.drop(before_operations)
+
+    parts = managed_parts(furniture)
+    fronts = parts.select { |part| material_role(part) == update.fetch('affectedRole') }
+    assert_equal update.fetch('expectedAffectedCount'), fronts.length
+    fronts.each { |part| assert_in_delta 16 * MM, local_thickness(part), 1e-9 }
+    update.fetch('expectedUnaffectedRoles').each do |role|
+      expected = scenarios.fetch('all16').fetch('expectedRoles').fetch(role).fetch('thicknessMm')
+      parts.select { |part| material_role(part) == role }.each do |part|
+        assert_in_delta expected * MM, local_thickness(part), 1e-9
+      end
+    end
+    assert_equal before_unaffected,
+                 semantic_role_snapshot(furniture, update.fetch('expectedUnaffectedRoles'))
+    handle = parts.find { |part| part.name == 'Handle' }
+    assert_in_delta update.fetch('expectedHardwareYAfterMm') * MM, handle.transformation.origin.y, 1e-9
   end
 
   def test_material_change_atomically_rebuilds_every_bound_native_part_and_preserves_context
@@ -65,14 +142,14 @@ class MaterialRebuildTest < Minitest::Test
 
     body = managed_parts(furniture).select { |part| material_role(part) == 'BODY' }
     fronts = managed_parts(furniture).select { |part| material_role(part) == 'FRONT' }
-    assert_equal 2, body.length
-    assert_equal 3, fronts.length
+    assert_equal 5, body.length
+    assert_equal 4, fronts.length
     body.each { |part| assert_in_delta 16 * MM, local_thickness(part), 1e-9 }
     fronts.each { |part| assert_in_delta 18 * MM, local_thickness(part), 1e-9 }
 
     handle = managed_parts(furniture).find { |part| part.name == 'Handle' }
     refute_nil handle
-    assert_equal Geom::Point3d.new(480 * MM, 18 * MM, 300 * MM), handle.transformation.origin
+    assert_equal Geom::Point3d.new(480 * MM, 578 * MM, 300 * MM), handle.transformation.origin
     assert_equal 'door', @store.read(handle).dig('intent', 'hostComponentInstanceId')
 
     rebuilt_meta = @store.read(furniture)
@@ -102,7 +179,7 @@ class MaterialRebuildTest < Minitest::Test
     assert result['success'], result['error']
 
     by_role = managed_parts(furniture).group_by { |part| material_role(part) }
-    assert_equal 2, by_role.fetch('BODY').length
+    assert_equal 5, by_role.fetch('BODY').length
     by_role.fetch('BODY').each { |part| assert_in_delta 18 * MM, local_thickness(part), 1e-9 }
     body_right = by_role.fetch('BODY').find { |part| part.name == 'Body Right' }
     assert_in_delta 582 * MM, body_right.transformation.origin.x, 1e-9
@@ -115,7 +192,8 @@ class MaterialRebuildTest < Minitest::Test
     )
   end
 
-  def test_material_change_without_native_resolution_fails_before_opening_an_operation
+  def test_shared_405_contract_scenario_d_resolution_failure_preserves_valid_furniture
+    failure = @parity_contract.fetch('scenarios').fetch('failure')
     @builder.insert_furniture(
       @model, @definition, {}, resolved_layout: native_layout(16),
                                material_choices: { 'BODY' => 'mat-body-16', 'FRONT' => 'mat-front-16' }
@@ -127,14 +205,17 @@ class MaterialRebuildTest < Minitest::Test
 
     result = @builder.update_furniture(
       @model, furniture, @definition, {}, resolved_layout: nil,
-                                          material_choices: { 'FRONT' => 'mat-front-18' }
+                                          material_choices: failure.fetch('choices')
     )
 
     refute result['success']
+    # Granete rejects the inactive choice before a NativeLayout exists. Ruby
+    # receives nil and must not begin a destructive SketchUp operation.
     assert_includes result['error'], 'composición nativa resuelta'
     assert_equal before_hierarchy, hierarchy_snapshot(furniture)
     assert_equal before_meta, @store.read(furniture)
     assert_equal before_operations, @model.operations
+    assert_equal 'FRONT', failure.fetch('expectedRejectedRole')
   end
 
   def test_successful_rebuild_keeps_an_already_unique_top_level_definition
@@ -204,6 +285,22 @@ class MaterialRebuildTest < Minitest::Test
     )
   end
 
+  def contract_native_layout(scenario)
+    roles = scenario.fetch('expectedRoles')
+    body = layout_body(roles.fetch('FRONT').fetch('thicknessMm'),
+                       body_thickness: roles.fetch('BODY').fetch('thicknessMm'))
+    body.fetch('components').each do |component|
+      role = component.fetch('optionRole')
+      expected = roles.fetch(role)
+      component['materialId'] = expected.fetch('materialId')
+      next unless role == 'BACK'
+
+      component['thicknessMm'] = expected.fetch('thicknessMm')
+      component['dimensionsMm'][1] = expected.fetch('thicknessMm')
+    end
+    Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+  end
+
   def layout_body(front_thickness, body_thickness:)
     {
       'furnitureDefinitionId' => @definition['furniture_definition_id'],
@@ -213,16 +310,20 @@ class MaterialRebuildTest < Minitest::Test
       'components' => [
         board('body-left', 'Body Left', 'BODY', body_thickness, [0, 0, 0]),
         board('body-right', 'Body Right', 'BODY', body_thickness, [600 - body_thickness, 0, 0]),
+        board('base', 'Base', 'BODY', body_thickness, [0, 0, 0]),
+        board('top', 'Top', 'BODY', body_thickness, [0, 0, 704]),
+        board('shelf', 'Shelf', 'BODY', body_thickness, [0, 0, 352]),
         board('back', 'Back', 'BACK', 6, [0, 0, 0]),
         board('door', 'Door', 'FRONT', front_thickness, [0, 560, 0]),
-        board('drawer-front-1', 'Drawer Front 1', 'FRONT', front_thickness, [0, 560, 240]),
-        board('drawer-front-2', 'Drawer Front 2', 'FRONT', front_thickness, [0, 560, 480])
+        board('drawer-front-1', 'Drawer Front 1', 'FRONT', front_thickness, [0, 560, 0]),
+        board('drawer-front-2', 'Drawer Front 2', 'FRONT', front_thickness, [0, 560, 240]),
+        board('drawer-front-3', 'Drawer Front 3', 'FRONT', front_thickness, [0, 560, 480])
       ],
       'hardware' => [
         {
           'placementId' => 'door-handle', 'hardwareId' => 'handle-160', 'name' => 'Handle',
           'shape' => 'bar-pull', 'hostComponentInstanceId' => 'door', 'anchorFace' => 'front',
-          'transform' => { 'translationMm' => [480, front_thickness, 300] },
+          'transform' => { 'translationMm' => [480, 560 + front_thickness, 300] },
           'dimensionsMm' => [96, 25, 32]
         }
       ]
@@ -263,5 +364,15 @@ class MaterialRebuildTest < Minitest::Test
     managed_parts(furniture).map do |part|
       [part.object_id, part.name, part.definition.object_id, part.transformation.to_a, @store.read(part)]
     end
+  end
+
+  def semantic_role_snapshot(furniture, roles)
+    managed_parts(furniture).filter_map do |part|
+      role = material_role(part)
+      next unless roles.include?(role)
+
+      metadata = @store.read(part)
+      [metadata.dig('identity', 'componentInstanceId'), role, local_thickness(part), part.transformation.to_a]
+    end.sort_by(&:first)
   end
 end
