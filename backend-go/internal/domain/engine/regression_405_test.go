@@ -18,15 +18,23 @@ type parity405RoleExpectation struct {
 }
 
 type parity405Scenario struct {
-	Choices                map[string]string                   `json:"choices"`
-	ExpectedRoles          map[string]parity405RoleExpectation `json:"expectedRoles"`
-	ExpectedFormulaResults map[string]float64                  `json:"expectedFormulaResults"`
-	ExpectedRejectedRole   string                              `json:"expectedRejectedRole"`
+	Choices                   map[string]string                   `json:"choices"`
+	BeforeChoices             map[string]string                   `json:"beforeChoices"`
+	AfterChoices              map[string]string                   `json:"afterChoices"`
+	AffectedRole              string                              `json:"affectedRole"`
+	ExpectedAffectedCount     int                                 `json:"expectedAffectedCount"`
+	ExpectedUnaffectedRoles   []string                            `json:"expectedUnaffectedRoles"`
+	ExpectedHardwareYBeforeMm float64                             `json:"expectedHardwareYBeforeMm"`
+	ExpectedHardwareYAfterMm  float64                             `json:"expectedHardwareYAfterMm"`
+	ExpectedRoles             map[string]parity405RoleExpectation `json:"expectedRoles"`
+	ExpectedFormulaResults    map[string]float64                  `json:"expectedFormulaResults"`
+	ExpectedRejectedRole      string                              `json:"expectedRejectedRole"`
 }
 
 type parity405Contract struct {
-	NominalThicknessMm map[string]int               `json:"nominalThicknessMm"`
-	Scenarios          map[string]parity405Scenario `json:"scenarios"`
+	FurnitureDimensionsMm [3]int                       `json:"furnitureDimensionsMm"`
+	NominalThicknessMm    map[string]int               `json:"nominalThicknessMm"`
+	Scenarios             map[string]parity405Scenario `json:"scenarios"`
 }
 
 func loadMaterialThicknessParityContract(t *testing.T) parity405Contract {
@@ -168,6 +176,123 @@ func TestMaterialThicknessParityScenarioB_MixedRoles(t *testing.T) {
 		t.Fatalf("ResolveFurnitureLayout: %v", err)
 	}
 	assert405LayoutRoles(t, layout.Components, scenario.ExpectedRoles)
+}
+
+func TestMaterialThicknessParityScenarioC_FrontUpdateIsolatedAcrossBomAndLayout(t *testing.T) {
+	contract := loadMaterialThicknessParityContract(t)
+	scenario := contract.Scenarios["frontUpdate"]
+	module, catalog := parity405Cabinet()
+
+	beforeBom, err := ResolveBom(module, scenario.BeforeChoices, catalog)
+	if err != nil {
+		t.Fatalf("ResolveBom before FRONT update: %v", err)
+	}
+	afterBom, err := ResolveBom(module, scenario.AfterChoices, catalog)
+	if err != nil {
+		t.Fatalf("ResolveBom after FRONT update: %v", err)
+	}
+	beforeBomByID := map[string]domain.ResolvedBoardPart{}
+	for _, part := range beforeBom.BoardParts {
+		beforeBomByID[part.ID] = part
+	}
+	changedBom := 0
+	for _, after := range afterBom.BoardParts {
+		before, ok := beforeBomByID[after.ID]
+		if !ok {
+			t.Fatalf("BOM part %s appeared only after FRONT update", after.ID)
+		}
+		changed := before.MaterialID != after.MaterialID || before.ThicknessMm != after.ThicknessMm ||
+			before.LengthMm != after.LengthMm || before.WidthMm != after.WidthMm
+		if after.OptionRole == scenario.AffectedRole {
+			if !changed {
+				t.Errorf("affected BOM part %s (%s) did not change", after.ID, after.Description)
+			}
+			changedBom++
+			continue
+		}
+		if contains405Role(scenario.ExpectedUnaffectedRoles, after.OptionRole) && changed {
+			t.Errorf("unaffected BOM part %s (%s/%s) changed: before=%+v after=%+v",
+				after.ID, after.Description, after.OptionRole, before, after)
+		}
+	}
+	if changedBom != scenario.ExpectedAffectedCount {
+		t.Fatalf("changed FRONT BOM parts = %d, want %d", changedBom, scenario.ExpectedAffectedCount)
+	}
+
+	beforeLayout, err := ResolveFurnitureLayout(module, catalog, nil, scenario.BeforeChoices)
+	if err != nil {
+		t.Fatalf("ResolveFurnitureLayout before FRONT update: %v", err)
+	}
+	afterLayout, err := ResolveFurnitureLayout(module, catalog, nil, scenario.AfterChoices)
+	if err != nil {
+		t.Fatalf("ResolveFurnitureLayout after FRONT update: %v", err)
+	}
+	if beforeLayout.DimensionsMm != contract.FurnitureDimensionsMm || afterLayout.DimensionsMm != contract.FurnitureDimensionsMm {
+		t.Fatalf("FRONT update changed external dimensions: before=%v after=%v want=%v",
+			beforeLayout.DimensionsMm, afterLayout.DimensionsMm, contract.FurnitureDimensionsMm)
+	}
+	beforeLayoutByID := map[string]LayoutComponent{}
+	for _, component := range beforeLayout.Components {
+		beforeLayoutByID[component.ComponentInstanceID] = component
+	}
+	changedLayout := 0
+	for _, after := range afterLayout.Components {
+		before, ok := beforeLayoutByID[after.ComponentInstanceID]
+		if !ok {
+			t.Fatalf("layout component %s appeared only after FRONT update", after.ComponentInstanceID)
+		}
+		changed := !same405LayoutSemantics(before, after)
+		if after.OptionRole == scenario.AffectedRole {
+			if !changed {
+				t.Errorf("affected layout component %s (%s) did not change", after.ComponentInstanceID, after.Name)
+			}
+			changedLayout++
+			continue
+		}
+		if contains405Role(scenario.ExpectedUnaffectedRoles, after.OptionRole) && changed {
+			t.Errorf("unaffected layout component %s (%s/%s) changed: before=%+v after=%+v",
+				after.ComponentInstanceID, after.Name, after.OptionRole, before, after)
+		}
+	}
+	if changedLayout != scenario.ExpectedAffectedCount {
+		t.Fatalf("changed FRONT layout components = %d, want %d", changedLayout, scenario.ExpectedAffectedCount)
+	}
+	if len(beforeLayout.Hardware) != 1 || len(afterLayout.Hardware) != 1 {
+		t.Fatalf("expected one front-hosted hardware placement before/after, got %d/%d",
+			len(beforeLayout.Hardware), len(afterLayout.Hardware))
+	}
+	beforeHardware, afterHardware := beforeLayout.Hardware[0], afterLayout.Hardware[0]
+	if beforeHardware.HostComponentInstanceID != afterHardware.HostComponentInstanceID {
+		t.Fatalf("hardware host identity changed: %s -> %s",
+			beforeHardware.HostComponentInstanceID, afterHardware.HostComponentInstanceID)
+	}
+	if beforeHardware.Transform.TranslationMm[1] != scenario.ExpectedHardwareYBeforeMm ||
+		afterHardware.Transform.TranslationMm[1] != scenario.ExpectedHardwareYAfterMm {
+		t.Fatalf("front hardware did not recompute with host thickness: before=%v after=%v",
+			beforeHardware.Transform.TranslationMm, afterHardware.Transform.TranslationMm)
+	}
+}
+
+func contains405Role(roles []string, role string) bool {
+	for _, candidate := range roles {
+		if candidate == role {
+			return true
+		}
+	}
+	return false
+}
+
+func same405LayoutSemantics(a, b LayoutComponent) bool {
+	return a.ComponentInstanceID == b.ComponentInstanceID &&
+		a.ComponentDefinitionID == b.ComponentDefinitionID &&
+		a.OptionRole == b.OptionRole &&
+		a.MaterialID == b.MaterialID &&
+		a.ThicknessMm == b.ThicknessMm &&
+		a.LengthMm == b.LengthMm &&
+		a.WidthMm == b.WidthMm &&
+		a.Transform == b.Transform &&
+		a.DimensionsMm == b.DimensionsMm &&
+		a.LocalTransform == b.LocalTransform
 }
 
 func TestMaterialThicknessParityScenarioD_InactiveChoiceFailsBeforeGeometry(t *testing.T) {

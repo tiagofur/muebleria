@@ -25,10 +25,20 @@
 
 - `packages/domain`: 91 archivos / 1152 tests verdes + typecheck verde.
 - `backend-go/internal/domain/engine`: paquete completo verde; regresiones #405
-  enfocadas verdes.
+  enfocadas verdes, incluido FRONT 18→16 before/after en BOM y layout.
 - `apps/sketchup-extension`: 164 unit tests / 1578 assertions verdes;
   `material_rebuild_test.rb` 7 tests / 196 assertions y RuboCop verdes.
 - `feature_list.json`: 185 features, sólo F189 en `in_progress`.
 
 **Estado:** implementación lista para revisión; F189 permanece `in_progress`
 hasta veredicto del reviewer.
+
+## Corrección de review
+
+- Ronda 1: `CHANGES_REQUESTED` porque Go no ejecutaba el escenario C del
+  contrato.
+- Se agregó comparación before/after en Go para BOM y layout: cuatro FRONT
+  afectados, BODY/BACK invariantes, dimensiones exteriores estables, identidad
+  de host y herraje 578→576.
+- Gate enfocado posterior: `go test ./internal/domain/engine -run
+  'MaterialThicknessParity' -count=1` verde.
