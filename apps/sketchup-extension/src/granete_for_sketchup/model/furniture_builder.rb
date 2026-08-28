@@ -189,6 +189,34 @@ module Granete
         end
       end
 
+      # Normalizes editable furniture intent without resolving manufacturing
+      # geometry. Material choices are merged as role-keyed authoring intent;
+      # only Granete's NativeLayout may supply their physical consequences.
+      module FurnitureIntent
+        private
+
+        def normalize_parameters(definition, raw_parameters)
+          (definition['parameters'] || []).each_with_object({}) do |parameter, params|
+            name = parameter['name']
+            params[name] = raw_parameters[name] || parameter['defaultValue']
+          end
+        end
+
+        def merge_material_choices(existing_meta, incoming_choices)
+          existing = existing_meta&.dig('intent', 'materialChoices')
+          existing = {} unless existing.is_a?(Hash)
+          return existing.dup unless incoming_choices.is_a?(Hash)
+
+          existing.merge(incoming_choices)
+        end
+
+        def material_choices_changed?(existing_meta, merged_choices)
+          existing = existing_meta&.dig('intent', 'materialChoices')
+          existing = {} unless existing.is_a?(Hash)
+          merged_choices != existing
+        end
+      end
+
       # Native SketchUp renderer (#415 / ADR-0004). Every managed furniture is
       # a top-level Sketchup::ComponentInstance with an isolated generated
       # ComponentDefinition; every managed board/hardware is a nested
@@ -202,6 +230,7 @@ module Granete
       # metadata and never derive from host GUID/persistent_id/name.
       class FurnitureBuilder
         include GenericAuthoringRenderer
+        include FurnitureIntent
 
         MM_TO_INCHES = 1.0 / 25.4
         DEFAULT_HARDWARE_DIMS_MM = [96.0, 32.0, 25.0].freeze
@@ -212,6 +241,9 @@ module Granete
         LEGACY_REPRESENTATION_ERROR =
           'El mueble usa la representación legacy (Group) y aún no fue migrado a ' \
           'ComponentInstance nativo (#416). Reinsertá el mueble desde la biblioteca.'
+        MATERIAL_RESOLUTION_REQUIRED_ERROR =
+          'El cambio de material requiere una composición nativa resuelta por Granete; ' \
+          'el mueble anterior no fue modificado.'
 
         def initialize(metadata_store: nil, asset_loader: nil, texture_cache: nil)
           @metadata_store = metadata_store
@@ -262,16 +294,29 @@ module Granete
           parameters = normalize_parameters(definition, raw_parameters)
           existing_meta = @metadata_store&.read(furniture)
           instance_id = existing_meta&.dig('identity', 'instanceRef') || generate_instance_id
+          merged_material_choices = merge_material_choices(existing_meta, material_choices)
+
+          if material_choices_changed?(existing_meta, merged_material_choices) &&
+             !resolved_layout.is_a?(Library::NativeLayout)
+            return { 'success' => false, 'error' => MATERIAL_RESOLUTION_REQUIRED_ERROR }
+          end
 
           model.start_operation("Editar Mueble #{definition['name']}", true)
           begin
+            # A native copy/paste can temporarily leave two top-level furniture
+            # instances sharing one host definition. Isolate the target before
+            # touching its children so FI-A can never mutate FI-B. make_unique
+            # returns this same instance and preserves its world transform.
+            furniture.make_unique if furniture.definition.instances.length > 1
             furniture_definition = furniture.definition
             furniture_definition.entities.clear!
             counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
                                    resolved_layout)
-            MetadataWriter.write_furniture(@metadata_store, furniture, instance_id, definition, parameters,
-                                           material_choices: material_choices)
             purge_orphan_generated_definitions(model)
+            MetadataWriter.write_furniture(
+              @metadata_store, furniture, instance_id, definition, parameters,
+              material_choices: merged_material_choices, existing_metadata: existing_meta
+            )
             model.commit_operation
           rescue StandardError => e
             model.abort_operation
@@ -301,16 +346,6 @@ module Granete
 
         def generate_instance_id
           "inst-#{rand(0x1000..0xffff).to_s(16)}#{rand(0x1000..0xffff).to_s(16)}"
-        end
-
-        def normalize_parameters(definition, raw_parameters)
-          params = {}
-          (definition['parameters'] || []).each do |p|
-            name = p['name']
-            val = raw_parameters[name] || p['defaultValue']
-            params[name] = val
-          end
-          params
         end
 
         def build_result(instance_id, definition, parameters, counts)
@@ -459,31 +494,44 @@ module Granete
       module MetadataWriter
         module_function
 
-        def write_furniture(store, furniture, instance_id, definition, parameters, material_choices: nil)
+        def write_furniture(store, furniture, instance_id, definition, parameters, material_choices: nil,
+                            existing_metadata: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
           rev_ref = definition['revisionId'] || definition['version'] || 'rev-1'
-
-          metadata_payload = {
-            'namespace' => 'com.granete.sketchup_extension',
-            'metadataVersion' => 1,
-            'kind' => 'furnitureInstance',
-            'identity' => {
-              'instanceRef' => instance_id,
-              'projectRef' => proj_ref,
-              'sourceRevisionRef' => rev_ref
-            },
-            'intent' => {
-              'semanticRole' => 'furniture-instance',
-              'furnitureDefinitionId' => definition['furniture_definition_id'],
-              'parameters' => parameters
-            }
-          }
-          if material_choices.is_a?(Hash) && !material_choices.empty?
-            metadata_payload['intent']['materialChoices'] = material_choices
-          end
+          metadata_payload = json_copy(existing_metadata.is_a?(Hash) ? existing_metadata : {})
+          write_envelope(metadata_payload)
+          metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref, rev_ref)
+          metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
           store.write(furniture, metadata_payload)
+        end
+
+        def json_copy(value)
+          JSON.parse(JSON.generate(value))
+        end
+
+        def write_envelope(payload)
+          payload['namespace'] = 'com.granete.sketchup_extension'
+          payload['metadataVersion'] = 1
+          payload['kind'] = 'furnitureInstance'
+        end
+
+        def furniture_identity(payload, instance_id, project_ref, revision_ref)
+          identity = payload['identity'].is_a?(Hash) ? payload['identity'] : {}
+          identity['instanceRef'] ||= instance_id
+          identity['projectRef'] ||= project_ref
+          identity['sourceRevisionRef'] = revision_ref
+          identity
+        end
+
+        def furniture_intent(payload, definition, parameters, material_choices)
+          intent = payload['intent'].is_a?(Hash) ? payload['intent'] : {}
+          intent['semanticRole'] ||= 'furniture-instance'
+          intent['furnitureDefinitionId'] = definition['furniture_definition_id']
+          intent['parameters'] = parameters
+          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash) && !material_choices.empty?
+          intent
         end
 
         # component_definition_id is the #346 stable authoring-definition ID
