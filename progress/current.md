@@ -65,20 +65,25 @@ metadata.
    generado también es ComponentInstance nativo con color/preview.
 7. **Path genérico offline:** misma jerarquía nativa con base identidad por
    construcción (laterales/estantes/puertas autorados localmente).
-8. **Host validation:** `test/testup/TC_NativeEntitySmoke.rb` (10 tests:
-   entity types, bounds locales, transform lateral exacto, move/rotate sin
-   reescribir children, aislamiento FI-A/FI-B, rename, GUID, contrato espejo
-   fail-closed, abort real del host) + fixture
-   `test/fixtures/native_layout.json` (= golden del resolver). README
-   documenta la suite. **Ejecución en host real: PENDIENTE** — requiere
-   instalar RBZ + TestUp 2.5.4 y correr SketchUp GUI (esta sesión no puede
-   lanzar GUI ni simular evidencia; convención: registrar como no disponible,
-   nunca simular pass).
+8. **Host validation EJECUTADO EN HOST REAL:** TestUp 2.5.4 + RBZ
+   `efeab3fb…` instalados en SketchUp 2026.2 (macOS, Ruby 3.2.2), corridos
+   vía `-RubyStartupArg TestUp:CI:Config`. Resultado final:
+   **17/17 (7 TC_BootstrapSmoke + 10 TC_NativeEntitySmoke), 251 assertions,
+   status Success** — evidencia preservada en
+   `progress/host_smoke_F186_testup_ci.json` + README (tabla compatibilidad).
+   El host real expuso y el slice corrigió 3 issues que los stubs enmascaraban:
+   (a) `Geom::Transformation.identity` NO existe en el host (bug de runtime:
+   todo insert fallaría) ⇒ `Transformation.new`; (b) el template default del
+   documento trae geometría (persona = ComponentInstance) ⇒ el smoke scpea
+   lookups a definiciones `Granete · Mueble ·` y el cleanup NO toca contenido
+   del template; (c) `BoundingBox#to_a` no existe en el host ⇒ min/max.
+   El smoke además requiere métodos de test PÚBLICOS (TestUp descubre vía
+   public_instance_methods): un test bajo `private` no se descubre (hallazgo).
 
 ## Evidencia
 
 - `bundle exec rake verify` (syntax+lint+unit+boundary+RBZ): OK — 159 runs /
-  2217 assertions, RBZ sha256 `245785d0…` (tras fixes de review).
+  2217 assertions, RBZ final sha256 `efeab3fb…` (tras fixes de review + host smoke).
 - Tests nuevos `native_entity_renderer_test.rb` (matriz obligatoria +
   negative proofs, golden-driven) y `furniture_builder_test.rb` reescrito
   (native), `persistence_roundtrip/selection_observer/dialog_controller/
@@ -88,7 +93,8 @@ metadata.
   — defId compartido por 3 copias quantity, ≠ instanceId — y golden
   regenerado con el campo).
 - `pnpm typecheck` + `pnpm test`: OK (sin cambios TS; no-regresión).
-- Host smoke real: PENDIENTE (ver arriba).
+- Host smoke real: **OK 17/17** (runs intermedios 1–3 documentados arriba;
+  JSON final preservado).
 
 ## Review round 1 (progress/review_F186.md) — CHANGES_REQUESTED → atendido
 

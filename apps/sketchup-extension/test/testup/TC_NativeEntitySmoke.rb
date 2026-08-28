@@ -1,11 +1,17 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'stringio'
+require 'testup/testcase'
+
 # Host smoke for the native SketchUp entity model (#415 / ADR-0004): the
 # INSTALLED extension must insert and rebuild managed furniture as native
 # ComponentInstances with local geometry, authoritative #414 transforms and
 # Granete contract identity in namespaced metadata. Like TC_BootstrapSmoke,
 # this suite never loads the repository checkout: the product under test is
-# the installed RBZ.
+# the installed RBZ. The host's default document template may carry its own
+# geometry (e.g. a person ComponentInstance), so every lookup is scoped to
+# Granete-generated definitions — never to "whatever entity is first".
 module Granete
   module SketchUpExtension
     class TC_NativeEntitySmoke < TestUp::TestCase
@@ -18,7 +24,6 @@ module Granete
       ).freeze
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       MM = 1.0 / 25.4
-      DICTIONARY = 'com.granete.sketchup_extension'
       GRANETE_DEFINITION_PREFIXES = ['Granete · Mueble · ', 'Granete · Parte · ',
                                      'Granete · Herraje · '].freeze
 
@@ -41,10 +46,14 @@ module Granete
 
         assert result['success'], "insert failed: #{result['error']}"
         assert_instance_of Sketchup::ComponentInstance, top
-        # No managed Group wrapper anywhere in the model.
-        assert model.entities.grep(Sketchup::Group).empty?
+        assert_equal 1, granete_furniture_instances.length
 
+        # No managed Group wrapper anywhere in the managed hierarchy (the
+        # template may legally carry its own unmanaged content).
         children = top.definition.entities.grep(Sketchup::ComponentInstance)
+        assert top.definition.entities.grep(Sketchup::Group).empty?
+        assert children.length.positive?
+
         layout = native_layout
         assert_equal layout['components'].length + layout['hardware'].length, children.length
         children.each do |child|
@@ -82,7 +91,9 @@ module Granete
         _result, top = insert_fixture_furniture
         lateral = find_child(top, 'Lateral')
         child_transform_before = lateral.transformation.to_a
-        child_bounds_before = lateral.definition.bounds.to_a
+        # BoundingBox has no #to_a in the real host; min/max Points do.
+        bounds = lateral.definition.bounds
+        child_bounds_before = [bounds.min.to_a, bounds.max.to_a]
 
         quarter_turn = Geom::Transformation.axes(
           Geom::Point3d.new(1000 * MM, 200 * MM, 0),
@@ -93,18 +104,22 @@ module Granete
         assert_transforms_equal quarter_turn, top.transformation
         lateral = find_child(top, 'Lateral')
         assert_transforms_equal Geom::Transformation.new(child_transform_before), lateral.transformation
-        assert_equal child_bounds_before, lateral.definition.bounds.to_a
+        bounds = lateral.definition.bounds
+        assert_equal child_bounds_before, [bounds.min.to_a, bounds.max.to_a]
       end
 
       def test_two_furniture_units_diverge_without_shared_definition_effects
-        _first, top_a = insert_fixture_furniture
-        _second, top_b = insert_fixture_furniture
+        insert_fixture_furniture
+        insert_fixture_furniture
+        top_a, top_b = granete_furniture_instances.first(2)
+        refute_nil top_a
+        refute_nil top_b
 
         refute_same top_a.definition, top_b.definition
 
         children_b_before = top_b.definition.entities.grep(Sketchup::ComponentInstance).map(&:name)
         rebuild = builder.update_furniture(model, top_a, definition, {},
-                                           resolved_layout: parse_layout(native_layout_body))
+                                           resolved_layout: parse_layout)
         assert rebuild['success'], "update failed: #{rebuild['error']}"
 
         assert_equal children_b_before,
@@ -157,7 +172,10 @@ module Granete
           parse_layout(body)
         end
         refute_nil error.message
-        assert model.entities.to_a.empty?, 'no geometry may exist from a rejected contract'
+        # No GRANETE entity or definition may exist from a rejected contract
+        # (the template's own content is not ours to assert about).
+        assert granete_furniture_instances.empty?
+        assert granete_definitions.empty?
       end
 
       def test_abort_operation_leaves_no_partial_hierarchy
@@ -172,6 +190,31 @@ module Granete
         refute group.valid?
         assert model.definitions['Granete · Parte · probe'].nil?
       end
+
+      def test_legacy_group_representation_fails_closed_with_migration_pointer
+        # Host reality: a SketchUp Group ALSO responds to #definition, so the
+        # update guard must discriminate by entity type, not duck typing.
+        group = model.active_entities.add_group
+        group.entities.add_line([0, 0, 0], [100, 0, 0])
+        Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
+          Granete::SketchUpExtension::Metadata::Store.new(model),
+          group, 'inst-legacy', definition, {}
+        )
+        assert group.respond_to?(:definition)
+        assert group.is_a?(Sketchup::Group)
+
+        result = builder.update_furniture(model, group, definition, {})
+
+        refute result['success']
+        assert_includes result['error'], '416'
+        assert group.valid?
+        assert_equal 1, group.definition.entities.count # only its own line
+      end
+
+      # ------------------------------------------------------------------
+      # Test methods must stay ABOVE this line: TestUp discovers public
+      # instance methods only.
+      # ------------------------------------------------------------------
 
       DEFINITION = {
         'furniture_definition_id' => 'mod-1',
@@ -195,26 +238,6 @@ module Granete
         )
       end
 
-      def test_legacy_group_representation_fails_closed_with_416_pointer
-        # Host reality: a SketchUp Group ALSO responds to #definition, so the
-        # update guard must discriminate by entity type, not duck typing.
-        group = model.active_entities.add_group
-        group.entities.add_line([0, 0, 0], [100, 0, 0])
-        Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
-          Granete::SketchUpExtension::Metadata::Store.new(model),
-          group, 'inst-legacy', definition, {}
-        )
-        assert group.respond_to?(:definition)
-        assert group.is_a?(Sketchup::Group)
-
-        result = builder.update_furniture(model, group, definition, {})
-
-        refute result['success']
-        assert_includes result['error'], '416'
-        assert group.valid?
-        assert_equal 1, group.definition.entities.count # only its own line
-      end
-
       def definition
         DEFINITION
       end
@@ -231,10 +254,25 @@ module Granete
         native_layout_body
       end
 
+      # Granete furniture = top-level instances of our generated definitions.
+      # The document template can carry its own ComponentInstances, so never
+      # grab "the first instance in the model".
+      def granete_furniture_instances
+        model.entities.grep(Sketchup::ComponentInstance).select do |entity|
+          entity.definition.name.to_s.start_with?('Granete · Mueble · ')
+        end
+      end
+
+      def granete_definitions
+        model.definitions.select do |definition|
+          GRANETE_DEFINITION_PREFIXES.any? { |prefix| definition.name.to_s.start_with?(prefix) }
+        end
+      end
+
       def insert_fixture_furniture
         result = builder.insert_furniture(model, definition, {},
                                           resolved_layout: parse_layout)
-        [result, model.entities.grep(Sketchup::ComponentInstance).first]
+        [result, granete_furniture_instances.last]
       end
 
       def find_child(top, name)
@@ -248,6 +286,8 @@ module Granete
         end
       end
 
+      # Scoped self-cleanup: only Granete-generated entities/definitions are
+      # removed — template or user content in the scratch document is not ours.
       def cleanup_granete_entities
         current = begin
           model
@@ -256,15 +296,13 @@ module Granete
         end
         return unless current
 
-        current.entities.to_a.each do |entity|
-          entity.erase! if entity.respond_to?(:erase!) && entity.valid?
+        granete_furniture_instances.each do |entity|
+          entity.erase! if entity.valid?
         end
-        if current.respond_to?(:definitions)
-          current.definitions.to_a.each do |definition|
-            next unless GRANETE_DEFINITION_PREFIXES.any? { |p| definition.name.to_s.start_with?(p) }
+        current.definitions.to_a.each do |definition|
+          next unless GRANETE_DEFINITION_PREFIXES.any? { |p| definition.name.to_s.start_with?(p) }
 
-            current.definitions.remove(definition)
-          end
+          current.definitions.remove(definition)
         end
       rescue StandardError
         nil

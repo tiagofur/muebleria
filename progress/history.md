@@ -1451,3 +1451,17 @@ Verificación: rake verify OK (156+3 tests, RBZ sha256 245785d0…); go test
 pnpm typecheck/test OK. Review: round 1 CHANGES_REQUESTED (H1-H4) → fixes →
 round 2 APPROVED (progress/review_F186.md). Ledger F186 done. Docs:
 native-entity-model §2/§8, interaction-model §3/§6/§7/§17/§20/§22.
+
+### F186 — addendum host smoke real (2026-08-27)
+
+Ejecutado en host real: SketchUp 2026.2 macOS (Ruby 3.2.2) + TestUp 2.5.4 +
+RBZ instalado `efeab3fb…` vía `-RubyStartupArg TestUp:CI:Config`. Resultado
+final **17/17 tests (7 bootstrap + 10 native entity), 251 assertions,
+Success**; JSON preservado en `progress/host_smoke_F186_testup_ci.json` y
+README actualizado. El host real expuso 3 issues corregidos en el slice:
+`Geom::Transformation.identity` no existe en el host (bug runtime: todo
+insert fallaba; ⇒ `Transformation.new`), el template default trae geometría
+(persona ComponentInstance ⇒ smoke scopea a definiciones Granete · y cleanup
+no toca contenido ajeno) y `BoundingBox#to_a` no existe (⇒ min/max).
+Además: TestUp descubre tests vía `public_instance_methods` — un test bajo
+`private` jamás se descubre/corre.

@@ -226,8 +226,11 @@ module Granete
           model.start_operation("Insertar Mueble #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, instance_id)
+            # Host-accurate identity transform: SketchUp has no
+            # Transformation.identity constructor — Transformation.new IS the
+            # identity (caught by the real-host TestUp smoke).
             furniture = model.active_entities.add_instance(furniture_definition,
-                                                           Geom::Transformation.identity)
+                                                           Geom::Transformation.new)
             furniture.name = "#{definition['name']} (#{instance_id})"
             counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
                                    resolved_layout)
