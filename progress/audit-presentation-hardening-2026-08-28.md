@@ -26,7 +26,7 @@ evidencia ejecutada.
 | **P0-2c — “Abrir en Producción” terminaba en un dead-end** | La ruta recibía un proyecto aceptado, pero la cola filtraba proyectos sin `materialsRelease` y lo mostraba como inexistente. | **Corregido.** El workspace consulta también la lista sin filtrar y muestra una guía accionable hacia Almacén; sólo un ID realmente ausente conserva “Orden no encontrada”. | `a838bdb`, `f01b876`. Tests de componente para proyecto aceptado sin liberación, proyecto fuera de etapa e ID desconocido. |
 | **P0-2d — “Demo plantilla” resolvía un despiece vacío** | El seed persistía `MOD-GAB-01` como módulo plano, sin `structure_id` ni composición, pero el motor resuelve el BOM compuesto. | **Corregido.** El seed y el upgrade convierten el gabinete al contrato `EST-GAB-01` + componentes; el item conserva elecciones resolubles. | `1c1c71d`, `31cc72f`. Test Go de composición, upgrade flat→composed y resolución de BOM con al menos una pieza y sin error. |
 | **P0-3 — pestañas con catálogos stale** | Cada pestaña mantenía un snapshot completo y no recibía señal de mutaciones hechas en otra pestaña. | **Mitigado para demo.** Un guardado exitoso emite por `granete-catalog`; la otra pestaña queda marcada stale y recarga al volver a visible. Si la recarga falla, conserva el flag para reintentar. | `e60eaff`. Tests con dos canales/instancias, visibilidad, reintento y orden de saves. Solución completa diferida a #443. |
-| **P1-4 — doble guardado creaba duplicados** | `patch()` lanzaba fan-outs concurrentes; dos saves podían leer el mismo snapshot y hacer `POST` de la misma entidad. | **Corregido.** Los saves se serializan por instancia y cada save encolado relee el catálogo actual; un fallo libera la cadena. | `bbf440b`, complementado por `e60eaff`. Tests de doble creación rápida: un solo `POST` y orden preservado. |
+| **P1-4 — doble guardado creaba duplicados** | Había dos fallos distintos: `patch()` permitía fan-outs concurrentes y dos submits equivalentes de `createCustomer` generaban UUIDs diferentes. Serializar los saves resolvía el interleaving, pero por sí solo persistía ambas entidades. | **Corregido.** Los saves se serializan por instancia y `createCustomer` mantiene un guard semántico de submissions equivalentes mientras el primero está pendiente. El segundo click no agrega otra entidad ni inicia otro save, incluso si el generador ya produjo otro UUID. | `bbf440b`, `e60eaff`, `6009328`. El repro usa dos IDs distintos como producción y exige una sola entidad, una sola llamada de persistencia y un solo create; los tests de orden de la cadena se conservan. |
 | **P1-5 — PUT de proyecto devolvía 500 por UUID inválido** | `customer_id` e IDs anidados vacíos/malformados llegaban a columnas UUID en SQL y terminaban como error interno. | **Corregido.** El handler valida los IDs requeridos después de los gates de ownership y devuelve `400` con mensaje claro. | `e9ba809`, `8a2d7c9`. Tests de payload mínimo, UUID vacío/malformado y preservación de semántica de autorización. |
 | **P1-6 — toasts idénticos se apilaban** | Cada fallo añadía una notificación nueva aunque coincidieran tipo y mensaje. | **Corregido.** Un toast activo idéntico renueva su timer en lugar de duplicarse. | `bbf440b`, complementado por `e60eaff`. Tests de deduplicación y renovación. |
 
@@ -37,8 +37,9 @@ evidencia ejecutada.
 - API/auth/storage: suites Go focalizadas; los commits de API registran además
   `go test ./...` verde.
 - Web/UI: tests de interceptor 401, stores, transición de cotización,
-  sincronización cross-tab y estados de Producción. Los commits registran las
-  suites Vitest correspondientes y typecheck del slice de Producción.
+  sincronización cross-tab y estados de Producción. El repro de doble-submit
+  usa UUIDs distintos y valida el guard semántico real. Los commits registran
+  las suites Vitest correspondientes y typecheck del slice de Producción.
 - No se sustituye evidencia runtime por tests unitarios: son capas distintas.
 
 ## Verificación runtime y limpieza
