@@ -89,6 +89,24 @@ describe('uiStore — toast queue', () => {
     const four = items.find((i) => i.message === 'Four');
     expect(four?.phase).not.toBe('exit');
   });
+
+  // P1-6 (pre-demo audit): repeated identical errors stacked as five copies
+  // of the same message; a live twin refreshes its lifetime instead.
+  it('dedupes an identical live toast instead of stacking a clone', () => {
+    useUiStore.getState().toast({ type: 'error', message: 'Error de conexión al sincronizar cambios' });
+    useUiStore.getState().toast({ type: 'error', message: 'Error de conexión al sincronizar cambios' });
+    useUiStore.getState().toast({ type: 'error', message: 'Error de conexión al sincronizar cambios' });
+    const items = useUiStore.getState().items.filter((i) => i.phase !== 'exit');
+    expect(items).toHaveLength(1);
+    expect(items[0]!.message).toBe('Error de conexión al sincronizar cambios');
+  });
+
+  it('a different type or message still stacks separately', () => {
+    useUiStore.getState().toast({ type: 'error', message: 'mismo mensaje' });
+    useUiStore.getState().toast({ type: 'info', message: 'mismo mensaje' });
+    useUiStore.getState().toast({ type: 'error', message: 'otro mensaje' });
+    expect(useUiStore.getState().items).toHaveLength(3);
+  });
 });
 
 // ---------------------------------------------------------------------------

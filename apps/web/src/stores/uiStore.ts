@@ -194,6 +194,28 @@ export const useUiStore = create<UiState>()((set, get) => {
       const message = input.message.trim();
       if (!message) return;
 
+      // P1-6 (pre-demo audit): repeated identical errors (e.g. one per
+      // failed catalog save) stacked up as five copies of the same message.
+      // Refresh the lifetime of the live twin instead of stacking a clone.
+      const state0 = get();
+      const twin = state0.items.find(
+        (t) =>
+          t.phase !== 'exit' &&
+          t.type === input.type &&
+          t.message === message,
+      );
+      if (twin) {
+        set((state) => ({
+          items: state.items.map((t) =>
+            t.id === twin.id && t.phase === 'enter'
+              ? { ...t, phase: 'visible' as const }
+              : t,
+          ),
+        }));
+        scheduleAutoDismiss(twin.id);
+        return;
+      }
+
       set((state) => {
         const overflow = state.items.filter((t) => t.phase !== 'exit');
         // Cap at TOAST_MAX: mark oldest for exit on next macrotask so

@@ -263,28 +263,61 @@ export function makeCatalogStoreCtx(
   const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
   const baseUrl = deps.baseUrl;
 
+  // P1-4 (pre-demo audit): double-clicks fire several patches before the
+  // first save finishes; concurrent saveCatalog fan-outs interleave and the
+  // upsert POSTs duplicate rows (audit repro: one "Guardar" triple-click
+  // created the same customer twice 3 ms apart). Serialize saves per store:
+  // a queued save re-reads the latest catalog, so by the time it runs the
+  // first save already created the entity and the upsert PUTs instead of
+  // POSTing a duplicate.
+  let saveInFlight: Promise<void> | null = null;
+
   function patch(updater: (catalog: Catalog) => Catalog): Promise<void> {
     const prev = get().catalog;
     if (!prev) return Promise.resolve();
     const nextCatalog = updater(prev);
     set({ catalog: nextCatalog });
-    return saveCatalog(nextCatalog).then(
-      () => undefined,
-      (err: unknown) => {
-        console.error('Error al guardar catálogo:', err);
-        // F118 S2: no error toasts from saves that raced a logout — the
-        // login screen must stay clean.
-        if (useWorkspaceStore.getState().session === null) {
-          return Promise.reject(err);
-        }
-        toast({
-          type: 'error',
-          message: 'Error de conexión al sincronizar cambios',
-        });
-        // Reject so callers do not toast "guardado" on failed sync.
-        return Promise.reject(err);
-      },
-    );
+    const task = (): Promise<void> =>
+      saveCatalog(get().catalog ?? nextCatalog).then(
+        () => undefined,
+        (err: unknown) => {
+          console.error('Error al guardar catálogo:', err);
+          // F118 S2: no error toasts from saves that raced a logout — the
+          // login screen must stay clean.
+          if (useWorkspaceStore.getState().session === null) {
+            throw err;
+          }
+          toast({
+            type: 'error',
+            message: 'Error de conexión al sincronizar cambios',
+          });
+          // Reject so callers do not toast "guardado" on failed sync.
+          throw err;
+        },
+      );
+    if (!saveInFlight) {
+      // Idle: start immediately (same timing as the pre-serialization code).
+      const run = task();
+      // The chain tracker observes the failure (so it never surfaces as an
+      // unhandled rejection) and frees the slot once the save settles.
+      saveInFlight = run
+        .finally(() => {
+          saveInFlight = null;
+        })
+        .catch(() => undefined);
+      return run;
+    }
+    // Busy: queue after the in-flight save settles; then(task, task) runs the
+    // next save on success OR failure — errors must not poison the chain. The
+    // queued save re-reads the latest catalog, so the entity the first save
+    // created is already there and the upsert PUTs (no duplicate).
+    const run = saveInFlight.then(task, task);
+    saveInFlight = run
+      .finally(() => {
+        saveInFlight = null;
+      })
+      .catch(() => undefined);
+    return run;
   }
 
   function saveAndToast(
