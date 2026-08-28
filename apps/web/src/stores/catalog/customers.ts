@@ -14,6 +14,8 @@ type CustomersSlice = Pick<
 >;
 
 export function createCustomersActions(ctx: CatalogStoreCtx): CustomersSlice {
+  const pendingCreates = new Set<string>();
+
   return {
     createCustomer: (draft, actor) => {
       const ownerUserId = resolveOwnerOnCreate(
@@ -31,13 +33,24 @@ export function createCustomersActions(ctx: CatalogStoreCtx): CustomersSlice {
         active: true,
         ownerUserId,
       };
-      ctx.saveAndToast(
+      const submissionKey = JSON.stringify({
+        name: item.name,
+        email: item.email,
+        phone: item.phone,
+        address: item.address,
+        notes: item.notes,
+        ownerUserId: item.ownerUserId,
+      });
+      if (pendingCreates.has(submissionKey)) return;
+      pendingCreates.add(submissionKey);
+
+      void ctx.saveAndToast(
         (c) => ({
           ...c,
           customers: [...(c.customers ?? []), item],
         }),
         `✓ Cliente "${item.name}" creado`,
-      );
+      ).finally(() => pendingCreates.delete(submissionKey));
     },
 
     updateCustomer: (id, draft, actor) => {

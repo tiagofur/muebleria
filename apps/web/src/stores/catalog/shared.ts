@@ -234,7 +234,7 @@ export interface CatalogStoreCtx {
     updater: (catalog: Catalog) => Catalog,
     message: string | null,
     type?: 'success' | 'info',
-  ): void;
+  ): Promise<void>;
 
   /**
    * Awaits a patch and reports whether the save landed. Use in async actions
@@ -330,8 +330,8 @@ export function makeCatalogStoreCtx(
     updater: (catalog: Catalog) => Catalog,
     message: string | null,
     type: 'success' | 'info' = 'success',
-  ): void {
-    void patch(updater).then(
+  ): Promise<void> {
+    return patch(updater).then(
       () => {
         if (message) toast({ type, message });
       },

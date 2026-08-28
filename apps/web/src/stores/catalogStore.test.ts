@@ -1161,22 +1161,33 @@ describe('catalogStore — save serialization (P1-4)', () => {
     await Promise.resolve();
   });
 
-  it('rapid duplicate createCustomer produces one create for the stable id', async () => {
+  it('deduplicates an in-flight customer submission with production-like UUIDs', async () => {
     const known = new Set(seedCatalog().customers?.map((customer) => customer.id));
     let customerCreates = 0;
+    let releaseSave: (() => void) | undefined;
+    const generatedIds: string[] = [];
+    const saveCatalog = vi.fn(async (catalog: Catalog) => {
+      for (const customer of catalog.customers ?? []) {
+        if (known.has(customer.id)) continue;
+        customerCreates++;
+        known.add(customer.id);
+      }
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+    });
     const { deps } = makeDeps({
-      newId: () => 'customer-stable-id',
-      saveCatalog: async (catalog) => {
-        for (const customer of catalog.customers ?? []) {
-          if (known.has(customer.id)) continue;
-          customerCreates++;
-          await Promise.resolve();
-          known.add(customer.id);
-        }
+      newId: () => {
+        const id = `customer-${generatedIds.length + 1}`;
+        generatedIds.push(id);
+        return id;
       },
+      saveCatalog,
     });
     const store = createCatalogStore({ deps });
-    store.getState().setCatalog(seedCatalog());
+    const initialCatalog = seedCatalog();
+    const initialCount = initialCatalog.customers?.length ?? 0;
+    store.getState().setCatalog(initialCatalog);
     const draft = {
       name: 'Cliente doble click',
       email: '',
@@ -1188,7 +1199,13 @@ describe('catalogStore — save serialization (P1-4)', () => {
 
     store.getState().createCustomer(draft, { id: 'seller-1', role: 'vendedor' });
     store.getState().createCustomer(draft, { id: 'seller-1', role: 'vendedor' });
-    await Promise.resolve();
+
+    expect(generatedIds).toEqual(['customer-1', 'customer-2']);
+    expect(store.getState().catalog?.customers).toHaveLength(initialCount + 1);
+    expect(saveCatalog).toHaveBeenCalledTimes(1);
+    expect(customerCreates).toBe(1);
+
+    releaseSave?.();
     await Promise.resolve();
     await Promise.resolve();
 
