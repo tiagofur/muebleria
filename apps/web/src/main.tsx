@@ -15,10 +15,16 @@ import '@granete/ui/common/tabs.css';
 import '@granete/ui/common/entityCard.css';
 import '@granete/ui/common/engineeringDetail.css';
 import { App } from './App';
+import { installAuth401Interceptor } from './auth401';
+import { useWorkspaceStore } from './stores/workspaceStore';
 import './app.css';
 
 // #366 — claves legacy muebles_* → granete_* antes de que nada lea storage.
 migrateLegacyStorageKeys();
+
+// P0-1 (pre-demo audit): 401 en endpoints de negocio ⇒ logout con el mensaje
+// de sesión expirada, nunca el toast engañoso "Error de conexión".
+installAuth401Interceptor(() => useWorkspaceStore.getState().markSessionExpired());
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {
