@@ -104,7 +104,7 @@ test.describe('F194 responsive UI gate', () => {
       await assertNoPageOverflow(page);
 
       await page.screenshot({
-        path: `test-results/f193-ui-gate/team-${viewport.name}-${viewport.width}.png`,
+        path: `test-results/f194-ui-gate/team-${viewport.name}-${viewport.width}.png`,
         fullPage: true,
       });
     });
@@ -118,7 +118,7 @@ test.describe('F194 responsive UI gate', () => {
       await assertNoPageOverflow(page);
 
       await page.screenshot({
-        path: `test-results/f193-ui-gate/accept-${viewport.name}-${viewport.width}.png`,
+        path: `test-results/f194-ui-gate/accept-${viewport.name}-${viewport.width}.png`,
         fullPage: true,
       });
     });

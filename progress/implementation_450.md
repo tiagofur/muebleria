@@ -169,7 +169,7 @@ ampliar el alcance funcional:
   y modal focus trap/Escape/restore;
 - gate Playwright reproducible para Team y aceptación a 390, 768 y 1280 px,
   con assertions de no-overflow y screenshots en
-  `test-results/f193-ui-gate/` revisados visualmente.
+  `test-results/f194-ui-gate/` revisados visualmente.
 
 ### Evidencia de la ronda
 
