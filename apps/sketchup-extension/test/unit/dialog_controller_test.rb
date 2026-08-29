@@ -11,6 +11,10 @@ require_relative '../../src/granete_for_sketchup/library/layout_contract'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
+require_relative '../../src/granete_for_sketchup/selection/capabilities'
+require_relative '../../src/granete_for_sketchup/selection/selection_context'
+require_relative '../../src/granete_for_sketchup/selection/capability_policy'
+require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 
@@ -577,5 +581,86 @@ class DialogControllerTest < Minitest::Test
     dialog.callbacks.fetch('delete_selected_furniture').call(nil, JSON.generate({}))
 
     assert_includes @model.active_entities.groups, group
+  end
+
+  def test_dialog_ready_publishes_furniture_selection_context_payload
+    definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
+    Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
+                                                       .insert_furniture(@model, definition, { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    @model.selection.add(furniture)
+
+    dialog = @controller.show
+    dialog.callbacks.fetch('dialog_ready').call(nil)
+
+    script = dialog.executed_scripts.find do |s|
+      s.include?('onSelectionChange') && s.include?('"kind":"furniture"')
+    end
+    refute_nil script, 'the furniture SelectionContext payload must reach the dialog'
+    assert_includes script, '"furnitureDefinitionId":"kitchen-base-standard"'
+    assert_includes script, '"canEditParameters"'
+  end
+
+  def test_selection_change_publishes_part_context_with_owner_breadcrumb
+    definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
+    result = Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
+                                                                .insert_furniture(@model, definition,
+                                                                                  { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    left_panel = furniture.definition.entities.instances.first
+    @model.selection.clear
+    @model.selection.add(left_panel)
+
+    dialog = @controller.show
+    dialog.callbacks.fetch('dialog_ready').call(nil)
+
+    script = dialog.executed_scripts.find do |s|
+      s.include?('onSelectionChange') && s.include?('"kind":"part"')
+    end
+    refute_nil script, 'the part SelectionContext payload must reach the dialog'
+    assert_includes script, JSON.generate(result['instance_id'])
+    assert_includes script, '"semanticPath"'
+    assert_includes script, '"capabilities"'
+  end
+
+  def test_select_furniture_callback_selects_the_owning_furniture_entity
+    definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
+    result = Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
+                                                                .insert_furniture(@model, definition,
+                                                                                  { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    left_panel = furniture.definition.entities.instances.first
+    @model.selection.clear
+    @model.selection.add(left_panel)
+    refute_same furniture, @model.selection.first
+
+    dialog = @controller.show
+    dialog.callbacks.fetch('select_furniture').call(
+      nil, JSON.generate({ 'furnitureInstanceRef' => result['instance_id'] })
+    )
+
+    assert_same furniture, @model.selection.first
+    assert(dialog.executed_scripts.any? do |s|
+      s.include?('onSelectionChange') && s.include?('"kind":"furniture"')
+    end, 'selecting the furniture must publish its context')
+  end
+
+  def test_select_furniture_rejects_a_part_instance_id
+    definition = @controller.instance_variable_get(:@catalog_provider).find_definition('kitchen-base-standard')
+    Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
+                                                       .insert_furniture(@model, definition, { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    left_panel = furniture.definition.entities.instances.first
+    part_id = @store.read(left_panel).dig('identity', 'instanceRef')
+    @model.selection.clear
+    @model.selection.add(left_panel)
+
+    dialog = @controller.show
+    dialog.callbacks.fetch('select_furniture').call(
+      nil, JSON.generate({ 'furnitureInstanceId' => part_id })
+    )
+
+    assert_same left_panel, @model.selection.first,
+                'a part occurrence id must never select/retarget as furniture'
   end
 end

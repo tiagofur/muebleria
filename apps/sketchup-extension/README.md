@@ -157,6 +157,41 @@ evidence is compatibility-only; results and conventions live in
 `docs/sketchup-opencutlist-interop.md`. The suites fail closed when the RBZ,
 the checkout guard or OpenCutList 7.x is not present.
 
+### Semantic selection suite (#476)
+
+`TC_SelectionContextSmoke` proves the canonical `Selection::Resolver` /
+`SelectionContext` contract in the real host through the **installed**
+extension: top-level furniture selection resolves `kind=furniture` with its
+local locator identity (`furnitureInstanceRef`; the server-owned
+`furnitureInstanceId`/`projectId` stay `nil` until the Digital Thread owns
+them) and honest capabilities (a definition missing from the catalog
+disables editing with an explanation instead of silently enabling it),
+nested board selection resolves `kind=part` with occurrence + definition
+IDs and owner recovery (`ownerRecovery: scan/path/ambiguous/none` — a
+native copy sharing definition and metadata ref is reported as ambiguous,
+never silently first-matched), hardware selection resolves `kind=hardware`
+with its own `hardwarePlacementId` namespace (no fabricated
+`componentInstanceId`), host occurrence ID and the real #350 provenance
+published by the server (`placementKind: manual`; unknown provenance fails
+closed in the plugin and is never guessed as derived), rename + move/rotate
+and full child regeneration preserve every occurrence identity key while
+only the technical host locator (persistent_id) changes, two occurrences
+sharing one `componentDefinitionId` never collapse into one context, and
+arbitrary user Groups (which do respond to `#definition` in the host) stay
+`unmanaged`. SketchUp defers `SelectionObserver` notifications to its event
+loop, so the suite resolves through the observer's public `resolve` — the
+exact code the deferred event runs — instead of racing the event loop. The
+active-path disambiguation is proven in the real host by opening the copy's
+editing context with `Model#active_path=` (official API since SketchUp
+2020): the open instance chain — which does NOT include the selected child,
+it belongs to `active_entities` — roots at the copy and resolves
+`ownerRecovery: path`. The HtmlDialog side (capability-driven
+gating, breadcrumb navigation, provenance copy, unmanaged state,
+multi-selection fail-closed) is covered by the Node harness
+`test/js/dialog_inspector_test.js` run from the unit suite. Downstream
+excellence features (#466/#467/#468/#470/#471) must consume this foundation
+instead of building parallel selection payloads.
+
 ## Configuration and security boundary
 
 The bootstrap injects two independent ports:

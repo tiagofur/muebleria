@@ -326,7 +326,8 @@
         32,
         37,
         160
-      ]
+      ],
+      "placementKind": "manual"
     }
   ]
 }

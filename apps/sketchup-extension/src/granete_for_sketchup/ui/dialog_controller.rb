@@ -266,6 +266,60 @@ module Granete
         end
       end
 
+      # Contextual-inspector callback handlers (#476): breadcrumb navigation
+      # back to the owning furniture. View state only.
+      module InspectorBridge
+        FURNITURE_KINDS = %w[furnitureInstance bootstrapIntent].freeze
+
+        def handle_select_furniture(raw_payload = nil)
+          payload = parse_payload(raw_payload)
+          # The breadcrumb locates the host by its LOCAL ref — never by the
+          # future server business ID (#384), which nothing owns yet.
+          instance_ref = payload['furnitureInstanceRef'] || payload['instanceId']
+          model = active_model
+          target = instance_ref && search_entities_for_instance(instance_ref)
+
+          if model && target && furniture_metadata?(model, target)
+            select_entity(model, target)
+            @logger.info('inspector_select_furniture', instance_ref: instance_ref)
+          else
+            @logger.warn('inspector_select_furniture_rejected',
+                         instance_ref: instance_ref)
+          end
+        rescue StandardError => e
+          @logger.error('inspector_select_furniture_failed', error: e)
+        end
+
+        private
+
+        def parse_payload(raw_payload)
+          if raw_payload.is_a?(String) && !raw_payload.strip.empty?
+            JSON.parse(raw_payload)
+          else
+            raw_payload || {}
+          end
+        end
+
+        # Only a furniture occurrence may be selected as furniture: a part or
+        # hardware id must never retarget the breadcrumb as its own owner.
+        def furniture_metadata?(model, target)
+          store = @metadata_store_factory.call(model)
+          metadata = store.read(target)
+          FURNITURE_KINDS.include?(metadata && metadata['kind'])
+        rescue Metadata::InvalidMetadataError
+          false
+        end
+
+        # Selecting is viewport view state: no SketchUp operation, no
+        # metadata mutation — the selection observer then publishes the
+        # furniture SelectionContext.
+        def select_entity(model, target)
+          selection = model.selection
+          selection.clear
+          selection.add(target)
+        end
+      end
+
       # Observes SketchUp application events (new, open, activate model) to re-bind
       # selection observers when the user switches documents.
       class AppModelObserver < (defined?(::Sketchup::AppObserver) ? ::Sketchup::AppObserver : Object)
@@ -289,18 +343,19 @@ module Granete
 
       # Selection and model lifecycle observer bridge for keeping the dialog in sync with SketchUp.
       module ObserverBridge
-        def handle_selection_change(instance_data)
+        def handle_selection_change(context)
           return unless @dialog&.visible?
 
-          execute_bridge(@dialog, 'onSelectionChange', instance_data)
+          payload = context.respond_to?(:to_payload) ? context.to_payload : context
+          execute_bridge(@dialog, 'onSelectionChange', payload)
         rescue StandardError => e
           @logger.error('selection_change_failed', error: e)
         end
 
         def check_current_selection(dialog)
-          first = (@observed_model || active_model)&.selection&.first
-          data = @selection_observer.inspect_entity(first)
-          execute_bridge(dialog, 'onSelectionChange', data)
+          selection = (@observed_model || active_model)&.selection
+          context = @selection_observer.resolve(selection&.first, selection: selection)
+          execute_bridge(dialog, 'onSelectionChange', context && context.to_payload)
         end
 
         def attach_selection_observer
@@ -345,6 +400,7 @@ module Granete
         include SessionBridge
         include FurnitureBridge
         include OptionSelectorBridge
+        include InspectorBridge
         include ObserverBridge
 
         attr_reader :selection_observer
@@ -367,7 +423,8 @@ module Granete
           @selection_observer = Observers::SelectionObserver.new(
             metadata_store: metadata_store || ActiveModelMetadataStore.new(@metadata_store_factory),
             catalog_provider: @catalog_provider,
-            on_selection_change: method(:handle_selection_change)
+            on_selection_change: method(:handle_selection_change),
+            model_provider: method(:active_model)
           )
         end
 
@@ -452,6 +509,7 @@ module Granete
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
+          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           dialog.add_action_callback('login') { |_c, p| handle_login(dialog, p) }

@@ -4818,6 +4818,49 @@
       "depends_on": [
         "F191"
       ]
+    },
+    {
+      "id": "F193",
+      "title": "SelectionContext semántico y inspector contextual por capacidades (#476)",
+      "description": "Contrato central de selección SelectionContext (kind furniture/aggregate/part/hardware/unmanaged) con namespaces de ID estrictamente separados (furnitureInstanceId server vs furnitureInstanceRef local; projectId/designId/baseRevisionId vs sus refs locales), hardware con hardwarePlacementId propio, procedencia real #350 (placementKind manual/derived del layout con fail-closed unknown), recuperación del owner por active_path/scan/ambigüedad explícita, capabilities con explicación en español, inspector contextual por kind con gating por capability exacta y multi-selección fail-closed. Base consumible por #466/#467/#468/#470/#471 sin payloads paralelos.",
+      "tags": [
+        "sketchup-extension",
+        "ruby",
+        "selection",
+        "contextual-inspector",
+        "capabilities",
+        "p0"
+      ],
+      "created": "2026-08-29",
+      "acceptance": [
+        "Seleccionar mueble top-level produce kind=furniture con identidad Granete correcta y capabilities honestas",
+        "furnitureInstanceId/projectId/designId/baseRevisionId permanecen nil hasta que el server los posea (#384); los refs locales llevan el locator y ningún namespace colapsa (negative proof con las 8 claves coexistentes)",
+        "Seleccionar pieza gestionada produce kind=part con componentInstanceId exacto, componentDefinitionId reutilizable y contexto del mueble dueño",
+        "Seleccionar herraje produce kind=hardware con hardwarePlacementId propio (sin componentInstanceId fabricado), definición y ocurrencia anfitriona exactas",
+        "La procedencia del herraje es la publicada por el server (placementKind manual/derived, contrato #350); ausente o desconocida → unknown fail-closed, nunca adivinada como derived",
+        "Rename y mover/rotar el mueble no cambian la identidad de ocurrencia del SelectionContext",
+        "La regeneración de hijos recupera el mismo contexto semántico por identidad Granete con host locator nuevo",
+        "ComponentInstance/Group arbitrario del usuario permanece unmanaged",
+        "Dos ocurrencias que comparten componentDefinitionId no colapsan en un contexto (negative proof)",
+        "Copias nativas que comparten definición+ref producen ownerRecovery=ambiguous sin elegir owner silencioso; active_path del host disambigua cuando existe",
+        "El inspector renderiza por kind + capability exacta (canEditParameters vs canEditMaterialRoles), multi-selección fail-closed, breadcrumb por furnitureInstanceRef e IDs en detalle técnico plegado",
+        "Harness DOM/JS del HtmlDialog cubre furniture/part/hardware/unmanaged/denial/breadcrumb/multi (40 checks)",
+        "TestUp en host real cubre furniture, pieza anidada, herraje manual, rename, rebuild, shared-definition copy y unmanaged",
+        "bundle exec rake verify (syntax/rubocop/unit/boundary/RBZ determinista) pasa"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/476",
+        "docs/architecture/sketchup-plugin-excellence.md",
+        "docs/architecture/sketchup-authoring-interaction-contract.md",
+        "docs/sketchup-excellence-execution-plan.md",
+        "contracts/sketchupLayoutTransform.contract.json",
+        "progress/host_smoke_F193_testup_ci.json"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F186",
+        "F190"
+      ]
     }
   ]
 }

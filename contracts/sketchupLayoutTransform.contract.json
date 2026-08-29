@@ -315,6 +315,7 @@
       "colorHex": "#c0c0c0",
       "hostComponentInstanceId": "mod-comp-door-copy-0",
       "anchorFace": "front",
+      "placementKind": "manual",
       "transform": {
         "translationMm": [
           542,

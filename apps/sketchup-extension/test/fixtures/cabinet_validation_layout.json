@@ -552,7 +552,8 @@
         32,
         37,
         160
-      ]
+      ],
+      "placementKind": "manual"
     },
     {
       "placementId": "gab-front-door-copy-0-hw-hinge-t",
@@ -573,7 +574,8 @@
         96,
         32,
         35
-      ]
+      ],
+      "placementKind": "manual"
     },
     {
       "placementId": "gab-front-door-copy-0-hw-hinge-b",
@@ -594,7 +596,8 @@
         96,
         32,
         35
-      ]
+      ],
+      "placementKind": "manual"
     }
   ]
 }

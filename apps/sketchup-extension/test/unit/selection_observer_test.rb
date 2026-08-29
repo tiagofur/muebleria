@@ -4,6 +4,10 @@ require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 require_relative '../../src/granete_for_sketchup/metadata/store'
+require_relative '../../src/granete_for_sketchup/selection/capabilities'
+require_relative '../../src/granete_for_sketchup/selection/selection_context'
+require_relative '../../src/granete_for_sketchup/selection/capability_policy'
+require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 
 class SelectionObserverTest < Minitest::Test
@@ -14,11 +18,11 @@ class SelectionObserverTest < Minitest::Test
     @provider = Granete::SketchUpExtension::Library::CatalogProvider.new
     @builder = Granete::SketchUpExtension::Model::FurnitureBuilder.new(metadata_store: @store)
 
-    @last_selected_data = nil
+    @last_context = :unset
     @observer = Granete::SketchUpExtension::Observers::SelectionObserver.new(
       metadata_store: @store,
       catalog_provider: @provider,
-      on_selection_change: ->(data) { @last_selected_data = data }
+      on_selection_change: ->(context) { @last_context = context }
     )
   end
 
@@ -30,11 +34,12 @@ class SelectionObserverTest < Minitest::Test
     @model.selection.add_observer(@observer)
     @model.selection.add(furniture)
 
-    refute_nil @last_selected_data
-    assert_equal 'furniture', @last_selected_data['type']
-    assert_equal 'kitchen-base-standard', @last_selected_data['definitionId']
-    assert_equal 'Gabinete Base Estándar', @last_selected_data['name']
-    assert_equal 800, @last_selected_data['parameters']['widthMm']
+    refute_nil @last_context
+    assert_equal 'furniture', @last_context['kind']
+    assert_equal 'kitchen-base-standard', @last_context['furnitureDefinitionId']
+    assert_equal 'Gabinete Base Estándar', @last_context['display']['name']
+    assert_equal 800, @last_context['parameters']['widthMm']
+    assert @last_context['capabilities']['canEditParameters']['supported']
   end
 
   def test_drill_down_reaches_the_semantic_child_and_its_owner_furniture
@@ -49,12 +54,13 @@ class SelectionObserverTest < Minitest::Test
     @model.selection.clear
     @model.selection.add(left_panel)
 
-    refute_nil @last_selected_data
-    assert_equal 'component', @last_selected_data['type']
-    assert_equal 'left_side', @last_selected_data['role']
+    refute_nil @last_context
+    assert_equal 'part', @last_context['kind']
+    assert_equal 'left_side', @last_context['display']['role']
     # The owning furniture stays recoverable from the semantic child (#415):
     # drill-down context without losing the managed unit.
-    assert_equal result['instance_id'], @last_selected_data['furnitureInstanceId']
+    assert_equal result['instance_id'], @last_context['furnitureInstanceRef']
+    assert_equal 2, @last_context['semanticPath'].length
   end
 
   def test_renamed_entities_keep_resolving_semantic_identity
@@ -63,22 +69,52 @@ class SelectionObserverTest < Minitest::Test
     furniture = @model.active_entities.instances.first
     left_panel = furniture.definition.entities.instances.first
 
-    # Names are UX labels; rename must not break selection resolution.
-    furniture.name = 'Módulo renombrado'
-    left_panel.name = 'Costado renombrado'
-
     @model.selection.add_observer(@observer)
     @model.selection.clear
     @model.selection.add(left_panel)
+    before = @last_context.dup
 
-    assert_equal 'component', @last_selected_data['type']
-    assert_equal result['instance_id'], @last_selected_data['furnitureInstanceId']
+    # Names are UX labels; rename must not break selection resolution.
+    furniture.name = 'Módulo renombrado'
+    left_panel.name = 'Costado renombrado'
+    @model.selection.clear
+    @model.selection.add(left_panel)
+
+    assert_equal 'part', @last_context['kind']
+    assert_equal before['componentInstanceId'], @last_context['componentInstanceId']
+    assert_equal result['instance_id'], @last_context['furnitureInstanceRef']
+  end
+
+  def test_unmanaged_geometry_publishes_unmanaged_kind
+    group = @model.active_entities.add_group
+
+    @model.selection.add_observer(@observer)
+    @model.selection.clear
+    @model.selection.add(group)
+
+    assert_equal 'unmanaged', @last_context['kind']
+    assert_empty @last_context['capabilities']
+  end
+
+  def test_multi_selection_reports_count_without_changing_identity
+    definition = @provider.find_definition('kitchen-base-standard')
+    @builder.insert_furniture(@model, definition, { 'widthMm' => 600 })
+    furniture = @model.active_entities.instances.first
+    group = @model.active_entities.add_group
+
+    @model.selection.add_observer(@observer)
+    @model.selection.clear
+    @model.selection.add(furniture)
+    @model.selection.add(group)
+
+    assert_equal 'furniture', @last_context['kind']
+    assert_equal 2, @last_context['selectionCount']
   end
 
   def test_clears_selection_when_empty
     @model.selection.add_observer(@observer)
     @model.selection.clear
 
-    assert_nil @last_selected_data
+    assert_nil @last_context
   end
 end
