@@ -1,4 +1,12 @@
-# Sesión activa
+# Sin sesión activa
+
+F191 / #448 quedó cerrada localmente el 2026-08-28 después de auditoría
+independiente, correcciones y los gates TypeScript, Go, SketchUp, OpenAPI y
+diff. Evidencia: `progress/implementation_448.md` y
+`progress/review_F191.md`. El siguiente trabajo debe elegirse desde el backlog;
+#449 no fue iniciado en esta sesión.
+
+---
 
 ## Organization Foundation v2 — planning & reconciliation (#446/#447) — 2026-08-28
 

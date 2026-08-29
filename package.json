@@ -8,6 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "openapi:generate": "python3 scripts/generate_openapi.py",
+    "openapi:check": "python3 scripts/check_openapi_drift.py",
     "build": "pnpm -r --if-present run build",
     "build:desktop": "pnpm --filter @granete/desktop package",
     "release:desktop": "pnpm --filter @granete/desktop dist",
@@ -35,4 +37,3 @@
     ]
   }
 }
-

@@ -211,6 +211,9 @@ importers:
       '@granete/domain':
         specifier: workspace:*
         version: link:../domain
+      '@granete/storage':
+        specifier: workspace:*
+        version: link:../storage
       '@react-three/drei':
         specifier: ^10.7.7
         version: 10.7.7(@react-three/fiber@9.6.1(c63a8c96fe33fd020fec37062e61e303))(@types/react@19.2.17)(@types/three@0.185.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(three@0.185.1)

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { isValidUserRole, type UserRole, DomainError } from '@granete/domain';
-import { apiClient } from '../services/apiClient';
+import { generatedApiClient } from '../services/apiClient';
 import { ensureSecureStoreMigrated } from '../services/secureStoreMigration';
 
 const TOKEN_KEY = 'granete_auth_token';
@@ -95,15 +95,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true });
     try {
-      const response = await apiClient.post<{
-        token: string;
-        user: {
-          id: string;
-          name: string;
-          email: string;
-        };
-        roles?: string[];
-      }>('/api/auth/login', { email, password });
+      const response = await generatedApiClient().login({
+        email,
+        password,
+        transport: 'mobile',
+      });
 
       const user: UserSession = {
         userId: response.user.id,

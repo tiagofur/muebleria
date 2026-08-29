@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -304,6 +305,12 @@ func (s *stubStore) ListOrganizations(context.Context) ([]domain.Organization, e
 func (s *stubStore) CreateOrganization(_ context.Context, o *domain.Organization) error {
 	if o.ID == "" {
 		o.ID = "new-org-1"
+	}
+	if o.Version == 0 {
+		o.Version = 1
+	}
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = time.Now()
 	}
 	s.createdOrgs = append(s.createdOrgs, o)
 	return nil
@@ -1939,7 +1946,7 @@ func TestHandleLogin_Uniform401ForMissingUser(t *testing.T) {
 		Store:     &stubStore{getUserByEmailErr: errors.New("user not found")},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
-	body := strings.NewReader(`{"email":"nope@test.com","password":"whatever1"}`)
+	body := strings.NewReader(`{"email":"nope@test.com","password":"whatever1","transport":"web"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1967,7 +1974,7 @@ func TestHandleLogin_Uniform401ForPendingUser(t *testing.T) {
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
-	body := strings.NewReader(`{"email":"pending@test.com","password":"goodpass1"}`)
+	body := strings.NewReader(`{"email":"pending@test.com","password":"goodpass1","transport":"web"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1998,7 +2005,7 @@ func TestHandleLogin_Uniform401ForWrongPassword(t *testing.T) {
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
-	body := strings.NewReader(`{"email":"ok@test.com","password":"wrongpass9"}`)
+	body := strings.NewReader(`{"email":"ok@test.com","password":"wrongpass9","transport":"web"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -2028,8 +2035,8 @@ func TestHandleRegister_RejectsWeakPassword(t *testing.T) {
 }
 
 func TestHandleRegister_IgnoresRoleInBody(t *testing.T) {
-	// Role field removed from RegisterRequest — extra JSON fields are ignored by decoder.
-	// Ensure self-registration cannot self-elevate via body.role.
+	// Role is not part of the generated RegisterRequest. The compatibility
+	// decoder may ignore it, but self-registration must never apply it.
 	var created *domain.User
 	srv := &Server{Store: &createUserCapture{created: &created}}
 	body := strings.NewReader(`{"email":"a@b.com","password":"goodpass1","name":"A","role":"admin"}`)
@@ -2466,10 +2473,9 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	dto := ToPublicUserDTO(&u)
 	resp := LoginResponse{
 		Token: "jwt-token-example",
-		User:  dto,
+		User:  toOpenAPIUser(&u),
 	}
 
 	out, err := json.Marshal(resp)
@@ -2497,7 +2503,11 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 // --- F172 stubs: platform / org team / invitations / support sessions ---
 
 func (s *stubStore) UpdateOrganization(context.Context, *domain.Organization) error { return nil }
-func (s *stubStore) CloneCatalog(context.Context, string, string) error             { return nil }
+func (s *stubStore) UpdateOrganizationVersion(_ context.Context, o *domain.Organization, expected int64) error {
+	o.Version = expected + 1
+	return nil
+}
+func (s *stubStore) CloneCatalog(context.Context, string, string) error { return nil }
 func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration) (*domain.SupportSession, error) {
 	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte"}, nil
 }
@@ -2513,11 +2523,11 @@ func (s *stubStore) EndSupportSession(context.Context, string, string, string) (
 func (s *stubStore) ListOrgTeam(context.Context, string) ([]storage.OrgTeamMember, error) {
 	return nil, nil
 }
-func (s *stubStore) UpdateMembershipRolesByOrg(context.Context, string, string, []domain.UserRole) error {
-	return nil
+func (s *stubStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, userID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
+	return &storage.OrgTeamMember{UserID: userID, Roles: roles, Active: true, Version: version + 1}, nil
 }
-func (s *stubStore) SetMembershipActive(context.Context, string, string, bool) error {
-	return nil
+func (s *stubStore) SetMembershipActive(_ context.Context, _ string, userID string, active bool, version int64) (*storage.OrgTeamMember, error) {
+	return &storage.OrgTeamMember{UserID: userID, Active: active, Version: version + 1}, nil
 }
 func (s *stubStore) CreateInvitation(_ context.Context, _ string, _ string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
 	return &storage.Invitation{ID: "inv-1", Email: "new@taller.test", Roles: roles}, nil
@@ -2525,12 +2535,15 @@ func (s *stubStore) CreateInvitation(_ context.Context, _ string, _ string, role
 func (s *stubStore) ListInvitations(context.Context, string) ([]storage.Invitation, error) {
 	return nil, nil
 }
-func (s *stubStore) RevokeInvitation(context.Context, string, string) error { return nil }
+func (s *stubStore) RevokeInvitation(_ context.Context, _, id string, version int64) (*storage.Invitation, error) {
+	now := time.Now()
+	return &storage.Invitation{ID: id, Email: "revoked@taller.test", Version: version + 1, RevokedAt: &now}, nil
+}
 func (s *stubStore) GetOpenInvitationByToken(context.Context, string) (*storage.OpenInvitation, error) {
 	return nil, errors.New("invitation not found")
 }
 func (s *stubStore) AcceptInvitationTx(context.Context, string, string) error { return nil }
-func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]map[string]interface{}, error) {
+func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]openapi.SecurityAuditEvent, error) {
 	return nil, nil
 }
 func (s *stubStore) GetUserByEmailAnyState(_ context.Context, email string) (*domain.User, error) {

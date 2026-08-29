@@ -35,19 +35,21 @@ type Organization struct {
 	ParentOrganizationID *string   `json:"parent_organization_id,omitempty"`
 	CreatedAt            time.Time `json:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at"`
+	Version              int64     `json:"version"`
 }
 
 // Membership is a user's set of roles inside one organization. Roles are a
 // set (multi-role memberships) even while assignment flows still write a
 // single role — the RBAC union sweep lands in F170b.
 type Membership struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organization_id"`
-	UserID         string    `json:"user_id"`
+	ID             string     `json:"id"`
+	OrganizationID string     `json:"organization_id"`
+	UserID         string     `json:"user_id"`
 	Roles          []UserRole `json:"roles"`
-	Active         bool      `json:"active"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Active         bool       `json:"active"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	Version        int64      `json:"version"`
 }
 
 // MembershipWithOrg is the login / organization-selector projection: the
@@ -75,14 +77,14 @@ func IsValidRoleSet(roles []UserRole) bool {
 // one organization (ADR-0005 §5). Effective role is admin of that org; the
 // real actor stays the platform admin in every write.
 type SupportSession struct {
-	ID                  string    `json:"id"`
-	PlatformAdminUserID string    `json:"platform_admin_user_id"`
-	OrganizationID      string    `json:"organization_id"`
-	Reason              string    `json:"reason"`
-	StartedAt           time.Time `json:"started_at"`
-	ExpiresAt           time.Time `json:"expires_at"`
+	ID                  string     `json:"id"`
+	PlatformAdminUserID string     `json:"platform_admin_user_id"`
+	OrganizationID      string     `json:"organization_id"`
+	Reason              string     `json:"reason"`
+	StartedAt           time.Time  `json:"started_at"`
+	ExpiresAt           time.Time  `json:"expires_at"`
 	EndedAt             *time.Time `json:"ended_at,omitempty"`
-	EndedVia            string    `json:"ended_via,omitempty"`
+	EndedVia            string     `json:"ended_via,omitempty"`
 }
 
 // commercialRoleSet is what store/dealer organizations may use: commercial +

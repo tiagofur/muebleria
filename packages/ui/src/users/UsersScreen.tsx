@@ -3,7 +3,7 @@
  * (F026 / F035 / F166 / F172 #326).
  * Permite gestionar miembros del taller con roles múltiples (unión RBAC),
  * asignación de sectores de planta, invitaciones por enlace directo/WhatsApp
- * y aprobaciones pendientes.
+ * y estado de cuenta separado del estado de membresía.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -13,7 +13,6 @@ import {
   SearchX,
   Settings2,
   ShieldCheck,
-  Trash2,
   Users,
   MapPin,
   Mail,
@@ -24,7 +23,7 @@ import {
   Send,
   XCircle,
 } from 'lucide-react';
-import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
+import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
@@ -34,27 +33,12 @@ import {
   roleLabelEs,
   type ProductRole,
 } from '@granete/domain';
+import { GraneteApiClient, GraneteApiError, type TeamMember, type Invitation } from '@granete/storage';
 
-export interface UserRow {
-  readonly id: string;
-  readonly user_id?: string;
-  readonly name: string;
-  readonly email: string;
-  readonly role?: string;
-  readonly roles?: readonly string[];
-  readonly active: boolean;
-  readonly created_at: string;
-}
+export type UserRow = TeamMember;
+export type OrgInvitationRow = Invitation;
 
-export interface OrgInvitationRow {
-  readonly id: string;
-  readonly email: string;
-  readonly roles: readonly string[];
-  readonly created_at: string;
-  readonly expires_at: string;
-}
-
-export type UserFilter = 'all' | 'active' | 'pending' | 'invitations';
+export type UserFilter = 'all' | 'active' | 'suspended' | 'invitations';
 
 export interface UsersScreenProps {
   readonly baseUrl: string;
@@ -109,12 +93,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     [orgType],
   );
 
-  const [rejectingUser, setRejectingUser] = useState<UserRow | null>(null);
-
-  const headers = useMemo(
-    () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
-    [token],
-  );
+  const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -125,39 +104,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setLoading(true);
     setLoadError(null);
     try {
-      // First try /api/org/team (F172)
-      let teamLoaded = false;
-      try {
-        const res = await fetch(`${baseUrl}/org/team`, { headers });
-        if (res.ok) {
-          const data = (await res.json()) as UserRow[];
-          setUsers(data);
-          teamLoaded = true;
-        }
-      } catch {
-        // fallback below
-      }
-
-      if (!teamLoaded) {
-        const res = await fetch(`${baseUrl}/admin/users`, { headers });
-        if (res.ok) {
-          const data = (await res.json()) as UserRow[];
-          setUsers(data);
-        } else {
-          throw new Error('team');
-        }
-      }
-
-      // Load invitations
-      try {
-        const resInv = await fetch(`${baseUrl}/org/invitations`, { headers });
-        if (resInv.ok) {
-          const dataInv = (await resInv.json()) as OrgInvitationRow[];
-          setInvitations(dataInv);
-        }
-      } catch {
-        // invitations are supplementary — the member list already loaded
-      }
+      const [team, pendingInvitations] = await Promise.all([
+        api.listTeam(token),
+        api.listInvitations(token),
+      ]);
+      setUsers([...team]);
+      setInvitations([...pendingInvitations]);
     } catch {
       setLoadError('No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.');
     } finally {
@@ -170,47 +122,26 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   }, [baseUrl, token]);
 
   const filtered = useMemo(() => {
-    if (filter === 'pending') return users.filter((u) => !u.active);
-    if (filter === 'active') return users.filter((u) => u.active);
+    if (filter === 'suspended') return users.filter((u) => !u.membership_active);
+    if (filter === 'active') return users.filter((u) => u.membership_active);
     return users;
   }, [users, filter]);
 
-  const pendingCount = users.filter((u) => !u.active).length;
-
-  const approve = async (id: string) => {
-    setActionId(id);
-    try {
-      const res = await fetch(`${baseUrl}/admin/users/${id}/approve`, { method: 'PUT', headers });
-      if (!res.ok) throw new Error('approve');
-      showToast('✓ Usuario aprobado');
-      await load();
-    } catch {
-      showToast('No se pudo aprobar el usuario');
-    } finally {
-      setActionId(null);
-    }
-  };
+  const suspendedCount = users.filter((u) => !u.membership_active).length;
 
   const saveMultiRoles = async (userId: string, roles: ProductRole[]) => {
     setActionId(userId);
     try {
-      const res = await fetch(`${baseUrl}/org/members/${userId}/roles`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ roles }),
-      });
-      if (!res.ok) {
-        // F178 N8: no legacy single-role fallback — it silently downgraded a
-        // multi-role member to roles[0] on ANY error (validation, 5xx…).
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        showToast(body?.error ?? 'No se pudieron guardar los roles');
-        return;
-      }
+      const member = users.find((candidate) => candidate.user_id === userId);
+      if (!member) throw new Error('Miembro no encontrado');
+      await api.updateMemberRoles(token, userId, member.version, { roles });
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
       await load();
-    } catch {
-      showToast('No se pudieron guardar los roles. Revisá tu conexión.');
+    } catch (error) {
+      showToast(error instanceof GraneteApiError && error.code === 'MEMBERSHIP_VERSION_CONFLICT'
+        ? 'La membresía cambió en otra sesión. Actualizá e intentá de nuevo.'
+        : 'No se pudieron guardar los roles. Revisá tu conexión.');
     } finally {
       setActionId(null);
     }
@@ -219,35 +150,15 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const toggleMemberActive = async (userId: string, active: boolean) => {
     setActionId(userId);
     try {
-      const res = await fetch(`${baseUrl}/org/members/${userId}/active`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ active }),
-      });
-      if (!res.ok) {
-        throw new Error('Error al actualizar estado');
-      }
+      const member = users.find((candidate) => candidate.user_id === userId);
+      if (!member) throw new Error('Miembro no encontrado');
+      await api.updateMemberActive(token, userId, member.version, { active });
       showToast(active ? '✓ Miembro reactivado' : '✓ Miembro desactivado');
       await load();
     } catch {
       showToast('No se pudo actualizar el estado del miembro');
     } finally {
       setActionId(null);
-    }
-  };
-
-  const reject = async (id: string) => {
-    setActionId(id);
-    try {
-      const res = await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
-      if (!res.ok) throw new Error('reject');
-      showToast('✓ Usuario rechazado');
-      await load();
-    } catch {
-      showToast('No se pudo rechazar el usuario');
-    } finally {
-      setActionId(null);
-      setRejectingUser(null);
     }
   };
 
@@ -260,20 +171,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setInviteLoading(true);
     setInviteError(null);
     try {
-      const res = await fetch(`${baseUrl}/org/invitations`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
+      const data = await api.createInvitation(token, {
           email: inviteEmail.trim(),
           roles: inviteRoles,
-        }),
       });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || 'Error al crear invitación');
-      }
-      const data = (await res.json()) as { accept_url?: string; invitation_token?: string };
-      const fullUrl = `${window.location.origin}${data.accept_url || `/accept-invitation?token=${data.invitation_token}`}`;
+      const fullUrl = `${window.location.origin}${data.accept_url}`;
       setCreatedInviteLink(fullUrl);
       showToast('✓ Invitación creada');
       await load();
@@ -284,17 +186,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     }
   };
 
-  const handleRevokeInvitation = async (id: string) => {
-    setActionId(id);
+  const handleRevokeInvitation = async (invitation: Invitation) => {
+    setActionId(invitation.id);
     try {
-      const res = await fetch(`${baseUrl}/org/invitations/${id}`, {
-        method: 'DELETE',
-        headers,
-      });
-      if (res.ok) {
-        showToast('✓ Invitación revocada');
-        await load();
-      }
+      await api.revokeInvitation(token, invitation.id, invitation.version);
+      showToast('✓ Invitación revocada');
+      await load();
     } finally {
       setActionId(null);
     }
@@ -309,7 +206,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   };
 
   const roleChips = (u: UserRow) => {
-    const rolesList = (u.roles && u.roles.length > 0) ? u.roles : u.role ? [u.role] : ['user'];
+    const rolesList = u.roles.length > 0 ? u.roles : ['user'];
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)', alignItems: 'center' }}>
         {rolesList.map((r) => (
@@ -364,11 +261,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
       <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
         <StatusChips<UserFilter>
           options={[
-            { value: 'active', label: `Miembros activos (${users.filter((u) => u.active).length})` },
+            { value: 'active', label: `Membresías activas (${users.filter((u) => u.membership_active).length})` },
             { value: 'invitations', label: `Invitaciones pendientes (${invitations.length})` },
-            { value: 'all', label: `Todos los usuarios (${users.length})` },
-            ...(pendingCount > 0
-              ? [{ value: 'pending' as const, label: `Pendientes de aprobación (${pendingCount})` }]
+            { value: 'all', label: `Todo el equipo (${users.length})` },
+            ...(suspendedCount > 0
+              ? [{ value: 'suspended' as const, label: `Membresías suspendidas (${suspendedCount})` }]
               : []),
           ]}
           value={filter}
@@ -447,7 +344,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       <button
                         type="button"
                         className="btn btn--secondary btn--small"
-                        onClick={() => void handleRevokeInvitation(inv.id)}
+                        onClick={() => void handleRevokeInvitation(inv)}
                         disabled={actionId === inv.id}
                         style={{ color: 'var(--danger)' }}
                       >
@@ -464,9 +361,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         <EmptyState
           title="No hay miembros que coincidan con el filtro"
           description={
-            filter === 'pending'
-              ? 'No hay registros pendientes de aprobación.'
-              : 'No hay usuarios en este estado.'
+            filter === 'suspended'
+              ? 'No hay membresías suspendidas.'
+              : 'No hay miembros en este estado.'
           }
         />
       ) : (
@@ -476,22 +373,23 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               <tr>
                 <th>Miembro</th>
                 <th>Roles en el taller</th>
-                <th>Estado</th>
+                <th>Estado de cuenta</th>
+                <th>Estado de membresía</th>
                 <th>Estación / Puesto</th>
                 <th className="users-table__align-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((u) => {
-                const isWorking = actionId === (u.user_id || u.id);
-                const pRole = (u.roles?.[0] || u.role || 'user') as ProductRole;
+                const isWorking = actionId === u.user_id;
+                const pRole = (u.roles[0] || 'user') as ProductRole;
                 const canAssignSectors =
                   (u.roles && u.roles.some((r) => r === 'produccion' || r === 'almacen')) ||
                   pRole === 'produccion' ||
                   pRole === 'almacen';
 
                 return (
-                  <tr key={u.user_id || u.id}>
+                  <tr key={u.user_id}>
                     <td>
                       <div className="users-table__name">{u.name || 'Sin nombre'}</div>
                       <div className="users-table__email">{u.email}</div>
@@ -504,11 +402,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           className="btn btn--ghost btn--small"
                           onClick={() => {
                             setRoleEditUser(u);
-                            const initialRoles = (u.roles && u.roles.length > 0)
+                            const initialRoles = u.roles.length > 0
                               ? (u.roles as ProductRole[])
-                              : u.role
-                                ? [u.role as ProductRole]
-                                : ['user' as ProductRole];
+                              : ['user' as ProductRole];
                             setSelectedRoles(initialRoles);
                           }}
                           disabled={isWorking}
@@ -520,8 +416,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       </div>
                     </td>
                     <td>
-                      <span className={`status-badge ${u.active ? 'status-badge--active' : 'status-badge--open'}`}>
-                        {u.active ? 'Activo' : 'Inactivo'}
+                      <span className={`status-badge ${u.account_active ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {u.account_active ? 'Cuenta activa' : 'Cuenta inactiva'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`status-badge ${u.membership_active ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {u.membership_active ? 'Membresía activa' : 'Membresía suspendida'}
                       </span>
                     </td>
                     <td>
@@ -530,7 +431,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           type="button"
                           className="btn btn--secondary btn--small"
                           onClick={() => {
-                            setSelectedUserId(u.user_id || u.id);
+                            setSelectedUserId(u.user_id);
                             setSelectedUserName(u.name || u.email);
                             setSelectedUserRole(pRole);
                           }}
@@ -545,34 +446,24 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                     
                     <td className="users-table__align-right">
                       <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
-                        {!u.active ? (
-                          <>
-                            <button
-                              type="button"
-                              className="btn btn--primary btn--small"
-                              onClick={() => void approve(u.user_id || u.id)}
-                              disabled={isWorking}
-                            >
-                              <CheckCircle2 size={13} /> Aprobar
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn--secondary btn--small"
-                              onClick={() => setRejectingUser(u)}
-                              disabled={isWorking}
-                              style={{ color: 'var(--danger)' }}
-                            >
-                              <Trash2 size={13} /> Rechazar
-                            </button>
-                          </>
+                        {!u.membership_active ? (
+                          <button
+                            type="button"
+                            className="btn btn--primary btn--small"
+                            onClick={() => void toggleMemberActive(u.user_id, true)}
+                            disabled={isWorking || !u.account_active}
+                            title={!u.account_active ? 'La cuenta global está inactiva' : undefined}
+                          >
+                            <CheckCircle2 size={13} /> Reactivar membresía
+                          </button>
                         ) : (
                           <button
                             type="button"
                             className="btn btn--secondary btn--small"
-                            onClick={() => void toggleMemberActive(u.user_id || u.id, false)}
+                            onClick={() => void toggleMemberActive(u.user_id, false)}
                             disabled={isWorking}
                           >
-                            <MinusCircle size={13} /> Desactivar
+                            <MinusCircle size={13} /> Suspender membresía
                           </button>
                         )}
                       </div>
@@ -660,7 +551,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               disabled={selectedRoles.length === 0}
               onClick={() => {
                 if (roleEditUser) {
-                  void saveMultiRoles(roleEditUser.user_id || roleEditUser.id, selectedRoles);
+                  void saveMultiRoles(roleEditUser.user_id, selectedRoles);
                 }
               }}
             >
@@ -810,18 +701,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         )}
       </Modal>
 
-      {/* REJECT CONFIRM DIALOG */}
-      {rejectingUser && (
-        <ConfirmDialog
-          open={rejectingUser !== null}
-          title="Rechazar usuario"
-          message={`¿Rechazar y eliminar la cuenta de ${rejectingUser.name || rejectingUser.email}?`}
-          confirmLabel="Rechazar y eliminar"
-          tone="danger"
-          onConfirm={() => void reject(rejectingUser.user_id || rejectingUser.id)}
-          onClose={() => setRejectingUser(null)}
-        />
-      )}
     </div>
   );
 }

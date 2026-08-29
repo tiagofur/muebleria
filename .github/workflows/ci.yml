@@ -48,6 +48,9 @@ jobs:
               sys.exit(1)
           PY
 
+      - name: Check generated OpenAPI contract drift
+        run: python3 scripts/check_openapi_drift.py
+
   typescript:
     name: TypeScript (Typecheck & Tests)
     runs-on: ubuntu-latest

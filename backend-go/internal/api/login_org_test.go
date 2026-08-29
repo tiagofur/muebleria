@@ -21,7 +21,7 @@ func orgTestMembership(userID, orgID, slug string, roles []domain.UserRole) doma
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "Taller " + slug, Slug: slug, Type: domain.OrganizationTypeFactory,
-			Active: true, },
+			Active: true},
 	}
 }
 
@@ -48,6 +48,9 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 
 func doLogin(t *testing.T, s *Server, payload map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
+	if _, ok := payload["transport"]; !ok {
+		payload["transport"] = "web"
+	}
 	body, _ := json.Marshal(payload)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
@@ -63,9 +66,9 @@ func TestLogin_MultiMembershipRequiresSelection(t *testing.T) {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	var resp struct {
-		Token            string         `json:"token"`
-		SelectionRequired bool          `json:"selection_required"`
-		Memberships      []MembershipDTO `json:"memberships"`
+		Token             string          `json:"token"`
+		SelectionRequired bool            `json:"selection_required"`
+		Memberships       []MembershipDTO `json:"memberships"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)

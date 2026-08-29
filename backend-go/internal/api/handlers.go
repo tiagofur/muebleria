@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -61,7 +62,7 @@ func NewServerWithMedia(store Store, jwtSecret string, allowedOrigins []string, 
 
 // Helpers para JSON
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
+	respondWithAPIError(w, code, defaultErrorCode(code), message, nil)
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
@@ -80,15 +81,29 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 // but returns a generic message to the client. Internal error strings (DB driver text,
 // constraint names, etc.) must never reach the client (#5).
 func respondWithInternalError(w http.ResponseWriter, err error, op string) {
-	slog.Error("internal server error", "op", op, "error", err)
+	slog.Error("internal server error", "op", op, "error", err, "request_id", requestIDFromWriter(w))
 	respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 }
 
 // decodeJSONBody limits the request body and decodes JSON into dst.
 // On failure it writes an error response and returns false (issue #20).
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodyWithPolicy(w, r, dst, false)
+}
+
+// decodeGeneratedJSONBody is the request-side counterpart of the generated
+// response validator. It is intentionally used only by migrated OpenAPI
+// operations so legacy endpoints keep their published compatibility surface.
+func decodeGeneratedJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodyWithPolicy(w, r, dst, true)
+}
+
+func decodeJSONBodyWithPolicy(w http.ResponseWriter, r *http.Request, dst any, rejectUnknown bool) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	dec := json.NewDecoder(r.Body)
+	if rejectUnknown {
+		dec.DisallowUnknownFields()
+	}
 	if err := dec.Decode(dst); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
@@ -103,6 +118,10 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return false
 	}
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		respondWithError(w, http.StatusBadRequest, "request body must contain exactly one JSON value")
+		return false
+	}
 	return true
 }
 
@@ -110,11 +129,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 
 // RegisterRequest intentionally has no Role field — self-registration always
 // creates role "user" pending approval (issue #19).
-type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
-}
+type RegisterRequest = openapi.RegisterRequest
 
 func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -160,21 +175,60 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, map[string]string{
-		"message": "Solicitud de acceso enviada. El administrador revisará tu cuenta pronto.",
-	})
+	respondWithJSON(w, http.StatusCreated, openapi.RegisterResponse{Message: "Solicitud de acceso enviada. El administrador revisará tu cuenta pronto."})
 }
 
-type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	// Client marks the requesting product. "sketchup-extension" receives a
-	// long-lived read-only token (auth.ExtensionClient); empty means the web
-	// app and gets the standard short-lived access token.
-	Client string `json:"client"`
-	// Org is an optional organization hint (slug): pre-selects that membership
-	// instead of asking the user to choose (ADR-0004 §6).
-	Org string `json:"org"`
+type loginCredentials struct {
+	Email, Password, Org string
+	Transport            openapi.LoginTransport
+}
+
+func decodeLoginCredentials(w http.ResponseWriter, r *http.Request) (loginCredentials, bool) {
+	var wire struct {
+		Email     string                  `json:"email"`
+		Password  string                  `json:"password"`
+		Transport *openapi.LoginTransport `json:"transport,omitempty"`
+		Org       *string                 `json:"org,omitempty"`
+	}
+	if !decodeGeneratedJSONBody(w, r, &wire) {
+		return loginCredentials{}, false
+	}
+	if wire.Transport == nil {
+		respondWithError(w, http.StatusBadRequest, "auth transport is required")
+		return loginCredentials{}, false
+	}
+	transport := *wire.Transport
+	switch transport {
+	case openapi.LoginTransportWeb, openapi.LoginTransportMobile, openapi.LoginTransportSketchup:
+	default:
+		respondWithError(w, http.StatusBadRequest, "invalid auth transport")
+		return loginCredentials{}, false
+	}
+	if wire.Email == "" || wire.Password == "" {
+		respondWithError(w, http.StatusBadRequest, "email and password are required")
+		return loginCredentials{}, false
+	}
+	org := ""
+	if wire.Org != nil {
+		org = *wire.Org
+	}
+	return loginCredentials{Email: wire.Email, Password: wire.Password, Org: org, Transport: transport}, true
+}
+
+func authTransportFromClaims(claims *auth.Claims) openapi.AuthTransport {
+	if claims.Support != nil {
+		return openapi.AuthTransportSupport
+	}
+	switch openapi.AuthTransport(claims.Transport) {
+	case openapi.AuthTransportWeb, openapi.AuthTransportMobile, openapi.AuthTransportSketchup:
+		return openapi.AuthTransport(claims.Transport)
+	}
+	// Finite compatibility for tokens issued before #448. Their maximum life is
+	// 30 days (SketchUp); all other missing-transport tokens were web sessions.
+	if claims.Client == auth.ExtensionClient {
+		return openapi.AuthTransportSketchup
+	}
+	return openapi.AuthTransportWeb
 }
 
 // PublicUserDTO is the safe public representation of a user, guaranteeing
@@ -218,65 +272,41 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 	return out
 }
 
-// LicenseDTO is the derived licensing state surfaced to clients (login,
-// org summary) — computed from the ORGANIZATION license (ADR-0005 §3).
-type LicenseDTO struct {
-	Plan      string               `json:"plan"`
-	ExpiresAt *time.Time           `json:"expires_at,omitempty"`
-	Status    domain.LicenseStatus `json:"status"`
+func toOpenAPIUser(u *domain.User) openapi.User {
+	created, updated := u.CreatedAt.UTC().Format(time.RFC3339Nano), u.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	return openapi.User{ID: u.ID, Email: u.Email, Name: u.Name, Active: u.Active, PlatformAdmin: u.PlatformAdmin, CreatedAt: &created, UpdatedAt: &updated}
 }
 
-type LoginResponse struct {
-	Token   string        `json:"token,omitempty"`
-	User    PublicUserDTO `json:"user"`
-	License LicenseDTO    `json:"license"`
-	// Roles are the active membership's roles (union semantics client-side).
-	Roles []domain.UserRole `json:"roles,omitempty"`
-	// Organization is the active organization when the token is org-scoped.
-	Organization *OrgSummaryDTO `json:"organization,omitempty"`
-	// Memberships lists the user's selectable organizations.
-	Memberships []MembershipDTO `json:"memberships,omitempty"`
-	// SelectionRequired is true when the user belongs to several
-	// organizations and must call /api/auth/select-org before working.
-	SelectionRequired bool `json:"selection_required,omitempty"`
+func toOpenAPIOrganization(o domain.Organization) openapi.OrganizationSummary {
+	license := openapi.License{Plan: string(o.LicensePlan), Status: string(domain.LicenseStatusAt(o.LicensePlan, o.LicenseExpiresAt, time.Now()))}
+	if o.LicenseExpiresAt != nil {
+		value := o.LicenseExpiresAt.UTC().Format(time.RFC3339Nano)
+		license.ExpiresAt = &value
+	}
+	return openapi.OrganizationSummary{ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type), License: license}
 }
 
-// OrgSummaryDTO is the organization projection clients need (selector, banner).
-type OrgSummaryDTO struct {
-	ID      string                  `json:"id"`
-	Name    string                  `json:"name"`
-	Slug    string                  `json:"slug"`
-	Type    domain.OrganizationType `json:"type"`
-	License LicenseDTO              `json:"license"`
-}
-
-type MembershipDTO struct {
-	OrganizationID string            `json:"organization_id"`
-	Roles          []domain.UserRole `json:"roles"`
-	Organization   OrgSummaryDTO     `json:"organization"`
-}
+type LicenseDTO = openapi.License
+type LoginResponse = openapi.LoginResponse
+type OrgSummaryDTO = openapi.OrganizationSummary
+type MembershipDTO = openapi.Membership
 
 func toOrgSummaryDTO(o domain.Organization) OrgSummaryDTO {
-	return OrgSummaryDTO{
-		ID:   o.ID,
-		Name: o.Name,
-		Slug: o.Slug,
-		Type: o.Type,
-		License: LicenseDTO{
-			Plan:      string(o.LicensePlan),
-			ExpiresAt: o.LicenseExpiresAt,
-			Status:    domain.LicenseStatusAt(o.LicensePlan, o.LicenseExpiresAt, time.Now()),
-		},
-	}
+	return toOpenAPIOrganization(o)
 }
 
 func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
 	out := make([]MembershipDTO, 0, len(list))
 	for _, m := range list {
+		roles := make([]string, len(m.Roles))
+		for i, role := range m.Roles {
+			roles[i] = string(role)
+		}
 		out = append(out, MembershipDTO{
 			OrganizationID: m.OrganizationID,
-			Roles:          m.Roles,
+			Roles:          roles,
 			Organization:   toOrgSummaryDTO(m.Organization),
+			Version:        m.Version,
 		})
 	}
 	return out
@@ -285,6 +315,12 @@ func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
 func (s *Server) audit(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) {
 	// Best-effort: an audit write failure must not fail the request; it is
 	// logged server-side instead.
+	if details == nil {
+		details = map[string]interface{}{}
+	}
+	if requestID := RequestIDFromContext(ctx); requestID != "" {
+		details["request_id"] = requestID
+	}
 	if err := s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
 		EventType:      eventType,
 		ActorUserID:    actorUserID,
@@ -296,16 +332,29 @@ func (s *Server) audit(ctx context.Context, eventType, actorUserID, organization
 	}
 }
 
+func (s *Server) auditRequired(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) error {
+	if details == nil {
+		details = map[string]interface{}{}
+	}
+	if requestID := RequestIDFromContext(ctx); requestID != "" {
+		details["request_id"] = requestID
+	}
+	return s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+		EventType: eventType, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip, Details: details,
+	})
+}
+
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	var req LoginRequest
-	if !decodeJSONBody(w, r, &req) {
+	req, ok := decodeLoginCredentials(w, r)
+	if !ok {
 		return
 	}
+	transport, orgHint := req.Transport, req.Org
 
 	// Uniform 401 for not found / wrong password / pending approval so clients
 	// cannot enumerate accounts (issue #19). Dummy bcrypt when user missing
@@ -314,7 +363,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	failLogin := func(userID string) {
 		s.audit(r.Context(), "login_failed", userID, "", clientIP(r), map[string]interface{}{
-			"client": req.Client,
+			"transport": transport,
 		})
 		respondWithError(w, http.StatusUnauthorized, invalidCreds)
 	}
@@ -341,9 +390,9 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// single membership, then a selection is required. Platform staff without
 	// any membership gets an org-less console token.
 	var chosen *domain.MembershipWithOrg
-	if req.Org != "" {
+	if orgHint != "" {
 		for i := range memberships {
-			if memberships[i].Organization.Slug == req.Org {
+			if memberships[i].Organization.Slug == orgHint {
 				chosen = &memberships[i]
 				break
 			}
@@ -360,22 +409,24 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// Multi-organization user without a hint: an org-less token is issued
 		// ONLY to complete /api/auth/select-org (it carries no business scope
 		// — the middleware denies data access to org-less non-staff tokens).
-		orgless, err := auth.GenerateToken(u.ID, u.Email, auth.TokenContext{
+		orgless, err := auth.GenerateTransportToken(u.ID, u.Email, auth.TokenContext{
 			PlatformAdmin: u.PlatformAdmin,
-		}, s.JWTSecret)
+		}, string(transport), s.JWTSecret)
 		if err != nil {
 			respondWithInternalError(w, err, "login: generate orgless token")
 			return
 		}
 		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
-			"client": req.Client, "selection_required": true,
+			"transport": transport, "selection_required": true,
 		})
 		respondWithJSON(w, http.StatusOK, LoginResponse{
 			Token:             orgless,
-			User:              ToPublicUserDTO(u),
-			License:           LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone},
+			User:              toOpenAPIUser(u),
+			License:           LicenseDTO{Plan: string(domain.LicensePlanNone), Status: string(domain.LicenseStatusNone)},
+			Roles:             []string{},
 			Memberships:       toMembershipDTOs(memberships),
 			SelectionRequired: true,
+			Transport:         openapi.AuthTransport(transport),
 		})
 		return
 	}
@@ -383,7 +434,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if chosen == nil && !u.PlatformAdmin {
 		// No membership and not platform staff: nothing to log in to.
 		s.audit(r.Context(), "login_failed", u.ID, "", clientIP(r), map[string]interface{}{
-			"client": req.Client, "reason": "no_membership",
+			"transport": transport, "reason": "no_membership",
 		})
 		respondWithError(w, http.StatusForbidden, "tu cuenta no pertenece a ningún taller todavía. Pedile al administrador que te asigne.")
 		return
@@ -403,32 +454,29 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		orgDTO = &sum
 		license = sum.License
 	} else {
-		license = LicenseDTO{Plan: string(domain.LicensePlanNone), Status: domain.LicenseStatusNone}
+		license = LicenseDTO{Plan: string(domain.LicensePlanNone), Status: string(domain.LicenseStatusNone)}
 	}
 
 	var token string
-	if req.Client == auth.ExtensionClient {
-		// The extension always works inside the user's (single) organization.
-		token, err = auth.GenerateExtensionToken(u.ID, u.Email, tc, s.JWTSecret)
-	} else {
-		token, err = auth.GenerateToken(u.ID, u.Email, tc, s.JWTSecret)
-	}
+	token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "login: generate token")
 		return
 	}
 
 	s.audit(r.Context(), "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
-		"client": req.Client,
+		"transport": transport,
 	})
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
-		Token:        token,
-		User:         ToPublicUserDTO(u),
-		License:      license,
-		Roles:        tcRolesUserRoles(tc),
-		Organization: orgDTO,
-		Memberships:  toMembershipDTOs(memberships),
+		Token:             token,
+		User:              toOpenAPIUser(u),
+		License:           license,
+		Roles:             tc.Roles,
+		Organization:      orgDTO,
+		Memberships:       toMembershipDTOs(memberships),
+		SelectionRequired: false,
+		Transport:         openapi.AuthTransport(transport),
 	})
 }
 
@@ -445,10 +493,11 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
-	var body struct {
-		OrganizationID string `json:"organization_id"`
+	var body openapi.SelectOrganizationRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
 	}
-	if !decodeJSONBody(w, r, &body) || body.OrganizationID == "" {
+	if body.OrganizationID == "" {
 		respondWithError(w, http.StatusBadRequest, "missing organization_id")
 		return
 	}
@@ -464,7 +513,12 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		roles[i] = string(rl)
 	}
 	tc := auth.TokenContext{Roles: roles, OrgID: m.OrganizationID, PlatformAdmin: claims.PlatformAdmin}
-	token, err := auth.GenerateToken(claims.UserID, claims.Email, tc, s.JWTSecret)
+	transport := authTransportFromClaims(claims)
+	if claims.Support != nil {
+		respondWithError(w, http.StatusForbidden, "support sessions cannot change organization")
+		return
+	}
+	token, err := auth.GenerateTransportToken(claims.UserID, claims.Email, tc, string(transport), s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "select-org: generate token")
 		return
@@ -480,10 +534,12 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	org := toOrgSummaryDTO(m.Organization)
 	respondWithJSON(w, http.StatusOK, LoginResponse{
 		Token:        token,
-		User:         ToPublicUserDTO(u),
+		User:         toOpenAPIUser(u),
 		License:      org.License,
-		Roles:        m.Roles,
+		Roles:        rolesToStrings(m.Roles),
 		Organization: &org,
+		Memberships:  []MembershipDTO{},
+		Transport:    transport,
 	})
 }
 
@@ -518,11 +574,12 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		OrgID:         claims.OrgID,
 		PlatformAdmin: claims.PlatformAdmin,
 	}
+	transport := authTransportFromClaims(claims)
 	var token string
-	if claims.Client == auth.ExtensionClient {
-		token, err = auth.GenerateExtensionToken(u.ID, u.Email, tc, s.JWTSecret)
+	if claims.Support != nil {
+		token, err = auth.GenerateSupportToken(u.ID, u.Email, *claims.Support, s.JWTSecret)
 	} else {
-		token, err = auth.GenerateToken(u.ID, u.Email, tc, s.JWTSecret)
+		token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
 	}
 	if err != nil {
 		respondWithInternalError(w, err, "refresh: generate token")
@@ -530,13 +587,15 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := LoginResponse{
-		Token: token,
-		User:  ToPublicUserDTO(u),
-		Roles: claimsRolesUserRoles(claims),
+		Token:       token,
+		User:        toOpenAPIUser(u),
+		Roles:       append([]string(nil), claims.Roles...),
+		Memberships: []MembershipDTO{},
 		License: LicenseDTO{
 			Plan:   string(domain.LicensePlanNone),
-			Status: domain.LicenseStatusNone,
+			Status: string(domain.LicenseStatusNone),
 		},
+		Transport: transport,
 	}
 	if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
@@ -1906,7 +1965,11 @@ func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "roles inválidos para este tipo de taller")
 		return
 	}
-	if err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, id, roles); err != nil {
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, id, roles, expectedVersion); err != nil {
 		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
 		return
 	}
@@ -2187,20 +2250,10 @@ func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// tcRolesUserRoles converts token context string roles to domain roles.
-func tcRolesUserRoles(tc auth.TokenContext) []domain.UserRole {
-	out := make([]domain.UserRole, len(tc.Roles))
-	for i, r := range tc.Roles {
-		out[i] = domain.UserRole(r)
-	}
-	return out
-}
-
-// claimsRolesUserRoles converts the live claims role set to domain roles.
-func claimsRolesUserRoles(claims *auth.Claims) []domain.UserRole {
-	out := make([]domain.UserRole, len(claims.Roles))
-	for i, r := range claims.Roles {
-		out[i] = domain.UserRole(r)
+func rolesToStrings(roles []domain.UserRole) []string {
+	out := make([]string, len(roles))
+	for i, role := range roles {
+		out[i] = string(role)
 	}
 	return out
 }
@@ -2222,23 +2275,16 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
-	resp := map[string]interface{}{
-		"user":           ToPublicUserDTO(u),
-		"roles":          claims.Roles,
-		"platform_admin": claims.PlatformAdmin,
-	}
+	transport := authTransportFromClaims(claims)
+	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Transport: transport}
 	if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
-			org := toOrgSummaryDTO(m.Organization)
-			resp["organization"] = org
+			org := toOpenAPIOrganization(m.Organization)
+			resp.Organization = &org
 		}
 	}
 	if claims.Support != nil {
-		resp["support"] = map[string]interface{}{
-			"organization_id": claims.Support.OrgID,
-			"session_id":      claims.Support.SessionID,
-			"reason":          claims.Support.Reason,
-		}
+		resp.Support = &openapi.SupportInfo{OrganizationID: claims.Support.OrgID, SessionID: claims.Support.SessionID, Reason: claims.Support.Reason}
 	}
 	respondWithJSON(w, http.StatusOK, resp)
 }

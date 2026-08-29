@@ -6,8 +6,6 @@
 package pilotreadiness
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"testing"
 )
@@ -86,23 +84,13 @@ func TestPilotReadiness_SupportSessionExpiry(t *testing.T) {
 
 // auditEvent is one row of GET /api/platform/organizations/{id}/audit.
 type auditEvent struct {
-	EventType string `json:"event_type"`
-	// Details arrives base64-encoded (the storage layer scans jsonb as bytes).
-	Details string `json:"details"`
+	EventType string         `json:"event_type"`
+	Details   map[string]any `json:"details"`
 }
 
 func (e auditEvent) detailMap(t *testing.T) map[string]any {
 	t.Helper()
-	raw, err := base64.StdEncoding.DecodeString(e.Details)
-	if err != nil {
-		// Tolerate a plain JSON object if the transport ever changes.
-		raw = []byte(e.Details)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		t.Fatalf("audit details not decodable: %v (raw=%q)", err, e.Details)
-	}
-	return m
+	return e.Details
 }
 
 func listAuditEvents(t *testing.T, orgID string) []auditEvent {

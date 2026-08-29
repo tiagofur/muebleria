@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { roleLabelEs } from '@granete/domain';
 import { UsersScreen } from './UsersScreen';
@@ -11,13 +11,13 @@ import { UsersScreen } from './UsersScreen';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('UsersScreen (F026 admin approval)', () => {
-  it('calls admin users endpoints for list/approve/role/reject', () => {
+  it('uses the generated team client without a list fallback', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
-    expect(src).toContain('/admin/users');
-    expect(src).toContain('/approve');
-    expect(src).toContain('/role');
-    expect(src).toContain("method: 'PUT'");
-    expect(src).toContain("method: 'DELETE'");
+
+    expect(src).toContain('api.listTeam');
+    expect(src).not.toContain('/admin/users/');
+    expect(src).toContain('api.updateMemberRoles');
+    expect(src).toContain('api.updateMemberActive');
     // Los roles ofrecidos los pinea el contrato (ASSIGNABLE_ROLES) y los
     // cubren los tests de comportamiento de abajo; aquí sólo vigilamos que
     // no vuelvan labels legacy hardcodeadas al source.
@@ -74,12 +74,14 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
   ) as { canonicalRoles: string[]; rejectedRoles: string[] };
 
   const member = {
-    id: 'u1',
     user_id: 'u1',
     name: 'Ana Pérez',
     email: 'ana@taller.com',
     roles: ['vendedor'],
-    active: true,
+    account_active: true,
+    membership_active: true,
+    member_since: '2026-08-28T00:00:00Z',
+    version: 1,
   };
 
   // Behavior (no source grep): la pantalla debe ofrecer exactamente lo que
@@ -169,5 +171,66 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
     expect(src).toContain('roleLabelEs');
     expect(src).not.toContain('ROLE_LABELS');
+  });
+
+  it('renders account status separately from membership status', async () => {
+    const jsonOk = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes('/org/team')) {
+          return jsonOk([{ ...member, account_active: false }]);
+        }
+        return jsonOk([]);
+      }),
+    );
+
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    expect(await screen.findByText('Cuenta inactiva')).toBeTruthy();
+    expect(screen.getByText('Membresía activa')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Estado de cuenta' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Estado de membresía' })).toBeTruthy();
+  });
+
+  it('reactivates a suspended membership with the versioned membership command', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const jsonOk = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        requests.push({ url, init });
+        if (url.includes('/org/team')) {
+          return jsonOk([{ ...member, membership_active: false, version: 7 }]);
+        }
+        if (url.includes('/org/members/u1/active')) {
+          return jsonOk({ user_id: 'u1', roles: ['vendedor'], active: true, version: 8 });
+        }
+        return jsonOk([]);
+      }),
+    );
+    const user = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await user.click(await screen.findByRole('button', { name: /Membresías suspendidas/ }));
+    await user.click(await screen.findByRole('button', { name: 'Reactivar membresía' }));
+
+    await waitFor(() => {
+      expect(requests.some(({ url }) => url.includes('/org/members/u1/active'))).toBe(true);
+    });
+    const mutation = requests.find(({ url }) => url.includes('/org/members/u1/active'))!;
+    expect(mutation.url).not.toContain('/admin/users/');
+    expect(mutation.init?.method).toBe('PUT');
+    expect(new Headers(mutation.init?.headers).get('If-Match')).toBe('"v7"');
+    expect(mutation.init?.body).toBe(JSON.stringify({ active: true }));
   });
 });

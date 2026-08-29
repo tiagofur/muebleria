@@ -1,0 +1,3 @@
+ALTER TABLE invitations DROP COLUMN IF EXISTS version;
+ALTER TABLE memberships DROP COLUMN IF EXISTS version;
+ALTER TABLE organizations DROP COLUMN IF EXISTS version;

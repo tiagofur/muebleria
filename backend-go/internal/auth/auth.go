@@ -69,12 +69,15 @@ type Claims struct {
 	// token (console / org selection), never business data access.
 	OrgID string `json:"org_id,omitempty"`
 	// PlatformAdmin marks platform staff (console + audited support sessions).
-	PlatformAdmin bool `json:"platform_admin,omitempty"`
+	PlatformAdmin bool   `json:"platform_admin,omitempty"`
 	Client        string `json:"client,omitempty"`
+	// Transport is the canonical client boundary. Client remains only to read
+	// pre-#448 SketchUp tokens until their natural 30-day expiry.
+	Transport string `json:"transport,omitempty"`
 	// Support marks a platform support session into Support.OrgID: effective
 	// admin of that organization, real actor = the platform admin (ADR-0005 §5).
-	Support       *SupportClaims `json:"support,omitempty"`
-	Ver           int            `json:"ver"`
+	Support *SupportClaims `json:"support,omitempty"`
+	Ver     int            `json:"ver"`
 	jwt.RegisteredClaims
 }
 
@@ -134,13 +137,14 @@ type TokenContext struct {
 func GenerateSupportToken(userID string, email string, sc SupportClaims, secret string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		Role:   "admin",
-		Roles:  []string{"admin"},
-		OrgID:  sc.OrgID,
-		Support: &sc,
-		Ver:    TokenVersion,
+		UserID:    userID,
+		Email:     email,
+		Role:      "admin",
+		Roles:     []string{"admin"},
+		OrgID:     sc.OrgID,
+		Transport: "support",
+		Support:   &sc,
+		Ver:       TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(SupportTokenTTL)),
@@ -157,14 +161,28 @@ func GenerateSupportToken(userID string, email string, sc SupportClaims, secret 
 }
 
 func GenerateToken(userID string, email string, tc TokenContext, secret string) (string, error) {
-	return generateToken(userID, email, tc, "", AccessTokenTTL, secret)
+	return GenerateTransportToken(userID, email, tc, "web", secret)
+}
+
+// GenerateTransportToken records the validated API transport in the token so
+// select-org, refresh and /me preserve the same canonical session boundary.
+func GenerateTransportToken(userID string, email string, tc TokenContext, transport string, secret string) (string, error) {
+	client, ttl := "", AccessTokenTTL
+	switch transport {
+	case "web", "mobile":
+	case "sketchup":
+		client, ttl = ExtensionClient, ExtensionTokenTTL
+	default:
+		return "", fmt.Errorf("invalid login transport %q", transport)
+	}
+	return generateToken(userID, email, tc, client, transport, ttl, secret)
 }
 
 // GenerateExtensionToken issues a long-lived token carrying the extension
 // client claim. AuthMiddleware restricts these tokens to GET requests (plus
 // /api/auth/refresh) so a leaked extension token cannot mutate workshop data.
 func GenerateExtensionToken(userID string, email string, tc TokenContext, secret string) (string, error) {
-	return generateToken(userID, email, tc, ExtensionClient, ExtensionTokenTTL, secret)
+	return generateToken(userID, email, tc, ExtensionClient, "sketchup", ExtensionTokenTTL, secret)
 }
 
 // PrimaryRole resolves the transitional single role: the first role of the
@@ -176,7 +194,7 @@ func PrimaryRole(roles []string) string {
 	return roles[0]
 }
 
-func generateToken(userID string, email string, tc TokenContext, client string, ttl time.Duration, secret string) (string, error) {
+func generateToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration, secret string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		UserID:        userID,
@@ -186,6 +204,7 @@ func generateToken(userID string, email string, tc TokenContext, client string, 
 		OrgID:         tc.OrgID,
 		PlatformAdmin: tc.PlatformAdmin,
 		Client:        client,
+		Transport:     transport,
 		Ver:           TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,

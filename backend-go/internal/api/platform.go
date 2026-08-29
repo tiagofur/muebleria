@@ -10,12 +10,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // PlatformAdminMiddleware requires the platform staff flag.
@@ -46,39 +49,31 @@ func randomToken32() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// PlatformOrgDTO represents an organization projection for the superadmin platform console.
-type PlatformOrgDTO struct {
-	ID               string                  `json:"id"`
-	Name             string                  `json:"name"`
-	Slug             string                  `json:"slug"`
-	Type             domain.OrganizationType `json:"type"`
-	LicensePlan      string                  `json:"license_plan"`
-	LicenseExpiresAt *time.Time              `json:"license_expires_at"`
-	Active           bool                    `json:"active"`
-	CreatedAt        time.Time               `json:"created_at"`
-	UpdatedAt        time.Time               `json:"updated_at"`
-	MemberCount      int                     `json:"member_count"`
-	License          LicenseDTO              `json:"license"`
-}
+type PlatformOrgDTO = openapi.PlatformOrganization
 
 func toPlatformOrgDTO(o domain.Organization, memberCount int) PlatformOrgDTO {
 	return PlatformOrgDTO{
-		ID:               o.ID,
-		Name:             o.Name,
-		Slug:             o.Slug,
-		Type:             o.Type,
-		LicensePlan:      string(o.LicensePlan),
-		LicenseExpiresAt: o.LicenseExpiresAt,
-		Active:           o.Active,
-		CreatedAt:        o.CreatedAt,
-		UpdatedAt:        o.UpdatedAt,
-		MemberCount:      memberCount,
-		License: LicenseDTO{
-			Plan:      string(o.LicensePlan),
-			ExpiresAt: o.LicenseExpiresAt,
-			Status:    domain.LicenseStatusAt(o.LicensePlan, o.LicenseExpiresAt, time.Now()),
-		},
+		ID:                   o.ID,
+		Name:                 o.Name,
+		Slug:                 o.Slug,
+		Type:                 string(o.Type),
+		LicensePlan:          string(o.LicensePlan),
+		LicenseExpiresAt:     formatOptionalTime(o.LicenseExpiresAt),
+		Active:               o.Active,
+		ParentOrganizationID: o.ParentOrganizationID,
+		CreatedAt:            o.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:            o.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		MemberCount:          int64(memberCount),
+		Version:              o.Version,
 	}
+}
+
+func formatOptionalTime(value *time.Time) *string {
+	if value == nil {
+		return nil
+	}
+	out := value.UTC().Format(time.RFC3339Nano)
+	return &out
 }
 
 // GET /api/platform/organizations
@@ -98,42 +93,61 @@ func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.
 
 // POST /api/platform/organizations {name, slug, type?, license_plan?, license_expires_at?, clone_catalog_from?}
 func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name             string     `json:"name"`
-		Slug             string     `json:"slug"`
-		Type             string     `json:"type"`
-		LicensePlan      string     `json:"license_plan"`
-		LicenseExpiresAt *time.Time `json:"license_expires_at"`
-		CloneCatalogFrom string     `json:"clone_catalog_from"`
+	var body openapi.CreatePlatformOrganizationRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
 	}
-	if !decodeJSONBody(w, r, &body) || strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Slug) == "" {
-		respondWithError(w, http.StatusBadRequest, "name y slug son obligatorios")
+	if strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Slug) == "" || strings.TrimSpace(body.Type) == "" || strings.TrimSpace(body.LicensePlan) == "" {
+		respondWithError(w, http.StatusBadRequest, "name, slug, type y license_plan son obligatorios")
+		return
+	}
+	if len([]rune(strings.TrimSpace(body.Name))) > 120 || !validOrganizationSlug.MatchString(strings.TrimSpace(body.Slug)) {
+		respondWithError(w, http.StatusBadRequest, "name o slug inválido")
 		return
 	}
 	orgType := domain.OrganizationType(body.Type)
-	if orgType == "" {
-		orgType = domain.OrganizationTypeFactory
-	}
 	if !domain.IsValidOrganizationType(orgType) {
 		respondWithError(w, http.StatusBadRequest, "type inválido (factory|store|dealer)")
 		return
 	}
 	plan := domain.LicensePlan(body.LicensePlan)
-	if plan == "" {
-		plan = domain.LicensePlanNone
-	}
 	if !domain.IsValidLicensePlan(plan) {
 		respondWithError(w, http.StatusBadRequest, "license_plan inválido")
 		return
 	}
 	claims := claimsFromRequest(r)
+	var licenseExpiresAt *time.Time
+	if body.LicenseExpiresAt != nil {
+		parsed, err := time.Parse(time.RFC3339, *body.LicenseExpiresAt)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "license_expires_at inválido (formato ISO 8601 requerido)")
+			return
+		}
+		licenseExpiresAt = &parsed
+	}
+	cloneSourceID := ""
+	if body.CloneCatalogFrom != nil && strings.TrimSpace(*body.CloneCatalogFrom) != "" {
+		source := strings.TrimSpace(*body.CloneCatalogFrom)
+		var sourceOrg *domain.Organization
+		var err error
+		if isValidUUID(source) {
+			sourceOrg, err = s.Store.GetOrganizationByID(r.Context(), source)
+		} else {
+			sourceOrg, err = s.Store.GetOrganizationBySlug(r.Context(), source)
+		}
+		if err != nil || sourceOrg == nil {
+			respondWithError(w, http.StatusBadRequest, "organización origen de clonación no encontrada")
+			return
+		}
+		cloneSourceID = sourceOrg.ID
+	}
 
 	org := &domain.Organization{
 		Name:             strings.TrimSpace(body.Name),
 		Slug:             strings.TrimSpace(body.Slug),
 		Type:             orgType,
 		LicensePlan:      plan,
-		LicenseExpiresAt: body.LicenseExpiresAt,
+		LicenseExpiresAt: licenseExpiresAt,
 		Active:           true,
 	}
 	if err := s.Store.CreateOrganization(r.Context(), org); err != nil {
@@ -141,35 +155,42 @@ func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Optional base-catalog clone (defaults to the initial organization).
-	if strings.TrimSpace(body.CloneCatalogFrom) != "" {
-		src := strings.TrimSpace(body.CloneCatalogFrom)
-		srcOrg, err := s.Store.GetOrganizationByID(r.Context(), src)
-		if err != nil {
-			srcOrg, err = s.Store.GetOrganizationBySlug(r.Context(), src)
-		}
-		if err != nil || srcOrg == nil {
-			respondWithError(w, http.StatusBadRequest, "organización origen de clonación no encontrada")
-			return
-		}
-		if err := s.Store.CloneCatalog(r.Context(), srcOrg.ID, org.ID); err != nil {
+	// Optional base-catalog clone. The source is resolved before inserting the
+	// destination so invalid input cannot create a partial organization even
+	// outside the idempotency transaction.
+	if cloneSourceID != "" {
+		if err := s.Store.CloneCatalog(r.Context(), cloneSourceID, org.ID); err != nil {
 			respondWithInternalError(w, err, "clone base catalog")
 			return
 		}
 	}
 
-	s.audit(r.Context(), "organization_created", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "organization_created", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 		"name": org.Name, "slug": org.Slug, "type": string(org.Type), "source": "platform console",
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit organization creation")
+		return
+	}
 	respondWithJSON(w, http.StatusCreated, toPlatformOrgDTO(*org, 0))
 }
 
 // PATCH /api/platform/organizations/{id} {name?, license_plan?, license_expires_at?, active?}
 func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var raw map[string]json.RawMessage
-	if !decodeJSONBody(w, r, &raw) {
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
 		return
+	}
+	var raw map[string]json.RawMessage
+	if !decodeGeneratedJSONBody(w, r, &raw) {
+		return
+	}
+	allowed := map[string]bool{"name": true, "license_plan": true, "license_expires_at": true, "active": true}
+	for key := range raw {
+		if !allowed[key] {
+			respondWithError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
 	}
 	org, err := s.Store.GetOrganizationByID(r.Context(), id)
 	if err != nil || org == nil {
@@ -241,7 +262,11 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		org.Active = active
 	}
 
-	if err := s.Store.UpdateOrganization(r.Context(), org); err != nil {
+	if err := s.Store.UpdateOrganizationVersion(r.Context(), org, expectedVersion); err != nil {
+		if errors.Is(err, storage.ErrVersionConflict) {
+			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "La organización fue modificada por otra sesión", nil)
+			return
+		}
 		respondWithInternalError(w, err, "platform update org")
 		return
 	}
@@ -279,6 +304,7 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		})
 	}
 	members, _ := s.Store.ListOrgTeam(r.Context(), org.ID)
+	w.Header().Set("ETag", FormatVersionETag(org.Version))
 	respondWithJSON(w, http.StatusOK, toPlatformOrgDTO(*org, len(members)))
 }
 
@@ -300,19 +326,18 @@ func (s *Server) HandlePlatformUsers(w http.ResponseWriter, r *http.Request) {
 		respondWithInternalError(w, err, "platform users")
 		return
 	}
-	type row struct {
-		PublicUserDTO
-		Memberships []MembershipDTO `json:"memberships"`
-	}
-	out := make([]row, 0, len(users))
+	out := make([]openapi.PlatformUser, 0, len(users))
 	for _, u := range users {
 		ms, err := s.Store.ListMembershipsByUser(r.Context(), u.ID)
 		if err != nil {
 			respondWithInternalError(w, err, "platform users memberships")
 			return
 		}
-		dto := ToPublicUserDTO(&u)
-		out = append(out, row{PublicUserDTO: dto, Memberships: toMembershipDTOs(ms)})
+		memberships := make([]openapi.PlatformUserMembership, 0, len(ms))
+		for _, m := range ms {
+			memberships = append(memberships, openapi.PlatformUserMembership{OrganizationID: m.OrganizationID, OrganizationName: m.Organization.Name, OrganizationSlug: m.Organization.Slug, Roles: roleStrings(m.Roles), Active: m.Active, Version: m.Version})
+		}
+		out = append(out, openapi.PlatformUser{ID: u.ID, Email: u.Email, Name: u.Name, PlatformAdmin: u.PlatformAdmin, Active: u.Active, CreatedAt: u.CreatedAt.UTC().Format(time.RFC3339Nano), Memberships: memberships})
 	}
 	respondWithJSON(w, http.StatusOK, out)
 }
@@ -322,10 +347,11 @@ func (s *Server) HandlePlatformUsers(w http.ResponseWriter, r *http.Request) {
 // real actor = the platform admin, banner data included.
 func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("id")
-	var body struct {
-		Reason string `json:"reason"`
+	var body openapi.StartSupportSessionRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
 	}
-	if !decodeJSONBody(w, r, &body) || len(strings.TrimSpace(body.Reason)) < 4 {
+	if len(strings.TrimSpace(body.Reason)) < 4 {
 		respondWithError(w, http.StatusBadRequest, "la razón del acceso de soporte es obligatoria (mínimo 4 caracteres)")
 		return
 	}
@@ -349,17 +375,16 @@ func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *htt
 		return
 	}
 
-	s.audit(r.Context(), "support_session_started", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "support_session_started", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 		"session_id": ss.ID, "reason": ss.Reason, "expires_at": ss.ExpiresAt,
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit support session")
+		return
+	}
 	orgDTO := toOrgSummaryDTO(*org)
-	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
-		"token":        token,
-		"session_id":   ss.ID,
-		"reason":       ss.Reason,
-		"expires_at":   ss.ExpiresAt,
-		"organization": orgDTO,
-		"support":      true,
+	respondWithJSON(w, http.StatusCreated, openapi.SupportSessionResponse{
+		Token: token, SessionID: ss.ID, Reason: ss.Reason,
+		ExpiresAt: ss.ExpiresAt.UTC().Format(time.RFC3339Nano), Organization: orgDTO, Support: true,
 	})
 }
 
@@ -383,7 +408,7 @@ func (s *Server) HandlePlatformEndSupportSession(w http.ResponseWriter, r *http.
 	s.audit(r.Context(), "support_session_ended", claims.UserID, orgID, clientIP(r), map[string]interface{}{
 		"session_id": sessionID, "via": "logout", "found": ended,
 	})
-	respondWithJSON(w, http.StatusOK, map[string]bool{"ended": ended})
+	respondWithJSON(w, http.StatusOK, openapi.EndSupportSessionResponse{Ended: ended})
 }
 
 // acceptInvitationLogin builds the login response after a user accepts an
@@ -409,13 +434,19 @@ func (s *Server) acceptInvitationLogin(w http.ResponseWriter, r *http.Request, u
 		}
 		org := toOrgSummaryDTO(m.Organization)
 		respondWithJSON(w, http.StatusOK, LoginResponse{
-			Token: token, User: ToPublicUserDTO(u), License: org.License,
-			Roles: m.Roles, Organization: &org,
+			Token: token, User: toOpenAPIUser(u), License: org.License,
+			Roles: roles, Organization: &org, Memberships: []MembershipDTO{}, Transport: openapi.AuthTransportWeb,
 		})
 		return
 	}
+	orgless, err := auth.GenerateToken(u.ID, u.Email, auth.TokenContext{PlatformAdmin: u.PlatformAdmin}, s.JWTSecret)
+	if err != nil {
+		respondWithInternalError(w, err, "accept invitation orgless token")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, LoginResponse{
-		User: ToPublicUserDTO(u), Memberships: toMembershipDTOs(memberships), SelectionRequired: true,
+		Token: orgless, User: toOpenAPIUser(u), License: openapi.License{Plan: string(domain.LicensePlanNone), Status: string(domain.LicenseStatusNone)},
+		Roles: []string{}, Memberships: toMembershipDTOs(memberships), SelectionRequired: true, Transport: openapi.AuthTransportWeb,
 	})
 }
 
@@ -423,12 +454,11 @@ func (s *Server) acceptInvitationLogin(w http.ResponseWriter, r *http.Request, u
 // limited at the route). Existing users authenticate with their password;
 // new users are created active with the invitation as approval.
 func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Token    string `json:"token"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
+	var body openapi.AcceptInvitationRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
 	}
-	if !decodeJSONBody(w, r, &body) || strings.TrimSpace(body.Token) == "" || body.Password == "" {
+	if strings.TrimSpace(body.Token) == "" || body.Password == "" {
 		respondWithError(w, http.StatusBadRequest, "token y password son obligatorios")
 		return
 	}
@@ -460,7 +490,10 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 			respondWithInternalError(w, err, "accept invitation hash")
 			return
 		}
-		name := strings.TrimSpace(body.Name)
+		name := ""
+		if body.Name != nil {
+			name = strings.TrimSpace(*body.Name)
+		}
 		if name == "" {
 			name = strings.SplitN(inv.Email, "@", 2)[0]
 		}
@@ -485,8 +518,11 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusConflict, "la invitación ya no está disponible")
 		return
 	}
-	s.audit(r.Context(), "invitation_accepted", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "invitation_accepted", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
 		"invitation_id": inv.ID, "email": inv.Email,
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit invitation acceptance")
+		return
+	}
 	s.acceptInvitationLogin(w, r, u)
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore, type UserSession } from './authStore';
-import { apiClient } from '../services/apiClient';
+import { generatedApiClient } from '../services/apiClient';
 import {
   primaryRoleOf,
   roleCanExportProduction,
@@ -30,7 +30,7 @@ vi.mock('expo-local-authentication', () => ({
 }));
 
 vi.mock('../services/apiClient', () => ({
-  apiClient: { post: vi.fn() },
+  generatedApiClient: vi.fn(),
 }));
 
 vi.mock('../services/secureStoreMigration', () => ({
@@ -74,13 +74,18 @@ describe('authStore Mobile', () => {
   });
 
   it('login lee LoginResponse.roles y descarta roles no canónicos', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({
+    const login = vi.fn().mockResolvedValue({
       token: 'tok-login',
       user: { id: 'usr-9', name: 'Ana Pérez', email: 'ana@taller.com' },
       roles: ['produccion', 'instalador', 'almacen'],
     });
+    vi.mocked(generatedApiClient).mockReturnValue({ login } as never);
 
     await useAuthStore.getState().login('ana@taller.com', 'secreta');
+
+    expect(login).toHaveBeenCalledWith({
+      email: 'ana@taller.com', password: 'secreta', transport: 'mobile',
+    });
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);

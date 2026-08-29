@@ -67,12 +67,14 @@ func TestFurnitureDefinitionsRequiresActiveLicense(t *testing.T) {
 				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.want, rec.Body.String())
 			}
 			if tc.want == http.StatusForbidden {
-				var body map[string]string
+				var body struct {
+					Message string `json:"message"`
+				}
 				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 					t.Fatalf("decode error body: %v", err)
 				}
-				if body["error"] == "" || body["error"] == "error interno del servidor" {
-					t.Fatalf("license blocker must explain how to resolve it, got %q", body["error"])
+				if body.Message == "" || body.Message == "error interno del servidor" {
+					t.Fatalf("license blocker must explain how to resolve it, got %q", body.Message)
 				}
 			}
 		})
@@ -253,7 +255,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 	}
 	u := &domain.User{
 		ID: "u1", Email: "u@example.com", Name: "U", Active: true,
-		PasswordHash: hash, }
+		PasswordHash: hash}
 	server := &Server{
 		Store: &stubStore{
 			getUserByEmail: u,
@@ -265,9 +267,9 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 					},
 					Organization: domain.Organization{
 						ID: "org-1", Name: "T", Slug: "t",
-						Type:           domain.OrganizationTypeFactory,
-						LicensePlan:    domain.LicensePlanTrial,
-						Active:         true,
+						Type:        domain.OrganizationTypeFactory,
+						LicensePlan: domain.LicensePlanTrial,
+						Active:      true,
 					},
 				}},
 			},
@@ -276,7 +278,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(map[string]string{
-		"email": "u@example.com", "password": "secret123", "client": auth.ExtensionClient,
+		"email": "u@example.com", "password": "secret123", "transport": "sketchup",
 	})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
@@ -304,7 +306,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 	if remaining < 29*24*time.Hour || remaining > auth.ExtensionTokenTTL {
 		t.Fatalf("extension token TTL = %v, want ~%v", remaining, auth.ExtensionTokenTTL)
 	}
-	if resp.License.Plan != "trial" || resp.License.Status != domain.LicenseStatusActive {
+	if resp.License.Plan != "trial" || resp.License.Status != string(domain.LicenseStatusActive) {
 		t.Fatalf("license block = %+v", resp.License)
 	}
 }

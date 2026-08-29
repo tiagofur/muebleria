@@ -19,12 +19,12 @@ func layoutStubServer(t *testing.T) (*Server, string) {
 	u := &domain.User{ID: "u1", Active: true}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
-		getUserByEmail:  u,
+		getUserByEmail:     u,
 		moduleReturnedByID: module,
-		listStructures:  catalog.Structures,
-		listComponents:  catalog.Components,
-		listAgregados:   catalog.Agregados,
-		listHardwares:   catalog.Hardware,
+		listStructures:     catalog.Structures,
+		listComponents:     catalog.Components,
+		listAgregados:      catalog.Agregados,
+		listHardwares:      catalog.Hardware,
 	}
 	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
 	if err != nil {
@@ -145,7 +145,7 @@ func TestFurnitureDefinitionLayoutServesLocalTransformContract(t *testing.T) {
 	var body struct {
 		TransformContract string `json:"transformContract"`
 		Components        []struct {
-			SlotID string `json:"slotId"`
+			SlotID         string `json:"slotId"`
 			LocalTransform struct {
 				TranslationMm [3]float64 `json:"translationMm"`
 				Basis         struct {
@@ -208,12 +208,14 @@ func TestFurnitureDefinitionLayoutRejectsInvalidDims(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var body map[string]string
+	var body struct {
+		Message string `json:"message"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
-	if body["error"] == "" || body["error"] == "error interno del servidor" {
-		t.Fatalf("invalid dims must explain themselves, got %q", body["error"])
+	if body.Message == "" || body.Message == "error interno del servidor" {
+		t.Fatalf("invalid dims must explain themselves, got %q", body.Message)
 	}
 }
 
@@ -247,12 +249,14 @@ func TestFurnitureDefinitionLayoutUnresolvableComposition(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var body map[string]string
+	var body struct {
+		Message string `json:"message"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
-	if body["error"] == "" || body["error"] == "error interno del servidor" {
-		t.Fatalf("resolution failure must surface its cause, got %q", body["error"])
+	if body.Message == "" || body.Message == "error interno del servidor" {
+		t.Fatalf("resolution failure must surface its cause, got %q", body.Message)
 	}
 }
 

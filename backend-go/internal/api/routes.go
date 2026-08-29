@@ -15,7 +15,6 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/auth/register", authRL(http.HandlerFunc(server.HandleRegister)))
 	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
 
-
 	// Health check endpoint (unauthenticated) — used by Docker healthchecks and Caddy depends_on.
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -40,28 +39,28 @@ func RegisterRoutes(server *Server) http.Handler {
 	// audit and audited support sessions. Platform staff only.
 	platformMW := PlatformAdminMiddleware(server.JWTSecret, server.Store)
 	mux.Handle("GET /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformListOrganizations)))
-	mux.Handle("POST /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformCreateOrganization)))
+	mux.Handle("POST /api/platform/organizations", platformMW(server.RequireIdempotency("platform.create-organization", http.HandlerFunc(server.HandlePlatformCreateOrganization))))
 	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
 	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
-	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(http.HandlerFunc(server.HandlePlatformStartSupportSession)))
+	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession))))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
 
 	// Factory sales network (#326): a factory admin lists/creates its
 	// connected store/dealer organizations (cloned from the factory catalog).
 	mux.Handle("GET /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
-	mux.Handle("POST /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
+	mux.Handle("POST /api/factory/organizations", authMW(server.RequireIdempotency("factory.create-organization", http.HandlerFunc(server.HandleFactoryOrganizations))))
 
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/team", authMW(http.HandlerFunc(server.HandleOrgTeam)))
 	mux.Handle("PUT /api/org/members/{userId}/roles", authMW(http.HandlerFunc(server.HandleOrgMemberRoles)))
 	mux.Handle("PUT /api/org/members/{userId}/active", authMW(http.HandlerFunc(server.HandleOrgMemberActive)))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
-	mux.Handle("POST /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgCreateInvitation)))
-	mux.Handle("DELETE /api/org/invitations/{id}", authMW(http.HandlerFunc(server.HandleOrgRevokeInvitation)))
+	mux.Handle("POST /api/org/invitations", authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation))))
+	mux.Handle("DELETE /api/org/invitations/{id}", authMW(server.RequireIdempotency("org.revoke-invitation", http.HandlerFunc(server.HandleOrgRevokeInvitation))))
 
 	// Public invitation acceptance (rate limited like login/register).
-	mux.Handle("POST /api/auth/accept-invitation", authRL(http.HandlerFunc(server.HandleAcceptInvitation)))
+	mux.Handle("POST /api/auth/accept-invitation", authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation))))
 
 	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
 	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).
@@ -336,5 +335,5 @@ func RegisterRoutes(server *Server) http.Handler {
 	// /api/admin/users (org-scoped directory).
 
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
-	return CORSMiddleware(server.allowedOrigins)(mux)
+	return CORSMiddleware(server.allowedOrigins)(RequestIDMiddleware(mux))
 }

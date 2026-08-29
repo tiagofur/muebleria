@@ -181,7 +181,6 @@ export {
   SalesNetworkSection,
   SettingsScreen,
   type SettingsScreenProps,
-  type ConnectedOrgRow,
 } from './settings';
 
 export {
@@ -434,4 +433,3 @@ export {
   type UsabilityTaskSummary,
   type UsabilityTargetResult,
 } from './preview3d/usabilityBenchmark';
-

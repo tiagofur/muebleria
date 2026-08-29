@@ -4741,6 +4741,43 @@
         "F188",
         "F189"
       ]
+    },
+    {
+      "id": "F191",
+      "title": "Contrato OpenAPI generado, errores tipados, concurrencia e idempotencia (#448)",
+      "description": "Fuente única OpenAPI v1 consumida por Go y TypeScript para Organization Foundation. Migra Auth, Team y Platform a DTOs/clientes generados con validación runtime; incorpora error envelope/request ID, ETag/If-Match, Idempotency-Key y CI anti-drift sin fallbacks runtime.",
+      "tags": [
+        "api",
+        "backend-go",
+        "web",
+        "contracts",
+        "security"
+      ],
+      "created": "2026-08-28",
+      "acceptance": [
+        "OpenAPI v1 versionado es la única fuente de DTOs Go y TypeScript para Auth, Team y Platform migrados",
+        "Generación determinista y CI detectan drift; backend y cliente compilan consumiendo artefactos generados",
+        "Boundaries TypeScript validan JSON runtime y no usan casts ciegos ni fallback legacy en superficies migradas",
+        "Todo error migrado usa envelope tipado con code, message, fieldErrors, requestId, retryable y details; comportamiento sensible depende de code",
+        "Request ID se valida/genera y propaga por header, errores y logging",
+        "ETag/version + If-Match están integrados en writes prioritarios y un stale write no sobrescribe estado",
+        "Idempotency-Key está integrado en un create/command crítico con replay, payload mismatch, scope y retention probados",
+        "Platform users y audit consumen el shape real generado y sus pruebas evitan nuevo drift",
+        "Cliente común centraliza auth, request ID, parsing y errores 401/403/409/412",
+        "pnpm test, pnpm typecheck, go test ./..., drift check y git diff --check pasan"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/448",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "contracts/openapi/granete-api.v1.yaml",
+        "backend-go/db/migration/000093_idempotency_receipts.up.sql",
+        "progress/implementation_448.md",
+        "progress/review_F191.md"
+      ],
+      "status": "done",
+      "depends_on": []
     }
   ]
 }

@@ -1,0 +1,3 @@
+ALTER TABLE organizations ADD COLUMN version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0);
+ALTER TABLE memberships ADD COLUMN version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0);
+ALTER TABLE invitations ADD COLUMN version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0);

@@ -23,6 +23,7 @@ package pilotreadiness
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -121,12 +122,14 @@ func gateMode() bool { return os.Getenv("PILOT_READINESS_GATE") != "" }
 func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, []byte) {
 	t.Helper()
 	var rd io.Reader
+	var rawBody []byte
 	if body != nil {
 		raw, err := json.Marshal(body)
 		if err != nil {
 			t.Fatalf("marshal body for %s %s: %v", method, path, err)
 		}
-		rd = bytes.NewReader(raw)
+		rawBody = raw
+		rd = bytes.NewReader(rawBody)
 	}
 	req, err := http.NewRequest(method, f.base+path, rd)
 	if err != nil {
@@ -138,6 +141,12 @@ func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, [
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	if method == http.MethodPost {
+		req.Header.Set("Idempotency-Key", pilotIdempotencyKey(path, token, rawBody))
+	}
+	if method == http.MethodPut && strings.HasPrefix(path, "/api/org/members/") {
+		req.Header.Set("If-Match", `"v1"`)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
@@ -148,6 +157,11 @@ func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, [
 		t.Fatalf("read response of %s %s: %v", method, path, err)
 	}
 	return resp.StatusCode, raw
+}
+
+func pilotIdempotencyKey(path, token string, body []byte) string {
+	fingerprint := sha256.Sum256(append([]byte(path+"\x00"+token+"\x00"), body...))
+	return fmt.Sprintf("pilot-%x", fingerprint[:])
 }
 
 // want runs the request and demands one of the accepted status codes.
@@ -201,9 +215,10 @@ func (f *fixture) login(t *testing.T, email, org string) loginResponse {
 	t.Helper()
 	var resp loginResponse
 	f.decode(t, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email":    email,
-		"password": pilotPassword,
-		"org":      org,
+		"email":     email,
+		"password":  pilotPassword,
+		"org":       org,
+		"transport": "web",
 	}, http.StatusOK, &resp)
 	return resp
 }
@@ -345,7 +360,7 @@ func buildFixture() (*fixture, error) {
 	// Platform console token (org-less by design).
 	var login loginResponse
 	if err := f.request(&login, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email": platformUser.Email, "password": pilotPassword,
+		"email": platformUser.Email, "password": pilotPassword, "transport": "web",
 	}, http.StatusOK); err != nil {
 		f.close()
 		return nil, fmt.Errorf("platform admin login: %w", err)
@@ -380,12 +395,14 @@ func skipOrErr(format string, err error) (*fixture, error) {
 
 func (f *fixture) request(dst any, method, path, token string, body any, accepted int) error {
 	var rd io.Reader
+	var rawBody []byte
 	if body != nil {
 		raw, err := json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		rd = bytes.NewReader(raw)
+		rawBody = raw
+		rd = bytes.NewReader(rawBody)
 	}
 	req, err := http.NewRequest(method, f.base+path, rd)
 	if err != nil {
@@ -396,6 +413,9 @@ func (f *fixture) request(dst any, method, path, token string, body any, accepte
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if method == http.MethodPost {
+		req.Header.Set("Idempotency-Key", pilotIdempotencyKey(path, token, rawBody))
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -7,18 +7,10 @@
  * entering the new org is delegated to the shell (org switch + team screen).
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Network, Store, Plus, LogIn, RefreshCw } from 'lucide-react';
+import { GraneteApiClient, type FactoryOrganization } from '@granete/storage';
 import { EmptyState } from '../common';
-
-export type ConnectedOrgRow = {
-  readonly id: string;
-  readonly name: string;
-  readonly slug: string;
-  readonly type: 'factory' | 'store' | 'dealer';
-  readonly active: boolean;
-  readonly created_at?: string;
-};
 
 export type SalesNetworkSectionProps = {
   readonly baseUrl: string;
@@ -27,8 +19,7 @@ export type SalesNetworkSectionProps = {
   readonly onEnterOrg: (orgId: string, orgName: string) => void;
 };
 
-const TYPE_LABELS: Record<ConnectedOrgRow['type'], string> = {
-  factory: 'Fábrica',
+const TYPE_LABELS: Record<FactoryOrganization['type'], string> = {
   store: 'Tienda comercial',
   dealer: 'Distribuidor',
 };
@@ -38,30 +29,21 @@ export function SalesNetworkSection({
   token,
   onEnterOrg,
 }: SalesNetworkSectionProps): ReactNode {
-  const [orgs, setOrgs] = useState<readonly ConnectedOrgRow[]>([]);
+  const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
+  const [orgs, setOrgs] = useState<readonly FactoryOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<'store' | 'dealer'>('store');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [justCreated, setJustCreated] = useState<ConnectedOrgRow | null>(null);
-
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  const [justCreated, setJustCreated] = useState<FactoryOrganization | null>(null);
 
   const load = async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`${baseUrl}/factory/organizations`, { headers });
-      if (res.ok) {
-        setOrgs((await res.json()) as ConnectedOrgRow[]);
-      } else {
-        throw new Error('network');
-      }
+      setOrgs(await api.listFactoryOrganizations(token));
     } catch {
       setLoadError('No se pudo cargar la red de ventas. Revisá tu conexión y volvé a intentar.');
     } finally {
@@ -83,24 +65,10 @@ export function SalesNetworkSection({
     setCreating(true);
     setCreateError(null);
     try {
-      const res = await fetch(`${baseUrl}/factory/organizations`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ name: trimmed, type }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          organization: ConnectedOrgRow;
-          catalog_cloned: boolean;
-          membership_granted: boolean;
-        };
-        setOrgs((prev) => [data.organization, ...prev]);
-        setJustCreated(data.organization);
-        setName('');
-      } else {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setCreateError(body?.error ?? 'No se pudo crear la organización.');
-      }
+      const data = await api.createFactoryOrganization(token, { name: trimmed, type });
+      setOrgs((prev) => [data.organization, ...prev]);
+      setJustCreated(data.organization);
+      setName('');
     } catch {
       setCreateError('No se pudo crear la organización. Revisá tu conexión.');
     } finally {

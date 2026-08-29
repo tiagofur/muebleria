@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { DomainError } from '@granete/domain';
+import { GraneteApiClient } from '@granete/storage';
 import { ensureSecureStoreMigrated } from './secureStoreMigration';
 
 const TOKEN_KEY = 'granete_auth_token';
@@ -17,6 +18,11 @@ export function setApiBaseUrl(url: string) {
 
 export function getApiBaseUrl(): string {
   return currentBaseUrl;
+}
+
+/** Generated Organization API client with shared request/response validation. */
+export function generatedApiClient(): GraneteApiClient {
+  return new GraneteApiClient(`${currentBaseUrl}/api`, globalThis.fetch);
 }
 
 export interface RequestOptions extends RequestInit {

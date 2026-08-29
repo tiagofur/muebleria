@@ -1553,3 +1553,39 @@ Reporte por hallazgo:
 (paridad completa de base en Go), #443 (persistencia por entidad + concurrencia
 optimista), #444 (regresión visual WebGL) y #27 (pickers buscables reutilizado,
 sin duplicar alcance).
+
+## F191 — generated OpenAPI contract, typed errors, concurrency and idempotency (#448) — 2026-08-28
+
+Closed the Organization Foundation v1 transport contract as one atomic
+cross-runtime slice. `contracts/openapi/granete-api.v1.yaml` now generates Go
+DTOs plus TypeScript DTOs, runtime schemas and operation client; CI proves drift
+for operation ID, verb, path, request and response. Migrated Auth, Team,
+invitations, Platform, support sessions and the current factory-organization
+baseline use generated boundaries without runtime legacy fallback.
+
+Independent audit of `98a8446` returned `CHANGES_REQUIRED`: process-local
+idempotency, account/membership confusion, a hardcoded generated client,
+incomplete validators, hidden Platform audit errors, ambiguous auth transport
+and missing precondition/mobile/factory-contract details. Commit `30e380a`
+corrected them. PostgreSQL migration `000093` supplies shared 24-hour receipts;
+business mutation and successful response commit atomically, 4xx rolls back the
+command under a savepoint before replay storage, and 5xx/crash rolls back all.
+Tests cover restart, replicas, concurrent duplicate, crash, retention, payload
+and `If-Match` mismatch, caught SQL errors and partial-provisioning rollback.
+Commit `601f68b` normalized generated file endings.
+
+Auth login now accepts only web/mobile/sketchup; support transport requires the
+audited support-session token path. Team separates account and membership state;
+Platform audit reports failed loads with retry. Invitation revoke and priority
+writes use ETag/`If-Match` with typed stale responses. The wider Sales Network UX
+remains #459, and #449 was not started.
+
+Verification: `pnpm openapi:check && pnpm typecheck && pnpm test` passed (7
+typecheck projects; domain 1153, storage 170, excel 93, desktop 17, mobile 49,
+UI 148 files / 1454 tests, web 26 files / 331 tests);
+`GOCACHE=/tmp/muebleria-go-cache go test ./... -count=1` passed every backend
+package including PostgreSQL and pilotreadiness; SketchUp `bundle exec rake
+test` passed; `git diff --check origin/main...HEAD` passed. Audit closure is
+recorded in `progress/review_F191.md`; it is independent technical evidence, not
+a receipt-driven/formal RDD approval. F191 marked `done`; remote CI remains a
+pre-merge gate.

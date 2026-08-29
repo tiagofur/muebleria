@@ -6,8 +6,31 @@ import (
 	"log"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type dbtx interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func (s *PostgresStore) db(ctx context.Context) dbtx {
+	if tx := transactionFromContext(ctx); tx != nil {
+		return tx
+	}
+	return s.Pool
+}
+
+func (s *PostgresStore) beginOrUseTx(ctx context.Context) (pgx.Tx, bool, error) {
+	if tx := transactionFromContext(ctx); tx != nil {
+		return tx, false, nil
+	}
+	tx, err := s.Pool.Begin(ctx)
+	return tx, true, err
+}
 
 type PostgresStore struct {
 	Pool *pgxpool.Pool
