@@ -24,7 +24,7 @@ func authoringFloatPtr(f float64) *float64 { return &f }
 func authoringStubServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	module, catalog := authoringAPICabinetFixture()
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail:     u,
@@ -614,7 +614,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	}
 
 	// Org-less token → fail closed before the handler.
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	orgless, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 	rec = postAuthoringResolve(server, orgless, "", authoringFixtureRequest(authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusForbidden {
