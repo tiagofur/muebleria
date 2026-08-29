@@ -222,7 +222,7 @@ def main():
       (args.out_root/"packages/storage/src/openapi/generated/client.ts",generate_ts_client(spec)),
       (args.out_root/"backend-go/internal/api/openapi/generated/types.gen.go",generate_go(schemas)),
     ]
-    for path,content in targets: path.parent.mkdir(parents=True,exist_ok=True);path.write_text(content+"\n")
+    for path,content in targets: path.parent.mkdir(parents=True,exist_ok=True);path.write_text(content.rstrip()+"\n")
     subprocess.run(["gofmt", "-w", str(targets[2][0])], check=True)
 
 if __name__=="__main__": main()

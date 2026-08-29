@@ -313,4 +313,3 @@ export function parseGenerated<T>(schemaName: keyof typeof runtimeSchemas, value
 export function parseGeneratedArray<T>(schemaName: keyof typeof runtimeSchemas, value: unknown): ReadonlyArray<T> {
   return validate({ type: 'array', items: { $ref: `#/components/schemas/${schemaName}` } }, value, '$') as ReadonlyArray<T>;
 }
-
