@@ -1719,3 +1719,25 @@ seed; documentado, sin cambio de código); OCL analiza la selección si no está
 vacía (el smoke la limpia); en SU 2026 `Length#to_s` sólo da mm decimales con
 `LengthFormat` decimal + `LengthUnit` millimeter juntos; los relanzamientos
 rápidos de SketchUp pueden crashear (signal 5) — se espacian las corridas.
+
+---
+
+## F192 — Tenant-scoped transactions and PostgreSQL RLS (#449) — 2026-08-29
+
+Rama `codex/449-tenant-rls`. Se implementó la migración `000094` con inventario
+exhaustivo, FORCE RLS, policies específicas, índices tenant-first y rollback
+acotado; transaction runner por request con actor live revalidado y `SET LOCAL`;
+repositorios unidos a la transacción; roles runtime/migrator separados y readiness
+fail-closed; retiro del fallback runtime a `InitialOrganizationID`; y pilot gate
+con pruebas SQL directas A↔B, Project shared, support, platform, pool reuse,
+rollback, malicious body e inventory drift.
+
+El review adversarial detectó y se corrigieron cuatro clases: atribución de hijos
+shared a Org C, mutación support A→B, bypass mediante roles heredados y rollback
+sobre objetos ajenos. La revisión independiente final quedó **APPROVED** en
+`progress/review_F192.md`.
+
+Verificación final: `go test ./...`, `pnpm openapi:check`, `pnpm typecheck`,
+`pnpm test`, `./init.sh`, `scripts/pilot-gate.sh --fresh-container`, compose config,
+shell syntax y `git diff --check`, todos verdes. Implementación en `252ba9b` y
+correcciones de seguridad en `04c07ca`.

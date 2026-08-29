@@ -4814,7 +4814,7 @@
         "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
         "docs/verification.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F191"
       ]
