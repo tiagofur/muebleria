@@ -1,4 +1,4 @@
-# Revisión independiente — F193 / Issue #450
+# Revisión independiente — F194 / Issue #450
 
 **PR:** #480
 
@@ -16,7 +16,7 @@ La implementación cubre correctamente la mayor parte del lifecycle explícito: 
 
 No se puede aprobar porque faltan pruebas ejecutables exigidas por #450 para la aceptación idempotente/reactivación y para el aislamiento SQL directo de las tablas del lifecycle. Además, la autoridad UI sigue describiendo el flujo global eliminado y las pantallas modificadas no presentan el gate completo de diseño requerido.
 
-F193 permanece `in_progress`. No se modificó código de implementación ni se hizo merge.
+F194 permanece `in_progress`. No se modificó código de implementación ni se hizo merge.
 
 ## Hallazgos obligatorios
 
@@ -99,11 +99,11 @@ La primera ejecución race con varios paquetes en paralelo fue descartada porque
 - C2 Convenciones: PASS en código/commits; falla el gate UI detallado arriba.
 - C3 Arquitectura: PASS en separación de autoridades y límites runtime.
 - C4 Tests: FAIL por pruebas de aceptación/replay/reactivación y SQL directo faltantes.
-- C5 Ledger/progreso: PASS para veredicto negativo; F193 permanece `in_progress`.
+- C5 Ledger/progreso: PASS para veredicto negativo; F194 permanece `in_progress`.
 - C6 Seguridad: FAIL de evidencia completa hasta ejecutar el negative proof SQL lifecycle; no se detectó una filtración concreta.
 - C7 Contrato generado: PASS.
 - C8 Remoto: PASS para el head auditado; el commit de este reporte debe volver a pasar CI antes de entrega.
 
 ## Condición de nueva revisión
 
-Resolver los cuatro P1, ejecutar nuevamente todas las suites de esta matriz, mantener F193 `in_progress` y solicitar una nueva revisión independiente sobre el nuevo head remoto.
+Resolver los cuatro P1, ejecutar nuevamente todas las suites de esta matriz, mantener F194 `in_progress` y solicitar una nueva revisión independiente sobre el nuevo head remoto.

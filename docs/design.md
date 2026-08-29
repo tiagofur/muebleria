@@ -1136,7 +1136,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 ### 6.11 Equipo
 
 - **Ruta nav:** `users` (sección CONFIG, **solo admin**)
-- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172 / F193)
+- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172 / F194)
 - **Unidad canónica:** `Membership`, identificada y mutada por `membershipId`. La
   identidad global `User` no es una fila administrable por el taller.
 - **Patrón:** tabla simple (acciones inline por fila, sin expand) + modales de

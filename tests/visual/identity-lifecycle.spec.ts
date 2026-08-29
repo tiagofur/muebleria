@@ -91,7 +91,7 @@ async function prepareAdminSession(page: Page) {
   });
 }
 
-test.describe('F193 responsive UI gate', () => {
+test.describe('F194 responsive UI gate', () => {
   for (const viewport of viewports) {
     test(`Team is usable without page overflow at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);

@@ -10,7 +10,7 @@ import { UsersScreen } from './UsersScreen';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-describe('UsersScreen (F193 membership lifecycle)', () => {
+describe('UsersScreen (F194 membership lifecycle)', () => {
   it('uses the generated team client without a list fallback', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
 

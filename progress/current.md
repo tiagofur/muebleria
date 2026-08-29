@@ -1,10 +1,11 @@
 # Feature en curso
 
-**F193 — Lifecycle explícito de identidad y membresía con onboarding invitation-first (#450)**
+**F194 — Lifecycle explícito de identidad y membresía con onboarding invitation-first (#450)**
 
 - Inicio: 2026-08-29 10:20 America/Bahia_Banderas
 - Rama: `feat/450-invitation-membership-lifecycle`
-- Base: `b4f8e7eaaea99fa0515085b46a8f2038858c57ae`
+- Base actual: `ac7577c20441936615edfab116073dcc93e279ec` (`origin/main` tras rebase)
+- Base original validada: `b4f8e7eaaea99fa0515085b46a8f2038858c57ae`
 
 ## Plan
 

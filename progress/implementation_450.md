@@ -2,7 +2,7 @@
 
 ## Estado
 
-F193 está `in_progress` sobre `b4f8e7e`. Los prerrequisitos #448 y #449 están
+F194 está `in_progress` sobre `b4f8e7e`. Los prerrequisitos #448 y #449 están
 mergeados. Esta entrega reemplaza el onboarding global por invitaciones y mantiene
 fuera de alcance last-admin, seats, offboarding y sectores avanzados de #451.
 
@@ -140,8 +140,8 @@ autoridad Platform y `last_login_at` sólo tras autenticación exitosa.
 ## Estado de revisión y entrega
 
 Receipt-driven review mode está `off`, decidido por `clone_local`. No se ejecutó
-reviewer ni existe veredicto: `progress/review_F193.md` registra
-`disabled/unmanaged` y F193 permanece `in_progress`.
+reviewer ni existe veredicto: `progress/review_F194.md` registra
+`disabled/unmanaged` y F194 permanece `in_progress`.
 
 El maintainer autorizó el 2026-08-29 un único PR con `size:exception`. Migration
 000095, contrato generado, runtime Go, clientes generados y consumidores React
@@ -151,8 +151,8 @@ la revisión independiente pendiente.
 
 ## Correcciones tras revisión independiente — ronda 1
 
-El veredicto `CHANGES_REQUESTED` de `progress/review_F193.md` identificó cuatro
-P1 de evidencia y UI. Se mantuvo F193 en `in_progress` y se corrigieron sin
+El veredicto `CHANGES_REQUESTED` de `progress/review_F194.md` identificó cuatro
+P1 de evidencia y UI. Se mantuvo F194 en `in_progress` y se corrigieron sin
 ampliar el alcance funcional:
 
 - aceptación HTTP/PostgreSQL para identidad nueva, existente y reactivación
@@ -187,4 +187,4 @@ ampliar el alcance funcional:
 | `git diff --check` | PASS |
 
 La ronda queda lista para un nuevo juicio independiente; este reporte no cambia
-por sí mismo el veredicto previo ni marca F193 como `done`.
+por sí mismo el veredicto previo ni marca F194 como `done`.
