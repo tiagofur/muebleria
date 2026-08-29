@@ -59,8 +59,20 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		) VALUES (
 		 '40000000-0000-0000-0000-000000000001', 'Shared A-B',
 		 '30000000-0000-0000-0000-00000000000a', 'draft',
-		 '` + rlsOrgA + `', '` + rlsOrgA + `', '` + rlsOrgB + `'
+			'` + rlsOrgA + `', '` + rlsOrgA + `', '` + rlsOrgB + `'
 		)`,
+		`INSERT INTO modules (id, code, name, organization_id) VALUES
+		 ('50000000-0000-0000-0000-000000000001', 'RLS-MODULE', 'RLS module', '` + rlsOrgA + `')`,
+		`INSERT INTO project_items (id, project_id, module_id, quantity, organization_id) VALUES
+		 ('60000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', 1, '` + rlsOrgA + `')`,
+		`INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id) VALUES
+		 ('40000000-0000-0000-0000-000000000001', 'RLS', 'choice-a', '` + rlsOrgA + `')`,
+		`INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id) VALUES
+		 ('60000000-0000-0000-0000-000000000001', 'RLS', '70000000-0000-0000-0000-000000000001', '` + rlsOrgA + `')`,
+		`INSERT INTO quote_snapshots (id, project_id, captured_at, materials_cost, edge_total, hardware_total, direct_cost, labor_modular, labor_fixed_cost, margin_factor, sale_price, organization_id) VALUES
+		 ('80000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', NOW(), 0, 0, 0, 0, 0, 0, 1, 0, '` + rlsOrgA + `')`,
+		`INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES
+		 ('80000000-0000-0000-0000-000000000001', 'material', '90000000-0000-0000-0000-000000000001', 0, '` + rlsOrgA + `')`,
 		`DROP ROLE IF EXISTS ` + rlsAppRole,
 		`CREATE ROLE ` + rlsAppRole + ` LOGIN PASSWORD 'rls-test-password'
 		 NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS IN ROLE granete_app`,
@@ -223,11 +235,44 @@ func TestTenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix(t *testing.T) 
 		}
 	})
 
-	var supportSessionID string
+	withRLSActor(t, fx.app, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO project_items (project_id, module_id, quantity, organization_id)
+			VALUES ('40000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', 1, $1)`, rlsOrgC)
+		if err == nil {
+			t.Fatal("shared child insert attributed to unrelated organization must fail")
+		}
+	})
+
+	for _, mutation := range []struct {
+		name, sql string
+	}{
+		{"project item", `UPDATE project_items SET organization_id='` + rlsOrgC + `' WHERE id='60000000-0000-0000-0000-000000000001'`},
+		{"project level choice", `UPDATE project_level_choices SET organization_id='` + rlsOrgC + `' WHERE project_id='40000000-0000-0000-0000-000000000001'`},
+		{"project item choice", `UPDATE project_item_choices SET organization_id='` + rlsOrgC + `' WHERE project_item_id='60000000-0000-0000-0000-000000000001'`},
+		{"quote snapshot", `UPDATE quote_snapshots SET organization_id='` + rlsOrgC + `' WHERE id='80000000-0000-0000-0000-000000000001'`},
+		{"snapshot price", `UPDATE snapshot_prices SET organization_id='` + rlsOrgC + `' WHERE snapshot_id='80000000-0000-0000-0000-000000000001'`},
+	} {
+		t.Run("shared child retarget "+mutation.name, func(t *testing.T) {
+			withRLSActor(t, fx.app, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+				if _, err := tx.Exec(ctx, mutation.sql); err == nil || !strings.Contains(err.Error(), "explicit command") {
+					t.Fatalf("shared child ownership mutation must fail: %v", err)
+				}
+			})
+		})
+	}
+
+	var supportSessionID, supportSessionBID string
 	if err := fx.admin.QueryRow(ctx, `
 		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
 		VALUES ($1, $2, 'RLS test support', NOW() + INTERVAL '1 hour')
 		RETURNING id`, rlsUserA, rlsOrgA).Scan(&supportSessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.admin.QueryRow(ctx, `
+		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
+		VALUES ($1, $2, 'RLS test support B', NOW() + INTERVAL '1 hour')
+		RETURNING id`, rlsUserA, rlsOrgB).Scan(&supportSessionBID); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := fx.app.Begin(ctx)
@@ -250,6 +295,14 @@ func TestTenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix(t *testing.T) 
 	if fmt.Sprint(names) != "[Customer A]" {
 		t.Fatalf("support session leaked another org: %v", names)
 	}
+	tag, err := tx.Exec(ctx, `UPDATE support_sessions SET ended_at=NOW(), ended_via='logout' WHERE id=$1`, supportSessionBID)
+	if err != nil || tag.RowsAffected() != 0 {
+		t.Fatalf("support session A mutated session B: rows=%d err=%v", tag.RowsAffected(), err)
+	}
+	var ended bool
+	if err := fx.admin.QueryRow(ctx, `SELECT ended_at IS NOT NULL FROM support_sessions WHERE id=$1`, supportSessionBID).Scan(&ended); err != nil || ended {
+		t.Fatalf("support session B changed through A: ended=%v err=%v", ended, err)
+	}
 }
 
 func TestTenantRLS_PoolReuseRollbackRoleAndInventoryReadiness(t *testing.T) {
@@ -257,6 +310,21 @@ func TestTenantRLS_PoolReuseRollbackRoleAndInventoryReadiness(t *testing.T) {
 	ctx := context.Background()
 	if err := fx.store.VerifyRLSReadiness(ctx); err != nil {
 		t.Fatalf("runtime readiness: %v", err)
+	}
+	const unsafeOwnerRole = "granete_rls_unsafe_owner_test"
+	var originalOwner string
+	if err := fx.admin.QueryRow(ctx, `SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'customers'::regclass`).Scan(&originalOwner); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fx.admin.Exec(ctx, `DROP ROLE IF EXISTS `+unsafeOwnerRole)
+	if _, err := fx.admin.Exec(ctx, `CREATE ROLE `+unsafeOwnerRole+` NOLOGIN; GRANT `+unsafeOwnerRole+` TO `+rlsAppRole+`; ALTER TABLE customers OWNER TO `+unsafeOwnerRole); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.store.VerifyRLSReadiness(ctx); err == nil || !strings.Contains(err.Error(), unsafeOwnerRole) {
+		t.Fatalf("readiness accepted inherited protected-table owner: %v", err)
+	}
+	if _, err := fx.admin.Exec(ctx, `ALTER TABLE customers OWNER TO `+pgx.Identifier{originalOwner}.Sanitize()+`; REVOKE `+unsafeOwnerRole+` FROM `+rlsAppRole+`; DROP ROLE `+unsafeOwnerRole); err != nil {
+		t.Fatal(err)
 	}
 
 	err := fx.store.WithinTenantTx(ctx, storage.TenantActor{
@@ -351,6 +419,72 @@ func TestTenantRLS_CriticalCustomerPlanUsesTenantIndex(t *testing.T) {
 		t.Fatalf("organization index missing from plans\nbaseline:\n%s\nRLS:\n%s", baseline, rlsPlan)
 	}
 	t.Logf("baseline (explicit scope, owner role):\n%s\nRLS (runtime role):\n%s", baseline, rlsPlan)
+}
+
+func TestTenantRLS_DownMigrationIsScopedAndComplete(t *testing.T) {
+	admin := multiOrgFreshDB(t)
+	ctx := context.Background()
+	store := &storage.PostgresStore{Pool: admin}
+	if err := store.RunMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, `
+		CREATE TABLE external_rls_sentinel (id integer primary key, owner_name text);
+		ALTER TABLE external_rls_sentinel ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE external_rls_sentinel FORCE ROW LEVEL SECURITY;
+		CREATE POLICY external_policy ON external_rls_sentinel USING (true) WITH CHECK (true)`); err != nil {
+		t.Fatal(err)
+	}
+	downSQL, err := os.ReadFile("../../db/migration/000094_tenant_rls.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, string(downSQL)); err != nil {
+		t.Fatal(err)
+	}
+
+	var sentinelRLS, sentinelForced bool
+	if err := admin.QueryRow(ctx, `SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid='external_rls_sentinel'::regclass`).Scan(&sentinelRLS, &sentinelForced); err != nil {
+		t.Fatal(err)
+	}
+	if !sentinelRLS || !sentinelForced {
+		t.Fatal("down migration changed unrelated RLS table")
+	}
+	var sentinelPolicies int
+	if err := admin.QueryRow(ctx, `SELECT count(*) FROM pg_policies WHERE tablename='external_rls_sentinel' AND policyname='external_policy'`).Scan(&sentinelPolicies); err != nil || sentinelPolicies != 1 {
+		t.Fatalf("unrelated policy removed: count=%d err=%v", sentinelPolicies, err)
+	}
+	var customerRLS bool
+	if err := admin.QueryRow(ctx, `SELECT relrowsecurity FROM pg_class WHERE oid='customers'::regclass`).Scan(&customerRLS); err != nil || customerRLS {
+		t.Fatalf("customers RLS not reverted: enabled=%v err=%v", customerRLS, err)
+	}
+	var artifacts int
+	if err := admin.QueryRow(ctx, `
+		SELECT
+			(CASE WHEN to_regclass('rls_policy_inventory') IS NOT NULL THEN 1 ELSE 0 END) +
+			(CASE WHEN to_regprocedure('app_has_organization_access(uuid)') IS NOT NULL THEN 1 ELSE 0 END) +
+			(SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='api_idempotency_receipts' AND column_name IN ('actor_user_id','organization_id')) +
+			(SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname IN (
+				'idx_api_idempotency_receipts_org_actor', 'idx_ambient_categories_organization',
+				'idx_board_parts_organization', 'idx_damage_reports_organization',
+				'idx_hardware_lines_organization', 'idx_material_categories_organization',
+				'idx_module_categories_organization', 'idx_module_components_organization',
+				'idx_module_presets_organization', 'idx_option_group_members_organization',
+				'idx_production_activities_organization', 'idx_project_internal_messages_organization',
+				'idx_project_item_choices_organization', 'idx_project_item_floor_events_organization',
+				'idx_project_level_choices_organization', 'idx_project_photos_organization',
+				'idx_project_picking_organization', 'idx_project_templates_organization',
+				'idx_purchase_order_items_organization', 'idx_quote_snapshots_organization',
+				'idx_snapshot_prices_organization', 'idx_structure_components_organization',
+				'idx_structure_presets_organization', 'idx_structure_revisions_organization',
+				'idx_suppliers_organization', 'idx_warranty_ticket_photos_organization'))
+	`).Scan(&artifacts); err != nil || artifacts != 0 {
+		t.Fatalf("down migration left #449 artifacts: count=%d err=%v", artifacts, err)
+	}
+	var runtimeCanRead bool
+	if err := admin.QueryRow(ctx, `SELECT has_table_privilege('granete_app', 'customers', 'SELECT')`).Scan(&runtimeCanRead); err != nil || runtimeCanRead {
+		t.Fatalf("down migration left runtime grant: can_read=%v err=%v", runtimeCanRead, err)
+	}
 }
 
 type planQuerier interface {

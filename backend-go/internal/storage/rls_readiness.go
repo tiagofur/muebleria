@@ -42,6 +42,44 @@ func (s *PostgresStore) VerifyRLSReadiness(ctx context.Context) error {
 		return fmt.Errorf("runtime role owns %d protected tables", ownedProtected)
 	}
 
+	var unsafeInheritedRoles []string
+	if err := s.Pool.QueryRow(ctx, `
+		WITH RECURSIVE role_closure AS (
+			SELECT oid, rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb
+			FROM pg_roles WHERE rolname = current_user
+			UNION
+			SELECT parent.oid, parent.rolname, parent.rolsuper, parent.rolbypassrls,
+			       parent.rolcreaterole, parent.rolcreatedb
+			FROM role_closure child
+			JOIN pg_auth_members membership ON membership.member = child.oid
+			JOIN pg_roles parent ON parent.oid = membership.roleid
+		), unsafe AS (
+			SELECT DISTINCT role.rolname
+			FROM role_closure role
+			WHERE role.rolname <> current_user
+			  AND (
+			      role.rolsuper OR role.rolbypassrls OR role.rolcreaterole OR role.rolcreatedb
+			      OR EXISTS (
+			          SELECT 1
+			          FROM pg_class c
+			          JOIN pg_namespace n ON n.oid = c.relnamespace
+			          JOIN rls_policy_inventory i ON i.table_name = c.relname
+			          WHERE n.nspname = 'public'
+			            AND c.relkind = 'r'
+			            AND i.classification <> 'platform-global'
+			            AND c.relowner = role.oid
+			      )
+			  )
+		)
+		SELECT COALESCE(array_agg(rolname ORDER BY rolname), ARRAY[]::text[])
+		FROM unsafe
+	`).Scan(&unsafeInheritedRoles); err != nil {
+		return fmt.Errorf("check inherited runtime roles: %w", err)
+	}
+	if len(unsafeInheritedRoles) != 0 {
+		return fmt.Errorf("runtime role can SET ROLE to unsafe roles: %v", unsafeInheritedRoles)
+	}
+
 	var missingInventory int
 	if err := s.Pool.QueryRow(ctx, `
 		SELECT count(*)

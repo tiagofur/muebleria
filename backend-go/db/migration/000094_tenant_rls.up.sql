@@ -296,6 +296,34 @@ AS $$
     )
 $$;
 
+CREATE OR REPLACE FUNCTION app_shared_child_matches_project(candidate_project_id UUID, candidate_organization_id UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY INVOKER
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM projects p
+        WHERE p.id = candidate_project_id
+          AND p.organization_id = candidate_organization_id
+    )
+$$;
+
+CREATE OR REPLACE FUNCTION protect_shared_child_ownership()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL
+AS $$
+BEGIN
+    IF OLD.organization_id IS DISTINCT FROM NEW.organization_id
+       OR to_jsonb(OLD)->>TG_ARGV[0] IS DISTINCT FROM to_jsonb(NEW)->>TG_ARGV[0]
+    THEN
+        RAISE EXCEPTION 'shared child ownership requires an explicit command'
+            USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
 DO $$
 DECLARE
     table_name TEXT;
@@ -307,9 +335,13 @@ BEGIN
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
         EXECUTE format(
-            'CREATE POLICY project_explicit_organizations ON %I USING (organization_id = app_current_organization_id() OR app_can_access_project(project_id)) WITH CHECK (organization_id = app_current_organization_id() OR app_can_access_project(project_id))',
+            'CREATE POLICY project_explicit_organizations ON %I USING (app_can_access_project(project_id)) WITH CHECK (app_can_access_project(project_id) AND app_shared_child_matches_project(project_id, organization_id))',
             table_name
         );
+		EXECUTE format(
+			'CREATE TRIGGER protect_shared_child_ownership BEFORE UPDATE OF organization_id, project_id ON %I FOR EACH ROW EXECUTE FUNCTION protect_shared_child_ownership(''project_id'')',
+			table_name
+		);
     END LOOP;
 END
 $$;
@@ -318,37 +350,41 @@ ALTER TABLE project_item_choices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_item_choices FORCE ROW LEVEL SECURITY;
 CREATE POLICY project_item_choice_explicit_organizations ON project_item_choices
     USING (
-        organization_id = app_current_organization_id()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM project_items pi
             WHERE pi.id = project_item_choices.project_item_id
         )
     )
     WITH CHECK (
-        organization_id = app_current_organization_id()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM project_items pi
             WHERE pi.id = project_item_choices.project_item_id
+              AND pi.organization_id = project_item_choices.organization_id
         )
     );
+CREATE TRIGGER protect_shared_child_ownership
+    BEFORE UPDATE OF organization_id, project_item_id ON project_item_choices
+    FOR EACH ROW EXECUTE FUNCTION protect_shared_child_ownership('project_item_id');
 
 ALTER TABLE snapshot_prices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE snapshot_prices FORCE ROW LEVEL SECURITY;
 CREATE POLICY snapshot_price_explicit_organizations ON snapshot_prices
     USING (
-        organization_id = app_current_organization_id()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM quote_snapshots qs
             WHERE qs.id = snapshot_prices.snapshot_id
         )
     )
     WITH CHECK (
-        organization_id = app_current_organization_id()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM quote_snapshots qs
             WHERE qs.id = snapshot_prices.snapshot_id
+              AND qs.organization_id = snapshot_prices.organization_id
         )
     );
+CREATE TRIGGER protect_shared_child_ownership
+    BEFORE UPDATE OF organization_id, snapshot_id ON snapshot_prices
+    FOR EACH ROW EXECUTE FUNCTION protect_shared_child_ownership('snapshot_id');
 
 ALTER TABLE memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE memberships FORCE ROW LEVEL SECURITY;
@@ -387,8 +423,49 @@ CREATE POLICY support_session_read ON support_sessions FOR SELECT
 CREATE POLICY support_session_insert ON support_sessions FOR INSERT
     WITH CHECK (platform_admin_user_id = app_current_user_id());
 CREATE POLICY support_session_update ON support_sessions FOR UPDATE
-    USING (platform_admin_user_id = app_current_user_id())
-    WITH CHECK (platform_admin_user_id = app_current_user_id());
+    USING (
+        platform_admin_user_id = app_current_user_id()
+        AND (
+            (app_current_support_session_id() IS NOT NULL
+             AND id = app_current_support_session_id()
+             AND organization_id = app_current_organization_id())
+            OR
+            (app_current_support_session_id() IS NULL
+             AND app_current_organization_id() IS NULL
+             AND app_has_organization_access(organization_id))
+        )
+    )
+    WITH CHECK (
+        platform_admin_user_id = app_current_user_id()
+        AND (
+            (app_current_support_session_id() IS NOT NULL
+             AND id = app_current_support_session_id()
+             AND organization_id = app_current_organization_id())
+            OR
+            (app_current_support_session_id() IS NULL
+             AND app_current_organization_id() IS NULL
+             AND app_has_organization_access(organization_id))
+        )
+    );
+
+CREATE OR REPLACE FUNCTION protect_support_session_scope()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL
+AS $$
+BEGIN
+    IF OLD.platform_admin_user_id IS DISTINCT FROM NEW.platform_admin_user_id
+       OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+    THEN
+        RAISE EXCEPTION 'support session actor and organization are immutable'
+            USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+CREATE TRIGGER protect_support_session_scope
+    BEFORE UPDATE OF platform_admin_user_id, organization_id ON support_sessions
+    FOR EACH ROW EXECUTE FUNCTION protect_support_session_scope();
 
 ALTER TABLE security_audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE security_audit_events FORCE ROW LEVEL SECURITY;
@@ -425,6 +502,7 @@ GRANT EXECUTE ON FUNCTION app_current_support_session_id() TO granete_app;
 GRANT EXECUTE ON FUNCTION app_has_organization_access(UUID) TO granete_app;
 GRANT EXECUTE ON FUNCTION lookup_open_invitation(TEXT) TO granete_app;
 GRANT EXECUTE ON FUNCTION app_can_access_project(UUID) TO granete_app;
+GRANT EXECUTE ON FUNCTION app_shared_child_matches_project(UUID, UUID) TO granete_app;
 GRANT SELECT ON rls_policy_inventory TO granete_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO granete_app;
 REVOKE ALL ON schema_migrations FROM granete_app;

@@ -26,7 +26,10 @@ FROM rls_policy_inventory ORDER BY table_name;
 
 `projects` is the only current cross-organization aggregate: its owner, sales,
 and manufacturing organizations can read it. Deletes remain owner/sales-only and
-a trigger prevents generic updates from changing those ownership columns. Catalog
+a trigger prevents generic updates from changing those ownership columns. Shared
+children retain the primary project organization as immutable ownership; named
+sales/manufacturing organizations gain visibility, not authority to attribute a
+row to a third tenant or retarget its parent. Catalog
 clone authorizes its source and destination explicitly inside one transaction.
 
 ## Roles and deployment
@@ -48,7 +51,9 @@ docker compose exec -e APP_DATABASE_PASSWORD='generated-secret' postgres \
 
 Back up first. Rotate the runtime password with `ALTER ROLE granete_app PASSWORD
 '...'`, update `APP_DATABASE_PASSWORD`, and restart the backend. Never give the
-runtime role membership in the migration role.
+runtime role membership in the migration role. Readiness recursively inspects
+role memberships and fails if `SET ROLE` could reach a privileged role or a
+protected-table owner.
 
 ## Transaction contract
 
@@ -99,8 +104,9 @@ inventory coverage, `ENABLE/FORCE RLS`, policies, and organization-first indexes
 
 Rollback stops the backend first, uses the migration credential, runs
 `000094_tenant_rls.down.sql`, and restores the previous application release. The
-down migration removes policies/functions and runtime grants but intentionally
-keeps the externally managed login. Rollback is an emergency compatibility path,
+down migration removes only #449 policies/functions/indexes and runtime grants,
+preserves unrelated RLS objects, and intentionally keeps the externally managed
+login. Rollback is an emergency compatibility path,
 not permission to continue multi-tenant production without the barrier.
 
 ## Coordination boundaries

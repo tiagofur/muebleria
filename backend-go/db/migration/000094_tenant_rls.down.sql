@@ -8,10 +8,9 @@ DECLARE
     relation RECORD;
 BEGIN
     FOR relation IN
-        SELECT schemaname, tablename
-        FROM pg_tables
-        WHERE schemaname = 'public'
-          AND rowsecurity
+        SELECT 'public' AS schemaname, table_name AS tablename
+        FROM rls_policy_inventory
+        WHERE classification <> 'platform-global'
     LOOP
         EXECUTE format('ALTER TABLE %I.%I NO FORCE ROW LEVEL SECURITY', relation.schemaname, relation.tablename);
         EXECUTE format('ALTER TABLE %I.%I DISABLE ROW LEVEL SECURITY', relation.schemaname, relation.tablename);
@@ -52,8 +51,17 @@ DROP POLICY IF EXISTS stock_movement_insert ON stock_movements;
 DROP POLICY IF EXISTS structure_revision_read ON structure_revisions;
 DROP POLICY IF EXISTS structure_revision_insert ON structure_revisions;
 
+DROP TRIGGER IF EXISTS protect_shared_child_ownership ON project_items;
+DROP TRIGGER IF EXISTS protect_shared_child_ownership ON project_level_choices;
+DROP TRIGGER IF EXISTS protect_shared_child_ownership ON quote_snapshots;
+DROP TRIGGER IF EXISTS protect_shared_child_ownership ON project_item_choices;
+DROP TRIGGER IF EXISTS protect_shared_child_ownership ON snapshot_prices;
+DROP TRIGGER IF EXISTS protect_support_session_scope ON support_sessions;
 DROP TRIGGER IF EXISTS protect_project_organization_ownership ON projects;
 DROP FUNCTION IF EXISTS protect_project_organization_ownership();
+DROP FUNCTION IF EXISTS protect_shared_child_ownership();
+DROP FUNCTION IF EXISTS protect_support_session_scope();
+DROP FUNCTION IF EXISTS app_shared_child_matches_project(UUID, UUID);
 DROP FUNCTION IF EXISTS app_can_access_project(UUID);
 DROP FUNCTION IF EXISTS app_current_support_session_id();
 DROP FUNCTION IF EXISTS app_has_organization_access(UUID);
@@ -64,6 +72,31 @@ DROP FUNCTION IF EXISTS app_current_organization_id();
 
 DROP TABLE IF EXISTS rls_policy_inventory;
 DROP INDEX IF EXISTS idx_api_idempotency_receipts_org_actor;
+DROP INDEX IF EXISTS idx_ambient_categories_organization;
+DROP INDEX IF EXISTS idx_board_parts_organization;
+DROP INDEX IF EXISTS idx_damage_reports_organization;
+DROP INDEX IF EXISTS idx_hardware_lines_organization;
+DROP INDEX IF EXISTS idx_material_categories_organization;
+DROP INDEX IF EXISTS idx_module_categories_organization;
+DROP INDEX IF EXISTS idx_module_components_organization;
+DROP INDEX IF EXISTS idx_module_presets_organization;
+DROP INDEX IF EXISTS idx_option_group_members_organization;
+DROP INDEX IF EXISTS idx_production_activities_organization;
+DROP INDEX IF EXISTS idx_project_internal_messages_organization;
+DROP INDEX IF EXISTS idx_project_item_choices_organization;
+DROP INDEX IF EXISTS idx_project_item_floor_events_organization;
+DROP INDEX IF EXISTS idx_project_level_choices_organization;
+DROP INDEX IF EXISTS idx_project_photos_organization;
+DROP INDEX IF EXISTS idx_project_picking_organization;
+DROP INDEX IF EXISTS idx_project_templates_organization;
+DROP INDEX IF EXISTS idx_purchase_order_items_organization;
+DROP INDEX IF EXISTS idx_quote_snapshots_organization;
+DROP INDEX IF EXISTS idx_snapshot_prices_organization;
+DROP INDEX IF EXISTS idx_structure_components_organization;
+DROP INDEX IF EXISTS idx_structure_presets_organization;
+DROP INDEX IF EXISTS idx_structure_revisions_organization;
+DROP INDEX IF EXISTS idx_suppliers_organization;
+DROP INDEX IF EXISTS idx_warranty_ticket_photos_organization;
 ALTER TABLE api_idempotency_receipts
     DROP COLUMN IF EXISTS actor_user_id,
     DROP COLUMN IF EXISTS organization_id;

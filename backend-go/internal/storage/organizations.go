@@ -354,6 +354,11 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 // EndOpenSupportSessionsByOrg closes every still-open support session of an
 // organization (suspension path — ended_via='org_suspended', B6).
 func (s *PostgresStore) EndOpenSupportSessionsByOrg(ctx context.Context, organizationID, via string) (int64, error) {
+	if transactionFromContext(ctx) != nil {
+		if err := authorizeTenantOrganizations(ctx, organizationID); err != nil {
+			return 0, err
+		}
+	}
 	result, err := s.db(ctx).Exec(ctx, `
 		UPDATE support_sessions SET ended_at = NOW(), ended_via = $2
 		WHERE organization_id = $1 AND ended_at IS NULL`,
