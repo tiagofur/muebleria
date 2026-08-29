@@ -13,6 +13,11 @@ export {
 } from './localStorageWorkspaceRepository';
 export { SCHEMA_VERSION, createSeedWorkspace } from './seed';
 export { migrateLegacyStorageKeys } from './legacyStorageKeys';
+export { GraneteApiClient, newIdempotencyKey } from './apiClient';
+export { GeneratedGraneteApiClient } from './openapi/generated/client';
+export { GraneteApiError, parseApiError } from './apiErrors';
+export type * from './openapi/generated/types';
+export { parseGenerated, parseGeneratedArray } from './openapi/generated/types';
 export {
   breakdownFromApi,
   catalogFromApi,
