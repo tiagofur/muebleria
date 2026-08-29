@@ -4861,6 +4861,51 @@
         "F186",
         "F190"
       ]
+    },
+    {
+      "id": "F194",
+      "title": "Lifecycle explícito de identidad y membresía con onboarding invitation-first (#450)",
+      "description": "Separa el estado global de User del lifecycle organization-scoped de Membership e Invitation; migra datos existentes, elimina registro/aprobación global e InitialOrganizationID del onboarding, y entrega create/resend/revoke/accept atómicos, idempotentes y tenant-safe mediante OpenAPI generado.",
+      "tags": [
+        "identity",
+        "membership",
+        "invitation",
+        "backend-go",
+        "postgresql",
+        "web",
+        "security",
+        "p0"
+      ],
+      "created": "2026-08-29",
+      "acceptance": [
+        "Account status y membership status son campos y autoridades distintas en PostgreSQL, Go, OpenAPI y React",
+        "El directorio organization-scoped muestra memberships active, suspended y left sin confundirlas con el estado global del User",
+        "Crear, reenviar, revocar y aceptar invitaciones usa IDs canónicos, versionado, idempotencia y auditoría durable",
+        "La aceptación de usuarios nuevos y existentes es atómica, concurrency-safe y crea o reactiva exactamente una membership",
+        "Aceptar una invitación entra directamente a la organización invitante aun cuando el usuario tenga múltiples memberships",
+        "El email se normaliza y es unique case-insensitive sin fusionar colisiones históricas silenciosamente",
+        "Un admin de organización no puede aprobar, borrar, deshabilitar ni reactivar identidades globales",
+        "InitialOrganizationID, /auth/register y los bridges /api/admin/users/* no participan en onboarding runtime ni conservan callers productivos",
+        "Resend invalida el token anterior y los estados expired, revoked, accepted y rotated se exponen honestamente sin filtrar secretos",
+        "Fresh/upgrade/rollback, cross-org, RLS, replay, concurrencia, audit failure y negative proofs pasan sin skips obligatorios"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/450",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/verification.md",
+        "contracts/openapi/granete-api.v1.yaml",
+        "progress/implementation_450.md",
+        "progress/review_F193.md"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F191",
+        "F192"
+      ]
     }
   ]
 }
