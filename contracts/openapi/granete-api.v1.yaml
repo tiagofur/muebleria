@@ -9,10 +9,16 @@
       "url": "/api"
     }
   ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
   "paths": {
     "/auth/login": {
       "post": {
         "operationId": "login",
+        "security": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -113,6 +119,7 @@
     "/auth/accept-invitation": {
       "post": {
         "operationId": "acceptInvitation",
+        "security": [],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -480,6 +487,7 @@
     "/auth/register": {
       "post": {
         "operationId": "register",
+        "security": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -518,6 +526,12 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
@@ -528,6 +542,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/RevokeInvitationResponse"
                 }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             }
           },
@@ -571,6 +590,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/PlatformOrganization"
                 }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             }
           },
@@ -652,9 +676,72 @@
           }
         }
       }
+    },
+    "/factory/organizations": {
+      "get": {
+        "operationId": "listFactoryOrganizations",
+        "responses": {
+          "200": {
+            "description": "Connected store and dealer organizations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FactoryOrganization"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createFactoryOrganization",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFactoryOrganizationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Connected organization created atomically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateFactoryOrganizationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
     "parameters": {
       "UserId": {
         "name": "userId",
@@ -691,7 +778,7 @@
         "description": "Strong resource version",
         "schema": {
           "type": "string",
-          "pattern": "^\\\"v[1-9][0-9]*\\\"$"
+          "pattern": "^\"v[1-9][0-9]*\"$"
         }
       }
     },
@@ -911,20 +998,20 @@
         "additionalProperties": false,
         "required": [
           "email",
-          "password"
+          "password",
+          "transport"
         ],
         "properties": {
           "email": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "transport": {
-            "$ref": "#/components/schemas/AuthTransport"
-          },
-          "client": {
-            "type": "string"
+            "$ref": "#/components/schemas/LoginTransport"
           },
           "org": {
             "type": "string"
@@ -1066,7 +1153,8 @@
           "user_id",
           "email",
           "name",
-          "active",
+          "account_active",
+          "membership_active",
           "roles",
           "member_since",
           "version"
@@ -1081,7 +1169,10 @@
           "name": {
             "type": "string"
           },
-          "active": {
+          "account_active": {
+            "type": "boolean"
+          },
+          "membership_active": {
             "type": "boolean"
           },
           "roles": {
@@ -1338,10 +1429,15 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
           },
           "slug": {
-            "type": "string"
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])$"
           },
           "type": {
             "type": "string"
@@ -1637,11 +1733,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "message"
+          "message",
+          "invitation"
         ],
         "properties": {
           "message": {
             "type": "string"
+          },
+          "invitation": {
+            "$ref": "#/components/schemas/Invitation"
           }
         }
       },
@@ -1666,6 +1766,90 @@
         "properties": {
           "ended": {
             "type": "boolean"
+          }
+        }
+      },
+      "LoginTransport": {
+        "type": "string",
+        "enum": [
+          "web",
+          "mobile",
+          "sketchup"
+        ]
+      },
+      "FactoryOrganization": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "type",
+          "active",
+          "created_at",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "store",
+              "dealer"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "CreateFactoryOrganizationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "store",
+              "dealer"
+            ]
+          }
+        }
+      },
+      "CreateFactoryOrganizationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization"
+        ],
+        "properties": {
+          "organization": {
+            "$ref": "#/components/schemas/FactoryOrganization"
           }
         }
       }

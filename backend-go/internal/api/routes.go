@@ -49,7 +49,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Factory sales network (#326): a factory admin lists/creates its
 	// connected store/dealer organizations (cloned from the factory catalog).
 	mux.Handle("GET /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
-	mux.Handle("POST /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
+	mux.Handle("POST /api/factory/organizations", authMW(server.RequireIdempotency("factory.create-organization", http.HandlerFunc(server.HandleFactoryOrganizations))))
 
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/team", authMW(http.HandlerFunc(server.HandleOrgTeam)))
@@ -57,7 +57,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/org/members/{userId}/active", authMW(http.HandlerFunc(server.HandleOrgMemberActive)))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
 	mux.Handle("POST /api/org/invitations", authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation))))
-	mux.Handle("DELETE /api/org/invitations/{id}", authMW(http.HandlerFunc(server.HandleOrgRevokeInvitation)))
+	mux.Handle("DELETE /api/org/invitations/{id}", authMW(server.RequireIdempotency("org.revoke-invitation", http.HandlerFunc(server.HandleOrgRevokeInvitation))))
 
 	// Public invitation acceptance (rate limited like login/register).
 	mux.Handle("POST /api/auth/accept-invitation", authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation))))

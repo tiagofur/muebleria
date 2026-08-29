@@ -159,10 +159,8 @@ describe('SettingsScreen — Red de Ventas (#326)', () => {
           JSON.stringify({
             organization: {
               id: 'org-store-9', name: 'Tienda Monterrey', slug: 'tienda-monterrey',
-              type: 'store', active: true,
+              type: 'store', active: true, created_at: '2026-08-28T00:00:00Z', version: 1,
             },
-            catalog_cloned: true,
-            membership_granted: true,
           }),
           { status: 201, headers: { 'Content-Type': 'application/json' } },
         );
@@ -188,6 +186,8 @@ describe('SettingsScreen — Red de Ventas (#326)', () => {
 
     const created = await screen.findByTestId('sales-network-created');
     expect(created).toBeTruthy();
+    const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(new Headers(createCall?.[1]?.headers).get('Idempotency-Key')).toMatch(/^web:/);
     await user.click(screen.getByTestId('sales-network-enter'));
     expect(onEnterOrg).toHaveBeenCalledWith('org-store-9', 'Tienda Monterrey');
   });

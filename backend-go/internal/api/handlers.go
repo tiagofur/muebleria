@@ -39,7 +39,6 @@ type Server struct {
 	allowedOrigins []string
 	rateLimitRPS   float64
 	rateLimitBurst int
-	idempotency    *IdempotencyStore
 	// MediaDir filesystem root for catalog images (F040). Empty disables upload.
 	MediaDir string
 }
@@ -51,7 +50,6 @@ func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimit
 		allowedOrigins: allowedOrigins,
 		rateLimitRPS:   rateLimitRPS,
 		rateLimitBurst: rateLimitBurst,
-		idempotency:    NewIdempotencyStore(),
 	}
 }
 
@@ -90,8 +88,22 @@ func respondWithInternalError(w http.ResponseWriter, err error, op string) {
 // decodeJSONBody limits the request body and decodes JSON into dst.
 // On failure it writes an error response and returns false (issue #20).
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodyWithPolicy(w, r, dst, false)
+}
+
+// decodeGeneratedJSONBody is the request-side counterpart of the generated
+// response validator. It is intentionally used only by migrated OpenAPI
+// operations so legacy endpoints keep their published compatibility surface.
+func decodeGeneratedJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBodyWithPolicy(w, r, dst, true)
+}
+
+func decodeJSONBodyWithPolicy(w http.ResponseWriter, r *http.Request, dst any, rejectUnknown bool) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	dec := json.NewDecoder(r.Body)
+	if rejectUnknown {
+		dec.DisallowUnknownFields()
+	}
 	if err := dec.Decode(dst); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
@@ -166,7 +178,58 @@ func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, openapi.RegisterResponse{Message: "Solicitud de acceso enviada. El administrador revisará tu cuenta pronto."})
 }
 
-type LoginRequest = openapi.LoginRequest
+type loginCredentials struct {
+	Email, Password, Org string
+	Transport            openapi.LoginTransport
+}
+
+func decodeLoginCredentials(w http.ResponseWriter, r *http.Request) (loginCredentials, bool) {
+	var wire struct {
+		Email     string                  `json:"email"`
+		Password  string                  `json:"password"`
+		Transport *openapi.LoginTransport `json:"transport,omitempty"`
+		Org       *string                 `json:"org,omitempty"`
+	}
+	if !decodeGeneratedJSONBody(w, r, &wire) {
+		return loginCredentials{}, false
+	}
+	if wire.Transport == nil {
+		respondWithError(w, http.StatusBadRequest, "auth transport is required")
+		return loginCredentials{}, false
+	}
+	transport := *wire.Transport
+	switch transport {
+	case openapi.LoginTransportWeb, openapi.LoginTransportMobile, openapi.LoginTransportSketchup:
+	default:
+		respondWithError(w, http.StatusBadRequest, "invalid auth transport")
+		return loginCredentials{}, false
+	}
+	if wire.Email == "" || wire.Password == "" {
+		respondWithError(w, http.StatusBadRequest, "email and password are required")
+		return loginCredentials{}, false
+	}
+	org := ""
+	if wire.Org != nil {
+		org = *wire.Org
+	}
+	return loginCredentials{Email: wire.Email, Password: wire.Password, Org: org, Transport: transport}, true
+}
+
+func authTransportFromClaims(claims *auth.Claims) openapi.AuthTransport {
+	if claims.Support != nil {
+		return openapi.AuthTransportSupport
+	}
+	switch openapi.AuthTransport(claims.Transport) {
+	case openapi.AuthTransportWeb, openapi.AuthTransportMobile, openapi.AuthTransportSketchup:
+		return openapi.AuthTransport(claims.Transport)
+	}
+	// Finite compatibility for tokens issued before #448. Their maximum life is
+	// 30 days (SketchUp); all other missing-transport tokens were web sessions.
+	if claims.Client == auth.ExtensionClient {
+		return openapi.AuthTransportSketchup
+	}
+	return openapi.AuthTransportWeb
+}
 
 // PublicUserDTO is the safe public representation of a user, guaranteeing
 // that internal secrets (such as password hashes) are never serialized (OC-005).
@@ -269,23 +332,29 @@ func (s *Server) audit(ctx context.Context, eventType, actorUserID, organization
 	}
 }
 
+func (s *Server) auditRequired(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) error {
+	if details == nil {
+		details = map[string]interface{}{}
+	}
+	if requestID := RequestIDFromContext(ctx); requestID != "" {
+		details["request_id"] = requestID
+	}
+	return s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
+		EventType: eventType, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip, Details: details,
+	})
+}
+
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	var req LoginRequest
-	if !decodeJSONBody(w, r, &req) {
+	req, ok := decodeLoginCredentials(w, r)
+	if !ok {
 		return
 	}
-	client, orgHint := "", ""
-	if req.Client != nil {
-		client = *req.Client
-	}
-	if req.Org != nil {
-		orgHint = *req.Org
-	}
+	transport, orgHint := req.Transport, req.Org
 
 	// Uniform 401 for not found / wrong password / pending approval so clients
 	// cannot enumerate accounts (issue #19). Dummy bcrypt when user missing
@@ -294,7 +363,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	failLogin := func(userID string) {
 		s.audit(r.Context(), "login_failed", userID, "", clientIP(r), map[string]interface{}{
-			"client": client,
+			"transport": transport,
 		})
 		respondWithError(w, http.StatusUnauthorized, invalidCreds)
 	}
@@ -340,15 +409,15 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// Multi-organization user without a hint: an org-less token is issued
 		// ONLY to complete /api/auth/select-org (it carries no business scope
 		// — the middleware denies data access to org-less non-staff tokens).
-		orgless, err := auth.GenerateToken(u.ID, u.Email, auth.TokenContext{
+		orgless, err := auth.GenerateTransportToken(u.ID, u.Email, auth.TokenContext{
 			PlatformAdmin: u.PlatformAdmin,
-		}, s.JWTSecret)
+		}, string(transport), s.JWTSecret)
 		if err != nil {
 			respondWithInternalError(w, err, "login: generate orgless token")
 			return
 		}
 		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
-			"client": client, "selection_required": true,
+			"transport": transport, "selection_required": true,
 		})
 		respondWithJSON(w, http.StatusOK, LoginResponse{
 			Token:             orgless,
@@ -357,7 +426,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			Roles:             []string{},
 			Memberships:       toMembershipDTOs(memberships),
 			SelectionRequired: true,
-			Transport:         openapi.AuthTransportWeb,
+			Transport:         openapi.AuthTransport(transport),
 		})
 		return
 	}
@@ -365,7 +434,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if chosen == nil && !u.PlatformAdmin {
 		// No membership and not platform staff: nothing to log in to.
 		s.audit(r.Context(), "login_failed", u.ID, "", clientIP(r), map[string]interface{}{
-			"client": client, "reason": "no_membership",
+			"transport": transport, "reason": "no_membership",
 		})
 		respondWithError(w, http.StatusForbidden, "tu cuenta no pertenece a ningún taller todavía. Pedile al administrador que te asigne.")
 		return
@@ -389,19 +458,14 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var token string
-	if client == auth.ExtensionClient {
-		// The extension always works inside the user's (single) organization.
-		token, err = auth.GenerateExtensionToken(u.ID, u.Email, tc, s.JWTSecret)
-	} else {
-		token, err = auth.GenerateToken(u.ID, u.Email, tc, s.JWTSecret)
-	}
+	token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "login: generate token")
 		return
 	}
 
 	s.audit(r.Context(), "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
-		"client": client,
+		"transport": transport,
 	})
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
@@ -412,12 +476,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Organization:      orgDTO,
 		Memberships:       toMembershipDTOs(memberships),
 		SelectionRequired: false,
-		Transport: func() openapi.AuthTransport {
-			if client == auth.ExtensionClient {
-				return openapi.AuthTransportSketchup
-			}
-			return openapi.AuthTransportWeb
-		}(),
+		Transport:         openapi.AuthTransport(transport),
 	})
 }
 
@@ -435,7 +494,10 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body openapi.SelectOrganizationRequest
-	if !decodeJSONBody(w, r, &body) || body.OrganizationID == "" {
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if body.OrganizationID == "" {
 		respondWithError(w, http.StatusBadRequest, "missing organization_id")
 		return
 	}
@@ -451,7 +513,12 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		roles[i] = string(rl)
 	}
 	tc := auth.TokenContext{Roles: roles, OrgID: m.OrganizationID, PlatformAdmin: claims.PlatformAdmin}
-	token, err := auth.GenerateToken(claims.UserID, claims.Email, tc, s.JWTSecret)
+	transport := authTransportFromClaims(claims)
+	if claims.Support != nil {
+		respondWithError(w, http.StatusForbidden, "support sessions cannot change organization")
+		return
+	}
+	token, err := auth.GenerateTransportToken(claims.UserID, claims.Email, tc, string(transport), s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "select-org: generate token")
 		return
@@ -472,7 +539,7 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		Roles:        rolesToStrings(m.Roles),
 		Organization: &org,
 		Memberships:  []MembershipDTO{},
-		Transport:    openapi.AuthTransportWeb,
+		Transport:    transport,
 	})
 }
 
@@ -507,11 +574,12 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		OrgID:         claims.OrgID,
 		PlatformAdmin: claims.PlatformAdmin,
 	}
+	transport := authTransportFromClaims(claims)
 	var token string
-	if claims.Client == auth.ExtensionClient {
-		token, err = auth.GenerateExtensionToken(u.ID, u.Email, tc, s.JWTSecret)
+	if claims.Support != nil {
+		token, err = auth.GenerateSupportToken(u.ID, u.Email, *claims.Support, s.JWTSecret)
 	} else {
-		token, err = auth.GenerateToken(u.ID, u.Email, tc, s.JWTSecret)
+		token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
 	}
 	if err != nil {
 		respondWithInternalError(w, err, "refresh: generate token")
@@ -527,12 +595,7 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 			Plan:   string(domain.LicensePlanNone),
 			Status: string(domain.LicenseStatusNone),
 		},
-		Transport: func() openapi.AuthTransport {
-			if claims.Client == auth.ExtensionClient {
-				return openapi.AuthTransportSketchup
-			}
-			return openapi.AuthTransportWeb
-		}(),
+		Transport: transport,
 	}
 	if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
@@ -2212,10 +2275,7 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
-	transport := openapi.AuthTransportWeb
-	if claims.Client == auth.ExtensionClient {
-		transport = openapi.AuthTransportSketchup
-	}
+	transport := authTransportFromClaims(claims)
 	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Transport: transport}
 	if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
@@ -2224,7 +2284,6 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if claims.Support != nil {
-		resp.Transport = openapi.AuthTransportSupport
 		resp.Support = &openapi.SupportInfo{OrganizationID: claims.Support.OrgID, SessionID: claims.Support.SessionID, Reason: claims.Support.Reason}
 	}
 	respondWithJSON(w, http.StatusOK, resp)

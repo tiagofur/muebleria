@@ -48,6 +48,9 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 
 func doLogin(t *testing.T, s *Server, payload map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
+	if _, ok := payload["transport"]; !ok {
+		payload["transport"] = "web"
+	}
 	body, _ := json.Marshal(payload)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))

@@ -29,6 +29,9 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
   protected createIdempotencyKey(): string { return newIdempotencyKey(); }
 
   async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
+    const body = options.bodySchema
+      ? parseGenerated(options.bodySchema as SchemaName, options.body)
+      : options.body;
     const headers = new Headers({ 'Content-Type': 'application/json', 'X-Request-ID': requestId() });
     if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
     if (options.ifMatch !== undefined) headers.set('If-Match', `"v${options.ifMatch}"`);
@@ -36,7 +39,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers,
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const value: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
     if (!response.ok) {

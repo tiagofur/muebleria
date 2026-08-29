@@ -306,6 +306,12 @@ func (s *stubStore) CreateOrganization(_ context.Context, o *domain.Organization
 	if o.ID == "" {
 		o.ID = "new-org-1"
 	}
+	if o.Version == 0 {
+		o.Version = 1
+	}
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = time.Now()
+	}
 	s.createdOrgs = append(s.createdOrgs, o)
 	return nil
 }
@@ -1940,7 +1946,7 @@ func TestHandleLogin_Uniform401ForMissingUser(t *testing.T) {
 		Store:     &stubStore{getUserByEmailErr: errors.New("user not found")},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
-	body := strings.NewReader(`{"email":"nope@test.com","password":"whatever1"}`)
+	body := strings.NewReader(`{"email":"nope@test.com","password":"whatever1","transport":"web"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1968,7 +1974,7 @@ func TestHandleLogin_Uniform401ForPendingUser(t *testing.T) {
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
-	body := strings.NewReader(`{"email":"pending@test.com","password":"goodpass1"}`)
+	body := strings.NewReader(`{"email":"pending@test.com","password":"goodpass1","transport":"web"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -1999,7 +2005,7 @@ func TestHandleLogin_Uniform401ForWrongPassword(t *testing.T) {
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
-	body := strings.NewReader(`{"email":"ok@test.com","password":"wrongpass9"}`)
+	body := strings.NewReader(`{"email":"ok@test.com","password":"wrongpass9","transport":"web"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -2529,7 +2535,10 @@ func (s *stubStore) CreateInvitation(_ context.Context, _ string, _ string, role
 func (s *stubStore) ListInvitations(context.Context, string) ([]storage.Invitation, error) {
 	return nil, nil
 }
-func (s *stubStore) RevokeInvitation(context.Context, string, string) error { return nil }
+func (s *stubStore) RevokeInvitation(_ context.Context, _, id string, version int64) (*storage.Invitation, error) {
+	now := time.Now()
+	return &storage.Invitation{ID: id, Email: "revoked@taller.test", Version: version + 1, RevokedAt: &now}, nil
+}
 func (s *stubStore) GetOpenInvitationByToken(context.Context, string) (*storage.OpenInvitation, error) {
 	return nil, errors.New("invitation not found")
 }

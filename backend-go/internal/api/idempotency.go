@@ -2,39 +2,23 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"regexp"
-	"sync"
-	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
-
-const IdempotencyRetention = 24 * time.Hour
 
 var validIdempotencyKey = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
 
-type idempotencyReceipt struct {
-	fingerprint string
-	expiresAt   time.Time
-	done        chan struct{}
-	status      int
-	header      http.Header
-	body        []byte
-}
-
-type IdempotencyStore struct {
-	mu       sync.Mutex
-	receipts map[string]*idempotencyReceipt
-	now      func() time.Time
-}
-
-func NewIdempotencyStore() *IdempotencyStore {
-	return &IdempotencyStore{receipts: map[string]*idempotencyReceipt{}, now: time.Now}
+type durableIdempotencyStore interface {
+	ExecuteIdempotent(context.Context, storage.IdempotencyRequest, func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error)
 }
 
 type captureWriter struct {
@@ -56,12 +40,12 @@ func (w *captureWriter) Write(p []byte) (int, error) {
 	return w.body.Write(p)
 }
 
-func copyResponse(w http.ResponseWriter, status int, header http.Header, body []byte) {
-	for key, values := range header {
+func copyIdempotentResponse(w http.ResponseWriter, response storage.IdempotencyResponse) {
+	for key, values := range response.Header {
 		w.Header()[key] = append([]string(nil), values...)
 	}
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	w.WriteHeader(response.Status)
+	_, _ = w.Write(response.Body)
 }
 
 func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Handler {
@@ -69,6 +53,11 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 		key := r.Header.Get("Idempotency-Key")
 		if !validIdempotencyKey.MatchString(key) {
 			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Idempotency-Key inválido", nil)
+			return
+		}
+		store, ok := s.Store.(durableIdempotencyStore)
+		if !ok {
+			respondWithAPIError(w, http.StatusServiceUnavailable, openapi.ApiErrorCodeInternalError, "El almacenamiento durable de idempotencia no está disponible", nil)
 			return
 		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBodyBytes))
@@ -89,44 +78,30 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 				canonicalBody = normalized
 			}
 		}
-		h := sha256.Sum256(append([]byte(r.Method+"\x00"+r.URL.Path+"\x00"), canonicalBody...))
-		fingerprint := hex.EncodeToString(h[:])
-		scope := actor + "\x00" + org + "\x00" + operation + "\x00" + key
-
-		for {
-			s.idempotency.mu.Lock()
-			now := s.idempotency.now()
-			for k, receipt := range s.idempotency.receipts {
-				if !receipt.expiresAt.After(now) {
-					delete(s.idempotency.receipts, k)
-				}
-			}
-			receipt, exists := s.idempotency.receipts[scope]
-			if exists {
-				if receipt.fingerprint != fingerprint {
-					s.idempotency.mu.Unlock()
-					respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeIdempotencyConflict, "La clave de idempotencia ya fue usada con otro payload", nil)
-					return
-				}
-				done := receipt.done
-				s.idempotency.mu.Unlock()
-				<-done
-				w.Header().Set("Idempotency-Replayed", "true")
-				copyResponse(w, receipt.status, receipt.header, receipt.body)
-				return
-			}
-			receipt = &idempotencyReceipt{fingerprint: fingerprint, expiresAt: now.Add(IdempotencyRetention), done: make(chan struct{})}
-			s.idempotency.receipts[scope] = receipt
-			s.idempotency.mu.Unlock()
+		fingerprintInput := []byte(r.Method + "\x00" + r.URL.Path + "\x00" + r.Header.Get("If-Match") + "\x00")
+		hash := sha256.Sum256(append(fingerprintInput, canonicalBody...))
+		scopeHash := sha256.Sum256([]byte(actor + "\x00" + org + "\x00" + operation + "\x00" + key))
+		request := storage.IdempotencyRequest{
+			ScopeKey:    hex.EncodeToString(scopeHash[:]),
+			Fingerprint: hex.EncodeToString(hash[:]),
+		}
+		response, replayed, err := store.ExecuteIdempotent(r.Context(), request, func(ctx context.Context) (storage.IdempotencyResponse, error) {
 			cw := &captureWriter{header: make(http.Header)}
 			cw.header.Set(requestIDHeader, RequestIDFromContext(r.Context()))
-			next.ServeHTTP(cw, r)
-			receipt.status = cw.status
-			receipt.header = cw.header.Clone()
-			receipt.body = append([]byte(nil), cw.body.Bytes()...)
-			close(receipt.done)
-			copyResponse(w, receipt.status, receipt.header, receipt.body)
+			next.ServeHTTP(cw, r.WithContext(ctx))
+			return storage.IdempotencyResponse{Status: cw.status, Header: cw.header.Clone(), Body: append([]byte(nil), cw.body.Bytes()...)}, nil
+		})
+		if errors.Is(err, storage.ErrIdempotencyConflict) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeIdempotencyConflict, "La clave de idempotencia ya fue usada con otro payload", nil)
 			return
 		}
+		if err != nil {
+			respondWithInternalError(w, err, "durable idempotency")
+			return
+		}
+		if replayed {
+			response.Header.Set("Idempotency-Replayed", "true")
+		}
+		copyIdempotentResponse(w, response)
 	})
 }

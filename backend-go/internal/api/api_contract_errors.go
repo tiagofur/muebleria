@@ -34,7 +34,7 @@ func respondWithAPIError(w http.ResponseWriter, status int, code openapi.ApiErro
 		details = map[string]any{}
 	}
 	respondWithJSON(w, status, openapi.ApiError{
-		Code: code, Message: message, FieldErrors: map[string]any{}, RequestId: requestIDFromWriter(w),
+		Code: code, Message: message, FieldErrors: map[string]string{}, RequestId: requestIDFromWriter(w),
 		Retryable: status >= 500, Details: details,
 	})
 }

@@ -215,9 +215,10 @@ func (f *fixture) login(t *testing.T, email, org string) loginResponse {
 	t.Helper()
 	var resp loginResponse
 	f.decode(t, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email":    email,
-		"password": pilotPassword,
-		"org":      org,
+		"email":     email,
+		"password":  pilotPassword,
+		"org":       org,
+		"transport": "web",
 	}, http.StatusOK, &resp)
 	return resp
 }
@@ -359,7 +360,7 @@ func buildFixture() (*fixture, error) {
 	// Platform console token (org-less by design).
 	var login loginResponse
 	if err := f.request(&login, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email": platformUser.Email, "password": pilotPassword,
+		"email": platformUser.Email, "password": pilotPassword, "transport": "web",
 	}, http.StatusOK); err != nil {
 		f.close()
 		return nil, fmt.Errorf("platform admin login: %w", err)

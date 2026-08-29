@@ -64,7 +64,7 @@ type Store interface {
 	SetMembershipActive(ctx context.Context, organizationID, userID string, active bool, expectedVersion int64) (*storage.OrgTeamMember, error)
 	CreateInvitation(ctx context.Context, organizationID, email string, roles []domain.UserRole, tokenHash string, expiresAt time.Time, invitedBy string) (*storage.Invitation, error)
 	ListInvitations(ctx context.Context, organizationID string) ([]storage.Invitation, error)
-	RevokeInvitation(ctx context.Context, organizationID, id string) error
+	RevokeInvitation(ctx context.Context, organizationID, id string, expectedVersion int64) (*storage.Invitation, error)
 	GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*storage.OpenInvitation, error)
 	AcceptInvitationTx(ctx context.Context, invitationID, userID string) error
 	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error)

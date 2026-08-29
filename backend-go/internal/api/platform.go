@@ -94,22 +94,23 @@ func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.
 // POST /api/platform/organizations {name, slug, type?, license_plan?, license_expires_at?, clone_catalog_from?}
 func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http.Request) {
 	var body openapi.CreatePlatformOrganizationRequest
-	if !decodeJSONBody(w, r, &body) || strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Slug) == "" {
-		respondWithError(w, http.StatusBadRequest, "name y slug son obligatorios")
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Slug) == "" || strings.TrimSpace(body.Type) == "" || strings.TrimSpace(body.LicensePlan) == "" {
+		respondWithError(w, http.StatusBadRequest, "name, slug, type y license_plan son obligatorios")
+		return
+	}
+	if len([]rune(strings.TrimSpace(body.Name))) > 120 || !validOrganizationSlug.MatchString(strings.TrimSpace(body.Slug)) {
+		respondWithError(w, http.StatusBadRequest, "name o slug inválido")
 		return
 	}
 	orgType := domain.OrganizationType(body.Type)
-	if orgType == "" {
-		orgType = domain.OrganizationTypeFactory
-	}
 	if !domain.IsValidOrganizationType(orgType) {
 		respondWithError(w, http.StatusBadRequest, "type inválido (factory|store|dealer)")
 		return
 	}
 	plan := domain.LicensePlan(body.LicensePlan)
-	if plan == "" {
-		plan = domain.LicensePlanNone
-	}
 	if !domain.IsValidLicensePlan(plan) {
 		respondWithError(w, http.StatusBadRequest, "license_plan inválido")
 		return
@@ -123,6 +124,22 @@ func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http
 			return
 		}
 		licenseExpiresAt = &parsed
+	}
+	cloneSourceID := ""
+	if body.CloneCatalogFrom != nil && strings.TrimSpace(*body.CloneCatalogFrom) != "" {
+		source := strings.TrimSpace(*body.CloneCatalogFrom)
+		var sourceOrg *domain.Organization
+		var err error
+		if isValidUUID(source) {
+			sourceOrg, err = s.Store.GetOrganizationByID(r.Context(), source)
+		} else {
+			sourceOrg, err = s.Store.GetOrganizationBySlug(r.Context(), source)
+		}
+		if err != nil || sourceOrg == nil {
+			respondWithError(w, http.StatusBadRequest, "organización origen de clonación no encontrada")
+			return
+		}
+		cloneSourceID = sourceOrg.ID
 	}
 
 	org := &domain.Organization{
@@ -138,26 +155,22 @@ func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Optional base-catalog clone (defaults to the initial organization).
-	if body.CloneCatalogFrom != nil && strings.TrimSpace(*body.CloneCatalogFrom) != "" {
-		src := strings.TrimSpace(*body.CloneCatalogFrom)
-		srcOrg, err := s.Store.GetOrganizationByID(r.Context(), src)
-		if err != nil {
-			srcOrg, err = s.Store.GetOrganizationBySlug(r.Context(), src)
-		}
-		if err != nil || srcOrg == nil {
-			respondWithError(w, http.StatusBadRequest, "organización origen de clonación no encontrada")
-			return
-		}
-		if err := s.Store.CloneCatalog(r.Context(), srcOrg.ID, org.ID); err != nil {
+	// Optional base-catalog clone. The source is resolved before inserting the
+	// destination so invalid input cannot create a partial organization even
+	// outside the idempotency transaction.
+	if cloneSourceID != "" {
+		if err := s.Store.CloneCatalog(r.Context(), cloneSourceID, org.ID); err != nil {
 			respondWithInternalError(w, err, "clone base catalog")
 			return
 		}
 	}
 
-	s.audit(r.Context(), "organization_created", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "organization_created", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 		"name": org.Name, "slug": org.Slug, "type": string(org.Type), "source": "platform console",
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit organization creation")
+		return
+	}
 	respondWithJSON(w, http.StatusCreated, toPlatformOrgDTO(*org, 0))
 }
 
@@ -169,8 +182,15 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		return
 	}
 	var raw map[string]json.RawMessage
-	if !decodeJSONBody(w, r, &raw) {
+	if !decodeGeneratedJSONBody(w, r, &raw) {
 		return
+	}
+	allowed := map[string]bool{"name": true, "license_plan": true, "license_expires_at": true, "active": true}
+	for key := range raw {
+		if !allowed[key] {
+			respondWithError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
 	}
 	org, err := s.Store.GetOrganizationByID(r.Context(), id)
 	if err != nil || org == nil {
@@ -328,7 +348,10 @@ func (s *Server) HandlePlatformUsers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("id")
 	var body openapi.StartSupportSessionRequest
-	if !decodeJSONBody(w, r, &body) || len(strings.TrimSpace(body.Reason)) < 4 {
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if len(strings.TrimSpace(body.Reason)) < 4 {
 		respondWithError(w, http.StatusBadRequest, "la razón del acceso de soporte es obligatoria (mínimo 4 caracteres)")
 		return
 	}
@@ -352,9 +375,12 @@ func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *htt
 		return
 	}
 
-	s.audit(r.Context(), "support_session_started", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "support_session_started", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 		"session_id": ss.ID, "reason": ss.Reason, "expires_at": ss.ExpiresAt,
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit support session")
+		return
+	}
 	orgDTO := toOrgSummaryDTO(*org)
 	respondWithJSON(w, http.StatusCreated, openapi.SupportSessionResponse{
 		Token: token, SessionID: ss.ID, Reason: ss.Reason,
@@ -429,7 +455,10 @@ func (s *Server) acceptInvitationLogin(w http.ResponseWriter, r *http.Request, u
 // new users are created active with the invitation as approval.
 func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) {
 	var body openapi.AcceptInvitationRequest
-	if !decodeJSONBody(w, r, &body) || strings.TrimSpace(body.Token) == "" || body.Password == "" {
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if strings.TrimSpace(body.Token) == "" || body.Password == "" {
 		respondWithError(w, http.StatusBadRequest, "token y password son obligatorios")
 		return
 	}
@@ -489,8 +518,11 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusConflict, "la invitación ya no está disponible")
 		return
 	}
-	s.audit(r.Context(), "invitation_accepted", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "invitation_accepted", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
 		"invitation_id": inv.ID, "email": inv.Email,
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit invitation acceptance")
+		return
+	}
 	s.acceptInvitationLogin(w, r, u)
 }

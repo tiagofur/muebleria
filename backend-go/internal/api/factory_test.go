@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
@@ -74,11 +75,11 @@ func TestFactoryNetwork_ListConnected(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
 	}
-	var list []ConnectedOrgDTO
+	var list []openapi.FactoryOrganization
 	if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(list) != 1 || list[0].Type != domain.OrganizationTypeStore {
+	if len(list) != 1 || list[0].Type != string(domain.OrganizationTypeStore) {
 		t.Fatalf("connected list = %+v", list)
 	}
 }
@@ -118,15 +119,13 @@ func TestFactoryNetwork_CreateStore(t *testing.T) {
 		t.Errorf("license = %s, want none (licenses are platform-managed)", created.LicensePlan)
 	}
 	var resp struct {
-		Organization      ConnectedOrgDTO `json:"organization"`
-		CatalogCloned     bool            `json:"catalog_cloned"`
-		MembershipGranted bool            `json:"membership_granted"`
+		Organization openapi.FactoryOrganization `json:"organization"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !resp.CatalogCloned || !resp.MembershipGranted {
-		t.Errorf("catalog_cloned=%v membership_granted=%v, want both true", resp.CatalogCloned, resp.MembershipGranted)
+	if resp.Organization.ID == "" {
+		t.Error("generated organization response is empty")
 	}
 }
 

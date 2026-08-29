@@ -20,7 +20,7 @@ func TestPilotReadiness_MembershipSingleOrg(t *testing.T) {
 
 	// Login with a foreign org hint → uniform 401 (no enumeration).
 	status, _ := fx.do(t, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email": fx.a.admin.email, "password": pilotPassword, "org": fx.b.slug,
+		"email": fx.a.admin.email, "password": pilotPassword, "org": fx.b.slug, "transport": "web",
 	})
 	if status != http.StatusUnauthorized {
 		t.Fatalf("login of %s with org hint %s: got %d want 401", fx.a.admin.email, fx.b.slug, status)
@@ -122,7 +122,7 @@ func TestPilotReadiness_MembershipDeactivationCutsAccess(t *testing.T) {
 
 	// The user no longer has any selectable organization.
 	status, body := fx.do(t, http.MethodPost, "/api/auth/login", "", map[string]string{
-		"email": "member-b@pilot-readiness.test", "password": pilotPassword,
+		"email": "member-b@pilot-readiness.test", "password": pilotPassword, "transport": "web",
 	})
 	if status != http.StatusForbidden {
 		t.Fatalf("deactivated member login: got %d want 403 body=%s", status, truncate(body))

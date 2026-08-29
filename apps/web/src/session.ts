@@ -285,7 +285,7 @@ export async function meRequest(
 }> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
-  const response: MeResponse = await new GraneteApiClient(baseUrl, doFetch).me(token);
+  const response: MeResponse = await new GraneteApiClient(baseUrl, doFetch).getSession(token);
   return response;
 }
 

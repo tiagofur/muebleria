@@ -3,7 +3,7 @@
  * (F026 / F035 / F166 / F172 #326).
  * Permite gestionar miembros del taller con roles múltiples (unión RBAC),
  * asignación de sectores de planta, invitaciones por enlace directo/WhatsApp
- * y aprobaciones pendientes.
+ * y estado de cuenta separado del estado de membresía.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -13,7 +13,6 @@ import {
   SearchX,
   Settings2,
   ShieldCheck,
-  Trash2,
   Users,
   MapPin,
   Mail,
@@ -24,7 +23,7 @@ import {
   Send,
   XCircle,
 } from 'lucide-react';
-import { ConfirmDialog, EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
+import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
 import { SectorAssignment } from './SectorAssignment';
@@ -39,7 +38,7 @@ import { GraneteApiClient, GraneteApiError, type TeamMember, type Invitation } f
 export type UserRow = TeamMember;
 export type OrgInvitationRow = Invitation;
 
-export type UserFilter = 'all' | 'active' | 'pending' | 'invitations';
+export type UserFilter = 'all' | 'active' | 'suspended' | 'invitations';
 
 export interface UsersScreenProps {
   readonly baseUrl: string;
@@ -94,12 +93,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     [orgType],
   );
 
-  const [rejectingUser, setRejectingUser] = useState<UserRow | null>(null);
-
-  const headers = useMemo(
-    () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
-    [token],
-  );
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
 
   const showToast = (msg: string) => {
@@ -129,26 +122,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   }, [baseUrl, token]);
 
   const filtered = useMemo(() => {
-    if (filter === 'pending') return users.filter((u) => !u.active);
-    if (filter === 'active') return users.filter((u) => u.active);
+    if (filter === 'suspended') return users.filter((u) => !u.membership_active);
+    if (filter === 'active') return users.filter((u) => u.membership_active);
     return users;
   }, [users, filter]);
 
-  const pendingCount = users.filter((u) => !u.active).length;
-
-  const approve = async (id: string) => {
-    setActionId(id);
-    try {
-      const res = await fetch(`${baseUrl}/admin/users/${id}/approve`, { method: 'PUT', headers });
-      if (!res.ok) throw new Error('approve');
-      showToast('✓ Usuario aprobado');
-      await load();
-    } catch {
-      showToast('No se pudo aprobar el usuario');
-    } finally {
-      setActionId(null);
-    }
-  };
+  const suspendedCount = users.filter((u) => !u.membership_active).length;
 
   const saveMultiRoles = async (userId: string, roles: ProductRole[]) => {
     setActionId(userId);
@@ -183,21 +162,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     }
   };
 
-  const reject = async (id: string) => {
-    setActionId(id);
-    try {
-      const res = await fetch(`${baseUrl}/admin/users/${id}`, { method: 'DELETE', headers });
-      if (!res.ok) throw new Error('reject');
-      showToast('✓ Usuario rechazado');
-      await load();
-    } catch {
-      showToast('No se pudo rechazar el usuario');
-    } finally {
-      setActionId(null);
-      setRejectingUser(null);
-    }
-  };
-
   const handleCreateInvitation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim() || inviteRoles.length === 0) {
@@ -222,10 +186,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     }
   };
 
-  const handleRevokeInvitation = async (id: string) => {
-    setActionId(id);
+  const handleRevokeInvitation = async (invitation: Invitation) => {
+    setActionId(invitation.id);
     try {
-      await api.request<unknown>('DELETE', `/org/invitations/${encodeURIComponent(id)}`, { token });
+      await api.revokeInvitation(token, invitation.id, invitation.version);
       showToast('✓ Invitación revocada');
       await load();
     } finally {
@@ -297,11 +261,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
       <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
         <StatusChips<UserFilter>
           options={[
-            { value: 'active', label: `Miembros activos (${users.filter((u) => u.active).length})` },
+            { value: 'active', label: `Membresías activas (${users.filter((u) => u.membership_active).length})` },
             { value: 'invitations', label: `Invitaciones pendientes (${invitations.length})` },
-            { value: 'all', label: `Todos los usuarios (${users.length})` },
-            ...(pendingCount > 0
-              ? [{ value: 'pending' as const, label: `Pendientes de aprobación (${pendingCount})` }]
+            { value: 'all', label: `Todo el equipo (${users.length})` },
+            ...(suspendedCount > 0
+              ? [{ value: 'suspended' as const, label: `Membresías suspendidas (${suspendedCount})` }]
               : []),
           ]}
           value={filter}
@@ -380,7 +344,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       <button
                         type="button"
                         className="btn btn--secondary btn--small"
-                        onClick={() => void handleRevokeInvitation(inv.id)}
+                        onClick={() => void handleRevokeInvitation(inv)}
                         disabled={actionId === inv.id}
                         style={{ color: 'var(--danger)' }}
                       >
@@ -397,9 +361,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         <EmptyState
           title="No hay miembros que coincidan con el filtro"
           description={
-            filter === 'pending'
-              ? 'No hay registros pendientes de aprobación.'
-              : 'No hay usuarios en este estado.'
+            filter === 'suspended'
+              ? 'No hay membresías suspendidas.'
+              : 'No hay miembros en este estado.'
           }
         />
       ) : (
@@ -409,7 +373,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               <tr>
                 <th>Miembro</th>
                 <th>Roles en el taller</th>
-                <th>Estado</th>
+                <th>Estado de cuenta</th>
+                <th>Estado de membresía</th>
                 <th>Estación / Puesto</th>
                 <th className="users-table__align-right">Acciones</th>
               </tr>
@@ -451,8 +416,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       </div>
                     </td>
                     <td>
-                      <span className={`status-badge ${u.active ? 'status-badge--active' : 'status-badge--open'}`}>
-                        {u.active ? 'Activo' : 'Inactivo'}
+                      <span className={`status-badge ${u.account_active ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {u.account_active ? 'Cuenta activa' : 'Cuenta inactiva'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`status-badge ${u.membership_active ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {u.membership_active ? 'Membresía activa' : 'Membresía suspendida'}
                       </span>
                     </td>
                     <td>
@@ -476,26 +446,16 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                     
                     <td className="users-table__align-right">
                       <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
-                        {!u.active ? (
-                          <>
-                            <button
-                              type="button"
-                              className="btn btn--primary btn--small"
-                              onClick={() => void approve(u.user_id)}
-                              disabled={isWorking}
-                            >
-                              <CheckCircle2 size={13} /> Aprobar
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn--secondary btn--small"
-                              onClick={() => setRejectingUser(u)}
-                              disabled={isWorking}
-                              style={{ color: 'var(--danger)' }}
-                            >
-                              <Trash2 size={13} /> Rechazar
-                            </button>
-                          </>
+                        {!u.membership_active ? (
+                          <button
+                            type="button"
+                            className="btn btn--primary btn--small"
+                            onClick={() => void toggleMemberActive(u.user_id, true)}
+                            disabled={isWorking || !u.account_active}
+                            title={!u.account_active ? 'La cuenta global está inactiva' : undefined}
+                          >
+                            <CheckCircle2 size={13} /> Reactivar membresía
+                          </button>
                         ) : (
                           <button
                             type="button"
@@ -503,7 +463,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                             onClick={() => void toggleMemberActive(u.user_id, false)}
                             disabled={isWorking}
                           >
-                            <MinusCircle size={13} /> Desactivar
+                            <MinusCircle size={13} /> Suspender membresía
                           </button>
                         )}
                       </div>
@@ -741,18 +701,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         )}
       </Modal>
 
-      {/* REJECT CONFIRM DIALOG */}
-      {rejectingUser && (
-        <ConfirmDialog
-          open={rejectingUser !== null}
-          title="Rechazar usuario"
-          message={`¿Rechazar y eliminar la cuenta de ${rejectingUser.name || rejectingUser.email}?`}
-          confirmLabel="Rechazar y eliminar"
-          tone="danger"
-          onConfirm={() => void reject(rejectingUser.user_id)}
-          onClose={() => setRejectingUser(null)}
-        />
-      )}
     </div>
   );
 }

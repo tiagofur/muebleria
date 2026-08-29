@@ -278,7 +278,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(map[string]string{
-		"email": "u@example.com", "password": "secret123", "client": auth.ExtensionClient,
+		"email": "u@example.com", "password": "secret123", "transport": "sketchup",
 	})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))

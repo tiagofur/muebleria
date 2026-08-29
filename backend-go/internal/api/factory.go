@@ -13,24 +13,15 @@ import (
 	"strings"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// ConnectedOrgDTO is the sales-network listing projection.
-type ConnectedOrgDTO struct {
-	ID        string                  `json:"id"`
-	Name      string                  `json:"name"`
-	Slug      string                  `json:"slug"`
-	Type      domain.OrganizationType `json:"type"`
-	Active    bool                    `json:"active"`
-	CreatedAt time.Time               `json:"created_at"`
-}
-
-func toConnectedOrgDTO(o domain.Organization) ConnectedOrgDTO {
-	return ConnectedOrgDTO{
-		ID: o.ID, Name: o.Name, Slug: o.Slug, Type: o.Type,
-		Active: o.Active, CreatedAt: o.CreatedAt,
+func toFactoryOrganization(o domain.Organization) openapi.FactoryOrganization {
+	return openapi.FactoryOrganization{
+		ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type),
+		Active: o.Active, CreatedAt: o.CreatedAt.UTC().Format(time.RFC3339Nano), Version: o.Version,
 	}
 }
 
@@ -51,6 +42,8 @@ func (s *Server) requireFactoryAdmin(w http.ResponseWriter, r *http.Request) (*a
 // organizations.slug CHECK (000080): ^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$
 // — 2..64 chars, no leading/trailing dash.
 const orgSlugMaxLen = 64
+
+var validOrganizationSlug = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])$`)
 
 // slugifyOrgName derives a URL-safe slug from the organization name, clamped
 // to the column CHECK. Returns "" when the name cannot produce a valid slug.
@@ -104,19 +97,23 @@ func (s *Server) HandleFactoryOrganizations(w http.ResponseWriter, r *http.Reque
 			respondWithInternalError(w, err, "factory network")
 			return
 		}
-		out := make([]ConnectedOrgDTO, 0, len(list))
+		out := make([]openapi.FactoryOrganization, 0, len(list))
 		for _, o := range list {
-			out = append(out, toConnectedOrgDTO(o))
+			out = append(out, toFactoryOrganization(o))
 		}
 		respondWithJSON(w, http.StatusOK, out)
 
 	case http.MethodPost:
-		var body struct {
-			Name string `json:"name"`
-			Type string `json:"type"`
+		var body openapi.CreateFactoryOrganizationRequest
+		if !decodeGeneratedJSONBody(w, r, &body) {
+			return
 		}
-		if !decodeJSONBody(w, r, &body) || strings.TrimSpace(body.Name) == "" {
+		if strings.TrimSpace(body.Name) == "" {
 			respondWithError(w, http.StatusBadRequest, "name es obligatorio")
+			return
+		}
+		if len([]rune(strings.TrimSpace(body.Name))) > 80 {
+			respondWithError(w, http.StatusBadRequest, "name no puede exceder 80 caracteres")
 			return
 		}
 		orgType := domain.OrganizationType(body.Type)
@@ -148,29 +145,28 @@ func (s *Server) HandleFactoryOrganizations(w http.ResponseWriter, r *http.Reque
 
 		// Clone the factory's catalog so the store sells the factory's
 		// products. A fresh organization is always an empty destination.
-		catalogCloned := true
 		if err := s.Store.CloneCatalog(r.Context(), claims.OrgID, child.ID); err != nil {
-			catalogCloned = false
+			respondWithInternalError(w, err, "factory clone connected org catalog")
+			return
 		}
 
 		// The creator becomes admin of the connected org — that membership is
 		// what lets them switch into it (select-org) and invite its team.
-		membershipGranted := true
 		if err := s.Store.EnsureMembership(r.Context(), child.ID, claims.UserID, []domain.UserRole{domain.RoleAdmin}); err != nil {
-			membershipGranted = false
+			respondWithInternalError(w, err, "factory grant connected org membership")
+			return
 		}
 
-		s.audit(r.Context(), "connected_org_created", claims.UserID, child.ID, clientIP(r), map[string]interface{}{
+		if err := s.auditRequired(r.Context(), "connected_org_created", claims.UserID, child.ID, clientIP(r), map[string]interface{}{
 			"parent_organization_id": claims.OrgID,
 			"name":                   child.Name,
 			"type":                   string(child.Type),
-			"catalog_cloned":         catalogCloned,
-			"membership_granted":     membershipGranted,
-		})
-		respondWithJSON(w, http.StatusCreated, map[string]interface{}{
-			"organization":       toConnectedOrgDTO(*child),
-			"catalog_cloned":     catalogCloned,
-			"membership_granted": membershipGranted,
+		}); err != nil {
+			respondWithInternalError(w, err, "audit connected organization creation")
+			return
+		}
+		respondWithJSON(w, http.StatusCreated, openapi.CreateFactoryOrganizationResponse{
+			Organization: toFactoryOrganization(*child),
 		})
 
 	default:

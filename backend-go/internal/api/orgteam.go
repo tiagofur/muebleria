@@ -50,7 +50,8 @@ func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
 	out := make([]openapi.TeamMember, len(team))
 	for i, member := range team {
 		out[i] = openapi.TeamMember{
-			UserID: member.UserID, Email: member.Email, Name: member.Name, Active: member.Active,
+			UserID: member.UserID, Email: member.Email, Name: member.Name,
+			AccountActive: member.AccountActive, MembershipActive: member.Active,
 			Roles: roleStrings(member.Roles), MemberSince: member.MemberSince.UTC().Format(time.RFC3339Nano), Version: member.Version,
 		}
 	}
@@ -69,7 +70,7 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body openapi.UpdateMemberRolesRequest
-	if !decodeJSONBody(w, r, &body) {
+	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
 	}
 	roles := make([]domain.UserRole, len(body.Roles))
@@ -115,7 +116,10 @@ func (s *Server) HandleOrgMemberActive(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Active *bool `json:"active"`
 	}
-	if !decodeJSONBody(w, r, &body) || body.Active == nil {
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if body.Active == nil {
 		respondWithError(w, http.StatusBadRequest, "active es obligatorio")
 		return
 	}
@@ -194,10 +198,10 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var body openapi.CreateInvitationRequest
-	email := ""
-	if decodeJSONBody(w, r, &body) {
-		email = strings.TrimSpace(strings.ToLower(body.Email))
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
 	}
+	email := strings.TrimSpace(strings.ToLower(body.Email))
 	roles := make([]domain.UserRole, len(body.Roles))
 	for i, role := range body.Roles {
 		roles[i] = domain.UserRole(role)
@@ -224,9 +228,12 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 		respondWithInternalError(w, err, "org create invitation")
 		return
 	}
-	s.audit(r.Context(), "invitation_created", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "invitation_created", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
 		"email": email, "roles": roles,
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit invitation creation")
+		return
+	}
 	respondWithJSON(w, http.StatusCreated, openapi.CreateInvitationResponse{
 		Invitation:      invitationToOpenAPI(*inv),
 		InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token,
@@ -239,12 +246,29 @@ func (s *Server) HandleOrgRevokeInvitation(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	if err := s.Store.RevokeInvitation(r.Context(), claims.OrgID, r.PathValue("id")); err != nil {
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	invitation, err := s.Store.RevokeInvitation(r.Context(), claims.OrgID, r.PathValue("id"), expectedVersion)
+	if errors.Is(err, storage.ErrVersionConflict) {
+		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "La invitación fue modificada por otra sesión", nil)
+		return
+	}
+	if errors.Is(err, storage.ErrInvitationNotFound) {
 		respondWithError(w, http.StatusNotFound, "invitación no encontrada")
 		return
 	}
-	s.audit(r.Context(), "invitation_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
+	if err != nil {
+		respondWithInternalError(w, err, "revoke invitation")
+		return
+	}
+	if err := s.auditRequired(r.Context(), "invitation_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
 		"invitation_id": r.PathValue("id"),
-	})
-	respondWithJSON(w, http.StatusOK, openapi.RevokeInvitationResponse{Message: "invitation revoked"})
+	}); err != nil {
+		respondWithInternalError(w, err, "audit invitation revoke")
+		return
+	}
+	w.Header().Set("ETag", FormatVersionETag(invitation.Version))
+	respondWithJSON(w, http.StatusOK, openapi.RevokeInvitationResponse{Message: "invitation revoked", Invitation: invitationToOpenAPI(*invitation)})
 }

@@ -19,7 +19,7 @@ module Granete
       # boundary: the stored session is a bearer credential for a read-only
       # extension profile, revocable server-side at any moment.
       class SessionProvider < Provider
-        EXTENSION_CLIENT = 'sketchup-extension'
+        AUTH_TRANSPORT = 'sketchup'
         KEY_SERVER_URL = 'server_url'
         KEY_SESSION_ACCESS = 'session_access'
         KEY_SESSION_STATE = 'session_state'
@@ -42,7 +42,7 @@ module Granete
           adapter.base_url = server_url
           response = adapter.request(
             { 'method' => 'POST', 'path' => '/auth/login',
-              'body' => { 'email' => email, 'password' => password, 'client' => EXTENSION_CLIENT } }
+              'body' => { 'email' => email, 'password' => password, 'transport' => AUTH_TRANSPORT } }
           )
           handle_login_response(adapter, response)
         rescue Transport::RequestError, Transport::NotConfiguredError => e

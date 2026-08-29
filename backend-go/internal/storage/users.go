@@ -37,7 +37,7 @@ func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*doma
 // of its active flag and never returns ErrPendingApproval. Used by the admin CLI
 // (cmd/admin) to locate a user — including inactive ones — for password rotation.
 func (s *PostgresStore) GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error) {
-	row := s.Pool.QueryRow(ctx,
+	row := s.db(ctx).QueryRow(ctx,
 		`SELECT `+userColumns+` FROM users WHERE email = $1`, email)
 	var u domain.User
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Active, &u.PlatformAdmin,
@@ -78,7 +78,7 @@ func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*domain.Use
 }
 
 func (s *PostgresStore) CreateUser(ctx context.Context, u *domain.User) error {
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, name, active)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at;
@@ -183,7 +183,7 @@ func (s *PostgresStore) ApproveUser(ctx context.Context, id string) error {
 // the user already holds memberships — a user that belongs nowhere cannot
 // log into any organization.
 func (s *PostgresStore) DeleteOrphanInvitedUser(ctx context.Context, id string) error {
-	_, err := s.Pool.Exec(ctx,
+	_, err := s.db(ctx).Exec(ctx,
 		`DELETE FROM users WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1)`, id)
 	return err
 }

@@ -56,6 +56,8 @@ export function PlatformScreen({
   const [users, setUsers] = useState<PlatformUserRow[]>([]);
   const [auditEvents, setAuditEvents] = useState<SecurityAuditEventRow[]>([]);
   const [selectedAuditOrgId, setSelectedAuditOrgId] = useState<string>('');
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditLoadError, setAuditLoadError] = useState<string | null>(null);
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -111,12 +113,23 @@ export function PlatformScreen({
   };
 
   const loadAudit = async (orgId: string) => {
-    if (!orgId) return;
+    if (!orgId) {
+      setAuditEvents([]);
+      setAuditLoadError(null);
+      return;
+    }
+    setAuditLoading(true);
+    setAuditLoadError(null);
     try {
       const data = await api.listSecurityAudit(token, orgId);
       setAuditEvents([...data]);
     } catch {
-      // ignore
+      setAuditEvents([]);
+      setAuditLoadError(
+        'No se pudo cargar la auditoría de este taller. Revisá tu conexión y volvé a intentar.',
+      );
+    } finally {
+      setAuditLoading(false);
     }
   };
 
@@ -217,7 +230,7 @@ export function PlatformScreen({
     setSubmitting(true);
     setModalError(null);
     try {
-      const data = await api.startSupportSession(token, supportOrg.id, supportReason.trim());
+      const data = await api.startSupportSession(token, supportOrg.id, { reason: supportReason.trim() });
       showToast(`✓ Entrando a ${supportOrg.name} en modo soporte...`);
       setSupportOrg(null);
       setSupportReason('');
@@ -517,6 +530,16 @@ export function PlatformScreen({
                 </div>
               </div>
 
+              {auditLoading ? (
+                <PageLoading label="Cargando auditoría de seguridad..." />
+              ) : auditLoadError ? (
+                <EmptyState
+                  title="No se pudo cargar la auditoría"
+                  description={auditLoadError}
+                  actionLabel="Reintentar"
+                  onAction={() => void loadAudit(selectedAuditOrgId)}
+                />
+              ) : (
               <div className="platform-table-wrap">
                 <table className="platform-table">
                   <thead>
@@ -576,6 +599,7 @@ export function PlatformScreen({
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           )}
         </>

@@ -28,12 +28,12 @@ const (
 )
 
 type ApiError struct {
-	Code        ApiErrorCode   `json:"code"`
-	Message     string         `json:"message"`
-	FieldErrors map[string]any `json:"fieldErrors"`
-	RequestId   string         `json:"requestId"`
-	Retryable   bool           `json:"retryable"`
-	Details     map[string]any `json:"details"`
+	Code        ApiErrorCode      `json:"code"`
+	Message     string            `json:"message"`
+	FieldErrors map[string]string `json:"fieldErrors"`
+	RequestId   string            `json:"requestId"`
+	Retryable   bool              `json:"retryable"`
+	Details     map[string]any    `json:"details"`
 }
 
 type AuthTransport string
@@ -79,8 +79,7 @@ type Membership struct {
 type LoginRequest struct {
 	Email     string         `json:"email"`
 	Password  string         `json:"password"`
-	Transport *AuthTransport `json:"transport,omitempty"`
-	Client    *string        `json:"client,omitempty"`
+	Transport LoginTransport `json:"transport"`
 	Org       *string        `json:"org,omitempty"`
 }
 
@@ -121,13 +120,14 @@ type MeResponse struct {
 }
 
 type TeamMember struct {
-	UserID      string   `json:"user_id"`
-	Email       string   `json:"email"`
-	Name        string   `json:"name"`
-	Active      bool     `json:"active"`
-	Roles       []string `json:"roles"`
-	MemberSince string   `json:"member_since"`
-	Version     int64    `json:"version"`
+	UserID           string   `json:"user_id"`
+	Email            string   `json:"email"`
+	Name             string   `json:"name"`
+	AccountActive    bool     `json:"account_active"`
+	MembershipActive bool     `json:"membership_active"`
+	Roles            []string `json:"roles"`
+	MemberSince      string   `json:"member_since"`
+	Version          int64    `json:"version"`
 }
 
 type Invitation struct {
@@ -265,7 +265,8 @@ type RegisterResponse struct {
 }
 
 type RevokeInvitationResponse struct {
-	Message string `json:"message"`
+	Message    string     `json:"message"`
+	Invitation Invitation `json:"invitation"`
 }
 
 type StartSupportSessionRequest struct {
@@ -274,4 +275,31 @@ type StartSupportSessionRequest struct {
 
 type EndSupportSessionResponse struct {
 	Ended bool `json:"ended"`
+}
+
+type LoginTransport string
+
+const (
+	LoginTransportWeb      LoginTransport = "web"
+	LoginTransportMobile   LoginTransport = "mobile"
+	LoginTransportSketchup LoginTransport = "sketchup"
+)
+
+type FactoryOrganization struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Type      string `json:"type"`
+	Active    bool   `json:"active"`
+	CreatedAt string `json:"created_at"`
+	Version   int64  `json:"version"`
+}
+
+type CreateFactoryOrganizationRequest struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type CreateFactoryOrganizationResponse struct {
+	Organization FactoryOrganization `json:"organization"`
 }

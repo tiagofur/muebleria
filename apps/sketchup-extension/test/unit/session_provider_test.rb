@@ -54,8 +54,9 @@ class SessionProviderTest < Minitest::Test
     assert_equal 'logged_in', @provider.status['state']
     assert @provider.configured?
     assert_match(/^Bearer /, @provider.authorization_header)
-    # Login body carries the extension client marker, never persisted passwords.
-    assert_equal 'sketchup-extension', @transport.captured_payload.dig('body', 'client')
+    # Login body carries the canonical transport, never persisted passwords.
+    assert_equal 'sketchup', @transport.captured_payload.dig('body', 'transport')
+    refute @transport.captured_payload['body'].key?('client')
   end
 
   def test_login_rejects_wrong_credentials_with_spanish_error
