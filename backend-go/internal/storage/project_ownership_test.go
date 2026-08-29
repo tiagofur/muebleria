@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // F173 / #327: Project Ownership and multi-organization cooperation.
@@ -13,7 +14,7 @@ import (
 // organization data.
 func TestProjectOwnership_SplitSalesAndManufacturing(t *testing.T) {
 	store, orgSales, orgMfg := isolationSetup(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	// Third organization (unrelated third party)
 	const orgThird = "aaaaaaaa-0000-0000-0000-00000000000c"

@@ -16,7 +16,7 @@ func (s *PostgresStore) ListCategories(ctx context.Context) ([]domain.ModuleCate
 		WHERE organization_id = $1
 		ORDER BY sort_order ASC, name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (s *PostgresStore) GetCategoryByID(ctx context.Context, id string) (*domain
 		FROM module_categories
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.ModuleCategory
 	var parentID *string
 	err := row.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt)
@@ -83,7 +83,7 @@ func (s *PostgresStore) CreateCategory(ctx context.Context, c *domain.ModuleCate
 			VALUES ($1, $2, $3, $4, $5)
 			RETURNING created_at, updated_at;
 		`
-		return s.Pool.QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+		return s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
 			Scan(&c.CreatedAt, &c.UpdatedAt)
 	}
 
@@ -92,7 +92,7 @@ func (s *PostgresStore) CreateCategory(ctx context.Context, c *domain.ModuleCate
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at;
 	`
-	return s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+	return s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
 		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 }
 
@@ -119,7 +119,7 @@ func (s *PostgresStore) UpdateCategory(ctx context.Context, id string, c *domain
 		WHERE id = $4 AND organization_id = $5
 		RETURNING updated_at;
 	`
-	err = s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
+	err = s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("category not found")
@@ -132,7 +132,7 @@ func (s *PostgresStore) UpdateCategory(ctx context.Context, id string, c *domain
 
 func (s *PostgresStore) DeleteCategory(ctx context.Context, id string) error {
 	// Children would violate RESTRICT — surface a clear error
-	children, err := s.Pool.Query(ctx, `SELECT id FROM module_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
+	children, err := s.db(ctx).Query(ctx, `SELECT id FROM module_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -141,6 +141,6 @@ func (s *PostgresStore) DeleteCategory(ctx context.Context, id string) error {
 		return fmt.Errorf("cannot delete category with children; reparent or delete children first")
 	}
 
-	_, err = s.Pool.Exec(ctx, `DELETE FROM module_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
+	_, err = s.db(ctx).Exec(ctx, `DELETE FROM module_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	return err
 }

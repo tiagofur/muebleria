@@ -10,7 +10,7 @@ import (
 // Compras/Almacén). Oldest first by project, then material. The display name
 // of who marked the despacho is joined from users.
 func (s *PostgresStore) ListAllPicking(ctx context.Context) ([]domain.ProjectPicking, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT pp.project_id, pp.material, pp.status, pp.marked_at, pp.marked_by, u.name
 		FROM project_picking pp
 		LEFT JOIN users u ON u.id = pp.marked_by
@@ -40,7 +40,7 @@ func (s *PostgresStore) ListAllPicking(ctx context.Context) ([]domain.ProjectPic
 // MarkedAt/MarkedBy are stamped by the caller (the API handler) so the server
 // is the single source of who/when — clients never supply them.
 func (s *PostgresStore) UpsertProjectPicking(ctx context.Context, pick domain.ProjectPicking) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO project_picking (project_id, material, status, marked_at, marked_by, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (project_id, material, organization_id) DO UPDATE SET

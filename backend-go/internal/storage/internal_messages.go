@@ -12,7 +12,7 @@ import (
 
 // ListProjectInternalMessages returns all internal collaboration messages for a project ordered by created_at ASC.
 func (s *PostgresStore) ListProjectInternalMessages(ctx context.Context, projectID string) ([]domain.ProjectInternalMessage, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, project_id, sender_id, sender_name, message_type, content, is_resolved, attachments, created_at
 		FROM project_internal_messages
 		WHERE project_id = $1 AND organization_id = $2
@@ -75,7 +75,7 @@ func (s *PostgresStore) CreateProjectInternalMessage(ctx context.Context, msg *d
 		attachmentsJSON = []byte(msg.Attachments)
 	}
 
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO project_internal_messages (project_id, sender_id, sender_name, message_type, content, is_resolved, attachments, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at;
@@ -107,7 +107,7 @@ func (s *PostgresStore) UpdateProjectTechnicalWorkflow(
 	}
 
 	now := time.Now()
-	tag, err := s.Pool.Exec(ctx, `
+	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE projects
 		SET assigned_engineer_id = $1,
 		    technical_status = $2,

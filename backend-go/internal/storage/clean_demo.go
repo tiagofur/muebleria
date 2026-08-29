@@ -59,7 +59,7 @@ type demoRow struct{ id, code string }
 // the whole run happens inside a transaction that is rolled back — the
 // returned report is exactly what apply=true would do.
 func (s *PostgresStore) CleanDemoData(ctx context.Context, orgID string, apply bool) (*CleanDemoOrgResult, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}

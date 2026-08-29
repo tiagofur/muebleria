@@ -82,13 +82,14 @@ type pilotOrg struct {
 }
 
 type fixture struct {
-	base      string // httptest server base URL
-	ts        *httptest.Server
-	store     *storage.PostgresStore
-	pool      *pgxpool.Pool
-	dsn       url.URL // DSN of the pilot test database
-	adminPool *pgxpool.Pool
-	mediaDir  string
+	base        string // httptest server base URL
+	ts          *httptest.Server
+	store       *storage.PostgresStore
+	pool        *pgxpool.Pool
+	dsn         url.URL // DSN of the pilot test database
+	adminPool   *pgxpool.Pool
+	runtimePool *pgxpool.Pool
+	mediaDir    string
 
 	platform pilotUser // org-less platform console token
 
@@ -346,7 +347,34 @@ func buildFixture() (*fixture, error) {
 		return nil, fmt.Errorf("set platform admin: %w", err)
 	}
 
-	// HTTP server: the real router over the real store.
+	// The HTTP server must use a real, direct, non-owner runtime login. The
+	// admin pool remains available only for fixture bootstrap and assertions.
+	const runtimeRole = "granete_pilot_app"
+	const runtimePassword = "pilot-runtime-password"
+	_, _ = admin.Exec(ctx, `DROP ROLE IF EXISTS `+runtimeRole)
+	if _, err := admin.Exec(ctx, `CREATE ROLE `+runtimeRole+` LOGIN PASSWORD '`+runtimePassword+`' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`); err != nil {
+		f.close()
+		return nil, fmt.Errorf("create pilot runtime role: %w", err)
+	}
+	if _, err := admin.Exec(ctx, `GRANT granete_app TO `+runtimeRole); err != nil {
+		f.close()
+		return nil, fmt.Errorf("grant pilot runtime privileges: %w", err)
+	}
+	runtimeURL := testURL
+	runtimeURL.User = url.UserPassword(runtimeRole, runtimePassword)
+	runtimePool, err := pgxpool.New(ctx, runtimeURL.String())
+	if err != nil {
+		f.close()
+		return nil, fmt.Errorf("connect pilot runtime role: %w", err)
+	}
+	f.runtimePool = runtimePool
+	f.store = &storage.PostgresStore{Pool: runtimePool}
+	if err := f.store.VerifyRLSReadiness(ctx); err != nil {
+		f.close()
+		return nil, fmt.Errorf("pilot runtime RLS readiness: %w", err)
+	}
+
+	// HTTP server: the real router over the real runtime store.
 	mediaDir, err := os.MkdirTemp("", "pilot-media-")
 	if err != nil {
 		f.close()
@@ -639,6 +667,9 @@ func (f *fixture) close() {
 	if f.pool != nil {
 		f.pool.Close()
 	}
+	if f.runtimePool != nil {
+		f.runtimePool.Close()
+	}
 	if f.mediaDir != "" {
 		_ = os.RemoveAll(f.mediaDir)
 	}
@@ -646,6 +677,7 @@ func (f *fixture) close() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_, _ = f.adminPool.Exec(ctx, `DROP DATABASE IF EXISTS `+pilotTestDBName+` WITH (FORCE)`)
+		_, _ = f.adminPool.Exec(ctx, `DROP ROLE IF EXISTS granete_pilot_app`)
 		f.adminPool.Close()
 	}
 }

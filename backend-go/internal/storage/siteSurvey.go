@@ -28,7 +28,7 @@ func (s *PostgresStore) MutateProjectSurvey(
 	projectID string,
 	mutate func(survey *domain.SiteSurvey) (*domain.SiteSurveyMutation, error),
 ) (*domain.SiteSurveyMutation, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning site survey tx: %w", err)
 	}

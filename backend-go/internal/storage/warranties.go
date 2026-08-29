@@ -42,7 +42,7 @@ func (s *PostgresStore) ListWarrantyTickets(ctx context.Context, projectID, cust
 
 	query += " ORDER BY created_at DESC;"
 
-	rows, err := s.Pool.Query(ctx, query, args...)
+	rows, err := s.db(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list warranty tickets: %w", err)
 	}
@@ -116,7 +116,7 @@ func (s *PostgresStore) ListWarrantyTickets(ctx context.Context, projectID, cust
 
 // GetWarrantyTicketByID retrieves a ticket along with its photos.
 func (s *PostgresStore) GetWarrantyTicketByID(ctx context.Context, id string) (*domain.WarrantyTicket, error) {
-	row := s.Pool.QueryRow(ctx, `
+	row := s.db(ctx).QueryRow(ctx, `
 		SELECT id, ticket_number, project_id, customer_id, title, description, category, priority, status,
 		       assigned_technician_id, scheduled_date, resolved_at, resolution_notes, refabrication_pieces,
 		       created_at, updated_at
@@ -205,7 +205,7 @@ func (s *PostgresStore) CreateWarrantyTicket(ctx context.Context, ticket *domain
 		}
 	}
 
-	_, err = s.Pool.Exec(ctx, `
+	_, err = s.db(ctx).Exec(ctx, `
 		INSERT INTO warranty_tickets (
 			id, ticket_number, project_id, customer_id, title, description, category, priority, status,
 			assigned_technician_id, scheduled_date, resolved_at, resolution_notes, refabrication_pieces,
@@ -255,7 +255,7 @@ func (s *PostgresStore) UpdateWarrantyTicket(ctx context.Context, ticket *domain
 		}
 	}
 
-	res, err := s.Pool.Exec(ctx, `
+	res, err := s.db(ctx).Exec(ctx, `
 		UPDATE warranty_tickets SET
 			title = $2,
 			description = $3,
@@ -296,7 +296,7 @@ func (s *PostgresStore) UpdateWarrantyTicket(ctx context.Context, ticket *domain
 
 // DeleteWarrantyTicket deletes a warranty ticket.
 func (s *PostgresStore) DeleteWarrantyTicket(ctx context.Context, id string) error {
-	res, err := s.Pool.Exec(ctx, `DELETE FROM warranty_tickets WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
+	res, err := s.db(ctx).Exec(ctx, `DELETE FROM warranty_tickets WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("delete warranty ticket: %w", err)
 	}
@@ -308,7 +308,7 @@ func (s *PostgresStore) DeleteWarrantyTicket(ctx context.Context, id string) err
 
 // ListWarrantyTicketPhotos returns all photos attached to a ticket.
 func (s *PostgresStore) ListWarrantyTicketPhotos(ctx context.Context, ticketID string) ([]domain.WarrantyTicketPhoto, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, ticket_id, kind, url, thumbnail_url, caption, created_at
 		FROM warranty_ticket_photos
 		WHERE ticket_id = $1 AND organization_id = $2
@@ -353,7 +353,7 @@ func (s *PostgresStore) ListWarrantyTicketPhotos(ctx context.Context, ticketID s
 func (s *PostgresStore) AddWarrantyTicketPhoto(ctx context.Context, photo *domain.WarrantyTicketPhoto) error {
 	photo.CreatedAt = time.Now().UTC()
 
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO warranty_ticket_photos (
 			id, ticket_id, kind, url, thumbnail_url, caption, created_at, organization_id
 		) VALUES (
@@ -378,7 +378,7 @@ func (s *PostgresStore) AddWarrantyTicketPhoto(ctx context.Context, photo *domai
 
 // DeleteWarrantyTicketPhoto removes a photo from a warranty ticket.
 func (s *PostgresStore) DeleteWarrantyTicketPhoto(ctx context.Context, ticketID, photoID string) error {
-	res, err := s.Pool.Exec(ctx, `DELETE FROM warranty_ticket_photos WHERE ticket_id = $1 AND id = $2 AND organization_id = $3;`, ticketID, photoID, OrgFromCtx(ctx))
+	res, err := s.db(ctx).Exec(ctx, `DELETE FROM warranty_ticket_photos WHERE ticket_id = $1 AND id = $2 AND organization_id = $3;`, ticketID, photoID, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("delete warranty ticket photo: %w", err)
 	}

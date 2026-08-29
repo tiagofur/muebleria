@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func TestAgregados_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
 	store, _ := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	if err := store.RunMigrations(ctx); err != nil {
 		t.Fatalf("RunMigrations: %v", err)
@@ -18,7 +19,7 @@ func TestAgregados_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
 
 func TestAgregados_CRUDRoundTrip(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	id := uniqueID("agr-test")
 	code := uniqueID("AGR-CAJON")
@@ -110,7 +111,7 @@ func containsAgregadoID(list []domain.Agregado, id string) bool {
 
 func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 	store, _ := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	// 1. Structure with agregados
 	structIn := &domain.Structure{

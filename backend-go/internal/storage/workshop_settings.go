@@ -16,7 +16,7 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 	// through pointers so NULL rows resolve to the normalize fallbacks instead
 	// of failing the read.
 	var cutStrategy, navMode *string
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		SELECT default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode
 		FROM workshop_settings
 		WHERE organization_id = $1
@@ -45,7 +45,7 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 // organization (id comes from the sequence default).
 func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error) {
 	ws = normalizeWorkshopSettings(ws)
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO workshop_settings (
 			organization_id, default_margin_factor, default_labor_fixed_cost, default_currency, vendedor_can_view_costs, default_cut_strategy, nav_mode, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())

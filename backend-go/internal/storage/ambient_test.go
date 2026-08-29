@@ -25,7 +25,7 @@ func connectStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	if url == "" {
 		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
 	}
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Skipf("no db: %v", err)
@@ -53,7 +53,7 @@ func fptr(v float64) *float64 { return &v }
 // second time directly must be safe (IF NOT EXISTS guards) — spec #4150.
 func TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	if err := store.RunMigrations(ctx); err != nil {
 		t.Fatalf("RunMigrations: %v", err)
@@ -91,7 +91,7 @@ func TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
 
 func TestAmbientMaterials_CRUDRoundTrip(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	id := uniqueID("amb-crud")
 	code := uniqueID("FLR")
@@ -159,7 +159,7 @@ func TestAmbientMaterials_CRUDRoundTrip(t *testing.T) {
 // from 0. previewRoughness===0 is a real value, not "unset" (spec #4150).
 func TestAmbientMaterials_NullablePBR_NullVsZero(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	id := uniqueID("amb-pbr")
 	t.Cleanup(func() { _, _ = pool.Exec(ctx, `DELETE FROM ambient_materials WHERE id = $1`, id) })
@@ -204,7 +204,7 @@ func TestAmbientMaterials_NullablePBR_NullVsZero(t *testing.T) {
 
 func TestAmbientMaterials_UniqueCodeConstraint(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	code := uniqueID("UNIQ")
 	id1 := uniqueID("amb-uniq-1")

@@ -16,7 +16,7 @@ func TestMaterialBoard_PersistsTextureTileMm(t *testing.T) {
 	if url == "" {
 		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
 	}
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Skipf("no db: %v", err)

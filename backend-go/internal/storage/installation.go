@@ -31,7 +31,7 @@ func (s *PostgresStore) MutateProjectInstallation(
 	projectID string,
 	mutate func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error),
 ) (*domain.InstallationMutation, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning installation tx: %w", err)
 	}

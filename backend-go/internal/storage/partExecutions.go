@@ -32,7 +32,7 @@ func (s *PostgresStore) MutateProjectPartExecutions(
 	projectID string,
 	mutate func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error),
 ) (*domain.PartExecutionsMutation, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning part executions tx: %w", err)
 	}

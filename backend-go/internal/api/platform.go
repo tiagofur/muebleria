@@ -505,7 +505,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		createdUser = true
 	}
 
-	if err := s.Store.AcceptInvitationTx(r.Context(), inv.ID, u.ID); err != nil {
+	if err := s.Store.AcceptInvitationTx(r.Context(), inv.ID, inv.OrganizationID, u.ID); err != nil {
 		// A user created in THIS request that failed to attach to any org
 		// would be orphaned (active, member of nothing, unable to log in).
 		// Clean it up before failing; existing users are left untouched.

@@ -12,7 +12,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-func strPtr(s string) *string { return &s }
+func strPtr(s string) *string       { return &s }
 func ptrFloat64(v float64) *float64 { return &v }
 
 // Integration: requires local Postgres. Verifies the per-hardware preview
@@ -30,7 +30,7 @@ func TestHardware_PersistsPreviewGeometry(t *testing.T) {
 	if url == "" {
 		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
 	}
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Skipf("no db: %v", err)

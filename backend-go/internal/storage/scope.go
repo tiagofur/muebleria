@@ -6,11 +6,8 @@
 // org-less tokens on business routes (fail-closed); storage reads it via
 // OrgFromCtx and appends `organization_id = $n` to queries.
 //
-// The initial-organization fallback below is unreachable from HTTP: the
-// middleware guarantees a scope on every business route. It remains for
-// direct-storage callers only (CLI, migration tooling, tests bootstrapping
-// the initial org). The transitional column DEFAULTs were dropped in
-// migration 000088 — every write now passes the organization explicitly.
+// There is no runtime fallback. CLI, migrations, seed and tests must carry an
+// explicit organization scope or use their dedicated administrative port.
 
 package storage
 
@@ -20,6 +17,18 @@ import (
 )
 
 type orgScopeKey struct{}
+type actorScopeKey struct{}
+
+// TenantActor is the database actor context installed with SET LOCAL for one
+// transaction. Values come from revalidated claims or an explicit authorized
+// application-service command, never from an arbitrary request body.
+type TenantActor struct {
+	OrganizationID            string
+	UserID                    string
+	MembershipID              string
+	SupportSessionID          string
+	AuthorizedOrganizationIDs []string
+}
 
 // ErrNoOrgScope is returned by RequireOrgFromCtx when the context carries no
 // organization scope at all (no fallback applies).
@@ -34,6 +43,22 @@ func WithOrgCtx(ctx context.Context, orgID string) context.Context {
 	return context.WithValue(ctx, orgScopeKey{}, orgID)
 }
 
+// WithTenantActorCtx carries the complete revalidated actor alongside the
+// legacy organization lookup used by existing repositories.
+func WithTenantActorCtx(ctx context.Context, actor TenantActor) context.Context {
+	ctx = context.WithValue(ctx, actorScopeKey{}, actor)
+	return WithOrgCtx(ctx, actor.OrganizationID)
+}
+
+// TenantActorFromCtx returns the actor installed for the current transaction.
+func TenantActorFromCtx(ctx context.Context) (TenantActor, bool) {
+	if ctx == nil {
+		return TenantActor{}, false
+	}
+	actor, ok := ctx.Value(actorScopeKey{}).(TenantActor)
+	return actor, ok
+}
+
 // RequireOrgFromCtx resolves the organization scope or fails with
 // ErrNoOrgScope — for callers that must not silently fall back.
 func RequireOrgFromCtx(ctx context.Context) (string, error) {
@@ -45,16 +70,16 @@ func RequireOrgFromCtx(ctx context.Context) (string, error) {
 	return "", ErrNoOrgScope
 }
 
-// OrgFromCtx resolves the organization scope. HTTP callers always carry a
-// scope (the middleware rejects org-less business requests); the initial-org
-// fallback only serves direct-storage tooling (CLI/migrations/tests).
+// OrgFromCtx resolves the explicit organization scope. Missing scope returns
+// an empty value so existing SQL fails closed; new boundaries should prefer
+// RequireOrgFromCtx and return ErrNoOrgScope directly.
 func OrgFromCtx(ctx context.Context) string {
 	if ctx != nil {
 		if v, ok := ctx.Value(orgScopeKey{}).(string); ok && v != "" {
 			return v
 		}
 	}
-	return InitialOrganizationID
+	return ""
 }
 
 // HasOrgScope reports whether the context explicitly carries an organization

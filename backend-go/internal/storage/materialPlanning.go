@@ -30,7 +30,7 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 	projectID string,
 	mutate func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error),
 ) (*domain.MaterialPlanningMutation, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning material planning tx: %w", err)
 	}

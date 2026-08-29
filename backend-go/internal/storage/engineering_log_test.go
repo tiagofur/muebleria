@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // sameJSON — JSONB normalizes key order/spacing, so compare semantically.
@@ -43,7 +44,7 @@ func uuidv4(t *testing.T) string {
 
 func TestProject_EngineeringLogRoundTrip(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	id := uuidv4(t)
 	customerID := uuidv4(t)

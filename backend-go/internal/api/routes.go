@@ -321,7 +321,6 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Admin — Gestión de usuarios (solo admin; live role from DB)
 	adminMW := AdminMiddleware(server.JWTSecret, server.Store)
 	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
-	mux.Handle("PUT /api/admin/users/{id}/approve", adminMW(http.HandlerFunc(server.HandleAdminUserApprove)))
 	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
 	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
 	// Sector assignments of any user — admin only (F094: was plain auth,

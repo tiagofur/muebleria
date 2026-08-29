@@ -13,7 +13,7 @@ import (
 
 // ListStock returns every tracked material with its live balance + minimum.
 func (s *PostgresStore) ListStock(ctx context.Context) ([]domain.MaterialStock, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT kind, material_id, quantity, min_stock, updated_at
 		FROM material_stock
 		WHERE organization_id = $1
@@ -43,7 +43,7 @@ func (s *PostgresStore) ListStock(ctx context.Context) ([]domain.MaterialStock, 
 // it as agotado until an entrada arrives.
 func (s *PostgresStore) UpsertStockMin(ctx context.Context, kind domain.StockMaterialKind, materialID string, minStock float64) (domain.MaterialStock, error) {
 	var st domain.MaterialStock
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO material_stock (kind, material_id, quantity, min_stock, organization_id)
 		VALUES ($1, $2, 0, $3, $4)
 		ON CONFLICT (kind, material_id, organization_id) DO UPDATE SET
@@ -56,7 +56,7 @@ func (s *PostgresStore) UpsertStockMin(ctx context.Context, kind domain.StockMat
 
 // GetStockMovementByID loads one ledger row (used to validate reversions).
 func (s *PostgresStore) GetStockMovementByID(ctx context.Context, id string) (*domain.StockMovement, error) {
-	row := s.Pool.QueryRow(ctx, `
+	row := s.db(ctx).QueryRow(ctx, `
 		SELECT id, kind, material_id, type, delta, balance_after,
 		       project_id, note, reverts_id, by_user_id, by_name, at
 		FROM stock_movements WHERE id = $1 AND organization_id = $2
@@ -74,7 +74,7 @@ func (s *PostgresStore) GetStockMovementByID(ctx context.Context, id string) (*d
 
 // GetStockMovementByRevertsID loads a ledger row that reverts the given movement id.
 func (s *PostgresStore) GetStockMovementByRevertsID(ctx context.Context, revertsID string) (*domain.StockMovement, error) {
-	row := s.Pool.QueryRow(ctx, `
+	row := s.db(ctx).QueryRow(ctx, `
 		SELECT id, kind, material_id, type, delta, balance_after,
 		       project_id, note, reverts_id, by_user_id, by_name, at
 		FROM stock_movements WHERE reverts_id = $1 AND organization_id = $2
@@ -96,7 +96,7 @@ func (s *PostgresStore) GetStockMovementByRevertsID(ctx context.Context, reverts
 //   - only `entrada` creates the row; other types on untracked materials fail
 //   - a negative balance is rejected (ErrStockInsufficient)
 func (s *PostgresStore) RecordStockMovement(ctx context.Context, mov domain.StockMovement) (domain.StockMovement, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return mov, err
 	}
@@ -201,7 +201,7 @@ func (s *PostgresStore) ListStockMovements(ctx context.Context, kind domain.Stoc
 	args = append(args, limit)
 	query += fmt.Sprintf(" ORDER BY at DESC LIMIT $%d", len(args))
 
-	rows, err := s.Pool.Query(ctx, query, args...)
+	rows, err := s.db(ctx).Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

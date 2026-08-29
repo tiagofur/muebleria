@@ -50,7 +50,7 @@ func uniqueStructureCode(prefix string) string {
 // and persists an immutable snapshot in structure_revisions (#108 Slice 2).
 func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 	store := skipIfNoDB(t)
-	ctx := context.Background()
+	ctx := WithOrgCtx(context.Background(), InitialOrganizationID)
 
 	// Real component so the structure_components FK is satisfied.
 	comp := &domain.Component{
@@ -66,9 +66,9 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 
 	// Fresh structure (rev defaults to 1 at the DB level).
 	st := &domain.Structure{
-		Code:       uniqueStructureCode("BUMP"),
-		Name:       "Bump Test",
-		WidthMm:    600, HeightMm: 720, DepthMm: 560, Active: true,
+		Code:    uniqueStructureCode("BUMP"),
+		Name:    "Bump Test",
+		WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true,
 		Components: []domain.ComponentInstance{{ComponentID: comp.ID, Quantity: 1}},
 		Presets:    []domain.DimensionPreset{{ID: "", Name: "Std", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
 	}
@@ -146,11 +146,11 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 // (loadProjectItems via GetProjectByID) and the write path (UpdateProject).
 func TestStructureRevisionPinRoundTrip(t *testing.T) {
 	store := skipIfNoDB(t)
-	ctx := context.Background()
+	ctx := WithOrgCtx(context.Background(), InitialOrganizationID)
 
 	// Real customer + module to satisfy FKs.
 	customer := &domain.Customer{
-		Name: "Pin Test Customer " + time.Now().Format("150405.000000"),
+		Name:   "Pin Test Customer " + time.Now().Format("150405.000000"),
 		Active: true,
 	}
 	if err := store.CreateCustomer(ctx, customer); err != nil {
@@ -174,9 +174,9 @@ func TestStructureRevisionPinRoundTrip(t *testing.T) {
 	pin1 := 1
 	pin3 := 3
 	project := &domain.Project{
-		Name: "Pin Test " + time.Now().Format("150405.000000"),
+		Name:       "Pin Test " + time.Now().Format("150405.000000"),
 		CustomerID: customer.ID,
-		Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
+		Currency:   "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
 		Items: []domain.ProjectItem{
 			{ModuleID: mod.ID, Quantity: 1, StructureRevisionPin: &pin1,
 				OptionChoices: map[string]string{}},

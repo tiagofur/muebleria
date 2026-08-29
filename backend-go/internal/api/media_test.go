@@ -126,7 +126,7 @@ func TestDeleteMediaFileByURL(t *testing.T) {
 	dir := t.TempDir()
 	// Partitioned layout (ADR-0004): an unscoped context falls back to the
 	// initial organization, so files live under <mediaDir>/<org>/.
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	// Create a real file to delete.
 	existing := filepath.Join(dir, storage.InitialOrganizationID, "real.jpg")

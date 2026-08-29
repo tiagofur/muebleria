@@ -4778,6 +4778,46 @@
       ],
       "status": "done",
       "depends_on": []
+    },
+    {
+      "id": "F192",
+      "title": "Transacciones tenant-scoped y PostgreSQL RLS defense-in-depth (#449)",
+      "description": "Tenant transaction runner con contexto de actor revalidado mediante SET LOCAL, FORCE RLS para toda tabla clasificada, roles PostgreSQL separados y sin bypass, eliminación del fallback runtime a InitialOrganizationID, policy inventory verificado y negative proofs direct-SQL/API/pool-safe.",
+      "tags": [
+        "backend-go",
+        "postgresql",
+        "rls",
+        "multi-organization",
+        "security",
+        "p0"
+      ],
+      "created": "2026-08-29",
+      "acceptance": [
+        "Toda tabla queda clasificada como tenant-owned, explicitly-shared, platform-global o append-only con policy/excepción e índices verificables",
+        "El rol runtime no posee tablas protegidas, no tiene BYPASSRLS y no puede desactivar row_security; migraciones usan un rol/DSN separado",
+        "Toda transacción de negocio establece organization, user, membership y support session mediante SET LOCAL desde el actor revalidado",
+        "Queries directos y repositories sin filtro no pueden leer, escribir, borrar ni hacer upsert cross-org en ninguna dirección",
+        "Project shared respeta sales/manufacturing ownership exacto; platform admin org-less no accede business data y soporte queda limitado a su organización",
+        "Pool reuse y commit/rollback limpian el contexto tenant sin contaminación entre requests",
+        "OrgFromCtx y paths runtime fallan loud sin scope; InitialOrganizationID queda limitado a migrations, fixtures y tooling administrativo explícito",
+        "El policy inventory y readiness check fallan ante tabla tenant sin RLS/policy, rol inseguro o índice ausente",
+        "Pilot readiness ejecuta assertions PostgreSQL reales para RLS, rol, pool, malicious body y negative proofs sin skips en gate mode",
+        "Migración fresh y upgrade es staged/reversible; runbook y métrica sanitizada cubren diagnóstico de denials sin exponer existencia",
+        "Performance de queries críticas se registra antes/después con EXPLAIN y los índices soportan las policies",
+        "pnpm test, pnpm typecheck, go test ./..., pilot gate, git diff --check y CI pasan"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/449",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/verification.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F191"
+      ]
     }
   ]
 }

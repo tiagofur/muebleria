@@ -10,7 +10,7 @@ import (
 )
 
 func (s *PostgresStore) loadStructureComponents(ctx context.Context, structureID string) ([]domain.ComponentInstance, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT component_id, quantity, placement_override, overrides
 		FROM structure_components
 		WHERE structure_id = $1
@@ -58,7 +58,7 @@ func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID st
 		WHERE structure_id = $1
 		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
 	`
-	rows, err := s.Pool.Query(ctx, presetsQuery, structureID)
+	rows, err := s.db(ctx).Query(ctx, presetsQuery, structureID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (s *PostgresStore) loadStructurePresets(ctx context.Context, structureID st
 // (#108). Returns newest-first (created_at DESC) to mirror the TS history
 // field ordering. Empty (non-nil) slice when there are no historical revisions.
 func (s *PostgresStore) loadStructureHistory(ctx context.Context, structureID string) ([]domain.StructureRevision, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT revision, snapshot
 		FROM structure_revisions
 		WHERE structure_id = $1
@@ -204,7 +204,7 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query structures: %w", err)
 	}
@@ -241,30 +241,33 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		if len(jointRulesRaw) > 0 {
 			_ = json.Unmarshal(jointRulesRaw, &st.JointDrillingRules)
 		}
-		components, err := s.loadStructureComponents(ctx, st.ID)
-		if err != nil {
-			return nil, err
-		}
-		st.Components = components
-
-		presets, err := s.loadStructurePresets(ctx, st.ID)
-		if err != nil {
-			return nil, err
-		}
-		st.Presets = presets
-
-		history, err := s.loadStructureHistory(ctx, st.ID)
-		if err != nil {
-			return nil, err
-		}
-		st.History = history
-
 		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		components, err := s.loadStructureComponents(ctx, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Components = components
+		presets, err := s.loadStructurePresets(ctx, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Presets = presets
+		history, err := s.loadStructureHistory(ctx, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].History = history
 	}
 	if out == nil {
 		out = []domain.Structure{}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domain.Structure, error) {
@@ -277,7 +280,7 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 	var notes *string
 	var agrsRaw []byte
 	var jointRulesRaw []byte
-	err := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
+	err := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
 		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt,
 	)
 	if err != nil {
@@ -356,7 +359,7 @@ func placementOverrideArg(p *domain.ComponentPlacement) interface{} {
 }
 
 func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structure) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -440,7 +443,7 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 // structure_revisions and bump structures.revision by one. Components/presets
 // are then replaced as before. The bumped revision is written back onto st.
 func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *domain.Structure) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -576,7 +579,7 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 }
 
 func (s *PostgresStore) DeleteStructure(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM structures WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM structures WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

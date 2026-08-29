@@ -14,12 +14,13 @@ import (
 // minimum length. The server refuses to boot otherwise — there is no insecure
 // fallback. See docs/security (#1) and the .env.example at the repo root.
 type Config struct {
-	Port           string
-	DatabaseURL    string
-	JWTSecret      string
-	AllowedOrigins []string // CORS allowlist (reflected per-request); never "*"
-	RateLimitRPS   float64  // sustained requests/second for auth endpoints
-	RateLimitBurst int      // maximum burst for auth endpoints
+	Port                 string
+	DatabaseURL          string
+	MigrationDatabaseURL string
+	JWTSecret            string
+	AllowedOrigins       []string // CORS allowlist (reflected per-request); never "*"
+	RateLimitRPS         float64  // sustained requests/second for auth endpoints
+	RateLimitBurst       int      // maximum burst for auth endpoints
 	// MediaDir is the filesystem root for catalog image uploads (F040).
 	MediaDir string
 }
@@ -39,9 +40,14 @@ func LoadConfig() (Config, error) {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		// Default for local development only (sslmode=disable).
-		// Production MUST set DATABASE_URL with sslmode=require (or verify-full).
-		dbURL = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		dbURL = "postgres://granete_app:granete_app@localhost:5445/muebles?sslmode=disable"
+	}
+	migrationDBURL := os.Getenv("MIGRATION_DATABASE_URL")
+	if migrationDBURL == "" {
+		migrationDBURL = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+	}
+	if dbURL == migrationDBURL {
+		return Config{}, fmt.Errorf("DATABASE_URL and MIGRATION_DATABASE_URL must use separate database roles")
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -80,13 +86,14 @@ func LoadConfig() (Config, error) {
 	}
 
 	return Config{
-		Port:           port,
-		DatabaseURL:    dbURL,
-		JWTSecret:      jwtSecret,
-		AllowedOrigins: allowed,
-		RateLimitRPS:   rps,
-		RateLimitBurst: burst,
-		MediaDir:       mediaDir,
+		Port:                 port,
+		DatabaseURL:          dbURL,
+		MigrationDatabaseURL: migrationDBURL,
+		JWTSecret:            jwtSecret,
+		AllowedOrigins:       allowed,
+		RateLimitRPS:         rps,
+		RateLimitBurst:       burst,
+		MediaDir:             mediaDir,
 	}, nil
 }
 
