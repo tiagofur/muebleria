@@ -132,7 +132,7 @@ type workshopFurnitureCatalog struct {
 	SchemaID           string                                 `json:"schemaId"`
 	RevisionID         string                                 `json:"revisionId"`
 	Categories         []workshopFurnitureCategory            `json:"categories"`
-	MaterialCategories []workshopMaterialCategory            `json:"materialCategories"`
+	MaterialCategories []workshopMaterialCategory             `json:"materialCategories"`
 	Definitions        map[string]workshopFurnitureDefinition `json:"definitions"`
 	Presets            []workshopFurniturePreset              `json:"presets"`
 	// Materials carries the workshop's active boards so clients can populate

@@ -22,11 +22,13 @@ func okHandler() http.HandlerFunc {
 // errorBody parses the JSON error envelope used by respondWithError.
 func errorBody(t *testing.T, rr *httptest.ResponseRecorder) string {
 	t.Helper()
-	var m map[string]string
+	var m struct {
+		Message string `json:"message"`
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
 		t.Fatalf("response is not a JSON error envelope: %v (body=%q)", err, rr.Body.String())
 	}
-	return m["error"]
+	return m.Message
 }
 
 // staticUsers implements UserLookup for middleware tests.

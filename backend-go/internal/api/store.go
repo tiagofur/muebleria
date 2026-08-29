@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -46,6 +47,7 @@ type Store interface {
 	SetPlatformAdmin(ctx context.Context, userID string, admin bool) error
 	InsertSecurityAuditEvent(ctx context.Context, ev storage.SecurityAuditEvent) error
 	UpdateOrganization(ctx context.Context, o *domain.Organization) error
+	UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error
 	CloneCatalog(ctx context.Context, srcOrg, dstOrg string) error
 
 	// Support sessions (ADR-0005 §5)
@@ -58,14 +60,14 @@ type Store interface {
 
 	// Org team & invitations (#326)
 	ListOrgTeam(ctx context.Context, organizationID string) ([]storage.OrgTeamMember, error)
-	UpdateMembershipRolesByOrg(ctx context.Context, organizationID, userID string, roles []domain.UserRole) error
-	SetMembershipActive(ctx context.Context, organizationID, userID string, active bool) error
+	UpdateMembershipRolesByOrg(ctx context.Context, organizationID, userID string, roles []domain.UserRole, expectedVersion int64) (*storage.OrgTeamMember, error)
+	SetMembershipActive(ctx context.Context, organizationID, userID string, active bool, expectedVersion int64) (*storage.OrgTeamMember, error)
 	CreateInvitation(ctx context.Context, organizationID, email string, roles []domain.UserRole, tokenHash string, expiresAt time.Time, invitedBy string) (*storage.Invitation, error)
 	ListInvitations(ctx context.Context, organizationID string) ([]storage.Invitation, error)
 	RevokeInvitation(ctx context.Context, organizationID, id string) error
 	GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*storage.OpenInvitation, error)
 	AcceptInvitationTx(ctx context.Context, invitationID, userID string) error
-	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]map[string]interface{}, error)
+	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error)
 	GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error)
 
 	// Customers

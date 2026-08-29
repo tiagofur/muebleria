@@ -1,8 +1,8 @@
 package api
 
 import (
-	"crypto/rand"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io"

@@ -5,12 +5,15 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // requireOrgAdmin: org-scoped token with admin in the role set (regular
@@ -44,7 +47,14 @@ func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
 		respondWithInternalError(w, err, "org team")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, team)
+	out := make([]openapi.TeamMember, len(team))
+	for i, member := range team {
+		out[i] = openapi.TeamMember{
+			UserID: member.UserID, Email: member.Email, Name: member.Name, Active: member.Active,
+			Roles: roleStrings(member.Roles), MemberSince: member.MemberSince.UTC().Format(time.RFC3339Nano), Version: member.Version,
+		}
+	}
+	respondWithJSON(w, http.StatusOK, out)
 }
 
 // PUT /api/org/members/{userId}/roles {roles: []}
@@ -54,22 +64,41 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := r.PathValue("userId")
-	var body struct {
-		Roles []domain.UserRole `json:"roles"`
-	}
-	if !decodeJSONBody(w, r, &body) || !domain.RolesAllowedInOrg(body.Roles, org.Type) {
-		respondWithError(w, http.StatusBadRequest, "roles inválidos para este tipo de taller")
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
 		return
 	}
-	if err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, userID, body.Roles); err != nil {
-		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
+	var body openapi.UpdateMemberRolesRequest
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	roles := make([]domain.UserRole, len(body.Roles))
+	for i, role := range body.Roles {
+		roles[i] = domain.UserRole(role)
+	}
+	if !domain.RolesAllowedInOrg(roles, org.Type) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeRoleNotAllowed, "roles inválidos para este tipo de taller", nil)
+		return
+	}
+	member, err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, userID, roles, expectedVersion)
+	if err != nil {
+		if errors.Is(err, storage.ErrVersionConflict) {
+			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeMembershipVersionConflict, "La membresía fue modificada por otra sesión", map[string]any{"currentVersionRequired": true})
+			return
+		}
+		if errors.Is(err, storage.ErrMembershipNotFound) {
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
+			return
+		}
+		respondWithInternalError(w, err, "update membership roles")
 		return
 	}
 
 	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"target_user_id": userID, "roles": body.Roles,
+		"target_user_id": userID, "roles": roles,
 	})
-	respondWithJSON(w, http.StatusOK, map[string][]domain.UserRole{"roles": body.Roles})
+	w.Header().Set("ETag", FormatVersionETag(member.Version))
+	respondWithJSON(w, http.StatusOK, openapi.MembershipMutationResponse{UserID: userID, Roles: roleStrings(member.Roles), Active: member.Active, Version: member.Version})
 }
 
 // PUT /api/org/members/{userId}/active {active: bool}
@@ -79,6 +108,10 @@ func (s *Server) HandleOrgMemberActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := r.PathValue("userId")
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
 	var body struct {
 		Active *bool `json:"active"`
 	}
@@ -86,8 +119,17 @@ func (s *Server) HandleOrgMemberActive(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "active es obligatorio")
 		return
 	}
-	if err := s.Store.SetMembershipActive(r.Context(), claims.OrgID, userID, *body.Active); err != nil {
-		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
+	member, err := s.Store.SetMembershipActive(r.Context(), claims.OrgID, userID, *body.Active, expectedVersion)
+	if err != nil {
+		if errors.Is(err, storage.ErrVersionConflict) {
+			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeMembershipVersionConflict, "La membresía fue modificada por otra sesión", nil)
+			return
+		}
+		if errors.Is(err, storage.ErrMembershipNotFound) {
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
+			return
+		}
+		respondWithInternalError(w, err, "update membership active")
 		return
 	}
 	event := "membership_deactivated"
@@ -97,7 +139,16 @@ func (s *Server) HandleOrgMemberActive(w http.ResponseWriter, r *http.Request) {
 	s.audit(r.Context(), event, claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
 		"target_user_id": userID,
 	})
-	respondWithJSON(w, http.StatusOK, map[string]bool{"active": *body.Active})
+	w.Header().Set("ETag", FormatVersionETag(member.Version))
+	respondWithJSON(w, http.StatusOK, openapi.MembershipMutationResponse{UserID: userID, Roles: roleStrings(member.Roles), Active: member.Active, Version: member.Version})
+}
+
+func roleStrings(roles []domain.UserRole) []string {
+	out := make([]string, len(roles))
+	for i, r := range roles {
+		out[i] = string(r)
+	}
+	return out
 }
 
 // GET /api/org/invitations
@@ -111,7 +162,28 @@ func (s *Server) HandleOrgListInvitations(w http.ResponseWriter, r *http.Request
 		respondWithInternalError(w, err, "org invitations")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, list)
+	out := make([]openapi.Invitation, len(list))
+	for i := range list {
+		out[i] = invitationToOpenAPI(list[i])
+	}
+	respondWithJSON(w, http.StatusOK, out)
+}
+
+func invitationToOpenAPI(inv storage.Invitation) openapi.Invitation {
+	out := openapi.Invitation{
+		ID: inv.ID, Email: inv.Email, Roles: roleStrings(inv.Roles),
+		ExpiresAt: inv.ExpiresAt.UTC().Format(time.RFC3339Nano), CreatedAt: inv.CreatedAt.UTC().Format(time.RFC3339Nano),
+		InvitedBy: inv.InvitedBy, AcceptedBy: inv.AcceptedBy, Version: inv.Version,
+	}
+	if inv.AcceptedAt != nil {
+		value := inv.AcceptedAt.UTC().Format(time.RFC3339Nano)
+		out.AcceptedAt = &value
+	}
+	if inv.RevokedAt != nil {
+		value := inv.RevokedAt.UTC().Format(time.RFC3339Nano)
+		out.RevokedAt = &value
+	}
+	return out
 }
 
 // POST /api/org/invitations {email, roles} → link/código (no SMTP in pilots:
@@ -121,15 +193,16 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	var body struct {
-		Email string             `json:"email"`
-		Roles []domain.UserRole `json:"roles"`
-	}
+	var body openapi.CreateInvitationRequest
 	email := ""
 	if decodeJSONBody(w, r, &body) {
 		email = strings.TrimSpace(strings.ToLower(body.Email))
 	}
-	if email == "" || !strings.Contains(email, "@") || !domain.RolesAllowedInOrg(body.Roles, org.Type) {
+	roles := make([]domain.UserRole, len(body.Roles))
+	for i, role := range body.Roles {
+		roles[i] = domain.UserRole(role)
+	}
+	if email == "" || !strings.Contains(email, "@") || !domain.RolesAllowedInOrg(roles, org.Type) {
 		respondWithError(w, http.StatusBadRequest, "email válido y roles permitidos son obligatorios")
 		return
 	}
@@ -139,7 +212,7 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 		respondWithInternalError(w, err, "invitation token")
 		return
 	}
-	inv, err := s.Store.CreateInvitation(r.Context(), claims.OrgID, email, body.Roles,
+	inv, err := s.Store.CreateInvitation(r.Context(), claims.OrgID, email, roles,
 		hashInvitationToken(token), time.Now().Add(14*24*time.Hour), claims.UserID)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -152,16 +225,11 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.audit(r.Context(), "invitation_created", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"email": email, "roles": body.Roles,
+		"email": email, "roles": roles,
 	})
-	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
-		"id":         inv.ID,
-		"email":      inv.Email,
-		"roles":      inv.Roles,
-		"expires_at": inv.ExpiresAt,
-		// The raw token travels exactly once; only its hash is stored.
-		"invitation_token": token,
-		"accept_url":       "/accept-invitation?token=" + token,
+	respondWithJSON(w, http.StatusCreated, openapi.CreateInvitationResponse{
+		Invitation:      invitationToOpenAPI(*inv),
+		InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token,
 	})
 }
 
@@ -178,6 +246,5 @@ func (s *Server) HandleOrgRevokeInvitation(w http.ResponseWriter, r *http.Reques
 	s.audit(r.Context(), "invitation_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
 		"invitation_id": r.PathValue("id"),
 	})
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "invitation revoked"})
+	respondWithJSON(w, http.StatusOK, openapi.RevokeInvitationResponse{Message: "invitation revoked"})
 }
-

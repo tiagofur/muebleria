@@ -118,9 +118,9 @@ func TestFactoryNetwork_CreateStore(t *testing.T) {
 		t.Errorf("license = %s, want none (licenses are platform-managed)", created.LicensePlan)
 	}
 	var resp struct {
-		Organization       ConnectedOrgDTO `json:"organization"`
-		CatalogCloned      bool            `json:"catalog_cloned"`
-		MembershipGranted  bool            `json:"membership_granted"`
+		Organization      ConnectedOrgDTO `json:"organization"`
+		CatalogCloned     bool            `json:"catalog_cloned"`
+		MembershipGranted bool            `json:"membership_granted"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
