@@ -6,12 +6,13 @@
 
 import { useState, type ReactNode } from 'react';
 import { ShieldCheck, UserCheck, ArrowLeft, Lock, User } from 'lucide-react';
+import { GraneteApiClient, type LoginResponse } from '@granete/storage';
 import './acceptInvitation.css';
 
 export interface AcceptInvitationScreenProps {
   readonly token: string;
   readonly baseUrl: string;
-  readonly onAccepted: (authResult: unknown) => void;
+  readonly onAccepted: (authResult: LoginResponse) => void;
   readonly onBackToLogin?: () => void;
 }
 
@@ -36,22 +37,9 @@ export function AcceptInvitationScreen({
     setError(null);
 
     try {
-      const res = await fetch(`${baseUrl}/auth/accept-invitation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: token.trim(),
-          password,
-          name: name.trim() || undefined,
-        }),
+      const authData = await new GraneteApiClient(baseUrl).acceptInvitation({
+        token: token.trim(), password, ...(name.trim() ? { name: name.trim() } : {}),
       });
-
-      if (!res.ok) {
-        const errData = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-        throw new Error(errData.error || errData.message || 'Error al aceptar invitación');
-      }
-
-      const authData = await res.json();
       onAccepted(authData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo aceptar la invitación');

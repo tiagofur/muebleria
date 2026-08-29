@@ -1,3 +1,9 @@
+import {
+  GraneteApiClient, GraneteApiError, parseGenerated,
+  type LoginResponse, type MeResponse, type User, type OrganizationSummary,
+  type Membership, type SupportInfo as GeneratedSupportInfo,
+} from '@granete/storage';
+
 /**
  * Session gate helpers for the web shell login / register screens.
  * Auth token key matches APIWorkspaceRepository (`granete_token`).
@@ -19,46 +25,21 @@ export const DEFAULT_API_BASE: string =
 
 export type SessionMode = 'guest' | 'auth';
 
-export type AuthUser = {
-  readonly id: string;
-  readonly email: string;
-  readonly name: string;
+export type AuthUser = Pick<User, 'id' | 'email' | 'name' | 'active'> & {
   /**
    * Legacy single role — OPTIONAL since users.role was dropped (000090):
    * auth responses carry the membership roles as the `roles` sibling and
    * rolesOfUser falls back to this only for stale persisted sessions.
    */
   readonly role?: string;
-  readonly active: boolean;
   /** Active membership roles (multi-role union, ADR-0005). */
   readonly roles?: readonly string[];
-  readonly platform_admin?: boolean;
+  readonly platform_admin?: User['platform_admin'];
 };
 
-export type OrgSummary = {
-  readonly id: string;
-  readonly name: string;
-  readonly slug: string;
-  /** Organization type (factory/store/dealer) — drives org-type role gates. */
-  readonly type?: string;
-  readonly license?: {
-    readonly plan?: string;
-    readonly expires_at?: string | null;
-    readonly status?: string;
-  };
-};
-
-export type MembershipChoice = {
-  readonly organization_id: string;
-  readonly roles: readonly string[];
-  readonly organization: OrgSummary;
-};
-
-export type SupportInfo = {
-  readonly organization_id: string;
-  readonly session_id: string;
-  readonly reason: string;
-};
+export type OrgSummary = OrganizationSummary;
+export type MembershipChoice = Membership;
+export type SupportInfo = GeneratedSupportInfo;
 
 export type LoginSuccess = {
   readonly token: string;
@@ -199,24 +180,6 @@ export function isAdminRole(role: string | null | undefined): boolean {
   return role === 'admin';
 }
 
-async function readErrorMessage(
-  res: Response,
-  fallback: string,
-): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: unknown; message?: unknown };
-    if (typeof body.error === 'string' && body.error.trim()) {
-      return body.error;
-    }
-    if (typeof body.message === 'string' && body.message.trim()) {
-      return body.message;
-    }
-  } catch {
-    // ignore non-JSON
-  }
-  return fallback;
-}
-
 /**
  * POST {base}/auth/login with LoginRequest body.
  * On success returns JWT token + user (role included).
@@ -235,35 +198,13 @@ export async function loginRequest(
     throw new Error('fetch no disponible');
   }
 
-  let res: Response;
   try {
-    res = await fetchImpl(`${baseUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
+    return parseAuthResponse(await new GraneteApiClient(baseUrl, fetchImpl).login({ email, password, transport: 'web' }));
+  } catch (error) {
+    if (error instanceof GraneteApiError && error.status === 401) throw new Error('Email o contraseña incorrectos');
+    if (error instanceof GraneteApiError && error.status === 403) throw new Error(error.message);
     throw new Error('No se pudo conectar con el servidor');
   }
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      throw new Error('Email o contraseña incorrectos');
-    }
-    if (res.status === 403) {
-      throw new Error(
-        await readErrorMessage(
-          res,
-          'Tu cuenta está pendiente de aprobación por el administrador',
-        ),
-      );
-    }
-    throw new Error(
-      await readErrorMessage(res, `Error de inicio de sesión (${res.status})`),
-    );
-  }
-
-  return parseAuthResponse(await res.json());
 }
 
 /**
@@ -284,25 +225,13 @@ export async function registerRequest(
     throw new Error('fetch no disponible');
   }
 
-  let res: Response;
   try {
-    res = await fetchImpl(`${baseUrl}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
-    });
-  } catch {
+    await new GraneteApiClient(baseUrl, fetchImpl).register({ name, email, password });
+  } catch (error) {
+    if (error instanceof GraneteApiError && error.status === 409) throw new Error('Ese email ya está registrado');
+    if (error instanceof GraneteApiError) throw new Error(error.message);
     throw new Error('No se pudo conectar con el servidor');
   }
-
-  if (res.ok) return;
-
-  if (res.status === 409) {
-    throw new Error('Ese email ya está registrado');
-  }
-  throw new Error(
-    await readErrorMessage(res, `Error al registrar (${res.status})`),
-  );
 }
 
 function safeSessionStorage(): Storage | null {
@@ -338,15 +267,7 @@ export async function selectOrgRequest(
 ): Promise<LoginSuccess> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
-  const res = await doFetch(`${baseUrl}/auth/select-org`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ organization_id: organizationId }),
-  });
-  if (!res.ok) {
-    throw new Error('No se pudo entrar al taller seleccionado');
-  }
-  return parseAuthResponse(await res.json());
+  return parseAuthResponse(await new GraneteApiClient(baseUrl, doFetch).selectOrganization(token, { organization_id: organizationId }));
 }
 
 /**
@@ -364,60 +285,31 @@ export async function meRequest(
 }> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
-  const res = await doFetch(`${baseUrl}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  } as RequestInit);
-  if (!res.ok) {
-    throw new Error('No se pudo verificar la sesión');
-  }
-  return (await res.json()) as {
-    user: AuthUser;
-    roles?: readonly string[];
-    organization?: OrgSummary;
-    support?: SupportInfo;
-  };
+  const response: MeResponse = await new GraneteApiClient(baseUrl, doFetch).me(token);
+  return response;
 }
 
 export function parseAuthResponse(data: unknown): LoginSuccess {
-  const d = data as {
-    token?: unknown;
-    user?: Partial<AuthUser> & { role?: unknown };
-    roles?: unknown;
-    organization?: unknown;
-    memberships?: unknown;
-    selection_required?: unknown;
-    support?: unknown;
-  };
-  if (typeof d.token !== 'string' || !d.token || !d.user) {
-    throw new Error('Respuesta de autenticación inválida');
-  }
-  const u = d.user;
-  const roles = Array.isArray(d.roles)
-    ? d.roles.filter((r): r is string => typeof r === 'string' && r !== '')
-    : undefined;
-  const org =
-    d.organization && typeof (d.organization as OrgSummary).id === 'string'
-      ? (d.organization as OrgSummary)
-      : undefined;
-  const memberships = Array.isArray(d.memberships)
-    ? (d.memberships as MembershipChoice[]).filter(
-        (m) => m && typeof m.organization_id === 'string' && m.organization,
-      )
-    : undefined;
+  let d: LoginResponse;
+  try { d = parseGenerated<LoginResponse>('LoginResponse', data); }
+  catch { throw new Error('Respuesta de autenticación inválida'); }
+  if (!d.token) throw new Error('Respuesta de autenticación inválida');
+  const roles = d.roles;
+  const org = d.organization;
+  const memberships = d.memberships;
   return {
     token: d.token,
     user: {
-      id: String(u.id ?? ''),
-      email: String(u.email ?? ''),
-      name: typeof u.name === 'string' ? u.name : '',
-      ...(typeof u.role === 'string' && u.role !== '' ? { role: u.role } : {}),
-      active: u.active !== false,
-      ...((u as { platform_admin?: unknown }).platform_admin === true ? { platform_admin: true } : {}),
+      id: d.user.id,
+      email: d.user.email,
+      name: d.user.name,
+      active: d.user.active,
+      ...(d.user.platform_admin ? { platform_admin: true } : {}),
       ...(roles && roles.length > 0 ? { roles } : {}),
     },
     ...(org ? { organization: org } : {}),
     ...(memberships && memberships.length > 0 ? { memberships } : {}),
-    ...(d.selection_required === true ? { selectionRequired: true } : {}),
+    ...(d.selection_required ? { selectionRequired: true } : {}),
     ...(d.support === true ? { support: true } : {}),
   };
 }
@@ -433,11 +325,9 @@ export async function endSupportRequest(
 ): Promise<void> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
-  const res = await doFetch(`${baseUrl}/platform/support-sessions/${sessionId}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
+  try {
+    await new GraneteApiClient(baseUrl, doFetch).endSupportSession(token, sessionId);
+  } catch {
     throw new Error('No se pudo cerrar la sesión de soporte');
   }
 }

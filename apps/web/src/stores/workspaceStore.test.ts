@@ -47,8 +47,8 @@ const AUTH_USER = {
   id: 'user-1',
   email: 'admin@test',
   name: 'Admin Test',
-  role: 'admin',
   active: true,
+  platform_admin: false,
 } as const;
 
 function jsonOk(body: unknown, init: ResponseInit = {}): Response {
@@ -60,7 +60,17 @@ function jsonOk(body: unknown, init: ResponseInit = {}): Response {
 }
 
 function jsonError(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
+  const message = typeof body === 'object' && body !== null && 'error' in body
+    ? String((body as { error: unknown }).error)
+    : `HTTP ${status}`;
+  return new Response(JSON.stringify({
+    code: status === 401 ? 'UNAUTHORIZED' : 'INTERNAL_ERROR',
+    message,
+    fieldErrors: {},
+    requestId: `request-${status}`,
+    retryable: status >= 500,
+    details: {},
+  }), {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
@@ -175,7 +185,7 @@ describe('workspaceStore — login', () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        jsonOk({ token: 'jwt-1', user: AUTH_USER }),
+        jsonOk({ token: 'jwt-1', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [], selection_required: false, transport: 'web' }),
       );
     const store = createWorkspaceStore({
       deps: { baseUrl: 'http://test/api', fetchImpl },
@@ -191,7 +201,7 @@ describe('workspaceStore — login', () => {
       'auth',
     );
     expect(JSON.parse(globalThis.localStorage.getItem(USER_STORAGE_KEY)!)).toMatchObject(
-      { id: AUTH_USER.id, role: AUTH_USER.role },
+      { id: AUTH_USER.id, roles: ['admin'] },
     );
     expect(store.getState().workspace).toBeNull(); // forces reload
   });
@@ -199,7 +209,7 @@ describe('workspaceStore — login', () => {
   it('calls POST {baseUrl}/auth/login with JSON body', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonOk({ token: 'jwt', user: AUTH_USER }));
+      .mockResolvedValueOnce(jsonOk({ token: 'jwt', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [], selection_required: false, transport: 'web' }));
     const store = createWorkspaceStore({
       deps: { baseUrl: 'http://test/api', fetchImpl },
     });
@@ -210,8 +220,8 @@ describe('workspaceStore — login', () => {
       'http://test/api/auth/login',
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'a@b', password: 'pw' }),
+        headers: expect.any(Headers),
+        body: JSON.stringify({ email: 'a@b', password: 'pw', transport: 'web' }),
       }),
     );
   });
@@ -248,7 +258,7 @@ describe('workspaceStore — login', () => {
 
 describe('workspaceStore — register', () => {
   it('on success: clears registerError, no session change', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonOk({}));
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonOk({ message: 'ok' }));
     const store = createWorkspaceStore({ deps: { fetchImpl } });
 
     await store.getState().register('Name', 'a@b', 'pw');
@@ -554,7 +564,7 @@ describe('workspaceStore — loadAssignableOwners', () => {
     await store.getState().loadAssignableOwners();
 
     expect(store.getState().assignableOwners).toEqual([
-      { id: AUTH_USER.id, name: AUTH_USER.name, role: AUTH_USER.role },
+      { id: AUTH_USER.id, name: AUTH_USER.name, role: undefined },
     ]);
   });
 });
@@ -739,7 +749,7 @@ describe('workspaceStore — F118 guest import (S3)', () => {
     );
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonOk({ token: 'jwt-2', user: AUTH_USER }));
+      .mockResolvedValueOnce(jsonOk({ token: 'jwt-2', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [], selection_required: false, transport: 'web' }));
     const repo = makeStubRepo(createSeedWorkspace());
     const store = createWorkspaceStore({
       deps: {
@@ -758,7 +768,7 @@ describe('workspaceStore — F118 guest import (S3)', () => {
     globalThis.localStorage.removeItem('granete_guest_workspace');
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonOk({ token: 'jwt-3', user: AUTH_USER }));
+      .mockResolvedValueOnce(jsonOk({ token: 'jwt-3', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [], selection_required: false, transport: 'web' }));
     const store = createWorkspaceStore({
       deps: { baseUrl: 'http://test/api', fetchImpl },
     });
@@ -853,8 +863,9 @@ describe('workspaceStore — hydrateSessionInfo', () => {
     );
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonOk({
-        user: { ...AUTH_USER, role: 'user' },
+        user: AUTH_USER,
         roles: ['vendedor', 'ingeniero'],
+        transport: 'web',
       }),
     );
     const store = createWorkspaceStore({

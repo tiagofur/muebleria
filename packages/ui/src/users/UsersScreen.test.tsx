@@ -11,13 +11,13 @@ import { UsersScreen } from './UsersScreen';
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('UsersScreen (F026 admin approval)', () => {
-  it('calls admin users endpoints for list/approve/role/reject', () => {
+  it('uses the generated team client without a list fallback', () => {
     const src = readFileSync(join(here, 'UsersScreen.tsx'), 'utf8');
-    expect(src).toContain('/admin/users');
-    expect(src).toContain('/approve');
-    expect(src).toContain('/role');
-    expect(src).toContain("method: 'PUT'");
-    expect(src).toContain("method: 'DELETE'");
+
+    expect(src).toContain('api.listTeam');
+    expect(src).not.toContain('fetch(`${baseUrl}/admin/users`');
+    expect(src).toContain('api.updateMemberRoles');
+    expect(src).toContain('api.updateMemberActive');
     // Los roles ofrecidos los pinea el contrato (ASSIGNABLE_ROLES) y los
     // cubren los tests de comportamiento de abajo; aquí sólo vigilamos que
     // no vuelvan labels legacy hardcodeadas al source.
@@ -74,12 +74,13 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
   ) as { canonicalRoles: string[]; rejectedRoles: string[] };
 
   const member = {
-    id: 'u1',
     user_id: 'u1',
     name: 'Ana Pérez',
     email: 'ana@taller.com',
     roles: ['vendedor'],
     active: true,
+    member_since: '2026-08-28T00:00:00Z',
+    version: 1,
   };
 
   // Behavior (no source grep): la pantalla debe ofrecer exactamente lo que

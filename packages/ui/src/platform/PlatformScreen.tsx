@@ -20,6 +20,13 @@ import {
 import { PageHeader, Modal, PageLoading, EmptyState } from '../common';
 import { WorkspaceTabs } from '../common/Tabs';
 import { roleLabelEs } from '@granete/domain';
+import {
+  GraneteApiClient,
+  GraneteApiError,
+  type PlatformOrganization,
+  type PlatformUser,
+  type SecurityAuditEvent,
+} from '@granete/storage';
 import './platform.css';
 
 export interface PlatformScreenProps {
@@ -28,48 +35,9 @@ export interface PlatformScreenProps {
   readonly onSupportSessionStart?: (token: string, orgId: string) => void;
 }
 
-export interface OrganizationRow {
-  readonly id: string;
-  readonly name: string;
-  readonly slug: string;
-  readonly type: 'factory' | 'store' | 'dealer';
-  readonly license_plan?: string;
-  readonly license_expires_at?: string | null;
-  readonly license?: {
-    readonly plan?: string;
-    readonly expires_at?: string | null;
-    readonly status?: string;
-  };
-  readonly active: boolean;
-  readonly created_at?: string;
-  readonly member_count?: number;
-}
-
-export interface PlatformUserRow {
-  readonly id: string;
-  readonly email: string;
-  readonly name: string;
-  readonly platform_admin: boolean;
-  readonly active: boolean;
-  readonly created_at: string;
-  readonly memberships: {
-    readonly organization_id: string;
-    readonly organization_name: string;
-    readonly organization_slug: string;
-    readonly roles: string[];
-    readonly active: boolean;
-  }[];
-}
-
-export interface SecurityAuditEventRow {
-  readonly id: string;
-  readonly created_at: string;
-  readonly event_type: string;
-  readonly actor_user_id: string;
-  readonly organization_id: string;
-  readonly ip_address: string;
-  readonly metadata: Record<string, unknown>;
-}
+export type OrganizationRow = PlatformOrganization;
+export type PlatformUserRow = PlatformUser;
+export type SecurityAuditEventRow = SecurityAuditEvent;
 
 type TabKey = 'organizations' | 'users' | 'audit';
 
@@ -114,13 +82,7 @@ export function PlatformScreen({
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
 
-  const headers = useMemo(
-    () => ({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    }),
-    [token],
-  );
+  const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -129,16 +91,11 @@ export function PlatformScreen({
 
   const loadOrganizations = async () => {
     try {
-      const res = await fetch(`${baseUrl}/platform/organizations`, { headers });
-      if (res.ok) {
-        const data = (await res.json()) as OrganizationRow[];
-        setOrganizations(data);
+      const data = await api.listPlatformOrganizations(token);
+        setOrganizations([...data]);
         if (data.length > 0 && !selectedAuditOrgId) {
           setSelectedAuditOrgId(data[0]!.id);
         }
-      } else {
-        throw new Error('organizations');
-      }
     } catch {
       throw new Error('organizations');
     }
@@ -146,13 +103,8 @@ export function PlatformScreen({
 
   const loadUsers = async () => {
     try {
-      const res = await fetch(`${baseUrl}/platform/users`, { headers });
-      if (res.ok) {
-        const data = (await res.json()) as PlatformUserRow[];
-        setUsers(data);
-      } else {
-        throw new Error('users');
-      }
+      const data = await api.listPlatformUsers(token);
+      setUsers([...data]);
     } catch {
       throw new Error('users');
     }
@@ -161,13 +113,8 @@ export function PlatformScreen({
   const loadAudit = async (orgId: string) => {
     if (!orgId) return;
     try {
-      const res = await fetch(`${baseUrl}/platform/organizations/${orgId}/audit?limit=100`, {
-        headers,
-      });
-      if (res.ok) {
-        const data = (await res.json()) as SecurityAuditEventRow[];
-        setAuditEvents(data);
-      }
+      const data = await api.listSecurityAudit(token, orgId);
+      setAuditEvents([...data]);
     } catch {
       // ignore
     }
@@ -214,22 +161,14 @@ export function PlatformScreen({
     setSubmitting(true);
     setModalError(null);
     try {
-      const res = await fetch(`${baseUrl}/platform/organizations`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
+      await api.createPlatformOrganization(token, {
           name: newName.trim(),
           slug: newSlug.trim().toLowerCase(),
           type: newType,
           license_plan: newPlan,
           license_expires_at: newExpiry ? new Date(`${newExpiry}T23:59:59Z`).toISOString() : null,
-          clone_catalog_from: cloneFromOrgId || undefined,
-        }),
+          ...(cloneFromOrgId ? { clone_catalog_from: cloneFromOrgId } : {}),
       });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || 'Error al crear organización');
-      }
       showToast('✓ Organización creada exitosamente');
       setShowCreateModal(false);
       setNewName('');
@@ -251,20 +190,12 @@ export function PlatformScreen({
     setSubmitting(true);
     setModalError(null);
     try {
-      const res = await fetch(`${baseUrl}/platform/organizations/${editingOrg.id}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
+      await api.updatePlatformOrganization(token, editingOrg.id, editingOrg.version, {
           name: editName.trim(),
           license_plan: editPlan,
           license_expires_at: editExpiry ? new Date(`${editExpiry}T23:59:59Z`).toISOString() : null,
           active: editActive,
-        }),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || 'Error al actualizar organización');
-      }
+        });
       showToast('✓ Organización actualizada');
       setEditingOrg(null);
       await loadOrganizations();
@@ -286,19 +217,7 @@ export function PlatformScreen({
     setSubmitting(true);
     setModalError(null);
     try {
-      const res = await fetch(
-        `${baseUrl}/platform/organizations/${supportOrg.id}/support-session`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ reason: supportReason.trim() }),
-        },
-      );
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || 'Error al iniciar sesión de soporte');
-      }
-      const data = (await res.json()) as { token: string };
+      const data = await api.startSupportSession(token, supportOrg.id, supportReason.trim());
       showToast(`✓ Entrando a ${supportOrg.name} en modo soporte...`);
       setSupportOrg(null);
       setSupportReason('');
@@ -306,7 +225,7 @@ export function PlatformScreen({
         onSupportSessionStart(data.token, supportOrg.id);
       }
     } catch (err) {
-      setModalError(err instanceof Error ? err.message : 'Error al iniciar sesión de soporte');
+      setModalError(err instanceof GraneteApiError ? err.payload.message : err instanceof Error ? err.message : 'Error al iniciar sesión de soporte');
     } finally {
       setSubmitting(false);
     }
@@ -451,14 +370,14 @@ export function PlatformScreen({
                         </div>
                         <div>
                           <strong>Plan:</strong>{' '}
-                          <span className={`platform-chip platform-chip--${(org.license_plan || org.license?.plan) === 'pro' ? 'pro' : 'plan'}`}>
-                            {(org.license_plan || org.license?.plan || 'none').toUpperCase()}
+                          <span className={`platform-chip platform-chip--${org.license_plan === 'pro' ? 'pro' : 'plan'}`}>
+                            {(org.license_plan || 'none').toUpperCase()}
                           </span>
                         </div>
                         <div>
                           <strong>Vence:</strong>{' '}
-                          {(org.license_expires_at || org.license?.expires_at)
-                            ? new Date((org.license_expires_at || org.license?.expires_at)!).toLocaleDateString()
+                          {org.license_expires_at
+                            ? new Date(org.license_expires_at).toLocaleDateString()
                             : 'Permanente'}
                         </div>
                       </div>
@@ -468,8 +387,8 @@ export function PlatformScreen({
                           type="button"
                           className="btn btn--secondary btn--sm"
                           onClick={() => {
-                            const currentPlan = org.license_plan || org.license?.plan || 'trial';
-                            const currentExpiry = org.license_expires_at || org.license?.expires_at || null;
+                            const currentPlan = org.license_plan || 'trial';
+                            const currentExpiry = org.license_expires_at || null;
                             setModalError(null);
                             setEditingOrg(org);
                             setEditName(org.name);
@@ -632,7 +551,7 @@ export function PlatformScreen({
                           </td>
                           <td style={{ fontSize: 'var(--text-xs)' }}>
                             <pre
-                              title={JSON.stringify(ev.metadata ?? {}, null, 2)}
+                              title={JSON.stringify(ev.details ?? {}, null, 2)}
                               style={{
                                 margin: 0,
                                 padding: '2px 4px',
@@ -645,11 +564,11 @@ export function PlatformScreen({
                                 fontSize: 'var(--text-xs)',
                               }}
                             >
-                              {JSON.stringify(ev.metadata ?? {})}
+                              {JSON.stringify(ev.details ?? {})}
                             </pre>
                           </td>
                           <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                            {ev.ip_address || '—'}
+                            {ev.ip || '—'}
                           </td>
                         </tr>
                       ))

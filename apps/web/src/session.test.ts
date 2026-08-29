@@ -113,7 +113,7 @@ describe('session helpers', () => {
 
 describe('loginRequest', () => {
   it('POSTs credentials and returns token + user on success', async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
           token: 'jwt-ok',
@@ -121,9 +121,14 @@ describe('loginRequest', () => {
             id: '1',
             email: 'a@b.com',
             name: 'Ana',
-            role: 'admin',
             active: true,
+            platform_admin: false,
           },
+          license: { plan: 'none', status: 'none' },
+          roles: ['admin'],
+          memberships: [],
+          selection_required: false,
+          transport: 'web',
         }),
         {
           status: 200,
@@ -138,18 +143,18 @@ describe('loginRequest', () => {
     });
 
     expect(result.token).toBe('jwt-ok');
-    expect(result.user.role).toBe('admin');
+    expect(result.user.roles).toEqual(['admin']);
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://localhost:8080/api/auth/login',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ email: 'a@b.com', password: 'secret' }),
+        body: JSON.stringify({ email: 'a@b.com', password: 'secret', transport: 'web' }),
       }),
     );
   });
 
   it('maps 401 to Spanish error', async () => {
-    const fetchImpl = vi.fn(async () => new Response('no', { status: 401 }));
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ code: 'UNAUTHORIZED', message: 'invalid', fieldErrors: {}, requestId: 'request-401', retryable: false, details: {} }), { status: 401, headers: { 'Content-Type': 'application/json' } }));
     await expect(
       loginRequest('a@b.com', 'bad', {
         fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -162,7 +167,8 @@ describe('loginRequest', () => {
       async () =>
         new Response(
           JSON.stringify({
-            error: 'Tu cuenta está pendiente de aprobación por el administrador',
+            code: 'FORBIDDEN', message: 'Tu cuenta está pendiente de aprobación por el administrador',
+            fieldErrors: {}, requestId: 'request-403', retryable: false, details: {},
           }),
           { status: 403, headers: { 'Content-Type': 'application/json' } },
         ),
@@ -175,7 +181,7 @@ describe('loginRequest', () => {
   });
 
   it('maps network failure to connection error', async () => {
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
       throw new TypeError('Failed to fetch');
     });
     await expect(
@@ -213,7 +219,9 @@ describe('registerRequest', () => {
   });
 
   it('maps 409 to email already registered', async () => {
-    const fetchImpl = vi.fn(async () => new Response('dup', { status: 409 }));
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      code: 'CONFLICT', message: 'duplicate', fieldErrors: {}, requestId: 'request-register-409', retryable: false, details: {},
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
     await expect(
       registerRequest('X', 'x@b.com', 'secret1', {
         fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -224,12 +232,17 @@ describe('registerRequest', () => {
 
 describe('selectOrgRequest', () => {
   it('POSTs organization_id to /auth/select-org with Bearer token', async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
           token: 'jwt-org-scoped',
-          user: { id: '1', email: 'a@b.com', name: 'Ana', role: 'admin', active: true },
-          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1' },
+          user: { id: '1', email: 'a@b.com', name: 'Ana', active: true, platform_admin: false },
+          license: { plan: 'none', status: 'none' },
+          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', license: { plan: 'none', status: 'none' } },
+          roles: ['admin'],
+          memberships: [],
+          selection_required: false,
+          transport: 'web',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -242,27 +255,23 @@ describe('selectOrgRequest', () => {
 
     expect(result.token).toBe('jwt-org-scoped');
     expect(result.organization?.id).toBe('org-1');
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:8080/api/auth/select-org',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token-123',
-        }),
-        body: JSON.stringify({ organization_id: 'org-1' }),
-      }),
-    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('http://localhost:8080/api/auth/select-org');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
+    expect(init?.body).toBe(JSON.stringify({ organization_id: 'org-1' }));
   });
 });
 
 describe('meRequest', () => {
   it('GETs /auth/me with Bearer token without double /api', async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
-          user: { id: '1', email: 'a@b.com', name: 'Ana', role: 'admin', active: true },
+          user: { id: '1', email: 'a@b.com', name: 'Ana', active: true, platform_admin: false },
           roles: ['admin'],
-          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1' },
+          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', license: { plan: 'none', status: 'none' } },
+          transport: 'web',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -275,20 +284,15 @@ describe('meRequest', () => {
 
     expect(result.user.id).toBe('1');
     expect(result.organization?.id).toBe('org-1');
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:8080/api/auth/me',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token-123',
-        }),
-      }),
-    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('http://localhost:8080/api/auth/me');
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
   });
 });
 
 describe('endSupportRequest', () => {
   it('DELETEs /platform/support-sessions/{id} with Bearer token', async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ ended: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -300,14 +304,9 @@ describe('endSupportRequest', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:8080/api/platform/support-sessions/session-999',
-      expect.objectContaining({
-        method: 'DELETE',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token-123',
-        }),
-      }),
-    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('http://localhost:8080/api/platform/support-sessions/session-999');
+    expect(init?.method).toBe('DELETE');
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
   });
 });
