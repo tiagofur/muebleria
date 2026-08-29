@@ -417,6 +417,8 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		tc.Roles = roles
 		tc.OrgID = chosen.OrganizationID
+		tc.MembershipID = chosen.ID
+		tc.MembershipCredentialVersion = chosen.CredentialVersion
 		sum := toOrgSummaryDTO(chosen.Organization)
 		orgDTO = &sum
 		license = sum.License
@@ -483,7 +485,11 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	for i, rl := range m.Roles {
 		roles[i] = string(rl)
 	}
-	tc := auth.TokenContext{Roles: roles, OrgID: m.OrganizationID, PlatformAdmin: claims.PlatformAdmin}
+	tc := auth.TokenContext{
+		Roles: roles, OrgID: m.OrganizationID, MembershipID: m.ID,
+		MembershipCredentialVersion: m.CredentialVersion, PlatformAdmin: claims.PlatformAdmin,
+		AuthStartedAt: claims.AuthStartedAt.Time,
+	}
 	transport := authTransportFromClaims(claims)
 	if claims.Support != nil {
 		respondWithError(w, http.StatusForbidden, "support sessions cannot change organization")
@@ -541,14 +547,14 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	// and the live organization scope; the middleware already refreshed the
 	// membership roles into claims.
 	tc := auth.TokenContext{
-		Roles:         claims.Roles,
-		OrgID:         claims.OrgID,
-		PlatformAdmin: claims.PlatformAdmin,
+		Roles: claims.Roles, OrgID: claims.OrgID, MembershipID: claims.MembershipID,
+		MembershipCredentialVersion: claims.MembershipCredentialVersion,
+		PlatformAdmin:               claims.PlatformAdmin, AuthStartedAt: claims.AuthStartedAt.Time,
 	}
 	transport := authTransportFromClaims(claims)
 	var token string
 	if claims.Support != nil {
-		token, err = auth.GenerateSupportToken(u.ID, u.Email, *claims.Support, s.JWTSecret)
+		token, err = auth.GenerateSupportTokenFrom(u.ID, u.Email, *claims.Support, claims.AuthStartedAt.Time, s.JWTSecret)
 	} else {
 		token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
 	}

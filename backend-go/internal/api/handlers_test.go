@@ -335,8 +335,9 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 	// explicit memberships (ADR-0005 middleware re-validates per request).
 	return &domain.MembershipWithOrg{
 		Membership: domain.Membership{
-			OrganizationID: organizationID, UserID: userID,
+			ID: userID + ":" + organizationID, OrganizationID: organizationID, UserID: userID,
 			Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
+			CredentialVersion: 1,
 		},
 		Organization: domain.Organization{
 			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,

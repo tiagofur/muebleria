@@ -44,9 +44,9 @@ func TestValidatePassword(t *testing.T) {
 		pw      string
 		wantErr bool
 	}{
-		{"short1a", true},    // 7
-		{"12345678", true},   // digits only
-		{"abcdefgh", true},   // letters only
+		{"short1a", true},  // 7
+		{"12345678", true}, // digits only
+		{"abcdefgh", true}, // letters only
 		{"pass1234", false},
 		{"Passw0rd!", false},
 		{"", true},
@@ -144,4 +144,39 @@ func TestValidateToken_RejectsWrongVersion(t *testing.T) {
 func jwtNewSigned(claims *Claims, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+func TestGenerateToken_PreservesAbsoluteSessionLifetimeAndMembershipCredentials(t *testing.T) {
+	secret := "test-secret-key-12345"
+	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	token, err := GenerateToken("user-1", "user@example.com", TokenContext{
+		Roles:                       []string{"admin"},
+		OrgID:                       "org-1",
+		MembershipID:                "membership-1",
+		MembershipCredentialVersion: 7,
+		AuthStartedAt:               started,
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := ValidateToken(token, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.MembershipID != "membership-1" || claims.MembershipCredentialVersion != 7 {
+		t.Fatalf("membership claims = %q/%d, want membership-1/7", claims.MembershipID, claims.MembershipCredentialVersion)
+	}
+	if got := claims.AuthStartedAt.Time; !got.Equal(started) {
+		t.Fatalf("auth_started_at = %s, want %s", got, started)
+	}
+	if want := started.Add(AccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
+		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	}
+}
+
+func TestGenerateToken_RejectsOrganizationScopeWithoutMembershipCredentials(t *testing.T) {
+	_, err := GenerateToken("user-1", "user@example.com", TokenContext{OrgID: "org-1", Roles: []string{"admin"}}, "secret")
+	if err == nil {
+		t.Fatal("organization-scoped token without membership credentials must be rejected")
+	}
 }

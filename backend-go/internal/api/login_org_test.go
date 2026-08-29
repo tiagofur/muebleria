@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -17,7 +18,8 @@ import (
 func orgTestMembership(userID, orgID, slug string, roles []domain.UserRole) domain.MembershipWithOrg {
 	return domain.MembershipWithOrg{
 		Membership: domain.Membership{
-			OrganizationID: orgID, UserID: userID, Roles: roles, Status: domain.MembershipStatusActive,
+			ID: userID + ":" + orgID, OrganizationID: orgID, UserID: userID, Roles: roles,
+			Status: domain.MembershipStatusActive, CredentialVersion: 1,
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "Taller " + slug, Slug: slug, Type: domain.OrganizationTypeFactory,
@@ -182,4 +184,71 @@ func TestLogin_FailureIsAudited(t *testing.T) {
 		t.Fatal("expected error body")
 	}
 	_ = st
+}
+
+func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
+	server, _ := loginTestServer(t)
+	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{AuthStartedAt: started}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp LoginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !claims.AuthStartedAt.Time.Equal(started) {
+		t.Fatalf("auth_started_at = %s, want %s", claims.AuthStartedAt.Time, started)
+	}
+	if want := started.Add(auth.AccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
+		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	}
+}
+
+func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
+	server, _ := loginTestServer(t)
+	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
+		Roles:                       []string{string(domain.RoleVendedor)},
+		OrgID:                       "org-1",
+		MembershipID:                "u1:org-1",
+		MembershipCredentialVersion: 1,
+		AuthStartedAt:               started,
+	}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleRefresh)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp LoginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !claims.AuthStartedAt.Time.Equal(started) {
+		t.Fatalf("auth_started_at = %s, want %s", claims.AuthStartedAt.Time, started)
+	}
+	if want := started.Add(auth.AccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
+		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	}
 }

@@ -498,7 +498,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	roles := roleStrings(result.Membership.Roles)
-	token, err := auth.GenerateToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, PlatformAdmin: result.User.PlatformAdmin}, s.JWTSecret)
+	token, err := auth.GenerateToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin}, s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "accept invitation token")
 		return

@@ -195,7 +195,9 @@ func serveAuthenticatedRequest(
 			claims.Role = string(domain.RoleAdmin)
 		} else if claims.OrgID != "" {
 			m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
-			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 {
+			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 ||
+				m.ID != claims.MembershipID || m.CredentialVersion != claims.MembershipCredentialVersion ||
+				(m.SessionsRevokedAt != nil && !claims.AuthStartedAt.Time.After(*m.SessionsRevokedAt)) {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}

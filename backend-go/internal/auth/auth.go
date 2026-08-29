@@ -55,7 +55,7 @@ func init() {
 // TokenVersion identifies the claims layout. Tokens with any other version
 // are rejected: the multi-org claims (org context, roles[], platform_admin)
 // are a one-time breaking change and every client re-logs in once (ADR-0004 §6).
-const TokenVersion = 2
+const TokenVersion = 3
 
 type Claims struct {
 	UserID string `json:"user_id"`
@@ -68,6 +68,15 @@ type Claims struct {
 	// OrgID is the active organization scope; empty means a platform-level
 	// token (console / org selection), never business data access.
 	OrgID string `json:"org_id,omitempty"`
+	// MembershipID binds an organization-scoped token to exactly one live
+	// membership. It is intentionally not inferred from user and organization.
+	MembershipID string `json:"membership_id,omitempty"`
+	// MembershipCredentialVersion invalidates tokens when Team revokes a
+	// membership's sessions. Middleware compares it to the live membership.
+	MembershipCredentialVersion int64 `json:"membership_credential_version,omitempty"`
+	// AuthStartedAt is the absolute session origin. Refresh and organization
+	// selection preserve it so they cannot extend the 18-hour web/mobile limit.
+	AuthStartedAt *jwt.NumericDate `json:"auth_started_at,omitempty"`
 	// PlatformAdmin marks platform staff (console + audited support sessions).
 	PlatformAdmin bool   `json:"platform_admin,omitempty"`
 	Client        string `json:"client,omitempty"`
@@ -126,28 +135,42 @@ func CheckPasswordHash(password, hash string) bool {
 // TokenContext is the organization scope embedded in a token: the active
 // membership's roles plus the platform staff flag.
 type TokenContext struct {
-	Roles         []string
-	OrgID         string
-	PlatformAdmin bool
+	Roles                       []string
+	OrgID                       string
+	MembershipID                string
+	MembershipCredentialVersion int64
+	PlatformAdmin               bool
+	AuthStartedAt               time.Time
 }
 
 // GenerateSupportToken issues the short-lived support-session token: org
 // context with effective admin role. The middleware re-validates the session
 // row on every request, so logout/expiry cut access immediately.
 func GenerateSupportToken(userID string, email string, sc SupportClaims, secret string) (string, error) {
+	return GenerateSupportTokenFrom(userID, email, sc, time.Time{}, secret)
+}
+
+// GenerateSupportTokenFrom preserves the absolute support-session origin when
+// a support token is refreshed. Support remains a separate scoped read-only
+// boundary and intentionally carries no membership credentials.
+func GenerateSupportTokenFrom(userID string, email string, sc SupportClaims, authStartedAt time.Time, secret string) (string, error) {
 	now := time.Now()
+	if authStartedAt.IsZero() {
+		authStartedAt = now
+	}
 	claims := &Claims{
-		UserID:    userID,
-		Email:     email,
-		Role:      "admin",
-		Roles:     []string{"admin"},
-		OrgID:     sc.OrgID,
-		Transport: "support",
-		Support:   &sc,
-		Ver:       TokenVersion,
+		UserID:        userID,
+		Email:         email,
+		Role:          "admin",
+		Roles:         []string{"admin"},
+		OrgID:         sc.OrgID,
+		Transport:     "support",
+		Support:       &sc,
+		Ver:           TokenVersion,
+		AuthStartedAt: jwt.NewNumericDate(authStartedAt),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
-			ExpiresAt: jwt.NewNumericDate(now.Add(SupportTokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(SupportTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
@@ -196,19 +219,32 @@ func PrimaryRole(roles []string) string {
 
 func generateToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration, secret string) (string, error) {
 	now := time.Now()
+	authStartedAt := tc.AuthStartedAt
+	if authStartedAt.IsZero() {
+		authStartedAt = now
+	}
+	if tc.OrgID != "" && tc.MembershipID == "" {
+		return "", errors.New("organization-scoped token requires membership id")
+	}
+	if tc.OrgID != "" && tc.MembershipCredentialVersion < 1 {
+		return "", errors.New("organization-scoped token requires membership credential version")
+	}
 	claims := &Claims{
-		UserID:        userID,
-		Email:         email,
-		Role:          PrimaryRole(tc.Roles),
-		Roles:         tc.Roles,
-		OrgID:         tc.OrgID,
-		PlatformAdmin: tc.PlatformAdmin,
-		Client:        client,
-		Transport:     transport,
-		Ver:           TokenVersion,
+		UserID:                      userID,
+		Email:                       email,
+		Role:                        PrimaryRole(tc.Roles),
+		Roles:                       tc.Roles,
+		OrgID:                       tc.OrgID,
+		MembershipID:                tc.MembershipID,
+		MembershipCredentialVersion: tc.MembershipCredentialVersion,
+		PlatformAdmin:               tc.PlatformAdmin,
+		Client:                      client,
+		Transport:                   transport,
+		Ver:                         TokenVersion,
+		AuthStartedAt:               jwt.NewNumericDate(authStartedAt),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
@@ -240,6 +276,12 @@ func ValidateToken(tokenStr string, secret string) (*Claims, error) {
 	}
 	if claims.Ver != TokenVersion {
 		return nil, fmt.Errorf("unsupported token version")
+	}
+	if claims.AuthStartedAt == nil {
+		return nil, errors.New("token missing auth start")
+	}
+	if claims.Support == nil && claims.OrgID != "" && (claims.MembershipID == "" || claims.MembershipCredentialVersion < 1) {
+		return nil, errors.New("token missing membership credentials")
 	}
 
 	return claims, nil
