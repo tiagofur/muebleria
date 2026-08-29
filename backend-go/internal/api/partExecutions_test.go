@@ -45,6 +45,7 @@ func partExecFixtures(releasedRevision string) (*stubStore, *Server) {
 		partInstances:       []domain.PartInstance{lat},
 		moduleUnits:         []domain.ModuleUnitExecution{unit},
 		itemFloorStatuses:   map[string]string{"i1": "pending"},
+		userSectorsList:     []domain.UserSector{{UserID: "u1", Sector: "cutting"}, {UserID: "u1", Sector: "assembly"}, {UserID: "u1", Sector: "packaging"}},
 	}
 	return store, &Server{Store: store}
 }

@@ -40,7 +40,7 @@ func TestMigrations_NoBusinessData(t *testing.T) {
 		"material_stock", "stock_movements", "project_picking",
 		"production_activities", "damage_reports",
 		// Identidad (los usuarios se crean por registro/invitación/CLI, nunca por migración)
-		"users", "memberships", "invitations", "user_sectors", "support_sessions",
+		"users", "memberships", "invitations", "membership_sectors", "support_sessions",
 	}
 	for _, table := range zero {
 		var n int

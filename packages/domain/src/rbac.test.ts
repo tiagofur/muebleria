@@ -355,9 +355,9 @@ describe('rbac (F035 / OC-004)', () => {
     expect(roleCanAdvanceStation('gerente_ventas', 'packaged')).toBe(true);
     expect(roleCanAdvanceStation('ingeniero', 'cut')).toBe(true);
 
-    // produccion without assignments: legacy full access.
-    expect(roleCanAdvanceStation('produccion', 'edged', [])).toBe(true);
-    expect(roleCanAdvanceStation('produccion', 'edged', null)).toBe(true);
+    // produccion without assignments: deny by default.
+    expect(roleCanAdvanceStation('produccion', 'edged', [])).toBe(false);
+    expect(roleCanAdvanceStation('produccion', 'edged', null)).toBe(false);
 
     // produccion assigned to cutting only.
     const cutter = roleCanAdvanceStation('produccion', 'cut', ['cutting']);
@@ -578,5 +578,12 @@ describe('guia-de-uso doc pins canonical role labels', () => {
     for (const r of rolesContract.rejectedRoles) {
       expect(doc).not.toContain(r);
     }
+  });
+});
+
+describe('membership sector enforcement', () => {
+  it('fails closed for produccion without memberships sectors', () => {
+    expect(roleCanAdvanceStation('produccion', 'cut', [])).toBe(false);
+    expect(roleCanAdvanceStation('produccion', 'cut', ['cutting'])).toBe(true);
   });
 });

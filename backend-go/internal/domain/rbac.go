@@ -198,7 +198,7 @@ func RoleCanClaimProductionJob(role UserRole) bool {
 	}
 }
 
-// RoleIsScopedBySector — check if role is scoped by user_sectors (produccion or almacen).
+// RoleIsScopedBySector — check if role is scoped by membership_sectors (produccion or almacen).
 func RoleIsScopedBySector(role UserRole) bool {
 	return role == RoleProduccion || role == RoleAlmacen
 }
@@ -242,7 +242,7 @@ func SectorAllowedForRole(role UserRole, sector ProductionSector) bool {
 //
 //   - Supervisors (admin / gerente_ventas / gerente_produccion / ingeniero):
 //     full pipeline.
-//   - produccion: assigned sectors only; NO assignments = legacy full access.
+//   - produccion: assigned sectors only; NO assignments = no access (fail-closed).
 //   - almacen: only explicitly assigned sectors — never unrestricted.
 //   - Everyone else: no floor advancement.
 func RoleCanAdvanceStation(role UserRole, targetStatus string, assignedSectors []string) bool {
@@ -279,7 +279,7 @@ func RoleCanWorkSector(role UserRole, sector ProductionSector, assignedSectors [
 		return true
 	case RoleProduccion:
 		if len(assignedSectors) == 0 {
-			return true
+			return false
 		}
 		return containsSector(assignedSectors, string(sector))
 	case RoleAlmacen:
@@ -341,8 +341,8 @@ var projectEventAppendRoles = map[string][]UserRole{
 	"materials_ready":              {RoleAdmin, RoleGerenteProduccion, RoleAlmacen, RoleIngeniero},
 	"materials_release_overridden": {RoleAdmin, RoleGerenteProduccion, RoleAlmacen},
 	// Physical milestones.
-	"production_started":     {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
-	"production_completed":   {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"production_started":   {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
+	"production_completed": {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
 	// Quality / rework (OC-060..062) — parity with TS rbac.ts.
 	"quality_issue_reported": {RoleAdmin, RoleGerenteProduccion, RoleProduccion},
 	"rework_started":         {RoleAdmin, RoleGerenteProduccion, RoleProduccion},

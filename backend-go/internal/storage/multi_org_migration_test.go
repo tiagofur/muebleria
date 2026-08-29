@@ -208,7 +208,7 @@ func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
 		{`SELECT organization_id FROM projects WHERE id = '44444444-4444-4444-4444-444444444444'`, "projects"},
 		{`SELECT organization_id FROM customers WHERE id = '33333333-3333-3333-3333-333333333333'`, "customers"},
 		{`SELECT organization_id FROM material_boards WHERE id = '55555555-5555-5555-5555-555555555555'`, "material_boards"},
-		{`SELECT organization_id FROM user_sectors WHERE user_id = '11111111-1111-1111-1111-111111111111' AND sector = 'cutting'`, "user_sectors"},
+		{`SELECT ms.organization_id FROM membership_sectors ms JOIN memberships m ON m.id = ms.membership_id WHERE m.user_id = '11111111-1111-1111-1111-111111111111' AND ms.sector = 'cutting'`, "membership_sectors"},
 		{`SELECT organization_id FROM workshop_settings WHERE id = 1`, "workshop_settings"},
 	} {
 		var orgID string

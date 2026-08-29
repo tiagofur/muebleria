@@ -21,6 +21,7 @@ func floorScanTestFixtures() (*stubStore, *Server) {
 				{ID: "i3", ModuleID: "m-alt", Quantity: 2},
 			},
 		},
+		userSectorsList: []domain.UserSector{{UserID: "u1", Sector: "cutting"}, {UserID: "u1", Sector: "edge_banding"}, {UserID: "u1", Sector: "shipping"}},
 		modulesByID: map[string]*domain.Module{
 			"m-gab": {ID: "m-gab", Code: "GAB-01", Name: "Gabinete base"},
 			"m-alt": {ID: "m-alt", Code: "ALT-01", Name: "Alacena"},

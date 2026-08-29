@@ -58,11 +58,11 @@ func TestFloorScan_ScopedOperatorOnlyAdvancesOwnSector(t *testing.T) {
 	}
 }
 
-func TestFloorScan_ProduccionWithoutAssignmentsIsUnrestricted(t *testing.T) {
-	_, srv := scopedFixtures(nil) // legacy operator, no user_sectors rows
+func TestFloorScan_ProduccionWithoutAssignmentsFailsClosed(t *testing.T) {
+	_, srv := scopedFixtures(nil)
 	rr := doFloorScan(srv, domain.RoleProduccion, `{"module":"GAB-01-L2","advance":true}`)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("legacy operator should advance freely, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("unassigned operator must be denied, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -160,7 +160,7 @@ func TestProductionClaim_ProjectStationClaimIsNonExclusiveAndDedupedPerOperator(
 }
 
 func TestProductionFinish_ProjectStationClaimDoesNotAdvanceItems(t *testing.T) {
-	store, srv := scopedFixtures(nil)
+	store, srv := scopedFixtures([]domain.UserSector{{UserID: "u1", Sector: "cutting"}})
 	store.activitiesByID = []domain.ProductionActivity{{ID: "project-claim", ProjectID: "p1", Sector: domain.SectorCutting, Type: domain.ActivityClaim, OperatorID: "u1", OperatorName: "Ramón"}}
 	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/production/activity/finish/project-claim", strings.NewReader(`{}`)), "u1", string(domain.RoleProduccion))
 	req.SetPathValue("activityId", "project-claim")
@@ -176,7 +176,7 @@ func TestProductionFinish_ProjectStationClaimDoesNotAdvanceItems(t *testing.T) {
 }
 
 func TestProductionFinish_AdvancesFloorPipeline(t *testing.T) {
-	store, srv := scopedFixtures(nil)
+	store, srv := scopedFixtures([]domain.UserSector{{UserID: "u1", Sector: "cutting"}})
 	// i1 pending; a cutting claim by this operator, then finished.
 	store.activitiesByID = []domain.ProductionActivity{{
 		ID: "a1", ProjectID: "p1", ItemID: "i1", Sector: domain.SectorCutting,

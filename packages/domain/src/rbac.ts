@@ -434,7 +434,7 @@ export function sectorsAllowedForRole(
  * - Supervisors (admin / gerente_ventas / gerente_produccion / ingeniero):
  *   full pipeline.
  * - `produccion`: only sectors assigned via user_sectors. NO assignments =
- *   legacy full access (existing operators keep working every station).
+ *   no access (fail-closed) (existing operators keep working every station).
  * - `almacen`: ONLY explicitly assigned sectors — never unrestricted
  *   (warehouse staging produces no floor status of its own).
  * - Everyone else (vendedor / user / guest): no floor advancement.
@@ -457,7 +457,7 @@ export function roleCanAdvanceStation(
     return true;
   }
   if (role === 'produccion') {
-    if (!assignedSectors || assignedSectors.length === 0) return true;
+    if (!assignedSectors || assignedSectors.length === 0) return false;
     return assignedSectors.includes(sector);
   }
   if (role === 'almacen') {
