@@ -129,6 +129,12 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 					return nil
 				})
 				if err != nil {
+					// Deferred Team constraints fire on transaction commit, after the
+					// handler has rendered into the capture writer. Preserve their typed
+					// public contract instead of returning a generic transaction error.
+					if respondWithTeamInvariantError(w, err) {
+						return
+					}
 					respondWithInternalError(w, err, "tenant transaction")
 					return
 				}

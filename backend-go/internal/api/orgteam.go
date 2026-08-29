@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -212,6 +213,10 @@ func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "el offboarding de membresías queda reservado para el flujo de Team", nil)
 		return
 	}
+	if status == domain.MembershipStatusSuspended && reason == "" {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "reason es obligatorio para suspender una membresía", nil)
+		return
+	}
 	if _, ok := s.teamMutationTarget(w, r, claims, org, nil); !ok {
 		return
 	}
@@ -243,8 +248,35 @@ func membershipMutationError(w http.ResponseWriter, err error) bool {
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
 		return true
 	}
+	if respondWithTeamInvariantError(w, err) {
+		return true
+	}
 	respondWithInternalError(w, err, "membership mutation")
 	return true
+}
+
+const (
+	organizationRequiresActiveAdminConstraint   = "organization_requires_active_admin"
+	organizationActiveMemberSeatLimitConstraint = "organization_active_member_seat_limit"
+)
+
+// respondWithTeamInvariantError translates only named Postgres constraints.
+// Constraint identity survives driver wrapping; error text does not.
+func respondWithTeamInvariantError(w http.ResponseWriter, err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+		return false
+	}
+	switch pgErr.ConstraintName {
+	case organizationRequiresActiveAdminConstraint:
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeLastAdmin, "la organización activa debe conservar al menos un administrador", nil)
+		return true
+	case organizationActiveMemberSeatLimitConstraint:
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeSeatLimitReached, "se alcanzó el límite de miembros activos", nil)
+		return true
+	default:
+		return false
+	}
 }
 func membershipMutationResponse(m storage.OrgTeamMember) openapi.MembershipMutationResponse {
 	return openapi.MembershipMutationResponse{MembershipID: m.MembershipID, UserID: m.UserID, Status: openapi.MembershipStatus(m.Status), Roles: roleStrings(m.Roles), Version: m.Version}

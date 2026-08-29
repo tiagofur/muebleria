@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -17,6 +19,8 @@ type teamCapabilitiesStore struct {
 	team          []storage.OrgTeamMember
 	rolesUpdated  bool
 	statusUpdated bool
+	rolesErr      error
+	statusErr     error
 }
 
 func (s *teamCapabilitiesStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
@@ -25,11 +29,17 @@ func (s *teamCapabilitiesStore) ListOrgTeam(context.Context, string, string) ([]
 
 func (s *teamCapabilitiesStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, membershipID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
 	s.rolesUpdated = true
+	if s.rolesErr != nil {
+		return nil, s.rolesErr
+	}
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "target", Roles: roles, Status: domain.MembershipStatusActive, Version: version + 1}, nil
 }
 
 func (s *teamCapabilitiesStore) UpdateMembershipStatus(_ context.Context, _ string, membershipID string, status domain.MembershipStatus, _ string, _ string, version int64) (*storage.OrgTeamMember, error) {
 	s.statusUpdated = true
+	if s.statusErr != nil {
+		return nil, s.statusErr
+	}
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "target", Status: status, Version: version + 1}, nil
 }
 
@@ -151,12 +161,68 @@ func TestOrgMemberStatusCapabilities(t *testing.T) {
 			target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: tt.targetRoles}
 			srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
 			rr := httptest.NewRecorder()
-			srv.HandleOrgMemberStatus(rr, teamCapabilityRequest(http.MethodPut, "/api/org/memberships/target-membership/status", "actor", tt.actorRoles, `{"status":"suspended"}`))
+			srv.HandleOrgMemberStatus(rr, teamCapabilityRequest(http.MethodPut, "/api/org/memberships/target-membership/status", "actor", tt.actorRoles, `{"status":"suspended","reason":"staffing change"}`))
 			if rr.Code != tt.want {
 				t.Fatalf("status = %d, want %d: %s", rr.Code, tt.want, rr.Body.String())
 			}
 			if store.statusUpdated != tt.updated {
 				t.Fatalf("statusUpdated = %t, want %t", store.statusUpdated, tt.updated)
+			}
+		})
+	}
+}
+
+func TestOrgMemberStatusRequiresReasonToSuspend(t *testing.T) {
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: []domain.UserRole{domain.RoleVendedor}}
+	srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+	rr := httptest.NewRecorder()
+	srv.HandleOrgMemberStatus(rr, teamCapabilityRequest(http.MethodPut, "/api/org/memberships/target-membership/status", "actor", []string{string(domain.RoleAdmin)}, `{"status":"suspended","reason":"   "}`))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	if store.statusUpdated {
+		t.Fatal("suspension without a reason must not write")
+	}
+}
+
+func TestOrgMemberMutationsMapNamedTeamInvariantConstraints(t *testing.T) {
+	tests := []struct {
+		name       string
+		constraint string
+		handle     func(*Server, http.ResponseWriter, *http.Request)
+		body       string
+		configure  func(*teamCapabilitiesStore, error)
+		wantCode   string
+	}{
+		{
+			name:       "role mutation preserves last admin error",
+			constraint: organizationRequiresActiveAdminConstraint,
+			handle:     (*Server).HandleOrgMemberRoles,
+			body:       `{"roles":["vendedor"]}`,
+			configure:  func(store *teamCapabilitiesStore, err error) { store.rolesErr = err },
+			wantCode:   string(openapi.ApiErrorCodeLastAdmin),
+		},
+		{
+			name:       "status mutation preserves seat limit error",
+			constraint: organizationActiveMemberSeatLimitConstraint,
+			handle:     (*Server).HandleOrgMemberStatus,
+			body:       `{"status":"suspended","reason":"staffing change"}`,
+			configure:  func(store *teamCapabilitiesStore, err error) { store.statusErr = err },
+			wantCode:   string(openapi.ApiErrorCodeSeatLimitReached),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: []domain.UserRole{domain.RoleVendedor}}
+			srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+			tt.configure(store, &pgconn.PgError{Code: "23514", ConstraintName: tt.constraint})
+			rr := httptest.NewRecorder()
+			tt.handle(srv, rr, teamCapabilityRequest(http.MethodPut, "/api/org/memberships/target-membership", "actor", []string{string(domain.RoleAdmin)}, tt.body))
+			if rr.Code != http.StatusConflict {
+				t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusConflict, rr.Body.String())
+			}
+			if !strings.Contains(rr.Body.String(), `"code":"`+tt.wantCode+`"`) {
+				t.Fatalf("typed error missing %s: %s", tt.wantCode, rr.Body.String())
 			}
 		})
 	}
