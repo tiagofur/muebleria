@@ -17,7 +17,7 @@ import (
 func orgTestMembership(userID, orgID, slug string, roles []domain.UserRole) domain.MembershipWithOrg {
 	return domain.MembershipWithOrg{
 		Membership: domain.Membership{
-			OrganizationID: orgID, UserID: userID, Roles: roles, Active: true,
+			OrganizationID: orgID, UserID: userID, Roles: roles, Status: domain.MembershipStatusActive,
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "Taller " + slug, Slug: slug, Type: domain.OrganizationTypeFactory,
@@ -32,7 +32,7 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 		t.Fatalf("hash: %v", err)
 	}
 	u := &domain.User{
-		ID: "u1", Email: "u@example.com", Name: "U", Active: true, PasswordHash: hash,
+		ID: "u1", Email: "u@example.com", Name: "U", AccountStatus: domain.AccountStatusActive, PasswordHash: hash,
 	}
 	st := &stubStore{
 		getUserByEmail: u,

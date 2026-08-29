@@ -54,10 +54,10 @@ func (s *PostgresStore) SetUserSectors(ctx context.Context, userID string, secto
 // GetUsersBySector returns all users assigned to a given sector.
 func (s *PostgresStore) GetUsersBySector(ctx context.Context, sector string) ([]domain.User, error) {
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT u.id, u.email, u.name, u.active, u.created_at, u.updated_at
+		SELECT u.id, u.email, u.name, u.account_status, u.created_at, u.updated_at
 		FROM users u
 		INNER JOIN user_sectors us ON us.user_id = u.id
-		WHERE us.sector = $1 AND u.active = true AND us.organization_id = $2
+		WHERE us.sector = $1 AND u.account_status = 'active' AND us.organization_id = $2
 		ORDER BY u.name
 	`, sector, OrgFromCtx(ctx))
 	if err != nil {
@@ -88,7 +88,7 @@ func scanUsers(rows pgx.Rows) ([]domain.User, error) {
 	var users []domain.User
 	for rows.Next() {
 		var u domain.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Active, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.AccountStatus, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)

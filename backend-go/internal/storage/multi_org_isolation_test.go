@@ -197,9 +197,9 @@ func TestIsolation_UserDirectoryByOrganization(t *testing.T) {
 
 	// Two users: u-a belongs only to org A, u-both belongs to A and B.
 	seed := []string{
-		`INSERT INTO users (id, email, name, active, password_hash) VALUES
-		 ('a1000000-0000-0000-0000-0000000000aa', 'a@test.com', 'Usuario A', true, 'x'),
-		 ('a1000000-0000-0000-0000-0000000000bb', 'both@test.com', 'Usuario AB', true, 'x')`,
+		`INSERT INTO users (id, email, normalized_email, name, account_status, password_hash) VALUES
+		 ('a1000000-0000-0000-0000-0000000000aa', 'a@test.com', 'a@test.com', 'Usuario A', 'active', 'x'),
+		 ('a1000000-0000-0000-0000-0000000000bb', 'both@test.com', 'both@test.com', 'Usuario AB', 'active', 'x')`,
 		`INSERT INTO memberships (organization_id, user_id, roles) VALUES
 		 ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000aa', '{admin}'),
 		 ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000bb', '{vendedor}'),

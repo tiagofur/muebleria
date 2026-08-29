@@ -55,10 +55,11 @@ taller (email, contraseña y URL del servidor Granete). Al iniciar sesión:
 - La sesión se persiste en
   `~/Library/Application Support/Granete/sketchup_extension_session.json`.
   Ese archivo es una credencial bearer: no se comparte ni se incluye en
-  reportes. Desactivar el usuario en Granete la revoca de inmediato.
-- Si la licencia del usuario no está activa, la biblioteca remota se bloquea
-  con instrucciones (admin: `PUT /api/admin/users/{id}/license`) y el plugin
-  sirve el catálogo local de respaldo.
+  reportes. Deshabilitar la cuenta desde Platform revoca el acceso global;
+  suspender sólo una membership no afecta sus otras organizaciones.
+- Si la licencia de la organización no está activa, la biblioteca remota se
+  bloquea con instrucciones para que Platform revise el plan del taller, y el
+  plugin sirve el catálogo local de respaldo.
 
 Sin sesión o sin servidor, el plugin funciona offline con el catálogo local.
 

@@ -2,31 +2,25 @@
  * UsersScreen / TeamScreen — Panel de administración de Equipo del taller
  * (F026 / F035 / F166 / F172 #326).
  * Permite gestionar miembros del taller con roles múltiples (unión RBAC),
- * asignación de sectores de planta, invitaciones por enlace directo/WhatsApp
- * y estado de cuenta separado del estado de membresía.
+ * invitaciones por enlace directo y estado de cuenta separado del estado de
+ * membresía.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   CheckCircle2,
   MinusCircle,
   RefreshCw,
-  SearchX,
   Settings2,
-  ShieldCheck,
   Users,
-  MapPin,
   Mail,
   UserPlus,
   Copy,
   Check,
-  Clock,
-  Send,
   XCircle,
 } from 'lucide-react';
 import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
 import '../catalogs/catalogs.css';
 import './users.css';
-import { SectorAssignment } from './SectorAssignment';
 import {
   allowedRolesForOrgType,
   ASSIGNABLE_ROLES,
@@ -38,7 +32,7 @@ import { GraneteApiClient, GraneteApiError, type TeamMember, type Invitation } f
 export type UserRow = TeamMember;
 export type OrgInvitationRow = Invitation;
 
-export type UserFilter = 'all' | 'active' | 'suspended' | 'invitations';
+export type UserFilter = 'all' | 'active' | 'suspended' | 'left' | 'invitations';
 
 export interface UsersScreenProps {
   readonly baseUrl: string;
@@ -65,11 +59,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Station sector assignment
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [selectedUserName, setSelectedUserName] = useState<string>('');
-  const [selectedUserRole, setSelectedUserRole] = useState<string>('');
-
   // Multi-role edit modal
   const [roleEditUser, setRoleEditUser] = useState<UserRow | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<ProductRole[]>([]);
@@ -82,6 +71,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const [copiedLink, setCopiedLink] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [revokeInvitation, setRevokeInvitation] = useState<Invitation | null>(null);
+  const [revokeReason, setRevokeReason] = useState('');
 
   /** Roles this organization type may assign (#326): factories use the full
    * canonical set; store/dealer are commercial-only (server re-validates). */
@@ -105,7 +96,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setLoadError(null);
     try {
       const [team, pendingInvitations] = await Promise.all([
-        api.listTeam(token),
+        api.listMemberships(token),
         api.listInvitations(token),
       ]);
       setUsers([...team]);
@@ -122,19 +113,21 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   }, [baseUrl, token]);
 
   const filtered = useMemo(() => {
-    if (filter === 'suspended') return users.filter((u) => !u.membership_active);
-    if (filter === 'active') return users.filter((u) => u.membership_active);
+    if (filter === 'suspended') return users.filter((u) => u.membership_status === 'suspended');
+    if (filter === 'active') return users.filter((u) => u.membership_status === 'active');
+    if (filter === 'left') return users.filter((u) => u.membership_status === 'left');
     return users;
   }, [users, filter]);
 
-  const suspendedCount = users.filter((u) => !u.membership_active).length;
+  const suspendedCount = users.filter((u) => u.membership_status === 'suspended').length;
+  const leftCount = users.filter((u) => u.membership_status === 'left').length;
 
-  const saveMultiRoles = async (userId: string, roles: ProductRole[]) => {
-    setActionId(userId);
+  const saveMultiRoles = async (membershipId: string, roles: ProductRole[]) => {
+    setActionId(membershipId);
     try {
-      const member = users.find((candidate) => candidate.user_id === userId);
+      const member = users.find((candidate) => candidate.membership_id === membershipId);
       if (!member) throw new Error('Miembro no encontrado');
-      await api.updateMemberRoles(token, userId, member.version, { roles });
+      await api.updateMembershipRoles(token, membershipId, member.version, { roles });
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
       await load();
@@ -147,16 +140,18 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     }
   };
 
-  const toggleMemberActive = async (userId: string, active: boolean) => {
-    setActionId(userId);
+  const updateMemberStatus = async (membershipId: string, status: 'active' | 'suspended') => {
+    setActionId(membershipId);
     try {
-      const member = users.find((candidate) => candidate.user_id === userId);
+      const member = users.find((candidate) => candidate.membership_id === membershipId);
       if (!member) throw new Error('Miembro no encontrado');
-      await api.updateMemberActive(token, userId, member.version, { active });
-      showToast(active ? '✓ Miembro reactivado' : '✓ Miembro desactivado');
+      await api.updateMembershipStatus(token, membershipId, member.version, { status });
+      showToast(status === 'active' ? '✓ Membresía reactivada' : '✓ Membresía suspendida');
       await load();
-    } catch {
-      showToast('No se pudo actualizar el estado del miembro');
+    } catch (error) {
+      showToast(error instanceof GraneteApiError && error.code === 'LAST_ADMIN'
+        ? 'Antes de suspender al último administrador, transferí ese rol a otro miembro.'
+        : 'No se pudo actualizar el estado de la membresía');
     } finally {
       setActionId(null);
     }
@@ -187,11 +182,29 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   };
 
   const handleRevokeInvitation = async (invitation: Invitation) => {
+    if (!revokeReason.trim()) return;
     setActionId(invitation.id);
     try {
-      await api.revokeInvitation(token, invitation.id, invitation.version);
+      await api.revokeInvitation(token, invitation.id, invitation.version, { reason: revokeReason.trim() });
       showToast('✓ Invitación revocada');
+      setRevokeInvitation(null);
+      setRevokeReason('');
       await load();
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleResendInvitation = async (invitation: Invitation) => {
+    setActionId(invitation.id);
+    try {
+      const data = await api.resendInvitation(token, invitation.id, invitation.version);
+      setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+      setShowInviteModal(true);
+      showToast('✓ Enlace rotado. El enlace anterior ya no sirve.');
+      await load();
+    } catch {
+      showToast('No se pudo reenviar la invitación');
     } finally {
       setActionId(null);
     }
@@ -208,7 +221,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const roleChips = (u: UserRow) => {
     const rolesList = u.roles.length > 0 ? u.roles : ['user'];
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)', alignItems: 'center' }}>
+      <div className="users-role-chips">
         {rolesList.map((r) => (
           <span key={r} className="meta-chip">
             {roleLabelEs(r)}
@@ -222,7 +235,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     <div className="catalogs-page">
       <PageHeader
         title="Usuarios"
-        subtitle="Equipo del taller, asignación de roles múltiples, puestos de planta e invitaciones"
+        subtitle="Equipo del taller, roles, estados de membresía e invitaciones"
         icon={<Users size={20} strokeWidth={1.5} />}
         primaryAction={
           <button
@@ -236,7 +249,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               setShowInviteModal(true);
             }}
           >
-            <UserPlus size={15} /> Invitar Miembro
+            <UserPlus size={15} strokeWidth={1.5} aria-hidden="true" /> Invitar Miembro
           </button>
         }
         secondaryActions={
@@ -247,7 +260,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             onClick={() => void load()}
             disabled={loading}
           >
-            <RefreshCw size={14} /> Actualizar
+            <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" /> Actualizar
           </button>
         }
       />
@@ -258,14 +271,17 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+      <div className="users-filters">
         <StatusChips<UserFilter>
           options={[
-            { value: 'active', label: `Membresías activas (${users.filter((u) => u.membership_active).length})` },
-            { value: 'invitations', label: `Invitaciones pendientes (${invitations.length})` },
+            { value: 'active', label: `Membresías activas (${users.filter((u) => u.membership_status === 'active').length})` },
+            { value: 'invitations', label: `Invitaciones (${invitations.length})` },
             { value: 'all', label: `Todo el equipo (${users.length})` },
             ...(suspendedCount > 0
               ? [{ value: 'suspended' as const, label: `Membresías suspendidas (${suspendedCount})` }]
+              : []),
+            ...(leftCount > 0
+              ? [{ value: 'left' as const, label: `Membresías finalizadas (${leftCount})` }]
               : []),
           ]}
           value={filter}
@@ -288,8 +304,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         /* INVITATIONS VIEW */
         invitations.length === 0 ? (
           <EmptyState
-            title="Sin invitaciones pendientes"
-            description="No hay invitaciones abiertas. Podés invitar a nuevos miembros con el botón 'Invitar Miembro'."
+            title="Sin invitaciones"
+            description="Todavía no hay invitaciones. Podés crear una con el botón 'Invitar Miembro'."
             actionLabel="Invitar Miembro"
             onAction={() => {
               setInviteEmail('');
@@ -308,6 +324,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                   <th>Roles asignados</th>
                   <th>Creada</th>
                   <th>Vencimiento</th>
+                  <th>Estado</th>
                   <th className="users-table__align-right">Acciones</th>
                 </tr>
               </thead>
@@ -315,13 +332,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                 {invitations.map((inv) => (
                   <tr key={inv.id}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                        <Mail size={14} style={{ color: 'var(--text-muted)' }} />
-                        <span style={{ fontWeight: 600 }}>{inv.email}</span>
+                      <div className="users-invitation-email">
+                        <Mail size={14} strokeWidth={1.5} aria-hidden="true" />
+                        <span>{inv.email}</span>
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                      <div className="users-role-chips">
                         {inv.roles.map((r) => (
                           <span key={r} className="meta-chip">
                             {roleLabelEs(r)}
@@ -329,27 +346,30 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                         ))}
                       </div>
                     </td>
-                    <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                    <td className="users-table__date">
                       {new Date(inv.created_at).toLocaleDateString()}
                     </td>
-                    <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      {new Date(inv.expires_at).toLocaleDateString()}{' '}
-                      {new Date(inv.expires_at).getTime() <= Date.now() ? (
-                        <span className="status-badge status-badge--open">Vencida</span>
-                      ) : (
-                        <span className="status-badge status-badge--active">Pendiente</span>
-                      )}
+                    <td className="users-table__date">
+                      {new Date(inv.expires_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <span className={`status-badge ${['pending', 'delivered', 'opened'].includes(inv.status) ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {{ pending: 'Pendiente', delivered: 'Entregada', opened: 'Abierta', expired: 'Vencida', accepted: 'Aceptada', revoked: 'Revocada' }[inv.status]}
+                      </span>
                     </td>
                     <td className="users-table__align-right">
-                      <button
-                        type="button"
-                        className="btn btn--secondary btn--small"
-                        onClick={() => void handleRevokeInvitation(inv)}
-                        disabled={actionId === inv.id}
-                        style={{ color: 'var(--danger)' }}
-                      >
-                        <XCircle size={13} /> Revocar
-                      </button>
+                      {['pending', 'delivered', 'opened', 'expired'].includes(inv.status) ? (
+                        <div className="users-table__actions">
+                          <button type="button" className="btn btn--secondary btn--small" onClick={() => void handleResendInvitation(inv)} disabled={actionId === inv.id}>
+                            <RefreshCw size={13} strokeWidth={1.5} aria-hidden="true" /> Reenviar
+                          </button>
+                          {['pending', 'delivered', 'opened'].includes(inv.status) && (
+                            <button type="button" className="btn btn--secondary btn--small" onClick={() => { setRevokeInvitation(inv); setRevokeReason(''); }} disabled={actionId === inv.id}>
+                              <XCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Revocar
+                            </button>
+                          )}
+                        </div>
+                      ) : <span aria-hidden="true">—</span>}
                     </td>
                   </tr>
                 ))}
@@ -375,27 +395,21 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                 <th>Roles en el taller</th>
                 <th>Estado de cuenta</th>
                 <th>Estado de membresía</th>
-                <th>Estación / Puesto</th>
                 <th className="users-table__align-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((u) => {
-                const isWorking = actionId === u.user_id;
-                const pRole = (u.roles[0] || 'user') as ProductRole;
-                const canAssignSectors =
-                  (u.roles && u.roles.some((r) => r === 'produccion' || r === 'almacen')) ||
-                  pRole === 'produccion' ||
-                  pRole === 'almacen';
+                const isWorking = actionId === u.membership_id;
 
                 return (
-                  <tr key={u.user_id}>
+                  <tr key={u.membership_id}>
                     <td>
                       <div className="users-table__name">{u.name || 'Sin nombre'}</div>
                       <div className="users-table__email">{u.email}</div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                      <div className="users-member-roles">
                         {roleChips(u)}
                         <button
                           type="button"
@@ -409,63 +423,44 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           }}
                           disabled={isWorking}
                           title="Modificar roles"
-                          style={{ padding: '2px 6px' }}
+                          aria-label={`Modificar roles de ${u.name || u.email}`}
                         >
-                          <Settings2 size={13} />
+                          <Settings2 size={13} strokeWidth={1.5} aria-hidden="true" />
                         </button>
                       </div>
                     </td>
                     <td>
-                      <span className={`status-badge ${u.account_active ? 'status-badge--active' : 'status-badge--open'}`}>
-                        {u.account_active ? 'Cuenta activa' : 'Cuenta inactiva'}
+                      <span className={`status-badge ${u.account_status === 'active' ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {u.account_status === 'active' ? 'Cuenta activa' : 'Cuenta deshabilitada'}
                       </span>
                     </td>
                     <td>
-                      <span className={`status-badge ${u.membership_active ? 'status-badge--active' : 'status-badge--open'}`}>
-                        {u.membership_active ? 'Membresía activa' : 'Membresía suspendida'}
+                      <span className={`status-badge ${u.membership_status === 'active' ? 'status-badge--active' : 'status-badge--open'}`}>
+                        {{ active: 'Membresía activa', suspended: 'Membresía suspendida', left: 'Membresía finalizada' }[u.membership_status]}
                       </span>
                     </td>
-                    <td>
-                      {canAssignSectors ? (
-                        <button
-                          type="button"
-                          className="btn btn--secondary btn--small"
-                          onClick={() => {
-                            setSelectedUserId(u.user_id);
-                            setSelectedUserName(u.name || u.email);
-                            setSelectedUserRole(pRole);
-                          }}
-                          disabled={isWorking}
-                        >
-                          <MapPin size={13} /> Estaciones
-                        </button>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>—</span>
-                      )}
-                    </td>
-                    
                     <td className="users-table__align-right">
-                      <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
-                        {!u.membership_active ? (
+                      <div className="users-table__actions users-table__actions--end">
+                        {u.membership_status === 'suspended' ? (
                           <button
                             type="button"
                             className="btn btn--primary btn--small"
-                            onClick={() => void toggleMemberActive(u.user_id, true)}
-                            disabled={isWorking || !u.account_active}
-                            title={!u.account_active ? 'La cuenta global está inactiva' : undefined}
+                            onClick={() => void updateMemberStatus(u.membership_id, 'active')}
+                            disabled={isWorking || u.account_status !== 'active'}
+                            title={u.account_status !== 'active' ? 'La cuenta global está deshabilitada' : undefined}
                           >
-                            <CheckCircle2 size={13} /> Reactivar membresía
+                            <CheckCircle2 size={13} strokeWidth={1.5} aria-hidden="true" /> Reactivar membresía
                           </button>
-                        ) : (
+                        ) : u.membership_status === 'active' ? (
                           <button
                             type="button"
                             className="btn btn--secondary btn--small"
-                            onClick={() => void toggleMemberActive(u.user_id, false)}
+                            onClick={() => void updateMemberStatus(u.membership_id, 'suspended')}
                             disabled={isWorking}
                           >
-                            <MinusCircle size={13} /> Suspender membresía
+                            <MinusCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Suspender membresía
                           </button>
-                        )}
+                        ) : <span aria-hidden="true">—</span>}
                       </div>
                     </td>
                   </tr>
@@ -476,18 +471,6 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         </div>
       )}
 
-      {/* SECTOR ASSIGNMENT MODAL */}
-      {selectedUserId && (
-        <SectorAssignment
-          baseUrl={baseUrl}
-          token={token}
-          userId={selectedUserId}
-          userName={selectedUserName}
-          role={selectedUserRole as ProductRole}
-          onClose={() => setSelectedUserId(null)}
-        />
-      )}
-
       {/* MULTI-ROLE EDIT MODAL */}
       <Modal
         open={roleEditUser !== null}
@@ -495,34 +478,24 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         title={`Roles de ${roleEditUser?.name || 'Miembro'}`}
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+        <div className="users-modal-stack">
+          <p className="users-modal-copy">
             Seleccioná uno o varios roles para este usuario. Las capacidades se combinan por unión de permisos (ADR-0005).
           </p>
 
           {(orgType === 'store' || orgType === 'dealer') && (
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+            <p className="users-modal-copy">
               Este taller es comercial: sólo puede asignar roles de ventas y coordinación.
             </p>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-2)' }}>
+          <div className="users-role-options users-role-options--single">
             {assignableRoles.map((r) => {
               const isChecked = selectedRoles.includes(r);
               return (
                 <label
                   key={r}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-2)',
-                    padding: 'var(--space-2) var(--space-3)',
-                    background: isChecked ? 'var(--brand-50)' : 'var(--surface-muted)',
-                    border: `1px solid ${isChecked ? 'var(--brand-300)' : 'var(--border)'}`,
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-sm)',
-                  }}
+                  className={`users-role-option${isChecked ? ' is-selected' : ''}`}
                 >
                   <input
                     type="checkbox"
@@ -535,13 +508,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       }
                     }}
                   />
-                  <span style={{ fontWeight: isChecked ? 600 : 400 }}>{roleLabelEs(r)}</span>
+                  <span>{roleLabelEs(r)}</span>
                 </label>
               );
             })}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+          <div className="users-modal-actions">
             <button type="button" className="btn btn--secondary" onClick={() => setRoleEditUser(null)}>
               Cancelar
             </button>
@@ -551,7 +524,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               disabled={selectedRoles.length === 0}
               onClick={() => {
                 if (roleEditUser) {
-                  void saveMultiRoles(roleEditUser.user_id, selectedRoles);
+                  void saveMultiRoles(roleEditUser.membership_id, selectedRoles);
                 }
               }}
             >
@@ -569,45 +542,28 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         size="md"
       >
         {createdInviteLink ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            <div
-              style={{
-                background: 'var(--success-50, var(--surface-muted))',
-                color: 'var(--success-700, var(--text-primary))',
-                border: '1px solid var(--success-500, var(--border))',
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--text-sm)',
-              }}
-            >
+          <div className="users-modal-stack">
+            <div className="users-invitation-success" role="status">
               ✓ Invitación generada exitosamente.
             </div>
 
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+            <p className="users-modal-copy">
               Copiá el enlace y envíaselo al miembro por WhatsApp o email para que cree su contraseña y acceda:
             </p>
 
-            <div
-              style={{
-                background: 'var(--surface-muted)',
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border)',
-                wordBreak: 'break-all',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-xs)',
-              }}
-            >
+            <div className="users-invitation-link">
               {createdInviteLink}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+            <div className="users-modal-actions users-modal-actions--flush">
               <button
                 type="button"
                 className="btn btn--primary"
                 onClick={handleCopyInviteLink}
               >
-                {copiedLink ? <Check size={16} /> : <Copy size={16} />}
+                {copiedLink
+                  ? <Check size={16} strokeWidth={1.5} aria-hidden="true" />
+                  : <Copy size={16} strokeWidth={1.5} aria-hidden="true" />}
                 {copiedLink ? '¡Enlace copiado!' : 'Copiar enlace para WhatsApp'}
               </button>
               <button
@@ -620,9 +576,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             </div>
           </div>
         ) : (
-          <form onSubmit={handleCreateInvitation} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <form onSubmit={handleCreateInvitation} className="users-modal-stack">
             {inviteError && (
-              <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', margin: 0 }}>
+              <p role="alert" className="users-form-error">
                 {inviteError}
               </p>
             )}
@@ -644,23 +600,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
 
             <div>
               <label className="label">Roles a asignar *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+              <div className="users-role-options">
                 {assignableRoles.filter((r) => r !== 'user').map((r) => {
                   const isChecked = inviteRoles.includes(r);
                   return (
                     <label
                       key={r}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-2)',
-                        padding: 'var(--space-2) var(--space-3)',
-                        background: isChecked ? 'var(--brand-50)' : 'var(--surface-muted)',
-                        border: `1px solid ${isChecked ? 'var(--brand-300)' : 'var(--border)'}`,
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        fontSize: 'var(--text-sm)',
-                      }}
+                      className={`users-role-option${isChecked ? ' is-selected' : ''}`}
                     >
                       <input
                         type="checkbox"
@@ -680,7 +626,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+            <div className="users-modal-actions">
               <button
                 type="button"
                 className="btn btn--secondary"
@@ -699,6 +645,29 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             </div>
           </form>
         )}
+      </Modal>
+
+      <Modal
+        open={revokeInvitation !== null}
+        onClose={() => setRevokeInvitation(null)}
+        title="Revocar invitación"
+        size="sm"
+      >
+        <div className="users-modal-stack">
+          <p className="users-modal-copy">
+            El enlace dejará de funcionar. Indicá el motivo para conservar una auditoría útil.
+          </p>
+          <div>
+            <label className="label" htmlFor="revoke-reason">Motivo *</label>
+            <textarea id="revoke-reason" className="input" required value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} />
+          </div>
+          <div className="users-modal-actions users-modal-actions--flush">
+            <button type="button" className="btn btn--secondary" onClick={() => setRevokeInvitation(null)}>Cancelar</button>
+            <button type="button" className="btn btn--primary" disabled={!revokeReason.trim() || actionId === revokeInvitation?.id} onClick={() => { if (revokeInvitation) void handleRevokeInvitation(revokeInvitation); }}>
+              Revocar invitación
+            </button>
+          </div>
+        </div>
       </Modal>
 
     </div>

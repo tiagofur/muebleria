@@ -12,7 +12,6 @@ export {
   type WorkspaceState,
   type WorkspaceStoreDeps,
   type AssignableOwner,
-  type AuthGate,
 } from './workspaceStore';
 
 export {

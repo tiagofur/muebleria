@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -208,4 +209,47 @@ func TestPostgresIdempotencyServerErrorRollsBackFactoryOrganizationProvisioning(
 	if organizations != 0 || receipts != 0 {
 		t.Fatalf("partial provisioning leaked organizations=%d receipts=%d", organizations, receipts)
 	}
+}
+
+func TestPostgresSensitiveIdempotencyReceiptStoresOnlySealedBody(t *testing.T) {
+	one, two := idempotencyStores(t)
+	ctx := context.Background()
+	scope := fmt.Sprintf("sensitive-receipt-%d", time.Now().UnixNano())
+	plain := []byte(`{"invitation_token":"raw-token-must-not-persist"}`)
+	seal := func(body []byte) ([]byte, error) {
+		out := append([]byte("sealed:"), body...)
+		for left, right := len("sealed:"), len(out)-1; left < right; left, right = left+1, right-1 {
+			out[left], out[right] = out[right], out[left]
+		}
+		return out, nil
+	}
+	open := func(body []byte) ([]byte, error) {
+		out := append([]byte(nil), body[len("sealed:"):]...)
+		for left, right := 0, len(out)-1; left < right; left, right = left+1, right-1 {
+			out[left], out[right] = out[right], out[left]
+		}
+		return out, nil
+	}
+	req := storage.IdempotencyRequest{ScopeKey: scope, Fingerprint: "sensitive", SealBody: seal, OpenBody: open}
+	first, replayed, err := one.ExecuteIdempotent(ctx, req, func(context.Context) (storage.IdempotencyResponse, error) {
+		return storage.IdempotencyResponse{Status: http.StatusCreated, Body: plain}, nil
+	})
+	if err != nil || replayed || string(first.Body) != string(plain) {
+		t.Fatalf("first=%s replay=%v err=%v", first.Body, replayed, err)
+	}
+	var persisted []byte
+	if err := one.Pool.QueryRow(ctx, `SELECT body FROM api_idempotency_receipts WHERE scope_key=$1`, scope).Scan(&persisted); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(persisted, []byte("raw-token-must-not-persist")) {
+		t.Fatal("raw token persisted in receipt")
+	}
+	second, replayed, err := two.ExecuteIdempotent(ctx, req, func(context.Context) (storage.IdempotencyResponse, error) {
+		t.Fatal("replay executed mutation")
+		return storage.IdempotencyResponse{}, nil
+	})
+	if err != nil || !replayed || string(second.Body) != string(plain) {
+		t.Fatalf("replay=%v body=%s err=%v", replayed, second.Body, err)
+	}
+	_, _ = one.Pool.Exec(ctx, `DELETE FROM api_idempotency_receipts WHERE scope_key=$1`, scope)
 }

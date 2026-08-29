@@ -37,8 +37,8 @@ func TestPilotReadiness_MembershipExplicitContext(t *testing.T) {
 		t.Fatalf("dual user: first acceptance should scope to %s, got %+v", fx.a.slug, acceptA)
 	}
 	acceptB := fx.inviteAndAccept(t, fx.b.admin.token, "dual@pilot-readiness.test", "vendedor")
-	if !acceptB.SelectionRequired {
-		t.Fatalf("dual user: second acceptance must require org selection, got %+v", acceptB)
+	if acceptB.SelectionRequired || acceptB.Organization == nil || acceptB.Organization.Slug != fx.b.slug {
+		t.Fatalf("dual user: invitation acceptance must enter the inviting org directly, got %+v", acceptB)
 	}
 
 	// Plain login (no hint): org-less token + selection_required + both orgs.
@@ -66,7 +66,7 @@ func TestPilotReadiness_MembershipExplicitContext(t *testing.T) {
 	if len(meA.Roles) != 1 || meA.Roles[0] != "admin" {
 		t.Fatalf("dual user in A: roles %v want [admin]", meA.Roles)
 	}
-	fx.want(t, http.MethodGet, "/api/org/team", tokA, nil, http.StatusOK)
+	fx.want(t, http.MethodGet, "/api/org/memberships", tokA, nil, http.StatusOK)
 
 	// Context B: same person, different effective roles.
 	tokB := fx.scopedToken(t, "dual@pilot-readiness.test", fx.b.slug)
@@ -77,7 +77,7 @@ func TestPilotReadiness_MembershipExplicitContext(t *testing.T) {
 	if len(meB.Roles) != 1 || meB.Roles[0] != "vendedor" {
 		t.Fatalf("dual user in B: roles %v want [vendedor]", meB.Roles)
 	}
-	fx.want(t, http.MethodGet, "/api/org/team", tokB, nil, http.StatusForbidden)
+	fx.want(t, http.MethodGet, "/api/org/memberships", tokB, nil, http.StatusForbidden)
 
 	// The B-scoped token still cannot read A's data.
 	fx.want(t, http.MethodGet, "/api/customers/"+fx.a.customer.id, tokB, nil, http.StatusNotFound)
@@ -111,8 +111,8 @@ func TestPilotReadiness_MembershipDeactivationCutsAccess(t *testing.T) {
 	tok := fx.scopedToken(t, "member-b@pilot-readiness.test", fx.b.slug)
 	fx.want(t, http.MethodGet, "/api/settings", tok, nil, http.StatusOK)
 
-	fx.want(t, http.MethodPut, "/api/org/members/"+accept.User.ID+"/active", fx.b.admin.token,
-		map[string]bool{"active": false}, http.StatusOK)
+	fx.want(t, http.MethodPut, "/api/org/memberships/"+accept.Memberships[0].ID+"/status", fx.b.admin.token,
+		map[string]string{"status": "suspended", "reason": "pilot proof"}, http.StatusOK)
 
 	// Live token dies immediately (middleware re-reads the membership).
 	fx.want(t, http.MethodGet, "/api/settings", tok, nil, http.StatusUnauthorized)
@@ -134,13 +134,13 @@ func TestPilotReadiness_MembershipDeactivationCutsAccess(t *testing.T) {
 func TestPilotReadiness_RoleChangeRevalidatesTokens(t *testing.T) {
 	accept := fx.inviteAndAccept(t, fx.a.admin.token, "promote@pilot-readiness.test", "user")
 	tok := fx.scopedToken(t, "promote@pilot-readiness.test", fx.a.slug)
-	fx.want(t, http.MethodGet, "/api/org/team", tok, nil, http.StatusForbidden)
+	fx.want(t, http.MethodGet, "/api/org/memberships", tok, nil, http.StatusForbidden)
 
-	fx.want(t, http.MethodPut, "/api/org/members/"+accept.User.ID+"/roles", fx.a.admin.token,
+	fx.want(t, http.MethodPut, "/api/org/memberships/"+accept.Memberships[0].ID+"/roles", fx.a.admin.token,
 		map[string][]string{"roles": {"admin"}}, http.StatusOK)
 
 	// Same bearer, next request: admin capabilities now apply.
-	fx.want(t, http.MethodGet, "/api/org/team", tok, nil, http.StatusOK)
+	fx.want(t, http.MethodGet, "/api/org/memberships", tok, nil, http.StatusOK)
 	login := fx.login(t, "promote@pilot-readiness.test", fx.a.slug)
 	if len(login.Roles) != 1 || login.Roles[0] != "admin" {
 		t.Fatalf("role change: fresh login roles %v want [admin]", login.Roles)

@@ -318,10 +318,8 @@ export {
 
 export {
   LoginScreen,
-  RegisterScreen,
   AcceptInvitationScreen,
   type LoginScreenProps,
-  type RegisterScreenProps,
   type AcceptInvitationScreenProps,
 } from './auth';
 

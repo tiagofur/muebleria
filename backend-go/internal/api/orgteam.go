@@ -1,7 +1,3 @@
-// Organization team API (#326): the admin of the active organization manages
-// their people — members with multi-role chips, invitations by link/code,
-// offboarding — everything audited. Support sessions act as org admin here.
-
 package api
 
 import (
@@ -16,15 +12,13 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-// requireOrgAdmin: org-scoped token with admin in the role set (regular
-// membership admin or platform support session).
 func (s *Server) requireOrgAdmin(w http.ResponseWriter, r *http.Request) (*auth.Claims, *domain.Organization, bool) {
 	claims := claimsFromRequest(r)
 	if claims == nil || claims.OrgID == "" {
 		respondWithError(w, http.StatusForbidden, "necesitás sesión en un taller")
 		return nil, nil, false
 	}
-	if !domain.AnyRole(actorRoles(claims), func(rl domain.UserRole) bool { return rl == domain.RoleAdmin }) {
+	if !domain.AnyRole(actorRoles(claims), func(r domain.UserRole) bool { return r == domain.RoleAdmin }) {
 		respondWithError(w, http.StatusForbidden, "solo el administrador del taller puede gestionar el equipo")
 		return nil, nil, false
 	}
@@ -36,36 +30,37 @@ func (s *Server) requireOrgAdmin(w http.ResponseWriter, r *http.Request) (*auth.
 	return claims, org, true
 }
 
-// GET /api/org/team
+func teamMemberToOpenAPI(m storage.OrgTeamMember) openapi.TeamMember {
+	return openapi.TeamMember{
+		MembershipID: m.MembershipID, UserID: m.UserID, Email: m.Email, Name: m.Name,
+		AccountStatus: openapi.AccountStatus(m.AccountStatus), MembershipStatus: openapi.MembershipStatus(m.Status),
+		Roles: roleStrings(m.Roles), JoinedAt: m.JoinedAt.UTC().Format(time.RFC3339Nano), Version: m.Version,
+	}
+}
+
 func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
 	claims, _, ok := s.requireOrgAdmin(w, r)
 	if !ok {
 		return
 	}
-	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID)
+	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID, claims.UserID)
 	if err != nil {
 		respondWithInternalError(w, err, "org team")
 		return
 	}
 	out := make([]openapi.TeamMember, len(team))
-	for i, member := range team {
-		out[i] = openapi.TeamMember{
-			UserID: member.UserID, Email: member.Email, Name: member.Name,
-			AccountActive: member.AccountActive, MembershipActive: member.Active,
-			Roles: roleStrings(member.Roles), MemberSince: member.MemberSince.UTC().Format(time.RFC3339Nano), Version: member.Version,
-		}
+	for i, m := range team {
+		out[i] = teamMemberToOpenAPI(m)
 	}
 	respondWithJSON(w, http.StatusOK, out)
 }
 
-// PUT /api/org/members/{userId}/roles {roles: []}
 func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 	claims, org, ok := s.requireOrgAdmin(w, r)
 	if !ok {
 		return
 	}
-	userID := r.PathValue("userId")
-	expectedVersion, ok := RequireIfMatch(w, r)
+	expected, ok := RequireIfMatch(w, r)
 	if !ok {
 		return
 	}
@@ -74,79 +69,81 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	roles := make([]domain.UserRole, len(body.Roles))
-	for i, role := range body.Roles {
-		roles[i] = domain.UserRole(role)
+	for i, v := range body.Roles {
+		roles[i] = domain.UserRole(v)
 	}
 	if !domain.RolesAllowedInOrg(roles, org.Type) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeRoleNotAllowed, "roles inválidos para este tipo de taller", nil)
 		return
 	}
-	member, err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, userID, roles, expectedVersion)
-	if err != nil {
-		if errors.Is(err, storage.ErrVersionConflict) {
-			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeMembershipVersionConflict, "La membresía fue modificada por otra sesión", map[string]any{"currentVersionRequired": true})
-			return
-		}
-		if errors.Is(err, storage.ErrMembershipNotFound) {
-			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
-			return
-		}
-		respondWithInternalError(w, err, "update membership roles")
+	member, err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, r.PathValue("membershipId"), roles, expected)
+	if membershipMutationError(w, err) {
 		return
 	}
-
-	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"target_user_id": userID, "roles": roles,
-	})
+	if err := s.auditRequired(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"membership_id": member.MembershipID, "roles": roles}); err != nil {
+		respondWithInternalError(w, err, "audit membership roles")
+		return
+	}
 	w.Header().Set("ETag", FormatVersionETag(member.Version))
-	respondWithJSON(w, http.StatusOK, openapi.MembershipMutationResponse{UserID: userID, Roles: roleStrings(member.Roles), Active: member.Active, Version: member.Version})
+	respondWithJSON(w, http.StatusOK, membershipMutationResponse(*member))
 }
 
-// PUT /api/org/members/{userId}/active {active: bool}
-func (s *Server) HandleOrgMemberActive(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
 	claims, _, ok := s.requireOrgAdmin(w, r)
 	if !ok {
 		return
 	}
-	userID := r.PathValue("userId")
-	expectedVersion, ok := RequireIfMatch(w, r)
+	expected, ok := RequireIfMatch(w, r)
 	if !ok {
 		return
 	}
-	var body struct {
-		Active *bool `json:"active"`
-	}
+	var body openapi.UpdateMembershipStatusRequest
 	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
 	}
-	if body.Active == nil {
-		respondWithError(w, http.StatusBadRequest, "active es obligatorio")
+	reason := ""
+	if body.Reason != nil {
+		reason = strings.TrimSpace(*body.Reason)
+	}
+	status := domain.MembershipStatus(body.Status)
+	if status != domain.MembershipStatusActive && status != domain.MembershipStatusSuspended {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "el offboarding de membresías queda reservado para el flujo de Team", nil)
 		return
 	}
-	member, err := s.Store.SetMembershipActive(r.Context(), claims.OrgID, userID, *body.Active, expectedVersion)
-	if err != nil {
-		if errors.Is(err, storage.ErrVersionConflict) {
-			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeMembershipVersionConflict, "La membresía fue modificada por otra sesión", nil)
-			return
-		}
-		if errors.Is(err, storage.ErrMembershipNotFound) {
-			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
-			return
-		}
-		respondWithInternalError(w, err, "update membership active")
+	member, err := s.Store.UpdateMembershipStatus(r.Context(), claims.OrgID, r.PathValue("membershipId"), status, reason, claims.UserID, expected)
+	if membershipMutationError(w, err) {
 		return
 	}
-	event := "membership_deactivated"
-	if *body.Active {
-		event = "membership_reactivated"
+	event := "membership_reactivated"
+	if status == domain.MembershipStatusSuspended {
+		event = "membership_suspended"
 	}
-	s.audit(r.Context(), event, claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"target_user_id": userID,
-	})
+	if err := s.auditRequired(r.Context(), event, claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"membership_id": member.MembershipID, "reason": reason}); err != nil {
+		respondWithInternalError(w, err, "audit membership status")
+		return
+	}
 	w.Header().Set("ETag", FormatVersionETag(member.Version))
-	respondWithJSON(w, http.StatusOK, openapi.MembershipMutationResponse{UserID: userID, Roles: roleStrings(member.Roles), Active: member.Active, Version: member.Version})
+	respondWithJSON(w, http.StatusOK, membershipMutationResponse(*member))
 }
 
+func membershipMutationError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, storage.ErrVersionConflict) {
+		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeMembershipVersionConflict, "La membresía fue modificada por otra sesión", nil)
+		return true
+	}
+	if errors.Is(err, storage.ErrMembershipNotFound) {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
+		return true
+	}
+	respondWithInternalError(w, err, "membership mutation")
+	return true
+}
+func membershipMutationResponse(m storage.OrgTeamMember) openapi.MembershipMutationResponse {
+	return openapi.MembershipMutationResponse{MembershipID: m.MembershipID, UserID: m.UserID, Status: openapi.MembershipStatus(m.Status), Roles: roleStrings(m.Roles), Version: m.Version}
+}
 func roleStrings(roles []domain.UserRole) []string {
 	out := make([]string, len(roles))
 	for i, r := range roles {
@@ -155,13 +152,24 @@ func roleStrings(roles []domain.UserRole) []string {
 	return out
 }
 
-// GET /api/org/invitations
+func invitationToOpenAPI(inv storage.Invitation) openapi.Invitation {
+	out := openapi.Invitation{ID: inv.ID, OrganizationID: inv.OrganizationID, Email: inv.Email, Status: openapi.InvitationStatus(inv.Status), Roles: roleStrings(inv.Roles), ExpiresAt: inv.ExpiresAt.UTC().Format(time.RFC3339Nano), CreatedAt: inv.CreatedAt.UTC().Format(time.RFC3339Nano), InvitedBy: inv.InvitedBy, AcceptedBy: inv.AcceptedBy, RevokedBy: inv.RevokedBy, RevokedReason: inv.RevokedReason, Version: inv.Version}
+	if inv.AcceptedAt != nil {
+		v := inv.AcceptedAt.UTC().Format(time.RFC3339Nano)
+		out.AcceptedAt = &v
+	}
+	if inv.RevokedAt != nil {
+		v := inv.RevokedAt.UTC().Format(time.RFC3339Nano)
+		out.RevokedAt = &v
+	}
+	return out
+}
 func (s *Server) HandleOrgListInvitations(w http.ResponseWriter, r *http.Request) {
 	claims, _, ok := s.requireOrgAdmin(w, r)
 	if !ok {
 		return
 	}
-	list, err := s.Store.ListInvitations(r.Context(), claims.OrgID)
+	list, err := s.Store.ListInvitations(r.Context(), claims.OrgID, claims.UserID)
 	if err != nil {
 		respondWithInternalError(w, err, "org invitations")
 		return
@@ -173,25 +181,6 @@ func (s *Server) HandleOrgListInvitations(w http.ResponseWriter, r *http.Request
 	respondWithJSON(w, http.StatusOK, out)
 }
 
-func invitationToOpenAPI(inv storage.Invitation) openapi.Invitation {
-	out := openapi.Invitation{
-		ID: inv.ID, Email: inv.Email, Roles: roleStrings(inv.Roles),
-		ExpiresAt: inv.ExpiresAt.UTC().Format(time.RFC3339Nano), CreatedAt: inv.CreatedAt.UTC().Format(time.RFC3339Nano),
-		InvitedBy: inv.InvitedBy, AcceptedBy: inv.AcceptedBy, Version: inv.Version,
-	}
-	if inv.AcceptedAt != nil {
-		value := inv.AcceptedAt.UTC().Format(time.RFC3339Nano)
-		out.AcceptedAt = &value
-	}
-	if inv.RevokedAt != nil {
-		value := inv.RevokedAt.UTC().Format(time.RFC3339Nano)
-		out.RevokedAt = &value
-	}
-	return out
-}
-
-// POST /api/org/invitations {email, roles} → link/código (no SMTP in pilots:
-// the admin forwards it via WhatsApp). Token shown exactly once.
 func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Request) {
 	claims, org, ok := s.requireOrgAdmin(w, r)
 	if !ok {
@@ -201,74 +190,121 @@ func (s *Server) HandleOrgCreateInvitation(w http.ResponseWriter, r *http.Reques
 	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
 	}
-	email := strings.TrimSpace(strings.ToLower(body.Email))
+	email := domain.NormalizeEmail(body.Email)
 	roles := make([]domain.UserRole, len(body.Roles))
-	for i, role := range body.Roles {
-		roles[i] = domain.UserRole(role)
+	for i, v := range body.Roles {
+		roles[i] = domain.UserRole(v)
 	}
 	if email == "" || !strings.Contains(email, "@") || !domain.RolesAllowedInOrg(roles, org.Type) {
 		respondWithError(w, http.StatusBadRequest, "email válido y roles permitidos son obligatorios")
 		return
 	}
-
 	token, err := randomToken32()
 	if err != nil {
 		respondWithInternalError(w, err, "invitation token")
 		return
 	}
-	inv, err := s.Store.CreateInvitation(r.Context(), claims.OrgID, email, roles,
-		hashInvitationToken(token), time.Now().Add(14*24*time.Hour), claims.UserID)
+	inv, err := s.Store.CreateInvitation(r.Context(), claims.OrgID, email, roles, hashInvitationToken(token), time.Now().Add(14*24*time.Hour), claims.UserID)
 	if err != nil {
 		if isDuplicateKey(err) {
-			// One open invitation per (org, email) — the partial unique index
-			// rejects a second one; surface it as 409 instead of a 500.
-			respondWithError(w, http.StatusConflict, "ya existe una invitación abierta para ese email")
-			return
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "ya existe una invitación abierta para ese email", nil)
+		} else {
+			respondWithInternalError(w, err, "org create invitation")
 		}
-		respondWithInternalError(w, err, "org create invitation")
 		return
 	}
-	if err := s.auditRequired(r.Context(), "invitation_created", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"email": email, "roles": roles,
-	}); err != nil {
+	if err = s.auditRequired(r.Context(), "invitation_created", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"invitation_id": inv.ID}); err != nil {
 		respondWithInternalError(w, err, "audit invitation creation")
 		return
 	}
-	respondWithJSON(w, http.StatusCreated, openapi.CreateInvitationResponse{
-		Invitation:      invitationToOpenAPI(*inv),
-		InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token,
-	})
+	respondWithJSON(w, http.StatusCreated, openapi.CreateInvitationResponse{Invitation: invitationToOpenAPI(*inv), InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token})
 }
 
-// DELETE /api/org/invitations/{id}
+func (s *Server) HandleOrgResendInvitation(w http.ResponseWriter, r *http.Request) {
+	claims, _, ok := s.requireOrgAdmin(w, r)
+	if !ok {
+		return
+	}
+	expected, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	token, err := randomToken32()
+	if err != nil {
+		respondWithInternalError(w, err, "invitation token")
+		return
+	}
+	inv, err := s.Store.ResendInvitation(r.Context(), claims.OrgID, r.PathValue("invitationId"), hashInvitationToken(token), time.Now().Add(14*24*time.Hour), expected)
+	if invitationMutationError(w, err) {
+		return
+	}
+	if err = s.auditRequired(r.Context(), "invitation_resent", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"invitation_id": inv.ID}); err != nil {
+		respondWithInternalError(w, err, "audit invitation resend")
+		return
+	}
+	w.Header().Set("ETag", FormatVersionETag(inv.Version))
+	respondWithJSON(w, http.StatusOK, openapi.ResendInvitationResponse{Invitation: invitationToOpenAPI(*inv), InvitationToken: token, AcceptURL: "/accept-invitation?token=" + token})
+}
+
+// HandleOrgInvitationCommand adapts the OpenAPI action-suffix routes to Go's
+// ServeMux, which does not allow a literal suffix after a path wildcard.
+func (s *Server) HandleOrgInvitationCommand(w http.ResponseWriter, r *http.Request) {
+	command := r.PathValue("invitationCommand")
+	var operation string
+	switch {
+	case strings.HasSuffix(command, ":resend"):
+		operation = "org.resend-invitation"
+		r.SetPathValue("invitationId", strings.TrimSuffix(command, ":resend"))
+		s.RequireIdempotency(operation, http.HandlerFunc(s.HandleOrgResendInvitation)).ServeHTTP(w, r)
+	case strings.HasSuffix(command, ":revoke"):
+		operation = "org.revoke-invitation"
+		r.SetPathValue("invitationId", strings.TrimSuffix(command, ":revoke"))
+		s.RequireIdempotency(operation, http.HandlerFunc(s.HandleOrgRevokeInvitation)).ServeHTTP(w, r)
+	default:
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "ruta no encontrada", nil)
+	}
+}
 func (s *Server) HandleOrgRevokeInvitation(w http.ResponseWriter, r *http.Request) {
 	claims, _, ok := s.requireOrgAdmin(w, r)
 	if !ok {
 		return
 	}
-	expectedVersion, ok := RequireIfMatch(w, r)
+	expected, ok := RequireIfMatch(w, r)
 	if !ok {
 		return
 	}
-	invitation, err := s.Store.RevokeInvitation(r.Context(), claims.OrgID, r.PathValue("id"), expectedVersion)
-	if errors.Is(err, storage.ErrVersionConflict) {
-		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "La invitación fue modificada por otra sesión", nil)
+	var body openapi.RevokeInvitationRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
 	}
-	if errors.Is(err, storage.ErrInvitationNotFound) {
-		respondWithError(w, http.StatusNotFound, "invitación no encontrada")
+	reason := strings.TrimSpace(body.Reason)
+	if reason == "" {
+		respondWithError(w, http.StatusBadRequest, "reason es obligatorio")
 		return
 	}
-	if err != nil {
-		respondWithInternalError(w, err, "revoke invitation")
+	inv, err := s.Store.RevokeInvitation(r.Context(), claims.OrgID, r.PathValue("invitationId"), reason, claims.UserID, expected)
+	if invitationMutationError(w, err) {
 		return
 	}
-	if err := s.auditRequired(r.Context(), "invitation_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"invitation_id": r.PathValue("id"),
-	}); err != nil {
+	if err = s.auditRequired(r.Context(), "invitation_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"invitation_id": inv.ID, "reason": reason}); err != nil {
 		respondWithInternalError(w, err, "audit invitation revoke")
 		return
 	}
-	w.Header().Set("ETag", FormatVersionETag(invitation.Version))
-	respondWithJSON(w, http.StatusOK, openapi.RevokeInvitationResponse{Message: "invitation revoked", Invitation: invitationToOpenAPI(*invitation)})
+	w.Header().Set("ETag", FormatVersionETag(inv.Version))
+	respondWithJSON(w, http.StatusOK, openapi.RevokeInvitationResponse{Invitation: invitationToOpenAPI(*inv)})
+}
+func invitationMutationError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, storage.ErrVersionConflict) {
+		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "La invitación fue modificada por otra sesión", nil)
+		return true
+	}
+	if errors.Is(err, storage.ErrInvitationNotFound) {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeInvitationNotFound, "invitación no encontrada", nil)
+		return true
+	}
+	respondWithInternalError(w, err, "invitation mutation")
+	return true
 }

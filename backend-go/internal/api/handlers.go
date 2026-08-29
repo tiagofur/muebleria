@@ -132,57 +132,6 @@ func decodeJSONBodyWithPolicy(w http.ResponseWriter, r *http.Request, dst any, r
 
 // --- AUTH ---
 
-// RegisterRequest intentionally has no Role field — self-registration always
-// creates role "user" pending approval (issue #19).
-type RegisterRequest = openapi.RegisterRequest
-
-func (s *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	var req RegisterRequest
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	if req.Email == "" || req.Password == "" || req.Name == "" {
-		respondWithError(w, http.StatusBadRequest, "missing fields")
-		return
-	}
-
-	if err := auth.ValidatePassword(req.Password); err != nil {
-		respondWithError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	hash, err := auth.HashPassword(req.Password)
-	if err != nil {
-		respondWithInternalError(w, err, "register: hash password")
-		return
-	}
-
-	u := domain.User{
-		Email:        req.Email,
-		PasswordHash: hash,
-		Name:         req.Name,
-		Active:       false, // pending admin approval; membership granted on approval
-	}
-
-	err = s.Store.CreateUser(r.Context(), &u)
-	if err != nil {
-		if isDuplicateKey(err) {
-			respondWithError(w, http.StatusConflict, "email already registered")
-			return
-		}
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-
-	respondWithJSON(w, http.StatusCreated, openapi.RegisterResponse{Message: "Solicitud de acceso enviada. El administrador revisará tu cuenta pronto."})
-}
-
 type loginCredentials struct {
 	Email, Password, Org string
 	Transport            openapi.LoginTransport
@@ -242,13 +191,13 @@ func authTransportFromClaims(claims *auth.Claims) openapi.AuthTransport {
 // (sent as the `roles` sibling in auth responses) and licensing in the
 // organization — users.role/users.license_* were dropped (000090).
 type PublicUserDTO struct {
-	ID            string    `json:"id"`
-	Email         string    `json:"email"`
-	Name          string    `json:"name"`
-	Active        bool      `json:"active"`
-	PlatformAdmin bool      `json:"platform_admin"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID            string               `json:"id"`
+	Email         string               `json:"email"`
+	Name          string               `json:"name"`
+	AccountStatus domain.AccountStatus `json:"account_status"`
+	PlatformAdmin bool                 `json:"platform_admin"`
+	CreatedAt     time.Time            `json:"created_at"`
+	UpdatedAt     time.Time            `json:"updated_at"`
 }
 
 func ToPublicUserDTO(u *domain.User) PublicUserDTO {
@@ -259,7 +208,7 @@ func ToPublicUserDTO(u *domain.User) PublicUserDTO {
 		ID:            u.ID,
 		Email:         u.Email,
 		Name:          u.Name,
-		Active:        u.Active,
+		AccountStatus: u.AccountStatus,
 		PlatformAdmin: u.PlatformAdmin,
 		CreatedAt:     u.CreatedAt,
 		UpdatedAt:     u.UpdatedAt,
@@ -279,7 +228,16 @@ func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
 
 func toOpenAPIUser(u *domain.User) openapi.User {
 	created, updated := u.CreatedAt.UTC().Format(time.RFC3339Nano), u.UpdatedAt.UTC().Format(time.RFC3339Nano)
-	return openapi.User{ID: u.ID, Email: u.Email, Name: u.Name, Active: u.Active, PlatformAdmin: u.PlatformAdmin, CreatedAt: &created, UpdatedAt: &updated}
+	out := openapi.User{ID: u.ID, Email: u.Email, NormalizedEmail: u.NormalizedEmail, Name: u.Name, AccountStatus: openapi.AccountStatus(u.AccountStatus), PlatformAdmin: u.PlatformAdmin, CreatedAt: created, UpdatedAt: updated}
+	if u.EmailVerifiedAt != nil {
+		value := u.EmailVerifiedAt.UTC().Format(time.RFC3339Nano)
+		out.EmailVerifiedAt = &value
+	}
+	if u.LastLoginAt != nil {
+		value := u.LastLoginAt.UTC().Format(time.RFC3339Nano)
+		out.LastLoginAt = &value
+	}
+	return out
 }
 
 func toOpenAPIOrganization(o domain.Organization) openapi.OrganizationSummary {
@@ -308,10 +266,10 @@ func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
 			roles[i] = string(role)
 		}
 		out = append(out, MembershipDTO{
-			OrganizationID: m.OrganizationID,
-			Roles:          roles,
-			Organization:   toOrgSummaryDTO(m.Organization),
-			Version:        m.Version,
+			ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID,
+			Status: openapi.MembershipStatus(m.Status), Roles: roles,
+			JoinedAt:     m.JoinedAt.UTC().Format(time.RFC3339Nano),
+			Organization: toOrgSummaryDTO(m.Organization), Version: m.Version,
 		})
 	}
 	return out
@@ -361,7 +319,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	transport, orgHint := req.Transport, req.Org
 
-	// Uniform 401 for not found / wrong password / pending approval so clients
+	// Uniform 401 for not found, wrong password, or a disabled account so clients
 	// cannot enumerate accounts (issue #19). Dummy bcrypt when user missing
 	// keeps response timing closer to the password-check path.
 	const invalidCreds = "invalid email or password"
@@ -380,7 +338,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) || !u.Active {
+	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) || u.AccountStatus != domain.AccountStatusActive {
 		failLogin(u.ID)
 		return
 	}
@@ -419,6 +377,10 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		}, string(transport), s.JWTSecret)
 		if err != nil {
 			respondWithInternalError(w, err, "login: generate orgless token")
+			return
+		}
+		if err := s.Store.UpdateLastLogin(r.Context(), u.ID); err != nil {
+			respondWithInternalError(w, err, "login: update last login")
 			return
 		}
 		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
@@ -469,6 +431,10 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.Store.UpdateLastLogin(r.Context(), u.ID); err != nil {
+		respondWithInternalError(w, err, "login: update last login")
+		return
+	}
 	s.audit(r.Context(), "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
 		"transport": transport,
 	})
@@ -508,7 +474,7 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, body.OrganizationID)
-	if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
+	if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 {
 		respondWithError(w, http.StatusForbidden, "no tenés membresía activa en ese taller")
 		return
 	}
@@ -566,7 +532,7 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	// AuthMiddleware already loaded live role/active into claims; re-fetch for
 	// a complete User payload in the response.
 	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
-	if err != nil || u == nil || !u.Active {
+	if err != nil || u == nil || u.AccountStatus != domain.AccountStatusActive {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
@@ -1843,23 +1809,6 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 
 // --- ADMIN: User Management ---
 
-// HandleAdminUsers: GET /api/admin/users — the organization's directory
-// (pending first). Scoped to the caller's org: an org admin never sees other
-// organizations' users (ADR-0005); the platform console has its own global
-// listing.
-func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	list, err := s.Store.ListUsersByOrganization(r.Context())
-	if err != nil {
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, ToPublicUserDTOs(list))
-}
-
 // HandleAssignableOwners: GET /api/assignable-owners
 // Active members of the current organization that can own a customer/project
 // portfolio (admin + gerente + vendedor). Roles come from the org membership,
@@ -1878,7 +1827,7 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
 		return
 	}
-	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID)
+	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID, claims.UserID)
 	if err != nil {
 		respondWithInternalError(w, err, "handler")
 		return
@@ -1891,7 +1840,7 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 	}
 	out := make([]map[string]string, 0, len(team))
 	for _, m := range team {
-		if !m.Active {
+		if m.Status != domain.MembershipStatusActive {
 			continue
 		}
 		best, bestRank := "", -1
@@ -1910,78 +1859,6 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	respondWithJSON(w, http.StatusOK, out)
-}
-
-// HandleAdminUserRole: PUT /api/admin/users/{id}/role — legacy single-role
-// endpoint kept as the FE fallback. Membership-scoped since the users.role
-// bridge removal: it rewrites the target's roles INSIDE the caller's
-// organization only (deprecated users.role is never touched — changing roles
-// in org A must not affect what org B sees).
-func (s *Server) HandleAdminUserRole(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	id := r.PathValue("id")
-	if id == "" {
-		respondWithError(w, http.StatusBadRequest, "missing user id")
-		return
-	}
-	claims := claimsFromRequest(r)
-	if claims == nil || claims.OrgID == "" {
-		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
-		return
-	}
-	var body struct {
-		Role domain.UserRole `json:"role"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	if body.Role == "" {
-		respondWithError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	org, err := s.Store.GetOrganizationByID(r.Context(), claims.OrgID)
-	if err != nil || org == nil {
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-	roles := []domain.UserRole{body.Role}
-	if !domain.RolesAllowedInOrg(roles, org.Type) {
-		respondWithError(w, http.StatusBadRequest, "roles inválidos para este tipo de taller")
-		return
-	}
-	expectedVersion, ok := RequireIfMatch(w, r)
-	if !ok {
-		return
-	}
-	if _, err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, id, roles, expectedVersion); err != nil {
-		respondWithError(w, http.StatusNotFound, "membresía no encontrada")
-		return
-	}
-	s.audit(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
-		"target_user_id": id, "roles": roles, "via": "legacy_admin_role",
-	})
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
-}
-
-// HandleAdminUserReject: DELETE /api/admin/users/{id}
-func (s *Server) HandleAdminUserReject(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	id := r.PathValue("id")
-	if id == "" {
-		respondWithError(w, http.StatusBadRequest, "missing user id")
-		return
-	}
-	if err := s.Store.RejectUser(r.Context(), id); err != nil {
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user rejected"})
 }
 
 // HandleWorkshopSettings: GET/PUT /api/settings (F031 + F044 COST-02).

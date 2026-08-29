@@ -116,157 +116,6 @@
         }
       }
     },
-    "/auth/accept-invitation": {
-      "post": {
-        "operationId": "acceptInvitation",
-        "security": [],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AcceptInvitationRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Invitation accepted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      }
-    },
-    "/org/team": {
-      "get": {
-        "operationId": "listTeam",
-        "responses": {
-          "200": {
-            "description": "Team",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TeamMember"
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      }
-    },
-    "/org/members/{userId}/roles": {
-      "put": {
-        "operationId": "updateMemberRoles",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/UserId"
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateMemberRolesRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated membership",
-            "headers": {
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MembershipMutationResponse"
-                }
-              }
-            }
-          },
-          "412": {
-            "$ref": "#/components/responses/ApiError"
-          },
-          "428": {
-            "$ref": "#/components/responses/ApiError"
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      }
-    },
-    "/org/members/{userId}/active": {
-      "put": {
-        "operationId": "updateMemberActive",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/UserId"
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateMemberActiveRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated membership",
-            "headers": {
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MembershipMutationResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      }
-    },
     "/org/invitations": {
       "get": {
         "operationId": "listInvitations",
@@ -484,78 +333,6 @@
         }
       }
     },
-    "/auth/register": {
-      "post": {
-        "operationId": "register",
-        "security": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Registration requested",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegisterResponse"
-                }
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      }
-    },
-    "/org/invitations/{id}": {
-      "delete": {
-        "operationId": "revokeInvitation",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Invitation revoked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RevokeInvitationResponse"
-                }
-              }
-            },
-            "headers": {
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      }
-    },
     "/platform/organizations/{id}": {
       "patch": {
         "operationId": "updatePlatformOrganization",
@@ -732,6 +509,307 @@
           }
         }
       }
+    },
+    "/auth/invitations:accept": {
+      "post": {
+        "operationId": "acceptInvitation",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Invitation accepted and organization-scoped session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships": {
+      "get": {
+        "operationId": "listMemberships",
+        "responses": {
+          "200": {
+            "description": "Organization membership directory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamMember"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}/roles": {
+      "put": {
+        "operationId": "updateMembershipRoles",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRolesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated membership roles",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}/status": {
+      "put": {
+        "operationId": "updateMembershipStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembershipStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated membership status",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/invitations/{invitationId}:resend": {
+      "post": {
+        "operationId": "resendInvitation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvitationId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation token rotated and replacement returned once",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResendInvitationResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/invitations/{invitationId}:revoke": {
+      "post": {
+        "operationId": "revokeInvitation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvitationId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeInvitationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Invitation revoked",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeInvitationResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/platform/users/{userId}:set-account-status": {
+      "post": {
+        "operationId": "setPlatformUserAccountStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PlatformUserId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Global account status updated by Platform authority",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountStatusMutationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -743,15 +821,6 @@
       }
     },
     "parameters": {
-      "UserId": {
-        "name": "userId",
-        "in": "path",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
       "IfMatch": {
         "name": "If-Match",
         "in": "header",
@@ -770,6 +839,33 @@
           "minLength": 16,
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      },
+      "MembershipId": {
+        "name": "membershipId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "InvitationId": {
+        "name": "invitationId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "PlatformUserId": {
+        "name": "userId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
         }
       }
     },
@@ -825,7 +921,13 @@
           "RELATIONSHIP_NOT_ACTIVE",
           "FACTORY_NOT_AUTHORIZED",
           "CATALOG_VERSION_UNAVAILABLE",
-          "IDEMPOTENCY_CONFLICT"
+          "IDEMPOTENCY_CONFLICT",
+          "INVITATION_NOT_FOUND",
+          "INVITATION_REVOKED",
+          "INVITATION_TOKEN_ROTATED",
+          "ACCOUNT_DISABLED",
+          "MEMBERSHIP_ALREADY_ACTIVE",
+          "ACCOUNT_NOT_FOUND"
         ]
       },
       "ApiError": {
@@ -879,22 +981,47 @@
         "required": [
           "id",
           "email",
+          "normalized_email",
           "name",
-          "active",
-          "platform_admin"
+          "account_status",
+          "email_verified_at",
+          "last_login_at",
+          "platform_admin",
+          "created_at",
+          "updated_at"
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email"
+          },
+          "normalized_email": {
+            "type": "string",
+            "format": "email"
           },
           "name": {
             "type": "string"
           },
-          "active": {
-            "type": "boolean"
+          "account_status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "email_verified_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_login_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           },
           "platform_admin": {
             "type": "boolean"
@@ -969,14 +1096,30 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "id",
           "organization_id",
+          "user_id",
+          "status",
           "roles",
-          "organization",
-          "version"
+          "joined_at",
+          "version",
+          "organization"
         ],
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "organization_id": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MembershipStatus"
           },
           "roles": {
             "type": "array",
@@ -984,12 +1127,16 @@
               "type": "string"
             }
           },
-          "organization": {
-            "$ref": "#/components/schemas/OrganizationSummary"
+          "joined_at": {
+            "type": "string",
+            "format": "date-time"
           },
           "version": {
             "type": "integer",
             "minimum": 1
+          },
+          "organization": {
+            "$ref": "#/components/schemas/OrganizationSummary"
           }
         }
       },
@@ -1150,30 +1297,37 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "membership_id",
           "user_id",
           "email",
           "name",
-          "account_active",
-          "membership_active",
+          "account_status",
+          "membership_status",
           "roles",
-          "member_since",
+          "joined_at",
           "version"
         ],
         "properties": {
+          "membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "user_id": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email"
           },
           "name": {
             "type": "string"
           },
-          "account_active": {
-            "type": "boolean"
+          "account_status": {
+            "$ref": "#/components/schemas/AccountStatus"
           },
-          "membership_active": {
-            "type": "boolean"
+          "membership_status": {
+            "$ref": "#/components/schemas/MembershipStatus"
           },
           "roles": {
             "type": "array",
@@ -1181,7 +1335,7 @@
               "type": "string"
             }
           },
-          "member_since": {
+          "joined_at": {
             "type": "string",
             "format": "date-time"
           },
@@ -1196,18 +1350,35 @@
         "additionalProperties": false,
         "required": [
           "id",
+          "organization_id",
           "email",
+          "status",
           "roles",
           "expires_at",
           "created_at",
+          "invited_by",
+          "accepted_at",
+          "accepted_by",
+          "revoked_at",
+          "revoked_by",
+          "revoked_reason",
           "version"
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InvitationStatus"
           },
           "roles": {
             "type": "array",
@@ -1227,7 +1398,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uuid"
           },
           "accepted_at": {
             "type": [
@@ -1240,7 +1412,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "format": "uuid"
           },
           "revoked_at": {
             "type": [
@@ -1248,6 +1421,19 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "revoked_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "revoked_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "version": {
             "type": "integer",
@@ -1309,39 +1495,33 @@
           }
         }
       },
-      "UpdateMemberActiveRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "active"
-        ],
-        "properties": {
-          "active": {
-            "type": "boolean"
-          }
-        }
-      },
       "MembershipMutationResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "membership_id",
           "user_id",
+          "status",
           "roles",
-          "active",
           "version"
         ],
         "properties": {
+          "membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "user_id": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MembershipStatus"
           },
           "roles": {
             "type": "array",
             "items": {
               "type": "string"
             }
-          },
-          "active": {
-            "type": "boolean"
           },
           "version": {
             "type": "integer",
@@ -1465,7 +1645,7 @@
           "organization_name",
           "organization_slug",
           "roles",
-          "active",
+          "status",
           "version"
         ],
         "properties": {
@@ -1484,12 +1664,12 @@
               "type": "string"
             }
           },
-          "active": {
-            "type": "boolean"
-          },
           "version": {
             "type": "integer",
             "minimum": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/MembershipStatus"
           }
         }
       },
@@ -1501,7 +1681,7 @@
           "email",
           "name",
           "platform_admin",
-          "active",
+          "account_status",
           "created_at",
           "memberships"
         ],
@@ -1518,9 +1698,6 @@
           "platform_admin": {
             "type": "boolean"
           },
-          "active": {
-            "type": "boolean"
-          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -1530,6 +1707,9 @@
             "items": {
               "$ref": "#/components/schemas/PlatformUserMembership"
             }
+          },
+          "account_status": {
+            "$ref": "#/components/schemas/AccountStatus"
           }
         }
       },
@@ -1697,49 +1877,13 @@
           }
         }
       },
-      "RegisterRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "email",
-          "password",
-          "name"
-        ],
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "RegisterResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "message"
-        ],
-        "properties": {
-          "message": {
-            "type": "string"
-          }
-        }
-      },
       "RevokeInvitationResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "message",
           "invitation"
         ],
         "properties": {
-          "message": {
-            "type": "string"
-          },
           "invitation": {
             "$ref": "#/components/schemas/Invitation"
           }
@@ -1850,6 +1994,123 @@
         "properties": {
           "organization": {
             "$ref": "#/components/schemas/FactoryOrganization"
+          }
+        }
+      },
+      "AccountStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled"
+        ]
+      },
+      "MembershipStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "suspended",
+          "left"
+        ]
+      },
+      "InvitationStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "delivered",
+          "opened",
+          "accepted",
+          "expired",
+          "revoked"
+        ]
+      },
+      "UpdateMembershipStatusRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/MembershipStatus"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "ResendInvitationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "invitation",
+          "invitation_token",
+          "accept_url"
+        ],
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/Invitation"
+          },
+          "invitation_token": {
+            "type": "string"
+          },
+          "accept_url": {
+            "type": "string"
+          }
+        }
+      },
+      "RevokeInvitationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "UpdateAccountStatusRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "account_status",
+          "reason"
+        ],
+        "properties": {
+          "account_status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "AccountStatusMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "account_status",
+          "updated_at"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account_status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

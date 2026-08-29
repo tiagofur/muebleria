@@ -235,6 +235,10 @@ func (s *stubStore) GetUserByID(context.Context, string) (*domain.User, error) {
 	}
 	return nil, s.getUserByEmailErr
 }
+func (s *stubStore) UpdateLastLogin(context.Context, string) error { return nil }
+func (s *stubStore) UpdateAccountStatus(_ context.Context, _, userID string, status domain.AccountStatus, _, _ string) (*domain.User, error) {
+	return &domain.User{ID: userID, AccountStatus: status, UpdatedAt: time.Now()}, nil
+}
 func (s *stubStore) CreateUser(context.Context, *domain.User) error {
 	return s.createUserErr
 }
@@ -249,14 +253,6 @@ func (s *stubStore) ListUsersByOrganization(context.Context) ([]domain.User, err
 		return s.listUsers, nil
 	}
 	return []domain.User{}, nil
-}
-func (s *stubStore) RejectUser(context.Context, string) error {
-	s.stubNotUsed("RejectUser")
-	return nil
-}
-func (s *stubStore) DeleteOrphanInvitedUser(context.Context, string) error {
-	s.stubNotUsed("DeleteOrphanInvitedUser")
-	return nil
 }
 
 // --- Organizations / memberships / security audit (ADR-0004) ---
@@ -340,7 +336,7 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 	return &domain.MembershipWithOrg{
 		Membership: domain.Membership{
 			OrganizationID: organizationID, UserID: userID,
-			Roles: []domain.UserRole{domain.RoleAdmin}, Active: true,
+			Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
 		},
 		Organization: domain.Organization{
 			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,
@@ -349,10 +345,6 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 }
 
 func (s *stubStore) EnsureMembership(context.Context, string, string, []domain.UserRole) error {
-	return nil
-}
-
-func (s *stubStore) SetMembershipRoles(context.Context, string, []domain.UserRole) error {
 	return nil
 }
 
@@ -1968,7 +1960,7 @@ func TestHandleLogin_Uniform401ForPendingUser(t *testing.T) {
 	srv := &Server{
 		Store: &stubStore{getUserByEmail: &domain.User{
 			ID: "u1", Email: "pending@test.com", PasswordHash: hash,
-			Name: "P", Active: false,
+			Name: "P", AccountStatus: domain.AccountStatusDisabled,
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
@@ -1999,7 +1991,7 @@ func TestHandleLogin_Uniform401ForWrongPassword(t *testing.T) {
 	srv := &Server{
 		Store: &stubStore{getUserByEmail: &domain.User{
 			ID: "u1", Email: "ok@test.com", PasswordHash: hash,
-			Name: "O", Active: true,
+			Name: "O", AccountStatus: domain.AccountStatusActive,
 		}},
 		JWTSecret: "test-secret-key-for-jwt-signing-32b",
 	}
@@ -2016,55 +2008,6 @@ func TestHandleLogin_Uniform401ForWrongPassword(t *testing.T) {
 	if errorBody(t, rr) != "invalid email or password" {
 		t.Errorf("unexpected body %s", rr.Body.String())
 	}
-}
-
-func TestHandleRegister_RejectsWeakPassword(t *testing.T) {
-	srv := &Server{Store: &stubStore{}}
-	body := strings.NewReader(`{"email":"a@b.com","password":"short","name":"A"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-
-	srv.HandleRegister(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
-	}
-}
-
-func TestHandleRegister_IgnoresRoleInBody(t *testing.T) {
-	// Role is not part of the generated RegisterRequest. The compatibility
-	// decoder may ignore it, but self-registration must never apply it.
-	var created *domain.User
-	srv := &Server{Store: &createUserCapture{created: &created}}
-	body := strings.NewReader(`{"email":"a@b.com","password":"goodpass1","name":"A","role":"admin"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-
-	srv.HandleRegister(rr, req)
-
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201 (body=%s)", rr.Code, rr.Body.String())
-	}
-	if created == nil {
-		t.Fatal("expected CreateUser to be called")
-	}
-	if created.Active {
-		t.Error("self-reg must start inactive (pending approval)")
-	}
-}
-
-// createUserCapture embeds stubStore and records the user passed to CreateUser.
-type createUserCapture struct {
-	stubStore
-	created **domain.User
-}
-
-func (c *createUserCapture) CreateUser(_ context.Context, u *domain.User) error {
-	cp := *u
-	*c.created = &cp
-	return nil
 }
 
 func mustHash(pw string) (string, error) {
@@ -2462,13 +2405,13 @@ func TestPublicUserDTONeverLeaksSecrets(t *testing.T) {
 	t.Parallel()
 
 	u := domain.User{
-		ID:           "u-123",
-		Email:        "carlos@carpinteria.com",
-		PasswordHash: "$2a$12$eImiTXuWVxfM37uY4JANjOL.oUvhqp7VOHWcxSGYV7G4j7n",
-		Name:         "Carlos Carpintero",
-		Active:       true,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:            "u-123",
+		Email:         "carlos@carpinteria.com",
+		PasswordHash:  "$2a$12$eImiTXuWVxfM37uY4JANjOL.oUvhqp7VOHWcxSGYV7G4j7n",
+		Name:          "Carlos Carpintero",
+		AccountStatus: domain.AccountStatusActive,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	resp := LoginResponse{
@@ -2518,29 +2461,31 @@ func (s *stubStore) EndOpenSupportSessionsByOrg(context.Context, string, string)
 func (s *stubStore) EndSupportSession(context.Context, string, string, string) (bool, error) {
 	return true, nil
 }
-func (s *stubStore) ListOrgTeam(context.Context, string) ([]storage.OrgTeamMember, error) {
+func (s *stubStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
 	return nil, nil
 }
-func (s *stubStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, userID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
-	return &storage.OrgTeamMember{UserID: userID, Roles: roles, Active: true, Version: version + 1}, nil
+func (s *stubStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, membershipID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
+	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Roles: roles, Status: domain.MembershipStatusActive, Version: version + 1}, nil
 }
-func (s *stubStore) SetMembershipActive(_ context.Context, _ string, userID string, active bool, version int64) (*storage.OrgTeamMember, error) {
-	return &storage.OrgTeamMember{UserID: userID, Active: active, Version: version + 1}, nil
+func (s *stubStore) UpdateMembershipStatus(_ context.Context, _ string, membershipID string, status domain.MembershipStatus, _ string, _ string, version int64) (*storage.OrgTeamMember, error) {
+	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Status: status, Version: version + 1}, nil
 }
-func (s *stubStore) CreateInvitation(_ context.Context, _ string, _ string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
-	return &storage.Invitation{ID: "inv-1", Email: "new@taller.test", Roles: roles}, nil
+func (s *stubStore) CreateInvitation(_ context.Context, orgID string, email string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
+	return &storage.Invitation{ID: "inv-1", OrganizationID: orgID, Email: email, Status: "pending", Roles: roles}, nil
 }
-func (s *stubStore) ListInvitations(context.Context, string) ([]storage.Invitation, error) {
+func (s *stubStore) ListInvitations(context.Context, string, string) ([]storage.Invitation, error) {
 	return nil, nil
 }
-func (s *stubStore) RevokeInvitation(_ context.Context, _, id string, version int64) (*storage.Invitation, error) {
+func (s *stubStore) ResendInvitation(_ context.Context, orgID, id, _ string, _ time.Time, version int64) (*storage.Invitation, error) {
+	return &storage.Invitation{ID: id, OrganizationID: orgID, Status: "pending", Version: version + 1}, nil
+}
+func (s *stubStore) RevokeInvitation(_ context.Context, orgID, id, reason, actor string, version int64) (*storage.Invitation, error) {
 	now := time.Now()
-	return &storage.Invitation{ID: id, Email: "revoked@taller.test", Version: version + 1, RevokedAt: &now}, nil
+	return &storage.Invitation{ID: id, OrganizationID: orgID, Status: "revoked", Version: version + 1, RevokedAt: &now, RevokedReason: &reason, RevokedBy: &actor}, nil
 }
-func (s *stubStore) GetOpenInvitationByToken(context.Context, string) (*storage.OpenInvitation, error) {
-	return nil, errors.New("invitation not found")
+func (s *stubStore) AcceptInvitation(context.Context, storage.AcceptInvitationCommand, func(string, string) bool, func(string) error) (*storage.AcceptInvitationResult, error) {
+	return nil, storage.ErrInvitationNotFound
 }
-func (s *stubStore) AcceptInvitationTx(context.Context, string, string, string) error { return nil }
 func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]openapi.SecurityAuditEvent, error) {
 	return nil, nil
 }

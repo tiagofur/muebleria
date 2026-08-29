@@ -109,7 +109,7 @@ func (s *Server) authorizeProjectOrgOwnership(w http.ResponseWriter, r *http.Req
 			continue
 		}
 		m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, c.orgID)
-		if err != nil || m == nil || !m.Active || !m.Organization.Active {
+		if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active {
 			respondWithError(w, http.StatusForbidden, "no podés asignar una organización a la que no pertenecés")
 			return false
 		}

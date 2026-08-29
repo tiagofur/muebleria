@@ -1133,16 +1133,30 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **RBAC**: `roleCanAccessSettings` (admin, gerente_ventas, ingeniero).
 - **Icono:** `Settings`
 
-### 6.11 Usuarios
+### 6.11 Equipo
 
 - **Ruta nav:** `users` (sección CONFIG, **solo admin**)
-- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172)
-- **Patrón:** tabla simple (acciones inline por fila, sin expand) + modales (roles, invitación, estaciones)
+- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172 / F194)
+- **Unidad canónica:** `Membership`, identificada y mutada por `membershipId`. La
+  identidad global `User` no es una fila administrable por el taller.
+- **Patrón:** tabla simple (acciones inline por fila, sin expand) + modales de
+  roles e invitación.
 - **Contenido:**
-  - Filtros por estado: Miembros activos / Invitaciones pendientes / Todos (+ Pendientes de aprobación si aplica)
-  - Lista de miembros con chips de **roles múltiples** (unión RBAC, ADR-0005), email, estado y estación
-  - Acciones por fila: Editar roles (checkboxes multi-role), Estaciones (solo `produccion`/`almacen`), Aprobar/Rechazar pendientes, Desactivar, plan de licencia
-  - **"+ Invitar Miembro"**: email + roles → genera enlace de una sola vez (WhatsApp/email), revocación y vencimiento visible
+  - Filtros por lifecycle: membresías activas, suspendidas y finalizadas;
+    invitaciones; y equipo completo. No existe “pendiente de aprobación” global.
+  - Lista de miembros con chips de **roles múltiples** (unión RBAC, ADR-0005),
+    email, **estado de cuenta** (`active | disabled`) y **estado de membresía**
+    (`active | suspended | left`) en columnas separadas. El taller sólo muta la
+    membresía; el estado global de cuenta es informativo en esta superficie.
+  - Acciones por `membershipId`: editar roles, suspender y reactivar la
+    membresía. No aprobar, rechazar, eliminar ni deshabilitar un `User` global.
+  - **"+ Invitar Miembro"**: email + roles → genera un enlace de una sola vez.
+    La lista conserva estados honestos (`pending`, `delivered`, `opened`,
+    `accepted`, `expired`, `revoked`), expiry y acciones permitidas: reenviar
+    rota el enlace anterior; revocar exige motivo y deja el enlace inutilizable.
+- **Fuera de alcance de #450:** administración avanzada de Team, estaciones por
+  membership, invariant de último admin, offboarding y transferencia pertenecen
+  a #451. No reintroducir esos flujos por `userId` mientras se implementan.
 - **Roles asignables:** los 8 canónicos de `contracts/roles.json` — `admin`, `user`, `vendedor`, `gerente_ventas`, `gerente_produccion`, `ingeniero`, `produccion`, `almacen` (F035; `disenador`→`ingeniero` y `carpintero`→`produccion` son migraciones legacy rechazadas hoy). Etiquetas amigables centralizadas en `roleLabelEs` (`packages/domain`).
 - **RBAC**: solo `admin` (vía `roleCanManageUsers`; sesiones de soporte de plataforma actúan como admin del taller). El item se añade al sidebar condicionalmente.
 - **Icono:** `ShieldCheck`
@@ -1152,24 +1166,23 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/auth/LoginScreen.tsx`
 - **CSS:** `login.css` — solo tokens del design system (sin colores hardcodeados)
 - **Comportamiento:** pantalla completa **antes** del shell; no usa `AppShell`
-- **Panel de marca (v2.1, desktop ≥900px):** split con panel indigo (`--brand-800`, borde `--brand-400` 30%) a la izquierda — `BrandMark` 64px + wordmark + tagline «Cotización y producción para talleres de carpintería» + meta de módulos — y la card de form a la derecha. Es el único momento "committed" del producto. En <900px el panel se oculta (card centrada). RegisterScreen comparte la hoja sin el aside.
+- **Panel de marca (v2.1, desktop ≥900px):** split con panel indigo (`--brand-800`, borde `--brand-400` 30%) a la izquierda — `BrandMark` 64px + wordmark + tagline «Cotización y producción para talleres de carpintería» + meta de módulos — y la card de form a la derecha. Es el único momento "committed" del producto. En <900px el panel se oculta (card centrada).
 - **Acciones:**
   - Login API: `POST …/auth/login` → JWT en `localStorage` (`muebles_token`) + modo `auth` en `sessionStorage` (`muebles_session`)
   - Invitado: `WifiOff` + «Acceder sin conexión» → modo `guest` (sin token); workspace seed local
-  - Link a Registro (#6.13)
 - **Iconos:** `LogIn` (submit), `Mail`, `KeyRound`, `WifiOff` (guest)
 - **Salida de sesión:** control **Salir** en topbar del shell (`LogOut`); limpia `muebles_session` + `muebles_token` y vuelve a `LoginScreen`
 
-### 6.13 Registro
+### 6.13 Aceptación de invitación
 
-- **Path:** `packages/ui/src/auth/RegisterScreen.tsx`
+- **Path:** `packages/ui/src/auth/AcceptInvitationScreen.tsx`
 - **Patrón:** pantalla completa pre-shell, comparte `login.css`
 - **Acciones:**
-  - `POST …/auth/register` crea `role=user`, `active=false` (pendiente de aprobación admin)
-  - Login de cuenta pendiente → 403 con mensaje claro
-  - Tras registro exitoso: mensaje «pendiente de aprobación» + link a Login
-- **Iconos:** `UserPlus` (submit), `Mail`, `KeyRound`
-- **RBAC**: abierto a cualquiera (es alta de usuario).
+  - `POST …/auth/invitations:accept` consume un enlace de una sola vez;
+  - una identidad nueva define nombre y contraseña; una existente confirma su contraseña;
+  - éxito crea una sesión scoped directamente a la organización invitante;
+  - expiración, revocación, uso previo y rotación muestran estados distintos y accionables.
+- **RBAC:** endpoint público limitado por token; la creación, reemisión y revocación de invitaciones requieren administración del taller.
 
 ---
 

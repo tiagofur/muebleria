@@ -4,58 +4,40 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
-// User identity persistence. Roles live in memberships and licensing in the
-// organization (ADR-0005): the deprecated users.role / users.license_* columns
-// were dropped in migration 000090.
+const userColumns = `id, email, normalized_email, password_hash, name, account_status,
+	email_verified_at, last_login_at, platform_admin, created_at, updated_at`
 
-const userColumns = `id, email, password_hash, name, active, platform_admin, created_at, updated_at`
+var ErrUserNotFound = errors.New("user not found")
+
+func scanUser(row pgx.Row) (*domain.User, error) {
+	var u domain.User
+	if err := row.Scan(&u.ID, &u.Email, &u.NormalizedEmail, &u.PasswordHash, &u.Name,
+		&u.AccountStatus, &u.EmailVerifiedAt, &u.LastLoginAt, &u.PlatformAdmin,
+		&u.CreatedAt, &u.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
 
 func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
-	row := s.db(ctx).QueryRow(ctx,
-		`SELECT `+userColumns+` FROM users WHERE email = $1`, email)
-	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Active, &u.PlatformAdmin,
-		&u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("user not found")
-		}
-		return nil, err
-	}
-	// Return inactive (pending) users too — login maps all failures to the same
-	// 401 so clients cannot enumerate registered/pending emails (issue #19).
-	// Callers that require an approved account must check u.Active themselves.
-	return &u, nil
+	return scanUser(s.db(ctx).QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE normalized_email = $1`, domain.NormalizeEmail(email)))
 }
 
-// GetUserByEmailAnyState is like GetUserByEmail but returns the user regardless
-// of its active flag and never returns ErrPendingApproval. Used by the admin CLI
-// (cmd/admin) to locate a user — including inactive ones — for password rotation.
 func (s *PostgresStore) GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error) {
-	row := s.db(ctx).QueryRow(ctx,
-		`SELECT `+userColumns+` FROM users WHERE email = $1`, email)
-	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Active, &u.PlatformAdmin,
-		&u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("user not found")
-		}
-		return nil, err
-	}
-	return &u, nil
+	return s.GetUserByEmail(ctx, email)
 }
 
-// UpdateUserPassword sets a new password hash for the given user id.
-// Used by the admin CLI to rotate credentials.
-func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id string, passwordHash string) error {
-	result, err := s.db(ctx).Exec(ctx,
-		`UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, passwordHash, id)
+func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, passwordHash string) error {
+	result, err := s.db(ctx).Exec(ctx, `UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2`, passwordHash, id)
 	if err != nil {
 		return err
 	}
@@ -65,102 +47,110 @@ func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id string, passw
 	return nil
 }
 
-func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
-	row := s.db(ctx).QueryRow(ctx,
-		`SELECT `+userColumns+` FROM users WHERE id = $1`, id)
-	var u domain.User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Active, &u.PlatformAdmin,
-		&u.CreatedAt, &u.UpdatedAt)
+func (s *PostgresStore) UpdateLastLogin(ctx context.Context, id string) error {
+	result, err := s.db(ctx).Exec(ctx, `UPDATE users SET last_login_at=NOW(), updated_at=NOW() WHERE id=$1 AND account_status='active'`, id)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &u, nil
-}
-
-func (s *PostgresStore) CreateUser(ctx context.Context, u *domain.User) error {
-	err := s.db(ctx).QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, name, active)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, created_at, updated_at;
-	`, u.Email, u.PasswordHash, u.Name, u.Active).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
-	if err != nil {
-		return fmt.Errorf("error creating user: %w", err)
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
 	}
 	return nil
 }
 
+var ErrAccountNotFound = errors.New("account not found")
+
+// UpdateAccountStatus is platform-only at the transport boundary. The account
+// mutation and its required security event share the caller's idempotency
+// transaction, so audit failure rolls the status change back.
+func (s *PostgresStore) UpdateAccountStatus(ctx context.Context, actorID, userID string, status domain.AccountStatus, reason, ip string) (*domain.User, error) {
+	if status != domain.AccountStatusActive && status != domain.AccountStatusDisabled {
+		return nil, fmt.Errorf("invalid account status")
+	}
+	if tx := transactionFromContext(ctx); tx != nil {
+		if err := setTenantContext(ctx, tx, TenantActor{UserID: actorID}); err != nil {
+			return nil, err
+		}
+	}
+	u, err := scanUser(s.db(ctx).QueryRow(ctx, `UPDATE users SET account_status=$2,updated_at=NOW()
+		WHERE id=$1 RETURNING `+userColumns, userID, status))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrAccountNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	event := "account_disabled"
+	if status == domain.AccountStatusActive {
+		event = "account_reactivated"
+	}
+	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: event, ActorUserID: actorID, TargetUserID: userID, IP: ip, Details: map[string]interface{}{"reason": reason}}); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (s *PostgresStore) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
+	return scanUser(s.db(ctx).QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1`, id))
+}
+
+func (s *PostgresStore) CreateUser(ctx context.Context, u *domain.User) error {
+	u.NormalizedEmail = domain.NormalizeEmail(u.Email)
+	u.Email = stringsTrimmedEmail(u.Email)
+	if u.AccountStatus == "" {
+		u.AccountStatus = domain.AccountStatusActive
+	}
+	return s.db(ctx).QueryRow(ctx, `
+		INSERT INTO users (email, normalized_email, password_hash, name, account_status)
+		VALUES ($1,$2,$3,$4,$5)
+		RETURNING id, created_at, updated_at`, u.Email, u.NormalizedEmail, u.PasswordHash, u.Name, u.AccountStatus).
+		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
+}
+
+func stringsTrimmedEmail(email string) string {
+	// Preserve display casing but never surrounding whitespace.
+	return strings.TrimSpace(email)
+}
+
 func (s *PostgresStore) ListUsers(ctx context.Context) ([]domain.User, error) {
-	rows, err := s.db(ctx).Query(ctx,
-		`SELECT `+userColumns+` FROM users ORDER BY active ASC, created_at DESC`)
+	rows, err := s.db(ctx).Query(ctx, `SELECT `+userColumns+` FROM users ORDER BY account_status DESC, created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	var list []domain.User
+	out := []domain.User{}
 	for rows.Next() {
-		var u domain.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Active, &u.PlatformAdmin,
-			&u.CreatedAt, &u.UpdatedAt); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
-		list = append(list, u)
+		out = append(out, *u)
 	}
-	if list == nil {
-		list = []domain.User{}
-	}
-	return list, nil
+	return out, rows.Err()
 }
 
-// ListUsersByOrganization returns only the users holding an ACTIVE membership
-// in the context's organization (ADR-0005: an org admin never sees other
-// organizations' users). The global ListUsers stays reserved for the platform
-// console.
 func (s *PostgresStore) ListUsersByOrganization(ctx context.Context) ([]domain.User, error) {
 	orgID, err := RequireOrgFromCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT u.id, u.email, u.password_hash, u.name, u.active, u.platform_admin, u.created_at, u.updated_at
-		FROM users u
-		JOIN memberships m ON m.user_id = u.id AND m.active
-		JOIN organizations o ON o.id = m.organization_id AND o.active
-		WHERE m.organization_id = $1
-		ORDER BY u.active ASC, u.created_at DESC;
-	`, orgID)
+		SELECT u.id, u.email, u.normalized_email, u.password_hash, u.name, u.account_status,
+		u.email_verified_at, u.last_login_at, u.platform_admin, u.created_at, u.updated_at
+		FROM users u JOIN memberships m ON m.user_id=u.id AND m.status='active'
+		JOIN organizations o ON o.id=m.organization_id AND o.active
+		WHERE m.organization_id=$1 ORDER BY u.account_status DESC, u.created_at DESC`, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	var list []domain.User
+	out := []domain.User{}
 	for rows.Next() {
-		var u domain.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Active, &u.PlatformAdmin,
-			&u.CreatedAt, &u.UpdatedAt); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
-		list = append(list, u)
+		out = append(out, *u)
 	}
-	if list == nil {
-		list = []domain.User{}
-	}
-	return list, rows.Err()
-}
-
-// DeleteOrphanInvitedUser removes a just-created user that failed to attach
-// to any organization (invitation revoked/expired mid-accept). Refuses when
-// the user already holds memberships — a user that belongs nowhere cannot
-// log into any organization.
-func (s *PostgresStore) DeleteOrphanInvitedUser(ctx context.Context, id string) error {
-	_, err := s.db(ctx).Exec(ctx,
-		`DELETE FROM users WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1)`, id)
-	return err
-}
-
-// RejectUser deletes a pending user (hard delete — not yet approved).
-func (s *PostgresStore) RejectUser(ctx context.Context, id string) error {
-	_, err := s.db(ctx).Exec(ctx, `DELETE FROM users WHERE id = $1 AND active = false`, id)
-	return err
+	return out, rows.Err()
 }

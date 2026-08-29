@@ -26,16 +26,15 @@ Granete already has a valuable multi-organization baseline:
 - row-level `organization_id` scoping in Go storage;
 - platform administrators separated from workshop business access;
 - audited, time-boxed support sessions;
+- generated OpenAPI lifecycle contracts and typed errors;
+- invitation-first onboarding with explicit account, membership and invitation states;
+- PostgreSQL RLS enforced through tenant transactions and a non-owner runtime role;
 - sales/manufacturing organization fields and manufacturing payload redaction;
 - real PostgreSQL integration and cross-organization isolation tests.
 
-Those decisions remain valid. The problem is that the product still contains
-single-workshop bridges and incomplete cross-organization workflows:
+Those decisions remain valid. The remaining program work is concentrated in
+organization safety and incomplete cross-organization workflows:
 
-- Team UI combines `/api/org/*` with legacy `/api/admin/users/*` fallbacks;
-- public registration creates a global inactive user without a workshop
-  membership, while legacy approval assigns `InitialOrganizationID`;
-- inactive memberships disappear from the team directory;
 - role changes and suspension do not protect the last active administrator;
 - organization creation can leave an active organization without a complete
   catalog or bootstrap administrator;
@@ -43,9 +42,6 @@ single-workshop bridges and incomplete cross-organization workflows:
   relationship with status, capabilities, terms, catalog and price policies;
 - a normal store seller currently needs a membership in the factory to select
   it as manufacturer;
-- Go and React maintain manual DTOs that have already drifted;
-- tenant isolation still depends on every Go query being correct because
-  PostgreSQL RLS is not active;
 - a shared mutable `Project` aggregate is being used as the cross-organization
   boundary for sales, manufacturing and installation.
 

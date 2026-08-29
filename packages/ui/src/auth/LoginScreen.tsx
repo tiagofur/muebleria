@@ -7,7 +7,6 @@ import './login.css';
 export interface LoginScreenProps {
   readonly onLogin: (email: string, password: string) => Promise<void> | void;
   readonly onGuestAccess: () => void;
-  readonly onRegister?: () => void;
   readonly loading?: boolean;
   readonly error?: string | null;
   /** Non-blocking info banner (e.g. session expired notice). */
@@ -17,7 +16,6 @@ export interface LoginScreenProps {
 export function LoginScreen({
   onLogin,
   onGuestAccess,
-  onRegister,
   loading = false,
   error = null,
   notice = null,
@@ -163,18 +161,9 @@ export function LoginScreen({
           Acceder sin conexión (Invitado)
         </button>
 
-        {onRegister ? (
-          <p className="login-register-link">
-            ¿Primera vez?
-            <button type="button" onClick={onRegister} disabled={loading}>
-              Solicitar acceso
-            </button>
-          </p>
-        ) : (
-          <p className="login-register-link">
-            El acceso a talleres se realiza mediante invitación del administrador.
-          </p>
-        )}
+        <p className="login-invitation-note">
+          El acceso a talleres se realiza mediante invitación del administrador.
+        </p>
       </div>
     </div>
   );

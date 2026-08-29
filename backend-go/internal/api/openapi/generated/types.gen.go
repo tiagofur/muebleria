@@ -25,6 +25,12 @@ const (
 	ApiErrorCodeFactoryNotAuthorized      ApiErrorCode = "FACTORY_NOT_AUTHORIZED"
 	ApiErrorCodeCatalogVersionUnavailable ApiErrorCode = "CATALOG_VERSION_UNAVAILABLE"
 	ApiErrorCodeIdempotencyConflict       ApiErrorCode = "IDEMPOTENCY_CONFLICT"
+	ApiErrorCodeInvitationNotFound        ApiErrorCode = "INVITATION_NOT_FOUND"
+	ApiErrorCodeInvitationRevoked         ApiErrorCode = "INVITATION_REVOKED"
+	ApiErrorCodeInvitationTokenRotated    ApiErrorCode = "INVITATION_TOKEN_ROTATED"
+	ApiErrorCodeAccountDisabled           ApiErrorCode = "ACCOUNT_DISABLED"
+	ApiErrorCodeMembershipAlreadyActive   ApiErrorCode = "MEMBERSHIP_ALREADY_ACTIVE"
+	ApiErrorCodeAccountNotFound           ApiErrorCode = "ACCOUNT_NOT_FOUND"
 )
 
 type ApiError struct {
@@ -46,13 +52,16 @@ const (
 )
 
 type User struct {
-	ID            string  `json:"id"`
-	Email         string  `json:"email"`
-	Name          string  `json:"name"`
-	Active        bool    `json:"active"`
-	PlatformAdmin bool    `json:"platform_admin"`
-	CreatedAt     *string `json:"created_at,omitempty"`
-	UpdatedAt     *string `json:"updated_at,omitempty"`
+	ID              string        `json:"id"`
+	Email           string        `json:"email"`
+	NormalizedEmail string        `json:"normalized_email"`
+	Name            string        `json:"name"`
+	AccountStatus   AccountStatus `json:"account_status"`
+	EmailVerifiedAt *string       `json:"email_verified_at"`
+	LastLoginAt     *string       `json:"last_login_at"`
+	PlatformAdmin   bool          `json:"platform_admin"`
+	CreatedAt       string        `json:"created_at"`
+	UpdatedAt       string        `json:"updated_at"`
 }
 
 type License struct {
@@ -70,10 +79,14 @@ type OrganizationSummary struct {
 }
 
 type Membership struct {
+	ID             string              `json:"id"`
 	OrganizationID string              `json:"organization_id"`
+	UserID         string              `json:"user_id"`
+	Status         MembershipStatus    `json:"status"`
 	Roles          []string            `json:"roles"`
-	Organization   OrganizationSummary `json:"organization"`
+	JoinedAt       string              `json:"joined_at"`
 	Version        int64               `json:"version"`
+	Organization   OrganizationSummary `json:"organization"`
 }
 
 type LoginRequest struct {
@@ -120,27 +133,32 @@ type MeResponse struct {
 }
 
 type TeamMember struct {
-	UserID           string   `json:"user_id"`
-	Email            string   `json:"email"`
-	Name             string   `json:"name"`
-	AccountActive    bool     `json:"account_active"`
-	MembershipActive bool     `json:"membership_active"`
-	Roles            []string `json:"roles"`
-	MemberSince      string   `json:"member_since"`
-	Version          int64    `json:"version"`
+	MembershipID     string           `json:"membership_id"`
+	UserID           string           `json:"user_id"`
+	Email            string           `json:"email"`
+	Name             string           `json:"name"`
+	AccountStatus    AccountStatus    `json:"account_status"`
+	MembershipStatus MembershipStatus `json:"membership_status"`
+	Roles            []string         `json:"roles"`
+	JoinedAt         string           `json:"joined_at"`
+	Version          int64            `json:"version"`
 }
 
 type Invitation struct {
-	ID         string   `json:"id"`
-	Email      string   `json:"email"`
-	Roles      []string `json:"roles"`
-	ExpiresAt  string   `json:"expires_at"`
-	CreatedAt  string   `json:"created_at"`
-	InvitedBy  *string  `json:"invited_by,omitempty"`
-	AcceptedAt *string  `json:"accepted_at,omitempty"`
-	AcceptedBy *string  `json:"accepted_by,omitempty"`
-	RevokedAt  *string  `json:"revoked_at,omitempty"`
-	Version    int64    `json:"version"`
+	ID             string           `json:"id"`
+	OrganizationID string           `json:"organization_id"`
+	Email          string           `json:"email"`
+	Status         InvitationStatus `json:"status"`
+	Roles          []string         `json:"roles"`
+	ExpiresAt      string           `json:"expires_at"`
+	CreatedAt      string           `json:"created_at"`
+	InvitedBy      *string          `json:"invited_by"`
+	AcceptedAt     *string          `json:"accepted_at"`
+	AcceptedBy     *string          `json:"accepted_by"`
+	RevokedAt      *string          `json:"revoked_at"`
+	RevokedBy      *string          `json:"revoked_by"`
+	RevokedReason  *string          `json:"revoked_reason"`
+	Version        int64            `json:"version"`
 }
 
 type CreateInvitationRequest struct {
@@ -158,15 +176,12 @@ type UpdateMemberRolesRequest struct {
 	Roles []string `json:"roles"`
 }
 
-type UpdateMemberActiveRequest struct {
-	Active bool `json:"active"`
-}
-
 type MembershipMutationResponse struct {
-	UserID  string   `json:"user_id"`
-	Roles   []string `json:"roles"`
-	Active  bool     `json:"active"`
-	Version int64    `json:"version"`
+	MembershipID string           `json:"membership_id"`
+	UserID       string           `json:"user_id"`
+	Status       MembershipStatus `json:"status"`
+	Roles        []string         `json:"roles"`
+	Version      int64            `json:"version"`
 }
 
 type PlatformOrganization struct {
@@ -194,12 +209,12 @@ type CreatePlatformOrganizationRequest struct {
 }
 
 type PlatformUserMembership struct {
-	OrganizationID   string   `json:"organization_id"`
-	OrganizationName string   `json:"organization_name"`
-	OrganizationSlug string   `json:"organization_slug"`
-	Roles            []string `json:"roles"`
-	Active           bool     `json:"active"`
-	Version          int64    `json:"version"`
+	OrganizationID   string           `json:"organization_id"`
+	OrganizationName string           `json:"organization_name"`
+	OrganizationSlug string           `json:"organization_slug"`
+	Roles            []string         `json:"roles"`
+	Version          int64            `json:"version"`
+	Status           MembershipStatus `json:"status"`
 }
 
 type PlatformUser struct {
@@ -207,9 +222,9 @@ type PlatformUser struct {
 	Email         string                   `json:"email"`
 	Name          string                   `json:"name"`
 	PlatformAdmin bool                     `json:"platform_admin"`
-	Active        bool                     `json:"active"`
 	CreatedAt     string                   `json:"created_at"`
 	Memberships   []PlatformUserMembership `json:"memberships"`
+	AccountStatus AccountStatus            `json:"account_status"`
 }
 
 type SecurityAuditEvent struct {
@@ -254,18 +269,7 @@ type SalesNetworkReadModel struct {
 	Relationships  []OrganizationRelationship `json:"relationships"`
 }
 
-type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
-}
-
-type RegisterResponse struct {
-	Message string `json:"message"`
-}
-
 type RevokeInvitationResponse struct {
-	Message    string     `json:"message"`
 	Invitation Invitation `json:"invitation"`
 }
 
@@ -302,4 +306,56 @@ type CreateFactoryOrganizationRequest struct {
 
 type CreateFactoryOrganizationResponse struct {
 	Organization FactoryOrganization `json:"organization"`
+}
+
+type AccountStatus string
+
+const (
+	AccountStatusActive   AccountStatus = "active"
+	AccountStatusDisabled AccountStatus = "disabled"
+)
+
+type MembershipStatus string
+
+const (
+	MembershipStatusActive    MembershipStatus = "active"
+	MembershipStatusSuspended MembershipStatus = "suspended"
+	MembershipStatusLeft      MembershipStatus = "left"
+)
+
+type InvitationStatus string
+
+const (
+	InvitationStatusPending   InvitationStatus = "pending"
+	InvitationStatusDelivered InvitationStatus = "delivered"
+	InvitationStatusOpened    InvitationStatus = "opened"
+	InvitationStatusAccepted  InvitationStatus = "accepted"
+	InvitationStatusExpired   InvitationStatus = "expired"
+	InvitationStatusRevoked   InvitationStatus = "revoked"
+)
+
+type UpdateMembershipStatusRequest struct {
+	Status MembershipStatus `json:"status"`
+	Reason *string          `json:"reason,omitempty"`
+}
+
+type ResendInvitationResponse struct {
+	Invitation      Invitation `json:"invitation"`
+	InvitationToken string     `json:"invitation_token"`
+	AcceptURL       string     `json:"accept_url"`
+}
+
+type RevokeInvitationRequest struct {
+	Reason string `json:"reason"`
+}
+
+type UpdateAccountStatusRequest struct {
+	AccountStatus AccountStatus `json:"account_status"`
+	Reason        string        `json:"reason"`
+}
+
+type AccountStatusMutationResponse struct {
+	UserID        string        `json:"user_id"`
+	AccountStatus AccountStatus `json:"account_status"`
+	UpdatedAt     string        `json:"updated_at"`
 }

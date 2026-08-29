@@ -594,22 +594,6 @@ export interface WorkspaceRepository {
   /** Mark damage report as resolved. */
   resolveProductionDamage?(damageId: string): Promise<void>;
 
-  // --- User Sector Management (Admin assigns sectors to operators) ---
-
-  /** List sectors assigned to a user. */
-  getUserSectors?(userId: string): Promise<Array<{
-    userId: string;
-    sector: string;
-    subSector?: string;
-    assignedAt: string;
-  }>>;
-
-  /** Set sectors for a user (replaces all existing). */
-  setUserSectors?(userId: string, sectors: Array<{
-    sector: string;
-    subSector?: string;
-  }>): Promise<void>;
-
   /** List operators assigned to a specific sector. */
   getOperatorsBySector?(sector: string): Promise<Array<{
     id: string;
@@ -759,4 +743,3 @@ export interface WorkspaceRepository {
   }): Promise<WarrantyTicketPhoto>;
   deleteWarrantyTicketPhoto?(ticketId: string, photoId: string): Promise<void>;
 }
-

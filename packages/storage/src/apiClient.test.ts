@@ -9,7 +9,7 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
   it('rejects invalid JSON instead of accepting a cast', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([{ user_id: 'u1' }]));
     const client = new GraneteApiClient('http://api.test', fetchImpl);
-    await expect(client.listTeam('token')).rejects.toThrow('Invalid API response');
+    await expect(client.listMemberships('token')).rejects.toThrow('Invalid API response');
   });
 
   it('enforces generated minimum and date-time constraints', async () => {
@@ -41,7 +41,9 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       requestId: 'request-448-error', retryable: false, details: {},
     }, 412));
     const client = new GraneteApiClient('http://api.test', fetchImpl);
-    const error = await client.updateMemberActive('token','u1',3,{active:false}).catch((value: unknown) => value);
+    const error = await client.updateMembershipStatus('token', 'membership-1', 3, {
+      status: 'suspended',
+    }).catch((value: unknown) => value);
     expect(error).toBeInstanceOf(GraneteApiError);
     expect((error as GraneteApiError).code).toBe('MEMBERSHIP_VERSION_CONFLICT');
     expect((error as GraneteApiError).requestId).toBe('request-448-error');
@@ -59,14 +61,15 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
 
   it('centralizes auth, request ID, If-Match and idempotency headers', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({
-      user_id: 'u1', roles: ['admin'], active: true, version: 5,
+      membership_id: 'membership-1', user_id: 'u1', roles: ['admin'], status: 'active', version: 5,
     }));
     const client = new GraneteApiClient('http://api.test', fetchImpl);
-    await client.updateMemberRoles('token','u1',4,{roles:['admin']});
+    await client.updateMembershipRoles('token', 'membership-1', 4, { roles: ['admin'] });
     const init = fetchImpl.mock.calls[0]![1]!;
     const headers = new Headers(init.headers);
     expect(headers.get('Authorization')).toBe('Bearer token');
     expect(headers.get('If-Match')).toBe('"v4"');
+    expect(headers.get('Idempotency-Key')).toMatch(/^web:/);
     expect(headers.get('X-Request-ID')).toBeTruthy();
   });
 
@@ -84,9 +87,9 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
   it('locks Platform users to the flattened membership contract emitted by Go', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([{
       id: 'u1', email: 'owner@example.test', name: 'Owner', platform_admin: false,
-      active: true, created_at: '2026-08-28T00:00:00Z', memberships: [{
+      account_status: 'active', created_at: '2026-08-28T00:00:00Z', memberships: [{
         organization_id: 'org1', organization_name: 'Factory One', organization_slug: 'factory-one',
-        roles: ['admin'], active: true, version: 2,
+        roles: ['admin'], status: 'active', version: 2,
       }],
     }]));
     const users = await new GraneteApiClient('http://api.test', fetchImpl).listPlatformUsers('token');
@@ -94,10 +97,84 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
 
     fetchImpl.mockResolvedValueOnce(json([{
       id: 'u1', email: 'owner@example.test', name: 'Owner', platform_admin: false,
-      active: true, created_at: '2026-08-28T00:00:00Z',
+      account_status: 'active', created_at: '2026-08-28T00:00:00Z',
       memberships: [{ organization: { id: 'org1', name: 'legacy' }, roles: ['admin'] }],
     }]));
     await expect(new GraneteApiClient('http://api.test', fetchImpl).listPlatformUsers('token')).rejects.toThrow('Invalid API response');
+  });
+
+  it('uses the generated idempotent Platform command for global account lifecycle', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({
+      user_id: 'user-1', account_status: 'disabled', updated_at: '2026-08-29T00:00:00Z',
+    }));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    const result = await client.setPlatformUserAccountStatus(
+      'platform-token',
+      'user-1',
+      { account_status: 'disabled', reason: 'Security review' },
+      'platform-account-450',
+    );
+    expect(result.account_status).toBe('disabled');
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'http://api.test/platform/users/user-1:set-account-status',
+    );
+    const headers = new Headers(fetchImpl.mock.calls[0]?.[1]?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer platform-token');
+    expect(headers.get('Idempotency-Key')).toBe('platform-account-450');
+
+    const invalidFetch = vi.fn<typeof fetch>();
+    await expect(new GraneteApiClient('http://api.test', invalidFetch).setPlatformUserAccountStatus(
+      'platform-token',
+      'user-1',
+      { account_status: 'suspended', reason: 'Invalid account state' } as never,
+    )).rejects.toThrow('active | disabled');
+    expect(invalidFetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts canonical membership lifecycle shapes and rejects boolean legacy status fields', async () => {
+    const member = {
+      membership_id: 'membership-1', user_id: 'user-1', email: 'owner@example.test', name: 'Owner',
+      account_status: 'active', membership_status: 'suspended', roles: ['admin'],
+      joined_at: '2026-08-28T00:00:00Z', version: 2,
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([member]));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    const members = await client.listMemberships('token');
+    expect(members[0]?.membership_status).toBe('suspended');
+
+    fetchImpl.mockResolvedValueOnce(json([{
+      ...member,
+      account_status: undefined,
+      membership_status: undefined,
+      account_active: true,
+      membership_active: false,
+    }]));
+    await expect(client.listMemberships('token')).rejects.toThrow('Invalid API response');
+  });
+
+  it('keeps invitation lifecycle metadata typed and rejects persisted token hashes', async () => {
+    const invitation = {
+      id: 'invitation-1', organization_id: 'organization-1', email: 'invitee@example.test',
+      status: 'pending', roles: ['operator'], expires_at: '2026-08-30T00:00:00Z',
+      created_at: '2026-08-29T00:00:00Z', invited_by: 'user-1', accepted_at: null,
+      accepted_by: null, revoked_at: null, revoked_by: null, revoked_reason: null, version: 1,
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([invitation]));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    const invitations = await client.listInvitations('token');
+    expect(invitations[0]?.status).toBe('pending');
+
+    fetchImpl.mockResolvedValueOnce(json([{ ...invitation, status: 'delivered' }]));
+    await expect(client.listInvitations('token')).resolves.toMatchObject([{ status: 'delivered' }]);
+    fetchImpl.mockResolvedValueOnce(json([{ ...invitation, status: 'opened' }]));
+    await expect(client.listInvitations('token')).resolves.toMatchObject([{ status: 'opened' }]);
+
+    fetchImpl.mockResolvedValueOnce(json([{ ...invitation, token_hash: 'must-never-cross-api' }]));
+    await expect(client.listInvitations('token')).rejects.toThrow('Invalid API response');
+    fetchImpl.mockResolvedValueOnce(json([{ ...invitation, status: 'sent' }]));
+    await expect(client.listInvitations('token')).rejects.toThrow(
+      'pending | delivered | opened | accepted | expired | revoked',
+    );
   });
 
   it('locks audit events to ip/details and rejects legacy ip_address/metadata', async () => {

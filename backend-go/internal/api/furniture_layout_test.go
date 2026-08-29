@@ -16,7 +16,7 @@ import (
 func layoutStubServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail:     u,
@@ -262,7 +262,7 @@ func TestFurnitureDefinitionLayoutUnresolvableComposition(t *testing.T) {
 
 func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	// Org without an active license → the layout endpoint must block.
 	noLicense := &domain.Organization{
 		ID: "org-1", Name: "Taller Test", Slug: "taller-test",
@@ -341,7 +341,7 @@ func TestFurnitureDefinitionLayoutMaterialChoices(t *testing.T) {
 
 func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,
@@ -412,7 +412,7 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 	// The catalog endpoint reports each definition's real composition size so
 	// clients stop guessing "2 piezas" for every cabinet.
 	module, catalog := layoutCabinetFixture()
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,

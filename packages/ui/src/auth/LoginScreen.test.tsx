@@ -62,18 +62,15 @@ describe('LoginScreen', () => {
     expect(onGuestAccess).toHaveBeenCalled();
   });
 
-  it('shows Solicitar acceso when onRegister is provided', () => {
-    const onRegister = vi.fn();
+  it('explains invitation-only access without a public registration action', () => {
     render(
       <LoginScreen
         onLogin={vi.fn()}
         onGuestAccess={vi.fn()}
-        onRegister={onRegister}
       />,
     );
-    const link = screen.getByRole('button', { name: 'Solicitar acceso' });
-    fireEvent.click(link);
-    expect(onRegister).toHaveBeenCalled();
+    expect(screen.getByText(/mediante invitación del administrador/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Solicitar acceso' })).toBeNull();
   });
 
   it('disables submit and shows loading label while loading', () => {
@@ -190,4 +187,3 @@ describe('LoginScreen', () => {
     expect(passwordInput.type).toBe('password');
   });
 });
-

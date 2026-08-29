@@ -33,6 +33,48 @@ func TestPilotReadiness_PlatformAdminNoBusinessAccess(t *testing.T) {
 	}
 }
 
+func TestPilotReadiness_OnlyPlatformCanChangeGlobalAccountStatus(t *testing.T) {
+	accepted := fx.inviteAndAccept(t, fx.a.admin.token, "platform-account-status@pilot-readiness.test", "user")
+	path := "/api/platform/users/" + accepted.User.ID + ":set-account-status"
+
+	fx.want(t, http.MethodPost, path, fx.a.admin.token, map[string]string{
+		"account_status": "disabled", "reason": "org admin must not control identities",
+	}, http.StatusForbidden)
+	fx.want(t, http.MethodPost, path, fx.platform.token, map[string]string{
+		"account_status": "disabled", "reason": "pilot global account proof",
+	}, http.StatusOK)
+
+	status, _ := fx.do(t, http.MethodPost, "/api/auth/login", "", map[string]string{
+		"email": "platform-account-status@pilot-readiness.test", "password": pilotPassword, "transport": "web",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("disabled account login status=%d, want 401", status)
+	}
+	var membershipStatus string
+	if err := fx.pool.QueryRow(t.Context(), `SELECT status FROM memberships WHERE id=$1`, accepted.Memberships[0].ID).Scan(&membershipStatus); err != nil {
+		t.Fatal(err)
+	}
+	if membershipStatus != "active" {
+		t.Fatalf("account disable changed membership status to %q", membershipStatus)
+	}
+
+	fx.want(t, http.MethodPost, path, fx.platform.token, map[string]string{
+		"account_status": "active", "reason": "pilot global account reactivation proof",
+	}, http.StatusOK)
+	if login := fx.login(t, "platform-account-status@pilot-readiness.test", fx.a.slug); login.Token == "" {
+		t.Fatal("reactivated account did not authenticate")
+	}
+	for _, eventType := range []string{"account_disabled", "account_reactivated"} {
+		var count int
+		if err := fx.pool.QueryRow(t.Context(), `SELECT count(*) FROM security_audit_events WHERE target_user_id=$1 AND event_type=$2`, accepted.User.ID, eventType).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s audit count=%d, want 1", eventType, count)
+		}
+	}
+}
+
 // A support session on A acts as admin of A only: no B data, no switching to
 // B, audited start/end, and dead after logout or expiry.
 func TestPilotReadiness_SupportSessionScopedAndAudited(t *testing.T) {
@@ -42,7 +84,7 @@ func TestPilotReadiness_SupportSessionScopedAndAudited(t *testing.T) {
 	}
 
 	// Effective admin of A.
-	fx.want(t, http.MethodGet, "/api/org/team", token, nil, http.StatusOK)
+	fx.want(t, http.MethodGet, "/api/org/memberships", token, nil, http.StatusOK)
 
 	// A's data is reachable, B's is not — 404, never a leak.
 	var customers []struct {

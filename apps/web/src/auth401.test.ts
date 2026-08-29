@@ -131,7 +131,7 @@ describe('installAuth401Interceptor (P0-1 safety net)', () => {
         email: 'admin@test',
         name: 'Admin',
         role: 'admin',
-        active: true,
+        account_status: 'active',
       }),
     );
     store.setState({ session: 'auth' });

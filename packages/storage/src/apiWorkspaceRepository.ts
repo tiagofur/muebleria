@@ -1645,55 +1645,6 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
   }
 
-  // --- User Sector Management ---
-
-  async getUserSectors(userId: string): Promise<Array<{
-    userId: string;
-    sector: string;
-    subSector?: string;
-    assignedAt: string;
-  }>> {
-    const res = await fetch(`${this.baseUrl}/admin/users/${userId}/sectors`, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Failed to get user sectors: ${res.status} ${text}`);
-    }
-    const raw = await res.json();
-    // Go returns {user_id, sector, sub_sector?, created_at} (F094 — was
-    // mapped from a non-existent assigned_at field).
-    return (raw as Array<Record<string, unknown>>).map((s) => ({
-      userId: (s.user_id as string) ?? userId,
-      sector: s.sector as string,
-      subSector: (s.sub_sector as string) || undefined,
-      assignedAt: (s.created_at as string) ?? '',
-    }));
-  }
-
-  async setUserSectors(userId: string, sectors: Array<{
-    sector: string;
-    subSector?: string;
-  }>): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/admin/users/${userId}/sectors`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      // API contract is snake_case (F094 — subSector camelCase was silently
-      // dropped by the Go decoder).
-      body: JSON.stringify({
-        sectors: sectors.map((s) => ({
-          sector: s.sector,
-          ...(s.subSector ? { sub_sector: s.subSector } : {}),
-        })),
-      }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Failed to set user sectors: ${res.status} ${text}`);
-    }
-  }
-
   async getMySectors(): Promise<Array<{
     userId: string;
     sector: string;

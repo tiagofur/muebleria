@@ -180,15 +180,15 @@ func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
 
 	// Every legacy user keeps role and status in a membership.
 	var roles []string
-	var active bool
+	var membershipStatus string
 	err = pool.QueryRow(ctx,
-		`SELECT roles, active FROM memberships WHERE user_id = '11111111-1111-1111-1111-111111111111'`).
-		Scan(&roles, &active)
+		`SELECT roles, status FROM memberships WHERE user_id = '11111111-1111-1111-1111-111111111111'`).
+		Scan(&roles, &membershipStatus)
 	if err != nil {
 		t.Fatalf("produccion membership missing: %v", err)
 	}
-	if len(roles) != 1 || roles[0] != "produccion" || !active {
-		t.Fatalf("unexpected produccion membership: %v %v", roles, active)
+	if len(roles) != 1 || roles[0] != "produccion" || membershipStatus != "active" {
+		t.Fatalf("unexpected produccion membership: %v %v", roles, membershipStatus)
 	}
 	err = pool.QueryRow(ctx,
 		`SELECT roles FROM memberships WHERE user_id = '22222222-2222-2222-2222-222222222222'`).
