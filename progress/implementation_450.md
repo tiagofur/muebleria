@@ -148,3 +148,43 @@ El maintainer autorizó el 2026-08-29 un único PR con `size:exception`. Migrati
 forman un límite cross-runtime atómico: dividirlos dejaría ramas intermedias con
 schema y contrato incompatibles. La excepción no habilita auto-merge ni reemplaza
 la revisión independiente pendiente.
+
+## Correcciones tras revisión independiente — ronda 1
+
+El veredicto `CHANGES_REQUESTED` de `progress/review_F193.md` identificó cuatro
+P1 de evidencia y UI. Se mantuvo F193 en `in_progress` y se corrigieron sin
+ampliar el alcance funcional:
+
+- aceptación HTTP/PostgreSQL para identidad nueva, existente y reactivación
+  `suspended|left`, con replay exacto por `Idempotency-Key`, carrera entre keys,
+  sesión directa, cardinalidad, audit único y receipts cifrados sin secretos;
+- restauración del tenant context anónimo antes de completar el receipt: la
+  prueba E2E detectó que el cambio de actor durante accept ocultaba por RLS el
+  receipt reservado al request público;
+- negative proofs SQL directos bidireccionales sobre `memberships` e
+  `invitations` para SELECT/UPDATE/DELETE/UPSERT, más guards de BYPASSRLS,
+  ownership, FORCE RLS y grants excesivos;
+- `docs/design.md §6.11` alineado a Team por `membershipId`, estilos inline
+  retirados, Lucide `strokeWidth={1.5}`, foco de error, estados loading/teclado
+  y modal focus trap/Escape/restore;
+- gate Playwright reproducible para Team y aceptación a 390, 768 y 1280 px,
+  con assertions de no-overflow y screenshots en
+  `test-results/f193-ui-gate/` revisados visualmente.
+
+### Evidencia de la ronda
+
+| Comando | Resultado |
+|---|---|
+| `PATH="$HOME/.rbenv/shims:$PATH" ./init.sh` | PASS: TypeScript, Go y Ruby/RBZ |
+| `pnpm openapi:check` | PASS |
+| `pnpm typecheck` | PASS en 7 workspaces |
+| `pnpm test` | PASS; UI 147 archivos / 1451 tests, total monorepo 3262 tests |
+| `GOCACHE=/tmp/muebleria-go-cache go test ./... -count=1` | PASS |
+| `GOCACHE=/tmp/muebleria-go-cache go test -race -p 1 ./internal/auth ./internal/storage ./internal/api ./tests/pilotreadiness -count=1` | PASS |
+| `scripts/pilot-gate.sh --fresh-container` | PASS; migration 000095, RLS directo y acceptance HTTP incluidos |
+| `pnpm exec playwright test --config=playwright.config.ts tests/visual/identity-lifecycle.spec.ts` | PASS: 6/6 en 390/768/1280, Team + aceptación |
+| Impeccable detector sobre las superficies modificadas | PASS: cero hallazgos |
+| `git diff --check` | PASS |
+
+La ronda queda lista para un nuevo juicio independiente; este reporte no cambia
+por sí mismo el veredicto previo ni marca F193 como `done`.

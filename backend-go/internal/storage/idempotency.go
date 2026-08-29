@@ -138,6 +138,12 @@ func (s *PostgresStore) ExecuteIdempotent(
 			}
 		}
 	}
+	// Public commands may acquire an identity and switch tenant context while
+	// executing. Restore the receipt owner before releasing the savepoint so
+	// RLS can update the row that was reserved for the original request scope.
+	if err := setTenantContext(ctx, tx, TenantActor{OrganizationID: req.OrganizationID, UserID: req.ActorUserID}); err != nil {
+		return IdempotencyResponse{}, false, err
+	}
 	if _, err := tx.Exec(ctx, `RELEASE SAVEPOINT idempotent_command`); err != nil {
 		return IdempotencyResponse{}, false, err
 	}

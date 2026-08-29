@@ -143,6 +143,231 @@ func TestIdentityLifecycleMigration_FreshDatabaseSchemaAndRLS(t *testing.T) {
 	}
 }
 
+func TestIdentityLifecycleRLS_DirectSQLBlocksMembershipAndInvitationCrossTenantAccess(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+
+	const (
+		membershipA = "b1000000-0000-0000-0000-000000000001"
+		membershipB = "b1000000-0000-0000-0000-000000000002"
+		invitationA = "b2000000-0000-0000-0000-000000000001"
+		invitationB = "b2000000-0000-0000-0000-000000000002"
+	)
+	if _, err := fx.admin.Exec(ctx, `
+		UPDATE memberships SET id = CASE organization_id
+			WHEN $1 THEN $3::uuid WHEN $2 THEN $4::uuid ELSE id END
+		WHERE organization_id IN ($1, $2)
+	`, rlsOrgA, rlsOrgB, membershipA, membershipB); err != nil {
+		t.Fatalf("assign deterministic membership ids: %v", err)
+	}
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO invitations (
+			id, organization_id, email, normalized_email, roles, status,
+			token_hash, expires_at, invited_by
+		) VALUES
+			($3, $1, 'invite-a@example.test', 'invite-a@example.test', '{vendedor}', 'pending', 'rls-hash-a', NOW()+interval '1 day', $5),
+			($4, $2, 'invite-b@example.test', 'invite-b@example.test', '{vendedor}', 'pending', 'rls-hash-b', NOW()+interval '1 day', $6)
+	`, rlsOrgA, rlsOrgB, invitationA, invitationB, rlsUserA, rlsUserB); err != nil {
+		t.Fatalf("seed lifecycle RLS rows: %v", err)
+	}
+
+	tests := []struct {
+		name                string
+		actorOrg            string
+		actorUser           string
+		visibleMembershipID string
+		victimMembershipID  string
+		visibleInvitationID string
+		victimInvitationID  string
+	}{
+		{
+			name:                "organization A cannot reach B",
+			actorOrg:            rlsOrgA,
+			actorUser:           rlsUserA,
+			visibleMembershipID: membershipA,
+			victimMembershipID:  membershipB,
+			visibleInvitationID: invitationA,
+			victimInvitationID:  invitationB,
+		},
+		{
+			name:                "organization B cannot reach A",
+			actorOrg:            rlsOrgB,
+			actorUser:           rlsUserB,
+			visibleMembershipID: membershipB,
+			victimMembershipID:  membershipA,
+			visibleInvitationID: invitationB,
+			victimInvitationID:  invitationA,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			withRLSActor(t, fx.app, test.actorOrg, test.actorUser, func(tx pgx.Tx) {
+				assertOnlyLifecycleRowVisible(t, tx, "memberships", test.visibleMembershipID)
+				assertOnlyLifecycleRowVisible(t, tx, "invitations", test.visibleInvitationID)
+
+				for _, mutation := range []struct {
+					name string
+					sql  string
+				}{
+					{"membership update", `UPDATE memberships SET roles='{user}' WHERE id='` + test.victimMembershipID + `'`},
+					{"membership delete", `DELETE FROM memberships WHERE id='` + test.victimMembershipID + `'`},
+					{"invitation update", `UPDATE invitations SET roles='{admin}' WHERE id='` + test.victimInvitationID + `'`},
+					{"invitation delete", `DELETE FROM invitations WHERE id='` + test.victimInvitationID + `'`},
+				} {
+					tag, err := tx.Exec(ctx, mutation.sql)
+					if err != nil || tag.RowsAffected() != 0 {
+						t.Fatalf("cross-tenant %s affected hidden row: rows=%d err=%v", mutation.name, tag.RowsAffected(), err)
+					}
+				}
+			})
+
+			t.Run("membership upsert", func(t *testing.T) {
+				withRLSActor(t, fx.app, test.actorOrg, test.actorUser, func(tx pgx.Tx) {
+					_, err := tx.Exec(ctx, `
+						INSERT INTO memberships (id, organization_id, user_id, roles)
+						VALUES ($1, $2, $3, '{user}')
+						ON CONFLICT (id) DO UPDATE SET roles=EXCLUDED.roles`,
+						test.victimMembershipID, test.actorOrg, test.actorUser)
+					if err == nil {
+						t.Fatal("cross-tenant membership ON CONFLICT must fail instead of mutating a hidden row")
+					}
+				})
+			})
+
+			t.Run("invitation upsert", func(t *testing.T) {
+				withRLSActor(t, fx.app, test.actorOrg, test.actorUser, func(tx pgx.Tx) {
+					_, err := tx.Exec(ctx, `
+						INSERT INTO invitations (
+							id, organization_id, email, normalized_email, roles,
+							status, token_hash, expires_at, invited_by
+						) VALUES ($1, $2, $3, $3, '{admin}', 'pending', $4, NOW()+interval '1 day', $5)
+						ON CONFLICT (id) DO UPDATE SET roles=EXCLUDED.roles`,
+						test.victimInvitationID, test.actorOrg,
+						"attacker-"+test.actorOrg+"@example.test", "attacker-hash-"+test.actorOrg, test.actorUser)
+					if err == nil {
+						t.Fatal("cross-tenant invitation ON CONFLICT must fail instead of mutating a hidden row")
+					}
+				})
+			})
+		})
+	}
+
+	var membershipRoles, invitationRoles string
+	if err := fx.admin.QueryRow(ctx, `SELECT array_to_string(roles, ',') FROM memberships WHERE id=$1`, membershipA).Scan(&membershipRoles); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.admin.QueryRow(ctx, `SELECT array_to_string(roles, ',') FROM invitations WHERE id=$1`, invitationA).Scan(&invitationRoles); err != nil {
+		t.Fatal(err)
+	}
+	if membershipRoles != "admin" || invitationRoles != "vendedor" {
+		t.Fatalf("tenant A lifecycle rows changed: membership=%q invitation=%q", membershipRoles, invitationRoles)
+	}
+	if err := fx.admin.QueryRow(ctx, `SELECT array_to_string(roles, ',') FROM memberships WHERE id=$1`, membershipB).Scan(&membershipRoles); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.admin.QueryRow(ctx, `SELECT array_to_string(roles, ',') FROM invitations WHERE id=$1`, invitationB).Scan(&invitationRoles); err != nil {
+		t.Fatal(err)
+	}
+	if membershipRoles != "admin" || invitationRoles != "vendedor" {
+		t.Fatalf("tenant B lifecycle rows changed: membership=%q invitation=%q", membershipRoles, invitationRoles)
+	}
+}
+
+func TestIdentityLifecycleRLS_RuntimeRoleHasNoBypassOwnershipOrExcessGrants(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+
+	var currentUser string
+	var inheritsRuntimeRole bool
+	if err := fx.app.QueryRow(ctx, `SELECT current_user, pg_has_role(current_user, 'granete_app', 'MEMBER')`).
+		Scan(&currentUser, &inheritsRuntimeRole); err != nil {
+		t.Fatal(err)
+	}
+	if currentUser != rlsAppRole || !inheritsRuntimeRole {
+		t.Fatalf("test is not exercising granete_app privileges: current_user=%q member=%v", currentUser, inheritsRuntimeRole)
+	}
+
+	var unsafeReachableRoles int
+	if err := fx.admin.QueryRow(ctx, `
+		WITH RECURSIVE reachable(role_oid) AS (
+			SELECT oid FROM pg_roles WHERE rolname=$1
+			UNION
+			SELECT membership.roleid
+			FROM pg_auth_members membership
+			JOIN reachable ON reachable.role_oid=membership.member
+		)
+		SELECT count(*)
+		FROM reachable
+		JOIN pg_roles role ON role.oid=reachable.role_oid
+		WHERE role.rolsuper OR role.rolbypassrls OR role.rolcreaterole
+		   OR role.rolcreatedb OR role.rolreplication
+	`, currentUser).Scan(&unsafeReachableRoles); err != nil || unsafeReachableRoles != 0 {
+		t.Fatalf("runtime role can reach privileged role: count=%d err=%v", unsafeReachableRoles, err)
+	}
+
+	var ownedLifecycleTables int
+	if err := fx.admin.QueryRow(ctx, `
+		WITH RECURSIVE reachable(role_oid) AS (
+			SELECT oid FROM pg_roles WHERE rolname=$1
+			UNION
+			SELECT membership.roleid
+			FROM pg_auth_members membership
+			JOIN reachable ON reachable.role_oid=membership.member
+		)
+		SELECT count(*)
+		FROM pg_class relation
+		JOIN reachable ON reachable.role_oid=relation.relowner
+		WHERE relation.oid IN ('memberships'::regclass, 'invitations'::regclass)
+	`, currentUser).Scan(&ownedLifecycleTables); err != nil || ownedLifecycleTables != 0 {
+		t.Fatalf("runtime role owns protected lifecycle table: count=%d err=%v", ownedLifecycleTables, err)
+	}
+
+	for _, table := range []string{"memberships", "invitations"} {
+		var forced bool
+		var excessive, publicCRUD bool
+		if err := fx.admin.QueryRow(ctx, `
+			SELECT c.relrowsecurity AND c.relforcerowsecurity,
+			       has_table_privilege($1, $2, 'TRUNCATE')
+			           OR has_table_privilege($1, $2, 'REFERENCES')
+			           OR has_table_privilege($1, $2, 'TRIGGER'),
+			       has_table_privilege('public', $2, 'SELECT')
+			           OR has_table_privilege('public', $2, 'INSERT')
+			           OR has_table_privilege('public', $2, 'UPDATE')
+			           OR has_table_privilege('public', $2, 'DELETE')
+			FROM pg_class c WHERE c.oid=$2::regclass
+		`, currentUser, table).Scan(&forced, &excessive, &publicCRUD); err != nil {
+			t.Fatal(err)
+		}
+		if !forced || excessive || publicCRUD {
+			t.Fatalf("unsafe %s posture: force_rls=%v excessive_runtime_grants=%v public_crud=%v", table, forced, excessive, publicCRUD)
+		}
+	}
+}
+
+func assertOnlyLifecycleRowVisible(t *testing.T, tx pgx.Tx, table, expectedID string) {
+	t.Helper()
+	rows, err := tx.Query(context.Background(), `SELECT id::text FROM `+pgx.Identifier{table}.Sanitize()+` ORDER BY id`)
+	if err != nil {
+		t.Fatalf("unfiltered %s select: %v", table, err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != expectedID {
+		t.Fatalf("unfiltered %s SELECT leaked rows: got=%v want=[%s]", table, ids, expectedID)
+	}
+}
+
 func TestIdentityLifecycleMigration_UpgradeBackfillsConstraintsAndInventory(t *testing.T) {
 	pool := multiOrgFreshDB(t)
 	identityApplyThrough(t, pool, 94)

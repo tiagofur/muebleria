@@ -300,7 +300,7 @@ export function PlatformScreen({
               setShowCreateModal(true);
             }}
           >
-            <Plus size={16} /> Nueva Organización
+            <Plus size={16} strokeWidth={1.5} aria-hidden="true" /> Nueva Organización
           </button>
         }
         secondaryActions={
@@ -310,7 +310,7 @@ export function PlatformScreen({
             onClick={() => void loadCurrentTab()}
             disabled={loading}
           >
-            <RefreshCw size={15} /> Actualizar
+            <RefreshCw size={15} strokeWidth={1.5} aria-hidden="true" /> Actualizar
           </button>
         }
       />
@@ -324,9 +324,9 @@ export function PlatformScreen({
       {/* Tabs */}
       <WorkspaceTabs<TabKey>
         tabs={[
-          { id: 'organizations', label: 'Organizaciones', count: organizations.length, icon: <Building2 size={16} /> },
-          { id: 'users', label: 'Usuarios Globales', count: users.length, icon: <Users size={16} /> },
-          { id: 'audit', label: 'Auditoría de Seguridad', icon: <ShieldAlert size={16} /> },
+          { id: 'organizations', label: 'Organizaciones', count: organizations.length, icon: <Building2 size={16} strokeWidth={1.5} aria-hidden="true" /> },
+          { id: 'users', label: 'Usuarios Globales', count: users.length, icon: <Users size={16} strokeWidth={1.5} aria-hidden="true" /> },
+          { id: 'audit', label: 'Auditoría de Seguridad', icon: <ShieldAlert size={16} strokeWidth={1.5} aria-hidden="true" /> },
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -352,6 +352,8 @@ export function PlatformScreen({
                 <div style={{ position: 'relative', flex: 1, maxWidth: '360px' }}>
                   <Search
                     size={16}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
                     style={{
                       position: 'absolute',
                       left: 'var(--space-3)',
@@ -433,7 +435,7 @@ export function PlatformScreen({
                             setEditActive(org.active !== false);
                           }}
                         >
-                          <Edit2 size={13} /> Editar
+                          <Edit2 size={13} strokeWidth={1.5} aria-hidden="true" /> Editar
                         </button>
                         <button
                           type="button"
@@ -445,7 +447,7 @@ export function PlatformScreen({
                             setSupportReason('');
                           }}
                         >
-                          <LogIn size={13} /> Entrar a Taller
+                          <LogIn size={13} strokeWidth={1.5} aria-hidden="true" /> Entrar a Taller
                         </button>
                       </div>
                     </article>

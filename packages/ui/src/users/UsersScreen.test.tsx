@@ -136,6 +136,21 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     }
   });
 
+  it('traps keyboard focus in the invitation modal and restores it on Escape', async () => {
+    stubTeamEndpoints();
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    const trigger = (await screen.findAllByRole('button', { name: /Invitar Miembro/i }))[0]!;
+    trigger.focus();
+    await actor.keyboard('{Enter}');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Invitar Miembro al Taller' });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    await actor.keyboard('{Escape}');
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
   it('invitation modal only offers the commercial roles a store may assign', async () => {
     stubTeamEndpoints();
     const user = userEvent.setup();

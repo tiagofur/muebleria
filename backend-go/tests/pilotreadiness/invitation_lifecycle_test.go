@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -17,54 +16,6 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
-
-func TestPilotReadiness_ConcurrentInvitationAcceptCreatesOneIdentityAndMembership(t *testing.T) {
-	var invitation struct {
-		InvitationToken string `json:"invitation_token"`
-	}
-	fx.decode(t, http.MethodPost, "/api/org/invitations", fx.a.admin.token, map[string]any{"email": "concurrent-accept@pilot-readiness.test", "roles": []string{"user"}}, http.StatusCreated, &invitation)
-	sum := sha256.Sum256([]byte(invitation.InvitationToken))
-	passwordHash, err := auth.HashPassword(pilotPassword)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := storage.AcceptInvitationCommand{TokenHash: hex.EncodeToString(sum[:]), Password: pilotPassword, NewPasswordHash: passwordHash, Name: "Concurrent Member"}
-	results := make(chan error, 2)
-	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err := fx.store.AcceptInvitation(context.Background(), cmd, auth.CheckPasswordHash, auth.ValidatePassword)
-			results <- err
-		}()
-	}
-	wg.Wait()
-	close(results)
-	success, used := 0, 0
-	for err := range results {
-		if err == nil {
-			success++
-		} else if errors.Is(err, storage.ErrInvitationAlreadyUsed) {
-			used++
-		} else {
-			t.Fatalf("unexpected concurrent error: %v", err)
-		}
-	}
-	if success != 1 || used != 1 {
-		t.Fatalf("success=%d already_used=%d", success, used)
-	}
-	var users, memberships int
-	if err := fx.pool.QueryRow(context.Background(), `SELECT count(*) FROM users WHERE normalized_email='concurrent-accept@pilot-readiness.test'`).Scan(&users); err != nil {
-		t.Fatal(err)
-	}
-	if err := fx.pool.QueryRow(context.Background(), `SELECT count(*) FROM memberships m JOIN users u ON u.id=m.user_id WHERE u.normalized_email='concurrent-accept@pilot-readiness.test' AND m.organization_id=$1`, fx.a.id).Scan(&memberships); err != nil {
-		t.Fatal(err)
-	}
-	if users != 1 || memberships != 1 {
-		t.Fatalf("users=%d memberships=%d", users, memberships)
-	}
-}
 
 func TestPilotReadiness_ResendRotatesTokenAndOnlyNewTokenCanBeAccepted(t *testing.T) {
 	var invitation struct {

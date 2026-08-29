@@ -1133,16 +1133,30 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **RBAC**: `roleCanAccessSettings` (admin, gerente_ventas, ingeniero).
 - **Icono:** `Settings`
 
-### 6.11 Usuarios
+### 6.11 Equipo
 
 - **Ruta nav:** `users` (sección CONFIG, **solo admin**)
-- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172)
-- **Patrón:** tabla simple (acciones inline por fila, sin expand) + modales (roles, invitación, estaciones)
+- **Path:** `packages/ui/src/users/UsersScreen.tsx` (F026 / F035 / F166 / F172 / F193)
+- **Unidad canónica:** `Membership`, identificada y mutada por `membershipId`. La
+  identidad global `User` no es una fila administrable por el taller.
+- **Patrón:** tabla simple (acciones inline por fila, sin expand) + modales de
+  roles e invitación.
 - **Contenido:**
-  - Filtros por estado: Miembros activos / Invitaciones pendientes / Todos (+ Pendientes de aprobación si aplica)
-  - Lista de miembros con chips de **roles múltiples** (unión RBAC, ADR-0005), email, estado y estación
-  - Acciones por fila: Editar roles (checkboxes multi-role), Estaciones (solo `produccion`/`almacen`), Aprobar/Rechazar pendientes, Desactivar, plan de licencia
-  - **"+ Invitar Miembro"**: email + roles → genera enlace de una sola vez (WhatsApp/email), revocación y vencimiento visible
+  - Filtros por lifecycle: membresías activas, suspendidas y finalizadas;
+    invitaciones; y equipo completo. No existe “pendiente de aprobación” global.
+  - Lista de miembros con chips de **roles múltiples** (unión RBAC, ADR-0005),
+    email, **estado de cuenta** (`active | disabled`) y **estado de membresía**
+    (`active | suspended | left`) en columnas separadas. El taller sólo muta la
+    membresía; el estado global de cuenta es informativo en esta superficie.
+  - Acciones por `membershipId`: editar roles, suspender y reactivar la
+    membresía. No aprobar, rechazar, eliminar ni deshabilitar un `User` global.
+  - **"+ Invitar Miembro"**: email + roles → genera un enlace de una sola vez.
+    La lista conserva estados honestos (`pending`, `delivered`, `opened`,
+    `accepted`, `expired`, `revoked`), expiry y acciones permitidas: reenviar
+    rota el enlace anterior; revocar exige motivo y deja el enlace inutilizable.
+- **Fuera de alcance de #450:** administración avanzada de Team, estaciones por
+  membership, invariant de último admin, offboarding y transferencia pertenecen
+  a #451. No reintroducir esos flujos por `userId` mientras se implementan.
 - **Roles asignables:** los 8 canónicos de `contracts/roles.json` — `admin`, `user`, `vendedor`, `gerente_ventas`, `gerente_produccion`, `ingeniero`, `produccion`, `almacen` (F035; `disenador`→`ingeniero` y `carpintero`→`produccion` son migraciones legacy rechazadas hoy). Etiquetas amigables centralizadas en `roleLabelEs` (`packages/domain`).
 - **RBAC**: solo `admin` (vía `roleCanManageUsers`; sesiones de soporte de plataforma actúan como admin del taller). El item se añade al sidebar condicionalmente.
 - **Icono:** `ShieldCheck`

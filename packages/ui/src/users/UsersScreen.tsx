@@ -10,9 +10,7 @@ import {
   CheckCircle2,
   MinusCircle,
   RefreshCw,
-  SearchX,
   Settings2,
-  ShieldCheck,
   Users,
   Mail,
   UserPlus,
@@ -223,7 +221,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const roleChips = (u: UserRow) => {
     const rolesList = u.roles.length > 0 ? u.roles : ['user'];
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)', alignItems: 'center' }}>
+      <div className="users-role-chips">
         {rolesList.map((r) => (
           <span key={r} className="meta-chip">
             {roleLabelEs(r)}
@@ -251,7 +249,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               setShowInviteModal(true);
             }}
           >
-            <UserPlus size={15} /> Invitar Miembro
+            <UserPlus size={15} strokeWidth={1.5} aria-hidden="true" /> Invitar Miembro
           </button>
         }
         secondaryActions={
@@ -262,7 +260,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             onClick={() => void load()}
             disabled={loading}
           >
-            <RefreshCw size={14} /> Actualizar
+            <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" /> Actualizar
           </button>
         }
       />
@@ -273,7 +271,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+      <div className="users-filters">
         <StatusChips<UserFilter>
           options={[
             { value: 'active', label: `Membresías activas (${users.filter((u) => u.membership_status === 'active').length})` },
@@ -334,13 +332,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                 {invitations.map((inv) => (
                   <tr key={inv.id}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                        <Mail size={14} style={{ color: 'var(--text-muted)' }} />
-                        <span style={{ fontWeight: 600 }}>{inv.email}</span>
+                      <div className="users-invitation-email">
+                        <Mail size={14} strokeWidth={1.5} aria-hidden="true" />
+                        <span>{inv.email}</span>
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                      <div className="users-role-chips">
                         {inv.roles.map((r) => (
                           <span key={r} className="meta-chip">
                             {roleLabelEs(r)}
@@ -348,10 +346,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                         ))}
                       </div>
                     </td>
-                    <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                    <td className="users-table__date">
                       {new Date(inv.created_at).toLocaleDateString()}
                     </td>
-                    <td style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                    <td className="users-table__date">
                       {new Date(inv.expires_at).toLocaleDateString()}
                     </td>
                     <td>
@@ -363,11 +361,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       {['pending', 'delivered', 'opened', 'expired'].includes(inv.status) ? (
                         <div className="users-table__actions">
                           <button type="button" className="btn btn--secondary btn--small" onClick={() => void handleResendInvitation(inv)} disabled={actionId === inv.id}>
-                            <RefreshCw size={13} /> Reenviar
+                            <RefreshCw size={13} strokeWidth={1.5} aria-hidden="true" /> Reenviar
                           </button>
                           {['pending', 'delivered', 'opened'].includes(inv.status) && (
                             <button type="button" className="btn btn--secondary btn--small" onClick={() => { setRevokeInvitation(inv); setRevokeReason(''); }} disabled={actionId === inv.id}>
-                              <XCircle size={13} /> Revocar
+                              <XCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Revocar
                             </button>
                           )}
                         </div>
@@ -411,7 +409,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       <div className="users-table__email">{u.email}</div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                      <div className="users-member-roles">
                         {roleChips(u)}
                         <button
                           type="button"
@@ -425,9 +423,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           }}
                           disabled={isWorking}
                           title="Modificar roles"
-                          style={{ padding: '2px 6px' }}
+                          aria-label={`Modificar roles de ${u.name || u.email}`}
                         >
-                          <Settings2 size={13} />
+                          <Settings2 size={13} strokeWidth={1.5} aria-hidden="true" />
                         </button>
                       </div>
                     </td>
@@ -442,7 +440,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       </span>
                     </td>
                     <td className="users-table__align-right">
-                      <div className="users-table__actions" style={{ justifyContent: 'flex-end' }}>
+                      <div className="users-table__actions users-table__actions--end">
                         {u.membership_status === 'suspended' ? (
                           <button
                             type="button"
@@ -451,7 +449,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                             disabled={isWorking || u.account_status !== 'active'}
                             title={u.account_status !== 'active' ? 'La cuenta global está deshabilitada' : undefined}
                           >
-                            <CheckCircle2 size={13} /> Reactivar membresía
+                            <CheckCircle2 size={13} strokeWidth={1.5} aria-hidden="true" /> Reactivar membresía
                           </button>
                         ) : u.membership_status === 'active' ? (
                           <button
@@ -460,7 +458,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                             onClick={() => void updateMemberStatus(u.membership_id, 'suspended')}
                             disabled={isWorking}
                           >
-                            <MinusCircle size={13} /> Suspender membresía
+                            <MinusCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Suspender membresía
                           </button>
                         ) : <span aria-hidden="true">—</span>}
                       </div>
@@ -480,34 +478,24 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         title={`Roles de ${roleEditUser?.name || 'Miembro'}`}
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+        <div className="users-modal-stack">
+          <p className="users-modal-copy">
             Seleccioná uno o varios roles para este usuario. Las capacidades se combinan por unión de permisos (ADR-0005).
           </p>
 
           {(orgType === 'store' || orgType === 'dealer') && (
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+            <p className="users-modal-copy">
               Este taller es comercial: sólo puede asignar roles de ventas y coordinación.
             </p>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-2)' }}>
+          <div className="users-role-options users-role-options--single">
             {assignableRoles.map((r) => {
               const isChecked = selectedRoles.includes(r);
               return (
                 <label
                   key={r}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-2)',
-                    padding: 'var(--space-2) var(--space-3)',
-                    background: isChecked ? 'var(--brand-50)' : 'var(--surface-muted)',
-                    border: `1px solid ${isChecked ? 'var(--brand-300)' : 'var(--border)'}`,
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--text-sm)',
-                  }}
+                  className={`users-role-option${isChecked ? ' is-selected' : ''}`}
                 >
                   <input
                     type="checkbox"
@@ -520,13 +508,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       }
                     }}
                   />
-                  <span style={{ fontWeight: isChecked ? 600 : 400 }}>{roleLabelEs(r)}</span>
+                  <span>{roleLabelEs(r)}</span>
                 </label>
               );
             })}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+          <div className="users-modal-actions">
             <button type="button" className="btn btn--secondary" onClick={() => setRoleEditUser(null)}>
               Cancelar
             </button>
@@ -554,45 +542,28 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         size="md"
       >
         {createdInviteLink ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            <div
-              style={{
-                background: 'var(--success-50, var(--surface-muted))',
-                color: 'var(--success-700, var(--text-primary))',
-                border: '1px solid var(--success-500, var(--border))',
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--text-sm)',
-              }}
-            >
+          <div className="users-modal-stack">
+            <div className="users-invitation-success" role="status">
               ✓ Invitación generada exitosamente.
             </div>
 
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+            <p className="users-modal-copy">
               Copiá el enlace y envíaselo al miembro por WhatsApp o email para que cree su contraseña y acceda:
             </p>
 
-            <div
-              style={{
-                background: 'var(--surface-muted)',
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border)',
-                wordBreak: 'break-all',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-xs)',
-              }}
-            >
+            <div className="users-invitation-link">
               {createdInviteLink}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+            <div className="users-modal-actions users-modal-actions--flush">
               <button
                 type="button"
                 className="btn btn--primary"
                 onClick={handleCopyInviteLink}
               >
-                {copiedLink ? <Check size={16} /> : <Copy size={16} />}
+                {copiedLink
+                  ? <Check size={16} strokeWidth={1.5} aria-hidden="true" />
+                  : <Copy size={16} strokeWidth={1.5} aria-hidden="true" />}
                 {copiedLink ? '¡Enlace copiado!' : 'Copiar enlace para WhatsApp'}
               </button>
               <button
@@ -605,9 +576,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             </div>
           </div>
         ) : (
-          <form onSubmit={handleCreateInvitation} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <form onSubmit={handleCreateInvitation} className="users-modal-stack">
             {inviteError && (
-              <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', margin: 0 }}>
+              <p role="alert" className="users-form-error">
                 {inviteError}
               </p>
             )}
@@ -629,23 +600,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
 
             <div>
               <label className="label">Roles a asignar *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+              <div className="users-role-options">
                 {assignableRoles.filter((r) => r !== 'user').map((r) => {
                   const isChecked = inviteRoles.includes(r);
                   return (
                     <label
                       key={r}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-2)',
-                        padding: 'var(--space-2) var(--space-3)',
-                        background: isChecked ? 'var(--brand-50)' : 'var(--surface-muted)',
-                        border: `1px solid ${isChecked ? 'var(--brand-300)' : 'var(--border)'}`,
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        fontSize: 'var(--text-sm)',
-                      }}
+                      className={`users-role-option${isChecked ? ' is-selected' : ''}`}
                     >
                       <input
                         type="checkbox"
@@ -665,7 +626,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+            <div className="users-modal-actions">
               <button
                 type="button"
                 className="btn btn--secondary"
@@ -692,15 +653,15 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         title="Revocar invitación"
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+        <div className="users-modal-stack">
+          <p className="users-modal-copy">
             El enlace dejará de funcionar. Indicá el motivo para conservar una auditoría útil.
           </p>
           <div>
             <label className="label" htmlFor="revoke-reason">Motivo *</label>
             <textarea id="revoke-reason" className="input" required value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+          <div className="users-modal-actions users-modal-actions--flush">
             <button type="button" className="btn btn--secondary" onClick={() => setRevokeInvitation(null)}>Cancelar</button>
             <button type="button" className="btn btn--primary" disabled={!revokeReason.trim() || actionId === revokeInvitation?.id} onClick={() => { if (revokeInvitation) void handleRevokeInvitation(revokeInvitation); }}>
               Revocar invitación

@@ -64,7 +64,9 @@ describe('AcceptInvitationScreen lifecycle', () => {
     await actor.type(screen.getByLabelText('Contraseña *'), 'correct-horse');
     await actor.click(screen.getByRole('button', { name: /Aceptar invitación y entrar/ }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain('reemplazado por uno más reciente');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('reemplazado por uno más reciente');
+    expect(document.activeElement).toBe(alert);
   });
 
   it('lets an existing identity submit its legacy password without applying new-password rules in the browser', async () => {
@@ -82,5 +84,36 @@ describe('AcceptInvitationScreen lifecycle', () => {
     await actor.click(screen.getByRole('button', { name: /Aceptar invitación y entrar/ }));
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  });
+
+  it('supports keyboard navigation back to login and exposes the loading state', async () => {
+    const onBackToLogin = vi.fn();
+    let resolveRequest!: (value: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+      resolveRequest = resolve;
+    })));
+    const actor = userEvent.setup();
+    render(
+      <AcceptInvitationScreen
+        token="invite-token"
+        baseUrl="http://api.test"
+        onAccepted={vi.fn()}
+        onBackToLogin={onBackToLogin}
+      />,
+    );
+
+    await actor.type(screen.getByLabelText('Contraseña *'), 'correct-horse');
+    const submit = screen.getByRole('button', { name: /Aceptar invitación y entrar/ });
+    await actor.click(submit);
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+
+    resolveRequest(new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } }));
+    await screen.findByRole('alert');
+
+    const back = screen.getByRole('button', { name: 'Volver al inicio de sesión' });
+    back.focus();
+    await actor.keyboard('{Enter}');
+    expect(onBackToLogin).toHaveBeenCalledOnce();
   });
 });
