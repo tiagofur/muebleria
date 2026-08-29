@@ -124,7 +124,7 @@ class MetadataStoreTest < Minitest::Test
     assert_equal 'place-hw-01', written.dig('identity', 'hardwarePlacementId')
   end
 
-  def test_rejects_invalid_entity_class_and_placement_origin
+  def test_rejects_invalid_entity_class_and_placement_kind
     invalid_class = @fixture.merge('intent' => @fixture['intent'].merge('entityClass' => 'widget'))
 
     error = assert_raises(Granete::SketchUpExtension::Metadata::InvalidMetadataError) do

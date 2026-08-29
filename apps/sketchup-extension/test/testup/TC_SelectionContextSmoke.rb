@@ -196,11 +196,9 @@ module Granete
       # NEGATIVE PROOF (pre-#391 copy reality): a native copy temporarily
       # shares the SketchUp definition AND the metadata ref. Without host
       # path evidence the resolver must report ambiguity — never silently
-      # pick the first match. (The host API offers no programmatic way to
-      # enter a component's editing context, so the path-based
-      # disambiguation branch is covered by the unit suite with a faithful
-      # active_path model double; entering the copy interactively would
-      # exercise exactly that branch.)
+      # pick the first match. Opening the copy's editing context with
+      # Model#active_path= (official API since SketchUp 2020) then provides
+      # the real path evidence that disambiguates the owner.
       def test_shared_definition_copy_never_picks_an_owner_silently
         insert_fixture_furniture
         original = granete_furniture_instances.first
@@ -224,6 +222,18 @@ module Granete
         assert_equal 'st-comp-side-copy-0', ambiguous['componentInstanceId']
         assert_equal copied_metadata.dig('identity', 'instanceRef'),
                      ambiguous['furnitureInstanceRef']
+
+        # Enter the copy's editing context: the host's active path (the OPEN
+        # instance chain, without the selected child) roots at the copy and
+        # disambiguates the owner.
+        model.active_path = [copy]
+        resolved = select_and_resolve(lateral)
+        assert_equal 'path', resolved['ownerRecovery'],
+                     'an open editing path must disambiguate the copy scenario'
+        assert_equal copy.persistent_id, resolved['hostLocator']['furniturePersistentId']
+        assert_equal copy.name, resolved['semanticPath'].first
+
+        model.active_path = []
 
         # With the copy removed the scan is unambiguous again: recovery
         # returns to a single, verifiable owner.

@@ -4856,7 +4856,7 @@
         "contracts/sketchupLayoutTransform.contract.json",
         "progress/host_smoke_F193_testup_ci.json"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F186",
         "F190"

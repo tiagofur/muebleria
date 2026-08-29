@@ -239,8 +239,9 @@ module Granete
         PART_DEFINITION_PREFIX = 'Granete · Parte · '
         HARDWARE_DEFINITION_PREFIX = 'Granete · Herraje · '
         LEGACY_REPRESENTATION_ERROR =
-          'El mueble usa la representación legacy (Group) y aún no fue migrado a ' \
-          'ComponentInstance nativo (#416). Reinsertá el mueble desde la biblioteca.'
+          'El mueble usa una representación anterior del plugin (Group) que aún no fue ' \
+          'migrada a ComponentInstance nativo. Reinsertá el mueble desde la biblioteca ' \
+          'para editarlo.'
         MATERIAL_RESOLUTION_REQUIRED_ERROR =
           'El cambio de material requiere una composición nativa resuelta por Granete; ' \
           'el mueble anterior no fue modificado.'
@@ -560,9 +561,9 @@ module Granete
         end
 
         # write_hardware: managed hardware placement occurrence (#476). The
-        # entity class, hardware definition and placement origin are stored
-        # data — selection never infers them from names. placement_origin
-        # 'resolved' marks layout-derived hardware; #468 introduces 'manual'.
+        # entity class, hardware definition and #350 placement provenance
+        # ('manual'/'derived', straight from the resolved layout contract)
+        # are stored data — selection never infers them from names.
         def write_hardware(store, entity, placement_id, furniture_ref:,
                            hardware_definition_id: nil, host_component_instance_id: nil,
                            placement_kind: nil)

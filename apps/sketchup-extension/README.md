@@ -180,10 +180,12 @@ sharing one `componentDefinitionId` never collapse into one context, and
 arbitrary user Groups (which do respond to `#definition` in the host) stay
 `unmanaged`. SketchUp defers `SelectionObserver` notifications to its event
 loop, so the suite resolves through the observer's public `resolve` — the
-exact code the deferred event runs — instead of racing the event loop; the
-host API has no programmatic way to enter a component's editing context, so
-the active-path disambiguation branch is covered by the unit suite with a
-faithful `active_path` model double. The HtmlDialog side (capability-driven
+exact code the deferred event runs — instead of racing the event loop. The
+active-path disambiguation is proven in the real host by opening the copy's
+editing context with `Model#active_path=` (official API since SketchUp
+2020): the open instance chain — which does NOT include the selected child,
+it belongs to `active_entities` — roots at the copy and resolves
+`ownerRecovery: path`. The HtmlDialog side (capability-driven
 gating, breadcrumb navigation, provenance copy, unmanaged state,
 multi-selection fail-closed) is covered by the Node harness
 `test/js/dialog_inspector_test.js` run from the unit suite. Downstream

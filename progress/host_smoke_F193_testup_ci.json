@@ -9,283 +9,283 @@
     "ruby_version": "3.2.2",
     "ruby_patchlevel": 53,
     "ruby_platform": "arm64-darwin",
-    "time": "2026-08-29T17:25:03Z",
+    "time": "2026-08-29T17:54:28Z",
     "options": {
       "io": "TestUp::Console",
       "filter": " /^(Granete::SketchUpExtension::TC_BootstrapSmoke#test_default_ports_fail_closed|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_floor_and_runtime_are_available|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_observer_is_registered_while_extension_runs|Granete::SketchUpExtension::TC_BootstrapSmoke#test_installed_extension_is_registered_enabled_and_current|Granete::SketchUpExtension::TC_BootstrapSmoke#test_local_dialog_can_open_close_and_open_again|Granete::SketchUpExtension::TC_BootstrapSmoke#test_logging_redacts_sensitive_values|Granete::SketchUpExtension::TC_BootstrapSmoke#test_non_manufacturable_metadata_round_trips_in_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_abort_operation_leaves_no_partial_hierarchy|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_broken_contract_fails_closed_without_touching_the_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_furniture_move_and_rotation_never_rewrite_child_geometry|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_host_locators_never_become_business_identity|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_inserted_furniture_and_boards_are_native_component_instances|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_lateral_transform_matches_the_414_basis_and_translation|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_legacy_group_representation_fails_closed_with_migration_pointer|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_material_change_rebuilds_natively_and_round_trips_through_undo_and_save|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_part_definitions_hold_local_geometry_at_origin|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_rename_keeps_granete_identity_in_metadata|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_two_furniture_units_diverge_without_shared_definition_effects|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_business_identity_independent_of_host_locators|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_canonical_cabinet_is_a_full_native_hierarchy|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_fi_b_front_change_never_mutates_fi_a|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_hardware_keeps_host_and_door_binding_metadata|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_instance_transforms_are_rigid_never_scaled|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_local_axes_survive_move_and_quarter_turns|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_outliner_names_are_semantic_and_rename_safe|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_role_thicknesses_render_as_local_geometry_by_material|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_v1_uses_unique_part_definitions_with_shared_authoring_ids|Granete::SketchUpExtension::TC_OpenCutListInteropSmoke#test_opencutlist_reads_granete_native_cabinet_through_saved_skp|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_hardware_selection_exposes_placement_host_and_real_provenance|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_nested_part_selection_keeps_owner_and_definition_identity|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_rebuild_recovers_the_same_semantic_context_with_new_host_locator|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_rename_and_move_never_change_selection_identity|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_shared_definition_copy_never_picks_an_owner_silently|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_top_level_furniture_selection_produces_furniture_context|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_two_occurrences_sharing_one_definition_never_collapse|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_unmanaged_geometry_stays_unmanaged)$/",
       "verbose": true,
       "testup_ci": true,
-      "seed": 63756,
-      "args": "\"-n /^(Granete::SketchUpExtension::TC_BootstrapSmoke#test_default_ports_fail_closed|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_floor_and_runtime_are_available|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_observer_is_registered_while_extension_runs|Granete::SketchUpExtension::TC_BootstrapSmoke#test_installed_extension_is_registered_enabled_and_current|Granete::SketchUpExtension::TC_BootstrapSmoke#test_local_dialog_can_open_close_and_open_again|Granete::SketchUpExtension::TC_BootstrapSmoke#test_logging_redacts_sensitive_values|Granete::SketchUpExtension::TC_BootstrapSmoke#test_non_manufacturable_metadata_round_trips_in_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_abort_operation_leaves_no_partial_hierarchy|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_broken_contract_fails_closed_without_touching_the_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_furniture_move_and_rotation_never_rewrite_child_geometry|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_host_locators_never_become_business_identity|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_inserted_furniture_and_boards_are_native_component_instances|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_lateral_transform_matches_the_414_basis_and_translation|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_legacy_group_representation_fails_closed_with_migration_pointer|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_material_change_rebuilds_natively_and_round_trips_through_undo_and_save|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_part_definitions_hold_local_geometry_at_origin|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_rename_keeps_granete_identity_in_metadata|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_two_furniture_units_diverge_without_shared_definition_effects|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_business_identity_independent_of_host_locators|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_canonical_cabinet_is_a_full_native_hierarchy|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_fi_b_front_change_never_mutates_fi_a|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_hardware_keeps_host_and_door_binding_metadata|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_instance_transforms_are_rigid_never_scaled|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_local_axes_survive_move_and_quarter_turns|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_outliner_names_are_semantic_and_rename_safe|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_role_thicknesses_render_as_local_geometry_by_material|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_v1_uses_unique_part_definitions_with_shared_authoring_ids|Granete::SketchUpExtension::TC_OpenCutListInteropSmoke#test_opencutlist_reads_granete_native_cabinet_through_saved_skp|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_hardware_selection_exposes_placement_host_and_real_provenance|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_nested_part_selection_keeps_owner_and_definition_identity|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_rebuild_recovers_the_same_semantic_context_with_new_host_locator|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_rename_and_move_never_change_selection_identity|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_shared_definition_copy_never_picks_an_owner_silently|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_top_level_furniture_selection_produces_furniture_context|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_two_occurrences_sharing_one_definition_never_collapse|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_unmanaged_geometry_stays_unmanaged)$/\" --verbose --testup_ci --seed 63756"
+      "seed": 30300,
+      "args": "\"-n /^(Granete::SketchUpExtension::TC_BootstrapSmoke#test_default_ports_fail_closed|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_floor_and_runtime_are_available|Granete::SketchUpExtension::TC_BootstrapSmoke#test_host_observer_is_registered_while_extension_runs|Granete::SketchUpExtension::TC_BootstrapSmoke#test_installed_extension_is_registered_enabled_and_current|Granete::SketchUpExtension::TC_BootstrapSmoke#test_local_dialog_can_open_close_and_open_again|Granete::SketchUpExtension::TC_BootstrapSmoke#test_logging_redacts_sensitive_values|Granete::SketchUpExtension::TC_BootstrapSmoke#test_non_manufacturable_metadata_round_trips_in_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_abort_operation_leaves_no_partial_hierarchy|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_broken_contract_fails_closed_without_touching_the_model|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_furniture_move_and_rotation_never_rewrite_child_geometry|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_host_locators_never_become_business_identity|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_inserted_furniture_and_boards_are_native_component_instances|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_lateral_transform_matches_the_414_basis_and_translation|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_legacy_group_representation_fails_closed_with_migration_pointer|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_material_change_rebuilds_natively_and_round_trips_through_undo_and_save|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_part_definitions_hold_local_geometry_at_origin|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_rename_keeps_granete_identity_in_metadata|Granete::SketchUpExtension::TC_NativeEntitySmoke#test_two_furniture_units_diverge_without_shared_definition_effects|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_business_identity_independent_of_host_locators|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_canonical_cabinet_is_a_full_native_hierarchy|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_fi_b_front_change_never_mutates_fi_a|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_hardware_keeps_host_and_door_binding_metadata|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_instance_transforms_are_rigid_never_scaled|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_local_axes_survive_move_and_quarter_turns|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_outliner_names_are_semantic_and_rename_safe|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_role_thicknesses_render_as_local_geometry_by_material|Granete::SketchUpExtension::TC_NativeValidationSmoke#test_v1_uses_unique_part_definitions_with_shared_authoring_ids|Granete::SketchUpExtension::TC_OpenCutListInteropSmoke#test_opencutlist_reads_granete_native_cabinet_through_saved_skp|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_hardware_selection_exposes_placement_host_and_real_provenance|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_nested_part_selection_keeps_owner_and_definition_identity|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_rebuild_recovers_the_same_semantic_context_with_new_host_locator|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_rename_and_move_never_change_selection_identity|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_shared_definition_copy_never_picks_an_owner_silently|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_top_level_furniture_selection_produces_furniture_context|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_two_occurrences_sharing_one_definition_never_collapse|Granete::SketchUpExtension::TC_SelectionContextSmoke#test_unmanaged_geometry_stays_unmanaged)$/\" --verbose --testup_ci --seed 30300"
     }
   },
   "statistics": {
     "total": 36,
-    "assertions": 1053,
+    "assertions": 1057,
     "failures": 0,
     "errors": 0,
     "skips": 0,
     "passes": 36
   },
   "timings": {
-    "total_seconds": 10.231211999984225,
-    "runs_per_second": 3.518644711892932,
-    "assertions_per_second": 102.92035782286825
+    "total_seconds": 10.23833699998795,
+    "runs_per_second": 3.5161960384818713,
+    "assertions_per_second": 103.23942257431494
   },
   "fails": [],
   "skips": [],
   "passes": [
     {
       "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_OpenCutListInteropSmoke",
-      "name": "test_opencutlist_reads_granete_native_cabinet_through_saved_skp",
-      "assertions": 31,
-      "time": 0.43888599998899736
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_part_definitions_hold_local_geometry_at_origin",
-      "assertions": 4,
-      "time": 0.1505839999881573
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_rename_keeps_granete_identity_in_metadata",
+      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
+      "name": "test_outliner_names_are_semantic_and_rename_safe",
       "assertions": 2,
-      "time": 0.1594479999912437
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_host_locators_never_become_business_identity",
-      "assertions": 130,
-      "time": 0.2006659999897238
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_legacy_group_representation_fails_closed_with_migration_pointer",
-      "assertions": 7,
-      "time": 0.1100950000109151
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_broken_contract_fails_closed_without_touching_the_model",
-      "assertions": 4,
-      "time": 0.12659800000255927
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_material_change_rebuilds_natively_and_round_trips_through_undo_and_save",
-      "assertions": 13,
-      "time": 0.4584480000194162
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_two_furniture_units_diverge_without_shared_definition_effects",
-      "assertions": 5,
-      "time": 0.23027600001660176
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_lateral_transform_matches_the_414_basis_and_translation",
-      "assertions": 16,
-      "time": 0.18871600000420585
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_furniture_move_and_rotation_never_rewrite_child_geometry",
-      "assertions": 33,
-      "time": 0.1928970000008121
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_abort_operation_leaves_no_partial_hierarchy",
-      "assertions": 3,
-      "time": 0.1190270000079181
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
-      "name": "test_inserted_furniture_and_boards_are_native_component_instances",
-      "assertions": 20,
-      "time": 0.21793099999194965
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_rename_and_move_never_change_selection_identity",
-      "assertions": 8,
-      "time": 0.30166800000006333
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_unmanaged_geometry_stays_unmanaged",
-      "assertions": 6,
-      "time": 0.1994319999939762
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_top_level_furniture_selection_produces_furniture_context",
-      "assertions": 9,
-      "time": 0.19803100000717677
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_nested_part_selection_keeps_owner_and_definition_identity",
-      "assertions": 9,
-      "time": 0.22358299998450093
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_rebuild_recovers_the_same_semantic_context_with_new_host_locator",
-      "assertions": 13,
-      "time": 0.3231920000107493
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_hardware_selection_exposes_placement_host_and_real_provenance",
-      "assertions": 19,
-      "time": 0.19635099999140948
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_two_occurrences_sharing_one_definition_never_collapse",
-      "assertions": 9,
-      "time": 0.36118700000224635
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
-      "name": "test_shared_definition_copy_never_picks_an_owner_silently",
-      "assertions": 11,
-      "time": 0.20042899998952635
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_role_thicknesses_render_as_local_geometry_by_material",
-      "assertions": 40,
-      "time": 0.3214250000019092
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_hardware_keeps_host_and_door_binding_metadata",
-      "assertions": 6,
-      "time": 0.2925059999979567
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_canonical_cabinet_is_a_full_native_hierarchy",
-      "assertions": 45,
-      "time": 0.2065969999821391
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_local_axes_survive_move_and_quarter_turns",
-      "assertions": 83,
-      "time": 0.33483500001602806
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_v1_uses_unique_part_definitions_with_shared_authoring_ids",
-      "assertions": 17,
-      "time": 0.20029400000930764
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_fi_b_front_change_never_mutates_fi_a",
-      "assertions": 10,
-      "time": 0.37382499998784624
+      "time": 0.2860050000017509
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
       "name": "test_business_identity_independent_of_host_locators",
       "assertions": 380,
-      "time": 0.23783699999330565
+      "time": 0.17805800001951866
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
-      "name": "test_outliner_names_are_semantic_and_rename_safe",
-      "assertions": 2,
-      "time": 0.4762449999980163
+      "name": "test_local_axes_survive_move_and_quarter_turns",
+      "assertions": 83,
+      "time": 0.3862049999879673
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
+      "name": "test_hardware_keeps_host_and_door_binding_metadata",
+      "assertions": 6,
+      "time": 0.1937729999772273
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
+      "name": "test_role_thicknesses_render_as_local_geometry_by_material",
+      "assertions": 40,
+      "time": 0.2121659999829717
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
+      "name": "test_canonical_cabinet_is_a_full_native_hierarchy",
+      "assertions": 45,
+      "time": 0.3110420000157319
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
       "name": "test_instance_transforms_are_rigid_never_scaled",
       "assertions": 91,
-      "time": 0.2333070000167936
+      "time": 0.2051680000149645
     },
     {
       "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
-      "name": "test_installed_extension_is_registered_enabled_and_current",
+      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
+      "name": "test_fi_b_front_change_never_mutates_fi_a",
+      "assertions": 10,
+      "time": 0.3873250000178814
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeValidationSmoke",
+      "name": "test_v1_uses_unique_part_definitions_with_shared_authoring_ids",
+      "assertions": 17,
+      "time": 0.19206000000122003
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_two_furniture_units_diverge_without_shared_definition_effects",
+      "assertions": 5,
+      "time": 0.33632800000486895
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_material_change_rebuilds_natively_and_round_trips_through_undo_and_save",
+      "assertions": 13,
+      "time": 0.37534500000765547
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_legacy_group_representation_fails_closed_with_migration_pointer",
+      "assertions": 7,
+      "time": 0.1252960000128951
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_abort_operation_leaves_no_partial_hierarchy",
+      "assertions": 3,
+      "time": 0.11290600002394058
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_rename_keeps_granete_identity_in_metadata",
+      "assertions": 2,
+      "time": 0.20297499999287538
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_lateral_transform_matches_the_414_basis_and_translation",
+      "assertions": 16,
+      "time": 0.2935949999955483
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_host_locators_never_become_business_identity",
+      "assertions": 130,
+      "time": 0.2027490000182297
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_furniture_move_and_rotation_never_rewrite_child_geometry",
+      "assertions": 33,
+      "time": 0.23558499998762272
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_broken_contract_fails_closed_without_touching_the_model",
       "assertions": 4,
-      "time": 5.699999746866524e-05
+      "time": 0.12368099999730475
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_inserted_furniture_and_boards_are_native_component_instances",
+      "assertions": 20,
+      "time": 0.28259999997681007
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_NativeEntitySmoke",
+      "name": "test_part_definitions_hold_local_geometry_at_origin",
+      "assertions": 4,
+      "time": 0.1985630000126548
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_OpenCutListInteropSmoke",
+      "name": "test_opencutlist_reads_granete_native_cabinet_through_saved_skp",
+      "assertions": 31,
+      "time": 0.6017159999755677
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
       "name": "test_non_manufacturable_metadata_round_trips_in_model",
       "assertions": 2,
-      "time": 0.1466200000140816
+      "time": 0.13968600000953302
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_installed_extension_is_registered_enabled_and_current",
+      "assertions": 4,
+      "time": 3.29999893438071e-05
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
       "name": "test_logging_redacts_sensitive_values",
       "assertions": 6,
-      "time": 0.0001480000209994614
+      "time": 0.00012399998377077281
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
       "name": "test_host_floor_and_runtime_are_available",
       "assertions": 6,
-      "time": 0.00018599999020807445
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
-      "name": "test_host_observer_is_registered_while_extension_runs",
-      "assertions": 3,
-      "time": 0.001303000026382506
-    },
-    {
-      "type": "passed",
-      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
-      "name": "test_default_ports_fail_closed",
-      "assertions": 4,
-      "time": 0.0003169999981764704
+      "time": 0.0001610000035725534
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
       "name": "test_local_dialog_can_open_close_and_open_again",
       "assertions": 2,
-      "time": 0.034558999992441386
+      "time": 0.03761100000701845
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_host_observer_is_registered_while_extension_runs",
+      "assertions": 3,
+      "time": 0.015569999988656491
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_BootstrapSmoke",
+      "name": "test_default_ports_fail_closed",
+      "assertions": 4,
+      "time": 0.000139000010676682
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_rename_and_move_never_change_selection_identity",
+      "assertions": 8,
+      "time": 0.2501380000030622
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_unmanaged_geometry_stays_unmanaged",
+      "assertions": 6,
+      "time": 0.36619999998947605
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_top_level_furniture_selection_produces_furniture_context",
+      "assertions": 9,
+      "time": 0.3040729999775067
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_two_occurrences_sharing_one_definition_never_collapse",
+      "assertions": 9,
+      "time": 0.33372299998882227
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_nested_part_selection_keeps_owner_and_definition_identity",
+      "assertions": 9,
+      "time": 0.19192900002235547
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_shared_definition_copy_never_picks_an_owner_silently",
+      "assertions": 15,
+      "time": 0.19904700000188313
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_rebuild_recovers_the_same_semantic_context_with_new_host_locator",
+      "assertions": 13,
+      "time": 0.3504630000097677
+    },
+    {
+      "type": "passed",
+      "class": "Granete::SketchUpExtension::TC_SelectionContextSmoke",
+      "name": "test_hardware_selection_exposes_placement_host_and_real_provenance",
+      "assertions": 19,
+      "time": 0.30528600001707673
     }
   ]
 }

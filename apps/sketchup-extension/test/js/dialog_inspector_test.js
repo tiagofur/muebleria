@@ -245,6 +245,19 @@ function runTests() {
   passed += 1;
   check(!visible(el(sandbox, 'inspector-params-card')), 'params hidden when not editable');
 
+  // --- delete obeys its OWN capability: a missing catalog definition must
+  //     not disable deleting the placed furniture ---
+  dialog.onSelectionChange(furnitureContext({
+    definition: null,
+    capabilities: {
+      canEditParameters: { supported: false, reason: 'La definición ya no está disponible.' },
+      canEditMaterialRoles: { supported: false, reason: 'r' },
+      canDelete: { supported: true, reason: null }
+    }
+  }));
+  check(el(sandbox, 'inspector-edit-fieldset').disabled, 'edit fieldset fail-closed without definition');
+  check(!el(sandbox, 'btn-delete').disabled, 'delete stays enabled when only canEditParameters is false');
+
   // --- furniture, materials capability gates its own card ---
   dialog.onSelectionChange(furnitureContext({
     definition: Object.assign({}, DEFINITION, { materialRoles: [] }),

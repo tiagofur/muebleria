@@ -177,10 +177,12 @@ module Granete
 
         # Owning-furniture recovery for a nested child, by descending trust:
         #
-        #   path    — the host's real active editing path roots at a furniture
-        #             whose ref matches the child's (a copy sharing definition
-        #             and metadata is disambiguated by which copy the user is
-        #             actually inside — pre-#391 reality);
+        #   path    — the host's real active editing path (Model#active_path,
+        #             openable via Model#active_path= since SU 2020) roots at
+        #             the furniture the user is actually inside: the selected
+        #             child belongs to that editing context (active_entities),
+        #             so the path root IS the owner — pre-#391 copies sharing
+        #             definition and metadata are disambiguated by it;
         #   scan    — exactly ONE root entity carries the child's ref;
         #   ambiguous — several root entities carry the same ref (native
         #             copy/paste before #391): NEVER silently pick the first;
@@ -200,24 +202,26 @@ module Granete
           end
         end
 
-        def owner_from_active_path(entity, furniture_ref)
+        def owner_from_active_path(_entity, furniture_ref)
           model = @model_provider.call
           return nil unless model.respond_to?(:active_path)
 
           path = model.active_path
-          return nil unless path.is_a?(Array) && !path.empty? && path.include?(entity)
+          return nil unless path.is_a?(Array) && !path.empty?
 
-          path.each do |candidate|
-            next unless candidate.respond_to?(:get_attribute)
+          # Host reality: active_path holds the OPEN instance chain only —
+          # the selected entity itself lives in active_entities and is NOT a
+          # path member. The path ROOT is the top-level instance being
+          # edited, i.e. the owner of everything selectable right now; the
+          # ref match keeps an outdated/mismatched path from winning.
+          root = path.first
+          return nil unless root.respond_to?(:get_attribute)
 
-            metadata = read_metadata(candidate)
-            next unless FURNITURE_METADATA_KINDS.include?(metadata && metadata['kind'])
+          metadata = read_metadata(root)
+          return nil unless FURNITURE_METADATA_KINDS.include?(metadata && metadata['kind'])
+          return nil if furniture_ref && metadata.dig('identity', 'instanceRef') != furniture_ref
 
-            return nil if furniture_ref && metadata.dig('identity', 'instanceRef') != furniture_ref
-
-            return candidate
-          end
-          nil
+          root
         end
 
         def owner_scan_candidates(furniture_ref)

@@ -272,7 +272,7 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'furniture', context.kind
     assert_equal 'legacy-group', context.representation
     refute context.capabilities.supported?('canEditParameters')
-    assert_includes context.capabilities['canEditParameters'].reason, '416'
+    assert_includes context.capabilities['canEditParameters'].reason, 'representación anterior'
     refute context.capabilities.supported?('canDelete')
   end
 
@@ -373,8 +373,10 @@ class SelectionContextTest < Minitest::Test
     assert_equal 1, ambiguous.semantic_path.length
 
     # The user inside the copy's editing context disambiguates via the real
-    # host path — no silent first-match.
-    path_model = PathModelStub.new(@model, [copy, shelf])
+    # host path — no silent first-match. Host reality: active_path holds the
+    # OPEN instance chain only; the selected child belongs to
+    # active_entities and is NOT a path member.
+    path_model = PathModelStub.new(@model, [copy])
     path_resolver = Granete::SketchUpExtension::Selection::Resolver.new(
       metadata_store: @store, catalog_provider: @provider,
       model_provider: -> { path_model }

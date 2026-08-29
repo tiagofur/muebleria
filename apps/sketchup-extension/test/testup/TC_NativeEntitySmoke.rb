@@ -248,7 +248,7 @@ module Granete
         result = builder.update_furniture(model, group, definition, {})
 
         refute result['success']
-        assert_includes result['error'], '416'
+        assert_includes result['error'], 'representación anterior'
         assert group.valid?
         assert_equal 1, group.definition.entities.count # only its own line
       end

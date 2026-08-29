@@ -343,8 +343,7 @@ class NativeEntityRendererTest < Minitest::Test
     result = @builder.update_furniture(@model, legacy, definition, {})
 
     refute result['success']
-    assert_includes result['error'], 'legacy'
-    assert_includes result['error'], '416'
+    assert_includes result['error'], 'representación anterior'
     # The legacy representation is never partially rebuilt: no operation was
     # even started and its definition stays untouched.
     assert_empty legacy.definition.entities.to_a
