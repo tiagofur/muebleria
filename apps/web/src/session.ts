@@ -5,7 +5,7 @@ import {
 } from '@granete/storage';
 
 /**
- * Session gate helpers for the web shell login / register screens.
+ * Session gate helpers for the web shell login and invitation-first onboarding.
  * Auth token key matches APIWorkspaceRepository (`granete_token`).
  * Claves legacy `muebles_*`: las migra `migrateLegacyStorageKeys` (#366) al
  * arrancar la app (ver main.tsx).
@@ -25,7 +25,7 @@ export const DEFAULT_API_BASE: string =
 
 export type SessionMode = 'guest' | 'auth';
 
-export type AuthUser = Pick<User, 'id' | 'email' | 'name' | 'active'> & {
+export type AuthUser = Pick<User, 'id' | 'email' | 'name' | 'account_status'> & {
   /**
    * Legacy single role — OPTIONAL since users.role was dropped (000090):
    * auth responses carry the membership roles as the `roles` sibling and
@@ -146,7 +146,11 @@ export function readAuthUser(
     const raw = localStore.getItem(USER_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<AuthUser>;
-    if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') {
+    if (
+      typeof parsed.id !== 'string' ||
+      typeof parsed.email !== 'string' ||
+      (parsed.account_status !== 'active' && parsed.account_status !== 'disabled')
+    ) {
       return null;
     }
     return {
@@ -156,7 +160,7 @@ export function readAuthUser(
       ...(typeof parsed.role === 'string' && parsed.role !== ''
         ? { role: parsed.role }
         : {}),
-      active: parsed.active !== false,
+      account_status: parsed.account_status,
       ...(parsed.platform_admin === true ? { platform_admin: true } : {}),
       ...(Array.isArray(parsed.roles) ? { roles: parsed.roles } : {}),
     };
@@ -203,33 +207,6 @@ export async function loginRequest(
   } catch (error) {
     if (error instanceof GraneteApiError && error.status === 401) throw new Error('Email o contraseña incorrectos');
     if (error instanceof GraneteApiError && error.status === 403) throw new Error(error.message);
-    throw new Error('No se pudo conectar con el servidor');
-  }
-}
-
-/**
- * POST {base}/auth/register — creates pending user (active=false, role=user).
- */
-export async function registerRequest(
-  name: string,
-  email: string,
-  password: string,
-  options: {
-    readonly baseUrl?: string;
-    readonly fetchImpl?: typeof fetch;
-  } = {},
-): Promise<void> {
-  const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
-  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
-  if (typeof fetchImpl !== 'function') {
-    throw new Error('fetch no disponible');
-  }
-
-  try {
-    await new GraneteApiClient(baseUrl, fetchImpl).register({ name, email, password });
-  } catch (error) {
-    if (error instanceof GraneteApiError && error.status === 409) throw new Error('Ese email ya está registrado');
-    if (error instanceof GraneteApiError) throw new Error(error.message);
     throw new Error('No se pudo conectar con el servidor');
   }
 }
@@ -286,7 +263,23 @@ export async function meRequest(
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const response: MeResponse = await new GraneteApiClient(baseUrl, doFetch).getSession(token);
-  return response;
+  return {
+    user: toAuthUser(response.user, response.roles),
+    roles: response.roles,
+    ...(response.organization ? { organization: response.organization } : {}),
+    ...(response.support ? { support: response.support } : {}),
+  };
+}
+
+function toAuthUser(user: User, roles?: readonly string[]): AuthUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    account_status: user.account_status,
+    ...(user.platform_admin ? { platform_admin: true } : {}),
+    ...(roles ? { roles } : {}),
+  };
 }
 
 export function parseAuthResponse(data: unknown): LoginSuccess {
@@ -299,14 +292,7 @@ export function parseAuthResponse(data: unknown): LoginSuccess {
   const memberships = d.memberships;
   return {
     token: d.token,
-    user: {
-      id: d.user.id,
-      email: d.user.email,
-      name: d.user.name,
-      active: d.user.active,
-      ...(d.user.platform_admin ? { platform_admin: true } : {}),
-      ...(roles && roles.length > 0 ? { roles } : {}),
-    },
+    user: toAuthUser(d.user, roles),
     ...(org ? { organization: org } : {}),
     ...(memberships && memberships.length > 0 ? { memberships } : {}),
     ...(d.selection_required ? { selectionRequired: true } : {}),

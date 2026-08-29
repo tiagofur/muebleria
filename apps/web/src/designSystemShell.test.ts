@@ -165,18 +165,19 @@ describe('web shell login gate (Slice E)', () => {
     expect(typeof store.getState().login).toBe('function');
     expect(typeof store.getState().enterAsGuest).toBe('function');
     expect(typeof store.getState().logout).toBe('function');
-    expect(typeof store.getState().setAuthGate).toBe('function');
+    expect('register' in store.getState()).toBe(false);
   });
 
-  it('App.tsx wires RegisterScreen and admin UsersScreen', () => {
-    const app = readFileSync(appTsxPath, 'utf8');
-    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain('RegisterScreen');
-    expect(appContentSrc()).toContain('registerRequest');
+  it('uses invitation-first onboarding and keeps admin UsersScreen', () => {
+    const gate = readFileSync(join(here, 'SessionGate.tsx'), 'utf8');
+    expect(gate).toContain('AcceptInvitationScreen');
+    expect(gate).not.toContain('RegisterScreen');
+    expect(appContentSrc()).not.toContain('registerRequest');
     expect(shellViewSrc()).toContain('UsersScreen');
     expect(shellViewSrc()).toContain('showAdminUsers');
     expect(appContentSrc()).toContain('isAdminRole');
     expect(appContentSrc()).toContain('storeAuthUser');
-    expect(readFileSync(join(here, 'SessionGate.tsx'), 'utf8')).toContain("authGate === 'register'");
+    expect(gate).not.toContain("authGate === 'register'");
   });
 
   it('session helpers module exists with token, user and auth routes', () => {
@@ -186,7 +187,7 @@ describe('web shell login gate (Slice E)', () => {
     expect(session).toContain('granete_token');
     expect(session).toContain('granete_user');
     expect(session).toContain('/auth/login');
-    expect(session).toContain('/auth/register');
+    expect(session).not.toContain('/auth/register');
     expect(session).toContain('http://localhost:8080/api');
   });
 });

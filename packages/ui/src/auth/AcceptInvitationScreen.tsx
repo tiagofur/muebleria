@@ -6,7 +6,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { ShieldCheck, UserCheck, ArrowLeft, Lock, User } from 'lucide-react';
-import { GraneteApiClient, type LoginResponse } from '@granete/storage';
+import { GraneteApiClient, GraneteApiError, type ApiErrorCode, type LoginResponse } from '@granete/storage';
 import './acceptInvitation.css';
 
 export interface AcceptInvitationScreenProps {
@@ -14,6 +14,21 @@ export interface AcceptInvitationScreenProps {
   readonly baseUrl: string;
   readonly onAccepted: (authResult: LoginResponse) => void;
   readonly onBackToLogin?: () => void;
+}
+
+function invitationErrorMessage(error: unknown): string {
+  if (!(error instanceof GraneteApiError)) {
+    return error instanceof Error ? error.message : 'No se pudo aceptar la invitación';
+  }
+  const messages: Partial<Record<ApiErrorCode, string>> = {
+    INVITATION_EXPIRED: 'Esta invitación venció. Pedile al administrador que la reenvíe.',
+    INVITATION_REVOKED: 'Esta invitación fue revocada. Pedile una nueva al administrador.',
+    INVITATION_TOKEN_ROTATED: 'Este enlace fue reemplazado por uno más reciente. Usá el último que recibiste.',
+    INVITATION_ALREADY_USED: 'Esta invitación ya fue aceptada. Iniciá sesión con tu cuenta.',
+    ACCOUNT_DISABLED: 'Tu cuenta está deshabilitada. Contactá al administrador de plataforma.',
+    UNAUTHORIZED: 'La contraseña no coincide con tu cuenta existente.',
+  };
+  return messages[error.code] ?? error.message;
 }
 
 export function AcceptInvitationScreen({
@@ -42,7 +57,7 @@ export function AcceptInvitationScreen({
       });
       onAccepted(authData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo aceptar la invitación');
+      setError(invitationErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -130,8 +145,7 @@ export function AcceptInvitationScreen({
                 type="password"
                 className="input"
                 required
-                minLength={8}
-                placeholder="Mínimo 8 caracteres"
+                placeholder="Tu contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={{ paddingLeft: 'var(--space-8)' }}

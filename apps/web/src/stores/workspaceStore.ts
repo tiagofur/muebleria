@@ -31,7 +31,6 @@ import {
   readAuthToken,
   readAuthUser,
   readSessionMode,
-  registerRequest,
   storeAuthToken,
   storeAuthUser,
   writeSessionMode,
@@ -53,8 +52,6 @@ export interface AssignableOwner {
   readonly name: string;
   readonly role?: string;
 }
-
-export type AuthGate = 'login' | 'register';
 
 /**
  * Dependencies injectable for testing. Defaults bind to browser globals so
@@ -82,11 +79,8 @@ const defaultRepositoryFactory: RepositoryFactory = (mode, { baseUrl }) =>
 export interface WorkspaceState {
   // --- Session ---
   readonly session: SessionMode | null;
-  readonly authGate: AuthGate;
   readonly loginLoading: boolean;
   readonly loginError: string | null;
-  readonly registerLoading: boolean;
-  readonly registerError: string | null;
   /**
    * Set when the session ended because the token expired (401) — the login
    * screen shows a notice instead of kicking the user out silently.
@@ -126,16 +120,10 @@ export interface WorkspaceState {
   readonly assignableOwners: readonly AssignableOwner[];
 
   // --- Actions: session ---
-  readonly setAuthGate: (gate: AuthGate) => void;
   readonly clearAuthErrors: () => void;
   readonly enterAsGuest: () => void;
   readonly login: (email: string, password: string) => Promise<void>;
   readonly loginWithAuthPayload: (payload: unknown) => void;
-  readonly register: (
-    name: string,
-    email: string,
-    password: string,
-  ) => Promise<void>;
   readonly selectOrg: (organizationId: string) => Promise<void>;
   readonly hydrateSessionInfo: () => Promise<void>;
   readonly enterSupportSession: (token: string, orgId: string) => Promise<void>;
@@ -214,11 +202,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
       (set, get) => ({
         // --- Session ---
         session: readSessionModeInitial(),
-        authGate: 'login',
         loginLoading: false,
         loginError: null,
-        registerLoading: false,
-        registerError: null,
         sessionEndReason: null,
         pendingOrgSelection: null,
         orgSelectionLoading: false,
@@ -243,17 +228,13 @@ export function createWorkspaceStore(options?: InternalOptions) {
         assignableOwners: [],
 
         // --- Actions: session ---
-        setAuthGate: (gate) => set({ authGate: gate }),
-
-        clearAuthErrors: () =>
-          set({ loginError: null, registerError: null }),
+        clearAuthErrors: () => set({ loginError: null }),
 
         enterAsGuest: () => {
           writeSessionMode('guest');
           set({
             session: 'guest',
             loginError: null,
-            registerError: null,
             sessionEndReason: null,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
@@ -334,22 +315,6 @@ export function createWorkspaceStore(options?: InternalOptions) {
             workspaceLoadError: null,
             assignableOwners: [],
           });
-        },
-
-        register: async (name, email, password) => {
-          set({ registerLoading: true, registerError: null });
-          try {
-            await registerRequest(name, email, password, {
-              baseUrl: deps.baseUrl,
-              fetchImpl: deps.fetchImpl,
-            });
-            set({ registerLoading: false, registerError: null });
-          } catch (err) {
-            const message =
-              err instanceof Error ? err.message : 'No se pudo registrar';
-            set({ registerLoading: false, registerError: message });
-            throw err instanceof Error ? err : new Error(message);
-          }
         },
 
         selectOrg: async (organizationId: string) => {
@@ -463,16 +428,13 @@ export function createWorkspaceStore(options?: InternalOptions) {
           clearSession();
           set({
             session: null,
-            authGate: 'login',
             loginError: null,
-            registerError: null,
             sessionEndReason: null,
             pendingOrgSelection: null,
             orgSelectionError: null,
             activeOrg: null,
             supportInfo: null,
             loginLoading: false,
-            registerLoading: false,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,

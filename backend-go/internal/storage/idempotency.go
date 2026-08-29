@@ -19,6 +19,11 @@ type IdempotencyRequest struct {
 	Fingerprint    string
 	ActorUserID    string
 	OrganizationID string
+	// AfterRollback records sanitized failure evidence outside the command
+	// savepoint but inside the durable receipt transaction.
+	AfterRollback func(context.Context, IdempotencyResponse) error
+	SealBody      func([]byte) ([]byte, error)
+	OpenBody      func([]byte) ([]byte, error)
 }
 
 type IdempotencyResponse struct {
@@ -98,6 +103,12 @@ func (s *PostgresStore) ExecuteIdempotent(
 				return IdempotencyResponse{}, false, err
 			}
 		}
+		if req.OpenBody != nil {
+			body, err = req.OpenBody(body)
+			if err != nil {
+				return IdempotencyResponse{}, false, err
+			}
+		}
 		return IdempotencyResponse{Status: *status, Header: header, Body: body}, true, nil
 	}
 
@@ -121,6 +132,11 @@ func (s *PostgresStore) ExecuteIdempotent(
 		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT idempotent_command`); err != nil {
 			return IdempotencyResponse{}, false, err
 		}
+		if req.AfterRollback != nil {
+			if err := req.AfterRollback(context.WithValue(ctx, transactionContextKey{}, tx), response); err != nil {
+				return IdempotencyResponse{}, false, err
+			}
+		}
 	}
 	if _, err := tx.Exec(ctx, `RELEASE SAVEPOINT idempotent_command`); err != nil {
 		return IdempotencyResponse{}, false, err
@@ -129,10 +145,17 @@ func (s *PostgresStore) ExecuteIdempotent(
 	if err != nil {
 		return IdempotencyResponse{}, false, err
 	}
+	storedBody := response.Body
+	if req.SealBody != nil {
+		storedBody, err = req.SealBody(response.Body)
+		if err != nil {
+			return IdempotencyResponse{}, false, err
+		}
+	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE api_idempotency_receipts
 		SET status = $2, headers = $3::jsonb, body = $4, completed_at = clock_timestamp()
-		WHERE scope_key = $1`, req.ScopeKey, response.Status, headersJSON, response.Body); err != nil {
+		WHERE scope_key = $1`, req.ScopeKey, response.Status, headersJSON, storedBody); err != nil {
 		return IdempotencyResponse{}, false, err
 	}
 	if owned {

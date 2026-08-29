@@ -1,11 +1,11 @@
 /**
- * SessionGate — login/register gate around the app content (F057 shape,
- * F120 extracted from App.tsx). Renders `children` (the shell content) only
- * when a session is active; LoginScreen / RegisterScreen otherwise.
+ * SessionGate — invitation-first authentication gate around the app content.
+ * Renders `children` only when a session is active and otherwise exposes
+ * login or the token-bound invitation acceptance flow.
  */
 
 import type { ReactNode } from 'react';
-import { LoginScreen, RegisterScreen, AcceptInvitationScreen } from '@granete/ui';
+import { LoginScreen, AcceptInvitationScreen } from '@granete/ui';
 
 import { useWorkspaceStore } from './stores/workspaceStore';
 import { OrgPicker } from './OrgPicker';
@@ -13,16 +13,10 @@ import { DEFAULT_API_BASE } from './session';
 
 export function SessionGate({ children }: { readonly children: ReactNode }): ReactNode {
   const session = useWorkspaceStore((s) => s.session);
-  const authGate = useWorkspaceStore((s) => s.authGate);
   const loginLoading = useWorkspaceStore((s) => s.loginLoading);
   const loginError = useWorkspaceStore((s) => s.loginError);
-  const registerLoading = useWorkspaceStore((s) => s.registerLoading);
-  const registerError = useWorkspaceStore((s) => s.registerError);
-  const setAuthGate = useWorkspaceStore((s) => s.setAuthGate);
-  const clearAuthErrors = useWorkspaceStore((s) => s.clearAuthErrors);
   const enterAsGuest = useWorkspaceStore((s) => s.enterAsGuest);
   const login = useWorkspaceStore((s) => s.login);
-  const register = useWorkspaceStore((s) => s.register);
   const loginWithAuthPayload = useWorkspaceStore((s) => s.loginWithAuthPayload);
   const sessionEndReason = useWorkspaceStore((s) => s.sessionEndReason);
   const pendingOrgSelection = useWorkspaceStore((s) => s.pendingOrgSelection);
@@ -72,19 +66,6 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
   }
 
   if (session === null) {
-    if (authGate === 'register') {
-      return (
-        <RegisterScreen
-          onRegister={register}
-          onBack={() => {
-            setAuthGate('login');
-            clearAuthErrors();
-          }}
-          loading={registerLoading}
-          error={registerError}
-        />
-      );
-    }
     return (
       <LoginScreen
         onLogin={login}

@@ -32,7 +32,7 @@ func membershipFor(userID, orgID string, orgType domain.OrganizationType, roles 
 	return domain.MembershipWithOrg{
 		Membership: domain.Membership{
 			OrganizationID: orgID, UserID: userID,
-			Roles: roles, Active: true,
+			Roles: roles, Status: domain.MembershipStatusActive,
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "Org " + orgID, Slug: orgID, Type: orgType, Active: true,

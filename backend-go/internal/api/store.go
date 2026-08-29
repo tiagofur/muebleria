@@ -23,14 +23,12 @@ type Store interface {
 	// GetUserByID loads the user for JWT re-validation of role/active (issue #16).
 	GetUserByID(ctx context.Context, id string) (*domain.User, error)
 	CreateUser(ctx context.Context, u *domain.User) error
+	UpdateLastLogin(ctx context.Context, id string) error
+	UpdateAccountStatus(ctx context.Context, actorID, userID string, status domain.AccountStatus, reason, ip string) (*domain.User, error)
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	// ListUsersByOrganization scopes the directory to the context's
 	// organization (ADR-0005: org admins never see other orgs' users).
 	ListUsersByOrganization(ctx context.Context) ([]domain.User, error)
-	RejectUser(ctx context.Context, id string) error
-	// DeleteOrphanInvitedUser cleans up a user created by an invitation
-	// accept that failed before granting any membership.
-	DeleteOrphanInvitedUser(ctx context.Context, id string) error
 
 	// Organizations / memberships / security audit (ADR-0004)
 	GetOrganizationByID(ctx context.Context, id string) (*domain.Organization, error)
@@ -42,7 +40,6 @@ type Store interface {
 	ListConnectedOrganizations(ctx context.Context, parentOrganizationID string) ([]domain.Organization, error)
 	GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error)
 	EnsureMembership(ctx context.Context, organizationID, userID string, roles []domain.UserRole) error
-	SetMembershipRoles(ctx context.Context, userID string, roles []domain.UserRole) error
 	SetPlatformAdmin(ctx context.Context, userID string, admin bool) error
 	InsertSecurityAuditEvent(ctx context.Context, ev storage.SecurityAuditEvent) error
 	UpdateOrganization(ctx context.Context, o *domain.Organization) error
@@ -58,14 +55,14 @@ type Store interface {
 	EndOpenSupportSessionsByOrg(ctx context.Context, organizationID, via string) (int64, error)
 
 	// Org team & invitations (#326)
-	ListOrgTeam(ctx context.Context, organizationID string) ([]storage.OrgTeamMember, error)
-	UpdateMembershipRolesByOrg(ctx context.Context, organizationID, userID string, roles []domain.UserRole, expectedVersion int64) (*storage.OrgTeamMember, error)
-	SetMembershipActive(ctx context.Context, organizationID, userID string, active bool, expectedVersion int64) (*storage.OrgTeamMember, error)
+	ListOrgTeam(ctx context.Context, organizationID, actorID string) ([]storage.OrgTeamMember, error)
+	UpdateMembershipRolesByOrg(ctx context.Context, organizationID, membershipID string, roles []domain.UserRole, expectedVersion int64) (*storage.OrgTeamMember, error)
+	UpdateMembershipStatus(ctx context.Context, organizationID, membershipID string, status domain.MembershipStatus, reason, actorID string, expectedVersion int64) (*storage.OrgTeamMember, error)
 	CreateInvitation(ctx context.Context, organizationID, email string, roles []domain.UserRole, tokenHash string, expiresAt time.Time, invitedBy string) (*storage.Invitation, error)
-	ListInvitations(ctx context.Context, organizationID string) ([]storage.Invitation, error)
-	RevokeInvitation(ctx context.Context, organizationID, id string, expectedVersion int64) (*storage.Invitation, error)
-	GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*storage.OpenInvitation, error)
-	AcceptInvitationTx(ctx context.Context, invitationID, organizationID, userID string) error
+	ListInvitations(ctx context.Context, organizationID, actorID string) ([]storage.Invitation, error)
+	ResendInvitation(ctx context.Context, organizationID, id, tokenHash string, expiresAt time.Time, expectedVersion int64) (*storage.Invitation, error)
+	RevokeInvitation(ctx context.Context, organizationID, id, reason, actorID string, expectedVersion int64) (*storage.Invitation, error)
+	AcceptInvitation(ctx context.Context, cmd storage.AcceptInvitationCommand, verifyPassword func(string, string) bool, validateNewPassword func(string) error) (*storage.AcceptInvitationResult, error)
 	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error)
 	GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error)
 

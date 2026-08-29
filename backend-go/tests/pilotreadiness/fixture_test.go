@@ -142,10 +142,10 @@ func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, [
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if method == http.MethodPost {
+	if method == http.MethodPost || (method == http.MethodPut && strings.HasPrefix(path, "/api/org/memberships/")) {
 		req.Header.Set("Idempotency-Key", pilotIdempotencyKey(path, token, rawBody))
 	}
-	if method == http.MethodPut && strings.HasPrefix(path, "/api/org/members/") {
+	if method == http.MethodPut && strings.HasPrefix(path, "/api/org/memberships/") {
 		req.Header.Set("If-Match", `"v1"`)
 	}
 	resp, err := http.DefaultClient.Do(req)
@@ -206,6 +206,7 @@ type loginResponse struct {
 		Slug string `json:"slug"`
 	} `json:"organization"`
 	Memberships []struct {
+		ID             string   `json:"id"`
 		OrganizationID string   `json:"organization_id"`
 		Roles          []string `json:"roles"`
 	} `json:"memberships"`
@@ -442,7 +443,7 @@ func (f *fixture) request(dst any, method, path, token string, body any, accepte
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if method == http.MethodPost {
+	if method == http.MethodPost || (method == http.MethodPut && strings.HasPrefix(path, "/api/org/memberships/")) {
 		req.Header.Set("Idempotency-Key", pilotIdempotencyKey(path, token, rawBody))
 	}
 	resp, err := http.DefaultClient.Do(req)
@@ -461,7 +462,7 @@ func (f *fixture) request(dst any, method, path, token string, body any, accepte
 }
 
 func mustStorageUser(f *fixture, email, name, hash string) *domain.User {
-	u := &domain.User{Email: email, Name: name, PasswordHash: hash, Active: true}
+	u := &domain.User{Email: email, Name: name, PasswordHash: hash, AccountStatus: domain.AccountStatusActive}
 	if err := f.store.CreateUser(context.Background(), u); err != nil {
 		f.close()
 		panic(fmt.Sprintf("create storage user %s: %v", email, err))
@@ -516,7 +517,7 @@ func (f *fixture) createPilotOrg(name, slug, ownerEmail, currency string, margin
 
 	// 3. Owner accepts and enters the workshop.
 	var accept loginResponse
-	err = f.request(&accept, http.MethodPost, "/api/auth/accept-invitation", "", map[string]string{
+	err = f.request(&accept, http.MethodPost, "/api/auth/invitations:accept", "", map[string]string{
 		"token": inv.InvitationToken, "password": pilotPassword, "name": "Owner " + name,
 	}, http.StatusOK)
 	if err != nil {
@@ -696,7 +697,7 @@ func (f *fixture) inviteAndAccept(t *testing.T, adminToken, email string, roles 
 	}, http.StatusCreated, &inv)
 
 	var accept loginResponse
-	f.decode(t, http.MethodPost, "/api/auth/accept-invitation", "", map[string]string{
+	f.decode(t, http.MethodPost, "/api/auth/invitations:accept", "", map[string]string{
 		"token": inv.InvitationToken, "password": pilotPassword, "name": "Member " + email,
 	}, http.StatusOK, &accept)
 	if accept.User.ID == "" {

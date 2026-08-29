@@ -78,6 +78,7 @@ func formatOptionalTime(value *time.Time) *string {
 
 // GET /api/platform/organizations
 func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
 	list, err := s.Store.ListOrganizations(r.Context())
 	if err != nil {
 		respondWithInternalError(w, err, "platform orgs")
@@ -85,7 +86,7 @@ func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.
 	}
 	out := make([]PlatformOrgDTO, 0, len(list))
 	for _, o := range list {
-		members, _ := s.Store.ListOrgTeam(r.Context(), o.ID)
+		members, _ := s.Store.ListOrgTeam(r.Context(), o.ID, claims.UserID)
 		out = append(out, toPlatformOrgDTO(o, len(members)))
 	}
 	respondWithJSON(w, http.StatusOK, out)
@@ -303,7 +304,7 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 			"license_expires_at": org.LicenseExpiresAt,
 		})
 	}
-	members, _ := s.Store.ListOrgTeam(r.Context(), org.ID)
+	members, _ := s.Store.ListOrgTeam(r.Context(), org.ID, claims.UserID)
 	w.Header().Set("ETag", FormatVersionETag(org.Version))
 	respondWithJSON(w, http.StatusOK, toPlatformOrgDTO(*org, len(members)))
 }
@@ -335,11 +336,47 @@ func (s *Server) HandlePlatformUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		memberships := make([]openapi.PlatformUserMembership, 0, len(ms))
 		for _, m := range ms {
-			memberships = append(memberships, openapi.PlatformUserMembership{OrganizationID: m.OrganizationID, OrganizationName: m.Organization.Name, OrganizationSlug: m.Organization.Slug, Roles: roleStrings(m.Roles), Active: m.Active, Version: m.Version})
+			memberships = append(memberships, openapi.PlatformUserMembership{OrganizationID: m.OrganizationID, OrganizationName: m.Organization.Name, OrganizationSlug: m.Organization.Slug, Roles: roleStrings(m.Roles), Status: openapi.MembershipStatus(m.Status), Version: m.Version})
 		}
-		out = append(out, openapi.PlatformUser{ID: u.ID, Email: u.Email, Name: u.Name, PlatformAdmin: u.PlatformAdmin, Active: u.Active, CreatedAt: u.CreatedAt.UTC().Format(time.RFC3339Nano), Memberships: memberships})
+		out = append(out, openapi.PlatformUser{ID: u.ID, Email: u.Email, Name: u.Name, PlatformAdmin: u.PlatformAdmin, AccountStatus: openapi.AccountStatus(u.AccountStatus), CreatedAt: u.CreatedAt.UTC().Format(time.RFC3339Nano), Memberships: memberships})
 	}
 	respondWithJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) HandlePlatformAccountStatus(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	var body openapi.UpdateAccountStatusRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	reason := strings.TrimSpace(body.Reason)
+	status := domain.AccountStatus(body.AccountStatus)
+	if reason == "" || (status != domain.AccountStatusActive && status != domain.AccountStatusDisabled) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "account_status y reason son obligatorios", nil)
+		return
+	}
+	u, err := s.Store.UpdateAccountStatus(r.Context(), claims.UserID, r.PathValue("userId"), status, reason, clientIP(r))
+	if errors.Is(err, storage.ErrAccountNotFound) {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeAccountNotFound, "cuenta no encontrada", nil)
+		return
+	}
+	if err != nil {
+		respondWithInternalError(w, err, "platform account status")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, openapi.AccountStatusMutationResponse{
+		UserID: u.ID, AccountStatus: openapi.AccountStatus(u.AccountStatus), UpdatedAt: u.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	})
+}
+
+func (s *Server) HandlePlatformUserCommand(w http.ResponseWriter, r *http.Request) {
+	command := r.PathValue("userCommand")
+	if !strings.HasSuffix(command, ":set-account-status") {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "ruta no encontrada", nil)
+		return
+	}
+	r.SetPathValue("userId", strings.TrimSuffix(command, ":set-account-status"))
+	s.RequireIdempotency("platform.set-account-status", http.HandlerFunc(s.HandlePlatformAccountStatus)).ServeHTTP(w, r)
 }
 
 // POST /api/platform/organizations/{id}/support-session {reason}
@@ -411,118 +448,62 @@ func (s *Server) HandlePlatformEndSupportSession(w http.ResponseWriter, r *http.
 	respondWithJSON(w, http.StatusOK, openapi.EndSupportSessionResponse{Ended: ended})
 }
 
-// acceptInvitationLogin builds the login response after a user accepts an
-// invitation (single membership → straight in; several → select).
-func (s *Server) acceptInvitationLogin(w http.ResponseWriter, r *http.Request, u *domain.User) {
-	memberships, err := s.Store.ListMembershipsByUser(r.Context(), u.ID)
-	if err != nil {
-		respondWithInternalError(w, err, "accept invitation memberships")
-		return
-	}
-	if len(memberships) == 1 {
-		m := memberships[0]
-		roles := make([]string, len(m.Roles))
-		for i, rl := range m.Roles {
-			roles[i] = string(rl)
-		}
-		token, err := auth.GenerateToken(u.ID, u.Email, auth.TokenContext{
-			Roles: roles, OrgID: m.OrganizationID, PlatformAdmin: u.PlatformAdmin,
-		}, s.JWTSecret)
-		if err != nil {
-			respondWithInternalError(w, err, "accept invitation token")
-			return
-		}
-		org := toOrgSummaryDTO(m.Organization)
-		respondWithJSON(w, http.StatusOK, LoginResponse{
-			Token: token, User: toOpenAPIUser(u), License: org.License,
-			Roles: roles, Organization: &org, Memberships: []MembershipDTO{}, Transport: openapi.AuthTransportWeb,
-		})
-		return
-	}
-	orgless, err := auth.GenerateToken(u.ID, u.Email, auth.TokenContext{PlatformAdmin: u.PlatformAdmin}, s.JWTSecret)
-	if err != nil {
-		respondWithInternalError(w, err, "accept invitation orgless token")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, LoginResponse{
-		Token: orgless, User: toOpenAPIUser(u), License: openapi.License{Plan: string(domain.LicensePlanNone), Status: string(domain.LicenseStatusNone)},
-		Roles: []string{}, Memberships: toMembershipDTOs(memberships), SelectionRequired: true, Transport: openapi.AuthTransportWeb,
-	})
-}
-
-// POST /api/auth/accept-invitation {token, password, name?} — public (rate
-// limited at the route). Existing users authenticate with their password;
-// new users are created active with the invitation as approval.
+// POST /api/auth/invitations:accept is invite-only onboarding. The storage
+// command owns the exact-token lock, identity/membership mutation and required
+// audit writes in the same idempotency transaction.
 func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) {
 	var body openapi.AcceptInvitationRequest
 	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
 	}
 	if strings.TrimSpace(body.Token) == "" || body.Password == "" {
-		respondWithError(w, http.StatusBadRequest, "token y password son obligatorios")
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "token y password son obligatorios", nil)
 		return
 	}
-	inv, err := s.Store.GetOpenInvitationByToken(r.Context(), hashInvitationToken(strings.TrimSpace(body.Token)))
+	hash, err := auth.HashPassword(body.Password)
 	if err != nil {
-		respondWithError(w, http.StatusNotFound, "invitación inválida o expirada")
+		respondWithInternalError(w, err, "accept invitation hash")
 		return
 	}
-	if !domain.RolesAllowedInOrg(inv.Roles, inv.OrganizationType) {
-		respondWithError(w, http.StatusForbidden, "la invitación contiene roles no permitidos para este tipo de organización")
+	name := ""
+	if body.Name != nil {
+		name = strings.TrimSpace(*body.Name)
+	}
+	result, err := s.Store.AcceptInvitation(r.Context(), storage.AcceptInvitationCommand{TokenHash: hashInvitationToken(strings.TrimSpace(body.Token)), Password: body.Password, NewPasswordHash: hash, Name: name, IP: clientIP(r)}, auth.CheckPasswordHash, auth.ValidatePassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrInvitationNotFound):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeInvitationNotFound, "invitación inválida o no disponible", nil)
+		case errors.Is(err, storage.ErrInvitationExpired):
+			respondWithAPIError(w, http.StatusGone, openapi.ApiErrorCodeInvitationExpired, "la invitación expiró", nil)
+		case errors.Is(err, storage.ErrInvitationRevoked):
+			respondWithAPIError(w, http.StatusGone, openapi.ApiErrorCodeInvitationRevoked, "la invitación fue revocada", nil)
+		case errors.Is(err, storage.ErrInvitationAlreadyUsed):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeInvitationAlreadyUsed, "la invitación ya fue usada", nil)
+		case errors.Is(err, storage.ErrInvitationTokenRotated):
+			respondWithAPIError(w, http.StatusGone, openapi.ApiErrorCodeInvitationTokenRotated, "el token fue reemplazado", nil)
+		case errors.Is(err, storage.ErrAccountDisabled):
+			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeAccountDisabled, "credenciales inválidas", nil)
+		case errors.Is(err, storage.ErrInvalidInvitationCredentials):
+			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeUnauthorized, "credenciales inválidas", nil)
+		case errors.Is(err, storage.ErrInvitationNameRequired):
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "name es obligatorio para una cuenta nueva", map[string]any{"fieldErrors": map[string]string{"name": "required"}})
+		case errors.Is(err, storage.ErrInvitationPasswordInvalid):
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "la contraseña nueva no cumple la política de seguridad", nil)
+		case errors.Is(err, storage.ErrMembershipAlreadyActive):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeMembershipAlreadyActive, "la membresía ya está activa", nil)
+		default:
+			respondWithInternalError(w, err, "accept invitation")
+		}
 		return
 	}
-
-	createdUser := false
-	u, err := s.Store.GetUserByEmailAnyState(r.Context(), inv.Email)
-	if err == nil && u != nil {
-		if !auth.CheckPasswordHash(body.Password, u.PasswordHash) || !u.Active {
-			s.audit(r.Context(), "invitation_accept_failed", u.ID, inv.OrganizationID, clientIP(r), nil)
-			respondWithError(w, http.StatusUnauthorized, "credenciales inválidas")
-			return
-		}
-	} else {
-		if err := auth.ValidatePassword(body.Password); err != nil {
-			respondWithError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		hash, err := auth.HashPassword(body.Password)
-		if err != nil {
-			respondWithInternalError(w, err, "accept invitation hash")
-			return
-		}
-		name := ""
-		if body.Name != nil {
-			name = strings.TrimSpace(*body.Name)
-		}
-		if name == "" {
-			name = strings.SplitN(inv.Email, "@", 2)[0]
-		}
-		u = &domain.User{Email: inv.Email, PasswordHash: hash, Name: name, Active: true}
-		if err := s.Store.CreateUser(r.Context(), u); err != nil {
-			respondWithInternalError(w, err, "accept invitation create user")
-			return
-		}
-		createdUser = true
-	}
-
-	if err := s.Store.AcceptInvitationTx(r.Context(), inv.ID, inv.OrganizationID, u.ID); err != nil {
-		// A user created in THIS request that failed to attach to any org
-		// would be orphaned (active, member of nothing, unable to log in).
-		// Clean it up before failing; existing users are left untouched.
-		if createdUser {
-			_ = s.Store.DeleteOrphanInvitedUser(r.Context(), u.ID)
-		}
-		s.audit(r.Context(), "invitation_accept_failed", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
-			"reason": "invitation no longer open",
-		})
-		respondWithError(w, http.StatusConflict, "la invitación ya no está disponible")
+	roles := roleStrings(result.Membership.Roles)
+	token, err := auth.GenerateToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, PlatformAdmin: result.User.PlatformAdmin}, s.JWTSecret)
+	if err != nil {
+		respondWithInternalError(w, err, "accept invitation token")
 		return
 	}
-	if err := s.auditRequired(r.Context(), "invitation_accepted", u.ID, inv.OrganizationID, clientIP(r), map[string]interface{}{
-		"invitation_id": inv.ID, "email": inv.Email,
-	}); err != nil {
-		respondWithInternalError(w, err, "audit invitation acceptance")
-		return
-	}
-	s.acceptInvitationLogin(w, r, u)
+	org := toOrgSummaryDTO(result.Organization)
+	membership := MembershipDTO{ID: result.Membership.ID, OrganizationID: result.Membership.OrganizationID, UserID: result.Membership.UserID, Status: openapi.MembershipStatus(result.Membership.Status), Roles: roles, JoinedAt: result.Membership.JoinedAt.UTC().Format(time.RFC3339Nano), Version: result.Membership.Version, Organization: org}
+	respondWithJSON(w, http.StatusOK, LoginResponse{Token: token, User: toOpenAPIUser(&result.User), License: org.License, Roles: roles, Organization: &org, Memberships: []MembershipDTO{membership}, SelectionRequired: false, Transport: openapi.AuthTransportWeb})
 }

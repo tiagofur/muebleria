@@ -2,7 +2,7 @@ package domain
 
 import (
 	"encoding/json"
-	"fmt"
+	"strings"
 	"time"
 )
 
@@ -36,9 +36,6 @@ func IsValidUserRole(role UserRole) bool {
 		return false
 	}
 }
-
-// ErrPendingApproval is returned when a user exists but has not been approved yet.
-var ErrPendingApproval = fmt.Errorf("account pending approval")
 
 // LicensePlan is the per-user licensing tier managed by the workshop admin.
 type LicensePlan string
@@ -94,15 +91,30 @@ const (
 // organization — the deprecated users.role / users.license_* columns were
 // dropped in migration 000090.
 type User struct {
-	ID            string    `json:"id"`
-	Email         string    `json:"email"`
-	PasswordHash  string    `json:"-"`
-	Name          string    `json:"name"`
-	Active        bool      `json:"active"`
-	PlatformAdmin bool      `json:"platform_admin"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID              string        `json:"id"`
+	Email           string        `json:"email"`
+	NormalizedEmail string        `json:"normalized_email"`
+	PasswordHash    string        `json:"-"`
+	Name            string        `json:"name"`
+	AccountStatus   AccountStatus `json:"account_status"`
+	EmailVerifiedAt *time.Time    `json:"email_verified_at,omitempty"`
+	LastLoginAt     *time.Time    `json:"last_login_at,omitempty"`
+	PlatformAdmin   bool          `json:"platform_admin"`
+	CreatedAt       time.Time     `json:"created_at"`
+	UpdatedAt       time.Time     `json:"updated_at"`
 }
+
+type AccountStatus string
+
+const (
+	AccountStatusActive   AccountStatus = "active"
+	AccountStatusDisabled AccountStatus = "disabled"
+)
+
+// NormalizeEmail is the single identity key normalization used by login,
+// invitation and administrative identity commands. PostgreSQL independently
+// enforces uniqueness on the resulting normalized_email value.
+func NormalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
 // UserSector maps an operator to one or more production sectors.
 type UserSector struct {
@@ -140,19 +152,19 @@ type Customer struct {
 }
 
 type MaterialBoard struct {
-	ID           string  `json:"id"`
-	Code         string  `json:"code"`
-	Name         string  `json:"name"`
-	Manufacturer string  `json:"manufacturer"`
+	ID           string `json:"id"`
+	Code         string `json:"code"`
+	Name         string `json:"name"`
+	Manufacturer string `json:"manufacturer"`
 	// CategoryID links the board into the MaterialCategory tree (F142 subgrupos).
-	CategoryID    string  `json:"category_id,omitempty"`
-	WidthMm       int     `json:"width_mm"`
-	LengthMm      int     `json:"length_mm"`
-	ThicknessMm   int     `json:"thickness_mm"`
-	GrainDefault  bool    `json:"grain_default"`
-	BoardPrice    float64 `json:"board_price"`
-	WastePercent  float64 `json:"waste_percent"`
-	CostPerM2     float64 `json:"cost_per_m2"`
+	CategoryID   string  `json:"category_id,omitempty"`
+	WidthMm      int     `json:"width_mm"`
+	LengthMm     int     `json:"length_mm"`
+	ThicknessMm  int     `json:"thickness_mm"`
+	GrainDefault bool    `json:"grain_default"`
+	BoardPrice   float64 `json:"board_price"`
+	WastePercent float64 `json:"waste_percent"`
+	CostPerM2    float64 `json:"cost_per_m2"`
 	// DefaultEdgeBandID links the default edge band by id (never by name).
 	DefaultEdgeBandID string `json:"default_edge_band_id,omitempty"`
 	// ImageURL is a relative media path (e.g. /api/media/xxx.webp), never base64.
@@ -177,9 +189,9 @@ type MaterialBoard struct {
 }
 
 type EdgeBand struct {
-	ID          string  `json:"id"`
-	Code        string  `json:"code"`
-	Name        string  `json:"name"`
+	ID   string `json:"id"`
+	Code string `json:"code"`
+	Name string `json:"name"`
 	// ThicknessMm float64 (F116 C3): real edge bands are 0.4/0.5/0.8 mm —
 	// decoding into int rejected the TS default 0.5 with an opaque 400.
 	ThicknessMm float64 `json:"thickness_mm"`
@@ -381,24 +393,24 @@ type ModuleAgregadoInstance struct {
 // JointDrillingRules mirrors the TS domain shape (F129) — camelCase keys so
 // the JSONB column round-trips through the API without rewriting.
 type JointDrillingRules struct {
-	GridMm      *int             `json:"gridMm,omitempty"`
-	SideToFloor *PanelJointRule  `json:"sideToFloor,omitempty"`
-	SideToTop   *PanelJointRule  `json:"sideToTop,omitempty"`
-	BackPanel   *BackPanelRule   `json:"backPanel,omitempty"`
-	DoorHinge   *DoorHingeRule   `json:"doorHinge,omitempty"`
+	GridMm      *int            `json:"gridMm,omitempty"`
+	SideToFloor *PanelJointRule `json:"sideToFloor,omitempty"`
+	SideToTop   *PanelJointRule `json:"sideToTop,omitempty"`
+	BackPanel   *BackPanelRule  `json:"backPanel,omitempty"`
+	DoorHinge   *DoorHingeRule  `json:"doorHinge,omitempty"`
 }
 
 type PanelJointRule struct {
-	MinifixCode string   `json:"minifixCode,omitempty"`
-	DowelCode   string   `json:"dowelCode,omitempty"`
-	EndMarginMm *float64 `json:"endMarginMm,omitempty"`
+	MinifixCode  string   `json:"minifixCode,omitempty"`
+	DowelCode    string   `json:"dowelCode,omitempty"`
+	EndMarginMm  *float64 `json:"endMarginMm,omitempty"`
 	MaxSpacingMm *float64 `json:"maxSpacingMm,omitempty"`
-	WithDowels  *bool    `json:"withDowels,omitempty"`
+	WithDowels   *bool    `json:"withDowels,omitempty"`
 }
 
 type BackPanelRule struct {
-	ScrewCode   string   `json:"screwCode,omitempty"`
-	InsetMm     *float64 `json:"insetMm,omitempty"`
+	ScrewCode    string   `json:"screwCode,omitempty"`
+	InsetMm      *float64 `json:"insetMm,omitempty"`
 	MaxSpacingMm *float64 `json:"maxSpacingMm,omitempty"`
 }
 
@@ -639,7 +651,7 @@ type Project struct {
 	InstallationChecklist json.RawMessage `json:"installation_checklist,omitempty"`
 	NestingImport         json.RawMessage `json:"nesting_import,omitempty"`
 	// CutPlan is the 2D Guillotine Cut Plan for sheet cutting & warehouse requisition (F115).
-	CutPlan               json.RawMessage `json:"cut_plan,omitempty"`
+	CutPlan json.RawMessage `json:"cut_plan,omitempty"`
 	// Production is OP revision / export tracking (PROD-3.2). Opaque JSON blob.
 	// Shape: { revision, revision_at, fingerprint, last_export_* }.
 	Production json.RawMessage `json:"production,omitempty"`
@@ -650,40 +662,40 @@ type Project struct {
 	// MaterialsRelease is Almacén's "materials complete" stamp (process stage
 	// gating). Opaque JSON blob: { released_by, released_at }. NULL = the
 	// project is still in the warehouse queue.
-	MaterialsRelease  json.RawMessage     `json:"materials_release,omitempty"`
-	DesignRevisions   []DesignRevision    `json:"design_revisions,omitempty"`
-	Approvals         []Approval          `json:"approvals,omitempty"`
-	ProductionRelease *ProductionRelease  `json:"production_release,omitempty"`
-	ChangeOrders      []ChangeOrder       `json:"change_orders,omitempty"`
-	PartInstances     []PartInstance      `json:"part_instances,omitempty"`
+	MaterialsRelease  json.RawMessage       `json:"materials_release,omitempty"`
+	DesignRevisions   []DesignRevision      `json:"design_revisions,omitempty"`
+	Approvals         []Approval            `json:"approvals,omitempty"`
+	ProductionRelease *ProductionRelease    `json:"production_release,omitempty"`
+	ChangeOrders      []ChangeOrder         `json:"change_orders,omitempty"`
+	PartInstances     []PartInstance        `json:"part_instances,omitempty"`
 	ModuleUnits       []ModuleUnitExecution `json:"module_units,omitempty"`
 	// Installation is the installation job (visits, field issues, punch,
 	// closeout — OC-070..OC-074). Server-authoritative: only mutated through
 	// the dedicated installation endpoints, never through the project PUT.
-	Installation     *InstallationJob   `json:"installation,omitempty"`
+	Installation *InstallationJob `json:"installation,omitempty"`
 	// MaterialPlanning is the MRP subprocess of the obra: requirements from
 	// the released BOM, reservations and the evidence-backed release
 	// (OC-050..OC-054, #302). Server-authoritative via the materials endpoints.
 	MaterialPlanning *MaterialPlanning `json:"material_planning,omitempty"`
 	// Quality is the quality subprocess of the obra: issues, rework actions
 	// and per-unit QC records (OC-060..OC-062, #302).
-	Quality          *QualityJob       `json:"quality,omitempty"`
+	Quality *QualityJob `json:"quality,omitempty"`
 	// Costing is the job costing subprocess of the obra: baseline frozen from
 	// quote snapshot + release, time entries and other actual costs
 	// (OC-080..OC-084, #304). Material actuals derive from stock movements
 	// assigned to the obra. Server-authoritative via the costing endpoints.
-	Costing          *JobCosting       `json:"costing,omitempty"`
+	Costing *JobCosting `json:"costing,omitempty"`
 	// SiteSurvey is the structured site survey of the obra: spaces with field
 	// measurements, openings/obstacles, utilities and explicit capture/verify
 	// authorship (OC-040/OC-041, #305). Server-authoritative via the survey
 	// endpoints; hardens the survey_verified release gate when present.
-	SiteSurvey       *SiteSurvey       `json:"site_survey,omitempty"`
-	FloorEvents       []FloorStatusEvent  `json:"floor_events,omitempty"`
-	Events            []ProjectEvent      `json:"events,omitempty"`
-	Notes             string              `json:"notes,omitempty"`
-	PriceSnapshot     *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
-	CreatedAt         time.Time           `json:"created_at"`
-	UpdatedAt         time.Time           `json:"updated_at"`
+	SiteSurvey    *SiteSurvey         `json:"site_survey,omitempty"`
+	FloorEvents   []FloorStatusEvent  `json:"floor_events,omitempty"`
+	Events        []ProjectEvent      `json:"events,omitempty"`
+	Notes         string              `json:"notes,omitempty"`
+	PriceSnapshot *QuotePriceSnapshot `json:"price_snapshot,omitempty"`
+	CreatedAt     time.Time           `json:"created_at"`
+	UpdatedAt     time.Time           `json:"updated_at"`
 }
 
 // ProjectTemplate is a reusable project recipe (#110 / H15). Slimmed Project:
@@ -777,12 +789,12 @@ const (
 
 // ResolvedBoardPart is a board part with concrete material/edge/grain (TS parity).
 type ResolvedBoardPart struct {
-	ID          string           `json:"id"`
-	Code        string           `json:"code,omitempty"`
-	Description string           `json:"description"`
-	Quantity    int              `json:"quantity"`
-	LengthMm    int              `json:"length_mm"`
-	WidthMm     int              `json:"width_mm"`
+	ID          string `json:"id"`
+	Code        string `json:"code,omitempty"`
+	Description string `json:"description"`
+	Quantity    int    `json:"quantity"`
+	LengthMm    int    `json:"length_mm"`
+	WidthMm     int    `json:"width_mm"`
 	// ThicknessMm is the effective board thickness that produced this piece:
 	// the selected MaterialBoard.thicknessMm (#402 / MT-1), same as TS
 	// ResolvedBoardPart.thicknessMm.

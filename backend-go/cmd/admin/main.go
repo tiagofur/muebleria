@@ -127,7 +127,7 @@ func runCreate(args []string) {
 	// the admin membership and the initial org's license are in place
 	// (licensing is per organization — ADR-0005 §3).
 	if existing, err := store.GetUserByEmailAnyState(ctx, *email); err == nil && existing != nil {
-		log.Printf("User %q already exists (active=%v); ensuring membership...", *email, existing.Active)
+		log.Printf("User %q already exists (active=%v); ensuring membership...", *email, existing.AccountStatus)
 		if err := store.EnsureMembership(ctx, storage.InitialOrganizationID, existing.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
 			fatal(fmt.Errorf("ensuring admin membership: %w", err))
 		}
@@ -143,10 +143,10 @@ func runCreate(args []string) {
 	}
 
 	u := &domain.User{
-		Email:        *email,
-		PasswordHash: hash,
-		Name:         *name,
-		Active:       true,
+		Email:         *email,
+		PasswordHash:  hash,
+		Name:          *name,
+		AccountStatus: domain.AccountStatusActive,
 	}
 	if err := store.CreateUser(ctx, u); err != nil {
 		fatal(fmt.Errorf("creating admin user: %w", err))
@@ -413,8 +413,8 @@ func runSeed(args []string) {
 		UPDATE projects
 		SET owner_user_id = (
 			SELECT u.id FROM users u
-			JOIN memberships m ON m.user_id = u.id AND m.active AND m.organization_id = $1 AND 'admin' = ANY(m.roles)
-			WHERE u.active = true
+			JOIN memberships m ON m.user_id = u.id AND m.status = 'active' AND m.organization_id = $1 AND 'admin' = ANY(m.roles)
+			WHERE u.account_status = 'active'
 			ORDER BY u.created_at ASC
 			LIMIT 1
 		)
@@ -424,8 +424,8 @@ func runSeed(args []string) {
 		UPDATE customers
 		SET owner_user_id = (
 			SELECT u.id FROM users u
-			JOIN memberships m ON m.user_id = u.id AND m.active AND m.organization_id = $1 AND 'admin' = ANY(m.roles)
-			WHERE u.active = true
+			JOIN memberships m ON m.user_id = u.id AND m.status = 'active' AND m.organization_id = $1 AND 'admin' = ANY(m.roles)
+			WHERE u.account_status = 'active'
 			ORDER BY u.created_at ASC
 			LIMIT 1
 		)

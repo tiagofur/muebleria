@@ -18,7 +18,7 @@
 /* —— Panel de marca (desktop ≥900px) — v2.1 ——
    Split: panel indigo con marca a la izquierda + form a la derecha.
    En <900px el panel se oculta y queda la card centrada (comportamiento
-   previo). RegisterScreen comparte esta hoja sin el aside: sin cambio. */
+   previo). El onboarding público continúa sólo por invitación. */
 
 .login-brand {
   display: none;
@@ -315,58 +315,9 @@
   }
 }
 
-/* Register success state */
-.register-success {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-4);
-  padding: var(--space-6) 0;
-}
-
-.register-success__icon {
-  font-size: 3rem;
-  line-height: 1;
-}
-
-.register-success__title {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
-  color: var(--text-inverse);
-}
-
-.register-success__text {
-  margin: 0;
-  font-size: var(--text-base);
-  color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
-  line-height: var(--leading-relaxed);
-}
-
-/* Link to register page from login */
-.login-register-link {
+.login-invitation-note {
   margin-top: var(--space-3);
   text-align: center;
   font-size: var(--text-sm);
   color: color-mix(in srgb, var(--text-inverse) 55%, transparent);
-}
-
-.login-register-link button {
-  background: none;
-  border: none;
-  padding: 0;
-  margin-left: var(--space-1);
-  color: var(--brand-300);
-  font-size: inherit;
-  font-family: var(--font-sans);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  transition: var(--transition-colors);
-}
-
-.login-register-link button:hover {
-  color: var(--brand-200);
 }

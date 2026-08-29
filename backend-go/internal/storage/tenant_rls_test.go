@@ -45,9 +45,9 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		 ('` + rlsOrgA + `', 'RLS A', 'rls-a'),
 		 ('` + rlsOrgB + `', 'RLS B', 'rls-b'),
 		 ('` + rlsOrgC + `', 'RLS C', 'rls-c')`,
-		`INSERT INTO users (id, email, password_hash, name, active, platform_admin) VALUES
-		 ('` + rlsUserA + `', 'rls-a@example.test', 'x', 'RLS A', TRUE, TRUE),
-		 ('` + rlsUserB + `', 'rls-b@example.test', 'x', 'RLS B', TRUE, FALSE)`,
+		`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status, platform_admin) VALUES
+		 ('` + rlsUserA + `', 'rls-a@example.test', 'rls-a@example.test', 'x', 'RLS A', 'active', TRUE),
+		 ('` + rlsUserB + `', 'rls-b@example.test', 'rls-b@example.test', 'x', 'RLS B', 'active', FALSE)`,
 		`INSERT INTO memberships (organization_id, user_id, roles) VALUES
 		 ('` + rlsOrgA + `', '` + rlsUserA + `', '{admin}'),
 		 ('` + rlsOrgB + `', '` + rlsUserB + `', '{admin}')`,

@@ -72,10 +72,10 @@ describe('@granete/ui package surface', () => {
     expect(APP_NAV_SECTIONS[7]?.id).toBe('config');
   });
 
-  it('exports RegisterScreen and UsersScreen (F026)', async () => {
-    const { RegisterScreen, UsersScreen, LoginScreen } = await import('./index');
+  it('exports invitation-first auth and UsersScreen', async () => {
+    const { AcceptInvitationScreen, UsersScreen, LoginScreen } = await import('./index');
     expect(typeof LoginScreen).toBe('function');
-    expect(typeof RegisterScreen).toBe('function');
+    expect(typeof AcceptInvitationScreen).toBe('function');
     expect(typeof UsersScreen).toBe('function');
   });
 
@@ -152,5 +152,4 @@ describe('@granete/ui package surface', () => {
     expect(typeof ProjectsPortfolioView).toBe('function');
   });
 });
-
 

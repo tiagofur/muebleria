@@ -77,22 +77,13 @@ func crossOrgDirection(t *testing.T, d crossDirection) {
 	}
 
 	// User directory and team: only members of the caller's org.
-	var directory []struct {
-		ID string `json:"id"`
-	}
-	fx.decode(t, http.MethodGet, "/api/admin/users", tok, nil, http.StatusOK, &directory)
-	for _, u := range directory {
-		if u.ID == d.target.admin.id {
-			t.Fatalf("directory: %s's owner appears in %s's /api/admin/users", d.target.name, d.viewer.name)
-		}
-	}
 	var team []struct {
 		UserID string `json:"user_id"`
 	}
-	fx.decode(t, http.MethodGet, "/api/org/team", tok, nil, http.StatusOK, &team)
+	fx.decode(t, http.MethodGet, "/api/org/memberships", tok, nil, http.StatusOK, &team)
 	for _, m := range team {
 		if m.UserID == d.target.admin.id {
-			t.Fatalf("team: %s's owner appears in %s's /api/org/team", d.target.name, d.viewer.name)
+			t.Fatalf("team: %s's owner appears in %s's /api/org/memberships", d.target.name, d.viewer.name)
 		}
 	}
 

@@ -1152,24 +1152,23 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 - **Path:** `packages/ui/src/auth/LoginScreen.tsx`
 - **CSS:** `login.css` — solo tokens del design system (sin colores hardcodeados)
 - **Comportamiento:** pantalla completa **antes** del shell; no usa `AppShell`
-- **Panel de marca (v2.1, desktop ≥900px):** split con panel indigo (`--brand-800`, borde `--brand-400` 30%) a la izquierda — `BrandMark` 64px + wordmark + tagline «Cotización y producción para talleres de carpintería» + meta de módulos — y la card de form a la derecha. Es el único momento "committed" del producto. En <900px el panel se oculta (card centrada). RegisterScreen comparte la hoja sin el aside.
+- **Panel de marca (v2.1, desktop ≥900px):** split con panel indigo (`--brand-800`, borde `--brand-400` 30%) a la izquierda — `BrandMark` 64px + wordmark + tagline «Cotización y producción para talleres de carpintería» + meta de módulos — y la card de form a la derecha. Es el único momento "committed" del producto. En <900px el panel se oculta (card centrada).
 - **Acciones:**
   - Login API: `POST …/auth/login` → JWT en `localStorage` (`muebles_token`) + modo `auth` en `sessionStorage` (`muebles_session`)
   - Invitado: `WifiOff` + «Acceder sin conexión» → modo `guest` (sin token); workspace seed local
-  - Link a Registro (#6.13)
 - **Iconos:** `LogIn` (submit), `Mail`, `KeyRound`, `WifiOff` (guest)
 - **Salida de sesión:** control **Salir** en topbar del shell (`LogOut`); limpia `muebles_session` + `muebles_token` y vuelve a `LoginScreen`
 
-### 6.13 Registro
+### 6.13 Aceptación de invitación
 
-- **Path:** `packages/ui/src/auth/RegisterScreen.tsx`
+- **Path:** `packages/ui/src/auth/AcceptInvitationScreen.tsx`
 - **Patrón:** pantalla completa pre-shell, comparte `login.css`
 - **Acciones:**
-  - `POST …/auth/register` crea `role=user`, `active=false` (pendiente de aprobación admin)
-  - Login de cuenta pendiente → 403 con mensaje claro
-  - Tras registro exitoso: mensaje «pendiente de aprobación» + link a Login
-- **Iconos:** `UserPlus` (submit), `Mail`, `KeyRound`
-- **RBAC**: abierto a cualquiera (es alta de usuario).
+  - `POST …/auth/invitations:accept` consume un enlace de una sola vez;
+  - una identidad nueva define nombre y contraseña; una existente confirma su contraseña;
+  - éxito crea una sesión scoped directamente a la organización invitante;
+  - expiración, revocación, uso previo y rotación muestran estados distintos y accionables.
+- **RBAC:** endpoint público limitado por token; la creación, reemisión y revocación de invitaciones requieren administración del taller.
 
 ---
 

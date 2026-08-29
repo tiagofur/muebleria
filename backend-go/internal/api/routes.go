@@ -12,7 +12,6 @@ func RegisterRoutes(server *Server) http.Handler {
 	authRL := RateLimitMiddleware(server.rateLimitRPS, server.rateLimitBurst)
 
 	// Endpoints públicos (Auth) — with rate limiting
-	mux.Handle("POST /api/auth/register", authRL(http.HandlerFunc(server.HandleRegister)))
 	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
 
 	// Health check endpoint (unauthenticated) — used by Docker healthchecks and Caddy depends_on.
@@ -43,6 +42,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
 	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
+	mux.Handle("POST /api/platform/users/{userCommand...}", platformMW(http.HandlerFunc(server.HandlePlatformUserCommand)))
 	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession))))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
 
@@ -52,15 +52,15 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/factory/organizations", authMW(server.RequireIdempotency("factory.create-organization", http.HandlerFunc(server.HandleFactoryOrganizations))))
 
 	// Org team management (#326): active-org admin (or support session).
-	mux.Handle("GET /api/org/team", authMW(http.HandlerFunc(server.HandleOrgTeam)))
-	mux.Handle("PUT /api/org/members/{userId}/roles", authMW(http.HandlerFunc(server.HandleOrgMemberRoles)))
-	mux.Handle("PUT /api/org/members/{userId}/active", authMW(http.HandlerFunc(server.HandleOrgMemberActive)))
+	mux.Handle("GET /api/org/memberships", authMW(http.HandlerFunc(server.HandleOrgTeam)))
+	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles))))
+	mux.Handle("PUT /api/org/memberships/{membershipId}/status", authMW(server.RequireIdempotency("org.update-membership-status", http.HandlerFunc(server.HandleOrgMemberStatus))))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
 	mux.Handle("POST /api/org/invitations", authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation))))
-	mux.Handle("DELETE /api/org/invitations/{id}", authMW(server.RequireIdempotency("org.revoke-invitation", http.HandlerFunc(server.HandleOrgRevokeInvitation))))
+	mux.Handle("POST /api/org/invitations/{invitationCommand...}", authMW(http.HandlerFunc(server.HandleOrgInvitationCommand)))
 
 	// Public invitation acceptance (rate limited like login/register).
-	mux.Handle("POST /api/auth/accept-invitation", authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation))))
+	mux.Handle("POST /api/auth/invitations:accept", authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation))))
 
 	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
 	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).
@@ -318,20 +318,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/settings", authMW(http.HandlerFunc(server.HandleWorkshopSettings)))
 	mux.Handle("PUT /api/settings", authMW(http.HandlerFunc(server.HandleWorkshopSettings)))
 
-	// Admin — Gestión de usuarios (solo admin; live role from DB)
-	adminMW := AdminMiddleware(server.JWTSecret, server.Store)
-	mux.Handle("GET /api/admin/users", adminMW(http.HandlerFunc(server.HandleAdminUsers)))
-	mux.Handle("PUT /api/admin/users/{id}/role", adminMW(http.HandlerFunc(server.HandleAdminUserRole)))
-	mux.Handle("DELETE /api/admin/users/{id}", adminMW(http.HandlerFunc(server.HandleAdminUserReject)))
-	// Sector assignments of any user — admin only (F094: was plain auth,
-	// letting any authenticated user rewrite anyone's station access).
-	mux.Handle("GET /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
-	mux.Handle("PUT /api/admin/users/{id}/sectors", adminMW(http.HandlerFunc(server.HandleUserSectors)))
-
 	// NOTE: legacy /api/staff/* routes were removed (users.role bridge): they
 	// created/listed GLOBAL users with no organization scope and no caller in
 	// the clients. Team management lives in /api/org/* (memberships, #326) and
-	// /api/admin/users (org-scoped directory).
+	// exposes no global-user management bridge.
 
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
 	return CORSMiddleware(server.allowedOrigins)(RequestIDMiddleware(mux))

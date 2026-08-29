@@ -12,13 +12,13 @@ import (
 // login (and any other endpoint returning a user) cannot leak the hash.
 func TestUserPasswordHashNeverSerialized(t *testing.T) {
 	u := User{
-		ID:           "u-1",
-		Email:        "admin@test.com",
-		PasswordHash: "SUPER-SECRET-HASH-MUST-NOT-LEAK",
-		Name:         "Admin",
-		Active:       true,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:            "u-1",
+		Email:         "admin@test.com",
+		PasswordHash:  "SUPER-SECRET-HASH-MUST-NOT-LEAK",
+		Name:          "Admin",
+		AccountStatus: AccountStatusActive,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	out, err := json.Marshal(u)

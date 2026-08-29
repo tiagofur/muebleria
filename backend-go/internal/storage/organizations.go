@@ -122,12 +122,12 @@ func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOr
 }
 
 const membershipWithOrgColumns = `
-	m.id, m.organization_id, m.user_id, m.roles, m.active, m.created_at, m.updated_at, m.version,
+	m.id, m.organization_id, m.user_id, m.roles, m.status, m.joined_at, m.suspended_at, m.suspended_by::text, m.suspension_reason, m.left_at, m.left_by::text, m.leave_reason, m.created_at, m.updated_at, m.version,
 	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.parent_organization_id, o.created_at, o.updated_at, o.version`
 
 func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 	var m domain.MembershipWithOrg
-	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Active, &m.CreatedAt, &m.UpdatedAt, &m.Version,
+	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version,
 		&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
 		&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version)
@@ -156,7 +156,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 		SELECT `+membershipWithOrgColumns+`
 		FROM memberships m
 		JOIN organizations o ON o.id = m.organization_id
-		WHERE m.user_id = $1 AND m.active AND o.active
+		WHERE m.user_id = $1 AND m.status = 'active' AND o.active
 		ORDER BY o.created_at`, userID)
 	if err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 	out := []domain.MembershipWithOrg{}
 	for rows.Next() {
 		var m domain.MembershipWithOrg
-		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Active, &m.CreatedAt, &m.UpdatedAt, &m.Version,
+		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version,
 			&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
 			&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version); err != nil {
@@ -176,14 +176,13 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 	return out, rows.Err()
 }
 
-// GetActiveMembership loads one membership (any state) with its organization.
-// Callers decide how to react to inactive membership/organization.
+// GetActiveMembership loads only an active membership with its organization.
 func (s *PostgresStore) GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
 	return scanMembershipWithOrg(s.db(ctx).QueryRow(ctx, `
 		SELECT `+membershipWithOrgColumns+`
 		FROM memberships m
 		JOIN organizations o ON o.id = m.organization_id
-		WHERE m.user_id = $1 AND m.organization_id = $2`, userID, organizationID))
+		WHERE m.user_id = $1 AND m.organization_id = $2 AND m.status = 'active'`, userID, organizationID))
 }
 
 // EnsureMembership inserts a membership if the user has none in the
@@ -193,23 +192,10 @@ func (s *PostgresStore) EnsureMembership(ctx context.Context, organizationID, us
 		return fmt.Errorf("invalid role set")
 	}
 	_, err := s.db(ctx).Exec(ctx, `
-		INSERT INTO memberships (organization_id, user_id, roles)
-		VALUES ($1, $2, $3)
+		INSERT INTO memberships (organization_id, user_id, roles, status)
+		VALUES ($1, $2, $3, 'active')
 		ON CONFLICT (user_id, organization_id) DO NOTHING`,
 		organizationID, userID, roles)
-	return err
-}
-
-// SetMembershipRoles replaces the roles of every active membership of the
-// user. Transitional single-organization bridge for UpdateUserRole (F170b
-// scopes this per membership).
-func (s *PostgresStore) SetMembershipRoles(ctx context.Context, userID string, roles []domain.UserRole) error {
-	if !domain.IsValidRoleSet(roles) {
-		return fmt.Errorf("invalid role set")
-	}
-	_, err := s.db(ctx).Exec(ctx, `
-		UPDATE memberships SET roles = $2, updated_at = CURRENT_TIMESTAMP
-		WHERE user_id = $1`, userID, roles)
 	return err
 }
 
@@ -275,7 +261,7 @@ func (s *PostgresStore) ListSecurityAuditEvents(ctx context.Context, organizatio
 		limit = 100
 	}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT id, event_type, actor_user_id, target_user_id, organization_id, ip, details, created_at
+		SELECT id, event_type, actor_user_id, target_user_id, organization_id, COALESCE(ip, ''), details, created_at
 		FROM security_audit_events
 		WHERE ($1 = '' OR organization_id = $1::uuid)
 		ORDER BY created_at DESC
@@ -383,243 +369,426 @@ func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminU
 
 // --- Org team & invitations (#326) ---
 
-// OrgTeamMember is the team listing projection for the active organization.
+// OrgTeamMember is the membership-centric team projection. Historical
+// suspended/left memberships remain visible to authorized organization admins.
 type OrgTeamMember struct {
-	UserID        string            `json:"user_id"`
-	Email         string            `json:"email"`
-	Name          string            `json:"name"`
-	AccountActive bool              `json:"account_active"`
-	Active        bool              `json:"active"`
-	Roles         []domain.UserRole `json:"roles"`
-	MemberSince   time.Time         `json:"member_since"`
-	Version       int64             `json:"version"`
+	MembershipID  string
+	UserID        string
+	Email         string
+	Name          string
+	AccountStatus domain.AccountStatus
+	Status        domain.MembershipStatus
+	Roles         []domain.UserRole
+	JoinedAt      time.Time
+	Version       int64
 }
 
-func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID string) ([]OrgTeamMember, error) {
-	rows, err := s.db(ctx).Query(ctx, `
-		SELECT u.id, u.email, u.name, u.active, m.active, m.roles, m.created_at, m.version
-		FROM memberships m
-		JOIN users u ON u.id = m.user_id
-		WHERE m.organization_id = $1
-		ORDER BY m.created_at`, organizationID)
+func scanOrgTeamMember(row pgx.Row) (*OrgTeamMember, error) {
+	var out OrgTeamMember
+	err := row.Scan(&out.MembershipID, &out.UserID, &out.Email, &out.Name,
+		&out.AccountStatus, &out.Status, &out.Roles, &out.JoinedAt, &out.Version)
+	return &out, err
+}
+
+func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID, actorID string) ([]OrgTeamMember, error) {
+	if transactionFromContext(ctx) == nil {
+		var out []OrgTeamMember
+		err := s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: actorID}, func(txCtx context.Context) error {
+			var inner error
+			out, inner = s.ListOrgTeam(txCtx, organizationID, actorID)
+			return inner
+		})
+		return out, err
+	}
+	rows, err := s.db(ctx).Query(ctx, `SELECT m.id, u.id, u.email, u.name,
+		u.account_status, m.status, m.roles, m.joined_at, m.version
+		FROM memberships m JOIN users u ON u.id=m.user_id
+		WHERE m.organization_id=$1 ORDER BY m.joined_at`, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []OrgTeamMember{}
 	for rows.Next() {
-		var t OrgTeamMember
-		if err := rows.Scan(&t.UserID, &t.Email, &t.Name, &t.AccountActive, &t.Active, &t.Roles, &t.MemberSince, &t.Version); err != nil {
+		m, err := scanOrgTeamMember(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, t)
+		out = append(out, *m)
 	}
 	return out, rows.Err()
 }
 
-// UpdateMembershipRolesByOrg replaces the roles of ONE user's membership in
-// the organization (fails when there is no membership).
-func (s *PostgresStore) UpdateMembershipRolesByOrg(ctx context.Context, organizationID, userID string, roles []domain.UserRole, expectedVersion int64) (*OrgTeamMember, error) {
+func classifyMembershipMiss(ctx context.Context, db dbtx, organizationID, membershipID string) error {
+	var version int64
+	err := db.QueryRow(ctx, `SELECT version FROM memberships WHERE id=$1 AND organization_id=$2`, membershipID, organizationID).Scan(&version)
+	if err == nil {
+		return ErrVersionConflict
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMembershipNotFound
+	}
+	return err
+}
+
+// UpdateMembershipRolesByOrg addresses the tenant-owned membership ID, never
+// a globally meaningful user ID.
+func (s *PostgresStore) UpdateMembershipRolesByOrg(ctx context.Context, organizationID, membershipID string, roles []domain.UserRole, expectedVersion int64) (*OrgTeamMember, error) {
 	if !domain.IsValidRoleSet(roles) {
 		return nil, fmt.Errorf("invalid role set")
 	}
-	out := &OrgTeamMember{}
-	err := s.db(ctx).QueryRow(ctx, `
-		UPDATE memberships m SET roles = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
-		FROM users u
-		WHERE m.organization_id = $1 AND m.user_id = $2 AND m.version = $4 AND u.id = m.user_id
-		RETURNING u.id, u.email, u.name, u.active, m.active, m.roles, m.created_at, m.version`, organizationID, userID, roles, expectedVersion).
-		Scan(&out.UserID, &out.Email, &out.Name, &out.AccountActive, &out.Active, &out.Roles, &out.MemberSince, &out.Version)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			var exists bool
-			if e := s.db(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE organization_id=$1 AND user_id=$2)`, organizationID, userID).Scan(&exists); e != nil {
-				return nil, e
-			}
-			if exists {
-				return nil, ErrVersionConflict
-			}
-			return nil, ErrMembershipNotFound
-		}
-		return nil, err
+	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
+		UPDATE memberships m SET roles=$3, updated_at=NOW(), version=version+1
+		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$4 AND u.id=m.user_id
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		organizationID, membershipID, roles, expectedVersion))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
 	}
-	return out, nil
+	return out, err
 }
 
-// SetMembershipActive deactivates/reactivates one membership (team offboarding).
-func (s *PostgresStore) SetMembershipActive(ctx context.Context, organizationID, userID string, active bool, expectedVersion int64) (*OrgTeamMember, error) {
-	out := &OrgTeamMember{}
-	err := s.db(ctx).QueryRow(ctx, `
-		UPDATE memberships m SET active = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
-		FROM users u
-		WHERE m.organization_id = $1 AND m.user_id = $2 AND m.version = $4 AND u.id = m.user_id
-		RETURNING u.id, u.email, u.name, u.active, m.active, m.roles, m.created_at, m.version`, organizationID, userID, active, expectedVersion).
-		Scan(&out.UserID, &out.Email, &out.Name, &out.AccountActive, &out.Active, &out.Roles, &out.MemberSince, &out.Version)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			var exists bool
-			if e := s.db(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE organization_id=$1 AND user_id=$2)`, organizationID, userID).Scan(&exists); e != nil {
-				return nil, e
-			}
-			if exists {
-				return nil, ErrVersionConflict
-			}
-			return nil, ErrMembershipNotFound
-		}
-		return nil, err
+func (s *PostgresStore) UpdateMembershipStatus(ctx context.Context, organizationID, membershipID string, status domain.MembershipStatus, reason, actorID string, expectedVersion int64) (*OrgTeamMember, error) {
+	if status != domain.MembershipStatusActive && status != domain.MembershipStatusSuspended && status != domain.MembershipStatusLeft {
+		return nil, fmt.Errorf("invalid membership status")
 	}
-	return out, nil
+	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
+		UPDATE memberships m SET status=$3,
+			suspended_at=CASE WHEN $3='suspended' THEN NOW() ELSE NULL END,
+			suspended_by=CASE WHEN $3='suspended' THEN NULLIF($5,'')::uuid ELSE NULL END,
+			suspension_reason=CASE WHEN $3='suspended' THEN NULLIF($4,'') ELSE NULL END,
+			left_at=CASE WHEN $3='left' THEN NOW() ELSE NULL END,
+			left_by=CASE WHEN $3='left' THEN NULLIF($5,'')::uuid ELSE NULL END,
+			leave_reason=CASE WHEN $3='left' THEN NULLIF($4,'') ELSE NULL END,
+			updated_at=NOW(), version=version+1
+		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$6 AND u.id=m.user_id
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		organizationID, membershipID, status, reason, actorID, expectedVersion))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
+	}
+	return out, err
 }
 
-// Invitation is the org-facing invitation projection.
 type Invitation struct {
-	ID         string            `json:"id"`
-	Email      string            `json:"email"`
-	Roles      []domain.UserRole `json:"roles"`
-	ExpiresAt  time.Time         `json:"expires_at"`
-	InvitedBy  *string           `json:"invited_by,omitempty"`
-	AcceptedAt *time.Time        `json:"accepted_at,omitempty"`
-	AcceptedBy *string           `json:"accepted_by,omitempty"`
-	RevokedAt  *time.Time        `json:"revoked_at,omitempty"`
-	CreatedAt  time.Time         `json:"created_at"`
-	Version    int64             `json:"version"`
+	ID              string
+	OrganizationID  string
+	Email           string
+	NormalizedEmail string
+	Roles           []domain.UserRole
+	Status          string
+	ExpiresAt       time.Time
+	InvitedBy       *string
+	AcceptedAt      *time.Time
+	AcceptedBy      *string
+	RevokedAt       *time.Time
+	RevokedBy       *string
+	RevokedReason   *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Version         int64
+}
+
+const invitationColumns = `id,organization_id,email,normalized_email,roles,status,expires_at,
+	invited_by::text,accepted_at,accepted_by::text,revoked_at,revoked_by::text,revoked_reason,created_at,updated_at,version`
+
+func scanInvitation(row pgx.Row) (*Invitation, error) {
+	var i Invitation
+	err := row.Scan(&i.ID, &i.OrganizationID, &i.Email, &i.NormalizedEmail, &i.Roles, &i.Status, &i.ExpiresAt,
+		&i.InvitedBy, &i.AcceptedAt, &i.AcceptedBy, &i.RevokedAt, &i.RevokedBy, &i.RevokedReason, &i.CreatedAt, &i.UpdatedAt, &i.Version)
+	return &i, err
+}
+
+var (
+	ErrInvitationNotFound           = errors.New("invitation not found")
+	ErrInvitationExpired            = errors.New("invitation expired")
+	ErrInvitationRevoked            = errors.New("invitation revoked")
+	ErrInvitationAlreadyUsed        = errors.New("invitation already used")
+	ErrInvitationTokenRotated       = errors.New("invitation token rotated")
+	ErrAccountDisabled              = errors.New("account disabled")
+	ErrInvalidInvitationCredentials = errors.New("invalid invitation credentials")
+	ErrInvitationNameRequired       = errors.New("invitation name required")
+	ErrInvitationPasswordInvalid    = errors.New("invitation password invalid")
+	ErrMembershipAlreadyActive      = errors.New("membership already active")
+)
+
+func (s *PostgresStore) expireOpenInvitations(ctx context.Context, organizationID, normalizedEmail, actorID string) error {
+	rows, err := s.db(ctx).Query(ctx, `UPDATE invitations SET status='expired',updated_at=NOW(),version=version+1
+		WHERE organization_id=$1 AND ($2='' OR normalized_email=$2) AND status IN ('pending','delivered','opened') AND expires_at<=NOW()
+		RETURNING id`, organizationID, normalizedEmail)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: "invitation_expired", ActorUserID: actorID, OrganizationID: organizationID, Details: map[string]interface{}{"invitation_id": id}}); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func (s *PostgresStore) CreateInvitation(ctx context.Context, organizationID, email string, roles []domain.UserRole, tokenHash string, expiresAt time.Time, invitedBy string) (*Invitation, error) {
 	if !domain.IsValidRoleSet(roles) {
 		return nil, fmt.Errorf("invalid role set")
 	}
-	out := &Invitation{}
-	err := s.db(ctx).QueryRow(ctx, `
-		INSERT INTO invitations (organization_id, email, roles, token_hash, expires_at, invited_by)
-		VALUES ($1, $2, $3, $4, $5, nullif($6, '')::uuid)
-		RETURNING id, email, roles, expires_at, created_at, version`,
-		organizationID, email, roles, tokenHash, expiresAt, invitedBy).
-		Scan(&out.ID, &out.Email, &out.Roles, &out.ExpiresAt, &out.CreatedAt, &out.Version)
-	if err != nil {
+	normalized := domain.NormalizeEmail(email)
+	if err := s.expireOpenInvitations(ctx, organizationID, normalized, invitedBy); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return scanInvitation(s.db(ctx).QueryRow(ctx, `INSERT INTO invitations
+		(organization_id,email,normalized_email,roles,status,token_hash,expires_at,invited_by)
+		VALUES ($1,$2,$3,$4,'pending',$5,$6,NULLIF($7,'')::uuid) RETURNING `+invitationColumns,
+		organizationID, strings.TrimSpace(email), normalized, roles, tokenHash, expiresAt, invitedBy))
 }
 
-func (s *PostgresStore) ListInvitations(ctx context.Context, organizationID string) ([]Invitation, error) {
-	rows, err := s.db(ctx).Query(ctx, `
-		SELECT id, email, roles, expires_at, invited_by::text, accepted_at, accepted_by::text, revoked_at, created_at, version
-		FROM invitations
-		WHERE organization_id = $1
-		ORDER BY created_at DESC`, organizationID)
+func (s *PostgresStore) ListInvitations(ctx context.Context, organizationID, actorID string) ([]Invitation, error) {
+	if transactionFromContext(ctx) == nil {
+		var out []Invitation
+		err := s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: actorID}, func(txCtx context.Context) error {
+			var inner error
+			out, inner = s.ListInvitations(txCtx, organizationID, actorID)
+			return inner
+		})
+		return out, err
+	}
+	if err := s.expireOpenInvitations(ctx, organizationID, "", actorID); err != nil {
+		return nil, err
+	}
+	rows, err := s.db(ctx).Query(ctx, `SELECT `+invitationColumns+` FROM invitations WHERE organization_id=$1 ORDER BY created_at DESC`, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []Invitation{}
 	for rows.Next() {
-		var i Invitation
-		if err := rows.Scan(&i.ID, &i.Email, &i.Roles, &i.ExpiresAt, &i.InvitedBy, &i.AcceptedAt, &i.AcceptedBy, &i.RevokedAt, &i.CreatedAt, &i.Version); err != nil {
+		i, err := scanInvitation(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, i)
+		out = append(out, *i)
 	}
 	return out, rows.Err()
 }
 
-var ErrInvitationNotFound = errors.New("invitation not found")
-
-func (s *PostgresStore) RevokeInvitation(ctx context.Context, organizationID, id string, expectedVersion int64) (*Invitation, error) {
-	var out Invitation
-	err := s.db(ctx).QueryRow(ctx, `
-		UPDATE invitations
-		SET revoked_at = NOW(), version = version + 1
-		WHERE id = $1 AND organization_id = $2 AND accepted_at IS NULL
-			AND revoked_at IS NULL AND version = $3
-		RETURNING id, email, roles, expires_at, invited_by::text, accepted_at,
-			accepted_by::text, revoked_at, created_at, version`,
-		id, organizationID, expectedVersion).Scan(
-		&out.ID, &out.Email, &out.Roles, &out.ExpiresAt, &out.InvitedBy,
-		&out.AcceptedAt, &out.AcceptedBy, &out.RevokedAt, &out.CreatedAt, &out.Version,
-	)
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return &out, err
+func (s *PostgresStore) ResendInvitation(ctx context.Context, organizationID, id, tokenHash string, expiresAt time.Time, expectedVersion int64) (*Invitation, error) {
+	out, err := scanInvitation(s.db(ctx).QueryRow(ctx, `UPDATE invitations SET token_hash=$3,status='pending',expires_at=$4,
+		previous_token_hashes=array_append(previous_token_hashes,token_hash),
+		accepted_at=NULL,accepted_by=NULL,revoked_at=NULL,revoked_by=NULL,revoked_reason=NULL,updated_at=NOW(),version=version+1
+		WHERE id=$2 AND organization_id=$1 AND version=$5 AND status IN ('pending','delivered','opened','expired') RETURNING `+invitationColumns,
+		organizationID, id, tokenHash, expiresAt, expectedVersion))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, classifyInvitationMiss(ctx, s.db(ctx), organizationID, id)
 	}
-	var currentVersion int64
-	lookupErr := s.db(ctx).QueryRow(ctx, `
-		SELECT version FROM invitations
-		WHERE id = $1 AND organization_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
-		id, organizationID).Scan(&currentVersion)
-	if lookupErr == nil {
-		return nil, ErrVersionConflict
-	}
-	if errors.Is(lookupErr, pgx.ErrNoRows) {
-		return nil, ErrInvitationNotFound
-	}
-	return nil, lookupErr
+	return out, err
 }
 
-// OpenInvitationByToken resolves an invitation by token hash when it is still
-// open and unexpired, with its organization type for role validation.
-type OpenInvitation struct {
-	Invitation
-	OrganizationID   string                  `json:"organization_id"`
-	OrganizationType domain.OrganizationType `json:"organization_type"`
+func classifyInvitationMiss(ctx context.Context, db dbtx, organizationID, id string) error {
+	var version int64
+	err := db.QueryRow(ctx, `SELECT version FROM invitations WHERE id=$1 AND organization_id=$2`, id, organizationID).Scan(&version)
+	if err == nil {
+		return ErrVersionConflict
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInvitationNotFound
+	}
+	return err
 }
 
-func (s *PostgresStore) GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*OpenInvitation, error) {
-	var out OpenInvitation
-	err := s.db(ctx).QueryRow(ctx, `
-		SELECT id, email, roles, expires_at, invited_by, accepted_at,
-		       accepted_by, revoked_at, created_at, version,
-		       organization_id, organization_type
-		FROM lookup_open_invitation($1)`,
-		tokenHash).
-		Scan(&out.ID, &out.Email, &out.Roles, &out.ExpiresAt, &out.InvitedBy, &out.AcceptedAt, &out.AcceptedBy, &out.RevokedAt, &out.CreatedAt, &out.Version, &out.OrganizationID, &out.OrganizationType)
-	if err != nil {
+func (s *PostgresStore) RevokeInvitation(ctx context.Context, organizationID, id, reason, actorID string, expectedVersion int64) (*Invitation, error) {
+	out, err := scanInvitation(s.db(ctx).QueryRow(ctx, `UPDATE invitations SET status='revoked',revoked_at=NOW(),revoked_by=NULLIF($4,'')::uuid,
+		revoked_reason=$3,updated_at=NOW(),version=version+1 WHERE id=$2 AND organization_id=$1 AND version=$5
+		AND status IN ('pending','delivered','opened','expired') RETURNING `+invitationColumns, organizationID, id, reason, actorID, expectedVersion))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, classifyInvitationMiss(ctx, s.db(ctx), organizationID, id)
+	}
+	return out, err
+}
+
+type AcceptInvitationCommand struct{ TokenHash, Password, NewPasswordHash, Name, IP string }
+type AcceptInvitationResult struct {
+	User                     domain.User
+	Membership               domain.Membership
+	Organization             domain.Organization
+	CreatedUser, Reactivated bool
+}
+
+// RecordInvitationAcceptanceFailure resolves only the exact token row through
+// the narrow SECURITY DEFINER boundary and stores no credential, email, token
+// or token hash in audit details.
+func (s *PostgresStore) RecordInvitationAcceptanceFailure(ctx context.Context, tokenHash, reason, ip string) error {
+	var id, organizationID string
+	var discard [13]interface{}
+	var organizationType string
+	var currentToken bool
+	row := s.db(ctx).QueryRow(ctx, `SELECT id,normalized_email,roles,status,expires_at,invited_by,accepted_at,accepted_by,revoked_at,revoked_by,revoked_reason,created_at,updated_at,version,organization_id,organization_type,current_token FROM lock_open_invitation_by_hash($1)`, tokenHash)
+	args := []interface{}{&id}
+	for i := range discard {
+		args = append(args, &discard[i])
+	}
+	args = append(args, &organizationID, &organizationType, &currentToken)
+	if err := row.Scan(args...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("invitation not found")
+			return nil
 		}
-		return nil, err
-	}
-	return &out, nil
-}
-
-// AcceptInvitationTx marks the invitation accepted and ensures the user's
-// membership with its roles, atomically. Returns the user id.
-func (s *PostgresStore) AcceptInvitationTx(ctx context.Context, invitationID, organizationID, userID string) error {
-	if transactionFromContext(ctx) == nil {
-		return s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: userID}, func(txCtx context.Context) error {
-			return s.AcceptInvitationTx(txCtx, invitationID, organizationID, userID)
-		})
-	}
-	if err := setTenantContext(ctx, transactionFromContext(ctx), TenantActor{OrganizationID: organizationID, UserID: userID}); err != nil {
 		return err
 	}
+	if tx := transactionFromContext(ctx); tx != nil {
+		if err := setTenantContext(ctx, tx, TenantActor{OrganizationID: organizationID}); err != nil {
+			return err
+		}
+	}
+	if reason == "INVITATION_EXPIRED" && currentToken {
+		tag, err := s.db(ctx).Exec(ctx, `UPDATE invitations
+			SET status='expired',updated_at=NOW(),version=version+1
+			WHERE id=$1 AND status IN ('pending','delivered','opened') AND expires_at<=NOW()`, id)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 1 {
+			if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: "invitation_expired", OrganizationID: organizationID, Details: map[string]interface{}{"invitation_id": id}}); err != nil {
+				return err
+			}
+		}
+	}
+	return s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: "invitation_acceptance_failed", OrganizationID: organizationID, IP: ip, Details: map[string]interface{}{"invitation_id": id, "reason": reason}})
+}
+
+// AcceptInvitation atomically locks the exact invitation before identity lookup,
+// creates or verifies the identity, creates/reactivates only the inviting
+// organization's membership, consumes the invitation and writes required audit.
+func (s *PostgresStore) AcceptInvitation(ctx context.Context, cmd AcceptInvitationCommand, verifyPassword func(string, string) bool, validateNewPassword func(string) error) (*AcceptInvitationResult, error) {
 	tx, owned, err := s.beginOrUseTx(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-
-	var orgID string
-	var roles []domain.UserRole
-	err = tx.QueryRow(ctx, `
-		UPDATE invitations SET accepted_at = NOW(), accepted_by = $2
-		WHERE id = $1 AND organization_id = $3
-		  AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
-		RETURNING organization_id, roles`, invitationID, userID, organizationID).Scan(&orgID, &roles)
+	ctx = context.WithValue(ctx, transactionContextKey{}, tx)
+	var inv Invitation
+	var orgType domain.OrganizationType
+	var currentToken bool
+	err = tx.QueryRow(ctx, `SELECT id,normalized_email,roles,status,expires_at,
+		invited_by::text,accepted_at,accepted_by::text,revoked_at,revoked_by::text,revoked_reason,created_at,updated_at,version,organization_id,organization_type
+		,current_token
+		FROM lock_open_invitation_by_hash($1)`, cmd.TokenHash).Scan(&inv.ID, &inv.NormalizedEmail, &inv.Roles, &inv.Status, &inv.ExpiresAt,
+		&inv.InvitedBy, &inv.AcceptedAt, &inv.AcceptedBy, &inv.RevokedAt, &inv.RevokedBy, &inv.RevokedReason, &inv.CreatedAt, &inv.UpdatedAt, &inv.Version, &inv.OrganizationID, &orgType, &currentToken)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvitationNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("invitation not found")
+		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO memberships (organization_id, user_id, roles) VALUES ($1, $2, $3)
-		ON CONFLICT (user_id, organization_id) DO UPDATE SET roles = $3, active = TRUE, updated_at = CURRENT_TIMESTAMP`,
-		orgID, userID, roles); err != nil {
-		return err
+	if !currentToken {
+		return nil, ErrInvitationTokenRotated
 	}
+	switch inv.Status {
+	case "accepted":
+		return nil, ErrInvitationAlreadyUsed
+	case "revoked":
+		return nil, ErrInvitationRevoked
+	case "expired":
+		return nil, ErrInvitationExpired
+	}
+	if !inv.ExpiresAt.After(time.Now()) {
+		return nil, ErrInvitationExpired
+	}
+	if !domain.RolesAllowedInOrg(inv.Roles, orgType) {
+		return nil, fmt.Errorf("invitation role set invalid")
+	}
+	inv.Email = inv.NormalizedEmail
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, inv.NormalizedEmail); err != nil {
+		return nil, err
+	}
+	if err = setTenantContext(ctx, tx, TenantActor{OrganizationID: inv.OrganizationID}); err != nil {
+		return nil, err
+	}
+
+	result := &AcceptInvitationResult{}
+	u, lookupErr := scanUser(tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE normalized_email=$1 FOR UPDATE`, inv.NormalizedEmail))
+	if lookupErr != nil && !errors.Is(lookupErr, ErrUserNotFound) {
+		return nil, lookupErr
+	}
+	if u == nil {
+		if strings.TrimSpace(cmd.Name) == "" {
+			return nil, ErrInvitationNameRequired
+		}
+		if cmd.NewPasswordHash == "" {
+			return nil, ErrInvalidInvitationCredentials
+		}
+		if validateNewPassword == nil || validateNewPassword(cmd.Password) != nil {
+			return nil, ErrInvitationPasswordInvalid
+		}
+		u = &domain.User{Email: inv.NormalizedEmail, NormalizedEmail: inv.NormalizedEmail, Name: strings.TrimSpace(cmd.Name), PasswordHash: cmd.NewPasswordHash, AccountStatus: domain.AccountStatusActive}
+		err = tx.QueryRow(ctx, `INSERT INTO users(email,normalized_email,password_hash,name,account_status) VALUES($1,$2,$3,$4,'active') RETURNING `+userColumns,
+			u.Email, u.NormalizedEmail, u.PasswordHash, u.Name).Scan(&u.ID, &u.Email, &u.NormalizedEmail, &u.PasswordHash, &u.Name, &u.AccountStatus, &u.EmailVerifiedAt, &u.LastLoginAt, &u.PlatformAdmin, &u.CreatedAt, &u.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		result.CreatedUser = true
+	} else {
+		if u.AccountStatus != domain.AccountStatusActive {
+			return nil, ErrAccountDisabled
+		}
+		if verifyPassword == nil || !verifyPassword(cmd.Password, u.PasswordHash) {
+			return nil, ErrInvalidInvitationCredentials
+		}
+	}
+	ctx, err = s.SetTenantActor(ctx, TenantActor{OrganizationID: inv.OrganizationID, UserID: u.ID})
+	if err != nil {
+		return nil, err
+	}
+
+	var previousStatus domain.MembershipStatus
+	previousErr := tx.QueryRow(ctx, `SELECT status FROM memberships WHERE organization_id=$1 AND user_id=$2 FOR UPDATE`, inv.OrganizationID, u.ID).Scan(&previousStatus)
+	if previousErr != nil && !errors.Is(previousErr, pgx.ErrNoRows) {
+		return nil, previousErr
+	}
+	var m domain.Membership
+	err = tx.QueryRow(ctx, `INSERT INTO memberships(organization_id,user_id,roles,status) VALUES($1,$2,$3,'active')
+		ON CONFLICT(user_id,organization_id) DO UPDATE SET roles=EXCLUDED.roles,status='active',suspended_at=NULL,suspended_by=NULL,suspension_reason=NULL,left_at=NULL,left_by=NULL,leave_reason=NULL,updated_at=NOW(),version=memberships.version+1
+		RETURNING id,organization_id,user_id,roles,status,joined_at,created_at,updated_at,version`, inv.OrganizationID, u.ID, inv.Roles).
+		Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.CreatedAt, &m.UpdatedAt, &m.Version)
+	if err != nil {
+		return nil, err
+	}
+	result.Reactivated = previousErr == nil && previousStatus != domain.MembershipStatusActive
+	if previousErr == nil && previousStatus == domain.MembershipStatusActive {
+		return nil, ErrMembershipAlreadyActive
+	}
+	if _, err = tx.Exec(ctx, `UPDATE users SET last_login_at=NOW(),updated_at=NOW() WHERE id=$1`, u.ID); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE invitations SET status='accepted',accepted_at=NOW(),accepted_by=$2,updated_at=NOW(),version=version+1 WHERE id=$1 AND status IN ('pending','delivered','opened')`, inv.ID, u.ID); err != nil {
+		return nil, err
+	}
+	membershipEvent := "membership_created"
+	if result.Reactivated {
+		membershipEvent = "membership_reactivated"
+	}
+	for _, event := range []string{"invitation_accepted", membershipEvent} {
+		if err = s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: event, ActorUserID: u.ID, TargetUserID: u.ID, OrganizationID: inv.OrganizationID, IP: cmd.IP, Details: map[string]interface{}{"invitation_id": inv.ID, "membership_id": m.ID}}); err != nil {
+			return nil, err
+		}
+	}
+	org, err := scanOrganization(tx.QueryRow(ctx, `SELECT `+organizationColumns+` FROM organizations WHERE id=$1`, inv.OrganizationID))
+	if err != nil {
+		return nil, err
+	}
+	result.User = *u
+	result.Membership = m
+	result.Organization = *org
 	if owned {
-		return tx.Commit(ctx)
+		if err = tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
-	return nil
+	return result, nil
 }
 
 // jsonbRemapKey returns a SQL expression that rewrites `key` inside every

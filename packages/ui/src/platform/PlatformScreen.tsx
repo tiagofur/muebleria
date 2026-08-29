@@ -63,6 +63,8 @@ export function PlatformScreen({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingOrg, setEditingOrg] = useState<OrganizationRow | null>(null);
   const [supportOrg, setSupportOrg] = useState<OrganizationRow | null>(null);
+  const [accountUser, setAccountUser] = useState<PlatformUserRow | null>(null);
+  const [accountReason, setAccountReason] = useState('');
   const [supportReason, setSupportReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -130,6 +132,27 @@ export function PlatformScreen({
       );
     } finally {
       setAuditLoading(false);
+    }
+  };
+
+  const handleAccountStatus = async () => {
+    if (!accountUser || !accountReason.trim()) return;
+    setSubmitting(true);
+    setModalError(null);
+    const nextStatus = accountUser.account_status === 'active' ? 'disabled' : 'active';
+    try {
+      await api.setPlatformUserAccountStatus(token, accountUser.id, {
+        account_status: nextStatus,
+        reason: accountReason.trim(),
+      });
+      showToast(nextStatus === 'active' ? '✓ Cuenta reactivada' : '✓ Cuenta deshabilitada');
+      setAccountUser(null);
+      setAccountReason('');
+      await loadUsers();
+    } catch (error) {
+      setModalError(error instanceof GraneteApiError ? error.message : 'No se pudo cambiar el estado de la cuenta');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -447,12 +470,13 @@ export function PlatformScreen({
                       <th>Estado</th>
                       <th>Staff Plataforma</th>
                       <th>Organizaciones / Talleres</th>
+                      <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-6)' }}>
+                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-6)' }}>
                           No se encontraron usuarios
                         </td>
                       </tr>
@@ -462,8 +486,8 @@ export function PlatformScreen({
                           <td><strong>{u.name || 'Sin nombre'}</strong></td>
                           <td style={{ fontFamily: 'monospace' }}>{u.email}</td>
                           <td>
-                            <span className={`platform-chip platform-chip--${u.active ? 'active' : 'suspended'}`}>
-                              {u.active ? 'Activo' : 'Inactivo'}
+                            <span className={`platform-chip platform-chip--${u.account_status === 'active' ? 'active' : 'suspended'}`}>
+                              {u.account_status === 'active' ? 'Cuenta activa' : 'Cuenta deshabilitada'}
                             </span>
                           </td>
                           <td>
@@ -485,7 +509,7 @@ export function PlatformScreen({
                                   >
                                     {m.organization_name || m.organization_id}
                                     <span style={{ opacity: 0.7, marginLeft: '4px' }}>
-                                      ({(m.roles || []).map(roleLabelEs).join(', ')})
+                                      ({m.status} · {(m.roles || []).map(roleLabelEs).join(', ')})
                                     </span>
                                   </span>
                                 ))
@@ -493,6 +517,19 @@ export function PlatformScreen({
                                 <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>Sin talleres</span>
                               )}
                             </div>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn btn--secondary btn--small"
+                              onClick={() => {
+                                setAccountUser(u);
+                                setAccountReason('');
+                                setModalError(null);
+                              }}
+                            >
+                              {u.account_status === 'active' ? 'Deshabilitar cuenta' : 'Reactivar cuenta'}
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -836,6 +873,36 @@ export function PlatformScreen({
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={accountUser !== null}
+        onClose={() => setAccountUser(null)}
+        title={accountUser?.account_status === 'active' ? 'Deshabilitar cuenta global' : 'Reactivar cuenta global'}
+        size="sm"
+      >
+        <div className="platform-form">
+          {modalError && <div role="alert" className="platform-modal-error">{modalError}</div>}
+          <p className="platform-help-text">
+            Esta acción afecta el acceso de {accountUser?.email} a todas sus organizaciones y queda auditada.
+          </p>
+          <div className="platform-form-group">
+            <label className="platform-label" htmlFor="account-status-reason">Motivo *</label>
+            <textarea
+              id="account-status-reason"
+              className="platform-textarea"
+              required
+              value={accountReason}
+              onChange={(event) => setAccountReason(event.target.value)}
+            />
+          </div>
+          <div className="platform-modal-actions">
+            <button type="button" className="btn btn--secondary" onClick={() => setAccountUser(null)} disabled={submitting}>Cancelar</button>
+            <button type="button" className="btn btn--primary" onClick={() => void handleAccountStatus()} disabled={submitting || !accountReason.trim()}>
+              {submitting ? 'Guardando...' : 'Confirmar cambio'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* MODAL: SUPPORT SESSION ("ENTRAR A TALLER") */}

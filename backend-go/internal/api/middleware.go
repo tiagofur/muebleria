@@ -164,7 +164,7 @@ func serveAuthenticatedRequest(
 	// the source of truth for roles (ADR-0004).
 	if users != nil {
 		u, err := users.GetUserByID(r.Context(), claims.UserID)
-		if err != nil || u == nil || !u.Active {
+		if err != nil || u == nil || u.AccountStatus != domain.AccountStatusActive {
 			respondWithError(w, http.StatusUnauthorized, "invalid token")
 			return
 		}
@@ -195,7 +195,7 @@ func serveAuthenticatedRequest(
 			claims.Role = string(domain.RoleAdmin)
 		} else if claims.OrgID != "" {
 			m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
-			if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
+			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}

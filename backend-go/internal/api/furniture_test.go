@@ -40,13 +40,13 @@ func TestFurnitureDefinitionsRequiresActiveLicense(t *testing.T) {
 		org  *domain.Organization
 		want int
 	}{
-		{"no license", &domain.User{ID: "u1", Active: true},
+		{"no license", &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive},
 			&domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Active: true}, http.StatusForbidden},
-		{"expired license", &domain.User{ID: "u1", Active: true},
+		{"expired license", &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive},
 			&domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, LicenseExpiresAt: &expired, Active: true}, http.StatusForbidden},
-		{"active trial no expiry", &domain.User{ID: "u1", Active: true},
+		{"active trial no expiry", &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive},
 			&domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Active: true}, http.StatusOK},
-		{"active pro future expiry", &domain.User{ID: "u1", Active: true},
+		{"active pro future expiry", &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive},
 			&domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanPro, LicenseExpiresAt: ptrTime(time.Now().Add(30 * 24 * time.Hour)), Active: true}, http.StatusOK},
 	}
 	for _, tc := range cases {
@@ -82,7 +82,7 @@ func TestFurnitureDefinitionsRequiresActiveLicense(t *testing.T) {
 }
 
 func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	modules := []domain.Module{
 		{
 			ID: "11111111-1111-1111-1111-111111111111", Code: "MOD-BASE-600", Name: "Base Cocina 600",
@@ -163,7 +163,7 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 }
 
 func TestFurnitureDefinitionsEmptyWorkshop(t *testing.T) {
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
 
@@ -187,7 +187,7 @@ func TestFurnitureDefinitionsEmptyWorkshop(t *testing.T) {
 }
 
 func TestFurnitureDefinitionsStoreErrorIs500(t *testing.T) {
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{getUserByEmail: u, listModulesErr: errors.New("db down")}
 	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
@@ -204,7 +204,7 @@ func TestFurnitureDefinitionsStoreErrorIs500(t *testing.T) {
 }
 
 func TestFurnitureDefinitionsCachesPerContentRevision(t *testing.T) {
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	modules := []domain.Module{{ID: "m1", Code: "M1", Name: "Módulo 1", WidthMm: 600, HeightMm: 720, DepthMm: 500}}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{getUserByEmail: u, listModules: modules}
@@ -254,7 +254,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 		t.Fatalf("hash password: %v", err)
 	}
 	u := &domain.User{
-		ID: "u1", Email: "u@example.com", Name: "U", Active: true,
+		ID: "u1", Email: "u@example.com", Name: "U", AccountStatus: domain.AccountStatusActive,
 		PasswordHash: hash}
 	server := &Server{
 		Store: &stubStore{
@@ -263,7 +263,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 				"u1": {{
 					Membership: domain.Membership{
 						OrganizationID: "org-1", UserID: "u1",
-						Roles: []domain.UserRole{domain.RoleUser}, Active: true,
+						Roles: []domain.UserRole{domain.RoleUser}, Status: domain.MembershipStatusActive,
 					},
 					Organization: domain.Organization{
 						ID: "org-1", Name: "T", Slug: "t",
@@ -312,7 +312,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 }
 
 func TestExtensionTokenIsReadOnly(t *testing.T) {
-	u := &domain.User{ID: "u1", Active: true}
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	token, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, furnitureTestSecret)
 

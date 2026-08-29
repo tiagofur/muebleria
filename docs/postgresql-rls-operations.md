@@ -72,6 +72,15 @@ connection. An absent organization is fail-closed; there is no runtime initial-
 organization fallback. Public invitation lookup is an exact-token,
 `SECURITY DEFINER` function and acceptance enters tenant scope before mutation.
 
+Migration `000095_identity_membership_lifecycle` replaces the mutable
+`users.active` and `memberships.active` authorities with explicit account and
+membership states. It also versions the inventory entries for `users`,
+`memberships`, and `invitations`. Public acceptance can lock only the invitation
+identified by the supplied token hash; the function fixes `search_path`, exposes
+no hash/list surface, and grants only `EXECUTE` to `granete_app`. Identity lookup
+then serializes on normalized email before User creation, so concurrent
+organization invitations cannot create duplicate global identities.
+
 ## Verification and monitoring
 
 ```bash
@@ -108,6 +117,11 @@ down migration removes only #449 policies/functions/indexes and runtime grants,
 preserves unrelated RLS objects, and intentionally keeps the externally managed
 login. Rollback is an emergency compatibility path,
 not permission to continue multi-tenant production without the barrier.
+
+For `000095`, take a restorable backup and stop application traffic before
+rollback. Its down migration refuses to collapse `left`, `delivered`, or
+`opened` history into legacy booleans/timestamps. Reconcile those rows explicitly
+or restore the backup; never bypass the guard by deleting lifecycle history.
 
 ## Coordination boundaries
 

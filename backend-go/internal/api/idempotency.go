@@ -3,6 +3,9 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +19,40 @@ import (
 )
 
 var validIdempotencyKey = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
+
+var sensitiveIdempotencyOperations = map[string]bool{
+	"org.create-invitation": true, "org.resend-invitation": true, "auth.accept-invitation": true,
+}
+
+func idempotencyReceiptCipher(secret string) (func([]byte) ([]byte, error), func([]byte) ([]byte, error), error) {
+	key := sha256.Sum256([]byte("granete:idempotency-receipt:v1:" + secret))
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, err
+	}
+	seal := func(plain []byte) ([]byte, error) {
+		nonce := make([]byte, gcm.NonceSize())
+		if _, err := cryptorand.Read(nonce); err != nil {
+			return nil, err
+		}
+		return append([]byte("gcm1:"), gcm.Seal(nonce, nonce, plain, nil)...), nil
+	}
+	open := func(sealed []byte) ([]byte, error) {
+		if !bytes.HasPrefix(sealed, []byte("gcm1:")) {
+			return nil, errors.New("sensitive idempotency receipt is not encrypted")
+		}
+		payload := sealed[5:]
+		if len(payload) < gcm.NonceSize() {
+			return nil, errors.New("invalid sensitive idempotency receipt")
+		}
+		return gcm.Open(nil, payload[:gcm.NonceSize()], payload[gcm.NonceSize():], nil)
+	}
+	return seal, open, nil
+}
 
 type durableIdempotencyStore interface {
 	ExecuteIdempotent(context.Context, storage.IdempotencyRequest, func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error)
@@ -87,7 +124,44 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			ActorUserID:    actorID,
 			OrganizationID: org,
 		}
+		if sensitiveIdempotencyOperations[operation] {
+			seal, open, cipherErr := idempotencyReceiptCipher(s.JWTSecret)
+			if cipherErr != nil {
+				respondWithInternalError(w, cipherErr, "idempotency receipt cipher")
+				return
+			}
+			request.SealBody, request.OpenBody = seal, open
+		}
+		if operation == "auth.accept-invitation" {
+			if recorder, ok := s.Store.(interface {
+				RecordInvitationAcceptanceFailure(context.Context, string, string, string) error
+			}); ok {
+				var payload struct {
+					Token string `json:"token"`
+				}
+				if json.Unmarshal(body, &payload) == nil && payload.Token != "" {
+					tokenHash := hashInvitationToken(payload.Token)
+					request.AfterRollback = func(ctx context.Context, response storage.IdempotencyResponse) error {
+						var apiErr openapi.ApiError
+						reason := "rejected"
+						if json.Unmarshal(response.Body, &apiErr) == nil && apiErr.Code != "" {
+							reason = string(apiErr.Code)
+						}
+						return recorder.RecordInvitationAcceptanceFailure(ctx, tokenHash, reason, clientIP(r))
+					}
+				}
+			}
+		}
 		response, replayed, err := store.ExecuteIdempotent(r.Context(), request, func(ctx context.Context) (storage.IdempotencyResponse, error) {
+			if claims != nil {
+				if setter, ok := s.Store.(tenantActorSetter); ok {
+					var setErr error
+					ctx, setErr = setter.SetTenantActor(ctx, storage.TenantActor{OrganizationID: claims.OrgID, UserID: claims.UserID})
+					if setErr != nil {
+						return storage.IdempotencyResponse{}, setErr
+					}
+				}
+			}
 			cw := &captureWriter{header: make(http.Header)}
 			cw.header.Set(requestIDHeader, RequestIDFromContext(r.Context()))
 			next.ServeHTTP(cw, r.WithContext(ctx))
@@ -101,6 +175,9 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			respondWithInternalError(w, err, "durable idempotency")
 			return
 		}
+		// Stores may return a receipt shared with another concurrent replay.
+		// Never mutate its header map while decorating this response.
+		response.Header = response.Header.Clone()
 		if replayed {
 			response.Header.Set("Idempotency-Replayed", "true")
 		}

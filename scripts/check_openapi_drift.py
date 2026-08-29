@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory() as tmp:
     def change_operation_id(spec): spec["paths"]["/auth/login"]["post"]["operationId"]="loginChanged"
     def change_verb(spec): spec["paths"]["/auth/login"]["put"]=spec["paths"]["/auth/login"].pop("post")
     def change_path(spec): spec["paths"]["/auth/session-login"]=spec["paths"].pop("/auth/login")
-    def change_request(spec): spec["paths"]["/auth/login"]["post"]["requestBody"]["content"]["application/json"]["schema"]={"$ref":"#/components/schemas/RegisterRequest"}
+    def change_request(spec): spec["paths"]["/auth/login"]["post"]["requestBody"]["content"]["application/json"]["schema"]={"$ref":"#/components/schemas/AcceptInvitationRequest"}
     def change_response(spec): spec["paths"]["/auth/login"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]={"$ref":"#/components/schemas/MeResponse"}
     for name,mutate in (
         ("operation-id",change_operation_id),("verb",change_verb),("path",change_path),
@@ -36,13 +36,70 @@ with tempfile.TemporaryDirectory() as tmp:
 
 spec=json.loads(spec_path.read_text())
 patch_headers=spec["paths"]["/platform/organizations/{id}"]["patch"]["responses"]["200"].get("headers",{})
-revoke=spec["paths"]["/org/invitations/{id}"]["delete"]
-revoke_headers=revoke["responses"]["200"].get("headers",{})
-revoke_parameters=[p.get("$ref",p.get("name")) for p in revoke.get("parameters",[])]
-if "ETag" not in patch_headers or "ETag" not in revoke_headers:
-    raise RuntimeError("versioned organization and invitation mutations must declare response ETag")
-if "#/components/parameters/IfMatch" not in revoke_parameters or "#/components/parameters/IdempotencyKey" not in revoke_parameters:
-    raise RuntimeError("invitation revoke must declare If-Match and Idempotency-Key")
+for path in ("/org/invitations/{invitationId}:resend", "/org/invitations/{invitationId}:revoke"):
+    operation=spec["paths"][path]["post"]
+    headers=operation["responses"]["200"].get("headers",{})
+    operation_parameters=[p.get("$ref",p.get("name")) for p in operation.get("parameters",[])]
+    if "ETag" not in headers:
+        raise RuntimeError(f"versioned invitation command {path} must declare response ETag")
+    if "#/components/parameters/IfMatch" not in operation_parameters or "#/components/parameters/IdempotencyKey" not in operation_parameters:
+        raise RuntimeError(f"invitation command {path} must declare If-Match and Idempotency-Key")
+for path in ("/org/memberships/{membershipId}/roles", "/org/memberships/{membershipId}/status"):
+    operation=spec["paths"][path]["put"]
+    headers=operation["responses"]["200"].get("headers",{})
+    operation_parameters=[p.get("$ref",p.get("name")) for p in operation.get("parameters",[])]
+    if "ETag" not in headers:
+        raise RuntimeError(f"versioned membership command {path} must declare response ETag")
+    if "#/components/parameters/IfMatch" not in operation_parameters or "#/components/parameters/IdempotencyKey" not in operation_parameters:
+        raise RuntimeError(f"membership command {path} must declare If-Match and Idempotency-Key")
+if "ETag" not in patch_headers:
+    raise RuntimeError("versioned organization mutations must declare response ETag")
+
+required_paths={
+    "/org/memberships",
+    "/org/invitations",
+    "/org/invitations/{invitationId}:resend",
+    "/org/invitations/{invitationId}:revoke",
+    "/auth/invitations:accept",
+    "/platform/users/{userId}:set-account-status",
+}
+missing_paths=required_paths-set(spec["paths"])
+if missing_paths:
+    raise RuntimeError(f"canonical identity lifecycle paths are missing: {sorted(missing_paths)}")
+legacy_paths={
+    "/auth/register",
+    "/auth/accept-invitation",
+    "/org/team",
+    "/org/members/{userId}/roles",
+    "/org/members/{userId}/active",
+    "/org/invitations/{id}",
+}
+published_legacy=legacy_paths & set(spec["paths"])
+if published_legacy:
+    raise RuntimeError(f"legacy identity lifecycle paths remain published: {sorted(published_legacy)}")
+
+schemas=spec["components"]["schemas"]
+invitation_statuses=schemas["InvitationStatus"].get("enum",[])
+expected_invitation_statuses=["pending","delivered","opened","accepted","expired","revoked"]
+if invitation_statuses != expected_invitation_statuses:
+    raise RuntimeError(f"InvitationStatus must preserve the canonical lifecycle: {expected_invitation_statuses}")
+for schema_name,legacy_fields in (
+    ("User", {"active"}),
+    ("Membership", {"active"}),
+    ("TeamMember", {"account_active", "membership_active", "member_since"}),
+):
+    published=legacy_fields & set(schemas[schema_name]["properties"])
+    if published:
+        raise RuntimeError(f"{schema_name} still publishes legacy lifecycle fields: {sorted(published)}")
+serialized_spec=json.dumps(spec)
+if "token_hash" in serialized_spec:
+    raise RuntimeError("OpenAPI must never publish invitation token hashes")
+account_command=spec["paths"]["/platform/users/{userId}:set-account-status"]["post"]
+account_parameters=[p.get("$ref",p.get("name")) for p in account_command.get("parameters",[])]
+if "#/components/parameters/IdempotencyKey" not in account_parameters:
+    raise RuntimeError("Platform account lifecycle command must declare Idempotency-Key")
+if account_command["requestBody"]["content"]["application/json"]["schema"].get("$ref") != "#/components/schemas/UpdateAccountStatusRequest":
+    raise RuntimeError("Platform account lifecycle command must use the generated status request")
 if "/factory/organizations" not in spec["paths"]:
     raise RuntimeError("current factory organizations boundary is missing from OpenAPI")
 

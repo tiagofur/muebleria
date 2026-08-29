@@ -221,7 +221,7 @@ type staleInvitationStore struct {
 	calls   int
 }
 
-func (s *staleInvitationStore) RevokeInvitation(_ context.Context, _, id string, expectedVersion int64) (*storage.Invitation, error) {
+func (s *staleInvitationStore) RevokeInvitation(_ context.Context, _, id, _, _ string, expectedVersion int64) (*storage.Invitation, error) {
 	s.calls++
 	if expectedVersion != s.version {
 		return nil, storage.ErrVersionConflict
@@ -238,8 +238,8 @@ func TestStaleInvitationRevokeReturnsTyped412WithoutOverwrite(t *testing.T) {
 		version:   2,
 	}
 	server := NewServer(store, "secret", nil, 1, 1)
-	req := withOrgClaims(httptest.NewRequest(http.MethodDelete, "/api/org/invitations/inv-1", nil), "actor", "org-1", string(domain.RoleAdmin))
-	req.SetPathValue("id", "inv-1")
+	req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/org/invitations/inv-1:revoke", bytes.NewBufferString(`{"reason":"security"}`)), "actor", "org-1", string(domain.RoleAdmin))
+	req.SetPathValue("invitationId", "inv-1")
 	req.Header.Set("If-Match", `"v1"`)
 	rec := httptest.NewRecorder()
 	server.HandleOrgRevokeInvitation(rec, req)
@@ -274,8 +274,8 @@ func TestInvitationRevokeReplaysWithoutSecondMutation(t *testing.T) {
 	server := NewServer(store, "secret", nil, 1, 1)
 	handler := server.RequireIdempotency("org.revoke-invitation", http.HandlerFunc(server.HandleOrgRevokeInvitation))
 	do := func() *httptest.ResponseRecorder {
-		req := withOrgClaims(httptest.NewRequest(http.MethodDelete, "/api/org/invitations/inv-1", nil), "actor", "org-1", string(domain.RoleAdmin))
-		req.SetPathValue("id", "inv-1")
+		req := withOrgClaims(httptest.NewRequest(http.MethodPost, "/api/org/invitations/inv-1:revoke", bytes.NewBufferString(`{"reason":"security"}`)), "actor", "org-1", string(domain.RoleAdmin))
+		req.SetPathValue("invitationId", "inv-1")
 		req.Header.Set("If-Match", `"v1"`)
 		req.Header.Set("Idempotency-Key", "invitation-revoke-key")
 		rec := httptest.NewRecorder()
@@ -305,7 +305,7 @@ func (s *staleMembershipStore) UpdateMembershipRolesByOrg(_ context.Context, _, 
 	}
 	s.roles = append([]domain.UserRole(nil), roles...)
 	s.version++
-	return &storage.OrgTeamMember{Roles: s.roles, Version: s.version, Active: true}, nil
+	return &storage.OrgTeamMember{Roles: s.roles, Version: s.version, Status: domain.MembershipStatusActive}, nil
 }
 
 func TestStaleMembershipWriteReturnsTyped412WithoutOverwrite(t *testing.T) {
@@ -317,7 +317,7 @@ func TestStaleMembershipWriteReturnsTyped412WithoutOverwrite(t *testing.T) {
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/org/members/u-1/roles", bytes.NewBufferString(`{"roles":["admin"]}`)), "actor", string(domain.RoleAdmin))
 	claims := claimsFromRequest(req)
 	claims.OrgID = "org-1"
-	req.SetPathValue("userId", "u-1")
+	req.SetPathValue("membershipId", "u-1")
 	req.Header.Set("If-Match", `"v1"`)
 	rec := httptest.NewRecorder()
 	server.HandleOrgMemberRoles(rec, req)
@@ -459,6 +459,69 @@ func TestPlatformOrganizationRequiresGeneratedFields(t *testing.T) {
 			var payload openapi.ApiError
 			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil || payload.Code != openapi.ApiErrorCodeBadRequest {
 				t.Fatalf("single typed error required: payload=%+v err=%v body=%s", payload, err, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSensitiveIdempotencyReceiptCipherDoesNotPersistPlaintext(t *testing.T) {
+	seal, open, err := idempotencyReceiptCipher("stable-test-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := []byte(`{"invitation_token":"raw-secret-token"}`)
+	sealed, err := seal(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(sealed, []byte("raw-secret-token")) {
+		t.Fatal("sealed receipt contains raw token")
+	}
+	got, err := open(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, plain) {
+		t.Fatalf("round trip=%q", got)
+	}
+}
+
+type invitationAcceptErrorStore struct {
+	stubStore
+	err error
+}
+
+func (s *invitationAcceptErrorStore) AcceptInvitation(context.Context, storage.AcceptInvitationCommand, func(string, string) bool, func(string) error) (*storage.AcceptInvitationResult, error) {
+	return nil, s.err
+}
+
+func TestInvitationAcceptanceTypedLifecycleErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		status int
+		code   openapi.ApiErrorCode
+	}{
+		{"expired", storage.ErrInvitationExpired, http.StatusGone, openapi.ApiErrorCodeInvitationExpired},
+		{"revoked", storage.ErrInvitationRevoked, http.StatusGone, openapi.ApiErrorCodeInvitationRevoked},
+		{"used", storage.ErrInvitationAlreadyUsed, http.StatusConflict, openapi.ApiErrorCodeInvitationAlreadyUsed},
+		{"rotated", storage.ErrInvitationTokenRotated, http.StatusGone, openapi.ApiErrorCodeInvitationTokenRotated},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := NewServer(&invitationAcceptErrorStore{err: tc.err}, "secret", nil, 1, 1)
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/invitations:accept", bytes.NewBufferString(`{"token":"valid-looking-token","password":"secret123"}`))
+			rec := httptest.NewRecorder()
+			srv.HandleAcceptInvitation(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var got openapi.ApiError
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Code != tc.code {
+				t.Fatalf("code=%s", got.Code)
 			}
 		})
 	}

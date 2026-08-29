@@ -96,7 +96,7 @@ func TestPilotReadiness_ProjectOwnershipCannotTargetForeignOrg(t *testing.T) {
 	}
 
 	var updated struct {
-		SalesOrganization       string `json:"sales_organization_id"`
+		SalesOrganization         string `json:"sales_organization_id"`
 		ManufacturingOrganization string `json:"manufacturing_organization_id"`
 	}
 	fx.decode(t, http.MethodPut, "/api/projects/"+proj.ID, fx.a.admin.token, map[string]any{

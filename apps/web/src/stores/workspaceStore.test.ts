@@ -46,9 +46,14 @@ function memoryStorage(initial: Record<string, string> = {}): Storage {
 const AUTH_USER = {
   id: 'user-1',
   email: 'admin@test',
+  normalized_email: 'admin@test',
   name: 'Admin Test',
-  active: true,
+  account_status: 'active',
+  email_verified_at: null,
+  last_login_at: null,
   platform_admin: false,
+  created_at: '2026-08-29T00:00:00Z',
+  updated_at: '2026-08-29T00:00:00Z',
 } as const;
 
 function jsonOk(body: unknown, init: ResponseInit = {}): Response {
@@ -256,31 +261,6 @@ describe('workspaceStore — login', () => {
   });
 });
 
-describe('workspaceStore — register', () => {
-  it('on success: clears registerError, no session change', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonOk({ message: 'ok' }));
-    const store = createWorkspaceStore({ deps: { fetchImpl } });
-
-    await store.getState().register('Name', 'a@b', 'pw');
-
-    expect(store.getState().registerError).toBeNull();
-    expect(store.getState().registerLoading).toBe(false);
-    expect(store.getState().session).toBeNull(); // still pending admin approval
-  });
-
-  it('on 409: rethrows with friendly message', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonError(409, { error: 'exists' }));
-    const store = createWorkspaceStore({ deps: { fetchImpl } });
-
-    await expect(
-      store.getState().register('Name', 'a@b', 'pw'),
-    ).rejects.toThrow('Ese email ya está registrado');
-    expect(store.getState().registerError).toBe('Ese email ya está registrado');
-  });
-});
-
 describe('workspaceStore — logout', () => {
   it('clears session, errors, workspace, and storages', () => {
     const store = createWorkspaceStore();
@@ -305,19 +285,6 @@ describe('workspaceStore — logout', () => {
     expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
     expect(globalThis.localStorage.getItem(USER_STORAGE_KEY)).toBeNull();
     expect(globalThis.sessionStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
-  });
-});
-
-describe('workspaceStore — setAuthGate', () => {
-  it('toggles between login and register', () => {
-    const store = createWorkspaceStore();
-    expect(store.getState().authGate).toBe('login');
-
-    store.getState().setAuthGate('register');
-    expect(store.getState().authGate).toBe('register');
-
-    store.getState().setAuthGate('login');
-    expect(store.getState().authGate).toBe('login');
   });
 });
 

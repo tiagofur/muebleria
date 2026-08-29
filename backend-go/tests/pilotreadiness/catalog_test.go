@@ -47,7 +47,7 @@ func TestPilotReadiness_CatalogCloneIndependence(t *testing.T) {
 		"name":         "Tablero Renombrado Alfa",
 		"manufacturer": "Maderas Fixture",
 		"width_mm":     2750, "length_mm": 1850, "thickness_mm": 18,
-		"board_price": sharedA.BoardPrice + 321.75,
+		"board_price":   sharedA.BoardPrice + 321.75,
 		"waste_percent": 8, "cost_per_m2": 25.5,
 		"grain_default": true, "preview_color": "#a9714b",
 	}

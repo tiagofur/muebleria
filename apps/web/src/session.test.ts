@@ -8,7 +8,6 @@ import {
   loginRequest,
   readAuthUser,
   readSessionMode,
-  registerRequest,
   storeAuthToken,
   storeAuthUser,
   writeSessionMode,
@@ -65,7 +64,7 @@ describe('session helpers', () => {
         email: 'a@b.com',
         name: 'A',
         role: 'admin',
-        active: true,
+        account_status: 'active',
       }),
     });
     writeSessionMode('auth', session);
@@ -90,7 +89,7 @@ describe('session helpers', () => {
         email: 'tiagofur@gmail.com',
         name: 'Tiago',
         role: 'admin',
-        active: true,
+        account_status: 'active',
       },
       local,
     );
@@ -99,7 +98,7 @@ describe('session helpers', () => {
       email: 'tiagofur@gmail.com',
       name: 'Tiago',
       role: 'admin',
-      active: true,
+      account_status: 'active',
     });
   });
 
@@ -121,8 +120,13 @@ describe('loginRequest', () => {
             id: '1',
             email: 'a@b.com',
             name: 'Ana',
-            active: true,
+            normalized_email: 'a@b.com',
+            account_status: 'active',
+            email_verified_at: null,
+            last_login_at: null,
             platform_admin: false,
+            created_at: '2026-08-29T00:00:00Z',
+            updated_at: '2026-08-29T00:00:00Z',
           },
           license: { plan: 'none', status: 'none' },
           roles: ['admin'],
@@ -162,22 +166,22 @@ describe('loginRequest', () => {
     ).rejects.toThrow('Email o contraseña incorrectos');
   });
 
-  it('maps 403 pending approval to message from body', async () => {
+  it('maps a disabled account to the safe server message', async () => {
     const fetchImpl = vi.fn(
       async () =>
         new Response(
           JSON.stringify({
-            code: 'FORBIDDEN', message: 'Tu cuenta está pendiente de aprobación por el administrador',
+            code: 'ACCOUNT_DISABLED', message: 'Credenciales inválidas',
             fieldErrors: {}, requestId: 'request-403', retryable: false, details: {},
           }),
-          { status: 403, headers: { 'Content-Type': 'application/json' } },
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
         ),
     );
     await expect(
-      loginRequest('pending@b.com', 'x', {
+      loginRequest('disabled@b.com', 'x', {
         fetchImpl: fetchImpl as unknown as typeof fetch,
       }),
-    ).rejects.toThrow('pendiente de aprobación');
+    ).rejects.toThrow('Email o contraseña incorrectos');
   });
 
   it('maps network failure to connection error', async () => {
@@ -192,51 +196,13 @@ describe('loginRequest', () => {
   });
 });
 
-describe('registerRequest', () => {
-  it('POSTs name/email/password and resolves on 201', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ message: 'ok' }), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-    );
-    await registerRequest('Nueva', 'n@b.com', 'secret1', {
-      baseUrl: 'http://localhost:8080/api',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:8080/api/auth/register',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          name: 'Nueva',
-          email: 'n@b.com',
-          password: 'secret1',
-        }),
-      }),
-    );
-  });
-
-  it('maps 409 to email already registered', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
-      code: 'CONFLICT', message: 'duplicate', fieldErrors: {}, requestId: 'request-register-409', retryable: false, details: {},
-    }), { status: 409, headers: { 'Content-Type': 'application/json' } }));
-    await expect(
-      registerRequest('X', 'x@b.com', 'secret1', {
-        fetchImpl: fetchImpl as unknown as typeof fetch,
-      }),
-    ).rejects.toThrow('Ese email ya está registrado');
-  });
-});
-
 describe('selectOrgRequest', () => {
   it('POSTs organization_id to /auth/select-org with Bearer token', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
           token: 'jwt-org-scoped',
-          user: { id: '1', email: 'a@b.com', name: 'Ana', active: true, platform_admin: false },
+          user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
           license: { plan: 'none', status: 'none' },
           organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', license: { plan: 'none', status: 'none' } },
           roles: ['admin'],
@@ -268,7 +234,7 @@ describe('meRequest', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response(
         JSON.stringify({
-          user: { id: '1', email: 'a@b.com', name: 'Ana', active: true, platform_admin: false },
+          user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
           roles: ['admin'],
           organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', license: { plan: 'none', status: 'none' } },
           transport: 'web',
