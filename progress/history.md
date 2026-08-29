@@ -1741,3 +1741,26 @@ Verificación final: `go test ./...`, `pnpm openapi:check`, `pnpm typecheck`,
 `pnpm test`, `./init.sh`, `scripts/pilot-gate.sh --fresh-container`, compose config,
 shell syntax y `git diff --check`, todos verdes. Implementación en `252ba9b` y
 correcciones de seguridad en `04c07ca`.
+
+---
+
+## F194 — Invitation-first identity and membership lifecycle (#450) — 2026-08-29
+
+Rama `feat/450-invitation-membership-lifecycle`, PR #480. Se separaron los
+lifecycles de User, Membership e Invitation mediante migration 000095, OpenAPI
+generado, transacciones/idempotencia/auditoría durable, RLS, onboarding
+invitation-first y superficies React tenant-safe. Se retiraron registro público,
+aprobación global y bridges runtime por `userId`/`InitialOrganizationID`.
+
+La primera revisión independiente pidió cuatro P1: aceptación HTTP/PostgreSQL
+con replay/reactivación/concurrencia, negative proofs SQL directos de
+memberships/invitations, corrección de `docs/design.md` y gate UI completo. El
+head `c6330548` cerró los cuatro. El fix de idempotencia restaura el scope
+anónimo del receipt antes de finalizarlo después de que la aceptación cambia a
+la identidad/org invitada. La segunda revisión quedó **APPROVED** en
+`progress/review_F194.md`.
+
+Verificación final: `./init.sh`, OpenAPI, TypeScript, Go con race serial,
+PostgreSQL fresh/upgrade/rollback/RLS, pilot gate efímero, detector Impeccable,
+Playwright 6/6 a 390/768/1280, screenshots/no-overflow, CI remoto y readback de
+rama.
