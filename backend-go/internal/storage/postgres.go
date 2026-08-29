@@ -32,6 +32,21 @@ func (s *PostgresStore) beginOrUseTx(ctx context.Context) (pgx.Tx, bool, error) 
 	return tx, true, err
 }
 
+// borrowedTx lets legacy repository transactions participate in the request's
+// tenant transaction. Their Commit/Rollback become no-ops; the application
+// boundary remains the sole owner of the real transaction.
+type borrowedTx struct{ pgx.Tx }
+
+func (borrowedTx) Commit(context.Context) error   { return nil }
+func (borrowedTx) Rollback(context.Context) error { return nil }
+
+func (s *PostgresStore) beginTx(ctx context.Context) (pgx.Tx, error) {
+	if tx := transactionFromContext(ctx); tx != nil {
+		return borrowedTx{Tx: tx}, nil
+	}
+	return s.Pool.Begin(ctx)
+}
+
 type PostgresStore struct {
 	Pool *pgxpool.Pool
 }

@@ -27,7 +27,6 @@ type Store interface {
 	// ListUsersByOrganization scopes the directory to the context's
 	// organization (ADR-0005: org admins never see other orgs' users).
 	ListUsersByOrganization(ctx context.Context) ([]domain.User, error)
-	ApproveUser(ctx context.Context, id string) error
 	RejectUser(ctx context.Context, id string) error
 	// DeleteOrphanInvitedUser cleans up a user created by an invitation
 	// accept that failed before granting any membership.
@@ -66,7 +65,7 @@ type Store interface {
 	ListInvitations(ctx context.Context, organizationID string) ([]storage.Invitation, error)
 	RevokeInvitation(ctx context.Context, organizationID, id string, expectedVersion int64) (*storage.Invitation, error)
 	GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*storage.OpenInvitation, error)
-	AcceptInvitationTx(ctx context.Context, invitationID, userID string) error
+	AcceptInvitationTx(ctx context.Context, invitationID, organizationID, userID string) error
 	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error)
 	GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error)
 

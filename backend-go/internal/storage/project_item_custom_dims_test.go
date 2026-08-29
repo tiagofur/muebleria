@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func TestProjectItem_CustomDimsRoundTrip(t *testing.T) {
 	store, pool := connectStore(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	customer := &domain.Customer{
 		ID:     uuidv4(t),

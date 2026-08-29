@@ -506,9 +506,9 @@ func TestIsolation_ProjectMutators(t *testing.T) {
 	ctx := context.Background()
 
 	type mutatorCase struct {
-		name    string
+		name     string
 		notFound error
-		mutate  func(org string, project string) (bool, error)
+		mutate   func(org string, project string) (bool, error)
 	}
 
 	notCalled := func(t *testing.T, called bool) {

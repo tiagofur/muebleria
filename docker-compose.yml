@@ -10,11 +10,13 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: muebles
+      APP_DATABASE_PASSWORD: granete_app
     ports:
       - '5445:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend-go/db/migration/000001_init_schema.up.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/010-app-role.sh:ro
 
 volumes:
   postgres_data:

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -33,6 +34,16 @@ type MembershipLookup interface {
 	// open and unexpired (ADR-0005 §5).
 	GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error)
 }
+
+type tenantTransactionRunner interface {
+	WithinTenantTx(context.Context, storage.TenantActor, func(context.Context) error) error
+}
+
+type tenantActorSetter interface {
+	SetTenantActor(context.Context, storage.TenantActor) (context.Context, error)
+}
+
+var errTenantHandlerFailure = errors.New("tenant handler failed")
 
 // CORSMiddleware only allows origins present in the allowlist. The matched
 // origin is reflected per request; non-matching origins get no Allow-Origin
@@ -101,94 +112,144 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 				return
 			}
 
-			// Re-read active/platform flags from DB so deactivation and staff
-			// changes take effect immediately instead of waiting for token
-			// expiry (issue #16). users.role is deprecated: memberships are
-			// the source of truth for roles (ADR-0004).
-			if users != nil {
-				u, err := users.GetUserByID(r.Context(), claims.UserID)
-				if err != nil || u == nil || !u.Active {
-					respondWithError(w, http.StatusUnauthorized, "invalid token")
+			actor := storage.TenantActor{
+				OrganizationID: claims.OrgID,
+				UserID:         claims.UserID,
+			}
+			if claims.Support != nil {
+				actor.SupportSessionID = claims.Support.SessionID
+			}
+			if runner, ok := users.(tenantTransactionRunner); ok {
+				buffer := &captureWriter{header: make(http.Header)}
+				err := runner.WithinTenantTx(r.Context(), actor, func(ctx context.Context) error {
+					serveAuthenticatedRequest(buffer, r.WithContext(ctx), next, users, claims, actor)
+					if buffer.status >= http.StatusInternalServerError {
+						return errTenantHandlerFailure
+					}
+					return nil
+				})
+				if err != nil {
+					respondWithInternalError(w, err, "tenant transaction")
 					return
 				}
-				claims.Email = u.Email
-				claims.PlatformAdmin = u.PlatformAdmin
-
-				// Live organization scope: the token names the organization,
-				// but membership roles and the organization's active flag are
-				// re-read from the DB — a revoked membership or a suspended
-				// organization cuts access on the next request, not at expiry.
-				if claims.Support != nil {
-					// Support session: platform staff acting as admin of one
-					// organization. The session row is re-validated per
-					// request — logout/expiry cut access immediately. The
-					// actor stays the platform admin (UserID/Email claims).
-					if !claims.PlatformAdmin {
-						respondWithError(w, http.StatusUnauthorized, "invalid token")
-						return
-					}
-					ss, err := users.GetOpenSupportSession(r.Context(), claims.Support.SessionID)
-					if err != nil || ss == nil ||
-						ss.OrganizationID != claims.OrgID ||
-						ss.PlatformAdminUserID != claims.UserID {
-						respondWithError(w, http.StatusUnauthorized, "invalid token")
-						return
-					}
-					claims.Roles = []string{string(domain.RoleAdmin)}
-					claims.Role = string(domain.RoleAdmin)
-				} else if claims.OrgID != "" {
-					m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
-					if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
-						respondWithError(w, http.StatusUnauthorized, "invalid token")
-						return
-					}
-					roles := make([]string, len(m.Roles))
-					for i, r := range m.Roles {
-						roles[i] = string(r)
-					}
-					claims.Roles = roles
-					claims.Role = auth.PrimaryRole(roles)
-				} else {
-					// Org-less tokens carry NO business scope and NO roles
-					// (fail-closed, ADR-0005): platform staff use the console
-					// routes only; everyone else must select an organization
-					// before any data access (enforced below).
-					claims.Roles = nil
-					claims.Role = ""
+				for key, values := range buffer.header {
+					w.Header()[key] = append([]string(nil), values...)
 				}
-			}
-
-			// Extension tokens are read-only: a long-lived SketchUp session token
-			// must not be able to mutate workshop data even if leaked. Refresh
-			// stays open so the extension can renew before expiry.
-			if claims.Client == auth.ExtensionClient &&
-				r.Method != http.MethodGet &&
-				!(r.Method == http.MethodPost && r.URL.Path == "/api/auth/refresh") {
-				respondWithError(w, http.StatusForbidden, "el token de la extensión es de solo lectura")
+				status := buffer.status
+				if status == 0 {
+					status = http.StatusOK
+				}
+				w.WriteHeader(status)
+				_, _ = w.Write(buffer.body.Bytes())
 				return
 			}
 
-			// Business data requires an explicit organization scope (ADR-0005
-			// fail-closed): org-less tokens (platform staff between support
-			// sessions, users mid org-selection) may only reach the platform
-			// console and auth endpoints. Without this gate the storage layer's
-			// transitional initial-org fallback would expose the initial
-			// organization's data to an unscoped request.
-			if claims.OrgID == "" &&
-				!strings.HasPrefix(r.URL.Path, "/api/platform/") &&
-				!strings.HasPrefix(r.URL.Path, "/api/auth/") {
-				respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), UserContextKey, claims)
-			// Propagate the organization scope to the storage layer so reads
-			// and writes are filtered without changing handler signatures
-			// (ADR-0004 row-level isolation).
-			ctx = storage.WithOrgCtx(ctx, claims.OrgID)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			serveAuthenticatedRequest(w, r, next, users, claims, actor)
 		})
 	}
+}
+
+func serveAuthenticatedRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	next http.Handler,
+	users MembershipLookup,
+	claims *auth.Claims,
+	actor storage.TenantActor,
+) {
+
+	// Re-read active/platform flags from DB so deactivation and staff
+	// changes take effect immediately instead of waiting for token
+	// expiry (issue #16). users.role is deprecated: memberships are
+	// the source of truth for roles (ADR-0004).
+	if users != nil {
+		u, err := users.GetUserByID(r.Context(), claims.UserID)
+		if err != nil || u == nil || !u.Active {
+			respondWithError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		claims.Email = u.Email
+		claims.PlatformAdmin = u.PlatformAdmin
+
+		// Live organization scope: the token names the organization,
+		// but membership roles and the organization's active flag are
+		// re-read from the DB — a revoked membership or a suspended
+		// organization cuts access on the next request, not at expiry.
+		if claims.Support != nil {
+			// Support session: platform staff acting as admin of one
+			// organization. The session row is re-validated per
+			// request — logout/expiry cut access immediately. The
+			// actor stays the platform admin (UserID/Email claims).
+			if !claims.PlatformAdmin {
+				respondWithError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			ss, err := users.GetOpenSupportSession(r.Context(), claims.Support.SessionID)
+			if err != nil || ss == nil ||
+				ss.OrganizationID != claims.OrgID ||
+				ss.PlatformAdminUserID != claims.UserID {
+				respondWithError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			claims.Roles = []string{string(domain.RoleAdmin)}
+			claims.Role = string(domain.RoleAdmin)
+		} else if claims.OrgID != "" {
+			m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
+			if err != nil || m == nil || !m.Active || !m.Organization.Active || len(m.Roles) == 0 {
+				respondWithError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			roles := make([]string, len(m.Roles))
+			for i, r := range m.Roles {
+				roles[i] = string(r)
+			}
+			claims.Roles = roles
+			claims.Role = auth.PrimaryRole(roles)
+			actor.MembershipID = m.ID
+			if setter, ok := users.(tenantActorSetter); ok {
+				ctx, err := setter.SetTenantActor(r.Context(), actor)
+				if err != nil {
+					respondWithInternalError(w, err, "tenant actor")
+					return
+				}
+				r = r.WithContext(ctx)
+			}
+		} else {
+			// Org-less tokens carry NO business scope and NO roles
+			// (fail-closed, ADR-0005): platform staff use the console
+			// routes only; everyone else must select an organization
+			// before any data access (enforced below).
+			claims.Roles = nil
+			claims.Role = ""
+		}
+	}
+
+	// Extension tokens are read-only: a long-lived SketchUp session token
+	// must not be able to mutate workshop data even if leaked. Refresh
+	// stays open so the extension can renew before expiry.
+	if claims.Client == auth.ExtensionClient &&
+		r.Method != http.MethodGet &&
+		!(r.Method == http.MethodPost && r.URL.Path == "/api/auth/refresh") {
+		respondWithError(w, http.StatusForbidden, "el token de la extensión es de solo lectura")
+		return
+	}
+
+	// Business data requires an explicit organization scope (ADR-0005
+	// fail-closed): org-less tokens (platform staff between support
+	// sessions, users mid org-selection) may only reach the platform
+	// console and auth endpoints. Without this gate the storage layer's
+	// database context would otherwise be empty and every RLS policy
+	// must remain fail-closed.
+	if claims.OrgID == "" &&
+		!strings.HasPrefix(r.URL.Path, "/api/platform/") &&
+		!strings.HasPrefix(r.URL.Path, "/api/auth/") {
+		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
+		return
+	}
+
+	ctx := context.WithValue(r.Context(), UserContextKey, claims)
+	ctx = storage.WithTenantActorCtx(ctx, actor)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // AdminMiddleware wraps AuthMiddleware and requires the live DB role to be admin.

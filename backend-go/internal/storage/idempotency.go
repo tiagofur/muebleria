@@ -15,8 +15,10 @@ import (
 const IdempotencyRetention = 24 * time.Hour
 
 type IdempotencyRequest struct {
-	ScopeKey    string
-	Fingerprint string
+	ScopeKey       string
+	Fingerprint    string
+	ActorUserID    string
+	OrganizationID string
 }
 
 type IdempotencyResponse struct {
@@ -45,11 +47,13 @@ func (s *PostgresStore) ExecuteIdempotent(
 	req IdempotencyRequest,
 	execute func(context.Context) (IdempotencyResponse, error),
 ) (IdempotencyResponse, bool, error) {
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	tx, owned, err := s.beginOrUseTx(ctx)
 	if err != nil {
 		return IdempotencyResponse{}, false, err
 	}
-	defer tx.Rollback(ctx)
+	if owned {
+		defer tx.Rollback(ctx)
+	}
 
 	// Cleanup is opportunistic; the predicate, not cleanup timing, defines the
 	// guaranteed retention boundary.
@@ -58,9 +62,12 @@ func (s *PostgresStore) ExecuteIdempotent(
 	}
 	commandStartedAt := time.Now()
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO api_idempotency_receipts (scope_key, fingerprint)
-		VALUES ($1, $2)
-		ON CONFLICT (scope_key) DO NOTHING`, req.ScopeKey, req.Fingerprint)
+		INSERT INTO api_idempotency_receipts (
+			scope_key, fingerprint, actor_user_id, organization_id
+		)
+		VALUES ($1, $2, NULLIF($3, '')::uuid, NULLIF($4, '')::uuid)
+		ON CONFLICT (scope_key) DO NOTHING`,
+		req.ScopeKey, req.Fingerprint, req.ActorUserID, req.OrganizationID)
 	if err != nil {
 		return IdempotencyResponse{}, false, err
 	}
@@ -86,8 +93,10 @@ func (s *PostgresStore) ExecuteIdempotent(
 		if err := json.Unmarshal(headersJSON, &header); err != nil {
 			return IdempotencyResponse{}, false, err
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return IdempotencyResponse{}, false, err
+		if owned {
+			if err := tx.Commit(ctx); err != nil {
+				return IdempotencyResponse{}, false, err
+			}
 		}
 		return IdempotencyResponse{Status: *status, Header: header, Body: body}, true, nil
 	}
@@ -126,8 +135,10 @@ func (s *PostgresStore) ExecuteIdempotent(
 		WHERE scope_key = $1`, req.ScopeKey, response.Status, headersJSON, response.Body); err != nil {
 		return IdempotencyResponse{}, false, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return IdempotencyResponse{}, false, err
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return IdempotencyResponse{}, false, err
+		}
 	}
 	return response, false, nil
 }

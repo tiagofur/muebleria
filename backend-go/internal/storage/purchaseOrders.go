@@ -15,7 +15,7 @@ import (
 // ─── Suppliers ─────────────────────────────────────────────────────────────
 
 func (s *PostgresStore) ListSuppliers(ctx context.Context) ([]domain.Supplier, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, name, contact_name, email, phone, notes, active, created_at, updated_at
 		FROM suppliers
 		WHERE organization_id = $1
@@ -42,7 +42,7 @@ func (s *PostgresStore) ListSuppliers(ctx context.Context) ([]domain.Supplier, e
 }
 
 func (s *PostgresStore) CreateSupplier(ctx context.Context, sp domain.Supplier) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO suppliers (id, name, contact_name, email, phone, notes, active, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, sp.ID, sp.Name, sp.ContactName, sp.Email, sp.Phone, sp.Notes, sp.Active, OrgFromCtx(ctx))
@@ -50,7 +50,7 @@ func (s *PostgresStore) CreateSupplier(ctx context.Context, sp domain.Supplier) 
 }
 
 func (s *PostgresStore) UpdateSupplier(ctx context.Context, sp domain.Supplier) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		UPDATE suppliers SET name = $2, contact_name = $3, email = $4, phone = $5,
 			notes = $6, active = $7, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND organization_id = $8
@@ -59,7 +59,7 @@ func (s *PostgresStore) UpdateSupplier(ctx context.Context, sp domain.Supplier) 
 }
 
 func (s *PostgresStore) DeactivateSupplier(ctx context.Context, id string) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		UPDATE suppliers SET active = false, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND organization_id = $2
 	`, id, OrgFromCtx(ctx))
@@ -88,7 +88,7 @@ func scanPurchaseOrderRow(rows pgx.Rows) (domain.PurchaseOrder, error) {
 }
 
 func (s *PostgresStore) ListPurchaseOrders(ctx context.Context) ([]domain.PurchaseOrder, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT `+poColumns+` FROM purchase_orders WHERE organization_id = $1 ORDER BY created_at DESC
 	`, OrgFromCtx(ctx))
 	if err != nil {
@@ -113,7 +113,7 @@ func (s *PostgresStore) ListPurchaseOrders(ctx context.Context) ([]domain.Purcha
 }
 
 func (s *PostgresStore) GetPurchaseOrderByID(ctx context.Context, id string) (*domain.PurchaseOrder, error) {
-	po, err := scanPurchaseOrder(s.Pool.QueryRow(ctx, `
+	po, err := scanPurchaseOrder(s.db(ctx).QueryRow(ctx, `
 		SELECT `+poColumns+` FROM purchase_orders WHERE id = $1 AND organization_id = $2
 	`, id, OrgFromCtx(ctx)))
 	if err != nil {
@@ -131,7 +131,7 @@ func (s *PostgresStore) GetPurchaseOrderByID(ctx context.Context, id string) (*d
 }
 
 func (s *PostgresStore) listPOItems(ctx context.Context, poID string) ([]domain.PurchaseOrderItem, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT kind, material_id, quantity, received_quantity, unit_cost, allocated_project_id::text
 		FROM purchase_order_items WHERE po_id = $1 AND organization_id = $2
 		ORDER BY kind, material_id
@@ -168,7 +168,7 @@ func (s *PostgresStore) UpdatePurchaseOrder(ctx context.Context, po domain.Purch
 }
 
 func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOrder, create bool) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (s *PostgresStore) upsertPOItems(ctx context.Context, po *domain.PurchaseOr
 
 // EmitPurchaseOrder advances borrador → emitida (items frozen).
 func (s *PostgresStore) EmitPurchaseOrder(ctx context.Context, id string) (domain.PurchaseOrder, error) {
-	po, err := scanPurchaseOrder(s.Pool.QueryRow(ctx, `
+	po, err := scanPurchaseOrder(s.db(ctx).QueryRow(ctx, `
 		UPDATE purchase_orders SET status = 'emitida', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = 'borrador' AND organization_id = $2
 		RETURNING `+poColumns+`
@@ -243,7 +243,7 @@ func (s *PostgresStore) EmitPurchaseOrder(ctx context.Context, id string) (domai
 
 // CancelPurchaseOrder advances borrador/emitida → cancelada.
 func (s *PostgresStore) CancelPurchaseOrder(ctx context.Context, id string) (domain.PurchaseOrder, error) {
-	po, err := scanPurchaseOrder(s.Pool.QueryRow(ctx, `
+	po, err := scanPurchaseOrder(s.db(ctx).QueryRow(ctx, `
 		UPDATE purchase_orders SET status = 'cancelada', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status IN ('borrador','emitida') AND organization_id = $2
 		RETURNING `+poColumns+`
@@ -267,7 +267,7 @@ func (s *PostgresStore) CancelPurchaseOrder(ctx context.Context, id string) (dom
 // (entrada, note "OC-<number>") + received_quantity += qty. When every item
 // reaches its quantity, the order becomes 'recibida' (received_at stamped).
 func (s *PostgresStore) ReceivePurchaseOrder(ctx context.Context, id string, lines []domain.PurchaseOrderItem, byUserID, byName string) (domain.PurchaseOrder, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return domain.PurchaseOrder{}, err
 	}

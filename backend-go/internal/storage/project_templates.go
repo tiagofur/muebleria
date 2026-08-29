@@ -25,7 +25,7 @@ func (s *PostgresStore) ListProjectTemplates(ctx context.Context) ([]domain.Proj
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (s *PostgresStore) GetProjectTemplateByID(ctx context.Context, id string) (
 		FROM project_templates
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	t, err := scanProjectTemplate(row)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (s *PostgresStore) CreateProjectTemplate(ctx context.Context, t domain.Proj
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING created_at, updated_at;
 	`
-	err = s.Pool.QueryRow(ctx, query,
+	err = s.db(ctx).QueryRow(ctx, query,
 		t.ID, t.Name, t.Currency, t.MarginFactor, t.LaborFixedCost,
 		choicesToJSONB(t.ProjectLevelChoices),
 		rawJSONB(t.MeasureDefaults),
@@ -103,7 +103,7 @@ func (s *PostgresStore) UpdateProjectTemplate(ctx context.Context, id string, t 
 		WHERE id = $11 AND organization_id = $12
 		RETURNING updated_at;
 	`
-	err = s.Pool.QueryRow(ctx, query,
+	err = s.db(ctx).QueryRow(ctx, query,
 		t.Name, t.Currency, t.MarginFactor, t.LaborFixedCost,
 		choicesToJSONB(t.ProjectLevelChoices),
 		rawJSONB(t.MeasureDefaults),
@@ -122,7 +122,7 @@ func (s *PostgresStore) UpdateProjectTemplate(ctx context.Context, id string, t 
 
 // DeleteProjectTemplate removes a template by id.
 func (s *PostgresStore) DeleteProjectTemplate(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM project_templates WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM project_templates WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

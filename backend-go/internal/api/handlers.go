@@ -81,6 +81,11 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 // but returns a generic message to the client. Internal error strings (DB driver text,
 // constraint names, etc.) must never reach the client (#5).
 func respondWithInternalError(w http.ResponseWriter, err error, op string) {
+	if total, denied := storage.RecordRLSDenial(err); denied {
+		slog.Warn("postgres authorization denied", "op", op, "sqlstate", "42501", "rls_denial_total", total, "request_id", requestIDFromWriter(w))
+		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
+		return
+	}
 	slog.Error("internal server error", "op", op, "error", err, "request_id", requestIDFromWriter(w))
 	respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
 }
@@ -1905,24 +1910,6 @@ func (s *Server) HandleAssignableOwners(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	respondWithJSON(w, http.StatusOK, out)
-}
-
-// HandleAdminUserApprove: PUT /api/admin/users/{id}/approve
-func (s *Server) HandleAdminUserApprove(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	id := r.PathValue("id")
-	if id == "" {
-		respondWithError(w, http.StatusBadRequest, "missing user id")
-		return
-	}
-	if err := s.Store.ApproveUser(r.Context(), id); err != nil {
-		respondWithInternalError(w, err, "handler")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "user approved"})
 }
 
 // HandleAdminUserRole: PUT /api/admin/users/{id}/role — legacy single-role

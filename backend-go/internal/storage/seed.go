@@ -145,7 +145,7 @@ var (
 // ensures plinth/zoclo catalog entities (option groups, component, demo modules).
 func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	var count int
-	err := s.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM material_boards`).Scan(&count)
+	err := s.db(ctx).QueryRow(ctx, `SELECT COUNT(*) FROM material_boards`).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("seed check: %w", err)
 	}
@@ -154,7 +154,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		return s.ensurePlinthCatalog(ctx)
 	}
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -566,7 +566,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 // ensurePlinthCatalog upserts zoclo option groups, profile hardware, component,
 // and demo modules. Safe on existing DBs (seed early-return path).
 func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ func mustPool(t *testing.T) (*pgxpool.Pool, *storage.PostgresStore) {
 	if url == "" {
 		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
 	}
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Skipf("no db: %v", err)
@@ -38,7 +38,7 @@ func mustPool(t *testing.T) (*pgxpool.Pool, *storage.PostgresStore) {
 // old INT column + CHECK (> 0) rejected the TS default 0.5 and seed value 0.
 func TestEdgeBand_FractionalThicknessRoundTrip(t *testing.T) {
 	pool, store := mustPool(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	cases := []float64{0.5, 0.8, 0, 2}
 	for i, thickness := range cases {
@@ -71,16 +71,16 @@ func TestEdgeBand_FractionalThicknessRoundTrip(t *testing.T) {
 // still referenced from a module's agregados JSONB.
 func TestAgregado_HardDeleteWithUseGuard(t *testing.T) {
 	pool, store := mustPool(t)
-	ctx := context.Background()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	a := domain.Agregado{
-		ID:        "10000000-0000-0000-0000-000000000001",
-		Code:      "TEST-AGG-F116",
-		Name:      "Test agregado F116",
-		WidthMm:   600,
-		HeightMm:  400,
-		DepthMm:   500,
-		Active:    true,
+		ID:       "10000000-0000-0000-0000-000000000001",
+		Code:     "TEST-AGG-F116",
+		Name:     "Test agregado F116",
+		WidthMm:  600,
+		HeightMm: 400,
+		DepthMm:  500,
+		Active:   true,
 	}
 	cleanup := func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM modules WHERE code = 'TEST-MOD-F116-AGG'`)

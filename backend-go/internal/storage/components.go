@@ -20,7 +20,7 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query components: %w", err)
 	}
@@ -79,7 +79,7 @@ func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domai
 	var notes *string
 	var lengthFormula, widthFormula *string
 	var xFormula, yFormula, zFormula *string
-	err := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
+	err := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
 		&c.ID, &c.Code, &c.Name, &c.Placement, &c.GeometryKind,
 		&c.LengthMm, &c.WidthMm, &c.ThicknessMm,
 		&c.DefaultEdges, &c.OptionRoles, &lengthFormula, &widthFormula,
@@ -117,7 +117,7 @@ func (s *PostgresStore) CreateComponent(ctx context.Context, c *domain.Component
 	}
 
 	if c.ID != "" {
-		err = s.Pool.QueryRow(ctx, `
+		err = s.db(ctx).QueryRow(ctx, `
 			INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 			RETURNING created_at, updated_at;
@@ -129,7 +129,7 @@ func (s *PostgresStore) CreateComponent(ctx context.Context, c *domain.Component
 			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
 		).Scan(&c.CreatedAt, &c.UpdatedAt)
 	} else {
-		err = s.Pool.QueryRow(ctx, `
+		err = s.db(ctx).QueryRow(ctx, `
 			INSERT INTO components (code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 			RETURNING id, created_at, updated_at;
@@ -153,7 +153,7 @@ func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domai
 		return fmt.Errorf("marshaling default_edges: %w", err)
 	}
 
-	tag, err := s.Pool.Exec(ctx, `
+	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE components
 		SET code = $1, name = $2, placement = $3, geometry_kind = $4,
 		    length_mm = $5, width_mm = $6, thickness_mm = $7,
@@ -180,7 +180,7 @@ func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domai
 }
 
 func (s *PostgresStore) DeleteComponent(ctx context.Context, id string) error {
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM components WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM components WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

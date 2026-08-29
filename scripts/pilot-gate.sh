@@ -102,6 +102,9 @@ echo "[pilot-gate] corriendo la suite de Pilot Readiness (base de test efímera,
 echo "[pilot-gate] nunca toca datos productivos) con DATABASE_URL del entorno/${GATE_CONTAINER:-dev}"
 
 cd "${ROOT}/backend-go"
+echo "[pilot-gate] verificando RLS directo con credenciales runtime sin privilegios"
+DATABASE_URL="${DSN}" go test ./internal/storage -run '^TestTenantRLS_' -v -count=1
+
 if DATABASE_URL="${DSN}" PILOT_READINESS_GATE=1 \
   go test ./tests/pilotreadiness/ -v -count=1; then
   echo ""

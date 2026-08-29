@@ -67,9 +67,9 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		claims := claimsFromRequest(r)
-		actor, org := "anonymous", ""
+		actorID, scopeActor, org := "", "anonymous", ""
 		if claims != nil {
-			actor, org = claims.UserID, claims.OrgID
+			actorID, scopeActor, org = claims.UserID, claims.UserID, claims.OrgID
 		}
 		canonicalBody := body
 		var jsonValue any
@@ -80,10 +80,12 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 		}
 		fingerprintInput := []byte(r.Method + "\x00" + r.URL.Path + "\x00" + r.Header.Get("If-Match") + "\x00")
 		hash := sha256.Sum256(append(fingerprintInput, canonicalBody...))
-		scopeHash := sha256.Sum256([]byte(actor + "\x00" + org + "\x00" + operation + "\x00" + key))
+		scopeHash := sha256.Sum256([]byte(scopeActor + "\x00" + org + "\x00" + operation + "\x00" + key))
 		request := storage.IdempotencyRequest{
-			ScopeKey:    hex.EncodeToString(scopeHash[:]),
-			Fingerprint: hex.EncodeToString(hash[:]),
+			ScopeKey:       hex.EncodeToString(scopeHash[:]),
+			Fingerprint:    hex.EncodeToString(hash[:]),
+			ActorUserID:    actorID,
+			OrganizationID: org,
 		}
 		response, replayed, err := store.ExecuteIdempotent(r.Context(), request, func(ctx context.Context) (storage.IdempotencyResponse, error) {
 			cw := &captureWriter{header: make(http.Header)}

@@ -12,7 +12,7 @@ import (
 
 // ListProjectPhotos returns all photos attached to a project ordered by created_at DESC.
 func (s *PostgresStore) ListProjectPhotos(ctx context.Context, projectID string) ([]domain.ProjectPhoto, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, created_at, updated_at
 		FROM project_photos
 		WHERE project_id = $1 AND organization_id = $2
@@ -65,7 +65,7 @@ func (s *PostgresStore) ListProjectPhotos(ctx context.Context, projectID string)
 func (s *PostgresStore) GetProjectPhotoByID(ctx context.Context, photoID string) (*domain.ProjectPhoto, error) {
 	var p domain.ProjectPhoto
 	var thumbURL, caption, createdBy sql.NullString
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		SELECT id, project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, created_at, updated_at
 		FROM project_photos
 		WHERE id = $1 AND organization_id = $2;
@@ -115,7 +115,7 @@ func (s *PostgresStore) CreateProjectPhoto(ctx context.Context, photo *domain.Pr
 		captionParam = &photo.Caption
 	}
 
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO project_photos (project_id, stage, url, thumbnail_url, caption, is_showcase, created_by, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at;
@@ -136,7 +136,7 @@ func (s *PostgresStore) UpdateProjectPhoto(ctx context.Context, photoID string, 
 	var thumbURL, captionNull, createdBy sql.NullString
 	now := time.Now()
 
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		UPDATE project_photos
 		SET caption = $1, is_showcase = $2, stage = $3, updated_at = $4
 		WHERE id = $5 AND organization_id = $6
@@ -173,7 +173,7 @@ func (s *PostgresStore) UpdateProjectPhoto(ctx context.Context, photoID string, 
 
 // DeleteProjectPhoto removes a photo record by ID.
 func (s *PostgresStore) DeleteProjectPhoto(ctx context.Context, photoID string) error {
-	ct, err := s.Pool.Exec(ctx, `
+	ct, err := s.db(ctx).Exec(ctx, `
 		DELETE FROM project_photos
 		WHERE id = $1 AND organization_id = $2;
 	`, photoID, OrgFromCtx(ctx))
@@ -203,7 +203,7 @@ func (s *PostgresStore) ListShowcasePhotos(ctx context.Context, onlyShowcase boo
 	}
 	query += ` ORDER BY pp.is_showcase DESC, pp.created_at DESC;`
 
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list showcase photos: %w", err)
 	}

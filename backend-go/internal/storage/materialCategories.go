@@ -22,7 +22,7 @@ func (s *PostgresStore) ListMaterialCategories(ctx context.Context) ([]domain.Ma
 		WHERE organization_id = $1
 		ORDER BY sort_order ASC, name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *PostgresStore) GetMaterialCategoryByID(ctx context.Context, id string) 
 		FROM material_categories
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.MaterialCategory
 	var parentID *string
 	err := row.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt)
@@ -92,7 +92,7 @@ func (s *PostgresStore) CreateMaterialCategory(ctx context.Context, c *domain.Ma
 			VALUES ($1, $2, $3, $4, $5)
 			RETURNING created_at, updated_at;
 		`
-		return s.Pool.QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+		return s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
 			Scan(&c.CreatedAt, &c.UpdatedAt)
 	}
 
@@ -101,7 +101,7 @@ func (s *PostgresStore) CreateMaterialCategory(ctx context.Context, c *domain.Ma
 		VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
 		RETURNING id, created_at, updated_at;
 	`
-	return s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+	return s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
 		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 }
 
@@ -128,7 +128,7 @@ func (s *PostgresStore) UpdateMaterialCategory(ctx context.Context, id string, c
 		WHERE id = $4 AND organization_id = $5
 		RETURNING updated_at;
 	`
-	err = s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
+	err = s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("material category not found")
@@ -140,7 +140,7 @@ func (s *PostgresStore) UpdateMaterialCategory(ctx context.Context, id string, c
 }
 
 func (s *PostgresStore) DeleteMaterialCategory(ctx context.Context, id string) error {
-	children, err := s.Pool.Query(ctx, `SELECT id FROM material_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
+	children, err := s.db(ctx).Query(ctx, `SELECT id FROM material_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -149,6 +149,6 @@ func (s *PostgresStore) DeleteMaterialCategory(ctx context.Context, id string) e
 		return fmt.Errorf("cannot delete category with children; reparent or delete children first")
 	}
 
-	_, err = s.Pool.Exec(ctx, `DELETE FROM material_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
+	_, err = s.db(ctx).Exec(ctx, `DELETE FROM material_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	return err
 }

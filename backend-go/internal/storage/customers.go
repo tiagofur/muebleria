@@ -13,7 +13,7 @@ func (s *PostgresStore) GetCustomerByID(ctx context.Context, id string) (*domain
 		FROM customers
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.Customer
 	var email, phone, address, notes, ownerID *string
 	err := row.Scan(&c.ID, &c.Name, &email, &phone, &address, &notes, &c.Active, &ownerID, &c.CreatedAt, &c.UpdatedAt)
@@ -49,7 +49,7 @@ func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, c.ID, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
+		err := s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
 			Scan(&c.CreatedAt, &c.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating customer: %w", err)
@@ -61,7 +61,7 @@ func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
 		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating customer: %w", err)
@@ -80,7 +80,7 @@ func (s *PostgresStore) UpdateCustomer(ctx context.Context, id string, c *domain
 		    owner_user_id = $7, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $8 AND organization_id = $9;
 	`
-	result, err := s.Pool.Exec(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, id, OrgFromCtx(ctx))
+	result, err := s.db(ctx).Exec(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, id, OrgFromCtx(ctx))
 	if err != nil {
 		return fmt.Errorf("error updating customer: %w", err)
 	}
@@ -98,7 +98,7 @@ func (s *PostgresStore) ListCustomers(ctx context.Context) ([]domain.Customer, e
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (s *PostgresStore) DeactivateCustomer(ctx context.Context, id string) error
 		SET active = false, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND organization_id = $2;
 	`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

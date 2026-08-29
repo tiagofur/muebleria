@@ -10,7 +10,7 @@ import (
 
 // ListUserSectors returns all sector assignments for a user.
 func (s *PostgresStore) ListUserSectors(ctx context.Context, userID string) ([]domain.UserSector, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT user_id, sector, sub_sector, created_at
 		FROM user_sectors
 		WHERE user_id = $1 AND organization_id = $2
@@ -25,7 +25,7 @@ func (s *PostgresStore) ListUserSectors(ctx context.Context, userID string) ([]d
 
 // SetUserSectors replaces all sector assignments for a user (transactional delete+insert).
 func (s *PostgresStore) SetUserSectors(ctx context.Context, userID string, sectors []domain.UserSector) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (s *PostgresStore) SetUserSectors(ctx context.Context, userID string, secto
 
 // GetUsersBySector returns all users assigned to a given sector.
 func (s *PostgresStore) GetUsersBySector(ctx context.Context, sector string) ([]domain.User, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT u.id, u.email, u.name, u.active, u.created_at, u.updated_at
 		FROM users u
 		INNER JOIN user_sectors us ON us.user_id = u.id

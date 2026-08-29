@@ -250,10 +250,6 @@ func (s *stubStore) ListUsersByOrganization(context.Context) ([]domain.User, err
 	}
 	return []domain.User{}, nil
 }
-func (s *stubStore) ApproveUser(context.Context, string) error {
-	s.stubNotUsed("ApproveUser")
-	return nil
-}
 func (s *stubStore) RejectUser(context.Context, string) error {
 	s.stubNotUsed("RejectUser")
 	return nil
@@ -1473,7 +1469,9 @@ func TestHandleProjectByIDUpdateMalformedRequiredUUIDsReturn400(t *testing.T) {
 
 func withClaims(req *http.Request, userID, role string) *http.Request {
 	claims := &auth.Claims{UserID: userID, Role: role, Email: userID + "@test.com"}
-	return req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
+	ctx := context.WithValue(req.Context(), UserContextKey, claims)
+	ctx = storage.WithOrgCtx(ctx, storage.InitialOrganizationID)
+	return req.WithContext(ctx)
 }
 
 func TestOwnership_VendedorListFiltersOthers(t *testing.T) {
@@ -2542,7 +2540,7 @@ func (s *stubStore) RevokeInvitation(_ context.Context, _, id string, version in
 func (s *stubStore) GetOpenInvitationByToken(context.Context, string) (*storage.OpenInvitation, error) {
 	return nil, errors.New("invitation not found")
 }
-func (s *stubStore) AcceptInvitationTx(context.Context, string, string) error { return nil }
+func (s *stubStore) AcceptInvitationTx(context.Context, string, string, string) error { return nil }
 func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]openapi.SecurityAuditEvent, error) {
 	return nil, nil
 }

@@ -19,7 +19,7 @@ func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, e
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain
 		FROM agregados
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	a, err := scanAgregado(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -77,7 +77,7 @@ func (s *PostgresStore) CreateAgregado(ctx context.Context, a *domain.Agregado) 
 		INSERT INTO agregados (id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 	`
-	_, err = s.Pool.Exec(ctx, query,
+	_, err = s.db(ctx).Exec(ctx, query,
 		a.ID, a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
 		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, OrgFromCtx(ctx),
 	)
@@ -109,7 +109,7 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 		SET code = $1, name = $2, description = $3, notes = $4, width_mm = $5, height_mm = $6, depth_mm = $7, components = $8, hardware_lines = $9, active = $10, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $11 AND organization_id = $12;
 	`
-	tag, err := s.Pool.Exec(ctx, query,
+	tag, err := s.db(ctx).Exec(ctx, query,
 		a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
 		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, id, OrgFromCtx(ctx),
 	)
@@ -125,7 +125,7 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 
 func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string) error {
 	query := `UPDATE agregados SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2;`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -148,14 +148,14 @@ func (s *PostgresStore) DeleteAgregado(ctx context.Context, id string) error {
 			+ (SELECT count(*) FROM structures WHERE agregados @> $1::jsonb);
 	`
 	var inUse int
-	if err := s.Pool.QueryRow(ctx, inUseQuery, probe).Scan(&inUse); err != nil {
+	if err := s.db(ctx).QueryRow(ctx, inUseQuery, probe).Scan(&inUse); err != nil {
 		return err
 	}
 	if inUse > 0 {
 		return fmt.Errorf("agregado in use by %d módulo(s)/estructura(s)", inUse)
 	}
 
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM agregados WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

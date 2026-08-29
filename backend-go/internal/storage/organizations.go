@@ -53,7 +53,7 @@ func (s *PostgresStore) GetOrganizationBySlug(ctx context.Context, slug string) 
 }
 
 func (s *PostgresStore) ListOrganizations(ctx context.Context) ([]domain.Organization, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT `+organizationColumns+` FROM organizations ORDER BY created_at`)
+	rows, err := s.db(ctx).Query(ctx, `SELECT `+organizationColumns+` FROM organizations ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -80,19 +80,29 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 	if plan == "" {
 		plan = domain.LicensePlanNone
 	}
-	return s.db(ctx).QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, active, parent_organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+organizationColumns,
 		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, o.Active, o.ParentOrganizationID).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
 			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
+	if err != nil {
+		return err
+	}
+	// A platform provisioning transaction begins org-less. Once the server has
+	// generated and inserted the destination ID, explicitly authorize only that
+	// new organization for its bounded clone/audit tail.
+	if actor, ok := TenantActorFromCtx(ctx); ok && actor.OrganizationID == "" && actor.UserID != "" {
+		return authorizeTenantOrganizations(ctx, o.ID)
+	}
+	return nil
 }
 
 // ListConnectedOrganizations returns the sales network of a factory: the
 // organizations whose parent is the given factory (#326).
 func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOrganizationID string) ([]domain.Organization, error) {
-	rows, err := s.Pool.Query(ctx,
+	rows, err := s.db(ctx).Query(ctx,
 		`SELECT `+organizationColumns+` FROM organizations WHERE parent_organization_id = $1 ORDER BY created_at`,
 		parentOrganizationID)
 	if err != nil {
@@ -133,6 +143,15 @@ func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 // ListMembershipsByUser returns the user's memberships with their
 // organizations, active memberships of active organizations only.
 func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string) ([]domain.MembershipWithOrg, error) {
+	if transactionFromContext(ctx) == nil {
+		var out []domain.MembershipWithOrg
+		err := s.WithinTenantTx(ctx, TenantActor{UserID: userID}, func(txCtx context.Context) error {
+			var err error
+			out, err = s.ListMembershipsByUser(txCtx, userID)
+			return err
+		})
+		return out, err
+	}
 	rows, err := s.db(ctx).Query(ctx, `
 		SELECT `+membershipWithOrgColumns+`
 		FROM memberships m
@@ -160,7 +179,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 // GetActiveMembership loads one membership (any state) with its organization.
 // Callers decide how to react to inactive membership/organization.
 func (s *PostgresStore) GetActiveMembership(ctx context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
-	return scanMembershipWithOrg(s.Pool.QueryRow(ctx, `
+	return scanMembershipWithOrg(s.db(ctx).QueryRow(ctx, `
 		SELECT `+membershipWithOrgColumns+`
 		FROM memberships m
 		JOIN organizations o ON o.id = m.organization_id
@@ -188,7 +207,7 @@ func (s *PostgresStore) SetMembershipRoles(ctx context.Context, userID string, r
 	if !domain.IsValidRoleSet(roles) {
 		return fmt.Errorf("invalid role set")
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		UPDATE memberships SET roles = $2, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = $1`, userID, roles)
 	return err
@@ -196,7 +215,7 @@ func (s *PostgresStore) SetMembershipRoles(ctx context.Context, userID string, r
 
 // SetPlatformAdmin flips the platform staff flag (ADR-0004 §5).
 func (s *PostgresStore) SetPlatformAdmin(ctx context.Context, userID string, admin bool) error {
-	result, err := s.Pool.Exec(ctx,
+	result, err := s.db(ctx).Exec(ctx,
 		`UPDATE users SET platform_admin = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
 		userID, admin)
 	if err != nil {
@@ -220,6 +239,11 @@ type SecurityAuditEvent struct {
 }
 
 func (s *PostgresStore) InsertSecurityAuditEvent(ctx context.Context, ev SecurityAuditEvent) error {
+	if transactionFromContext(ctx) == nil {
+		return s.WithinTenantTx(ctx, TenantActor{OrganizationID: ev.OrganizationID, UserID: ev.ActorUserID}, func(txCtx context.Context) error {
+			return s.InsertSecurityAuditEvent(txCtx, ev)
+		})
+	}
 	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO security_audit_events (event_type, actor_user_id, target_user_id, organization_id, ip, details)
 		VALUES ($1, nullif($2, '')::uuid, nullif($3, '')::uuid, nullif($4, '')::uuid, nullif($5, ''), $6::jsonb)`,
@@ -242,10 +266,15 @@ func marshalDetails(d map[string]interface{}) string {
 // ListSecurityAuditEvents returns the newest events, optionally filtered by
 // organization (empty string = platform-wide, platform console only).
 func (s *PostgresStore) ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error) {
+	if organizationID != "" && transactionFromContext(ctx) != nil {
+		if err := authorizeTenantOrganizations(ctx, organizationID); err != nil {
+			return nil, err
+		}
+	}
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, event_type, actor_user_id, target_user_id, organization_id, ip, details, created_at
 		FROM security_audit_events
 		WHERE ($1 = '' OR organization_id = $1::uuid)
@@ -276,6 +305,11 @@ func (s *PostgresStore) ListSecurityAuditEvents(ctx context.Context, organizatio
 // --- Support sessions (ADR-0005 §5 / #326) ---
 
 func (s *PostgresStore) StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration) (*domain.SupportSession, error) {
+	if transactionFromContext(ctx) != nil {
+		if err := authorizeTenantOrganizations(ctx, organizationID); err != nil {
+			return nil, err
+		}
+	}
 	out := &domain.SupportSession{}
 	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
@@ -302,12 +336,17 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 			// Lazy close: an open-but-expired session is finalized with
 			// ended_via='expiry' so the audit trail records how it ended
 			// (access was already cut per-request by the middleware check).
-			_, _ = s.Pool.Exec(ctx, `
+			_, _ = s.db(ctx).Exec(ctx, `
 				UPDATE support_sessions SET ended_at = expires_at, ended_via = 'expiry'
 				WHERE id = $1 AND ended_at IS NULL AND expires_at <= NOW()`, sessionID)
 			return nil, fmt.Errorf("support session not found")
 		}
 		return nil, err
+	}
+	if transactionFromContext(ctx) != nil {
+		if err := authorizeTenantOrganizations(ctx, out.OrganizationID); err != nil {
+			return nil, err
+		}
 	}
 	return &out, nil
 }
@@ -315,7 +354,7 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 // EndOpenSupportSessionsByOrg closes every still-open support session of an
 // organization (suspension path — ended_via='org_suspended', B6).
 func (s *PostgresStore) EndOpenSupportSessionsByOrg(ctx context.Context, organizationID, via string) (int64, error) {
-	result, err := s.Pool.Exec(ctx, `
+	result, err := s.db(ctx).Exec(ctx, `
 		UPDATE support_sessions SET ended_at = NOW(), ended_via = $2
 		WHERE organization_id = $1 AND ended_at IS NULL`,
 		organizationID, via)
@@ -327,7 +366,7 @@ func (s *PostgresStore) EndOpenSupportSessionsByOrg(ctx context.Context, organiz
 
 // EndSupportSession closes an open session (idempotent for already-ended).
 func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminUserID, via string) (bool, error) {
-	result, err := s.Pool.Exec(ctx, `
+	result, err := s.db(ctx).Exec(ctx, `
 		UPDATE support_sessions SET ended_at = NOW(), ended_via = $3
 		WHERE id = $1 AND platform_admin_user_id = $2 AND ended_at IS NULL`,
 		sessionID, adminUserID, via)
@@ -352,7 +391,7 @@ type OrgTeamMember struct {
 }
 
 func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID string) ([]OrgTeamMember, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT u.id, u.email, u.name, u.active, m.active, m.roles, m.created_at, m.version
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
@@ -389,7 +428,7 @@ func (s *PostgresStore) UpdateMembershipRolesByOrg(ctx context.Context, organiza
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			var exists bool
-			if e := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE organization_id=$1 AND user_id=$2)`, organizationID, userID).Scan(&exists); e != nil {
+			if e := s.db(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE organization_id=$1 AND user_id=$2)`, organizationID, userID).Scan(&exists); e != nil {
 				return nil, e
 			}
 			if exists {
@@ -405,7 +444,7 @@ func (s *PostgresStore) UpdateMembershipRolesByOrg(ctx context.Context, organiza
 // SetMembershipActive deactivates/reactivates one membership (team offboarding).
 func (s *PostgresStore) SetMembershipActive(ctx context.Context, organizationID, userID string, active bool, expectedVersion int64) (*OrgTeamMember, error) {
 	out := &OrgTeamMember{}
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		UPDATE memberships m SET active = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
 		FROM users u
 		WHERE m.organization_id = $1 AND m.user_id = $2 AND m.version = $4 AND u.id = m.user_id
@@ -414,7 +453,7 @@ func (s *PostgresStore) SetMembershipActive(ctx context.Context, organizationID,
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			var exists bool
-			if e := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE organization_id=$1 AND user_id=$2)`, organizationID, userID).Scan(&exists); e != nil {
+			if e := s.db(ctx).QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memberships WHERE organization_id=$1 AND user_id=$2)`, organizationID, userID).Scan(&exists); e != nil {
 				return nil, e
 			}
 			if exists {
@@ -459,7 +498,7 @@ func (s *PostgresStore) CreateInvitation(ctx context.Context, organizationID, em
 }
 
 func (s *PostgresStore) ListInvitations(ctx context.Context, organizationID string) ([]Invitation, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, email, roles, expires_at, invited_by::text, accepted_at, accepted_by::text, revoked_at, created_at, version
 		FROM invitations
 		WHERE organization_id = $1
@@ -522,11 +561,10 @@ type OpenInvitation struct {
 func (s *PostgresStore) GetOpenInvitationByToken(ctx context.Context, tokenHash string) (*OpenInvitation, error) {
 	var out OpenInvitation
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT i.id, i.email, i.roles, i.expires_at, i.invited_by::text, i.accepted_at, i.accepted_by::text, i.revoked_at, i.created_at, i.version, o.id, o.type
-		FROM invitations i
-		JOIN organizations o ON o.id = i.organization_id
-		WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
-		  AND i.expires_at > NOW() AND o.active`,
+		SELECT id, email, roles, expires_at, invited_by, accepted_at,
+		       accepted_by, revoked_at, created_at, version,
+		       organization_id, organization_type
+		FROM lookup_open_invitation($1)`,
 		tokenHash).
 		Scan(&out.ID, &out.Email, &out.Roles, &out.ExpiresAt, &out.InvitedBy, &out.AcceptedAt, &out.AcceptedBy, &out.RevokedAt, &out.CreatedAt, &out.Version, &out.OrganizationID, &out.OrganizationType)
 	if err != nil {
@@ -540,7 +578,15 @@ func (s *PostgresStore) GetOpenInvitationByToken(ctx context.Context, tokenHash 
 
 // AcceptInvitationTx marks the invitation accepted and ensures the user's
 // membership with its roles, atomically. Returns the user id.
-func (s *PostgresStore) AcceptInvitationTx(ctx context.Context, invitationID, userID string) error {
+func (s *PostgresStore) AcceptInvitationTx(ctx context.Context, invitationID, organizationID, userID string) error {
+	if transactionFromContext(ctx) == nil {
+		return s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: userID}, func(txCtx context.Context) error {
+			return s.AcceptInvitationTx(txCtx, invitationID, organizationID, userID)
+		})
+	}
+	if err := setTenantContext(ctx, transactionFromContext(ctx), TenantActor{OrganizationID: organizationID, UserID: userID}); err != nil {
+		return err
+	}
 	tx, owned, err := s.beginOrUseTx(ctx)
 	if err != nil {
 		return err
@@ -553,8 +599,9 @@ func (s *PostgresStore) AcceptInvitationTx(ctx context.Context, invitationID, us
 	var roles []domain.UserRole
 	err = tx.QueryRow(ctx, `
 		UPDATE invitations SET accepted_at = NOW(), accepted_by = $2
-		WHERE id = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
-		RETURNING organization_id, roles`, invitationID, userID).Scan(&orgID, &roles)
+		WHERE id = $1 AND organization_id = $3
+		  AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+		RETURNING organization_id, roles`, invitationID, userID, organizationID).Scan(&orgID, &roles)
 	if err != nil {
 		return fmt.Errorf("invitation not found")
 	}
@@ -596,6 +643,10 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 	}
 	if owned {
 		defer tx.Rollback(ctx)
+		ctx = context.WithValue(ctx, transactionContextKey{}, tx)
+	}
+	if err := authorizeTenantOrganizations(ctx, srcOrg, dstOrg); err != nil {
+		return err
 	}
 
 	maps := []struct{ name, table string }{
@@ -795,7 +846,7 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 // parent link is NOT mutable here — it is set at creation (#326) and only
 // returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
-	return s.Pool.QueryRow(ctx, `
+	return s.db(ctx).QueryRow(ctx, `
 		UPDATE organizations SET name = $2, license_plan = $3, license_expires_at = $4,
 			active = $5, updated_at = CURRENT_TIMESTAMP, version = version + 1
 		WHERE id = $1
@@ -806,7 +857,7 @@ func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organi
 }
 
 func (s *PostgresStore) UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error {
-	err := s.Pool.QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		UPDATE organizations SET name=$2, license_plan=$3, license_expires_at=$4,
 			active=$5, updated_at=CURRENT_TIMESTAMP, version=version+1
 		WHERE id=$1 AND version=$6

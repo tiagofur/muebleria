@@ -18,7 +18,7 @@ import (
 // loadModuleComponents returns the component instances placed directly on a
 // module (F054 / #102), beyond those inherited from its referenced structure.
 func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID string) ([]domain.ComponentInstance, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
 		WHERE module_id = $1 AND organization_id = $2
@@ -189,7 +189,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 
 	// Cargar módulos y su despiece
 	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados FROM modules WHERE organization_id = $1 ORDER BY name ASC`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
 	}
@@ -247,88 +247,16 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 			m.Agregados = []domain.ModuleAgregadoInstance{}
 		}
 
-		// Component instances placed directly on this module (F054).
-		modComponents, err := s.loadModuleComponents(ctx, m.ID)
-		if err != nil {
-			return cat, err
-		}
-		m.Components = modComponents
-
-		presets, err := s.loadModulePresets(ctx, m.ID)
-		if err != nil {
-			return cat, err
-		}
-		m.Presets = presets
-
-		// Cargar board parts de este módulo
-		partsQuery := `
-			SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2
-			FROM board_parts
-			WHERE module_id = $1 AND organization_id = $2;
-		`
-		pRows, err := s.Pool.Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
-		if err != nil {
-			return cat, err
-		}
-		// defer immediately so early returns / scan errors cannot leak the cursor (#17).
-		func() {
-			defer pRows.Close()
-			for pRows.Next() {
-				var p domain.BoardPart
-				var code *string
-				var l1, l2, w1, w2 bool
-				err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2)
-				if err == nil {
-					if code != nil {
-						p.Code = *code
-					}
-					p.Edges = []domain.EdgeAssignment{
-						{Side: "L1", Enabled: l1},
-						{Side: "L2", Enabled: l2},
-						{Side: "W1", Enabled: w1},
-						{Side: "W2", Enabled: w2},
-					}
-					m.BoardParts = append(m.BoardParts, p)
-				}
-			}
-		}()
-
-		// Cargar herrajes de este módulo
-		hwQuery := `
-			SELECT id, quantity, description_override, option_role, hardware_id
-			FROM hardware_lines
-			WHERE module_id = $1 AND organization_id = $2;
-		`
-		hRows, err := s.Pool.Query(ctx, hwQuery, m.ID, OrgFromCtx(ctx))
-		if err != nil {
-			return cat, err
-		}
-		func() {
-			defer hRows.Close()
-			for hRows.Next() {
-				var hl domain.HardwareLine
-				var desc *string
-				var hwID *string
-				err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID)
-				if err == nil {
-					if desc != nil {
-						hl.DescriptionOverride = *desc
-					}
-					if hwID != nil {
-						hl.HardwareID = *hwID
-					}
-					m.HardwareLines = append(m.HardwareLines, hl)
-				}
-			}
-		}()
-
-		if m.BoardParts == nil {
-			m.BoardParts = []domain.BoardPart{}
-		}
-		if m.HardwareLines == nil {
-			m.HardwareLines = []domain.HardwareLine{}
-		}
 		cat.Modules = append(cat.Modules, m)
+	}
+	if err := rows.Err(); err != nil {
+		return cat, err
+	}
+	rows.Close()
+	for i := range cat.Modules {
+		if err := s.loadCatalogModuleDetails(ctx, &cat.Modules[i]); err != nil {
+			return cat, err
+		}
 	}
 	if cat.Modules == nil {
 		cat.Modules = []domain.Module{}
@@ -351,6 +279,68 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	return cat, nil
 }
 
+func (s *PostgresStore) loadCatalogModuleDetails(ctx context.Context, m *domain.Module) error {
+	var err error
+	m.Components, err = s.loadModuleComponents(ctx, m.ID)
+	if err != nil {
+		return err
+	}
+	m.Presets, err = s.loadModulePresets(ctx, m.ID)
+	if err != nil {
+		return err
+	}
+	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1 AND organization_id = $2`
+	pRows, err := s.db(ctx).Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
+	if err != nil {
+		return err
+	}
+	for pRows.Next() {
+		var p domain.BoardPart
+		var code *string
+		var l1, l2, w1, w2 bool
+		if err := pRows.Scan(&p.ID, &code, &p.Description, &p.Quantity, &p.LengthMm, &p.WidthMm, &p.OptionRole, &l1, &l2, &w1, &w2); err != nil {
+			pRows.Close()
+			return err
+		}
+		if code != nil {
+			p.Code = *code
+		}
+		p.Edges = []domain.EdgeAssignment{{Side: "L1", Enabled: l1}, {Side: "L2", Enabled: l2}, {Side: "W1", Enabled: w1}, {Side: "W2", Enabled: w2}}
+		m.BoardParts = append(m.BoardParts, p)
+	}
+	if err := pRows.Err(); err != nil {
+		pRows.Close()
+		return err
+	}
+	pRows.Close()
+	hRows, err := s.db(ctx).Query(ctx, `SELECT id, quantity, description_override, option_role, hardware_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`, m.ID, OrgFromCtx(ctx))
+	if err != nil {
+		return err
+	}
+	defer hRows.Close()
+	for hRows.Next() {
+		var hl domain.HardwareLine
+		var desc, hwID *string
+		if err := hRows.Scan(&hl.ID, &hl.Quantity, &desc, &hl.OptionRole, &hwID); err != nil {
+			return err
+		}
+		if desc != nil {
+			hl.DescriptionOverride = *desc
+		}
+		if hwID != nil {
+			hl.HardwareID = *hwID
+		}
+		m.HardwareLines = append(m.HardwareLines, hl)
+	}
+	if m.BoardParts == nil {
+		m.BoardParts = []domain.BoardPart{}
+	}
+	if m.HardwareLines == nil {
+		m.HardwareLines = []domain.HardwareLine{}
+	}
+	return hRows.Err()
+}
+
 // --- PROJECTS / QUOTATIONS ---
 
 func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, error) {
@@ -360,7 +350,7 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 		WHERE organization_id = $1 OR sales_organization_id = $1 OR manufacturing_organization_id = $1
 		ORDER BY updated_at DESC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -467,18 +457,25 @@ func (s *PostgresStore) ListProjects(ctx context.Context) ([]domain.Project, err
 			_ = json.Unmarshal(changeOrders, &p.ChangeOrders)
 		}
 
-		// Load items so FE reload keeps line items (calculate + UI depend on them).
-		items, err := s.loadProjectItems(ctx, p.ID)
-		if err != nil {
-			return nil, err
-		}
-		p.Items = items
-		level, err := s.loadProjectLevelChoices(ctx, p.ID)
-		if err != nil {
-			return nil, err
-		}
-		p.ProjectLevelChoices = level
 		list = append(list, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range list {
+		// Tenant requests share one transaction and one pgx connection, so
+		// dependent queries must run after the project cursor is closed.
+		items, err := s.loadProjectItems(ctx, list[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		list[i].Items = items
+		level, err := s.loadProjectLevelChoices(ctx, list[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		list[i].ProjectLevelChoices = level
 	}
 	if list == nil {
 		list = []domain.Project{}
@@ -493,7 +490,7 @@ func (s *PostgresStore) loadProjectLevelChoices(ctx context.Context, projectID s
 		FROM project_level_choices
 		WHERE project_id = $1;
 	`
-	rows, err := s.Pool.Query(ctx, query, projectID)
+	rows, err := s.db(ctx).Query(ctx, query, projectID)
 	if err != nil {
 		// Table may not exist yet on old DBs mid-migrate — treat as empty.
 		return map[string]string{}, nil
@@ -536,7 +533,7 @@ func (s *PostgresStore) loadModulePresets(ctx context.Context, moduleID string) 
 		WHERE module_id = $1 AND organization_id = $2
 		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
 	`
-	rows, err := s.Pool.Query(ctx, q, moduleID, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, q, moduleID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query module presets: %w", err)
 	}
@@ -584,7 +581,7 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		FROM project_items
 		WHERE project_id = $1;
 	`
-	rows, err := s.Pool.Query(ctx, itemQuery, projectID)
+	rows, err := s.db(ctx).Query(ctx, itemQuery, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +621,7 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 			FROM project_item_choices
 			WHERE project_item_id = $1;
 		`
-		cRows, err := s.Pool.Query(ctx, choicesQuery, item.ID)
+		cRows, err := s.db(ctx).Query(ctx, choicesQuery, item.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -716,7 +713,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		FROM projects
 		WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2 OR manufacturing_organization_id = $2);
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var p domain.Project
 	var createdBy *string
 	var ownerID *string
@@ -892,7 +889,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 		WHERE project_id = $1 AND organization_id = $2;
 	`
 	var snapshot domain.QuotePriceSnapshot
-	err = s.Pool.QueryRow(ctx, snapQuery, p.ID, OrgFromCtx(ctx)).Scan(
+	err = s.db(ctx).QueryRow(ctx, snapQuery, p.ID, OrgFromCtx(ctx)).Scan(
 		&snapshot.CapturedAt,
 		&snapshot.Breakdown.MaterialsCost,
 		&snapshot.Breakdown.EdgeTotal,
@@ -912,7 +909,7 @@ func (s *PostgresStore) GetProjectByID(ctx context.Context, id string) (*domain.
 			FROM snapshot_prices
 			WHERE snapshot_id = (SELECT id FROM quote_snapshots WHERE project_id = $1);
 		`
-		spRows, err := s.Pool.Query(ctx, pricesQuery, p.ID)
+		spRows, err := s.db(ctx).Query(ctx, pricesQuery, p.ID)
 		if err == nil {
 			func() {
 				defer spRows.Close()
@@ -973,7 +970,7 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 	p.ManufacturingOrganizationID = mfgOrg
 	p.OrganizationID = OrgFromCtx(ctx)
 
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -1020,7 +1017,7 @@ func (s *PostgresStore) CreateProject(ctx context.Context, p *domain.Project) er
 }
 
 func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, item *domain.ProjectItem) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -1058,7 +1055,7 @@ func (s *PostgresStore) AddProjectItem(ctx context.Context, projectID string, it
 }
 
 func (s *PostgresStore) RemoveProjectItem(ctx context.Context, projectID string, itemID string) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -1078,7 +1075,7 @@ func (s *PostgresStore) RemoveProjectItem(ctx context.Context, projectID string,
 }
 
 func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.Project) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -1187,7 +1184,7 @@ func (s *PostgresStore) UpdateProject(ctx context.Context, id string, p *domain.
 
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 	query := `DELETE FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2);`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1210,7 +1207,7 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query modules: %w", err)
 	}
@@ -1274,6 +1271,7 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
 
 	componentsByModule, err := s.listAllModuleComponents(ctx)
 	if err != nil {
@@ -1306,7 +1304,7 @@ func (s *PostgresStore) listAllModuleComponents(ctx context.Context) (map[string
 		WHERE organization_id = $1
 		ORDER BY created_at ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query all module components: %w", err)
 	}
@@ -1360,7 +1358,7 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 		WHERE organization_id = $1
 		ORDER BY width_mm ASC, height_mm ASC, depth_mm ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("error query module presets: %w", err)
 	}
@@ -1384,7 +1382,7 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
 	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, created_at, updated_at FROM modules WHERE id = $1 AND organization_id = $2`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var m domain.Module
 	var w, h, d *int
 	var notes *string
@@ -1450,7 +1448,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 
 	// BoardParts
 	partsQuery := `SELECT id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2 FROM board_parts WHERE module_id = $1 AND organization_id = $2`
-	pRows, err := s.Pool.Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
+	pRows, err := s.db(ctx).Query(ctx, partsQuery, m.ID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -1477,7 +1475,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 
 	// HardwareLines
 	hwQuery := `SELECT id, quantity, description_override, option_role, hardware_id FROM hardware_lines WHERE module_id = $1 AND organization_id = $2`
-	hRows, err := s.Pool.Query(ctx, hwQuery, m.ID, OrgFromCtx(ctx))
+	hRows, err := s.db(ctx).Query(ctx, hwQuery, m.ID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -1503,7 +1501,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 }
 
 func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -1667,7 +1665,7 @@ func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, 
 }
 
 func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.Module) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -1798,7 +1796,7 @@ func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
 	// the FE had already removed it locally. Refuse up-front with a clear
 	// error instead.
 	var inUse int
-	if err := s.Pool.QueryRow(ctx,
+	if err := s.db(ctx).QueryRow(ctx,
 		`SELECT count(*) FROM project_items WHERE module_id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx),
 	).Scan(&inUse); err != nil {
 		return err
@@ -1807,7 +1805,7 @@ func (s *PostgresStore) DeleteModule(ctx context.Context, id string) error {
 		return fmt.Errorf("module in use by %d cotización(es)", inUse)
 	}
 	query := `DELETE FROM modules WHERE id = $1 AND organization_id = $2;`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -1831,7 +1829,7 @@ func (s *PostgresStore) SetProjectItemFloorStatus(ctx context.Context, projectID
 	if !isValidItemFloorStatus(status) {
 		return fmt.Errorf("invalid floor status %q", status)
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE project_items
 		SET floor_status = $1
 		WHERE id = $2 AND project_id = $3 AND organization_id = $4;
@@ -1842,7 +1840,7 @@ func (s *PostgresStore) SetProjectItemFloorStatus(ctx context.Context, projectID
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("project item not found")
 	}
-	if _, err := s.Pool.Exec(ctx, `
+	if _, err := s.db(ctx).Exec(ctx, `
 		UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2;
 	`, projectID, OrgFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error touching project updated_at: %w", err)
@@ -1874,7 +1872,7 @@ func (s *PostgresStore) InsertFloorEvent(ctx context.Context, ev domain.FloorSta
 	if ev.At.IsZero() {
 		at = time.Now()
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO project_item_floor_events
 			(id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), $11)
@@ -1890,7 +1888,7 @@ func (s *PostgresStore) InsertFloorEvent(ctx context.Context, ev domain.FloorSta
 
 // ListFloorEvents returns the shop-floor log of a project, oldest first (F092).
 func (s *PostgresStore) ListFloorEvents(ctx context.Context, projectID string) ([]domain.FloorStatusEvent, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, project_id, item_id, from_status, to_status, at, by_user_id, by_name, source, note
 		FROM project_item_floor_events
 		WHERE project_id = $1
@@ -1984,7 +1982,7 @@ func jsonbStructArg(v interface{}) interface{} {
 
 // ListProjectEvents returns the lifecycle event log of a project, oldest first (OC-010).
 func (s *PostgresStore) ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.db(ctx).Query(ctx, `
 		SELECT id, project_id, type, at, by_user_id, source, note, payload, created_at
 		FROM project_events
 		WHERE project_id = $1
@@ -2026,7 +2024,7 @@ func (s *PostgresStore) InsertProjectEvent(ctx context.Context, ev domain.Projec
 		at = time.Now()
 	}
 	source := domain.NormalizeProjectEventSource(string(ev.Source))
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO project_events
 			(id, project_id, type, at, by_user_id, source, note, payload, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9)
@@ -2060,4 +2058,3 @@ func upsertProjectEventsTx(ctx context.Context, tx pgx.Tx, projectID string, eve
 	}
 	return nil
 }
-

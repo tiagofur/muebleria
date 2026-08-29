@@ -38,7 +38,7 @@ func (s *PostgresStore) MutateProjectCosting(
 	projectID string,
 	mutate func(snap *domain.JobCostingSnapshot) (*domain.JobCostingMutation, error),
 ) (*domain.JobCostingMutation, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning job costing tx: %w", err)
 	}

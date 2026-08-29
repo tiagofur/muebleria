@@ -94,7 +94,7 @@ func (s *PostgresStore) GetMaterialBoardByID(ctx context.Context, id string) (*d
 		FROM material_boards
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var m domain.MaterialBoard
 	var notes *string
 	var categoryID *string
@@ -141,7 +141,7 @@ func (s *PostgresStore) CreateMaterialBoard(ctx context.Context, m *domain.Mater
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 			RETURNING cost_per_m2, created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, m.ID, m.Code, m.Name, m.Manufacturer, nullableUUID(m.CategoryID), m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat, m.Notes, m.Active, OrgFromCtx(ctx)).
+		err := s.db(ctx).QueryRow(ctx, query, m.ID, m.Code, m.Name, m.Manufacturer, nullableUUID(m.CategoryID), m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat, m.Notes, m.Active, OrgFromCtx(ctx)).
 			Scan(&m.CostPerM2, &m.CreatedAt, &m.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating material board: %w", err)
@@ -153,7 +153,7 @@ func (s *PostgresStore) CreateMaterialBoard(ctx context.Context, m *domain.Mater
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		RETURNING id, cost_per_m2, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, m.Code, m.Name, m.Manufacturer, nullableUUID(m.CategoryID), m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat, m.Notes, m.Active, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, m.Code, m.Name, m.Manufacturer, nullableUUID(m.CategoryID), m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat, m.Notes, m.Active, OrgFromCtx(ctx)).
 		Scan(&m.ID, &m.CostPerM2, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating material board: %w", err)
@@ -168,7 +168,7 @@ func (s *PostgresStore) UpdateMaterialBoard(ctx context.Context, id string, m *d
 		WHERE id = $22 AND organization_id = $23
 		RETURNING cost_per_m2, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, m.Code, m.Name, m.Manufacturer, nullableUUID(m.CategoryID), m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat, m.Notes, m.Active, id, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, m.Code, m.Name, m.Manufacturer, nullableUUID(m.CategoryID), m.WidthMm, m.LengthMm, m.ThicknessMm, m.GrainDefault, m.BoardPrice, m.WastePercent, nullableUUID(m.DefaultEdgeBandID), m.ImageURL, nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL), nullIfZeroFloat(m.PreviewTextureTileWidthMm), nullIfZeroFloat(m.PreviewTextureTileLengthMm), m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat, m.Notes, m.Active, id, OrgFromCtx(ctx)).
 		Scan(&m.CostPerM2, &m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -187,7 +187,7 @@ func (s *PostgresStore) ListMaterialBoards(ctx context.Context) ([]domain.Materi
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ func (s *PostgresStore) DeactivateMaterialBoard(ctx context.Context, id string) 
 		SET active = false, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND organization_id = $2;
 	`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -260,7 +260,7 @@ func (s *PostgresStore) ReactivateMaterialBoard(ctx context.Context, id string) 
 		SET active = true, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND organization_id = $2;
 	`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -279,7 +279,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -373,27 +373,33 @@ func (s *PostgresStore) ListOptionGroups(ctx context.Context) ([]domain.OptionGr
 			return nil, err
 		}
 
-		// Cargar miembros
-		memberQuery := `SELECT entity_id FROM option_group_members WHERE option_group_id = $1`
-		mRows, err := s.Pool.Query(ctx, memberQuery, og.ID)
+		list = append(list, og)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range list {
+		mRows, err := s.db(ctx).Query(ctx, `SELECT entity_id FROM option_group_members WHERE option_group_id = $1`, list[i].ID)
 		if err != nil {
 			return nil, err
 		}
-		// Nested cursor: defer immediately so early returns cannot leak (#17).
-		func() {
-			defer mRows.Close()
-			for mRows.Next() {
-				var eid string
-				if err := mRows.Scan(&eid); err == nil {
-					og.OptionIDs = append(og.OptionIDs, eid)
-				}
+		for mRows.Next() {
+			var entityID string
+			if err := mRows.Scan(&entityID); err != nil {
+				mRows.Close()
+				return nil, err
 			}
-		}()
-		if og.OptionIDs == nil {
-			og.OptionIDs = []string{}
+			list[i].OptionIDs = append(list[i].OptionIDs, entityID)
 		}
-
-		list = append(list, og)
+		if err := mRows.Err(); err != nil {
+			mRows.Close()
+			return nil, err
+		}
+		mRows.Close()
+		if list[i].OptionIDs == nil {
+			list[i].OptionIDs = []string{}
+		}
 	}
 	if list == nil {
 		list = []domain.OptionGroup{}
@@ -407,7 +413,7 @@ func (s *PostgresStore) GetEdgeBandByID(ctx context.Context, id string) (*domain
 		FROM edge_bands
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var e domain.EdgeBand
 	var notes *string
 	err := row.Scan(&e.ID, &e.Code, &e.Name, &e.ThicknessMm, &e.CostPerMl, &notes, &e.PreviewColor, &e.Active, &e.CreatedAt, &e.UpdatedAt)
@@ -436,7 +442,7 @@ func (s *PostgresStore) CreateEdgeBand(ctx context.Context, e *domain.EdgeBand) 
 			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, e.ID, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, OrgFromCtx(ctx)).
+		err := s.db(ctx).QueryRow(ctx, query, e.ID, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, OrgFromCtx(ctx)).
 			Scan(&e.CreatedAt, &e.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating edge band: %w", err)
@@ -448,7 +454,7 @@ func (s *PostgresStore) CreateEdgeBand(ctx context.Context, e *domain.EdgeBand) 
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, OrgFromCtx(ctx)).
 		Scan(&e.ID, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating edge band: %w", err)
@@ -463,7 +469,7 @@ func (s *PostgresStore) UpdateEdgeBand(ctx context.Context, id string, e *domain
 		WHERE id = $8 AND organization_id = $9
 		RETURNING updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, id, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, e.Code, e.Name, e.ThicknessMm, e.CostPerMl, e.Notes, edgeColorArg(e), e.Active, id, OrgFromCtx(ctx)).
 		Scan(&e.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -477,7 +483,7 @@ func (s *PostgresStore) UpdateEdgeBand(ctx context.Context, id string, e *domain
 
 func (s *PostgresStore) DeactivateEdgeBand(ctx context.Context, id string) error {
 	query := `UPDATE edge_bands SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -489,7 +495,7 @@ func (s *PostgresStore) DeactivateEdgeBand(ctx context.Context, id string) error
 
 func (s *PostgresStore) ReactivateEdgeBand(ctx context.Context, id string) error {
 	query := `UPDATE edge_bands SET active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -505,7 +511,7 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 		FROM hardwares
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var h domain.Hardware
 	var notes *string
 	var imageURL *string
@@ -541,7 +547,7 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 			RETURNING created_at, updated_at;
 		`
-		err := s.Pool.QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx)).
+		err := s.db(ctx).QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx)).
 			Scan(&h.CreatedAt, &h.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("error creating hardware: %w", err)
@@ -553,7 +559,7 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		RETURNING id, created_at, updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx)).
 		Scan(&h.ID, &h.CreatedAt, &h.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating hardware: %w", err)
@@ -572,7 +578,7 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain
 		WHERE id = $19 AND organization_id = $20
 		RETURNING updated_at;
 	`
-	err := s.Pool.QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, id, OrgFromCtx(ctx)).
+	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, id, OrgFromCtx(ctx)).
 		Scan(&h.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -586,7 +592,7 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain
 
 func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string) error {
 	query := `UPDATE hardwares SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -598,7 +604,7 @@ func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string) error
 
 func (s *PostgresStore) ReactivateHardware(ctx context.Context, id string) error {
 	query := `UPDATE hardwares SET active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -614,7 +620,7 @@ func (s *PostgresStore) GetOptionGroupByID(ctx context.Context, id string) (*dom
 		FROM option_groups
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var og domain.OptionGroup
 	err := row.Scan(&og.ID, &og.Code, &og.Name, &og.Kind, &og.Required)
 	if err != nil {
@@ -622,7 +628,7 @@ func (s *PostgresStore) GetOptionGroupByID(ctx context.Context, id string) (*dom
 	}
 
 	memberQuery := `SELECT entity_id FROM option_group_members WHERE option_group_id = $1`
-	rows, err := s.Pool.Query(ctx, memberQuery, og.ID)
+	rows, err := s.db(ctx).Query(ctx, memberQuery, og.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +644,7 @@ func (s *PostgresStore) GetOptionGroupByID(ctx context.Context, id string) (*dom
 }
 
 func (s *PostgresStore) CreateOptionGroup(ctx context.Context, og *domain.OptionGroup) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -674,7 +680,7 @@ func (s *PostgresStore) CreateOptionGroup(ctx context.Context, og *domain.Option
 }
 
 func (s *PostgresStore) UpdateOptionGroup(ctx context.Context, id string, og *domain.OptionGroup) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -715,7 +721,7 @@ func (s *PostgresStore) UpdateOptionGroup(ctx context.Context, id string, og *do
 
 func (s *PostgresStore) DeleteOptionGroup(ctx context.Context, id string) error {
 	query := `DELETE FROM option_groups WHERE id = $1 AND organization_id = $2`
-	tag, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}

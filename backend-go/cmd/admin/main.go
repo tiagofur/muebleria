@@ -334,7 +334,7 @@ func runResetPassword(args []string) {
 func openStore() (*storage.PostgresStore, func(), error) {
 	// The CLI needs DATABASE_URL but does not need JWT_SECRET. Load the DSN
 	// directly from the environment to avoid forcing JWT_SECRET to be set.
-	dsn := os.Getenv("DATABASE_URL")
+	dsn := os.Getenv("MIGRATION_DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
 	}

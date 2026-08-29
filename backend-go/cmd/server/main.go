@@ -30,24 +30,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Inicializar Base de Datos
-	store, err := storage.NewPostgresStore(cfg.DatabaseURL)
+	// Migrations use a dedicated owner-capable role. The pool is closed before
+	// runtime starts so request code never receives schema-owner credentials.
+	migrationStore, err := storage.NewPostgresStore(cfg.MigrationDatabaseURL)
 	if err != nil {
-		slog.Error("Critical error: failed to initialize database store", "error", err)
+		slog.Error("Critical error: failed to initialize migration store", "error", err)
 		os.Exit(1)
 	}
-	defer store.Close()
-
-	// Aplicar migraciones embebidas antes de servir tráfico. Si la base de
-	// datos está desactualizada respecto al código, los endpoints reventarían
-	// con 500 (drift schema). Fail-closed: si una migración falla, no arranca.
 	migCtx, migCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	if err := store.RunMigrations(migCtx); err != nil {
+	if err := migrationStore.RunMigrations(migCtx); err != nil {
 		migCancel()
+		migrationStore.Close()
 		slog.Error("Critical error: failed to run database migrations", "error", err)
 		os.Exit(1)
 	}
 	migCancel()
+	migrationStore.Close()
+
+	store, err := storage.NewPostgresStore(cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("Critical error: failed to initialize runtime database store", "error", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+	readinessCtx, readinessCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := store.VerifyRLSReadiness(readinessCtx); err != nil {
+		readinessCancel()
+		slog.Error("Critical error: unsafe runtime database role or RLS inventory", "error", err)
+		os.Exit(1)
+	}
+	readinessCancel()
 
 	// NOTE: the admin account is no longer provisioned at boot (seed removed).
 	// Create or rotate it with the dedicated CLI:

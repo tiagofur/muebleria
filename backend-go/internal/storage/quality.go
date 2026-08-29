@@ -29,7 +29,7 @@ func (s *PostgresStore) MutateProjectQuality(
 	projectID string,
 	mutate func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error),
 ) (*domain.QualityMutation, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning quality tx: %w", err)
 	}

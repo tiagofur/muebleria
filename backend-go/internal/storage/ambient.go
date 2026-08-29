@@ -24,7 +24,7 @@ func (s *PostgresStore) ListAmbientCategories(ctx context.Context) ([]domain.Amb
 		WHERE organization_id = $1
 		ORDER BY sort_order ASC, name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (s *PostgresStore) GetAmbientCategoryByID(ctx context.Context, id string) (
 		FROM ambient_categories
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.AmbientCategory
 	var parentID *string
 	err := row.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt)
@@ -94,7 +94,7 @@ func (s *PostgresStore) CreateAmbientCategory(ctx context.Context, c *domain.Amb
 			VALUES ($1, $2, $3, $4, $5)
 			RETURNING created_at, updated_at;
 		`
-		return s.Pool.QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+		return s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
 			Scan(&c.CreatedAt, &c.UpdatedAt)
 	}
 
@@ -103,7 +103,7 @@ func (s *PostgresStore) CreateAmbientCategory(ctx context.Context, c *domain.Amb
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at;
 	`
-	return s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
+	return s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
 		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 }
 
@@ -130,7 +130,7 @@ func (s *PostgresStore) UpdateAmbientCategory(ctx context.Context, id string, c 
 		WHERE id = $4 AND organization_id = $5
 		RETURNING updated_at;
 	`
-	err = s.Pool.QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
+	err = s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("ambient category not found")
@@ -142,7 +142,7 @@ func (s *PostgresStore) UpdateAmbientCategory(ctx context.Context, id string, c 
 }
 
 func (s *PostgresStore) DeleteAmbientCategory(ctx context.Context, id string) error {
-	children, err := s.Pool.Query(ctx, `SELECT id FROM ambient_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
+	children, err := s.db(ctx).Query(ctx, `SELECT id FROM ambient_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (s *PostgresStore) DeleteAmbientCategory(ctx context.Context, id string) er
 		return fmt.Errorf("cannot delete category with children; reparent or delete children first")
 	}
 
-	_, err = s.Pool.Exec(ctx, `DELETE FROM ambient_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
+	_, err = s.db(ctx).Exec(ctx, `DELETE FROM ambient_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
 	return err
 }
 
@@ -162,7 +162,7 @@ func (s *PostgresStore) ListAmbientMaterials(ctx context.Context) ([]domain.Ambi
 		WHERE organization_id = $1
 		ORDER BY name ASC;
 	`
-	rows, err := s.Pool.Query(ctx, query, OrgFromCtx(ctx))
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (s *PostgresStore) GetAmbientMaterialByID(ctx context.Context, id string) (
 		FROM ambient_materials
 		WHERE id = $1 AND organization_id = $2;
 	`
-	row := s.Pool.QueryRow(ctx, query, id, OrgFromCtx(ctx))
+	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	m, err := scanAmbientMaterial(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -204,7 +204,7 @@ func (s *PostgresStore) CreateAmbientMaterial(ctx context.Context, m *domain.Amb
 		INSERT INTO ambient_materials (id, code, name, active, surface_type, category_id, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 	`
-	_, err := s.Pool.Exec(ctx, query,
+	_, err := s.db(ctx).Exec(ctx, query,
 		m.ID, m.Code, m.Name, m.Active, string(m.SurfaceType),
 		nullIfEmpty(m.CategoryID),
 		nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL),
@@ -224,7 +224,7 @@ func (s *PostgresStore) UpdateAmbientMaterial(ctx context.Context, id string, m 
 		SET code = $1, name = $2, active = $3, surface_type = $4, category_id = $5, preview_color = $6, preview_texture_url = $7, preview_texture_tile_width_mm = $8, preview_texture_tile_length_mm = $9, preview_roughness = $10, preview_metalness = $11, preview_clearcoat = $12
 		WHERE id = $13 AND organization_id = $14;
 	`
-	tag, err := s.Pool.Exec(ctx, query,
+	tag, err := s.db(ctx).Exec(ctx, query,
 		m.Code, m.Name, m.Active, string(m.SurfaceType),
 		nullIfEmpty(m.CategoryID),
 		nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL),
@@ -244,7 +244,7 @@ func (s *PostgresStore) UpdateAmbientMaterial(ctx context.Context, id string, m 
 
 func (s *PostgresStore) DeactivateAmbientMaterial(ctx context.Context, id string) error {
 	query := `UPDATE ambient_materials SET active = false WHERE id = $1 AND organization_id = $2;`
-	_, err := s.Pool.Exec(ctx, query, id, OrgFromCtx(ctx))
+	_, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
 	return err
 }
 
