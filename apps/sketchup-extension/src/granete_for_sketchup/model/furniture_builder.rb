@@ -452,7 +452,7 @@ module Granete
             furniture_ref: furniture_instance_id,
             hardware_definition_id: placement.hardware_id,
             host_component_instance_id: placement.host_component_instance_id,
-            placement_origin: 'resolved'
+            placement_kind: placement.placement_kind
           )
           instance
         end
@@ -491,7 +491,9 @@ module Granete
       # Writes the semantic metadata dictionaries (furniture + component
       # levels) through the metadata store. Granete contract IDs are
       # namespaced authoring identity: host GUID/persistent_id/name are never
-      # stored as business identity and rename never mutates them.
+      # stored as business identity and rename never mutates them. Piezas y
+      # herrajes keep SEPARATE occurrence namespaces (componentInstanceId vs
+      # hardwarePlacementId) that never alias each other.
       module MetadataWriter
         module_function
 
@@ -563,18 +565,24 @@ module Granete
         # 'resolved' marks layout-derived hardware; #468 introduces 'manual'.
         def write_hardware(store, entity, placement_id, furniture_ref:,
                            hardware_definition_id: nil, host_component_instance_id: nil,
-                           placement_origin: 'resolved')
+                           placement_kind: nil)
           return unless store
 
-          identity = child_identity(store, placement_id, furniture_ref)
-
-          intent = {
-            'entityClass' => 'hardware',
-            'placementOrigin' => placement_origin
+          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
+          identity = {
+            'instanceRef' => placement_id,
+            'hardwarePlacementId' => placement_id,
+            'projectRef' => proj_ref
           }
+          identity['furnitureInstanceRef'] = furniture_ref if furniture_ref
+
+          intent = { 'entityClass' => 'hardware' }
           intent['semanticRole'] = "hardware_#{placement_id}"
           intent['hardwareDefinitionId'] = hardware_definition_id if hardware_definition_id
           intent['hostComponentInstanceId'] = host_component_instance_id if host_component_instance_id
+          # Only the contract's #350 provenance is stored; a missing/legacy
+          # value stays absent so the resolver reports 'unknown' fail-closed.
+          intent['placementKind'] = placement_kind if placement_kind
 
           write_child(store, entity, identity, intent)
         end

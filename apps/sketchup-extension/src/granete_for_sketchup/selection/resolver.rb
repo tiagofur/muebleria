@@ -11,10 +11,17 @@ module Granete
       # labels. Entities without Granete metadata — including arbitrary user
       # Groups/ComponentInstances — resolve to kind=unmanaged, never to a
       # guessed Granete part.
+      #
+      # ID namespaces are never collapsed: the server-owned Digital Thread
+      # IDs (furnitureInstanceId/projectId/designId/baseRevisionId, #384)
+      # are only read from their OWN metadata keys; until that binding
+      # exists they stay nil while the local refs (instanceRef/projectRef/
+      # sourceRevisionRef) carry the locator truth.
       class Resolver
         FURNITURE_METADATA_KINDS = %w[furnitureInstance bootstrapIntent].freeze
         CHILD_METADATA_KINDS = %w[componentInstance partInstance].freeze
         LEGACY_HARDWARE_SIGNAL = 'hostComponentInstanceId'
+        ENTITY_CLASSES = %w[part hardware aggregate].freeze
 
         def initialize(metadata_store:, catalog_provider: nil, model_provider: nil)
           @metadata_store = metadata_store
@@ -27,10 +34,10 @@ module Granete
         def resolve(entity)
           return nil if entity.nil?
 
-          return with_capabilities(unmanaged_context(entity)) unless entity.respond_to?(:get_attribute)
+          return with_capabilities(unmanaged_context(entity, 'none')) unless entity.respond_to?(:get_attribute)
 
           metadata = read_metadata(entity)
-          return with_capabilities(unmanaged_context(entity)) if metadata.nil?
+          return with_capabilities(unmanaged_context(entity, 'none')) if metadata.nil?
 
           kind = metadata['kind']
           context = if FURNITURE_METADATA_KINDS.include?(kind)
@@ -38,17 +45,12 @@ module Granete
                     elsif CHILD_METADATA_KINDS.include?(kind)
                       child_context(entity, metadata)
                     else
-                      unmanaged_context(entity)
+                      unmanaged_context(entity, 'none')
                     end
           with_capabilities(context)
         end
 
         private
-
-        def with_capabilities(context)
-          context.capabilities = CapabilityPolicy.compute(context)
-          context
-        end
 
         def default_model_provider
           lambda do
@@ -72,10 +74,15 @@ module Granete
 
           SelectionContext.new(
             kind: 'furniture',
-            furniture_instance_id: identity['instanceRef'],
+            furniture_instance_id: identity['furnitureInstanceId'],
+            furniture_instance_ref: identity['instanceRef'],
             furniture_definition_id: definition_id,
-            project_id: identity['projectRef'],
-            base_revision_id: identity['sourceRevisionRef'],
+            project_id: identity['projectId'],
+            project_ref: identity['projectRef'],
+            design_id: identity['designId'],
+            design_ref: identity['designRef'],
+            base_revision_id: identity['baseRevisionId'],
+            source_revision_ref: identity['sourceRevisionRef'],
             representation: native_component_instance?(entity) ? 'native' : 'legacy-group',
             host_locator: host_locator(entity),
             semantic_path: [display_name(entity, definition)],
@@ -91,19 +98,19 @@ module Granete
           intent = metadata['intent'] || {}
           entity_class = resolve_entity_class(intent)
           owner_ref = identity['furnitureInstanceRef']
-          owner_entity = owner_entity(owner_ref)
+          recovery, owner_entity = owner_recovery(entity, owner_ref)
 
           common = {
-            furniture_instance_id: owner_ref,
-            project_id: identity['projectRef'],
+            furniture_instance_ref: owner_ref,
             host_locator: host_locator(entity, owner_entity),
             semantic_path: semantic_path(entity, owner_entity),
-            display: child_display(entity, intent)
+            display: child_display(entity, intent),
+            owner_recovery: recovery
           }
 
           case entity_class
           when 'hardware'
-            hardware_context(entity, metadata, common)
+            hardware_context(metadata, common)
           when 'aggregate'
             SelectionContext.new(kind: 'aggregate', component_instance_id: identity['instanceRef'],
                                  **common)
@@ -118,22 +125,29 @@ module Granete
           end
         end
 
-        def hardware_context(_entity, metadata, common)
+        def hardware_context(metadata, common)
           identity = metadata['identity'] || {}
           intent = metadata['intent'] || {}
+          placement_id = identity['hardwarePlacementId'] || identity['instanceRef']
 
           SelectionContext.new(
             kind: 'hardware',
-            component_instance_id: identity['instanceRef'],
-            hardware_placement_id: identity['instanceRef'],
+            hardware_placement_id: placement_id,
             hardware_definition_id: intent['hardwareDefinitionId'],
             host_component_instance_id: intent[LEGACY_HARDWARE_SIGNAL],
-            # Every hardware the current builder writes comes from a Granete
-            # resolved layout; manual placements arrive with #468, which
-            # writes 'manual' explicitly.
-            origin: intent['placementOrigin'] || 'resolved',
+            # Real #350 provenance from the layout contract; anything absent
+            # or unrecognized stays 'unknown' and fails closed — the context
+            # never guesses 'derived'.
+            placement_kind: placement_kind(intent['placementKind']),
             **common
           )
+        end
+
+        def placement_kind(kind)
+          case kind
+          when 'manual', 'derived' then kind
+          else 'unknown'
+          end
         end
 
         # Explicit entityClass wins. Metadata written before #476 has no
@@ -141,16 +155,17 @@ module Granete
         # binding — never names — until #416's migration refreshes it.
         def resolve_entity_class(intent)
           entity_class = intent['entityClass']
-          return entity_class if %w[part hardware aggregate].include?(entity_class)
+          return entity_class if ENTITY_CLASSES.include?(entity_class)
 
           intent[LEGACY_HARDWARE_SIGNAL] ? 'hardware' : 'part'
         end
 
-        def unmanaged_context(entity)
+        def unmanaged_context(entity, recovery)
           SelectionContext.new(
             kind: 'unmanaged',
             host_locator: host_locator(entity),
-            display: { 'name' => display_name(entity) }
+            display: { 'name' => display_name(entity) },
+            owner_recovery: recovery
           )
         end
 
@@ -160,25 +175,65 @@ module Granete
           @catalog_provider.find_definition(definition_id)
         end
 
-        # The owning furniture ENTITY is host evidence for the breadcrumb and
-        # navigation; the semantic identity (furnitureInstanceId) comes from
-        # the child metadata and stays valid even when the entity is gone.
-        def owner_entity(furniture_ref)
-          return nil if furniture_ref.nil?
+        # Owning-furniture recovery for a nested child, by descending trust:
+        #
+        #   path    — the host's real active editing path roots at a furniture
+        #             whose ref matches the child's (a copy sharing definition
+        #             and metadata is disambiguated by which copy the user is
+        #             actually inside — pre-#391 reality);
+        #   scan    — exactly ONE root entity carries the child's ref;
+        #   ambiguous — several root entities carry the same ref (native
+        #             copy/paste before #391): NEVER silently pick the first;
+        #   none    — no root entity carries the ref (owner deleted, etc.).
+        #
+        # The semantic identity never depends on this recovery: the child
+        # metadata already carries furnitureInstanceRef.
+        def owner_recovery(entity, furniture_ref)
+          owner = owner_from_active_path(entity, furniture_ref)
+          return ['path', owner] if owner
+
+          candidates = owner_scan_candidates(furniture_ref)
+          case candidates.length
+          when 1 then ['scan', candidates.first]
+          when 0 then ['none', nil]
+          else ['ambiguous', nil]
+          end
+        end
+
+        def owner_from_active_path(entity, furniture_ref)
+          model = @model_provider.call
+          return nil unless model.respond_to?(:active_path)
+
+          path = model.active_path
+          return nil unless path.is_a?(Array) && !path.empty? && path.include?(entity)
+
+          path.each do |candidate|
+            next unless candidate.respond_to?(:get_attribute)
+
+            metadata = read_metadata(candidate)
+            next unless FURNITURE_METADATA_KINDS.include?(metadata && metadata['kind'])
+
+            return nil if furniture_ref && metadata.dig('identity', 'instanceRef') != furniture_ref
+
+            return candidate
+          end
+          nil
+        end
+
+        def owner_scan_candidates(furniture_ref)
+          return [] if furniture_ref.nil?
 
           model = @model_provider.call
-          return nil unless model.respond_to?(:entities)
+          return [] unless model.respond_to?(:entities)
 
           # Managed furniture always lives at the model ROOT; active_entities
           # would be whatever context the user has open for editing, so this
           # read-only scan must stay on model.entities.
-          model.entities.find do |candidate| # rubocop:disable SketchupSuggestions/ModelEntities
+          model.entities.select do |candidate| # rubocop:disable SketchupSuggestions/ModelEntities
             next false unless candidate.respond_to?(:get_attribute)
 
             metadata = read_metadata(candidate)
-            next false if metadata.nil?
-
-            FURNITURE_METADATA_KINDS.include?(metadata['kind']) &&
+            FURNITURE_METADATA_KINDS.include?(metadata && metadata['kind']) &&
               metadata.dig('identity', 'instanceRef') == furniture_ref
           end
         end
@@ -211,6 +266,11 @@ module Granete
 
         def native_component_instance?(entity)
           defined?(::Sketchup::ComponentInstance) && entity.is_a?(::Sketchup::ComponentInstance)
+        end
+
+        def with_capabilities(context)
+          context.capabilities = CapabilityPolicy.compute(context)
+          context
         end
       end
     end

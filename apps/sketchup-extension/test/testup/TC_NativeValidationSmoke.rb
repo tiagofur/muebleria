@@ -270,7 +270,11 @@ module Granete
         metadata = store.read(handle)
         assert_equal 'gab-front-door-copy-0', metadata.dig('intent', 'hostComponentInstanceId'),
                      'visible hardware stays bound to its host board instance'
-        assert_equal 'gab-front-door-copy-0-hw-handle', metadata.dig('identity', 'componentInstanceId')
+        # Since #476 hardware owns its occurrence namespace: hardwarePlacementId
+        # is the placement identity and componentInstanceId stays a part-only
+        # namespace that never aliases it.
+        assert_equal 'gab-front-door-copy-0-hw-handle', metadata.dig('identity', 'hardwarePlacementId')
+        assert_nil metadata.dig('identity', 'componentInstanceId')
 
         top.definition.entities.grep(Sketchup::ComponentInstance).each do |child|
           next unless child.name.start_with?('Bisagra')

@@ -80,12 +80,14 @@ module Granete
                       supported: false, reason: CapabilityReasons::INSPECT_MANUFACTURING.call)
         end
 
+        # Provenance-aware (#350): only a real contract discriminator decides
+        # which explanation applies — 'unknown' fails closed with its own
+        # remediation instead of being treated as derived or manual.
         def hardware_capabilities(context, set)
-          manual = context.origin == 'manual'
-          move_reason = if manual
-                          CapabilityReasons::HARDWARE_MANUAL_EDIT.call
-                        else
-                          CapabilityReasons::HARDWARE_DERIVED_EDIT.call
+          move_reason = case context.placement_kind
+                        when 'manual' then CapabilityReasons::HARDWARE_MANUAL_EDIT.call
+                        when 'derived' then CapabilityReasons::HARDWARE_DERIVED_EDIT.call
+                        else CapabilityReasons::HARDWARE_UNKNOWN_EDIT.call
                         end
           set.declare('canMove', supported: false, reason: move_reason)
           set.declare('canRotate', supported: false, reason: move_reason)

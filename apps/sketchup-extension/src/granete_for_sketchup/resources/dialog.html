@@ -1449,6 +1449,32 @@
         margin: 0;
       }
 
+      /* Native fail-closed mutation switch (#476): a disabled fieldset turns
+         off every descendant control at once. */
+      .inspector-fieldset {
+        border: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .inspector-fieldset:disabled .card,
+      .inspector-fieldset:disabled .btn {
+        opacity: 0.6;
+      }
+
+      .tech-details summary {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+      }
+
+      .tech-details[open] summary {
+        margin-bottom: var(--space-2);
+      }
+
       footer {
         padding: var(--space-3);
         text-align: center;
@@ -1653,35 +1679,40 @@
               <p id="inspector-edit-blocker-reason" class="subhead" style="margin: var(--space-1) 0 0 0;"></p>
             </div>
 
-            <div class="card" id="inspector-params-card">
-              <div class="card-title">Parámetros del Mueble</div>
-              <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
+            <!-- One native fail-closed switch for every mutation control:
+                 with a multi-selection (until batch editing exists) or a
+                 capability denial, the whole fieldset disables at once. -->
+            <fieldset id="inspector-edit-fieldset" class="inspector-fieldset">
+              <div class="card" id="inspector-params-card">
+                <div class="card-title">Parámetros del Mueble</div>
+                <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
 
-              <div class="summary-box">
-                <div class="summary-item">
-                  <strong id="inspector-summary-dims">-- × -- × --</strong>
-                  <span>Cotas (mm)</span>
-                </div>
-                <div class="summary-item">
-                  <strong id="inspector-summary-parts">--</strong>
-                  <span>Piezas estimadas</span>
+                <div class="summary-box">
+                  <div class="summary-item">
+                    <strong id="inspector-summary-dims">-- × -- × --</strong>
+                    <span>Cotas (mm)</span>
+                  </div>
+                  <div class="summary-item">
+                    <strong id="inspector-summary-parts">--</strong>
+                    <span>Piezas estimadas</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div class="card" id="inspector-materials-card" style="display: none;">
-              <div class="card-title">Materiales del Taller</div>
-              <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
-            </div>
+              <div class="card" id="inspector-materials-card" style="display: none;">
+                <div class="card-title">Materiales del Taller</div>
+                <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
+              </div>
 
-            <button id="btn-update" class="btn btn-primary">
-              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              <span>Actualizar Mueble</span>
-            </button>
-            <button id="btn-delete" class="btn btn-danger">
-              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              <span>Eliminar Mueble</span>
-            </button>
+              <button id="btn-update" class="btn btn-primary">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span>Actualizar Mueble</span>
+              </button>
+              <button id="btn-delete" class="btn btn-danger">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Eliminar Mueble</span>
+              </button>
+            </fieldset>
           </div>
 
           <!-- Drill-down: part / hardware / aggregate context with owning furniture breadcrumb -->
@@ -1698,19 +1729,23 @@
               </button>
             </div>
 
-            <div class="card">
-              <div class="card-title">Identidad Granete</div>
-              <div id="child-facts" style="margin-top: var(--space-2);"></div>
-            </div>
+            <p id="child-owner-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs);"></p>
 
             <div class="card">
               <div class="card-title">Acciones disponibles</div>
               <div id="child-capabilities" style="margin-top: var(--space-2);"></div>
             </div>
+
+            <!-- Granete IDs are diagnostics, not product noise: collapsed by
+                 default so the actionable surface stays user-facing. -->
+            <details id="child-tech-details" class="card tech-details">
+              <summary>Detalle técnico</summary>
+              <div id="child-facts" style="margin-top: var(--space-2);"></div>
+            </details>
           </div>
 
           <div id="inspector-multi-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs); text-align: center;">
-            Selección múltiple: se muestra el primer elemento. La edición por lote llegará con #471.
+            Selección múltiple: se muestra el primer elemento sólo para inspección; la edición queda deshabilitada hasta que exista edición por lote.
           </div>
         </section>
 
@@ -1969,6 +2004,7 @@
         var inspectorEditBlocker = document.getElementById("inspector-edit-blocker");
         var inspectorEditBlockerReason = document.getElementById("inspector-edit-blocker-reason");
         var inspectorParamsCard = document.getElementById("inspector-params-card");
+        var inspectorEditFieldset = document.getElementById("inspector-edit-fieldset");
         var inspectorInteractiveBadge = document.getElementById("inspector-interactive-badge");
         var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
         var inspectorParamsContainer = document.getElementById("inspector-params-container");
@@ -1980,6 +2016,7 @@
         var childName = document.getElementById("child-name");
         var childKindBadge = document.getElementById("child-kind-badge");
         var childOriginNote = document.getElementById("child-origin-note");
+        var childOwnerNote = document.getElementById("child-owner-note");
         var childFacts = document.getElementById("child-facts");
         var childCapabilities = document.getElementById("child-capabilities");
         var btnGotoFurniture = document.getElementById("btn-goto-furniture");
@@ -2240,7 +2277,7 @@
           var isInspector = (card === inspectorMaterialsCard || def === inspectorDef);
           var ctx = contextInfo || {
             context: isInspector ? "inspector" : "configurator",
-            instanceId: isInspector && selectedContext ? selectedContext.furnitureInstanceId : null,
+            instanceId: isInspector && selectedContext ? selectedContext.furnitureInstanceRef : null,
             definitionId: def ? (def.furnitureDefinitionId || def.furniture_definition_id) : null
           };
 
@@ -3301,7 +3338,8 @@
           },
 
           onUpdateResult: function (result) {
-            btnUpdate.disabled = !capabilityEnabled(selectedContext, "canEditParameters");
+            btnUpdate.disabled = !capabilityEnabled(selectedContext, "canEditParameters") ||
+              (selectedContext && selectedContext.selectionCount > 1);
             btnUpdate.innerHTML = icon("save") + "<span>Actualizar Mueble</span>";
             if (result && result.success) {
               var detail = typeof result.component_count === "number" && result.component_count > 0
@@ -3329,7 +3367,7 @@
                     if (s === "project" || s === "project_default") {
                       projectDefaultMaterials[role] = id;
                     }
-                  }, { context: "inspector", instanceId: selectedContext.furnitureInstanceId, definitionId: selectedContext.furnitureDefinitionId });
+                  }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
                 updateInspectorSummary();
               }
             }
@@ -3361,11 +3399,13 @@
               projectDefaultMaterials[role] = materialId;
             }
 
-            var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedContext && payload.instanceId === selectedContext.furnitureInstanceId);
+            var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedContext && payload.instanceId === selectedContext.furnitureInstanceRef);
             var isConfiguratorTarget = payload.context === "configurator" || (!isInspectorTarget && activeLibDef);
 
             // If the finish choice belongs to an inspected placed furniture in the model
-            if (isInspectorTarget && selectedContext && selectedContext.kind === "furniture" && inspectorDef && (!payload.instanceId || payload.instanceId === selectedContext.furnitureInstanceId)) {
+            var materialsEditable = selectedContext && selectedContext.kind === "furniture" &&
+                capabilityEnabled(selectedContext, "canEditMaterialRoles") && !(selectedContext.selectionCount > 1);
+            if (isInspectorTarget && selectedContext && selectedContext.kind === "furniture" && inspectorDef && materialsEditable && (!payload.instanceId || payload.instanceId === selectedContext.furnitureInstanceRef)) {
               if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
               inspectorMaterialChoices[role] = materialId;
 
@@ -3375,11 +3415,11 @@
                   if (s === "project" || s === "project_default") {
                     projectDefaultMaterials[r] = id;
                   }
-                }, { context: "inspector", instanceId: selectedContext.furnitureInstanceId, definitionId: selectedContext.furnitureDefinitionId });
+                }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
               updateInspectorSummary();
 
               var updatePayload = {
-                instanceId: selectedContext.furnitureInstanceId,
+                instanceId: selectedContext.furnitureInstanceRef,
                 definitionId: selectedContext.furnitureDefinitionId,
                 parameters: inspectorParams,
                 materialChoices: inspectorMaterialChoices
@@ -3754,9 +3794,9 @@
 
           var legacy = context.representation === "legacy-group";
           inspectorRepresentationWarning.style.display = legacy ? "block" : "none";
-          if (legacy && context.hostLocator) {
+          if (legacy) {
             inspectorRepresentationWarning.textContent =
-              "Representación legacy (Group): la edición requiere migración (#416).";
+              "Este mueble usa una representación anterior del plugin. Reinsertalo desde la biblioteca para recuperar la edición.";
           }
 
           // Interactive validation reset
@@ -3772,22 +3812,32 @@
             inspectorManufacturingBadge.className = "status-badge pending";
           }
 
-          var canEdit = capabilityEnabled(context, "canEditParameters");
-          var blockerReason = !canEdit && context.capabilities && context.capabilities.canEditParameters
+          // Each control obeys its OWN capability, and a multi-selection
+          // fail-closes every mutation until batch editing exists.
+          var multi = context.selectionCount && context.selectionCount > 1;
+          var canEditParams = capabilityEnabled(context, "canEditParameters");
+          var canEditMaterials = capabilityEnabled(context, "canEditMaterialRoles");
+          var blockerReason = !canEditParams && context.capabilities && context.capabilities.canEditParameters
             ? context.capabilities.canEditParameters.reason
             : null;
-          inspectorEditBlocker.style.display = canEdit ? "none" : "block";
+          inspectorEditBlocker.style.display = canEditParams ? "none" : "block";
           inspectorEditBlockerReason.textContent = blockerReason || "La edición no está disponible para este mueble.";
-          inspectorParamsCard.style.display = canEdit ? "block" : "none";
-          inspectorMaterialsCard.style.display = canEdit ? "block" : "none";
+          inspectorParamsCard.style.display = canEditParams ? "block" : "none";
 
-          btnUpdate.disabled = !canEdit;
-          btnDelete.disabled = !capabilityEnabled(context, "canDelete");
+          // One native switch for params + materials + both buttons.
+          inspectorEditFieldset.disabled = Boolean(multi || !canEditParams);
+          btnUpdate.disabled = Boolean(!canEditParams || multi);
+          btnDelete.disabled = Boolean(!capabilityEnabled(context, "canDelete") || multi);
 
-          if (!canEdit) {
+          if (!canEditParams) {
             inspectorParams = {};
             inspectorMaterialChoices = {};
+            inspectorMaterialsCard.style.display = "none";
             return;
+          }
+          inspectorMaterialsCard.style.display = canEditMaterials ? "block" : "none";
+          if (!canEditMaterials) {
+            inspectorMaterialChoices = {};
           }
 
           inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), context.parameters || {});
@@ -3798,10 +3848,12 @@
             updateInspectorSummary();
             validateInteractiveClient(def, inspectorParams);
           });
-          renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
-            inspectorMaterialChoices, function (role, id) {
-              inspectorMaterialChoices[role] = id;
-            });
+          if (canEditMaterials) {
+            renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
+              inspectorMaterialChoices, function (role, id) {
+                inspectorMaterialChoices[role] = id;
+              });
+          }
 
           updateInspectorSummary();
         }
@@ -3816,14 +3868,30 @@
 
           if (context.kind === "hardware") {
             childOriginNote.style.display = "block";
-            childOriginNote.textContent = context.origin === "manual"
+            childOriginNote.textContent = context.placementKind === "manual"
               ? "Origen: colocación manual."
-              : "Origen: derivado de las reglas de la definición.";
+              : context.placementKind === "derived"
+                ? "Origen: derivado de las reglas de la definición."
+                : "Origen: sin determinar (faltan datos de procedencia).";
           } else {
             childOriginNote.style.display = "none";
           }
 
-          btnGotoFurniture.style.display = context.furnitureInstanceId ? "inline-flex" : "none";
+          childOwnerNote.style.display = "none";
+          if (context.ownerRecovery === "ambiguous") {
+            childOwnerNote.style.display = "block";
+            childOwnerNote.textContent =
+              "Hay varias copias del mismo mueble en el modelo; no se puede identificar con certeza el mueble dueño de esta pieza.";
+          } else if (context.ownerRecovery === "none") {
+            childOwnerNote.style.display = "block";
+            childOwnerNote.textContent =
+              "No se encontró el mueble dueño en el modelo (puede haber sido eliminado).";
+          }
+
+          // The button needs a resolvable owner ENTITY; an ambiguous or missing
+          // owner is honestly not navigable.
+          var ownerResolved = context.ownerRecovery === "path" || context.ownerRecovery === "scan";
+          btnGotoFurniture.style.display = ownerResolved && context.furnitureInstanceRef ? "inline-flex" : "none";
 
           renderChildFacts(context);
           renderCapabilityList(childCapabilities, context.capabilities);
@@ -3833,7 +3901,8 @@
           childBreadcrumb.innerHTML = "";
           var path = context.semanticPath || [];
 
-          if (context.furnitureInstanceId && path.length > 1) {
+          var ownerKnown = (context.ownerRecovery === "path" || context.ownerRecovery === "scan");
+          if (ownerKnown && context.furnitureInstanceRef && path.length > 1) {
             var ownerCrumb = document.createElement("button");
             ownerCrumb.type = "button";
             ownerCrumb.className = "crumb crumb-link";
@@ -3841,7 +3910,7 @@
             ownerCrumb.title = "Volver al contexto del mueble";
             ownerCrumb.addEventListener("click", function () {
               if (window.sketchup && window.sketchup.select_furniture) {
-                window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceId: context.furnitureInstanceId }));
+                window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceRef: context.furnitureInstanceRef }));
               }
             });
             childBreadcrumb.appendChild(ownerCrumb);
@@ -3861,7 +3930,7 @@
 
         function renderChildFacts(context) {
           var facts = [
-            ["Mueble", context.furnitureInstanceId],
+            ["Mueble (ref. local)", context.furnitureInstanceRef],
             ["Rol semántico", context.display && context.display.role],
             ["Ocurrencia (componentInstanceId)", context.componentInstanceId],
             ["Definición de pieza", context.componentDefinitionId],
@@ -3972,11 +4041,12 @@
         btnUpdate.addEventListener("click", function () {
           if (!selectedContext || selectedContext.kind !== "furniture") return;
           if (!capabilityEnabled(selectedContext, "canEditParameters")) return;
+          if (selectedContext.selectionCount > 1) return;
           btnUpdate.disabled = true;
           btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
 
           var payload = {
-            instanceId: selectedContext.furnitureInstanceId,
+            instanceId: selectedContext.furnitureInstanceRef,
             definitionId: selectedContext.furnitureDefinitionId,
             parameters: inspectorParams,
             materialChoices: inspectorMaterialChoices
@@ -4009,6 +4079,7 @@
         btnDelete.addEventListener("click", function () {
           if (!selectedContext || selectedContext.kind !== "furniture") return;
           if (!capabilityEnabled(selectedContext, "canDelete")) return;
+          if (selectedContext.selectionCount > 1) return;
           if (!deleteArmed) {
             deleteArmed = true;
             btnDelete.textContent = "¿Confirmar eliminación?";
@@ -4018,7 +4089,7 @@
           }
           resetDeleteConfirm();
           if (window.sketchup && window.sketchup.delete_selected_furniture) {
-            var deletePayload = { instanceId: selectedContext.furnitureInstanceId };
+            var deletePayload = { instanceId: selectedContext.furnitureInstanceRef };
             window.sketchup.delete_selected_furniture(JSON.stringify(deletePayload));
           } else {
             window.GraneteDialog.onSelectionChange(null);
@@ -4028,9 +4099,9 @@
         // Breadcrumb "return to owning furniture": viewport selection change
         // only — the Ruby side never mutates geometry or metadata here.
         btnGotoFurniture.addEventListener("click", function () {
-          if (!selectedContext || !selectedContext.furnitureInstanceId) return;
+          if (!selectedContext || !selectedContext.furnitureInstanceRef) return;
           if (window.sketchup && window.sketchup.select_furniture) {
-            window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceId: selectedContext.furnitureInstanceId }));
+            window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceRef: selectedContext.furnitureInstanceRef }));
           }
         });
 

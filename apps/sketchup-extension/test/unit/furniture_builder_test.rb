@@ -69,6 +69,7 @@ class FurnitureBuilderTest < Minitest::Test
     'hardware' => [
       { 'placementId' => 'mod-door-hw-0', 'hardwareId' => 'hw-handle', 'name' => 'Manija 160',
         'shape' => 'bar-pull', 'hostComponentInstanceId' => 'mod-door', 'anchorFace' => 'front',
+        'placementKind' => 'manual',
         'transform' => { 'translationMm' => [542, 578, 282] }, 'dimensionsMm' => [32, 25, 160],
         'colorHex' => '#c0c0c0' }
     ]
@@ -193,14 +194,18 @@ class FurnitureBuilderTest < Minitest::Test
     assert_equal 'hardware_mod-door-hw-0', handle_meta['intent']['semanticRole']
     assert_equal 'mod-door', handle_meta['intent']['hostComponentInstanceId']
     # #476 explicit semantic discriminators: entity class, hardware
-    # definition and placement origin are stored data — never name-derived.
+    # definition and the contract's placement provenance are stored data —
+    # never name-derived. Hardware owns its occurrence namespace.
     assert_equal 'hardware', handle_meta['intent']['entityClass']
     assert_equal 'hw-handle', handle_meta['intent']['hardwareDefinitionId']
-    assert_equal 'resolved', handle_meta['intent']['placementOrigin']
+    assert_equal 'manual', handle_meta['intent']['placementKind']
+    assert_equal 'mod-door-hw-0', handle_meta.dig('identity', 'hardwarePlacementId')
+    assert_nil handle_meta['identity']['componentInstanceId']
 
     door = part_instances.find { |p| p.name == 'Puerta' }
     door_meta = @store.read(door)
     assert_equal 'part', door_meta['intent']['entityClass']
+    assert_equal 'mod-door', door_meta.dig('identity', 'componentInstanceId')
 
     assert_equal [[:start, 'Insertar Mueble Gabinete Base Estándar', true], :commit],
                  @model.operations

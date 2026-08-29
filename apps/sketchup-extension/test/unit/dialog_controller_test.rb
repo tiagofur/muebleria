@@ -636,7 +636,7 @@ class DialogControllerTest < Minitest::Test
 
     dialog = @controller.show
     dialog.callbacks.fetch('select_furniture').call(
-      nil, JSON.generate({ 'furnitureInstanceId' => result['instance_id'] })
+      nil, JSON.generate({ 'furnitureInstanceRef' => result['instance_id'] })
     )
 
     assert_same furniture, @model.selection.first

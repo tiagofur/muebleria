@@ -7,14 +7,16 @@ require_relative '../../src/granete_for_sketchup/library/layout_contract'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/selection/capabilities'
+require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/selection_context'
 require_relative '../../src/granete_for_sketchup/selection/capability_policy'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
 
 # Canonical SelectionContext contract (#476): stable Granete identity for
-# furniture/aggregate/part/hardware, capability-driven inspector data and the
-# negative proofs that forbid name/geometry-based identity, occurrence
-# collapsing and guessed managed entities.
+# furniture/aggregate/part/hardware, strictly separated ID namespaces,
+# capability-driven inspector data and the negative proofs that forbid
+# identity collapse, name/geometry-based identity, provenance guesses and
+# silent owner ambiguity.
 class SelectionContextTest < Minitest::Test
   IDENTITY_BASIS = {
     'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1]
@@ -32,16 +34,21 @@ class SelectionContextTest < Minitest::Test
     )
   end
 
-  def test_top_level_furniture_produces_furniture_kind_with_granete_identity
+  def test_top_level_furniture_produces_furniture_kind_with_local_ref_identity
     definition = @provider.find_definition('kitchen-base-standard')
     result = @builder.insert_furniture(@model, definition, { 'widthMm' => 700 })
     furniture = @model.active_entities.instances.first
 
     context = @resolver.resolve(furniture)
+    payload = context.to_payload
 
     assert_equal 'furniture', context.kind
-    assert_equal result['instance_id'], context.furniture_instance_id
-    assert_equal result['instance_id'], context.to_payload['furnitureInstanceRef']
+    # Until the server owns Project identity (#384), the business ID stays
+    # nil and the LOCAL locator carries the truth — never an alias.
+    assert_nil context.furniture_instance_id
+    assert_equal result['instance_id'], context.furniture_instance_ref
+    assert_equal result['instance_id'], payload['furnitureInstanceRef']
+    assert_nil payload['furnitureInstanceId']
     assert_equal 'kitchen-base-standard', context.furniture_definition_id
     assert_equal 'native', context.representation
     assert_equal 700, context.parameters['widthMm']
@@ -50,6 +57,37 @@ class SelectionContextTest < Minitest::Test
     assert context.capabilities.supported?('canDelete')
     refute context.capabilities.supported?('canDuplicate')
     refute context.capabilities.supported?('canReviewPreflight')
+  end
+
+  # NEGATIVE PROOF: no ID namespace may collapse into another. Every key
+  # keeps its own value end-to-end through the payload.
+  def test_identity_namespaces_never_collapse
+    layout = native_layout(board('shelf-a', 'st-comp-shelf', 'shelf_1', 'Entrepaño 1'))
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    furniture = @model.active_entities.instances.first
+    metadata = @store.read(furniture)
+    metadata['identity'] = {
+      'instanceRef' => 'local-ref-1',
+      'furnitureInstanceId' => 'server-fi-1',
+      'projectRef' => 'local-project-ref-1',
+      'projectId' => 'server-project-1',
+      'designRef' => 'local-design-ref-1',
+      'designId' => 'server-design-1',
+      'sourceRevisionRef' => 'local-source-rev-1',
+      'baseRevisionId' => 'server-base-rev-1'
+    }
+    @store.write(furniture, metadata)
+
+    payload = @resolver.resolve(furniture).to_payload
+
+    assert_equal 'local-ref-1', payload['furnitureInstanceRef']
+    assert_equal 'server-fi-1', payload['furnitureInstanceId']
+    assert_equal 'local-project-ref-1', payload['projectRef']
+    assert_equal 'server-project-1', payload['projectId']
+    assert_equal 'local-design-ref-1', payload['designRef']
+    assert_equal 'server-design-1', payload['designId']
+    assert_equal 'local-source-rev-1', payload['sourceRevisionRef']
+    assert_equal 'server-base-rev-1', payload['baseRevisionId']
   end
 
   def test_managed_shelf_produces_part_kind_with_occurrence_and_definition_identity
@@ -67,7 +105,9 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'part', context_a.kind
     assert_equal 'shelf-a', context_a.component_instance_id
     assert_equal 'st-comp-shelf', context_a.component_definition_id
-    assert_equal result['instance_id'], context_a.furniture_instance_id
+    assert_equal result['instance_id'], context_a.furniture_instance_ref
+    assert_nil context_a.furniture_instance_id
+    assert_equal 'scan', context_a.owner_recovery
     assert_equal 2, context_a.semantic_path.length
     assert_equal 'Entrepaño 1', context_a.semantic_path.last
 
@@ -76,13 +116,27 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'st-comp-shelf', context_b.component_definition_id
     assert_equal 'shelf-b', context_b.component_instance_id
     refute context_a.same_identity_as?(context_b)
-    refute context_a.to_payload['componentInstanceId'] == context_b.to_payload['componentInstanceId']
+  end
+
+  # NEGATIVE PROOF: occurrence identity excludes reusable definition IDs —
+  # a definition revision never changes WHO the occurrence is.
+  def test_identity_key_ignores_definition_ids_and_host_bindings
+    context_a = Granete::SketchUpExtension::Selection::SelectionContext.new(
+      kind: 'part', furniture_instance_ref: 'ref-1', component_instance_id: 'shelf-a',
+      component_definition_id: 'st-comp-shelf', host_component_instance_id: 'host-1'
+    )
+    context_b = Granete::SketchUpExtension::Selection::SelectionContext.new(
+      kind: 'part', furniture_instance_ref: 'ref-1', component_instance_id: 'shelf-a',
+      component_definition_id: 'st-comp-shelf-v2', host_component_instance_id: 'host-9'
+    )
+
+    assert context_a.same_identity_as?(context_b)
   end
 
   def test_hardware_produces_hardware_kind_with_placement_and_host_occurrence_ids
     layout = native_layout(
       board('door-1', 'mod-comp-door', 'puerta', 'Puerta'),
-      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'door-1')
+      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'door-1', 'manual')
     )
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
     furniture = @model.active_entities.instances.first
@@ -94,13 +148,53 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'place-hw-1', context.hardware_placement_id
     assert_equal 'hw-handle', context.hardware_definition_id
     assert_equal 'door-1', context.host_component_instance_id
-    assert_equal 'resolved', context.origin
-    # Derived hardware never exposes manual-edit capabilities.
+    assert_equal 'manual', context.placement_kind
+    # Hardware keeps its OWN occurrence namespace: a part's
+    # componentInstanceId is never fabricated for a placement.
+    assert_nil context.component_instance_id
+    # Manual-edit capabilities are not available yet, and the reason is the
+    # manual one — not a derived claim.
+    %w[canMove canRotate canChangeHandedness canReplaceDefinition].each do |name|
+      refute context.capabilities[name].supported?
+      assert context.capabilities[name].reason
+    end
+    assert_includes context.capabilities['canMove'].reason, 'manual'
+  end
+
+  def test_derived_hardware_explains_correction_through_its_source
+    layout = native_layout(
+      board('door-1', 'mod-comp-door', 'puerta', 'Puerta'),
+      hardware('place-hw-1', 'hw-hinge', 'Bisagra', 'door-1', 'derived')
+    )
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    handle = @model.active_entities.instances.first.definition.entities.instances.last
+
+    context = @resolver.resolve(handle)
+
+    assert_equal 'hardware', context.kind
+    assert_equal 'derived', context.placement_kind
     refute context.capabilities['canMove'].supported?
-    refute context.capabilities['canRotate'].supported?
-    refute context.capabilities['canChangeHandedness'].supported?
-    refute context.capabilities['canReplaceDefinition'].supported?
-    assert context.capabilities['canMove'].reason
+    assert_includes context.capabilities['canMove'].reason, 'derivado'
+  end
+
+  # NEGATIVE PROOF: absent provenance fails closed as 'unknown' with its own
+  # remediation — never guessed as derived (or manual).
+  def test_missing_provenance_fails_closed_as_unknown
+    layout = native_layout(
+      board('door-1', 'mod-comp-door', 'puerta', 'Puerta'),
+      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'door-1', nil)
+    )
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    handle = @model.active_entities.instances.first.definition.entities.instances.last
+    payload = @store.read(handle)
+    payload['intent'].delete('placementKind')
+    @store.write(handle, payload)
+
+    context = @resolver.resolve(handle)
+
+    assert_equal 'unknown', context.placement_kind
+    refute context.capabilities['canMove'].supported?
+    assert_includes context.capabilities['canMove'].reason, 'sin determinar'
   end
 
   def test_rename_and_world_move_never_change_selection_identity
@@ -117,14 +211,14 @@ class SelectionContextTest < Minitest::Test
     after = @resolver.resolve(shelf)
 
     assert after.same_identity_as?(before)
-    assert_equal result['instance_id'], after.furniture_instance_id
+    assert_equal result['instance_id'], after.furniture_instance_ref
     refute_equal before.semantic_path.last, after.semantic_path.last
   end
 
   def test_child_regeneration_recovers_the_same_semantic_context_by_granete_identity
     layout = native_layout(
       board('shelf-a', 'st-comp-shelf', 'shelf_1', 'Entrepaño 1'),
-      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'shelf-a')
+      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'shelf-a', 'manual')
     )
     result = @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
     furniture = @model.active_entities.instances.first
@@ -132,8 +226,6 @@ class SelectionContextTest < Minitest::Test
     context_before = @resolver.resolve(old_shelf)
     old_persistent_id = old_shelf.persistent_id
 
-    # Rebuild regenerates every child (new persistent_ids) while the server
-    # keeps contract componentInstanceIds stable.
     @builder.update_furniture(@model, furniture, fixture_definition, {}, resolved_layout: layout)
 
     new_shelf = furniture.definition.entities.instances.find do |instance|
@@ -143,7 +235,7 @@ class SelectionContextTest < Minitest::Test
     context_after = @resolver.resolve(new_shelf)
 
     assert context_after.same_identity_as?(context_before)
-    assert_equal result['instance_id'], context_after.furniture_instance_id
+    assert_equal result['instance_id'], context_after.furniture_instance_ref
     refute_equal old_persistent_id, new_shelf.persistent_id
     assert_equal old_persistent_id, context_before.host_locator['entityPersistentId']
     assert_equal new_shelf.persistent_id, context_after.host_locator['entityPersistentId']
@@ -187,7 +279,7 @@ class SelectionContextTest < Minitest::Test
   def test_legacy_child_metadata_without_entity_class_uses_structured_host_binding_only
     layout = native_layout(
       board('door-1', 'mod-comp-door', 'puerta', 'Puerta'),
-      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'door-1')
+      hardware('place-hw-1', 'hw-handle', 'Manija 160', 'door-1', nil)
     )
     @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
     furniture = @model.active_entities.instances.first
@@ -197,17 +289,19 @@ class SelectionContextTest < Minitest::Test
     legacy_payload = @store.read(handle)
     legacy_payload['intent'].delete('entityClass')
     legacy_payload['intent'].delete('hardwareDefinitionId')
-    legacy_payload['intent'].delete('placementOrigin')
+    legacy_payload['intent'].delete('placementKind')
+    legacy_payload['identity'].delete('hardwarePlacementId')
     @store.write(handle, legacy_payload)
 
     context = @resolver.resolve(handle)
 
     # The structured hardware host binding (never the name) keeps hardware
-    # resolution working until #416 migrates old models.
+    # resolution working until #416 migrates old models; provenance without
+    # contract data fails closed.
     assert_equal 'hardware', context.kind
     assert_equal 'place-hw-1', context.hardware_placement_id
     assert_nil context.hardware_definition_id
-    assert_equal 'resolved', context.origin
+    assert_equal 'unknown', context.placement_kind
   end
 
   def test_entity_names_never_drive_semantic_class
@@ -216,7 +310,6 @@ class SelectionContextTest < Minitest::Test
     furniture = @model.active_entities.instances.first
     shelf = furniture.definition.entities.instances.first
 
-    # A part named like hardware must stay a part: no name heuristics.
     shelf.name = 'Herraje bisagra especial'
     context = @resolver.resolve(shelf)
 
@@ -240,16 +333,6 @@ class SelectionContextTest < Minitest::Test
     refute context.capabilities.supported?('canMoveWithinConstraint')
   end
 
-  def test_manual_placement_origin_blocks_manual_edit_explanation_consistently
-    context = Granete::SketchUpExtension::Selection::SelectionContext.new(
-      kind: 'hardware', origin: 'manual', hardware_placement_id: 'place-manual-1'
-    )
-    context.capabilities = Granete::SketchUpExtension::Selection::CapabilityPolicy.compute(context)
-
-    refute context.capabilities['canMove'].supported?
-    assert_includes context.capabilities['canMove'].reason, '468'
-  end
-
   def test_furniture_without_catalog_definition_disables_edit_with_reason
     missing = { 'furniture_definition_id' => 'gone-def', 'name' => 'Mueble desaparecido',
                 'parameters' => [] }
@@ -269,6 +352,53 @@ class SelectionContextTest < Minitest::Test
     assert_nil @resolver.resolve(nil)
   end
 
+  # --- owner recovery (#476 review): path > scan, ambiguity is honest ---
+
+  def test_owner_recovery_prefers_the_real_active_path_over_a_scan
+    layout = native_layout(board('shelf-a', 'st-comp-shelf', 'shelf_1', 'Entrepaño 1'))
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    furniture = @model.active_entities.instances.first
+    shelf = furniture.definition.entities.instances.first
+
+    # A native copy shares the definition AND (pre-#391) the metadata ref.
+    copy = @model.active_entities.add_instance(furniture.definition, Geom::Transformation.new)
+    metadata = @store.read(furniture)
+    @store.write(copy, JSON.parse(JSON.generate(metadata)))
+    copy.name = 'Copia del mueble'
+
+    # Scan alone is ambiguous: two root entities carry the same ref.
+    ambiguous = @resolver.resolve(shelf)
+    assert_equal 'ambiguous', ambiguous.owner_recovery
+    assert_nil ambiguous.host_locator['furniturePersistentId']
+    assert_equal 1, ambiguous.semantic_path.length
+
+    # The user inside the copy's editing context disambiguates via the real
+    # host path — no silent first-match.
+    path_model = PathModelStub.new(@model, [copy, shelf])
+    path_resolver = Granete::SketchUpExtension::Selection::Resolver.new(
+      metadata_store: @store, catalog_provider: @provider,
+      model_provider: -> { path_model }
+    )
+    resolved = path_resolver.resolve(shelf)
+
+    assert_equal 'path', resolved.owner_recovery
+    assert_equal copy.persistent_id, resolved.host_locator['furniturePersistentId']
+    assert_equal copy.name, resolved.semantic_path.first
+  end
+
+  def test_owner_recovery_reports_none_when_owner_entity_is_gone
+    layout = native_layout(board('shelf-a', 'st-comp-shelf', 'shelf_1', 'Entrepaño 1'))
+    @builder.insert_furniture(@model, fixture_definition, {}, resolved_layout: layout)
+    furniture = @model.active_entities.instances.first
+    shelf = furniture.definition.entities.instances.first
+
+    @model.active_entities.erase_entities([furniture])
+
+    context = @resolver.resolve(shelf)
+    assert_equal 'none', context.owner_recovery
+    assert_nil context.host_locator['furniturePersistentId']
+  end
+
   def test_payload_exposes_contract_keys_and_capabilities
     layout = native_layout(
       board('shelf-a', 'st-comp-shelf', 'shelf_1', 'Entrepaño 1', 'cat-shelf-1')
@@ -283,13 +413,29 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'shelf-a', payload['componentInstanceId']
     assert_equal 'st-comp-shelf', payload['componentDefinitionId']
     assert_equal 'cat-shelf-1', payload['catalogComponentId']
+    assert_equal 'scan', payload['ownerRecovery']
     assert payload['capabilities'].is_a?(Hash)
-    assert payload['capabilities']['canInspectManufacturing']['supported'] == false
+    assert_equal false, payload['capabilities']['canInspectManufacturing']['supported']
     assert payload['capabilities']['canInspectManufacturing']['reason']
     assert payload['hostLocator']['entityPersistentId']
   end
 
   private
+
+  # Minimal host-model double exposing an active editing path (the real
+  # SketchUp concept Model#active_path) over the stub model's entities.
+  class PathModelStub
+    def initialize(model, active_path)
+      @model = model
+      @active_path = active_path
+    end
+
+    attr_reader :active_path
+
+    def entities
+      @model.entities
+    end
+  end
 
   def fixture_definition
     {
@@ -316,16 +462,17 @@ class SelectionContextTest < Minitest::Test
     end
   end
 
-  def hardware(placement_id, hardware_id, name, host_component_instance_id)
+  def hardware(placement_id, hardware_id, name, host_component_instance_id, placement_kind)
     {
       'placementId' => placement_id,
       'hardwareId' => hardware_id,
       'name' => name,
       'hostComponentInstanceId' => host_component_instance_id,
+      'placementKind' => placement_kind,
       'transform' => { 'translationMm' => [10, 20, 30] },
       'dimensionsMm' => [32, 37, 160],
       'colorHex' => '#c0c0c0'
-    }
+    }.compact
   end
 
   def native_layout(*components)

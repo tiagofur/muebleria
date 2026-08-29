@@ -54,6 +54,51 @@ class LayoutContractTest < Minitest::Test
     assert_equal 'st-comp-side-copy-0', layout.find_board('st-comp-side-copy-0').component_instance_id
   end
 
+  def test_golden_hardware_carries_real_placement_provenance
+    layout = Granete::SketchUpExtension::Library::LayoutContract.parse!(golden_layout)
+
+    placement = layout.hardware.first
+    refute_nil placement
+    # The server publishes the #350 provenance discriminator; the golden
+    # regenerates from Go so this pins the real wire value.
+    assert_equal 'manual', placement.placement_kind
+    assert_equal 'mod-comp-door-copy-0-hw-0', placement.placement_id
+  end
+
+  def test_hardware_placement_kind_accepts_manual_and_derived_only
+    manual = golden_layout.merge('hardware' => [golden_hardware('placementKind' => 'manual')])
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(manual)
+    assert_equal 'manual', parsed.hardware.first.placement_kind
+
+    derived = golden_layout.merge('hardware' => [golden_hardware('placementKind' => 'derived')])
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(derived)
+    assert_equal 'derived', parsed.hardware.first.placement_kind
+
+    ['resolved', 'guessed', ''].each do |bad|
+      body = golden_layout.merge('hardware' => [golden_hardware('placementKind' => bad)])
+      assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError,
+                    "placementKind #{bad.inspect} must be rejected") do
+        Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+      end
+    end
+  end
+
+  def test_hardware_placement_kind_may_be_absent_for_legacy_bodies
+    body = golden_layout.merge('hardware' => [golden_hardware.except('placementKind')])
+    parsed = Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+
+    # Absent provenance parses as nil: the selection context reports
+    # 'unknown' fail-closed — it never guesses 'derived'.
+    assert_nil parsed.hardware.first.placement_kind
+  end
+
+  def golden_hardware(overrides = {})
+    raw = golden_layout['hardware'].first
+    raise 'missing hardware in golden' unless raw
+
+    raw.merge(overrides)
+  end
+
   def test_missing_transform_contract_fails_safe
     body = golden_layout.except('transformContract')
 

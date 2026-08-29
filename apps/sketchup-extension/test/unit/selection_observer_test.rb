@@ -59,7 +59,7 @@ class SelectionObserverTest < Minitest::Test
     assert_equal 'left_side', @last_context['display']['role']
     # The owning furniture stays recoverable from the semantic child (#415):
     # drill-down context without losing the managed unit.
-    assert_equal result['instance_id'], @last_context['furnitureInstanceId']
+    assert_equal result['instance_id'], @last_context['furnitureInstanceRef']
     assert_equal 2, @last_context['semanticPath'].length
   end
 
@@ -82,7 +82,7 @@ class SelectionObserverTest < Minitest::Test
 
     assert_equal 'part', @last_context['kind']
     assert_equal before['componentInstanceId'], @last_context['componentInstanceId']
-    assert_equal result['instance_id'], @last_context['furnitureInstanceId']
+    assert_equal result['instance_id'], @last_context['furnitureInstanceRef']
   end
 
   def test_unmanaged_geometry_publishes_unmanaged_kind

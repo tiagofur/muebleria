@@ -16,7 +16,7 @@ module Granete
         SUPPORTED_KINDS = %w[bootstrapIntent furnitureInstance componentInstance
                              partInstance].freeze
         ENTITY_CLASSES = %w[part hardware aggregate].freeze
-        HARDWARE_ORIGINS = %w[resolved manual].freeze
+        PLACEMENT_KINDS = %w[manual derived].freeze
 
         def initialize(model)
           @model = model
@@ -122,7 +122,8 @@ module Granete
 
         # #476 semantic child discriminator: the managed entity class is an
         # explicit metadata field, never derived from names/slots; hardware
-        # identity/placement origin are explicit Granete IDs/enums.
+        # identity and the #350 placement provenance are explicit Granete
+        # IDs/enums.
         def validate_child_intent(intent)
           if intent.key?('entityClass') && !ENTITY_CLASSES.include?(intent['entityClass'])
             raise InvalidMetadataError,
@@ -132,11 +133,11 @@ module Granete
             assert_opaque_string(intent['hardwareDefinitionId'], 'intent.hardwareDefinitionId',
                                  max_length: 256)
           end
-          return unless intent.key?('placementOrigin') &&
-                        !HARDWARE_ORIGINS.include?(intent['placementOrigin'])
+          return unless intent.key?('placementKind') &&
+                        !PLACEMENT_KINDS.include?(intent['placementKind'])
 
           raise InvalidMetadataError,
-                "intent.placementOrigin must be one of: #{HARDWARE_ORIGINS.join(', ')}"
+                "intent.placementKind must be one of: #{PLACEMENT_KINDS.join(', ')}"
         end
 
         def assert_equal(value, expected, path)

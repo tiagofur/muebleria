@@ -105,13 +105,13 @@ class MetadataStoreTest < Minitest::Test
       'kind' => 'componentInstance',
       'identity' => {
         'instanceRef' => 'place-hw-01',
-        'componentInstanceId' => 'place-hw-01',
+        'hardwarePlacementId' => 'place-hw-01',
         'projectRef' => 'proj-active'
       },
       'intent' => {
         'entityClass' => 'hardware',
         'hardwareDefinitionId' => 'hw-handle',
-        'placementOrigin' => 'resolved',
+        'placementKind' => 'manual',
         'hostComponentInstanceId' => 'mod-comp-door-copy-0'
       }
     }
@@ -120,7 +120,8 @@ class MetadataStoreTest < Minitest::Test
     assert_equal hardware_meta, written
     intent = @store.read(@entity)['intent']
     assert_equal 'hardware', intent['entityClass']
-    assert_equal 'resolved', intent['placementOrigin']
+    assert_equal 'manual', intent['placementKind']
+    assert_equal 'place-hw-01', written.dig('identity', 'hardwarePlacementId')
   end
 
   def test_rejects_invalid_entity_class_and_placement_origin
@@ -131,7 +132,7 @@ class MetadataStoreTest < Minitest::Test
     end
     assert_includes error.message, 'intent.entityClass'
 
-    invalid_origin = @fixture.merge('intent' => @fixture['intent'].merge('placementOrigin' => 'guessed'))
+    invalid_origin = @fixture.merge('intent' => @fixture['intent'].merge('placementKind' => 'guessed'))
 
     assert_raises(Granete::SketchUpExtension::Metadata::InvalidMetadataError) do
       @store.write(@entity, invalid_origin)

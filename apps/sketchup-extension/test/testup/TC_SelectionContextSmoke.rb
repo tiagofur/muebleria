@@ -6,12 +6,13 @@ require 'testup/testcase'
 
 # Host smoke for the semantic SelectionContext (#476): the INSTALLED
 # extension must resolve viewport selection into the one canonical context
-# model — kind furniture/aggregate/part/hardware/unmanaged with stable
-# Granete identity and capability-driven inspector data — surviving rename,
-# move/rotate and child regeneration, and never guessing managed identity
-# for arbitrary user geometry. Like TC_NativeEntitySmoke, this suite tests
-# the installed RBZ only and scopes every lookup to Granete-generated
-# entities: the host template may carry its own unmanaged content.
+# model — kind furniture/aggregate/part/hardware/unmanaged with strictly
+# separated Granete identity namespaces and capability-driven inspector
+# data — surviving rename, move/rotate and child regeneration, reporting
+# real #350 hardware provenance, never guessing managed identity for
+# arbitrary user geometry and never silently picking an owner among
+# ambiguous copies. Like TC_NativeEntitySmoke, this suite tests the
+# installed RBZ only and scopes every lookup to Granete-generated entities.
 module Granete
   module SketchUpExtension
     class TC_SelectionContextSmoke < TestUp::TestCase
@@ -25,9 +26,10 @@ module Granete
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       GRANETE_DEFINITION_PREFIXES = ['Granete · Mueble · ', 'Granete · Parte · ',
                                      'Granete · Herraje · '].freeze
-      IDENTITY_KEYS = %w[kind furnitureInstanceId componentInstanceId
-                         componentDefinitionId hardwarePlacementId
-                         hardwareDefinitionId hostComponentInstanceId].freeze
+      # Occurrence identity only — reusable definition IDs and host bindings
+      # are excluded by design.
+      IDENTITY_KEYS = %w[kind furnitureInstanceId furnitureInstanceRef
+                         componentInstanceId hardwarePlacementId].freeze
 
       def self.installed_extension
         Sketchup.extensions.to_a.find { |extension| extension.name == EXPECTED_NAME }
@@ -57,11 +59,15 @@ module Granete
         insert_fixture_furniture
         top = granete_furniture_instances.first
         context = select_and_resolve(top)
+
         assert_equal 'furniture', context['kind']
-        store = metadata_store
-        assert_equal store.read(top).dig('identity', 'instanceRef'), context['furnitureInstanceId']
+        # Local locator truth: the business id stays nil until the server
+        # owns Project identity (#384) — never an alias of the ref.
+        assert_equal metadata_store.read(top).dig('identity', 'instanceRef'),
+                     context['furnitureInstanceRef']
+        assert_nil context['furnitureInstanceId']
+        assert_nil context['projectId']
         assert_equal 'native', context['representation']
-        assert context['capabilities']['canEditParameters'].is_a?(Hash)
         # 'mod-1' is not in the packaged static catalog: the capability must
         # be honestly unsupported with an explanation, never silently on.
         refute context['capabilities']['canEditParameters']['supported']
@@ -72,43 +78,46 @@ module Granete
         insert_fixture_furniture
         top = granete_furniture_instances.first
         lateral = find_child_by_component_id(top, 'st-comp-side-copy-0')
-
         context = select_and_resolve(lateral)
+
         assert_equal 'part', context['kind']
         assert_equal 'st-comp-side-copy-0', context['componentInstanceId']
         assert_equal 'st-comp-side', context['componentDefinitionId']
         assert_equal metadata_store.read(top).dig('identity', 'instanceRef'),
-                     context['furnitureInstanceId']
+                     context['furnitureInstanceRef']
         assert_equal 2, context['semanticPath'].length
-        assert context['hostLocator']['entityPersistentId']
+        assert_equal 'scan', context['ownerRecovery']
+        assert_equal top.persistent_id, context['hostLocator']['furniturePersistentId']
       end
 
-      def test_hardware_selection_exposes_placement_host_and_derived_origin
+      def test_hardware_selection_exposes_placement_host_and_real_provenance
         insert_fixture_furniture
         top = granete_furniture_instances.first
         hardware = top.definition.entities.grep(Sketchup::ComponentInstance).find do |child|
           metadata_store.read(child).dig('intent', 'entityClass') == 'hardware'
         end
         refute_nil hardware, 'fixture layout must render one hardware placement'
-
         context = select_and_resolve(hardware)
+
         assert_equal 'hardware', context['kind']
         assert_equal 'mod-comp-door-copy-0-hw-0', context['hardwarePlacementId']
         assert_equal 'hw-handle', context['hardwareDefinitionId']
         assert_equal 'mod-comp-door-copy-0', context['hostComponentInstanceId']
-        assert_equal 'resolved', context['origin']
-        # Derived hardware never exposes manual-edit capabilities.
+        # Real #350 provenance published by the server, persisted verbatim;
+        # hardware owns its occurrence namespace (no componentInstanceId).
+        assert_equal 'manual', context['placementKind']
+        assert_nil context['componentInstanceId']
         %w[canMove canRotate canChangeHandedness canReplaceDefinition].each do |name|
           refute context['capabilities'][name]['supported'], "#{name} must be disabled"
           assert context['capabilities'][name]['reason'], "#{name} must explain why"
         end
+        assert_includes context['capabilities']['canMove']['reason'], 'manual'
       end
 
       def test_rename_and_move_never_change_selection_identity
         insert_fixture_furniture
         top = granete_furniture_instances.first
         lateral = find_child_by_component_id(top, 'st-comp-side-copy-0')
-
         before = select_and_resolve(lateral)
 
         top.name = 'Módulo renombrado y girado'
@@ -116,7 +125,6 @@ module Granete
         top.transformation = Geom::Transformation.rotation(
           Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(0, 0, 1), 90.degrees
         )
-
         after = select_and_resolve(lateral)
 
         IDENTITY_KEYS.each do |key|
@@ -128,7 +136,6 @@ module Granete
         insert_fixture_furniture
         top = granete_furniture_instances.first
         lateral = find_child_by_component_id(top, 'st-comp-side-copy-0')
-
         before = select_and_resolve(lateral)
         old_persistent_id = lateral.persistent_id
 
@@ -179,11 +186,51 @@ module Granete
         insert_fixture_furniture
         group = model.active_entities.add_group
         group.entities.add_line([0, 0, 0], [100, 0, 0])
-
         context = select_and_resolve(group)
+
         assert_equal 'unmanaged', context['kind']
         assert_empty context['capabilities']
         assert group.respond_to?(:definition), 'host reality: Group responds to #definition'
+      end
+
+      # NEGATIVE PROOF (pre-#391 copy reality): a native copy temporarily
+      # shares the SketchUp definition AND the metadata ref. Without host
+      # path evidence the resolver must report ambiguity — never silently
+      # pick the first match. (The host API offers no programmatic way to
+      # enter a component's editing context, so the path-based
+      # disambiguation branch is covered by the unit suite with a faithful
+      # active_path model double; entering the copy interactively would
+      # exercise exactly that branch.)
+      def test_shared_definition_copy_never_picks_an_owner_silently
+        insert_fixture_furniture
+        original = granete_furniture_instances.first
+        copy = model.active_entities.add_instance(original.definition, Geom::Transformation.new)
+        copied_metadata = metadata_store.read(original)
+        Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
+          metadata_store, copy, copied_metadata.dig('identity', 'instanceRef'), definition, {}
+        )
+        copy.name = 'Copia nativa del mueble'
+        lateral = find_child_by_component_id(original, 'st-comp-side-copy-0')
+        refute_nil lateral
+
+        ambiguous = select_and_resolve(lateral)
+        assert_equal 'ambiguous', ambiguous['ownerRecovery'],
+                     'two owners with the same ref must be reported, not first-matched'
+        assert_nil ambiguous['hostLocator']['furniturePersistentId'],
+                   'no owner entity may be claimed under ambiguity'
+        assert_equal 1, ambiguous['semanticPath'].length,
+                     'breadcrumb shows only the child until an owner is certain'
+        # The semantic identity itself is unaffected by the ambiguity.
+        assert_equal 'st-comp-side-copy-0', ambiguous['componentInstanceId']
+        assert_equal copied_metadata.dig('identity', 'instanceRef'),
+                     ambiguous['furnitureInstanceRef']
+
+        # With the copy removed the scan is unambiguous again: recovery
+        # returns to a single, verifiable owner.
+        copy.erase!
+        recovered = select_and_resolve(lateral)
+        assert_equal 'scan', recovered['ownerRecovery']
+        assert_equal original.persistent_id, recovered['hostLocator']['furniturePersistentId']
       end
 
       # ------------------------------------------------------------------

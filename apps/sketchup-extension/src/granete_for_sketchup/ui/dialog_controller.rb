@@ -273,16 +273,18 @@ module Granete
 
         def handle_select_furniture(raw_payload = nil)
           payload = parse_payload(raw_payload)
-          instance_id = payload['furnitureInstanceId'] || payload['instanceId']
+          # The breadcrumb locates the host by its LOCAL ref — never by the
+          # future server business ID (#384), which nothing owns yet.
+          instance_ref = payload['furnitureInstanceRef'] || payload['instanceId']
           model = active_model
-          target = instance_id && search_entities_for_instance(instance_id)
+          target = instance_ref && search_entities_for_instance(instance_ref)
 
           if model && target && furniture_metadata?(model, target)
             select_entity(model, target)
-            @logger.info('inspector_select_furniture', instance_id: instance_id)
+            @logger.info('inspector_select_furniture', instance_ref: instance_ref)
           else
             @logger.warn('inspector_select_furniture_rejected',
-                         instance_id: instance_id)
+                         instance_ref: instance_ref)
           end
         rescue StandardError => e
           @logger.error('inspector_select_furniture_failed', error: e)
