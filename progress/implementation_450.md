@@ -141,5 +141,10 @@ autoridad Platform y `last_login_at` sólo tras autenticación exitosa.
 
 Receipt-driven review mode está `off`, decidido por `clone_local`. No se ejecutó
 reviewer ni existe veredicto: `progress/review_F193.md` registra
-`disabled/unmanaged` y F193 permanece `in_progress`. La entrega supera 400 líneas
-y la estrategia de PR requiere decisión del maintainer antes de publicar.
+`disabled/unmanaged` y F193 permanece `in_progress`.
+
+El maintainer autorizó el 2026-08-29 un único PR con `size:exception`. Migration
+000095, contrato generado, runtime Go, clientes generados y consumidores React
+forman un límite cross-runtime atómico: dividirlos dejaría ramas intermedias con
+schema y contrato incompatibles. La excepción no habilita auto-merge ni reemplaza
+la revisión independiente pendiente.
