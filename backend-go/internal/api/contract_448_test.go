@@ -296,6 +296,12 @@ type staleMembershipStore struct {
 	roles         []domain.UserRole
 }
 
+func (s *staleMembershipStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return []storage.OrgTeamMember{{MembershipID: "u-1", UserID: "target", Roles: append([]domain.UserRole(nil), s.roles...)}}, nil
+}
+
 func (s *staleMembershipStore) UpdateMembershipRolesByOrg(_ context.Context, _, _ string, roles []domain.UserRole, expected int64) (*storage.OrgTeamMember, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

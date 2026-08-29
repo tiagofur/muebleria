@@ -30,6 +30,105 @@ func (s *Server) requireOrgAdmin(w http.ResponseWriter, r *http.Request) (*auth.
 	return claims, org, true
 }
 
+func (s *Server) requireOrgTeamCapability(w http.ResponseWriter, r *http.Request, capability domain.TeamCapability) (*auth.Claims, *domain.Organization, bool) {
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusForbidden, "necesitás sesión en un taller")
+		return nil, nil, false
+	}
+	if claims.Support != nil && capability != domain.TeamCapabilityView {
+		respondWithError(w, http.StatusForbidden, "la sesión de soporte sólo puede consultar Team")
+		return nil, nil, false
+	}
+	org, err := s.Store.GetOrganizationByID(r.Context(), claims.OrgID)
+	if err != nil || org == nil || !org.Active {
+		respondWithError(w, http.StatusNotFound, "organización no encontrada")
+		return nil, nil, false
+	}
+	if !domain.HasTeamCapability(actorRoles(claims), org.Type, capability) {
+		respondWithError(w, http.StatusForbidden, "no tenés permiso para esta acción de Team")
+		return nil, nil, false
+	}
+	return claims, org, true
+}
+
+func (s *Server) requireOrgTeamMutation(w http.ResponseWriter, r *http.Request) (*auth.Claims, *domain.Organization, bool) {
+	claims, org, ok := s.requireOrgTeamCapability(w, r, domain.TeamCapabilityView)
+	if !ok {
+		return nil, nil, false
+	}
+	if claims.Support != nil {
+		respondWithError(w, http.StatusForbidden, "la sesión de soporte sólo puede consultar Team")
+		return nil, nil, false
+	}
+	return claims, org, true
+}
+
+func teamRoleSetIsManageable(actorRoles, targetRoles []domain.UserRole, orgType domain.OrganizationType) bool {
+	if domain.HasTeamCapability(actorRoles, orgType, domain.TeamCapabilityManageAll) {
+		return true
+	}
+	for _, targetRole := range targetRoles {
+		switch targetRole {
+		case domain.RoleVendedor:
+			if !domain.HasTeamCapability(actorRoles, orgType, domain.TeamCapabilityManageSales) {
+				return false
+			}
+		case domain.RoleProduccion, domain.RoleAlmacen:
+			if !domain.HasTeamCapability(actorRoles, orgType, domain.TeamCapabilityManageProduction) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return len(targetRoles) > 0
+}
+
+func (s *Server) teamMutationTarget(w http.ResponseWriter, r *http.Request, claims *auth.Claims, org *domain.Organization, desiredRoles []domain.UserRole) (*storage.OrgTeamMember, bool) {
+	team, err := s.Store.ListOrgTeam(r.Context(), claims.OrgID, claims.UserID)
+	if err != nil {
+		respondWithInternalError(w, err, "org team target")
+		return nil, false
+	}
+	for i := range team {
+		target := &team[i]
+		if target.MembershipID != r.PathValue("membershipId") {
+			continue
+		}
+		if target.UserID == claims.UserID {
+			respondWithError(w, http.StatusForbidden, "no podés modificar tu propia membresía")
+			return nil, false
+		}
+		if !teamRoleSetIsManageable(actorRoles(claims), target.Roles, org.Type) {
+			respondWithError(w, http.StatusForbidden, "no tenés permiso para gestionar los roles actuales de esta membresía")
+			return nil, false
+		}
+		if desiredRoles != nil {
+			if !teamRoleSetIsManageable(actorRoles(claims), desiredRoles, org.Type) {
+				respondWithError(w, http.StatusForbidden, "no tenés permiso para asignar esos roles")
+				return nil, false
+			}
+			if containsRole(desiredRoles, domain.RoleAdmin) && !domain.HasTeamCapability(actorRoles(claims), org.Type, domain.TeamCapabilityAssignAdmin) {
+				respondWithError(w, http.StatusForbidden, "no tenés permiso para asignar administradores")
+				return nil, false
+			}
+		}
+		return target, true
+	}
+	respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
+	return nil, false
+}
+
+func containsRole(roles []domain.UserRole, wanted domain.UserRole) bool {
+	for _, role := range roles {
+		if role == wanted {
+			return true
+		}
+	}
+	return false
+}
+
 func teamMemberToOpenAPI(m storage.OrgTeamMember) openapi.TeamMember {
 	return openapi.TeamMember{
 		MembershipID: m.MembershipID, UserID: m.UserID, Email: m.Email, Name: m.Name,
@@ -39,7 +138,7 @@ func teamMemberToOpenAPI(m storage.OrgTeamMember) openapi.TeamMember {
 }
 
 func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
-	claims, _, ok := s.requireOrgAdmin(w, r)
+	claims, _, ok := s.requireOrgTeamCapability(w, r, domain.TeamCapabilityView)
 	if !ok {
 		return
 	}
@@ -56,7 +155,7 @@ func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
-	claims, org, ok := s.requireOrgAdmin(w, r)
+	claims, org, ok := s.requireOrgTeamMutation(w, r)
 	if !ok {
 		return
 	}
@@ -76,6 +175,9 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeRoleNotAllowed, "roles inválidos para este tipo de taller", nil)
 		return
 	}
+	if _, ok := s.teamMutationTarget(w, r, claims, org, roles); !ok {
+		return
+	}
 	member, err := s.Store.UpdateMembershipRolesByOrg(r.Context(), claims.OrgID, r.PathValue("membershipId"), roles, expected)
 	if membershipMutationError(w, err) {
 		return
@@ -89,7 +191,7 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
-	claims, _, ok := s.requireOrgAdmin(w, r)
+	claims, org, ok := s.requireOrgTeamMutation(w, r)
 	if !ok {
 		return
 	}
@@ -108,6 +210,9 @@ func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
 	status := domain.MembershipStatus(body.Status)
 	if status != domain.MembershipStatusActive && status != domain.MembershipStatusSuspended {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "el offboarding de membresías queda reservado para el flujo de Team", nil)
+		return
+	}
+	if _, ok := s.teamMutationTarget(w, r, claims, org, nil); !ok {
 		return
 	}
 	member, err := s.Store.UpdateMembershipStatus(r.Context(), claims.OrgID, r.PathValue("membershipId"), status, reason, claims.UserID, expected)
