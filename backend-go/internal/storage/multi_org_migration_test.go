@@ -249,7 +249,7 @@ func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
 
 	const org2 = "99999999-9999-9999-9999-999999999999"
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug) VALUES ($1, 'Taller Dos', 'taller-dos')`, org2); err != nil {
+		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Dos', 'taller-dos', FALSE)`, org2); err != nil {
 		t.Fatalf("create org 2: %v", err)
 	}
 
@@ -370,6 +370,13 @@ func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
 	var boards int
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM material_boards WHERE code = 'TAB-MULTIORG'`).Scan(&boards); err != nil || boards != 1 {
 		t.Fatalf("legacy catalog row lost during rollback (boards=%d err=%v)", boards, err)
+	}
+
+	// The structural 000090 rollback restores legacy role with a safe default,
+	// not the historical role. Restore this fixture's legacy admin so the
+	// replay can satisfy the active-organization admin invariant.
+	if _, err := pool.Exec(ctx, `UPDATE users SET role='admin' WHERE id='22222222-2222-2222-2222-222222222222'`); err != nil {
+		t.Fatalf("restore legacy admin fixture for replay: %v", err)
 	}
 
 	// Re-applying the chain after a rollback must work (idempotent lifecycle).

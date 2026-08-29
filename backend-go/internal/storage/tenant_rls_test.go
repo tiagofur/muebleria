@@ -41,10 +41,10 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 	}
 
 	for _, statement := range []string{
-		`INSERT INTO organizations (id, name, slug) VALUES
-		 ('` + rlsOrgA + `', 'RLS A', 'rls-a'),
-		 ('` + rlsOrgB + `', 'RLS B', 'rls-b'),
-		 ('` + rlsOrgC + `', 'RLS C', 'rls-c')`,
+		`INSERT INTO organizations (id, name, slug, active) VALUES
+		 ('` + rlsOrgA + `', 'RLS A', 'rls-a', FALSE),
+		 ('` + rlsOrgB + `', 'RLS B', 'rls-b', FALSE),
+		 ('` + rlsOrgC + `', 'RLS C', 'rls-c', FALSE)`,
 		`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status, platform_admin) VALUES
 		 ('` + rlsUserA + `', 'rls-a@example.test', 'rls-a@example.test', 'x', 'RLS A', 'active', TRUE),
 		 ('` + rlsUserB + `', 'rls-b@example.test', 'rls-b@example.test', 'x', 'RLS B', 'active', FALSE)`,
