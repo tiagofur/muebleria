@@ -138,7 +138,7 @@ export {
 } from './organization';
 export type { OrganizationType } from './organization';
 
-export type { ProductRole } from './rbac';
+export type { ProductRole, TeamCapability } from './rbac';
 export {
   ASSIGNABLE_ROLES,
   PRODUCT_ROLES,
@@ -159,6 +159,8 @@ export {
   roleCanManageUsers,
   roleCanManageProductionStaff,
   roleCanManageSalesStaff,
+  teamCapabilitiesForRoles,
+  hasTeamCapability,
   roleCanMarkProduced,
   roleCanMutateCatalog,
   roleCanMutateCustomers,

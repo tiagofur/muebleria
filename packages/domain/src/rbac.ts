@@ -26,6 +26,69 @@ export const USER_ROLES: readonly UserRole[] = [
 
 export const PRODUCT_ROLES: readonly ProductRole[] = USER_ROLES;
 
+export type TeamCapability =
+  | 'team:view'
+  | 'team:invite:sales'
+  | 'team:invite:production'
+  | 'team:manage:sales'
+  | 'team:manage:production'
+  | 'team:manage:all'
+  | 'team:assign:admin'
+  | 'team:transfer_admin'
+  | 'team:manage:sectors'
+  | 'team:revoke_sessions';
+
+const TEAM_CAPABILITY_ORDER: readonly TeamCapability[] = [
+  'team:view',
+  'team:invite:sales',
+  'team:invite:production',
+  'team:manage:sales',
+  'team:manage:production',
+  'team:manage:all',
+  'team:assign:admin',
+  'team:transfer_admin',
+  'team:manage:sectors',
+  'team:revoke_sessions',
+];
+
+const TEAM_CAPABILITIES: Readonly<Record<string, Partial<Record<ProductRole, readonly TeamCapability[]>>>> = {
+  factory: {
+    admin: TEAM_CAPABILITY_ORDER,
+    gerente_ventas: ['team:view', 'team:invite:sales', 'team:manage:sales'],
+    gerente_produccion: ['team:view', 'team:invite:production', 'team:manage:production', 'team:manage:sectors'],
+  },
+  store: {
+    admin: ['team:view', 'team:invite:sales', 'team:manage:sales', 'team:manage:all', 'team:assign:admin', 'team:transfer_admin', 'team:revoke_sessions'],
+    gerente_ventas: ['team:view', 'team:invite:sales', 'team:manage:sales'],
+  },
+  dealer: {
+    admin: ['team:view', 'team:invite:sales', 'team:manage:sales', 'team:manage:all', 'team:assign:admin', 'team:transfer_admin', 'team:revoke_sessions'],
+    gerente_ventas: ['team:view', 'team:invite:sales', 'team:manage:sales'],
+  },
+};
+
+export function teamCapabilitiesForRoles(
+  roles: readonly (string | null | undefined)[],
+  organizationType: string | null | undefined,
+): readonly TeamCapability[] {
+  const policy = TEAM_CAPABILITIES[organizationType ?? ''];
+  if (!policy) return [];
+  const granted = new Set<TeamCapability>();
+  for (const role of roles) {
+    if (!isValidUserRole(role)) continue;
+    for (const capability of policy[role] ?? []) granted.add(capability);
+  }
+  return TEAM_CAPABILITY_ORDER.filter((capability) => granted.has(capability));
+}
+
+export function hasTeamCapability(
+  roles: readonly (string | null | undefined)[],
+  organizationType: string | null | undefined,
+  capability: TeamCapability,
+): boolean {
+  return teamCapabilitiesForRoles(roles, organizationType).includes(capability);
+}
+
 /** Assignable job titles from admin panel (includes sin puesto). */
 export const ASSIGNABLE_ROLES: readonly ProductRole[] = PRODUCT_ROLES;
 
