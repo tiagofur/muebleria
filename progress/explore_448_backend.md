@@ -1,7 +1,7 @@
 # Auditoría backend — #448 Generated OpenAPI contract
 
-Fecha: 2026-08-28  
-Rama observada: `feat/448-generated-openapi-contract`  
+Fecha: 2026-08-28
+Rama observada: `feat/448-generated-openapi-contract`
 Alcance: auditoría de rutas, DTOs, errores HTTP, auth/sesiones, concurrencia,
 idempotencia, auditoría, tests y CI. No se modificó runtime.
 
@@ -334,4 +334,3 @@ juntos y eliminar el alternativo.
    cambiar test y consumer al objeto generado, no perpetuarlo en OpenAPI.
 6. `furniture.go` demuestra ETag de caché de lectura, no el contract de
    optimistic concurrency de #448/#443.
-

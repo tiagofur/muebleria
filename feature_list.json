@@ -4770,9 +4770,13 @@
         "https://github.com/tiagofur/muebleria/issues/446",
         "https://github.com/tiagofur/muebleria/issues/448",
         "docs/architecture/organization-foundation-v2.md",
-        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md"
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "contracts/openapi/granete-api.v1.yaml",
+        "backend-go/db/migration/000093_idempotency_receipts.up.sql",
+        "progress/implementation_448.md",
+        "progress/review_F191.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": []
     }
   ]

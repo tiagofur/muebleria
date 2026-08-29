@@ -1,91 +1,119 @@
-# F191 / issue #448 implementation evidence
+# F191 / issue #448 — implementation evidence
 
-Date: 2026-08-28  
-Branch: `feat/448-generated-openapi-contract`  
-Status: implementation complete, ledger intentionally remains `in_progress` pending reviewer verdict.
+Date: 2026-08-28
+Branch: `feat/448-generated-openapi-contract`
+Status: complete after independent audit and full local verification.
 
-## Authority and entry audit
+## Outcome
 
-- Confirmed the branch starts from `origin/main` at merge PR #463 and issue #447 is closed.
-- Read the Organization Foundation v2 canonical document, ADR-0006, ADR-0005, architecture/conventions/verification docs, and issues #446, #448, #462, and #443.
-- Detailed entry audits are preserved in:
-  - `progress/explore_448_authority.md`
-  - `progress/explore_448_backend.md`
-  - `progress/explore_448_web.md`
-- Computed the ledger ID from the live file (`max(existing numeric IDs) + 1`), registered exactly one feature (`F191`), and preserved exactly one `in_progress` feature.
+Issue #448 now has one versioned OpenAPI v1 contract consumed by generated Go
+and TypeScript artifacts across the migrated Organization Foundation surfaces.
+Auth, Team, invitations, Platform, support sessions and the current factory
+organization read/create baseline use generated request/response shapes without
+a runtime legacy fallback.
 
-## Implemented contract
+The initial implementation at `98a8446` failed independent audit. Commit
+`30e380a` closes the runtime and contract gaps; `601f68b` makes generated file
+endings deterministic. The audit trail is in `progress/review_F191.md`.
 
-- Added the versioned OpenAPI 3.1 source of truth at `contracts/openapi/granete-api.v1.yaml` and its operational contract at `contracts/openapi/README.md`.
-- Covered the real Auth, Team, invitation, Platform organization/user/audit, and support-session routes. Relationship and Sales Network schemas are declared for future consumers without registering placeholder runtime endpoints.
-- Added the deterministic, dependency-free generator `scripts/generate_openapi.py`. It validates OpenAPI version, required properties, and internal schema references, then emits:
-  - Go DTOs: `backend-go/internal/api/openapi/generated/types.gen.go`
-  - TypeScript DTOs and runtime schemas: `packages/storage/src/openapi/generated/types.ts`
-  - TypeScript operation client: `packages/storage/src/openapi/generated/client.ts`
-- Added `scripts/check_openapi_drift.py`, root generation/check scripts, and a CI drift gate.
-- Documented the authorized size exception: generated contract and its consumers are an atomic cross-runtime review unit requested as one PR.
+## Contract and generation
 
-## Backend integration
+- `contracts/openapi/granete-api.v1.yaml` is the versioned source of truth.
+- `scripts/generate_openapi.py` emits Go DTOs, TypeScript DTOs/runtime schemas
+  and the operation client from the OpenAPI schemas and paths.
+- `scripts/check_openapi_drift.py` proves that changes to operation ID, verb,
+  path, request and response alter generated output; CI runs the drift check.
+- Runtime validation enforces declared object properties,
+  `additionalProperties`, string/number bounds, patterns and `date-time`.
+- Generated errors preserve typed string `fieldErrors` and the common envelope:
+  `code`, `message`, `fieldErrors`, `requestId`, `retryable`, `details`.
+- Generated files are normalized to exactly one final newline.
 
-- All HTTP errors now use the generated envelope (`code`, `message`, `fieldErrors`, `requestId`, `retryable`, `details`). Security-sensitive behavior has stable codes rather than message substring matching.
-- Added validated/generated `X-Request-ID`, context propagation, response header propagation, structured internal-error logging, and audit correlation.
-- Added reusable strong version ETags (`"v<N>"`) and `If-Match` parsing with typed 428/400/412 responses.
-- Migration `000092_org_api_versions` adds positive `version` columns to organizations, memberships, and invitations.
-- Membership role/active mutations and Platform organization mutation perform atomic expected-version updates. Stale membership proof verifies the stored version/roles remain unchanged.
-- Added reusable 24-hour idempotency receipts scoped by actor + organization + operation + key. JSON payloads are canonicalized for fingerprints; identical/concurrent retries replay the exact recorded response, while key reuse with different input returns `IDEMPOTENCY_CONFLICT`.
-- Applied idempotency to organization creation, invitation creation/acceptance, and support-session creation. The process-local receipt implementation is deliberately bounded to #448; DB-atomic durable receipts/outbox remain owned by #452/#461 as documented by the canonical plan.
-- Migrated Auth responses/requests, Team projections/mutations/invitations, Platform organizations/users/audit/support sessions to generated DTOs or explicit generated adapters. No new/migrated Organization Foundation response is a public `map[string]interface{}` contract.
-- Corrected Platform users to flattened organization membership fields and audit to `ip` plus JSON-object `details`; request IDs are included in audit details.
-- Preserved existing correct routes and adapted the real PostgreSQL pilot-readiness fixture to the required idempotency and precondition headers.
+## Backend boundary and command semantics
 
-## TypeScript and web integration
+- Generated request decoding is strict on migrated routes: one JSON document,
+  no unknown properties and no duplicate error response on decode failure.
+- Request IDs are validated or generated, propagated in headers/context/errors,
+  and correlated with audit details.
+- Strong version ETags and `If-Match` protect priority membership,
+  organization and invitation-revoke mutations. Stale writes return typed 412
+  without mutating stored state.
+- Migration `000093_idempotency_receipts` adds shared PostgreSQL receipts with a
+  database-enforced 24-hour retention boundary.
+- The idempotency scope covers actor, organization, operation and key; the
+  fingerprint covers method, path, `If-Match` and canonical JSON body.
+- A business mutation and its successful replay receipt commit atomically.
+  Client failures roll the command back to a savepoint before persisting the
+  replayable 4xx; server failures roll back both mutation and receipt.
+- Restart, multi-replica concurrency, crash, retention, payload mismatch,
+  caught SQL error and rollback of partial factory provisioning are executable
+  PostgreSQL proofs.
+- Platform organization creation validates generated required fields and clone
+  source before insertion. Factory organization create/clone/membership/audit is
+  one atomic idempotent command.
 
-- Added the common `GraneteApiClient`, backed by the generated operation client, with centralized bearer auth, request IDs, typed errors, runtime response validation, `If-Match`, and `Idempotency-Key`.
-- Invalid successful JSON is rejected at the boundary. Invalid upstream error envelopes become a safe typed error while preserving `X-Request-ID`.
-- Migrated web login/register/me/select-org/support logout, public invitation acceptance, Team, and Platform consumers to the generated client/types.
-- Removed the Team list fallback from `/org/team` to `/admin/users`; legacy account approval/rejection remains an explicitly separate account workflow, not a membership fallback.
-- Removed blind HTTP response casts from the migrated Auth/Team/Platform surfaces.
-- Platform contract tests reject the old nested membership shape and old `ip_address`/`metadata` audit shape.
+## Auth and consumers
+
+- Login accepts only generated `LoginTransport` values: `web`, `mobile` or
+  `sketchup`. Missing, legacy, mismatched and unknown transport payloads fail at
+  the boundary.
+- `support` remains a response/token transport and can only be produced by the
+  audited support-session path with support claims. The regular access-token TTL
+  remains 18 hours; #448 does not reintroduce a 15-minute token.
+- Web, mobile and SketchUp send the canonical transport. Mobile uses the common
+  generated client and pins the `/api` base path.
+- Team separates global account status from membership status and uses
+  versioned membership commands; it no longer routes inactive membership rows
+  through destructive global-user actions.
+- Platform users/audit consume the generated shape. Audit load failures remain
+  visible with retry instead of becoming an empty/stale success.
+- The current `GET|POST /factory/organizations` baseline is in the generated
+  contract/client. The broader Sales Network redesign remains outside #448 and
+  is owned by #459; no second runtime implementation was started.
 
 ## Negative proofs
 
-- Invalid generated response payloads fail runtime validation.
-- Localized error messages can change without changing decisions based on `ApiError.code`.
-- An invalid inbound request ID is replaced; a valid one reaches response headers and the error envelope.
-- Missing/malformed `If-Match` is rejected.
-- A stale membership write returns typed 412 and cannot overwrite roles/version.
-- Same idempotency key + same canonical payload replays; different payload conflicts; concurrent duplicate executes once; an expired receipt executes again.
-- Platform user/audit legacy shapes are rejected.
-- Team source test proves the `/admin/users` list fallback is absent.
+Tests fail if any of these regressions return:
+
+- invalid or constraint-breaking success/error JSON accepted at a TS boundary;
+- invalid/legacy auth transport accepted, or ordinary login emits support claims;
+- operation metadata changes without generated-client drift;
+- unknown request properties or more than one JSON document accepted;
+- stale membership/invitation/organization write overwrites current state;
+- one idempotency key replays a different body or `If-Match` value;
+- restart/second replica/crash executes a committed command twice;
+- a replayable 4xx retains a partial business mutation;
+- Platform audit hides a failed load or accepts the legacy shape;
+- Team treats inactive membership as pending global account approval.
 
 ## Verification
 
-Green commands executed on the final implementation:
+Executed against the corrected branch:
 
 ```text
-python3 scripts/check_openapi_drift.py
-  OpenAPI generated files are current
+pnpm openapi:check && pnpm typecheck && pnpm test
+  PASS — OpenAPI current; 7 typecheck projects; domain 1153, storage 170,
+         excel 93, desktop 17, mobile 49, UI 148 files / 1454 tests,
+         web 26 files / 331 tests
 
-git diff --check
+GOCACHE=/tmp/muebleria-go-cache go test ./... -count=1  # backend-go
+  PASS — cmd/admin, db, internal/api, auth, config, domain, engine,
+         storage and pilotreadiness
+
+PATH=/Users/tiagofur/.rbenv/versions/3.2.11/bin:$PATH \
+  BUNDLE_PATH=/tmp/muebleria-bundle bundle exec rake test  # SketchUp
   PASS
 
-pnpm typecheck
-  PASS — all 7 runnable workspace projects
-
-pnpm test
-  PASS — domain 1153, excel 93, storage 166, desktop 17,
-         mobile 48, UI 1451, web 331 tests
-
-pnpm --filter @granete/storage test
-  PASS — 167 tests (includes the final invalid-envelope request-ID proof)
-
-GOCACHE=/tmp/muebleria-go-cache go test ./... -count=1  # backend-go, PostgreSQL local
-  PASS — cmd/admin, db, internal/api, auth, config, domain,
-         domain/engine, storage, and tests/pilotreadiness
-
-GOCACHE=/tmp/muebleria-go-cache go test ./internal/api \
-  -run 'Test(RequestID|VersionETag|Idempotency|StaleMembership)' -count=1
-  PASS — final focused contract proof after response replay header hardening
+git diff --check origin/main...HEAD
+  PASS after generated/document file-ending normalization
 ```
 
-Expected jsdom/WebGL warning output remains non-failing and unchanged. No acceptance blocker remains.
+Expected jsdom/WebGL warnings remained non-failing. Remote CI is still required
+by repository policy before merge; it is not replaced by this local evidence.
+
+## Scope boundary
+
+This change does not start #449. RLS, tenant transactions, lifecycle expansion,
+complete Sales Network UX and later Organization Foundation slices remain owned
+by their existing issues. The generated contract and its cross-runtime
+consumers stay in one PR under the documented size exception.

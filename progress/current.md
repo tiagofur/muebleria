@@ -1,31 +1,10 @@
-# Sesión activa
+# Sin sesión activa
 
-## F191 — contrato OpenAPI generado para Organization Foundation (#448) — 2026-08-28
-
-Issue activa: #448. Rama: `feat/448-generated-openapi-contract`.
-
-Objetivo: establecer un único contrato HTTP OpenAPI v1 ejecutable para Go y
-TypeScript, con errores tipados, request IDs, concurrencia optimista e
-idempotencia consumidos por Auth, Team y Platform.
-
-Alcance:
-
-- spec versionada, generación determinista Go/TypeScript y drift check en CI;
-- cliente/validación runtime compartidos y migración de Auth, Team y Platform;
-- envelope de error + request ID;
-- ETag/`If-Match` e `Idempotency-Key` reusables con integración y negative proofs;
-- corrección de drift Platform users/audit y documentación de migración.
-
-Exclusiones: RLS (#449), lifecycle/schema completo (#450–#452), relationships y
-Sales Network runtime (#453–#459), hardening completo de sesión (#460),
-audit/outbox durable (#461) y persistencia per-entity del catálogo (#443).
-
-Verificación prevista: `pnpm openapi:check`, `pnpm test`, `pnpm typecheck`,
-`GOCACHE=/tmp/muebleria-go-cache go test ./... -count=1` en `backend-go`, y
-`git diff --check`.
-
-Size exception: generated contract and its consumers are an atomic
-cross-runtime review unit requested as one PR.
+F191 / #448 quedó cerrada localmente el 2026-08-28 después de auditoría
+independiente, correcciones y los gates TypeScript, Go, SketchUp, OpenAPI y
+diff. Evidencia: `progress/implementation_448.md` y
+`progress/review_F191.md`. El siguiente trabajo debe elegirse desde el backlog;
+#449 no fue iniciado en esta sesión.
 
 ---
 
