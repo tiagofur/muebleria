@@ -8,6 +8,10 @@ Umbrella: #290
 
 This plan orders the work required to turn the validated SketchUp technical baseline into a professional, secure and commercially supportable product without bypassing Organization Foundation, Digital Thread or machine-validation gates.
 
+The execution rule is simple:
+
+> Build shared identity/transport foundations once, then build host UX on them. Never let each feature invent its own selection model, authoring payload or manufacturing shortcut.
+
 ## 2. Existing baseline we do not rebuild
 
 Completed/validated foundations:
@@ -36,20 +40,53 @@ Do not duplicate these concepts in new child issues.
 - #413 — native SketchUp entity model;
 - #401 — material-aware resolution;
 - #348–#354 — machine evidence/output validation;
-- #355 — packaging/licensing/updates;
+- #355 — commercial packaging/licensing/updates;
 - #416 — legacy host representation migration;
 - #460 — session/media/auth hardening.
 
-## 4. New child issues
+## 4. Shared P0 foundations added by the excellence audit
 
-| Order | Issue | Scope | Gate/dependency |
+Two shared foundations must land before downstream host features diverge.
+
+### #476 — Semantic SelectionContext + capability-driven inspector
+
+One selection/context model must answer for #466/#467/#468/#470/#471:
+
+```text
+what is selected?
+→ which stable Granete IDs identify it?
+→ which FurnitureInstance owns it?
+→ which actions are legal here?
+```
+
+No downstream feature may define a competing selection payload or infer identity from name/GUID/persistent_id/geometry.
+
+### #477 — Versioned rich authoring resolve contract
+
+The current layout endpoint is optimized for dimensions/material choices. Rich authoring must not grow ad-hoc query parameters.
+
+#477 creates/reuses one versioned TS↔Go↔Ruby semantic authoring resolve boundary for:
+
+- move/add/duplicate/remove internal occurrences;
+- joinery intent where supported;
+- manual HardwarePlacement changes;
+- hardware substitution;
+- complete authoritative resolved result + structured errors/preflight context.
+
+Before #384/Gate A this may remain stateless resolution; it must not create a parallel persistent Project/Design business family.
+
+## 5. New child issue order
+
+| Order | Issue | Scope | Hard prerequisite / coordination |
 |---:|---:|---|---|
-| A1 | #466 | Authoritative preflight review + viewport navigation | #347/#346 baseline |
-| A2 | #467 | Direct internal component authoring | #356/#347/#415 baseline |
-| A3 | #468 | Interactive HardwarePlacement edit/substitution | #350/#356/#347 baseline; reuse #467 infra |
-| B1 | #469 | Constraint-aware placement/snapping | #414/#415 baseline |
-| B2 | #470 | ManufacturingFeature inspection/provenance overlay | #347/#356/#350/#415 |
-| B3 | #471 | Multi-select/batch editing | #404/#403/#415; durable project scope waits #384 |
+| F0 | #476 | Semantic SelectionContext + contextual inspector | #346/#415 baseline |
+| F1 | #477 | Versioned rich authoring resolve contract | #346/#356/#347/#415; coordinate #460 |
+| A1 | #466 | Authoritative preflight review + viewport navigation | #476 + #347/#346 |
+| A2 | #467 | Direct internal component authoring | #476 + #477 + #356/#347/#415 |
+| A3 | #468 | Interactive HardwarePlacement edit/substitution | #476 + #477 + #350/#356/#347; reuse #467 mutation infra |
+| B1 | #469 | Constraint-aware placement/snapping | #414/#415 |
+| B2 | #470 | ManufacturingFeature inspection/provenance overlay | #476 + #347/#356/#350/#415; reuse #466 navigation |
+| B3 | #471 | Multi-select/batch editing | #476 + #404/#403/#415; durable project scope waits #384 |
 | C1 | #472 | Large-project performance budgets | #413/#415 baseline |
 | C2 | #473 | Windows/macOS/SketchUp host matrix | #417 baseline; feeds #355 |
 | C3 | #474 | Offline/cache/fallback safety | #460/#384 coordination |
@@ -64,68 +101,105 @@ Existing required issues:
 | #348–#354 | actual machine/output evidence |
 | #355 | signed packaging, compatibility, update/rollback, licensing |
 
-## 5. Execution waves
+## 6. Wave 0 — documentation and backlog authority
 
-### Wave 0 — Documentation and backlog authority
+Must happen before production implementation of the new host slices:
 
-Must happen before agents start the new host work:
-
-- merge `sketchup-plugin-excellence.md`;
-- merge `sketchup-authoring-interaction-contract.md`;
+- merge `docs/architecture/sketchup-plugin-excellence.md`;
+- merge `docs/architecture/sketchup-authoring-interaction-contract.md`;
 - merge this execution plan;
 - add scoped `apps/sketchup-extension/AGENTS.md`;
-- update #290, #349, #350, #416 and #355 with the new authority/boundaries;
-- update #465 with child issue table.
+- reconcile #290/#349/#350/#416/#355;
+- create/reconcile #465 children;
+- perform branch/readback review of the documentation PR.
 
-Definition of Done:
+PR #475 owns this Wave 0 documentation package.
 
-- no ambiguity about authority/identity;
-- no issue claims host UX that another issue assumes is already implemented;
-- every new child references the canonical docs.
+Until #475 is merged, child issues may receive discovery/review but should not reconstruct the canonical contract from memory.
 
-### Wave 1 — Professional editing loop, parallel with Foundation
-
-Can proceed before Gate A because it does not need new Project/Design persistence if scoped correctly.
+## 7. Wave 1 — shared interaction/transport foundations
 
 Recommended order:
 
 ```text
-#466 preflight review shell/navigation
-#467 direct internal authoring
-#468 hardware authoring
+#476 semantic selection/context
+     ↘
+      #466 preflight navigation can start after #476
+
+#477 rich authoring resolve contract
+     ↓
+#467 internal component authoring
+     ↓
+#468 hardware authoring/substitution
 ```
 
-Why #466 early:
+#476 and #477 can advance in parallel once Wave 0 is merged because they solve different boundaries.
 
-Every later authoring tool benefits from one common mechanism for authoritative errors, navigation and remediation.
+### #476 proof target
 
-Why #467 before deep #468 integration:
+Real SketchUp:
 
-Both need selection/context/semantic mutation/rebuild infrastructure. Build it once around the interaction contract.
+```text
+select furniture
+select nested shelf
+select hardware
+rename/rebuild
+→ one stable semantic SelectionContext model survives
+```
 
-Wave 1 acceptance demo:
+### #477 proof target
+
+Shared contract:
+
+```text
+current dims/material resolve
++ move shelf
++ add/remove shelf
++ move/replace hinge
+→ deterministic authoritative result
+→ same stable IDs/parity TS↔Go↔Ruby
+```
+
+No Project persistence is introduced.
+
+## 8. Wave 2 — professional editing loop
+
+After the shared foundation each authoring slice becomes a product feature instead of a new architecture experiment.
+
+```text
+#466 preflight review/navigation
+#467 direct internal authoring
+#468 HardwarePlacement authoring/substitution
+```
+
+#466 may land before #467/#468, then gain richer context actions as those editors become available.
+
+Wave 2 acceptance demo:
 
 ```text
 select shelf
 → move/add/remove supported shelf
 → Granete re-resolves relationships/machining
-→ conflict appears in preflight
-→ navigate blocker
-→ select/move hinge
+→ create a real conflict
+→ preflight shows blocker and navigates to it
+→ select/move or replace hinge
+→ unrelated shelf machining remains correct
 → conflict clears
-→ ready returned by Granete
+→ ready only when Granete returns ready
+→ undo/redo
 ```
 
 Required evidence:
 
-- domain/API tests as needed;
+- shared contract/domain/API tests as needed;
 - Ruby tests;
-- HtmlDialog interaction tests where feasible;
+- HtmlDialog/tool interaction coverage where feasible;
+- rollback/negative proof;
 - real SketchUp TestUp for select/edit/rebuild/undo/navigation.
 
-### Wave 2 — Daily-use productivity
+## 9. Wave 3 — daily-use productivity
 
-After the Wave 1 interaction infrastructure is stable:
+After Wave 1/2 infrastructure is stable:
 
 ```text
 #469 placement/snapping
@@ -136,20 +210,20 @@ After the Wave 1 interaction infrastructure is stable:
 Parallelism:
 
 - #469 can largely advance independently;
-- #470 should reuse #466 navigation/state;
-- #471 should reuse material/hardware editors and must keep durable project scopes disabled until #384 persistence exists.
+- #470 reuses #476 semantic selection and #466 navigation;
+- #471 reuses #476 plus material/hardware editors and must keep durable project/room scopes disabled until #384 persistence exists.
 
-Wave 2 acceptance demo:
+Wave 3 acceptance demo:
 
 ```text
 place several cabinets by preview/snap
-→ batch-change BODY material
-→ select one part
-→ inspect resolved manufacturing features
-→ no manufacturing rule executed in Ruby
+→ multi-select and batch-change a common BODY material
+→ select a board
+→ inspect resolved drilling/groove/edge provenance
+→ no manufacturing rule executes in Ruby
 ```
 
-### Wave 3 — Host robustness and migration
+## 10. Wave 4 — host robustness and migration
 
 Run in parallel where resources allow:
 
@@ -160,40 +234,49 @@ Run in parallel where resources allow:
 #474 degraded/offline safety
 ```
 
-Recommended sequencing detail:
+Rules:
 
-- #416 should land before broad customer migration from current pilot files;
-- #474 should land before declaring offline/fallback behavior commercially safe;
-- #472 creates measured budgets before optimization;
-- #473 establishes actual support rows before #355 release policy is finalized.
+- #416 must land before broad customer upgrades from existing Granete Group models;
+- #474 must land before degraded/offline behavior is considered commercially safe;
+- #472 measures before optimizing and never trades identity correctness for definition sharing;
+- #473 requires real Windows evidence before Windows becomes `supported`.
 
-Wave 3 gates:
+Wave 4 gates:
 
 - no destructive legacy migration;
-- no false productive fallback;
-- measured 100+ furniture performance baseline;
-- at least one Windows real-host row before Windows `supported`.
+- no false productive generic fallback;
+- measured 10/50/100/300 furniture performance baseline;
+- support claims tied to exact host evidence.
 
-## 6. Foundation Gate A dependency
+## 11. Foundation Gate A boundary
 
 ### May continue before Gate A #462
 
-- Wave 0 docs/backlog;
-- #466 read/present existing authoritative preflight;
-- #467/#468 local/working authoring intent + resolver contracts without new persistent family;
+After Wave 0 documentation is merged, and as long as no new persistent business family is created:
+
+- #476 semantic host selection/context;
+- #477 stateless authoring resolve contract;
+- #466 preflight presentation/navigation;
+- #467/#468 working authoring intent + authoritative resolver flow;
 - #469 placement UX;
-- #470 read-only overlay;
-- #472/#473 host validation;
+- #470 read-only manufacturing overlay;
+- #471 current-selection batch scope;
 - #416 representation migration;
-- #474 degraded-state mechanics that do not invent server business identity.
+- #472/#473 host validation;
+- #474 degraded-state mechanics that do not invent business identity.
 
 ### Must wait for Gate A
 
 Implementation of new persistent business families required by #384, including #385 `FurnitureInstance` storage/API.
 
-Do not solve this by adding a temporary SketchUp-only business store.
+Do not solve this by adding:
 
-## 7. Digital Thread wave after Gate A
+- a temporary SketchUp-only Project table/store;
+- locally generated IDs later accepted as server Project identity;
+- a parallel `SketchUpProject` aggregate;
+- client-side durable project defaults presented as business truth.
+
+## 12. Digital Thread wave after Gate A
 
 Follow #384 dependency graph without shortcuts:
 
@@ -215,22 +298,26 @@ Follow #384 dependency graph without shortcuts:
 
 #396 web workspace proceeds per its prerequisites.
 
-## 8. How #465 UX integrates with #384
+## 13. How excellence UX integrates with #384
 
-When #384 contracts become available, existing host work must be adapted rather than replaced:
+When #384 contracts become available, existing host work is adapted rather than replaced.
+
+### Selection/inspector
+
+#476 gains Project/Design/revision context while preserving component/hardware identity.
+
+### Authoring resolve
+
+#477 semantic intent becomes the working-copy command contract or is adapted behind it. Do not create another authoring model.
 
 ### Placement
 
 #469 reusable library insertion:
 
 ```text
-unconnected/local mode → compatibility instanceRef if allowed
-connected Project mode → #390 obtains server FurnitureInstance first
+unconnected/local compatibility mode → non-server compatibility identity only where allowed
+connected Project mode → #390 obtains server FurnitureInstance before productive managed placement
 ```
-
-### Selection/inspector
-
-Add Project/Design/revision context without changing child identity model.
 
 ### Batch editing
 
@@ -242,13 +329,13 @@ Connected-mode delete becomes a Digital Thread working-design/business lifecycle
 
 ### Copy
 
-#391 owns new server business identity. `make_unique` only solves host definition isolation.
+#391 owns new server business identity. SketchUp `make_unique` only solves host definition isolation.
 
 ### Preflight/publish
 
-#466 review state consumes exact revision/fingerprint context when available. It does not choose implicit latest.
+#466 consumes exact revision/fingerprint context when available; it never chooses implicit `latest`.
 
-## 9. Machine evidence wave
+## 14. Machine evidence wave
 
 After the full #347 gate and required field evidence:
 
@@ -260,11 +347,11 @@ After the full #347 gate and required field evidence:
 → #354 deterministic SketchUp → manufacturing output E2E
 ```
 
-No client or README may generalize a validated machine/software version to a whole brand without evidence.
+No client, docs or release notes may generalize a validated machine/software version to a whole brand without evidence.
 
-## 10. Commercial release wave
+## 15. Commercial release wave
 
-#355 becomes the readiness package and must consume:
+#355 becomes the release-readiness package and must consume:
 
 - #460 secure SketchUp/session/media behavior;
 - #473 support matrix;
@@ -272,7 +359,7 @@ No client or README may generalize a validated machine/software version to a who
 - #416 migration compatibility;
 - #474 degraded/offline policy;
 - #354 manufacturing goldens/evidence;
-- API/schema compatibility policy.
+- API/schema compatibility policy including #477.
 
 Required release features:
 
@@ -286,7 +373,7 @@ Required release features:
 - privacy-safe diagnostics;
 - license/session failure cannot corrupt model state.
 
-## 11. PR layering rule
+## 16. PR layering rule
 
 Every implementation PR must declare which layers it changes:
 
@@ -304,12 +391,14 @@ The issue Definition of Done determines which boxes are mandatory.
 
 A PR cannot close #467/#468 by checking only `domain`.
 
-## 12. Required negative-proof pattern
+## 17. Required negative-proof pattern
 
-Every child issue must add at least one test that fails against the forbidden shortcut it was created to prevent.
+Every child issue adds at least one test that fails against the forbidden shortcut it was created to prevent.
 
 Examples:
 
+- #476: two shelf occurrences sharing a definition collapse into one selection context;
+- #477: rich authoring grows ad-hoc `?shelf...`/`?hinge...` query parameters or parallel payload shapes;
 - #467: direct face mutation/duplicate occurrence ID;
 - #468: Ruby drilling table/derived placement edited manually;
 - #466: local dimensions imply manufacturing ready;
@@ -319,21 +408,21 @@ Examples:
 - #473: macOS evidence marks Windows supported;
 - #472: shared mutable definition crosses FI boundaries.
 
-## 13. Real-host evidence policy
+## 18. Real-host evidence policy
 
 Real-host TestUp is mandatory when correctness depends on actual SketchUp behavior, including:
 
 - ComponentInstance/definition lifecycle;
-- selection/InstancePath;
-- tool/preview interactions;
+- nested selection/InstancePath;
+- tools/preview interactions;
 - undo/redo;
 - save/reopen;
-- UI bridge behavior that differs in CEF/host;
+- CEF/HtmlDialog bridge behavior when host-dependent;
 - OS/SketchUp compatibility.
 
 Ruby stubs remain useful but cannot substitute host evidence for support claims.
 
-## 14. Pilot scenarios
+## 19. Pilot scenarios
 
 ### Pilot A — authoring excellence
 
@@ -341,11 +430,12 @@ Ruby stubs remain useful but cannot substitute host evidence for support claims.
 insert cabinet
 → place via snap
 → change BODY material
-→ move shelf
+→ select/move shelf
 → add second shelf
-→ move hinge
+→ select/move hinge
 → trigger/fix conflict through preflight navigation
 → inspect machining overlay
+→ batch-edit selected furniture
 → undo/redo
 → save/reopen
 ```
@@ -376,11 +466,11 @@ open legacy Granete Group SKP
 → run host/preflight checks
 ```
 
-## 15. Definition of Done for the excellence program
+## 20. Definition of Done for #465
 
 #465 may close only when:
 
-- #466–#474 are closed according to their actual DoD;
+- #476/#477 and #466–#474 are closed according to their actual DoD;
 - #416 is closed;
 - critical SketchUp portions of #460 are closed;
 - #384 core path needed for connected authoring/revision/release is closed and #398 is green;
