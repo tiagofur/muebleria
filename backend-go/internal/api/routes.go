@@ -103,6 +103,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Layout completo resuelto (componentes + herrajes) de una definición a
 	// medidas concretas — la extensión de SketchUp inserta desde aquí.
 	mux.Handle("GET /api/furniture/definitions/{definitionId}/layout", authMW(http.HandlerFunc(server.HandleFurnitureDefinitionLayout)))
+	// #477 — resolve de autoría semántica rica (stateless, versionado): la
+	// extensión envía su snapshot de autoría como body estructurado y recibe
+	// el resultado resuelto autoritativo. POST explícito; sin query params.
+	mux.Handle("POST /api/furniture/authoring/resolve", authMW(http.HandlerFunc(server.HandleFurnitureAuthoringResolve)))
 
 	// Clientes
 	mux.Handle("GET /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))

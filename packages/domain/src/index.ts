@@ -1333,6 +1333,28 @@ export {
   type MachineCapability,
   type MachineProfileRef,
 } from './sketchupAuthoringSchema';
+export {
+  AUTHORING_RESOLVE_ISSUE_CODES,
+  MANUFACTURING_PREFLIGHT_CONTRACT,
+  SKETCHUP_AUTHORING_RESOLVE_CONTRACT,
+  SKETCHUP_AUTHORING_RESOLVE_SCHEMA_ID,
+  SKETCHUP_AUTHORING_RESOLVE_SCHEMA_NAME,
+  SKETCHUP_AUTHORING_RESOLVE_SCHEMA_VERSION,
+  isAuthoringResolveIssueCode,
+  validateAuthoringResolveRequest,
+  type AuthoringComponentOccurrenceV1,
+  type AuthoringFurnitureIntentV1,
+  type AuthoringOccurrenceTransformV1,
+  type AuthoringResolveIssueCode,
+  type AuthoringResolveRequestV1,
+  type AuthoringResolveResponseV1,
+  type NormalizedAuthoringIntentV1,
+  type ResolveHoleV1,
+  type ResolvedLayoutWireV1,
+  type ResolvedMachiningOperationV1,
+  type ResolvedMachiningV1,
+  type ResolvedPreflightV1,
+} from './sketchupAuthoringResolve';
 
 // Smart Parametric Furniture Library (#349, #350, ADR-0002)
 export * from "./smartFurnitureDomain";

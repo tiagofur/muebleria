@@ -758,6 +758,111 @@ ilustrativo y no congela el schema ejecutable final.
 - sustituir `ProductionRelease`;
 - implementar producción como parte de este documento.
 
+## 16b. Authoring resolve transport v1 (#477)
+
+**Estado:** implementado (endpoint Go + contrato TS + transporte Ruby + fixture
+compartido `contracts/sketchupAuthoringResolve.contract.json`).
+**Schema:** `granete.sketchup-authoring-resolve.v1`
+**Endpoint:** `POST /api/furniture/authoring/resolve`
+
+Boundary stateless de transporte/resolve para intención semántica de autoría
+más allá de `widthMm/heightMm/depthMm` + materiales. Reusa la semántica del
+envelope #346 (triple de schema, `messageId`/`idempotencyKey`, units/frame,
+`PartRelationshipIntent`, `HardwarePlacementIntent`, `ContractIssue`) — no es
+un modelo paralelo SketchUp-only. Cuando #384 exista, este mismo contrato
+semántico se conecta detrás del comando de working-copy de Design.
+
+### Request
+
+```text
+schemaId / schemaName / schemaVersion      (triple exacta, mismatch falla cerrado)
+messageId, idempotencyKey, sentAt          (correlación determinista)
+source { client, clientVersion, host, hostVersion }
+units { length: mm, angle: deg, precisionMm ∈ (0,1] }
+coordinateSystem { handedness: right, upAxis: z, projectFrameId }
+furniture {
+  furnitureDefinitionId                    (definición autoritativa)
+  catalogRevision?                         (si viene, mismatch → CATALOG_REVISION_STALE; sin latest implícito)
+  parameters { widthMm, heightMm, depthMm } (sólo este vocabulario v1; claves ad-hoc → PARAMETER_INVALID)
+  materialChoices { ROLE → materialId }
+  components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
+  relationships?                           (PartRelationshipIntent)
+  hardwarePlacements?                      (set completo manual; ausente = defaults del definition; [] = ninguno)
+}
+```
+
+Reglas de ocurrencias:
+
+- cada ocurrencia mapea por `componentDefinitionId` al template de la
+  expansión del definition (`st-`/`mod-`/`agr-…`); el server valida
+  `catalogComponentId` cuando viene;
+- `componentInstanceId` es identidad de ocurrencia client-stable dentro del
+  resolve — dos entrepaños comparten `componentDefinitionId` y conservan
+  identidad/relationships/machining propios;
+- `transform` opcional es intención de autoría: sólo translación en frame
+  assembly; ausente = pose default resuelta por el server (la geometría no
+  movida siempre se re-resuelve, nunca se re-envía stale);
+- agregar/quitar ocurrencias v1 sólo para internos movibles (placement
+  `interno`, entrada única del definition); agregar comparte la definición
+  reutilizable y exige IDs nuevos; los templates estructurales/agregados
+  mantienen el count del definition (`OCCURRENCE_COUNT_UNSUPPORTED`/
+  `SNAPSHOT_INCOMPLETE` en caso contrario);
+- el orden del array no decide nada: sin transform se asignan slots default
+  por ID ordenado (determinista e insensible al orden).
+
+### Response
+
+```text
+status accepted|rejected + correlation (responseMessageId = "resolve-" + messageId)
+resolveContract (capability marker: misma schemaId)
+normalizedSnapshot  (receipt stateless: estado authoring efectivo completo —
+                     parámetros resueltos, ocurrencias con identidad server,
+                     relationships, placements; es la única base del próximo request)
+resolved {
+  layout            (FurnitureLayout #415 con transformContract; identidad exacta de ocurrencias)
+  machining { operations (provenance + holes), derivedHardwarePlacements, bomFingerprint }
+  preflight { status, issues, preflightContract → granete.manufacturing-preflight.v1 (#347) }
+}
+issues [] ContractIssue (códigos estables; nunca parsear mensajes)
+```
+
+- `machining` es el puerto Go del resolver #356 sobre la geometría resuelta
+  (server-authoritative): mover un entrepaño mueve sólo el machining
+  dependiente; mover una bisagra no toca el machining de entrepaños; el
+  pilot de herraje manual sigue la definición seleccionada (reemplazo
+  cambia diámetro/BOM);
+- `bomFingerprint` (fnv1a sobre JSON canónico) es el ancla de paridad
+  TS↔Go: el test de contract TS lo recomputa con `deriveRelationshipMachining`
+  sobre el mismo escenario y debe ser igual al wire Go;
+- HTTP: 200 accepted; 400 schema/malformed/query-params/oversized; 422
+  rechazo semántico. Rejected nunca incluye `resolved` (sin resultado
+  parcial aceptado).
+
+### Reglas de transporte
+
+- POST explícito: la intención de autoría es un body estructurado. **Cualquier
+  query parameter presente falla cerrado** (`QUERY_PARAMETERS_UNSUPPORTED`) —
+  la proliferación `?shelf2Z`/`?hinge1Offset` no puede volver a crecer;
+- límite explícito de payload (2 MiB), decodificación estricta (campos
+  desconocidos → `REQUEST_INVALID`), sin guessing de schema;
+- auth: capability POST explícita para tokens de extensión (#460): allowlist
+  que nombra este endpoint; el resto sigue read-only. License y scope org
+  como el resto de la familia furniture;
+- stateless: retries idénticos → respuestas byte-idénticas; no crea registros
+  de negocio ni consume receipts de idempotencia; sin timestamps volátiles en
+  la respuesta (los campos revision/fingerprint que el contexto dueño —#384—
+  todavía no posee no se inventan);
+- logs sin payload de autoría ni credenciales.
+
+### Fixture compartido
+
+`contracts/sketchupAuthoringResolve.contract.json` es golden generado por el
+resolver Go (regenerar con `UPDATE_AUTHORING_RESOLVE_GOLDEN=1`) con los
+escenarios canónicos 1-8 de #477 + negative proofs (query param, parámetro
+ad-hoc en body, ocurrencia duplicada) y la sección `joinery` con la geometría
+resuelta que TS usa para recomputar el fingerprint. TS, Go y Ruby lo consumen:
+ningún payload paralelo puede divergir.
+
 ## References
 
 - [SketchUp + Granete strategy](sketchup-granete-strategy.md)
