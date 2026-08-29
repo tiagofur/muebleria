@@ -3,11 +3,21 @@
 module Granete
   module SketchUpExtension
     module Observers
+      # SketchUp selection bridge over the canonical Selection::Resolver
+      # (#476). Every selection change publishes one SelectionContext payload
+      # — furniture / aggregate / part / hardware / unmanaged, with stable
+      # Granete identity and capability-driven actions — consumed by the
+      # contextual inspector and, downstream, by #466/#467/#468/#470/#471.
+      # No feature may build a parallel selection model on top of
+      # `selection.first` heuristics.
       class SelectionObserver < (defined?(::Sketchup::SelectionObserver) ? ::Sketchup::SelectionObserver : Object)
-        def initialize(metadata_store:, catalog_provider:, on_selection_change:)
+        def initialize(metadata_store:, catalog_provider:, on_selection_change:, model_provider: nil)
           super() if defined?(::Sketchup::SelectionObserver)
-          @metadata_store = metadata_store
-          @catalog_provider = catalog_provider
+          @resolver = Selection::Resolver.new(
+            metadata_store: metadata_store,
+            catalog_provider: catalog_provider,
+            model_provider: model_provider
+          )
           @on_selection_change = on_selection_change
         end
 
@@ -19,51 +29,33 @@ module Granete
           @on_selection_change.call(nil)
         end
 
-        def inspect_entity(entity)
-          return nil if entity.nil? || !entity.respond_to?(:get_attribute)
+        # Central resolution entrypoint (nil entity → nil context). Exposed
+        # for the dialog's initial sync and for downstream consumers that
+        # need to resolve an entity without waiting for a host event.
+        def resolve(entity, selection: nil)
+          context = @resolver.resolve(entity)
+          return nil if context.nil?
 
-          meta = @metadata_store.read(entity)
-          return nil if meta.nil?
-
-          kind = meta['kind']
-          case kind
-          when 'furnitureInstance', 'bootstrapIntent'
-            def_id = meta.dig('intent', 'furnitureDefinitionId')
-            definition = @catalog_provider.find_definition(def_id)
-            {
-              'type' => 'furniture',
-              'instanceId' => meta.dig('identity', 'instanceRef'),
-              'definitionId' => def_id,
-              'definition' => definition,
-              'name' => if definition
-                          definition['name']
-                        else
-                          (entity.respond_to?(:name) ? entity.name : 'Mueble')
-                        end,
-              'parameters' => meta.dig('intent', 'parameters') || {},
-              'materialChoices' => meta.dig('intent', 'materialChoices') || {}
-            }
-          when 'componentInstance'
-            {
-              'type' => 'component',
-              'instanceId' => meta.dig('identity', 'instanceRef'),
-              # Drill-down keeps the owning furniture recoverable (#415):
-              # metadata carries the furniture reference — InstancePath in the
-              # host walks the same ownership.
-              'furnitureInstanceId' => meta.dig('identity', 'furnitureInstanceRef'),
-              'componentDefinitionId' => meta.dig('identity', 'componentDefinitionId'),
-              'role' => meta.dig('intent', 'semanticRole'),
-              'name' => entity.respond_to?(:name) ? entity.name : 'Componente'
-            }
-          end
+          count = selection_count(selection)
+          context.selection_count = count if count
+          context
         end
 
         private
 
         def handle_selection(selection)
-          first = selection&.first
-          data = inspect_entity(first)
-          @on_selection_change.call(data)
+          context = resolve(selection&.first, selection: selection)
+          @on_selection_change.call(context&.to_payload)
+        end
+
+        def selection_count(selection)
+          return nil unless selection
+
+          if selection.respond_to?(:length)
+            selection.length
+          elsif selection.respond_to?(:items)
+            selection.items.length
+          end
         end
       end
     end

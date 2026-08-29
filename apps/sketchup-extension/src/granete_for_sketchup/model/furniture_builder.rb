@@ -183,8 +183,8 @@ module Granete
           instance = parent_definition.entities.add_instance(component_definition,
                                                              LocalGeometry.translation_only(pos_mm))
           instance.name = name
-          MetadataWriter.write_component(@metadata_store, instance, comp_id, slot_id,
-                                         furniture_ref: furniture_instance_id)
+          MetadataWriter.write_part(@metadata_store, instance, comp_id, slot_id,
+                                    furniture_ref: furniture_instance_id)
           instance
         end
       end
@@ -412,7 +412,7 @@ module Granete
           instance.name = name
 
           paint_board(model, instance, board)
-          MetadataWriter.write_component(
+          MetadataWriter.write_part(
             @metadata_store, instance, board.component_instance_id, board.slot_id,
             component_definition_id: board.component_definition_id,
             catalog_component_id: board.catalog_component_id,
@@ -447,11 +447,12 @@ module Granete
 
         def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
           instance.name = name
-          MetadataWriter.write_component(
+          MetadataWriter.write_hardware(
             @metadata_store, instance, placement.placement_id,
-            "hardware_#{placement.placement_id}",
             furniture_ref: furniture_instance_id,
-            host_component_instance_id: placement.host_component_instance_id
+            hardware_definition_id: placement.hardware_id,
+            host_component_instance_id: placement.host_component_instance_id,
+            placement_origin: 'resolved'
           )
           instance
         end
@@ -534,32 +535,62 @@ module Granete
           intent
         end
 
+        # write_part: managed physical part/aggregate occurrence.
         # component_definition_id is the #346 stable authoring-definition ID
         # (Granete-owned, never the host SU definition GUID);
         # catalog_component_id is the optional catalog reference — a separate
         # namespace that never aliases the authoring definition.
-        def write_component(store, entity, comp_id, slot_id, component_definition_id: nil,
-                            catalog_component_id: nil, furniture_ref: nil, role: nil,
-                            material_binding_role: nil, host_component_instance_id: nil)
+        def write_part(store, entity, comp_id, slot_id, component_definition_id: nil,
+                       catalog_component_id: nil, furniture_ref: nil, role: nil,
+                       material_binding_role: nil, entity_class: 'part')
           return unless store
 
-          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
+          identity = child_identity(store, comp_id, furniture_ref)
+          identity['componentDefinitionId'] = component_definition_id if component_definition_id
+          identity['catalogComponentId'] = catalog_component_id if catalog_component_id
 
+          intent = { 'entityClass' => entity_class }
+          intent['semanticRole'] = slot_id if slot_id
+          intent['role'] = role if role
+          intent['materialBindingRole'] = material_binding_role if material_binding_role
+
+          write_child(store, entity, identity, intent)
+        end
+
+        # write_hardware: managed hardware placement occurrence (#476). The
+        # entity class, hardware definition and placement origin are stored
+        # data — selection never infers them from names. placement_origin
+        # 'resolved' marks layout-derived hardware; #468 introduces 'manual'.
+        def write_hardware(store, entity, placement_id, furniture_ref:,
+                           hardware_definition_id: nil, host_component_instance_id: nil,
+                           placement_origin: 'resolved')
+          return unless store
+
+          identity = child_identity(store, placement_id, furniture_ref)
+
+          intent = {
+            'entityClass' => 'hardware',
+            'placementOrigin' => placement_origin
+          }
+          intent['semanticRole'] = "hardware_#{placement_id}"
+          intent['hardwareDefinitionId'] = hardware_definition_id if hardware_definition_id
+          intent['hostComponentInstanceId'] = host_component_instance_id if host_component_instance_id
+
+          write_child(store, entity, identity, intent)
+        end
+
+        def child_identity(store, comp_id, furniture_ref)
+          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
           identity = {
             'instanceRef' => comp_id,
             'componentInstanceId' => comp_id,
             'projectRef' => proj_ref
           }
           identity['furnitureInstanceRef'] = furniture_ref if furniture_ref
-          identity['componentDefinitionId'] = component_definition_id if component_definition_id
-          identity['catalogComponentId'] = catalog_component_id if catalog_component_id
+          identity
+        end
 
-          intent = {}
-          intent['semanticRole'] = slot_id if slot_id
-          intent['role'] = role if role
-          intent['materialBindingRole'] = material_binding_role if material_binding_role
-          intent['hostComponentInstanceId'] = host_component_instance_id if host_component_instance_id
-
+        def write_child(store, entity, identity, intent)
           store.write(entity, {
                         'namespace' => 'com.granete.sketchup_extension',
                         'metadataVersion' => 1,

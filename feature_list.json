@@ -4818,6 +4818,46 @@
       "depends_on": [
         "F191"
       ]
+    },
+    {
+      "id": "F193",
+      "title": "SelectionContext semántico y inspector contextual por capacidades (#476)",
+      "description": "Contrato central de selección SelectionContext (kind furniture/aggregate/part/hardware/unmanaged) con identidad Granete estable separada de locators host, resolución de mueble dueño desde metadatos, capabilities explícitas con explicación en español para acciones no soportadas, inspector contextual por kind con breadcrumb, y metadata de hijos con discriminadores explícitos (entityClass/hardwareDefinitionId/placementOrigin). Base consumible por #466/#467/#468/#470/#471 sin payloads paralelos.",
+      "tags": [
+        "sketchup-extension",
+        "ruby",
+        "selection",
+        "contextual-inspector",
+        "capabilities",
+        "p0"
+      ],
+      "created": "2026-08-29",
+      "acceptance": [
+        "Seleccionar mueble top-level produce kind=furniture con identidad Granete correcta y capabilities honestas",
+        "Seleccionar pieza gestionada produce kind=part con componentInstanceId exacto, componentDefinitionId reutilizable y contexto del mueble dueño",
+        "Seleccionar herraje produce kind=hardware con placement, definición y ocurrencia anfitriona exactas; origen derivado no expone edición manual",
+        "Rename no cambia la identidad del SelectionContext",
+        "Mover/rotar el mueble top-level no cambia la identidad del SelectionContext",
+        "La regeneración de hijos recupera el mismo contexto semántico por identidad Granete con host locator nuevo",
+        "ComponentInstance/Group arbitrario del usuario permanece unmanaged",
+        "Dos ocurrencias que comparten componentDefinitionId no colapsan en un contexto (negative proof)",
+        "La identidad jamás se infiere de nombre, dimensiones o persistent_id (negative proofs)",
+        "El inspector contextual renderiza por kind + capabilities con breadcrumb al mueble dueño y explicación de acciones deshabilitadas",
+        "TestUp en host real cubre furniture, pieza anidada, herraje, rename, rebuild y unmanaged",
+        "bundle exec rake verify (syntax/rubocop/unit/boundary/RBZ determinista) pasa"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/476",
+        "docs/architecture/sketchup-plugin-excellence.md",
+        "docs/architecture/sketchup-authoring-interaction-contract.md",
+        "docs/sketchup-excellence-execution-plan.md",
+        "progress/host_smoke_F193_testup_ci.json"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F186",
+        "F190"
+      ]
     }
   ]
 }

@@ -1382,6 +1382,73 @@
         user-select: text;
       }
 
+      /* Contextual inspector drill-down (#476): owning-furniture breadcrumb,
+         semantic identity facts and capability-driven action rows. */
+      .context-breadcrumb {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+
+      .context-breadcrumb .crumb {
+        padding: 0.125rem 0.375rem;
+        border-radius: var(--radius-sm);
+      }
+
+      .context-breadcrumb .crumb.current {
+        color: var(--text-primary);
+        font-weight: var(--weight-semibold);
+      }
+
+      .context-breadcrumb .crumb-link {
+        color: var(--brand-600);
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+      }
+
+      .context-breadcrumb .crumb-link:hover {
+        background: var(--brand-50);
+      }
+
+      .context-breadcrumb .crumb-sep {
+        color: var(--text-muted);
+        user-select: none;
+      }
+
+      .capability-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border-default);
+      }
+
+      .capability-row:last-child {
+        border-bottom: none;
+      }
+
+      .capability-row-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+
+      .capability-row-label {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--text-primary);
+      }
+
+      .capability-reason {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        margin: 0;
+      }
+
       footer {
         padding: var(--space-3);
         text-align: center;
@@ -1547,13 +1614,21 @@
           </div>
         </section>
 
-        <!-- Tab 2: Contextual Inspector (Editing) -->
+        <!-- Tab 2: Contextual Inspector (capability-driven, #476) -->
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
           <div id="inspector-empty-state" class="card empty-state">
             <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg></div>
-            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Ningún mueble seleccionado</h2>
+            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Ningún elemento seleccionado</h2>
             <p style="margin-bottom: 0; font-size: var(--text-sm);">
-              Haz clic en cualquier mueble de Granete en el viewport 3D para inspeccionar y editar sus propiedades.
+              Haz clic en un mueble, pieza o herraje de Granete en el viewport 3D para inspeccionarlo.
+            </p>
+          </div>
+
+          <div id="inspector-unmanaged-view" class="card empty-state" style="display: none;">
+            <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
+            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Geometría no gestionada por Granete</h2>
+            <p id="unmanaged-note" style="margin-bottom: 0; font-size: var(--text-sm);">
+              Esta entidad no pertenece a ningún mueble de Granete, por lo que no tiene propiedades ni acciones de fabricación.
             </p>
           </div>
 
@@ -1570,9 +1645,15 @@
                   <span id="inspector-manufacturing-badge" class="status-badge pending">Revisión técnica pendiente</span>
                 </div>
               </div>
+              <p id="inspector-representation-warning" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
             </div>
 
-            <div class="card">
+            <div class="card" id="inspector-edit-blocker" style="display: none;">
+              <div class="card-title">Edición no disponible</div>
+              <p id="inspector-edit-blocker-reason" class="subhead" style="margin: var(--space-1) 0 0 0;"></p>
+            </div>
+
+            <div class="card" id="inspector-params-card">
               <div class="card-title">Parámetros del Mueble</div>
               <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
 
@@ -1601,6 +1682,35 @@
               <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               <span>Eliminar Mueble</span>
             </button>
+          </div>
+
+          <!-- Drill-down: part / hardware / aggregate context with owning furniture breadcrumb -->
+          <div id="inspector-child-view" style="display: none;">
+            <div class="card">
+              <nav id="child-breadcrumb" class="context-breadcrumb" aria-label="Contexto de selección"></nav>
+              <div class="card-header-row" style="margin-top: var(--space-2);">
+                <h2 id="child-name" style="font-size: var(--text-md); margin: 0;">--</h2>
+                <span id="child-kind-badge" class="status-badge pending">--</span>
+              </div>
+              <p id="child-origin-note" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
+              <button id="btn-goto-furniture" type="button" class="btn btn-secondary" style="margin-top: var(--space-3);">
+                <span>Volver al mueble</span>
+              </button>
+            </div>
+
+            <div class="card">
+              <div class="card-title">Identidad Granete</div>
+              <div id="child-facts" style="margin-top: var(--space-2);"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">Acciones disponibles</div>
+              <div id="child-capabilities" style="margin-top: var(--space-2);"></div>
+            </div>
+          </div>
+
+          <div id="inspector-multi-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs); text-align: center;">
+            Selección múltiple: se muestra el primer elemento. La edición por lote llegará con #471.
           </div>
         </section>
 
@@ -1777,7 +1887,11 @@
         var searchQuery = "";
         var selectedCategory = "ALL";
 
-        var selectedInstance = null;
+        // Central selection state (#476): the SelectionContext payload published
+        // by the Ruby resolver — one model for every kind
+        // (furniture/aggregate/part/hardware/unmanaged) — consumed by the
+        // inspector and downstream excellence features.
+        var selectedContext = null;
         var inspectorDef = null;
         var inspectorMaterialChoices = {};
         var inspectorParams = {};
@@ -1847,7 +1961,14 @@
         // Inspector elements
         var inspectorEmpty = document.getElementById("inspector-empty-state");
         var inspectorActive = document.getElementById("inspector-active-view");
+        var inspectorUnmanaged = document.getElementById("inspector-unmanaged-view");
+        var inspectorChild = document.getElementById("inspector-child-view");
+        var inspectorMultiNote = document.getElementById("inspector-multi-note");
         var inspectorName = document.getElementById("inspector-furniture-name");
+        var inspectorRepresentationWarning = document.getElementById("inspector-representation-warning");
+        var inspectorEditBlocker = document.getElementById("inspector-edit-blocker");
+        var inspectorEditBlockerReason = document.getElementById("inspector-edit-blocker-reason");
+        var inspectorParamsCard = document.getElementById("inspector-params-card");
         var inspectorInteractiveBadge = document.getElementById("inspector-interactive-badge");
         var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
         var inspectorParamsContainer = document.getElementById("inspector-params-container");
@@ -1855,6 +1976,13 @@
         var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
         var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
         var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
+        var childBreadcrumb = document.getElementById("child-breadcrumb");
+        var childName = document.getElementById("child-name");
+        var childKindBadge = document.getElementById("child-kind-badge");
+        var childOriginNote = document.getElementById("child-origin-note");
+        var childFacts = document.getElementById("child-facts");
+        var childCapabilities = document.getElementById("child-capabilities");
+        var btnGotoFurniture = document.getElementById("btn-goto-furniture");
         var btnUpdate = document.getElementById("btn-update");
         var btnDelete = document.getElementById("btn-delete");
 
@@ -2112,7 +2240,7 @@
           var isInspector = (card === inspectorMaterialsCard || def === inspectorDef);
           var ctx = contextInfo || {
             context: isInspector ? "inspector" : "configurator",
-            instanceId: isInspector && selectedInstance ? selectedInstance.instanceId : null,
+            instanceId: isInspector && selectedContext ? selectedContext.furnitureInstanceId : null,
             definitionId: def ? (def.furnitureDefinitionId || def.furniture_definition_id) : null
           };
 
@@ -3173,23 +3301,23 @@
           },
 
           onUpdateResult: function (result) {
-            btnUpdate.disabled = false;
+            btnUpdate.disabled = !capabilityEnabled(selectedContext, "canEditParameters");
             btnUpdate.innerHTML = icon("save") + "<span>Actualizar Mueble</span>";
             if (result && result.success) {
               var detail = typeof result.component_count === "number" && result.component_count > 0
                 ? " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s")
                 : "";
               showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place" + detail + ".");
-              if (selectedInstance) {
-                selectedInstance.parameters = Object.assign({}, inspectorParams);
-                selectedInstance.materialChoices = Object.assign({}, inspectorMaterialChoices);
+              if (selectedContext) {
+                selectedContext.parameters = Object.assign({}, inspectorParams);
+                selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
               }
             } else {
               showToast("error", "Error: " + ((result && result.error) || "Fallo al actualizar"));
-              // Rollback in-memory inspector state to last confirmed values from selectedInstance
-              if (selectedInstance && inspectorDef) {
-                inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedInstance.parameters || {});
-                inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(inspectorDef), selectedInstance.materialChoices || {});
+              // Rollback in-memory inspector state to last confirmed values from selectedContext
+              if (selectedContext && inspectorDef) {
+                inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
+                inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
                 renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, function (name, val, unit) {
                   inspectorParams[name] = val;
                   updateInspectorSummary();
@@ -3201,59 +3329,23 @@
                     if (s === "project" || s === "project_default") {
                       projectDefaultMaterials[role] = id;
                     }
-                  }, { context: "inspector", instanceId: selectedInstance.instanceId, definitionId: selectedInstance.definitionId });
+                  }, { context: "inspector", instanceId: selectedContext.furnitureInstanceId, definitionId: selectedContext.furnitureDefinitionId });
                 updateInspectorSummary();
               }
             }
           },
 
-          onSelectionChange: function (instanceData) {
-            selectedInstance = instanceData;
-            if (!instanceData || instanceData.type !== "furniture") {
-              inspectorEmpty.style.display = "block";
-              inspectorActive.style.display = "none";
-              return;
-            }
+          onSelectionChange: function (context) {
+            selectedContext = context || null;
+            renderInspector();
 
-            inspectorEmpty.style.display = "none";
-            inspectorActive.style.display = "block";
-
-            var def = instanceData.definition || catalog.find(function (d) { return d.furniture_definition_id === instanceData.definitionId; });
-            inspectorDef = def || null;
-            inspectorName.textContent = instanceData.name || (def ? def.name : "Mueble");
-
-            // Interactive validation reset
-            inspectorInteractiveBadge.textContent = "✓ Medidas válidas";
-            inspectorInteractiveBadge.className = "status-badge valid";
-
-            // Authoritative preflight reset (must NOT claim ready without real domain preflight)
-            if (instanceData.manufacturingPreflightPassed) {
-              inspectorManufacturingBadge.textContent = "✓ Aprobado para fabricación";
-              inspectorManufacturingBadge.className = "status-badge passed";
-            } else {
-              inspectorManufacturingBadge.textContent = "Revisión técnica pendiente";
-              inspectorManufacturingBadge.className = "status-badge pending";
-            }
-
-            inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), instanceData.parameters || {});
-            inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(def), instanceData.materialChoices || {});
-
-            renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
-              inspectorParams[name] = val;
-              updateInspectorSummary();
-              validateInteractiveClient(def, inspectorParams);
-            });
-            renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
-              inspectorMaterialChoices, function (role, id) {
-                inspectorMaterialChoices[role] = id;
-              });
-
-            updateInspectorSummary();
-
-            // Preserve active tab context: do not hijack user away from library when they are browsing catalog
+            // Preserve active tab context: do not hijack the user away from
+            // the library while browsing the catalog. Unmanaged geometry does
+            // not pull focus either; only managed contexts do.
+            var managed = selectedContext && ["furniture", "aggregate", "part", "hardware"].indexOf(selectedContext.kind) !== -1;
             var activeTabBtn = document.querySelector(".tab-btn.active");
             var currentTabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "library";
-            if (currentTabId === "inspector" || !activeLibDef) {
+            if (managed && (currentTabId === "inspector" || !activeLibDef)) {
               switchTab("inspector");
             }
           },
@@ -3269,11 +3361,11 @@
               projectDefaultMaterials[role] = materialId;
             }
 
-            var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedInstance && payload.instanceId === selectedInstance.instanceId);
+            var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedContext && payload.instanceId === selectedContext.furnitureInstanceId);
             var isConfiguratorTarget = payload.context === "configurator" || (!isInspectorTarget && activeLibDef);
 
             // If the finish choice belongs to an inspected placed furniture in the model
-            if (isInspectorTarget && selectedInstance && inspectorDef && (!payload.instanceId || payload.instanceId === selectedInstance.instanceId)) {
+            if (isInspectorTarget && selectedContext && selectedContext.kind === "furniture" && inspectorDef && (!payload.instanceId || payload.instanceId === selectedContext.furnitureInstanceId)) {
               if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
               inspectorMaterialChoices[role] = materialId;
 
@@ -3283,12 +3375,12 @@
                   if (s === "project" || s === "project_default") {
                     projectDefaultMaterials[r] = id;
                   }
-                }, { context: "inspector", instanceId: selectedInstance.instanceId, definitionId: selectedInstance.definitionId });
+                }, { context: "inspector", instanceId: selectedContext.furnitureInstanceId, definitionId: selectedContext.furnitureDefinitionId });
               updateInspectorSummary();
 
               var updatePayload = {
-                instanceId: selectedInstance.instanceId,
-                definitionId: selectedInstance.definitionId,
+                instanceId: selectedContext.furnitureInstanceId,
+                definitionId: selectedContext.furnitureDefinitionId,
                 parameters: inspectorParams,
                 materialChoices: inspectorMaterialChoices
               };
@@ -3584,6 +3676,251 @@
           inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef);
         }
 
+        // ------------------------------------------------------------------
+        // Contextual inspector (#476): renders the canonical SelectionContext
+        // by kind. Legality comes exclusively from the Ruby capability set —
+        // the client never infers it from names, slot ids or entity types.
+        // ------------------------------------------------------------------
+
+        var CAPABILITY_LABELS = {
+          canEditParameters: "Editar parámetros",
+          canEditMaterialRoles: "Cambiar materiales",
+          canEditHighLevelHardware: "Editar herrajes del mueble",
+          canDuplicate: "Duplicar",
+          canDelete: "Eliminar",
+          canReviewPreflight: "Revisar preflight",
+          canInspectManufacturing: "Inspeccionar manufactura",
+          canMoveWithinConstraint: "Mover dentro de restricciones",
+          canAddRelated: "Agregar pieza relacionada",
+          canRemove: "Quitar",
+          canChangeJoinery: "Cambiar unión",
+          canMove: "Mover herraje",
+          canRotate: "Rotar herraje",
+          canChangeHandedness: "Cambiar mano",
+          canReplaceDefinition: "Reemplazar por compatible",
+          canInspectMachining: "Inspeccionar mecanizado"
+        };
+
+        var KIND_BADGES = {
+          part: "Pieza",
+          hardware: "Herraje",
+          aggregate: "Agregado"
+        };
+
+        function capabilityEnabled(context, name) {
+          return !!(context && context.capabilities && context.capabilities[name] && context.capabilities[name].supported);
+        }
+
+        function hideInspectorViews() {
+          inspectorEmpty.style.display = "none";
+          inspectorUnmanaged.style.display = "none";
+          inspectorActive.style.display = "none";
+          inspectorChild.style.display = "none";
+          inspectorMultiNote.style.display = "none";
+        }
+
+        function renderInspector() {
+          var context = selectedContext;
+          hideInspectorViews();
+
+          if (!context) {
+            inspectorEmpty.style.display = "block";
+            return;
+          }
+
+          if (context.selectionCount && context.selectionCount > 1) {
+            inspectorMultiNote.style.display = "block";
+          }
+
+          if (context.kind === "unmanaged") {
+            inspectorUnmanaged.style.display = "block";
+            return;
+          }
+          if (context.kind === "furniture") {
+            renderFurnitureInspector(context);
+            return;
+          }
+          renderChildInspector(context);
+        }
+
+        function renderFurnitureInspector(context) {
+          inspectorActive.style.display = "block";
+
+          var def = context.definition || catalog.find(function (d) {
+            return d.furniture_definition_id === context.furnitureDefinitionId;
+          });
+          inspectorDef = def || null;
+          inspectorName.textContent = (context.display && context.display.name) || (def ? def.name : "Mueble");
+
+          var legacy = context.representation === "legacy-group";
+          inspectorRepresentationWarning.style.display = legacy ? "block" : "none";
+          if (legacy && context.hostLocator) {
+            inspectorRepresentationWarning.textContent =
+              "Representación legacy (Group): la edición requiere migración (#416).";
+          }
+
+          // Interactive validation reset
+          inspectorInteractiveBadge.textContent = "✓ Medidas válidas";
+          inspectorInteractiveBadge.className = "status-badge valid";
+
+          // Authoritative preflight reset (must NOT claim ready without real domain preflight)
+          if (context.manufacturingPreflightPassed) {
+            inspectorManufacturingBadge.textContent = "✓ Aprobado para fabricación";
+            inspectorManufacturingBadge.className = "status-badge passed";
+          } else {
+            inspectorManufacturingBadge.textContent = "Revisión técnica pendiente";
+            inspectorManufacturingBadge.className = "status-badge pending";
+          }
+
+          var canEdit = capabilityEnabled(context, "canEditParameters");
+          var blockerReason = !canEdit && context.capabilities && context.capabilities.canEditParameters
+            ? context.capabilities.canEditParameters.reason
+            : null;
+          inspectorEditBlocker.style.display = canEdit ? "none" : "block";
+          inspectorEditBlockerReason.textContent = blockerReason || "La edición no está disponible para este mueble.";
+          inspectorParamsCard.style.display = canEdit ? "block" : "none";
+          inspectorMaterialsCard.style.display = canEdit ? "block" : "none";
+
+          btnUpdate.disabled = !canEdit;
+          btnDelete.disabled = !capabilityEnabled(context, "canDelete");
+
+          if (!canEdit) {
+            inspectorParams = {};
+            inspectorMaterialChoices = {};
+            return;
+          }
+
+          inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), context.parameters || {});
+          inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(def), context.materialChoices || {});
+
+          renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
+            inspectorParams[name] = val;
+            updateInspectorSummary();
+            validateInteractiveClient(def, inspectorParams);
+          });
+          renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
+            inspectorMaterialChoices, function (role, id) {
+              inspectorMaterialChoices[role] = id;
+            });
+
+          updateInspectorSummary();
+        }
+
+        function renderChildInspector(context) {
+          inspectorChild.style.display = "block";
+          childKindBadge.textContent = KIND_BADGES[context.kind] || context.kind;
+
+          childName.textContent = (context.display && context.display.name) || "";
+
+          renderBreadcrumb(context);
+
+          if (context.kind === "hardware") {
+            childOriginNote.style.display = "block";
+            childOriginNote.textContent = context.origin === "manual"
+              ? "Origen: colocación manual."
+              : "Origen: derivado de las reglas de la definición.";
+          } else {
+            childOriginNote.style.display = "none";
+          }
+
+          btnGotoFurniture.style.display = context.furnitureInstanceId ? "inline-flex" : "none";
+
+          renderChildFacts(context);
+          renderCapabilityList(childCapabilities, context.capabilities);
+        }
+
+        function renderBreadcrumb(context) {
+          childBreadcrumb.innerHTML = "";
+          var path = context.semanticPath || [];
+
+          if (context.furnitureInstanceId && path.length > 1) {
+            var ownerCrumb = document.createElement("button");
+            ownerCrumb.type = "button";
+            ownerCrumb.className = "crumb crumb-link";
+            ownerCrumb.textContent = path[0];
+            ownerCrumb.title = "Volver al contexto del mueble";
+            ownerCrumb.addEventListener("click", function () {
+              if (window.sketchup && window.sketchup.select_furniture) {
+                window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceId: context.furnitureInstanceId }));
+              }
+            });
+            childBreadcrumb.appendChild(ownerCrumb);
+
+            var sep = document.createElement("span");
+            sep.className = "crumb-sep";
+            sep.setAttribute("aria-hidden", "true");
+            sep.textContent = "›";
+            childBreadcrumb.appendChild(sep);
+          }
+
+          var current = document.createElement("span");
+          current.className = "crumb current";
+          current.textContent = path.length > 1 ? path[path.length - 1] : (context.display && context.display.name);
+          childBreadcrumb.appendChild(current);
+        }
+
+        function renderChildFacts(context) {
+          var facts = [
+            ["Mueble", context.furnitureInstanceId],
+            ["Rol semántico", context.display && context.display.role],
+            ["Ocurrencia (componentInstanceId)", context.componentInstanceId],
+            ["Definición de pieza", context.componentDefinitionId],
+            ["Referencia de catálogo", context.catalogComponentId],
+            ["Colocación de herraje", context.hardwarePlacementId],
+            ["Definición de herraje", context.hardwareDefinitionId],
+            ["Pieza anfitriona", context.hostComponentInstanceId],
+            ["Proyecto", context.projectId],
+            ["Revisión base", context.baseRevisionId]
+          ];
+
+          childFacts.innerHTML = "";
+          facts.forEach(function (fact) {
+            if (!fact[1]) return;
+            var row = document.createElement("div");
+            row.className = "kv-row";
+            var k = document.createElement("span");
+            k.className = "k";
+            k.textContent = fact[0];
+            var v = document.createElement("span");
+            v.className = "v";
+            v.textContent = fact[1];
+            row.appendChild(k);
+            row.appendChild(v);
+            childFacts.appendChild(row);
+          });
+        }
+
+        function renderCapabilityList(container, capabilities) {
+          container.innerHTML = "";
+          var names = capabilities ? Object.keys(capabilities) : [];
+          names.forEach(function (name) {
+            var capability = capabilities[name] || {};
+            var row = document.createElement("div");
+            row.className = "capability-row";
+
+            var head = document.createElement("div");
+            head.className = "capability-row-head";
+            var label = document.createElement("span");
+            label.className = "capability-row-label";
+            label.textContent = CAPABILITY_LABELS[name] || name;
+            var badge = document.createElement("span");
+            badge.className = "status-badge " + (capability.supported ? "valid" : "pending");
+            badge.textContent = capability.supported ? "Disponible" : "No disponible";
+            head.appendChild(label);
+            head.appendChild(badge);
+            row.appendChild(head);
+
+            if (!capability.supported && capability.reason) {
+              var reason = document.createElement("p");
+              reason.className = "capability-reason";
+              reason.textContent = capability.reason;
+              row.appendChild(reason);
+            }
+
+            container.appendChild(row);
+          });
+        }
+
         // Search event bindings
         libSearchInput.addEventListener("input", function () {
           searchQuery = libSearchInput.value;
@@ -3633,13 +3970,14 @@
         });
 
         btnUpdate.addEventListener("click", function () {
-          if (!selectedInstance) return;
+          if (!selectedContext || selectedContext.kind !== "furniture") return;
+          if (!capabilityEnabled(selectedContext, "canEditParameters")) return;
           btnUpdate.disabled = true;
           btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
 
           var payload = {
-            instanceId: selectedInstance.instanceId,
-            definitionId: selectedInstance.definitionId,
+            instanceId: selectedContext.furnitureInstanceId,
+            definitionId: selectedContext.furnitureDefinitionId,
             parameters: inspectorParams,
             materialChoices: inspectorMaterialChoices
           };
@@ -3648,7 +3986,7 @@
             window.sketchup.update_furniture(JSON.stringify(payload));
           } else {
             setTimeout(function () {
-              window.GraneteDialog.onUpdateResult({ success: true, name: selectedInstance.name });
+              window.GraneteDialog.onUpdateResult({ success: true, name: selectedContext.display ? selectedContext.display.name : "" });
             }, 500);
           }
         });
@@ -3669,6 +4007,8 @@
         }
 
         btnDelete.addEventListener("click", function () {
+          if (!selectedContext || selectedContext.kind !== "furniture") return;
+          if (!capabilityEnabled(selectedContext, "canDelete")) return;
           if (!deleteArmed) {
             deleteArmed = true;
             btnDelete.textContent = "¿Confirmar eliminación?";
@@ -3678,10 +4018,19 @@
           }
           resetDeleteConfirm();
           if (window.sketchup && window.sketchup.delete_selected_furniture) {
-            var deletePayload = selectedInstance ? { instanceId: selectedInstance.instanceId } : {};
+            var deletePayload = { instanceId: selectedContext.furnitureInstanceId };
             window.sketchup.delete_selected_furniture(JSON.stringify(deletePayload));
           } else {
             window.GraneteDialog.onSelectionChange(null);
+          }
+        });
+
+        // Breadcrumb "return to owning furniture": viewport selection change
+        // only — the Ruby side never mutates geometry or metadata here.
+        btnGotoFurniture.addEventListener("click", function () {
+          if (!selectedContext || !selectedContext.furnitureInstanceId) return;
+          if (window.sketchup && window.sketchup.select_furniture) {
+            window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceId: selectedContext.furnitureInstanceId }));
           }
         });
 

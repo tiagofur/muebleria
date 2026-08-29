@@ -157,6 +157,27 @@ evidence is compatibility-only; results and conventions live in
 `docs/sketchup-opencutlist-interop.md`. The suites fail closed when the RBZ,
 the checkout guard or OpenCutList 7.x is not present.
 
+### Semantic selection suite (#476)
+
+`TC_SelectionContextSmoke` proves the canonical `Selection::Resolver` /
+`SelectionContext` contract in the real host through the **installed**
+extension: top-level furniture selection resolves `kind=furniture` with its
+Granete identity and honest capabilities (a definition missing from the
+catalog disables editing with an explanation instead of silently enabling
+it), nested board selection resolves `kind=part` with occurrence +
+definition IDs and the owning-furniture breadcrumb, hardware selection
+resolves `kind=hardware` with placement/host occurrence IDs, derived origin
+and manual-edit capabilities disabled with reasons, rename + move/rotate and
+full child regeneration preserve every identity key while only the technical
+host locator (persistent_id) changes, two occurrences sharing one
+`componentDefinitionId` never collapse into one context, and arbitrary user
+Groups (which do respond to `#definition` in the host) stay `unmanaged`.
+SketchUp defers `SelectionObserver` notifications to its event loop, so the
+suite resolves through the observer's public `resolve` — the exact code the
+deferred event runs — instead of racing the event loop. Downstream excellence
+features (#466/#467/#468/#470/#471) must consume this foundation instead of
+building parallel selection payloads.
+
 ## Configuration and security boundary
 
 The bootstrap injects two independent ports:

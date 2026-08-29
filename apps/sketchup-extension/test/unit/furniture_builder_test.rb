@@ -192,6 +192,15 @@ class FurnitureBuilderTest < Minitest::Test
     assert_equal 'componentInstance', handle_meta['kind']
     assert_equal 'hardware_mod-door-hw-0', handle_meta['intent']['semanticRole']
     assert_equal 'mod-door', handle_meta['intent']['hostComponentInstanceId']
+    # #476 explicit semantic discriminators: entity class, hardware
+    # definition and placement origin are stored data — never name-derived.
+    assert_equal 'hardware', handle_meta['intent']['entityClass']
+    assert_equal 'hw-handle', handle_meta['intent']['hardwareDefinitionId']
+    assert_equal 'resolved', handle_meta['intent']['placementOrigin']
+
+    door = part_instances.find { |p| p.name == 'Puerta' }
+    door_meta = @store.read(door)
+    assert_equal 'part', door_meta['intent']['entityClass']
 
     assert_equal [[:start, 'Insertar Mueble Gabinete Base Estándar', true], :commit],
                  @model.operations

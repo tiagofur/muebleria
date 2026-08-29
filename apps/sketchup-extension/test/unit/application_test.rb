@@ -117,7 +117,7 @@ class ApplicationTest < Minitest::Test
 
     expected_callbacks = %w[
       close_dialog delete_selected_furniture dialog_ready get_catalog insert_furniture login logout
-      open_material_selector update_furniture
+      open_material_selector select_furniture update_furniture
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)
@@ -204,8 +204,9 @@ class ApplicationTest < Minitest::Test
 
     selection_script = dialog.executed_scripts.reverse.find { |s| s.include?('onSelectionChange') }
     refute_nil selection_script, 'selecting inserted furniture must reach the dialog'
-    assert_includes selection_script, '"type":"furniture"'
-    assert_includes selection_script, '"definitionId":"kitchen-base-standard"'
+    assert_includes selection_script, '"kind":"furniture"'
+    assert_includes selection_script, '"furnitureDefinitionId":"kitchen-base-standard"'
+    assert_includes selection_script, '"canEditParameters"'
   end
 
   def test_offline_application_serves_local_fallback_definitions
