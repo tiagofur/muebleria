@@ -25,6 +25,10 @@ type teamCapabilitiesStore struct {
 	statusErr       error
 	revokeErr       error
 	summary         *storage.OrgTeamSummary
+	inventory       *storage.MembershipResponsibilityInventory
+	inventoryErr    error
+	auditEvent      string
+	auditDetails    map[string]interface{}
 }
 
 func (s *teamCapabilitiesStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
@@ -59,6 +63,19 @@ func (s *teamCapabilitiesStore) RevokeMembershipSessions(_ context.Context, _ st
 		return nil, s.revokeErr
 	}
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "target", Status: domain.MembershipStatusActive, Version: version + 1}, nil
+}
+func (s *teamCapabilitiesStore) GetMembershipResponsibilityInventory(_ context.Context, membershipID string) (*storage.MembershipResponsibilityInventory, error) {
+	if s.inventoryErr != nil {
+		return nil, s.inventoryErr
+	}
+	if s.inventory != nil {
+		return s.inventory, nil
+	}
+	return &storage.MembershipResponsibilityInventory{OrganizationID: "org-1", MembershipID: membershipID, UserID: "target"}, nil
+}
+func (s *teamCapabilitiesStore) InsertSecurityAuditEvent(_ context.Context, event storage.SecurityAuditEvent) error {
+	s.auditEvent, s.auditDetails = event.EventType, event.Details
+	return nil
 }
 
 func teamCapabilityServer(orgType domain.OrganizationType, team []storage.OrgTeamMember) (*Server, *teamCapabilitiesStore) {
@@ -248,6 +265,67 @@ func TestCanonicalRevokeSessionsRequiresCapabilityAndReason(t *testing.T) {
 	}
 	if store.sessionsRevoked {
 		t.Fatal("denied revocation must not write")
+	}
+}
+
+func TestMembershipOffboardingPreviewIsScopedVersionedAndDeterministic(t *testing.T) {
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: []domain.UserRole{domain.RoleVendedor}, Version: 4}
+	srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+	store.inventory = &storage.MembershipResponsibilityInventory{
+		OrganizationID: "org-1", MembershipID: target.MembershipID, UserID: target.UserID,
+		CustomerOwnershipCount: 2, SalesProjectOwnershipCount: 3, EngineerAssignmentCount: 5,
+		OpenWarrantyAssignmentCount: 7, ActiveProductionClaimCount: 11,
+	}
+
+	request := teamCapabilityRequest(http.MethodPost, "/api/org/memberships/target-membership:offboarding-preview", "actor", []string{string(domain.RoleAdmin)}, "")
+	request.Header.Set("If-Match", `"v4"`)
+	first := httptest.NewRecorder()
+	srv.HandleMembershipOffboardingPreview(first, request)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	var preview openapi.MembershipOffboardingPreview
+	if err := json.Unmarshal(first.Body.Bytes(), &preview); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if preview.MembershipID != target.MembershipID || preview.MembershipVersion != 4 || preview.Inventory.TransferRequiredCount != 17 || preview.Inventory.BlockingCount != 11 {
+		t.Fatalf("preview=%+v", preview)
+	}
+	if first.Header().Get("ETag") != `"v4"` || store.auditEvent != "membership_offboarding_previewed" || store.auditDetails["impact_version"] != preview.ImpactVersion {
+		t.Fatalf("etag=%q audit=%q details=%v", first.Header().Get("ETag"), store.auditEvent, store.auditDetails)
+	}
+
+	second := httptest.NewRecorder()
+	repeatedRequest := teamCapabilityRequest(http.MethodPost, "/api/org/memberships/target-membership:offboarding-preview", "actor", []string{string(domain.RoleAdmin)}, "")
+	repeatedRequest.Header.Set("If-Match", `"v4"`)
+	srv.HandleMembershipOffboardingPreview(second, repeatedRequest)
+	if second.Code != http.StatusOK {
+		t.Fatalf("repeated status=%d body=%s", second.Code, second.Body.String())
+	}
+	var repeated openapi.MembershipOffboardingPreview
+	if err := json.Unmarshal(second.Body.Bytes(), &repeated); err != nil {
+		t.Fatalf("decode repeated preview: %v", err)
+	}
+	if repeated.ImpactVersion != preview.ImpactVersion {
+		t.Fatalf("impact version changed: %q != %q", repeated.ImpactVersion, preview.ImpactVersion)
+	}
+}
+
+func TestMembershipOffboardingPreviewRejectsStaleOrUnmanageableTarget(t *testing.T) {
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: []domain.UserRole{domain.RoleProduccion}, Version: 4}
+	srv, _ := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+	stale := teamCapabilityRequest(http.MethodPost, "/api/org/memberships/target-membership:offboarding-preview", "actor", []string{string(domain.RoleAdmin)}, "")
+	stale.Header.Set("If-Match", `"v3"`)
+	staleResult := httptest.NewRecorder()
+	srv.HandleMembershipOffboardingPreview(staleResult, stale)
+	if staleResult.Code != http.StatusPreconditionFailed {
+		t.Fatalf("stale status=%d body=%s", staleResult.Code, staleResult.Body.String())
+	}
+
+	denied := httptest.NewRecorder()
+	srv.HandleMembershipOffboardingPreview(denied, teamCapabilityRequest(http.MethodPost, "/api/org/memberships/target-membership:offboarding-preview", "sales-manager", []string{string(domain.RoleGerenteVentas)}, ""))
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("scope status=%d body=%s", denied.Code, denied.Body.String())
 	}
 }
 

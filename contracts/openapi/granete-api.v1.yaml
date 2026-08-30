@@ -1001,6 +1001,48 @@
           }
         }
       }
+    },
+    "/org/memberships/{membershipId}:offboarding-preview": {
+      "post": {
+        "operationId": "previewMembershipOffboarding",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative membership responsibility preview",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipOffboardingPreview"
+                }
+              }
+            }
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1718,6 +1760,44 @@
             "type": "integer",
             "minimum": 1
           }
+        }
+      },
+      "MembershipResponsibilityInventory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "customer_ownership_count",
+          "sales_project_ownership_count",
+          "engineer_assignment_count",
+          "open_warranty_assignment_count",
+          "active_production_claim_count",
+          "transfer_required_count",
+          "blocking_count"
+        ],
+        "properties": {
+          "customer_ownership_count": { "type": "integer", "minimum": 0 },
+          "sales_project_ownership_count": { "type": "integer", "minimum": 0 },
+          "engineer_assignment_count": { "type": "integer", "minimum": 0 },
+          "open_warranty_assignment_count": { "type": "integer", "minimum": 0 },
+          "active_production_claim_count": { "type": "integer", "minimum": 0 },
+          "transfer_required_count": { "type": "integer", "minimum": 0 },
+          "blocking_count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "MembershipOffboardingPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "membership_id",
+          "membership_version",
+          "impact_version",
+          "inventory"
+        ],
+        "properties": {
+          "membership_id": { "type": "string", "format": "uuid" },
+          "membership_version": { "type": "integer", "minimum": 1 },
+          "impact_version": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "inventory": { "$ref": "#/components/schemas/MembershipResponsibilityInventory" }
         }
       },
       "PlatformOrganization": {

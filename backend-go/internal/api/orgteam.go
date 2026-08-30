@@ -1,7 +1,10 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -340,6 +343,61 @@ func (s *Server) HandleRevokeMembershipSessions(w http.ResponseWriter, r *http.R
 	}
 	w.Header().Set("ETag", FormatVersionETag(member.Version))
 	respondWithJSON(w, http.StatusOK, membershipMutationResponse(*member))
+}
+
+// HandleMembershipOffboardingPreview returns the authoritative responsibility
+// inventory used by the later offboarding command. It intentionally performs
+// no lifecycle transition or reassignment.
+func (s *Server) HandleMembershipOffboardingPreview(w http.ResponseWriter, r *http.Request) {
+	claims, org, ok := s.requireOrgTeamMutation(w, r)
+	if !ok {
+		return
+	}
+	expected, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	target, ok := s.teamMutationTarget(w, r, claims, org, nil)
+	if !ok {
+		return
+	}
+	if target.Version != expected {
+		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeMembershipVersionConflict, "La membresía fue modificada por otra sesión", nil)
+		return
+	}
+	inventory, err := s.Store.GetMembershipResponsibilityInventory(r.Context(), target.MembershipID)
+	if errors.Is(err, storage.ErrMembershipNotFound) {
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeMembershipNotFound, "membresía no encontrada", nil)
+		return
+	}
+	if err != nil {
+		respondWithInternalError(w, err, "membership offboarding preview")
+		return
+	}
+	preview := membershipOffboardingPreviewToOpenAPI(*inventory, target.Version)
+	if err := s.auditRequired(r.Context(), "membership_offboarding_previewed", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{
+		"membership_id": target.MembershipID, "impact_version": preview.ImpactVersion,
+		"transfer_required_count": preview.Inventory.TransferRequiredCount, "blocking_count": preview.Inventory.BlockingCount,
+	}); err != nil {
+		respondWithInternalError(w, err, "audit membership offboarding preview")
+		return
+	}
+	w.Header().Set("ETag", FormatVersionETag(target.Version))
+	respondWithJSON(w, http.StatusOK, preview)
+}
+
+func membershipOffboardingPreviewToOpenAPI(inventory storage.MembershipResponsibilityInventory, membershipVersion int64) openapi.MembershipOffboardingPreview {
+	impactInput := fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%d\x00%d\x00%d", inventory.OrganizationID, inventory.MembershipID, inventory.UserID,
+		membershipVersion, inventory.CustomerOwnershipCount, inventory.SalesProjectOwnershipCount, inventory.EngineerAssignmentCount, inventory.OpenWarrantyAssignmentCount, inventory.ActiveProductionClaimCount)
+	digest := sha256.Sum256([]byte(impactInput))
+	return openapi.MembershipOffboardingPreview{
+		MembershipID: inventory.MembershipID, MembershipVersion: membershipVersion, ImpactVersion: hex.EncodeToString(digest[:]),
+		Inventory: openapi.MembershipResponsibilityInventory{
+			CustomerOwnershipCount: int64(inventory.CustomerOwnershipCount), SalesProjectOwnershipCount: int64(inventory.SalesProjectOwnershipCount),
+			EngineerAssignmentCount: int64(inventory.EngineerAssignmentCount), OpenWarrantyAssignmentCount: int64(inventory.OpenWarrantyAssignmentCount),
+			ActiveProductionClaimCount: int64(inventory.ActiveProductionClaimCount), TransferRequiredCount: int64(inventory.TransferRequiredCount()), BlockingCount: int64(inventory.BlockingCount()),
+		},
+	}
 }
 
 func membershipMutationError(w http.ResponseWriter, err error) bool {

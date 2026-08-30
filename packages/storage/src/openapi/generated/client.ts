@@ -15,6 +15,7 @@ import type {
   LoginResponse,
   MeResponse,
   MembershipMutationResponse,
+  MembershipOffboardingPreview,
   OrganizationRelationship,
   PlatformOrganization,
   PlatformUser,
@@ -79,4 +80,5 @@ export abstract class GeneratedGraneteApiClient {
   suspendMembership(token: string, membershipId: string, version: number, body: SuspendMembershipRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:suspend`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "SuspendMembershipRequest", body, idempotencyKey: key }); }
   reactivateMembership(token: string, membershipId: string, version: number, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:reactivate`, { schema: "MembershipMutationResponse", token, ifMatch: version, idempotencyKey: key }); }
   revokeMembershipSessions(token: string, membershipId: string, version: number, body: RevokeMembershipSessionsRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:revoke-sessions`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "RevokeMembershipSessionsRequest", body, idempotencyKey: key }); }
+  previewMembershipOffboarding(token: string, membershipId: string, version: number, key = this.createIdempotencyKey()): Promise<MembershipOffboardingPreview> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:offboarding-preview`, { schema: "MembershipOffboardingPreview", token, ifMatch: version, idempotencyKey: key }); }
 }

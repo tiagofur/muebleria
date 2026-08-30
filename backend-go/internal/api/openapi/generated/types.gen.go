@@ -184,6 +184,23 @@ type MembershipMutationResponse struct {
 	Version      int64            `json:"version"`
 }
 
+type MembershipResponsibilityInventory struct {
+	CustomerOwnershipCount      int64 `json:"customer_ownership_count"`
+	SalesProjectOwnershipCount  int64 `json:"sales_project_ownership_count"`
+	EngineerAssignmentCount     int64 `json:"engineer_assignment_count"`
+	OpenWarrantyAssignmentCount int64 `json:"open_warranty_assignment_count"`
+	ActiveProductionClaimCount  int64 `json:"active_production_claim_count"`
+	TransferRequiredCount       int64 `json:"transfer_required_count"`
+	BlockingCount               int64 `json:"blocking_count"`
+}
+
+type MembershipOffboardingPreview struct {
+	MembershipID      string                            `json:"membership_id"`
+	MembershipVersion int64                             `json:"membership_version"`
+	ImpactVersion     string                            `json:"impact_version"`
+	Inventory         MembershipResponsibilityInventory `json:"inventory"`
+}
+
 type PlatformOrganization struct {
 	ID                   string  `json:"id"`
 	Name                 string  `json:"name"`

@@ -60,6 +60,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/org/memberships/{membershipId}:suspend", authMW(server.RequireIdempotency("org.suspend-membership", http.HandlerFunc(server.HandleSuspendMembership))))
 	mux.Handle("POST /api/org/memberships/{membershipId}:reactivate", authMW(server.RequireIdempotency("org.reactivate-membership", http.HandlerFunc(server.HandleReactivateMembership))))
 	mux.Handle("POST /api/org/memberships/{membershipId}:revoke-sessions", authMW(server.RequireIdempotency("org.revoke-membership-sessions", http.HandlerFunc(server.HandleRevokeMembershipSessions))))
+	mux.Handle("POST /api/org/memberships/{membershipId}:offboarding-preview", authMW(server.RequireIdempotency("org.offboarding-preview", http.HandlerFunc(server.HandleMembershipOffboardingPreview))))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
 	mux.Handle("POST /api/org/invitations", authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation))))
 	mux.Handle("POST /api/org/invitations/{invitationCommand...}", authMW(http.HandlerFunc(server.HandleOrgInvitationCommand)))

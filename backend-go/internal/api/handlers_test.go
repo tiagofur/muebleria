@@ -2477,6 +2477,9 @@ func (s *stubStore) UpdateMembershipStatus(_ context.Context, _ string, membersh
 func (s *stubStore) RevokeMembershipSessions(_ context.Context, _ string, membershipID, _ string, _ string, version int64) (*storage.OrgTeamMember, error) {
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Status: domain.MembershipStatusActive, Version: version + 1}, nil
 }
+func (s *stubStore) GetMembershipResponsibilityInventory(_ context.Context, membershipID string) (*storage.MembershipResponsibilityInventory, error) {
+	return &storage.MembershipResponsibilityInventory{OrganizationID: "org-1", MembershipID: membershipID, UserID: "u-1"}, nil
+}
 func (s *stubStore) CreateInvitation(_ context.Context, orgID string, email string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
 	return &storage.Invitation{ID: "inv-1", OrganizationID: orgID, Email: email, Status: "pending", Roles: roles}, nil
 }
