@@ -211,4 +211,54 @@ describe('strict parameter evaluation at furniture composition entry points', ()
     expect(layout.components).toEqual([]);
     expect(layout.parts).toEqual([]);
   });
+
+  test.each([
+    ['missing binding', undefined],
+    ['binding', []],
+    ['binding fields', { version: '1', kind: 7, componentId: false, dimension: 3 }],
+    ['relationship', {
+      version: 1,
+      kind: 'componentQuantity',
+      componentId: 'definition-shelf',
+      relationship: [],
+    }],
+    ['relationship fields', {
+      version: 1,
+      kind: 'componentQuantity',
+      componentId: 'definition-shelf',
+      relationship: { kind: 7, sourceRole: false, targets: [] },
+    }],
+    ['targets', {
+      version: 1,
+      kind: 'componentQuantity',
+      componentId: 'definition-shelf',
+      relationship: { kind: 'shelf-support', sourceRole: 'shelf', targets: {} },
+    }],
+    ['target entry', {
+      version: 1,
+      kind: 'componentQuantity',
+      componentId: 'definition-shelf',
+      relationship: {
+        kind: 'shelf-support',
+        sourceRole: 'shelf',
+        targets: [null, { componentId: 1, role: false }],
+      },
+    }],
+  ])('fails every entry point closed for malformed nested %s shape', (_name, binding) => {
+    const shelfCount = parameters.find((parameter) => parameter.name === 'shelfCount')!;
+    const malformedDefinition: FurnitureDefinition = {
+      ...definition,
+      parameters: [{ ...shelfCount, binding } as unknown as FurnitureParameter],
+    };
+
+    const instantiated = instantiateFurniture(malformedDefinition, {}, {}, {}, {}, { projectId: 'project-1' });
+    const interactive = validateInteractiveParameters(malformedDefinition, {});
+    const layout = resolveFurnitureLayout(malformedDefinition, {});
+
+    expect(instantiated.issues.map((issue) => issue.code)).toContain('PARAMETER_DEFINITION_INVALID');
+    expect(interactive.issues.map((issue) => issue.code)).toContain('PARAMETER_DEFINITION_INVALID');
+    expect(layout.validation.issues.map((issue) => issue.code)).toContain('PARAMETER_DEFINITION_INVALID');
+    expect(layout.components).toEqual([]);
+    expect(layout.parts).toEqual([]);
+  });
 });

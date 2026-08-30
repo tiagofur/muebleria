@@ -37,6 +37,26 @@
       "boundary": "both"
     },
     {
+      "id": "unbound-non-metadata",
+      "boundary": "published",
+      "definitions": [
+        {
+          "name": "shelfCount",
+          "label": "Shelf count",
+          "type": "number",
+          "defaultValue": 1,
+          "required": true,
+          "unit": "count",
+          "category": "configuration",
+          "integer": true
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding"
+      ]
+    },
+    {
       "id": "reserved-dimension",
       "definitions": [
         {
@@ -672,6 +692,82 @@
         "definitions"
       ],
       "boundary": "both"
+    },
+    {
+      "id": "nested-binding-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":[]}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding"
+      ]
+    },
+    {
+      "id": "nested-relationship-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":[]}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship"
+      ]
+    },
+    {
+      "id": "nested-targets-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf\",\"targets\":{}}}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.targets"
+      ]
+    },
+    {
+      "id": "nested-target-entry-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf\",\"targets\":[null,{\"componentId\":1,\"role\":false}]}}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.targets"
+      ]
+    },
+    {
+      "id": "nested-binding-fields",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":\"1\",\"kind\":7,\"componentId\":false,\"dimension\":3}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.version",
+        "binding.kind",
+        "binding.componentId",
+        "binding.dimension"
+      ]
+    },
+    {
+      "id": "nested-relationship-fields",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":{\"kind\":7,\"sourceRole\":false,\"targets\":[]}}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.kind",
+        "binding.relationship.sourceRole"
+      ]
     }
   ]
 }

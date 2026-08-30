@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -180,6 +181,98 @@ func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].ParameterDefinitions[0].DefaultValue != float64(2) {
 		t.Fatalf("updated definitions not listed: %+v", listed)
+	}
+}
+
+func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) {
+	cases := []struct {
+		name           string
+		definition     domain.FurnitureParameterDefinition
+		expectedFields []string
+	}{
+		{
+			name: "reserved dimension with divergent default",
+			definition: domain.FurnitureParameterDefinition{
+				Name: "widthMm", Label: "Width", Type: domain.FurnitureParameterTypeNumber,
+				DefaultValue: float64(800), Required: true, Unit: domain.FurnitureParameterUnitMM,
+				Category: domain.FurnitureParameterCategoryDimension, Integer: true,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingDimensionColumn, Dimension: "widthMm"},
+			},
+			expectedFields: []string{"binding.kind", "name"},
+		},
+		{
+			name: "reserved dimension with incompatible type",
+			definition: domain.FurnitureParameterDefinition{
+				Name: "heightMm", Label: "Height", Type: domain.FurnitureParameterTypeString,
+				DefaultValue: "720", Required: true, Category: domain.FurnitureParameterCategoryDimension,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingDimensionColumn, Dimension: "heightMm"},
+			},
+			expectedFields: []string{"binding.kind", "name"},
+		},
+		{
+			name: "reserved dimension with decimal default",
+			definition: domain.FurnitureParameterDefinition{
+				Name: "depthMm", Label: "Depth", Type: domain.FurnitureParameterTypeNumber,
+				DefaultValue: float64(590.5), Required: true, Unit: domain.FurnitureParameterUnitMM,
+				Category: domain.FurnitureParameterCategoryDimension, Integer: true,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingDimensionColumn, Dimension: "depthMm"},
+			},
+			expectedFields: []string{"binding.kind", "defaultValue", "name"},
+		},
+	}
+
+	assertDefinitionError := func(t *testing.T, err error, expectedFields []string) {
+		t.Helper()
+		var definitionErr *domain.FurnitureParameterDefinitionsError
+		if !errors.As(err, &definitionErr) {
+			t.Fatalf("expected FurnitureParameterDefinitionsError, got %v", err)
+		}
+		fields := map[string]bool{}
+		for _, issue := range definitionErr.Issues {
+			fields[issue.Field] = true
+		}
+		for _, field := range expectedFields {
+			if !fields[field] {
+				t.Fatalf("missing field %q in %+v", field, definitionErr.Issues)
+			}
+		}
+	}
+
+	for index, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			pool := multiOrgFreshDB(t)
+			identityApplyThrough(t, pool, 100)
+			store := &storage.PostgresStore{Pool: pool}
+			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
+
+			invalidCreate := &domain.Module{
+				ID: fmt.Sprintf("f1970000-0000-0000-0000-0000000001%02d", index), Code: fmt.Sprintf("BAD-DIM-%d", index), Name: "Invalid dimension",
+				WidthMm: 600, HeightMm: 720, DepthMm: 590, ParameterDefinitions: []domain.FurnitureParameterDefinition{testCase.definition},
+			}
+			assertDefinitionError(t, store.CreateModule(ctx, invalidCreate), testCase.expectedFields)
+			var createCount int
+			if err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM modules WHERE id=$1`, invalidCreate.ID).Scan(&createCount); err != nil {
+				t.Fatal(err)
+			}
+			if createCount != 0 {
+				t.Fatal("rejected CreateModule persisted a row")
+			}
+
+			valid := &domain.Module{ID: fmt.Sprintf("f1970000-0000-0000-0000-0000000002%02d", index), Code: fmt.Sprintf("VALID-DIM-%d", index), Name: "Valid module", WidthMm: 600, HeightMm: 720, DepthMm: 590}
+			if err := store.CreateModule(ctx, valid); err != nil {
+				t.Fatalf("seed valid module: %v", err)
+			}
+			valid.WidthMm = 610
+			valid.ParameterDefinitions = []domain.FurnitureParameterDefinition{testCase.definition}
+			assertDefinitionError(t, store.UpdateModule(ctx, valid.ID, valid), testCase.expectedFields)
+			persisted, err := store.GetModuleByID(ctx, valid.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if persisted.WidthMm != 600 || len(persisted.ParameterDefinitions) != 0 {
+				t.Fatalf("rejected UpdateModule mutated persisted state: %+v", persisted)
+			}
+		})
 	}
 }
 

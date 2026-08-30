@@ -227,6 +227,52 @@ function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParam
     if (definition.binding !== undefined &&
         (definition.binding === null || typeof definition.binding !== 'object' || Array.isArray(definition.binding))) {
       issues.push({ parameter, field: 'binding', message: 'must be an object' });
+      continue;
+    }
+    if (definition.binding !== undefined) {
+      const binding = definition.binding as unknown as Record<string, unknown>;
+      if (typeof binding.version !== 'number') {
+        issues.push({ parameter, field: 'binding.version', message: 'must be a number' });
+      }
+      if (typeof binding.kind !== 'string') {
+        issues.push({ parameter, field: 'binding.kind', message: 'must be a string' });
+      }
+      for (const field of ['componentId', 'dimension'] as const) {
+        if (binding[field] !== undefined && typeof binding[field] !== 'string') {
+          issues.push({ parameter, field: `binding.${field}`, message: 'must be a string' });
+        }
+      }
+      if (binding.relationship !== undefined) {
+        if (binding.relationship === null || typeof binding.relationship !== 'object' ||
+            Array.isArray(binding.relationship)) {
+          issues.push({ parameter, field: 'binding.relationship', message: 'must be an object' });
+          continue;
+        }
+        const relationship = binding.relationship as Record<string, unknown>;
+        for (const field of ['kind', 'sourceRole'] as const) {
+          if (typeof relationship[field] !== 'string') {
+            issues.push({ parameter, field: `binding.relationship.${field}`, message: 'must be a string' });
+          }
+        }
+        if (!Array.isArray(relationship.targets)) {
+          issues.push({ parameter, field: 'binding.relationship.targets', message: 'must be an array' });
+          continue;
+        }
+        for (const target of relationship.targets) {
+          if (target === null || typeof target !== 'object' || Array.isArray(target)) {
+            issues.push({ parameter, field: 'binding.relationship.targets', message: 'entries must be objects' });
+            continue;
+          }
+          const record = target as Record<string, unknown>;
+          if (typeof record.componentId !== 'string' || typeof record.role !== 'string') {
+            issues.push({
+              parameter,
+              field: 'binding.relationship.targets',
+              message: 'componentId and role must be strings',
+            });
+          }
+        }
+      }
     }
   }
   return issues;
@@ -236,34 +282,61 @@ function validateBinding(
   definition: FurnitureParameter,
   add: (field: string, message: string) => void,
 ): void {
-  const binding = definition.binding!;
+  const candidate = definition.binding as unknown;
+  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    add('binding', 'must be an object');
+    return;
+  }
+  const binding = candidate as Record<string, unknown>;
   if (binding.version !== 1) add('binding.version', 'must be 1');
   if (binding.kind === 'componentQuantity') {
     if (definition.type !== 'number' || !definition.integer) {
       add('binding.kind', 'componentQuantity requires an integer number parameter');
     }
-    if (!binding.componentId?.trim()) add('binding.componentId', 'is required for componentQuantity');
+    if (typeof binding.componentId !== 'string' || !binding.componentId.trim()) {
+      add('binding.componentId', 'is required for componentQuantity');
+    }
     if (binding.dimension !== undefined) {
       add('binding.dimension', 'is not allowed for componentQuantity');
     }
-    if (binding.relationship) {
-      if (!binding.relationship.kind.trim()) add('binding.relationship.kind', 'is required');
-      if (!binding.relationship.sourceRole.trim()) add('binding.relationship.sourceRole', 'is required');
-      if (binding.relationship.targets.length === 0) {
-        add('binding.relationship.targets', 'must contain at least one target');
+    if (binding.relationship !== undefined) {
+      if (binding.relationship === null || typeof binding.relationship !== 'object' ||
+          Array.isArray(binding.relationship)) {
+        add('binding.relationship', 'must be an object');
+        return;
       }
-      if (binding.relationship.targets.some((target) => !target.componentId.trim() || !target.role.trim())) {
-        add('binding.relationship.targets', 'componentId and role are required');
+      const relationship = binding.relationship as Record<string, unknown>;
+      if (typeof relationship.kind !== 'string' || !relationship.kind.trim()) {
+        add('binding.relationship.kind', 'is required');
+      }
+      if (typeof relationship.sourceRole !== 'string' || !relationship.sourceRole.trim()) {
+        add('binding.relationship.sourceRole', 'is required');
+      }
+      if (!Array.isArray(relationship.targets) || relationship.targets.length === 0) {
+        add('binding.relationship.targets', 'must contain at least one target');
+      } else {
+        for (const target of relationship.targets) {
+          if (target === null || typeof target !== 'object' || Array.isArray(target)) {
+            add('binding.relationship.targets', 'componentId and role are required');
+            continue;
+          }
+          const record = target as Record<string, unknown>;
+          if (typeof record.componentId !== 'string' || !record.componentId.trim() ||
+              typeof record.role !== 'string' || !record.role.trim()) {
+            add('binding.relationship.targets', 'componentId and role are required');
+          }
+        }
       }
     }
   } else if (binding.kind === 'dimensionColumn') {
     if (definition.type !== 'number' || !definition.integer || definition.unit !== 'mm') {
       add('binding.kind', 'dimensionColumn requires an integer number parameter measured in mm');
     }
-    if (binding.dimension !== definition.name || !['widthMm', 'heightMm', 'depthMm'].includes(binding.dimension)) {
+    if (binding.dimension !== definition.name || typeof binding.dimension !== 'string' ||
+        !['widthMm', 'heightMm', 'depthMm'].includes(binding.dimension)) {
       add('binding.dimension', 'must match widthMm, heightMm, or depthMm');
     }
-    if (binding.componentId !== undefined && binding.componentId !== '' || binding.relationship !== undefined) {
+    if ((binding.componentId !== undefined && binding.componentId !== '') || binding.relationship !== undefined) {
       add('binding', 'dimensionColumn cannot target composition');
     }
   } else {
@@ -276,7 +349,7 @@ export function evaluateFurnitureParameters(
   definitions: readonly FurnitureParameter[],
   provided: Readonly<Record<string, unknown>>,
 ): FurnitureParameterEvaluation {
-  const definitionIssues = validateFurnitureParameterDefinitions(definitions);
+  const definitionIssues = validatePublishedFurnitureParameterDefinitions(definitions);
   if (definitionIssues.length !== 0) throw new FurnitureParameterDefinitionsError(definitionIssues);
 
   const declared = new Map(definitions.map((definition) => [definition.name, definition]));

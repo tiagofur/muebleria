@@ -31,6 +31,7 @@ type InvalidDefinitionCorpus = {
     readonly rawJson?: string;
     readonly expectedCode: 'PARAMETER_DEFINITION_INVALID';
     readonly expectedFields: readonly string[];
+    readonly expectedTsFields?: readonly string[];
   }[];
 };
 
@@ -107,7 +108,7 @@ describe('definition-driven furniture parameter parity', () => {
       expect(
         [...new Set(definitionError.issues.map((issue) => issue.field))].sort(),
         scenario.id,
-      ).toEqual([...scenario.expectedFields].sort());
+      ).toEqual([...(scenario.expectedTsFields ?? scenario.expectedFields)].sort());
     }
   });
 });
