@@ -12,8 +12,8 @@
 
 ## Evidencia r3
 
-- Implementación: `7e9a49bafc2b788784451bf27e019f2c71e35daa`, rebased sobre `origin/main` `d66baf13`.
+- Implementación: `1bd72f65511d4c384cb2b96cdd50158bc9b5d8d5`, rebased sobre `origin/main` `d66baf13`.
 - `PATH="$HOME/.rbenv/shims:$PATH" GOFLAGS=-p=1 ./init.sh`: verde (TypeScript, Go, Ruby/RBZ).
 - TestUp real contra RBZ instalado: 5/5, 50 assertions, SketchUp 26.2.242, Ruby 3.2.2.
-- RBZ SHA-256: `7bf9d25195e8c00f0583a074de3b9dbfde55d228de221e88d1563c748195c3f5`.
+- RBZ SHA-256: `17ae1bfa3f7c4cb613e0a93d48178b85ceca47f6b0461afd5f5ae618ed0c9e47`.
 - Evidencia parseable: `progress/host_smoke_F195_testup_ci.json` y `_stdout.txt`.

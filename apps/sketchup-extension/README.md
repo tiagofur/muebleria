@@ -228,7 +228,7 @@ SketchUp operation. It is not a BOM, release, machine, or fabrication contract.
 
 | Host | Embedded Ruby | CEF | Status |
 |---|---:|---:|---|
-| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…`; in-host smoke 2026-08-27 (#415): TestUp CI 17/17 (7 bootstrap + 10 native entity), RBZ SHA-256 `efeab3fb…`; in-host smoke 2026-08-28 (#417): TestUp CI **28/28** (7 bootstrap + 11 native entity + 9 native validation + 1 OpenCutList 7.1.0 interop), 968 assertions, RBZ SHA-256 `5fb741e9…`; in-host smoke 2026-08-30 (#477): TestUp **5/5**, 50 assertions, source `7e9a49ba…`, RBZ SHA-256 `7bf9d251…` |
+| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…`; in-host smoke 2026-08-27 (#415): TestUp CI 17/17 (7 bootstrap + 10 native entity), RBZ SHA-256 `efeab3fb…`; in-host smoke 2026-08-28 (#417): TestUp CI **28/28** (7 bootstrap + 11 native entity + 9 native validation + 1 OpenCutList 7.1.0 interop), 968 assertions, RBZ SHA-256 `5fb741e9…`; in-host smoke 2026-08-30 (#477): TestUp **5/5**, 50 assertions, source `1bd72f65…`, RBZ SHA-256 `17ae1bfa…` |
 | SketchUp 2024/2025 macOS | 3.2.2 | 112/128 | Planned compatibility — not a target, no implied support |
 | SketchUp 2024/2025/2026.2 Windows | 3.2.2 | 112–137 | Planned compatibility — not a target, no implied support |
 
