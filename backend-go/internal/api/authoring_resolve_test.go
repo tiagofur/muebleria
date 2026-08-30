@@ -50,7 +50,8 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 		listMaterials:      materials,
 	}
 	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{
-		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1,
+		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, furnitureTestSecret)
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -780,7 +781,8 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	// Extension tokens hold the EXPLICIT authoring-resolve POST capability
 	// (#460 coordination) and stay read-only everywhere else.
 	extension, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{
-		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1,
+		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, furnitureTestSecret)
 	rec = postAuthoringResolve(server, extension, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusOK {
@@ -813,7 +815,8 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 		listStructures: catalog.Structures, listComponents: catalog.Components, listHardwares: catalog.Hardware,
 	}
 	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{
-		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1,
+		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, furnitureTestSecret)
 	rec = postAuthoringResolve(licenseless, webToken, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusForbidden {
