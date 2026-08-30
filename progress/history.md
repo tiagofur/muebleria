@@ -1836,3 +1836,11 @@ entitlements. La revisión final quedó **APPROVED** en `progress/review_F197.md
 Evidencia final: `./init.sh` completo sobre PostgreSQL 16 aislado, OpenAPI drift,
 TypeScript, Go serializado, Ruby/RBZ, RLS SQL directo, rollback/replay/concurrencia,
 pilot gate fresh, UI y los seis checks CI remotos verdes; push y SHA remoto verificados.
+
+
+## 2026-08-30 — F197 / #452 cerrado después del merge de PR #484
+
+- `main` incorporó el lifecycle explícito y provisioning atómico de organizaciones mediante PR #484.
+- La corrección final serializa support sessions con suspensión/offboarding y mantiene el credential epoch organizacional.
+- F197 pasa de `in_progress` a `done`; `progress/current.md` vuelve a no tener feature activa.
+- El PR #486 debe rebasarse sobre `main` y usar un feature ID/migrations disponibles antes de cualquier merge posterior.
