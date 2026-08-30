@@ -5007,6 +5007,38 @@
         "PR #481 head 7703f0e8: re-review encontró schema incompleto para campos material visual/PBR del NativeLayout, coherencia Ruby demasiado estricta para hardware manual semántico sin preview y pérdida de códigos tipados en 405/415. F195 vuelve a in_progress hasta corrección y nueva revisión independiente.",
         "PR #481 r6: los gaps de la re-review de 7703f0e8 quedaron corregidos en 8433cbdf: NativeLayout visual/PBR alineado Go→Schema/Ajv→TS→Ruby, hardware manual sin preview preservado semánticamente como proyección visual subset y 405/415 tipados en Ruby. TestUp oficial 6/6/58, CI remota verde y nueva revisión independiente APPROVED en 21fb41a8 sobre 051512f3."
       ]
+    },
+    {
+      "id": "F197",
+      "title": "Parámetros tipados definition-driven para rich authoring resolve (#483 / SU-API-2)",
+      "description": "Proyecta y persiste una definición versionada de parámetros number/string/boolean/enum compartida por catálogo y authoring resolve; el servidor aplica defaults y validación estable, incorpora las reglas al catalog pin y conserva la paridad legacy width/height/depth.",
+      "tags": [
+        "backend-go",
+        "domain",
+        "api",
+        "contracts",
+        "sketchup-extension"
+      ],
+      "created": "2026-08-30",
+      "acceptance": [
+        "El catálogo devuelve definiciones tipadas versionadas con default, required, min/max/step, integer/count y options según corresponda",
+        "El catalog revision/hash cubre schema y defaults; cambiar sólo una regla invalida el pin anterior",
+        "Authoring resolve valida por la definición seleccionada, evalúa defaults server-side y devuelve normalizedSnapshot.parameters completo",
+        "Unknown, wrong-type, required, out-of-range, invalid-step e invalid-enum producen códigos estructurados estables",
+        "Fixture compartido Go/TypeScript cubre number, integer/count, boolean, enum y string, incluyendo negative proofs",
+        "La migración fresh/upgrade conserva módulos existentes y su paridad width/height/depth"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/483",
+        "https://github.com/tiagofur/muebleria/pull/481",
+        "docs/architecture/smart-furniture-engine.md",
+        "docs/architecture/parametric-furniture-library.md",
+        "docs/verification.md"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F195"
+      ]
     }
   ]
 }
