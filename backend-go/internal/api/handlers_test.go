@@ -335,8 +335,9 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 	// explicit memberships (ADR-0005 middleware re-validates per request).
 	return &domain.MembershipWithOrg{
 		Membership: domain.Membership{
-			OrganizationID: organizationID, UserID: userID,
+			ID: userID + ":" + organizationID, OrganizationID: organizationID, UserID: userID,
 			Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
+			CredentialVersion: 1,
 		},
 		Organization: domain.Organization{
 			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,
@@ -2464,11 +2465,20 @@ func (s *stubStore) EndSupportSession(context.Context, string, string, string) (
 func (s *stubStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
 	return nil, nil
 }
+func (s *stubStore) GetOrgTeamSummary(context.Context, string, string) (*storage.OrgTeamSummary, error) {
+	return &storage.OrgTeamSummary{TeamVersion: 1, EntitlementsVersion: 1}, nil
+}
 func (s *stubStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, membershipID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Roles: roles, Status: domain.MembershipStatusActive, Version: version + 1}, nil
 }
 func (s *stubStore) UpdateMembershipStatus(_ context.Context, _ string, membershipID string, status domain.MembershipStatus, _ string, _ string, version int64) (*storage.OrgTeamMember, error) {
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Status: status, Version: version + 1}, nil
+}
+func (s *stubStore) RevokeMembershipSessions(_ context.Context, _ string, membershipID, _ string, _ string, version int64) (*storage.OrgTeamMember, error) {
+	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Status: domain.MembershipStatusActive, Version: version + 1}, nil
+}
+func (s *stubStore) GetMembershipResponsibilityInventory(_ context.Context, membershipID string) (*storage.MembershipResponsibilityInventory, error) {
+	return &storage.MembershipResponsibilityInventory{OrganizationID: "org-1", MembershipID: membershipID, UserID: "u-1"}, nil
 }
 func (s *stubStore) CreateInvitation(_ context.Context, orgID string, email string, roles []domain.UserRole, _ string, _ time.Time, _ string) (*storage.Invitation, error) {
 	return &storage.Invitation{ID: "inv-1", OrganizationID: orgID, Email: email, Status: "pending", Roles: roles}, nil

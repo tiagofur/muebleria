@@ -202,7 +202,7 @@ func (s *Server) HandleProjectFloorScan(w http.ResponseWriter, r *http.Request) 
 // actorCanAdvanceStation enforces the F094 station separation: sector-scoped
 // operators (produccion/almacen) may only move items into statuses produced
 // by THEIR assigned sectors. Responds 403 and returns false when denied;
-// sector-list read failures fall open to the role-only check (logged).
+// sector-list read failures deny the scoped operation.
 func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, roles []domain.UserRole, userID, targetStatus string) bool {
 	// Multi-role union (ADR-0005): the actor may advance when any of their
 	// roles allows it — unscoped roles directly, sector-scoped roles through
@@ -223,8 +223,9 @@ func (s *Server) actorCanAdvanceStation(w http.ResponseWriter, r *http.Request, 
 	}
 	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
 	if err != nil {
-		log.Printf("[floor-scan] cannot read sectors for user %s: %v (falling open)", userID, err)
-		return true
+		log.Printf("[floor-scan] cannot read sectors for user %s: %v", userID, err)
+		respondWithError(w, http.StatusForbidden, "no se pudieron verificar tus sectores")
+		return false
 	}
 	names := make([]string, 0, len(sectors))
 	for _, us := range sectors {

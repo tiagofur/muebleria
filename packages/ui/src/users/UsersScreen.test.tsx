@@ -16,8 +16,9 @@ describe('UsersScreen (F194 membership lifecycle)', () => {
 
     expect(src).toContain('api.listMemberships');
     expect(src).not.toContain('/admin/users/');
-    expect(src).toContain('api.updateMembershipRoles');
-    expect(src).toContain('api.updateMembershipStatus');
+    expect(src).toContain('api.changeMembershipRoles');
+    expect(src).toContain('api.suspendMembership');
+    expect(src).toContain('api.reactivateMembership');
     // Los roles ofrecidos los pinea el contrato (ASSIGNABLE_ROLES) y los
     // cubren los tests de comportamiento de abajo; aquí sólo vigilamos que
     // no vuelvan labels legacy hardcodeadas al source.
@@ -83,7 +84,31 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     membership_status: 'active',
     joined_at: '2026-08-28T00:00:00Z',
     version: 1,
+	sectors: [],
+	offboarding_blocking_count: 0,
+    last_activity: null,
+    credential_version: 1,
+    sessions_revoked_at: null,
   };
+
+  const teamDirectory = (items: readonly unknown[], capabilities = [
+    'team:invite:sales',
+    'team:invite:production',
+    'team:manage:all',
+    'team:assign:admin',
+    'team:revoke_sessions',
+  ]) => ({
+    items,
+    summary: {
+      active_members: items.filter((item: any) => item.membership_status === 'active').length,
+      suspended_members: items.filter((item: any) => item.membership_status === 'suspended').length,
+      left_members: items.filter((item: any) => item.membership_status === 'left').length,
+      max_active_members: null,
+      team_version: 1,
+      entitlements_version: 1,
+      capabilities,
+    },
+  });
 
   // Behavior (no source grep): la pantalla debe ofrecer exactamente lo que
   // el backend acepta — el contrato canónico filtrado por tipo de org.
@@ -97,7 +122,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.includes('/org/memberships')) return jsonOk([member]);
+        if (url.includes('/org/memberships')) return jsonOk(teamDirectory([member]));
         return jsonOk([]);
       }),
     );
@@ -145,7 +170,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     trigger.focus();
     await actor.keyboard('{Enter}');
 
-    const dialog = await screen.findByRole('dialog', { name: 'Invitar Miembro al Taller' });
+    const dialog = await screen.findByRole('dialog', { name: 'Invitar miembro al taller' });
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await actor.keyboard('{Escape}');
     await waitFor(() => expect(document.activeElement).toBe(trigger));
@@ -199,7 +224,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         if (String(input).includes('/org/memberships')) {
-          return jsonOk([{ ...member, account_status: 'disabled' }]);
+          return jsonOk(teamDirectory([{ ...member, account_status: 'disabled' }]));
         }
         return jsonOk([]);
       }),
@@ -225,7 +250,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         requests.push({ url, init });
-        if (url.includes('/org/memberships/11111111-1111-4111-8111-111111111111/status')) {
+        if (url.includes('/org/memberships/11111111-1111-4111-8111-111111111111:reactivate')) {
           return jsonOk({
             membership_id: '11111111-1111-4111-8111-111111111111',
             user_id: '22222222-2222-4222-8222-222222222222',
@@ -235,7 +260,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
           });
         }
         if (url.endsWith('/org/memberships')) {
-          return jsonOk([{ ...member, membership_status: 'suspended', version: 7 }]);
+          return jsonOk(teamDirectory([{ ...member, membership_status: 'suspended', version: 7 }]));
         }
         return jsonOk([]);
       }),
@@ -244,16 +269,16 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
 
     await user.click(await screen.findByRole('button', { name: /Membresías suspendidas/ }));
-    await user.click(await screen.findByRole('button', { name: 'Reactivar membresía' }));
+    await user.click(await screen.findByRole('button', { name: 'Reactivar membresía de Ana Pérez' }));
 
     await waitFor(() => {
-      expect(requests.some(({ url }) => url.includes('/org/memberships/11111111-1111-4111-8111-111111111111/status'))).toBe(true);
+      expect(requests.some(({ url }) => url.includes('/org/memberships/11111111-1111-4111-8111-111111111111:reactivate'))).toBe(true);
     });
-    const mutation = requests.find(({ url }) => url.includes('/org/memberships/11111111-1111-4111-8111-111111111111/status'))!;
+    const mutation = requests.find(({ url }) => url.includes('/org/memberships/11111111-1111-4111-8111-111111111111:reactivate'))!;
     expect(mutation.url).not.toContain('/admin/users/');
-    expect(mutation.init?.method).toBe('PUT');
+    expect(mutation.init?.method).toBe('POST');
     expect(new Headers(mutation.init?.headers).get('If-Match')).toBe('"v7"');
-    expect(mutation.init?.body).toBe(JSON.stringify({ status: 'active' }));
+    expect(mutation.init?.body).toBeUndefined();
   });
 
   it('resends an expired invitation with version and idempotency, exposing only the rotated link', async () => {
@@ -278,7 +303,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       requests.push({ url, init });
-      if (url.endsWith('/org/memberships')) return jsonOk([]);
+      if (url.endsWith('/org/memberships')) return jsonOk(teamDirectory([]));
       if (url.endsWith('/org/invitations')) return jsonOk([invitation]);
       if (url.endsWith(`/${invitation.id}:resend`)) return jsonOk({
         invitation: { ...invitation, status: 'pending', version: 5, expires_at: '2026-09-12T00:00:00Z' },
@@ -310,7 +335,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     const jsonOk = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); requests.push({ url, init });
-      if (url.endsWith('/org/memberships')) return jsonOk([]);
+      if (url.endsWith('/org/memberships')) return jsonOk(teamDirectory([]));
       if (url.endsWith('/org/invitations')) return jsonOk([invitation]);
       if (url.endsWith(`/${invitation.id}:revoke`)) return jsonOk({ invitation: { ...invitation, status: 'revoked', revoked_at: '2026-08-29T01:00:00Z', revoked_reason: 'Duplicada', version: 3 } });
       return jsonOk([]);
@@ -328,5 +353,142 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     expect(new Headers(mutation.init?.headers).get('If-Match')).toBe('"v2"');
     expect(new Headers(mutation.init?.headers).get('Idempotency-Key')).toBeTruthy();
     expect(mutation.init?.body).toBe(JSON.stringify({ reason: 'Duplicada' }));
+  });
+});
+
+describe('UsersScreen (#451 safe team boundary)', () => {
+  const member = {
+    membership_id: '11111111-1111-4111-8111-111111111111', user_id: '22222222-2222-4222-8222-222222222222',
+	name: 'Ana Pérez', email: 'ana@taller.com', roles: ['vendedor'], account_status: 'active', membership_status: 'active', joined_at: '2026-08-28T00:00:00Z', version: 1, sectors: [], offboarding_blocking_count: 0, last_activity: null, credential_version: 1, sessions_revoked_at: null,
+  } as const;
+  const directory = (capabilities: string[], maxActiveMembers: number | null) => ({
+    items: [member], summary: { active_members: 1, suspended_members: 0, left_members: 0, max_active_members: maxActiveMembers, team_version: 4, entitlements_version: 2, capabilities },
+  });
+
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it('shows the authoritative seat summary, including an explicit unlimited limit', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify(directory(['team:view'], null)), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+    expect((await screen.findByLabelText('Resumen del equipo')).textContent).toContain('1 activos');
+    expect(screen.getByLabelText('Resumen del equipo').textContent).toContain('Sin límite de miembros');
+  });
+
+  it('does not render mutation controls when the server grants only team:view', async () => {
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      return url.endsWith('/org/memberships')
+        ? new Response(JSON.stringify(directory(['team:view'], 5)), { status: 200 })
+        : new Response(JSON.stringify({ code: 'FORBIDDEN' }), { status: 403 });
+    }));
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+    await screen.findByText('Ana Pérez');
+    expect(screen.queryByRole('button', { name: /Invitar miembro/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Modificar roles/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Suspender membresía/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Revocar sesiones/i })).toBeNull();
+    expect(requests.some((url) => url.endsWith('/org/invitations'))).toBe(false);
+  });
+
+  it('keeps the Team directory available when invitations return forbidden', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/org/memberships')) {
+        return new Response(JSON.stringify(directory([
+          'team:view',
+          'team:invite:sales',
+          'team:manage:sales',
+        ], 5)), { status: 200 });
+      }
+      return new Response(JSON.stringify({ code: 'FORBIDDEN' }), { status: 403 });
+    }));
+
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    expect(await screen.findByText('Ana Pérez')).toBeTruthy();
+    expect(screen.queryByText('No se pudo cargar el equipo')).toBeNull();
+    await actor.click(screen.getByRole('button', { name: 'Invitaciones (0)' }));
+    expect(screen.getByText('No se pudieron cargar las invitaciones')).toBeTruthy();
+  });
+
+  it('limits sales-manager invitation and member controls to sales targets', async () => {
+    const productionMember = {
+      ...member,
+      membership_id: '33333333-3333-4333-8333-333333333333',
+      user_id: '44444444-4444-4444-8444-444444444444',
+      name: 'Bruno Producción',
+      email: 'bruno@taller.com',
+      roles: ['produccion'],
+    } as const;
+    const capabilities = ['team:view', 'team:invite:sales', 'team:manage:sales'];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify({ ...directory(capabilities, 5), items: [member, productionMember] }), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    expect(await screen.findByRole('button', { name: 'Modificar roles de Ana Pérez' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Modificar roles de Bruno Producción' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Suspender membresía de Ana Pérez' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Suspender membresía de Bruno Producción' })).toBeNull();
+
+    await actor.click(screen.getByRole('button', { name: 'Invitar miembro' }));
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox', { name: roleLabelEs('vendedor') })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: roleLabelEs('admin') })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Invitar miembro al taller' })).toBeTruthy();
+  });
+
+  it('limits production-manager controls to production and warehouse targets', async () => {
+    const productionMember = {
+      ...member,
+      membership_id: '33333333-3333-4333-8333-333333333333',
+      user_id: '44444444-4444-4444-8444-444444444444',
+      name: 'Bruno Producción',
+      email: 'bruno@taller.com',
+      roles: ['produccion'],
+    } as const;
+    const warehouseMember = {
+      ...member,
+      membership_id: '55555555-5555-4555-8555-555555555555',
+      user_id: '66666666-6666-4666-8666-666666666666',
+      name: 'Carla Almacén',
+      email: 'carla@taller.com',
+      roles: ['almacen'],
+    } as const;
+    const capabilities = ['team:view', 'team:invite:production', 'team:manage:production'];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify({ ...directory(capabilities, 5), items: [member, productionMember, warehouseMember] }), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await screen.findByText('Bruno Producción');
+    expect(screen.queryByRole('button', { name: 'Modificar roles de Ana Pérez' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Modificar roles de Bruno Producción' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Modificar roles de Carla Almacén' })).toBeTruthy();
+  });
+
+  it('uses sentence case for Team action and dialog labels', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify(directory([
+        'team:view',
+        'team:invite:sales',
+        'team:manage:all',
+        'team:assign:admin',
+      ], 5)), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await actor.click(await screen.findByRole('button', { name: 'Modificar roles de Ana Pérez' }));
+    expect(screen.getByRole('button', { name: 'Guardar roles' })).toBeTruthy();
+    await actor.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await actor.click(screen.getByRole('button', { name: 'Invitar miembro' }));
+    expect(screen.getByRole('dialog', { name: 'Invitar miembro al taller' })).toBeTruthy();
   });
 });

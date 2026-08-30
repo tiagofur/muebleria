@@ -145,4 +145,7 @@ jobs:
 
       - name: Run Go Tests
         working-directory: backend-go
-        run: go test -v ./...
+        # PostgreSQL migration/race suites share cluster-level role DDL; keep
+        # package execution serial so independent ephemeral DB fixtures cannot
+        # concurrently mutate pg_auth_members.
+        run: go test -p 1 -v ./...

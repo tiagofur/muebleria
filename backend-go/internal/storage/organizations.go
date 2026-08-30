@@ -122,12 +122,12 @@ func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOr
 }
 
 const membershipWithOrgColumns = `
-	m.id, m.organization_id, m.user_id, m.roles, m.status, m.joined_at, m.suspended_at, m.suspended_by::text, m.suspension_reason, m.left_at, m.left_by::text, m.leave_reason, m.created_at, m.updated_at, m.version,
+	m.id, m.organization_id, m.user_id, m.roles, m.status, m.joined_at, m.suspended_at, m.suspended_by::text, m.suspension_reason, m.left_at, m.left_by::text, m.leave_reason, m.created_at, m.updated_at, m.version, m.credential_version, m.sessions_revoked_at,
 	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.parent_organization_id, o.created_at, o.updated_at, o.version`
 
 func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 	var m domain.MembershipWithOrg
-	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version,
+	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,
 		&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
 		&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version)
@@ -165,7 +165,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 	out := []domain.MembershipWithOrg{}
 	for rows.Next() {
 		var m domain.MembershipWithOrg
-		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version,
+		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,
 			&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
 			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
 			&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version); err != nil {
@@ -372,22 +372,67 @@ func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminU
 // OrgTeamMember is the membership-centric team projection. Historical
 // suspended/left memberships remain visible to authorized organization admins.
 type OrgTeamMember struct {
-	MembershipID  string
-	UserID        string
-	Email         string
-	Name          string
-	AccountStatus domain.AccountStatus
-	Status        domain.MembershipStatus
-	Roles         []domain.UserRole
-	JoinedAt      time.Time
-	Version       int64
+	MembershipID             string
+	UserID                   string
+	Email                    string
+	Name                     string
+	AccountStatus            domain.AccountStatus
+	Status                   domain.MembershipStatus
+	Roles                    []domain.UserRole
+	JoinedAt                 time.Time
+	Version                  int64
+	LastActivity             *time.Time
+	CredentialVersion        int64
+	SessionsRevokedAt        *time.Time
+	Sectors                  []domain.ProductionSector
+	OffboardingBlockingCount int64
 }
 
 func scanOrgTeamMember(row pgx.Row) (*OrgTeamMember, error) {
 	var out OrgTeamMember
 	err := row.Scan(&out.MembershipID, &out.UserID, &out.Email, &out.Name,
-		&out.AccountStatus, &out.Status, &out.Roles, &out.JoinedAt, &out.Version)
+		&out.AccountStatus, &out.Status, &out.Roles, &out.JoinedAt, &out.Version,
+		&out.LastActivity, &out.CredentialVersion, &out.SessionsRevokedAt)
 	return &out, err
+}
+
+// OrgTeamSummary is the tenant-scoped Team read model backed by the
+// transactional counters and explicit entitlement authority.
+type OrgTeamSummary struct {
+	ActiveMembers       int64
+	SuspendedMembers    int64
+	LeftMembers         int64
+	MaxActiveMembers    *int64
+	TeamVersion         int64
+	EntitlementsVersion int64
+}
+
+func (s *PostgresStore) GetOrgTeamSummary(ctx context.Context, organizationID, actorID string) (*OrgTeamSummary, error) {
+	if transactionFromContext(ctx) == nil {
+		var out *OrgTeamSummary
+		err := s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: actorID}, func(txCtx context.Context) error {
+			var inner error
+			out, inner = s.GetOrgTeamSummary(txCtx, organizationID, actorID)
+			return inner
+		})
+		return out, err
+	}
+	out := &OrgTeamSummary{}
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT state.active_member_count,
+			count(*) FILTER (WHERE membership.status = 'suspended'),
+			count(*) FILTER (WHERE membership.status = 'left'),
+			entitlement.max_active_members, state.version, entitlement.version
+		FROM organization_team_state state
+		JOIN organization_entitlements entitlement ON entitlement.organization_id = state.organization_id
+		LEFT JOIN memberships membership ON membership.organization_id = state.organization_id
+		WHERE state.organization_id = $1
+		GROUP BY state.active_member_count, entitlement.max_active_members, state.version, entitlement.version`, organizationID).Scan(
+		&out.ActiveMembers, &out.SuspendedMembers, &out.LeftMembers, &out.MaxActiveMembers, &out.TeamVersion, &out.EntitlementsVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrMembershipNotFound
+	}
+	return out, err
 }
 
 func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID, actorID string) ([]OrgTeamMember, error) {
@@ -401,7 +446,8 @@ func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID, actorID
 		return out, err
 	}
 	rows, err := s.db(ctx).Query(ctx, `SELECT m.id, u.id, u.email, u.name,
-		u.account_status, m.status, m.roles, m.joined_at, m.version
+		u.account_status, m.status, m.roles, m.joined_at, m.version,
+		u.last_login_at, m.credential_version, m.sessions_revoked_at
 		FROM memberships m JOIN users u ON u.id=m.user_id
 		WHERE m.organization_id=$1 ORDER BY m.joined_at`, organizationID)
 	if err != nil {
@@ -416,7 +462,50 @@ func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID, actorID
 		}
 		out = append(out, *m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	detailRows, err := s.db(ctx).Query(ctx, `
+		SELECT m.id,
+			COALESCE(array_agg(DISTINCT ms.sector ORDER BY ms.sector) FILTER (WHERE ms.sector IS NOT NULL), '{}'),
+			count(DISTINCT pa.id) FILTER (WHERE pa.finished_at IS NULL)
+		FROM memberships m
+		LEFT JOIN membership_sectors ms ON ms.membership_id=m.id AND ms.organization_id=m.organization_id
+		LEFT JOIN production_activities pa ON pa.organization_id=m.organization_id AND pa.operator_id=m.user_id::text AND pa.type='claim'
+		WHERE m.organization_id=$1
+		GROUP BY m.id`, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer detailRows.Close()
+	details := make(map[string]struct {
+		sectors  []domain.ProductionSector
+		blockers int64
+	})
+	for detailRows.Next() {
+		var membershipID string
+		var sectors []domain.ProductionSector
+		var blockers int64
+		if err := detailRows.Scan(&membershipID, &sectors, &blockers); err != nil {
+			return nil, err
+		}
+		details[membershipID] = struct {
+			sectors  []domain.ProductionSector
+			blockers int64
+		}{sectors: sectors, blockers: blockers}
+	}
+	if err := detailRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		detail := details[out[i].MembershipID]
+		out[i].Sectors = detail.sectors
+		out[i].OffboardingBlockingCount = detail.blockers
+		if out[i].Sectors == nil {
+			out[i].Sectors = []domain.ProductionSector{}
+		}
+	}
+	return out, nil
 }
 
 func classifyMembershipMiss(ctx context.Context, db dbtx, organizationID, membershipID string) error {
@@ -437,10 +526,35 @@ func (s *PostgresStore) UpdateMembershipRolesByOrg(ctx context.Context, organiza
 	if !domain.IsValidRoleSet(roles) {
 		return nil, fmt.Errorf("invalid role set")
 	}
+	var organizationType domain.OrganizationType
+	if err := s.db(ctx).QueryRow(ctx, `SELECT type FROM organizations WHERE id=$1`, organizationID).Scan(&organizationType); err != nil {
+		return nil, err
+	}
+	rows, err := s.db(ctx).Query(ctx, `SELECT sector FROM membership_sectors WHERE organization_id=$1 AND membership_id=$2 ORDER BY sector`, organizationID, membershipID)
+	if err != nil {
+		return nil, err
+	}
+	sectors := []domain.ProductionSector{}
+	for rows.Next() {
+		var sector domain.ProductionSector
+		if err := rows.Scan(&sector); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		sectors = append(sectors, sector)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	if !sectorsCompatibleWithMembership(sectors, roles, organizationType) {
+		return nil, ErrSectorAssignmentInvalid
+	}
 	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
 		UPDATE memberships m SET roles=$3, updated_at=NOW(), version=version+1
 		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$4 AND u.id=m.user_id
-		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
 		organizationID, membershipID, roles, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
@@ -460,10 +574,30 @@ func (s *PostgresStore) UpdateMembershipStatus(ctx context.Context, organization
 			left_at=CASE WHEN $3='left' THEN NOW() ELSE NULL END,
 			left_by=CASE WHEN $3='left' THEN NULLIF($5,'')::uuid ELSE NULL END,
 			leave_reason=CASE WHEN $3='left' THEN NULLIF($4,'') ELSE NULL END,
+			credential_version=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN credential_version+1 ELSE credential_version END,
+			sessions_revoked_at=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NOW() ELSE sessions_revoked_at END,
+			sessions_revoked_by=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NULLIF($5,'')::uuid ELSE sessions_revoked_by END,
+			sessions_revocation_reason=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NULLIF($4,'') ELSE sessions_revocation_reason END,
 			updated_at=NOW(), version=version+1
 		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$6 AND u.id=m.user_id
-		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
 		organizationID, membershipID, status, reason, actorID, expectedVersion))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
+	}
+	return out, err
+}
+
+// RevokeMembershipSessions invalidates every token issued for a tenant-scoped
+// membership without changing its lifecycle state.
+func (s *PostgresStore) RevokeMembershipSessions(ctx context.Context, organizationID, membershipID, actorID, reason string, expectedVersion int64) (*OrgTeamMember, error) {
+	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
+		UPDATE memberships m SET credential_version=credential_version+1,
+			sessions_revoked_at=NOW(), sessions_revoked_by=NULLIF($3,'')::uuid,
+			sessions_revocation_reason=NULLIF($4,''), updated_at=NOW(), version=version+1
+		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$5 AND u.id=m.user_id
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
+		organizationID, membershipID, actorID, reason, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
 	}
@@ -621,6 +755,18 @@ type AcceptInvitationResult struct {
 // the narrow SECURITY DEFINER boundary and stores no credential, email, token
 // or token hash in audit details.
 func (s *PostgresStore) RecordInvitationAcceptanceFailure(ctx context.Context, tokenHash, reason, ip string) error {
+	if transactionFromContext(ctx) == nil {
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback(ctx)
+		txCtx := context.WithValue(ctx, transactionContextKey{}, tx)
+		if err := s.RecordInvitationAcceptanceFailure(txCtx, tokenHash, reason, ip); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
 	var id, organizationID string
 	var discard [13]interface{}
 	var organizationType string
@@ -653,6 +799,11 @@ func (s *PostgresStore) RecordInvitationAcceptanceFailure(ctx context.Context, t
 			if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: "invitation_expired", OrganizationID: organizationID, Details: map[string]interface{}{"invitation_id": id}}); err != nil {
 				return err
 			}
+		}
+	}
+	if reason == "SEAT_LIMIT_REACHED" {
+		if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: "seat_limit_blocked", OrganizationID: organizationID, IP: ip, Details: map[string]interface{}{"invitation_id": id, "command": "accept_invitation"}}); err != nil {
+			return err
 		}
 	}
 	return s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{EventType: "invitation_acceptance_failed", OrganizationID: organizationID, IP: ip, Details: map[string]interface{}{"invitation_id": id, "reason": reason}})
@@ -752,8 +903,8 @@ func (s *PostgresStore) AcceptInvitation(ctx context.Context, cmd AcceptInvitati
 	var m domain.Membership
 	err = tx.QueryRow(ctx, `INSERT INTO memberships(organization_id,user_id,roles,status) VALUES($1,$2,$3,'active')
 		ON CONFLICT(user_id,organization_id) DO UPDATE SET roles=EXCLUDED.roles,status='active',suspended_at=NULL,suspended_by=NULL,suspension_reason=NULL,left_at=NULL,left_by=NULL,leave_reason=NULL,updated_at=NOW(),version=memberships.version+1
-		RETURNING id,organization_id,user_id,roles,status,joined_at,created_at,updated_at,version`, inv.OrganizationID, u.ID, inv.Roles).
-		Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.CreatedAt, &m.UpdatedAt, &m.Version)
+		RETURNING id,organization_id,user_id,roles,status,joined_at,created_at,updated_at,version,credential_version`, inv.OrganizationID, u.ID, inv.Roles).
+		Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion)
 	if err != nil {
 		return nil, err
 	}

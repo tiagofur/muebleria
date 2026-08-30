@@ -77,11 +77,13 @@ func crossOrgDirection(t *testing.T, d crossDirection) {
 	}
 
 	// User directory and team: only members of the caller's org.
-	var team []struct {
-		UserID string `json:"user_id"`
+	var team struct {
+		Items []struct {
+			UserID string `json:"user_id"`
+		} `json:"items"`
 	}
 	fx.decode(t, http.MethodGet, "/api/org/memberships", tok, nil, http.StatusOK, &team)
-	for _, m := range team {
+	for _, m := range team.Items {
 		if m.UserID == d.target.admin.id {
 			t.Fatalf("team: %s's owner appears in %s's /api/org/memberships", d.target.name, d.viewer.name)
 		}

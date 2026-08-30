@@ -126,7 +126,7 @@ func TestPostgresIdempotencyClientErrorRollsBackMutationAndReplaysAfterSQLError(
 	scope := "contract-448-client-error-" + suffix
 	event := "idempotency_client_error_" + suffix
 	conflictSlug := "idempotency-conflict-" + suffix
-	seed := &domain.Organization{Name: "Idempotency conflict seed", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Active: true}
+	seed := &domain.Organization{Name: "Idempotency conflict seed", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Active: false}
 	if err := one.CreateOrganization(ctx, seed); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestPostgresIdempotencyClientErrorRollsBackMutationAndReplaysAfterSQLError(
 		// Model a handler that catches a constraint/query error and maps it to a
 		// typed conflict response. PostgreSQL has aborted the transaction here.
 		if err := one.CreateOrganization(txCtx, &domain.Organization{
-			Name: "Duplicate slug", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Active: true,
+			Name: "Duplicate slug", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Active: false,
 		}); err == nil {
 			return storage.IdempotencyResponse{}, errors.New("expected SQL error")
 		}

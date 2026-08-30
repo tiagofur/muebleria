@@ -42,21 +42,23 @@ type Organization struct {
 // set (multi-role memberships) even while assignment flows still write a
 // single role — the RBAC union sweep lands in F170b.
 type Membership struct {
-	ID               string           `json:"id"`
-	OrganizationID   string           `json:"organization_id"`
-	UserID           string           `json:"user_id"`
-	Roles            []UserRole       `json:"roles"`
-	Status           MembershipStatus `json:"status"`
-	JoinedAt         time.Time        `json:"joined_at"`
-	SuspendedAt      *time.Time       `json:"suspended_at,omitempty"`
-	SuspendedBy      *string          `json:"suspended_by,omitempty"`
-	SuspensionReason *string          `json:"suspension_reason,omitempty"`
-	LeftAt           *time.Time       `json:"left_at,omitempty"`
-	LeftBy           *string          `json:"left_by,omitempty"`
-	LeaveReason      *string          `json:"leave_reason,omitempty"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
-	Version          int64            `json:"version"`
+	ID                string           `json:"id"`
+	OrganizationID    string           `json:"organization_id"`
+	UserID            string           `json:"user_id"`
+	Roles             []UserRole       `json:"roles"`
+	Status            MembershipStatus `json:"status"`
+	JoinedAt          time.Time        `json:"joined_at"`
+	SuspendedAt       *time.Time       `json:"suspended_at,omitempty"`
+	SuspendedBy       *string          `json:"suspended_by,omitempty"`
+	SuspensionReason  *string          `json:"suspension_reason,omitempty"`
+	LeftAt            *time.Time       `json:"left_at,omitempty"`
+	LeftBy            *string          `json:"left_by,omitempty"`
+	LeaveReason       *string          `json:"leave_reason,omitempty"`
+	CreatedAt         time.Time        `json:"created_at"`
+	UpdatedAt         time.Time        `json:"updated_at"`
+	Version           int64            `json:"version"`
+	CredentialVersion int64            `json:"credential_version"`
+	SessionsRevokedAt *time.Time       `json:"sessions_revoked_at,omitempty"`
 }
 
 type MembershipStatus string

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -90,6 +91,37 @@ type durableReceiptBackend struct {
 type durableTestStore struct {
 	stubStore
 	backend *durableReceiptBackend
+}
+
+type failingDurableTestStore struct {
+	stubStore
+	err error
+}
+
+func (s *failingDurableTestStore) ExecuteIdempotent(context.Context, storage.IdempotencyRequest, func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error) {
+	return storage.IdempotencyResponse{}, false, s.err
+}
+
+func TestIdempotencyTranslatesDeferredSeatLimitForPublicCommands(t *testing.T) {
+	store := &failingDurableTestStore{err: &pgconn.PgError{Code: "23514", ConstraintName: organizationActiveMemberSeatLimitConstraint}}
+	server := NewServer(store, "secret", nil, 1, 1)
+	handler := server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		respondWithJSON(w, http.StatusOK, map[string]bool{"accepted": true})
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/invitations:accept", bytes.NewBufferString(`{"token":"seat-limit"}`))
+	req.Header.Set("Idempotency-Key", "seat-limit-contract-key")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload openapi.ApiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Code != openapi.ApiErrorCodeSeatLimitReached {
+		t.Fatalf("code=%s payload=%+v", payload.Code, payload)
+	}
 }
 
 func (s *durableTestStore) ExecuteIdempotent(ctx context.Context, req storage.IdempotencyRequest, execute func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error) {
@@ -221,6 +253,10 @@ type staleInvitationStore struct {
 	calls   int
 }
 
+func (s *staleInvitationStore) ListInvitations(context.Context, string, string) ([]storage.Invitation, error) {
+	return []storage.Invitation{{ID: "inv-1", Roles: []domain.UserRole{domain.RoleVendedor}, Version: s.version}}, nil
+}
+
 func (s *staleInvitationStore) RevokeInvitation(_ context.Context, _, id, _, _ string, expectedVersion int64) (*storage.Invitation, error) {
 	s.calls++
 	if expectedVersion != s.version {
@@ -294,6 +330,12 @@ type staleMembershipStore struct {
 	mutationCalls int
 	version       int64
 	roles         []domain.UserRole
+}
+
+func (s *staleMembershipStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return []storage.OrgTeamMember{{MembershipID: "u-1", UserID: "target", Roles: append([]domain.UserRole(nil), s.roles...)}}, nil
 }
 
 func (s *staleMembershipStore) UpdateMembershipRolesByOrg(_ context.Context, _, _ string, roles []domain.UserRole, expected int64) (*storage.OrgTeamMember, error) {

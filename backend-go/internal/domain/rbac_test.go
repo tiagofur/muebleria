@@ -265,3 +265,11 @@ func TestSectorAllowedForRole(t *testing.T) {
 	}
 }
 
+func TestRoleCanWorkSector_ProductionWithoutAssignmentsFailsClosed(t *testing.T) {
+	if RoleCanWorkSector(RoleProduccion, SectorCutting, nil) {
+		t.Fatal("production membership without sectors must not work a station")
+	}
+	if !RoleCanWorkSector(RoleProduccion, SectorCutting, []string{"cutting"}) {
+		t.Fatal("assigned production membership must work its station")
+	}
+}

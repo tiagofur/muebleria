@@ -57,15 +57,16 @@ func sectorForUnitTargetStatus(status domain.ModuleUnitStatus) domain.Production
 // actorCanWorkSector enforces the F094 station separation for part/unit level
 // work: scoped operators (produccion/almacen) only work their assigned
 // sectors. Responds 403 and returns false when denied; sector-list read
-// failures fall open to the role-only check (logged), same as floor-scan.
+// failures deny the scoped operation, same as floor-scan.
 func (s *Server) actorCanWorkSector(w http.ResponseWriter, r *http.Request, roles []domain.UserRole, userID string, sector domain.ProductionSector) bool {
 	if !domain.RolesAllScopedBySector(roles) {
 		return true
 	}
 	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
 	if err != nil {
-		log.Printf("[part-executions] cannot read sectors for user %s: %v (falling open)", userID, err)
-		return true
+		log.Printf("[part-executions] cannot read sectors for user %s: %v", userID, err)
+		respondWithError(w, http.StatusForbidden, "no se pudieron verificar tus sectores")
+		return false
 	}
 	names := make([]string, 0, len(sectors))
 	for _, us := range sectors {
@@ -660,8 +661,8 @@ func (s *Server) actorCanWorkSectorInTx(r *http.Request, roles []domain.UserRole
 	}
 	sectors, err := s.Store.ListUserSectors(r.Context(), userID)
 	if err != nil {
-		log.Printf("[part-executions] cannot read sectors for user %s: %v (falling open)", userID, err)
-		return true
+		log.Printf("[part-executions] cannot read sectors for user %s: %v", userID, err)
+		return false
 	}
 	names := make([]string, 0, len(sectors))
 	for _, us := range sectors {

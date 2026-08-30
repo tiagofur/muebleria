@@ -11,10 +11,11 @@ import (
 // ListUserSectors returns all sector assignments for a user.
 func (s *PostgresStore) ListUserSectors(ctx context.Context, userID string) ([]domain.UserSector, error) {
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT user_id, sector, sub_sector, created_at
-		FROM user_sectors
-		WHERE user_id = $1 AND organization_id = $2
-		ORDER BY sector, sub_sector
+		SELECT m.user_id, ms.sector, '', ms.assigned_at
+		FROM membership_sectors ms
+		JOIN memberships m ON m.id = ms.membership_id
+		WHERE m.user_id = $1 AND ms.organization_id = $2
+		ORDER BY ms.sector
 	`, userID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
@@ -23,7 +24,7 @@ func (s *PostgresStore) ListUserSectors(ctx context.Context, userID string) ([]d
 	return scanUserSectors(rows)
 }
 
-// SetUserSectors replaces all sector assignments for a user (transactional delete+insert).
+// SetUserSectors replaces assignments through the exact membership in this tenant.
 func (s *PostgresStore) SetUserSectors(ctx context.Context, userID string, sectors []domain.UserSector) error {
 	tx, err := s.beginTx(ctx)
 	if err != nil {
@@ -31,19 +32,18 @@ func (s *PostgresStore) SetUserSectors(ctx context.Context, userID string, secto
 	}
 	defer tx.Rollback(ctx)
 
-	// Delete existing (only the active organization's assignments — the same
-	// operator may work in other talleres).
-	if _, err := tx.Exec(ctx, `DELETE FROM user_sectors WHERE user_id = $1 AND organization_id = $2`, userID, OrgFromCtx(ctx)); err != nil {
+	var membershipID string
+	if err := tx.QueryRow(ctx, `SELECT id FROM memberships WHERE user_id=$1 AND organization_id=$2`, userID, OrgFromCtx(ctx)).Scan(&membershipID); err != nil {
 		return err
 	}
-
-	// Insert new
+	if _, err := tx.Exec(ctx, `DELETE FROM membership_sectors WHERE membership_id=$1`, membershipID); err != nil {
+		return err
+	}
 	for _, sec := range sectors {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO user_sectors (user_id, sector, sub_sector, organization_id)
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (user_id, sector, sub_sector) DO NOTHING
-		`, userID, sec.Sector, sec.SubSector, OrgFromCtx(ctx)); err != nil {
+			INSERT INTO membership_sectors (membership_id, organization_id, sector)
+			VALUES ($1, $2, $3) ON CONFLICT (membership_id, sector) DO NOTHING
+		`, membershipID, OrgFromCtx(ctx), sec.Sector); err != nil {
 			return err
 		}
 	}
@@ -56,8 +56,9 @@ func (s *PostgresStore) GetUsersBySector(ctx context.Context, sector string) ([]
 	rows, err := s.db(ctx).Query(ctx, `
 		SELECT u.id, u.email, u.name, u.account_status, u.created_at, u.updated_at
 		FROM users u
-		INNER JOIN user_sectors us ON us.user_id = u.id
-		WHERE us.sector = $1 AND u.account_status = 'active' AND us.organization_id = $2
+		INNER JOIN memberships m ON m.user_id = u.id AND m.organization_id = $2
+		INNER JOIN membership_sectors ms ON ms.membership_id = m.id
+		WHERE ms.sector = $1 AND u.account_status = 'active' AND m.status = 'active'
 		ORDER BY u.name
 	`, sector, OrgFromCtx(ctx))
 	if err != nil {

@@ -31,6 +31,11 @@ const (
 	ApiErrorCodeAccountDisabled           ApiErrorCode = "ACCOUNT_DISABLED"
 	ApiErrorCodeMembershipAlreadyActive   ApiErrorCode = "MEMBERSHIP_ALREADY_ACTIVE"
 	ApiErrorCodeAccountNotFound           ApiErrorCode = "ACCOUNT_NOT_FOUND"
+	ApiErrorCodeOffboardingBlocked        ApiErrorCode = "OFFBOARDING_BLOCKED"
+	ApiErrorCodeReassignmentRequired      ApiErrorCode = "REASSIGNMENT_REQUIRED"
+	ApiErrorCodeSectorNotAllowed          ApiErrorCode = "SECTOR_NOT_ALLOWED"
+	ApiErrorCodeAdminTransferInvalid      ApiErrorCode = "ADMIN_TRANSFER_INVALID"
+	ApiErrorCodeImpactVersionConflict     ApiErrorCode = "IMPACT_VERSION_CONFLICT"
 )
 
 type ApiError struct {
@@ -133,15 +138,20 @@ type MeResponse struct {
 }
 
 type TeamMember struct {
-	MembershipID     string           `json:"membership_id"`
-	UserID           string           `json:"user_id"`
-	Email            string           `json:"email"`
-	Name             string           `json:"name"`
-	AccountStatus    AccountStatus    `json:"account_status"`
-	MembershipStatus MembershipStatus `json:"membership_status"`
-	Roles            []string         `json:"roles"`
-	JoinedAt         string           `json:"joined_at"`
-	Version          int64            `json:"version"`
+	MembershipID             string             `json:"membership_id"`
+	UserID                   string             `json:"user_id"`
+	Email                    string             `json:"email"`
+	Name                     string             `json:"name"`
+	AccountStatus            AccountStatus      `json:"account_status"`
+	MembershipStatus         MembershipStatus   `json:"membership_status"`
+	Roles                    []string           `json:"roles"`
+	JoinedAt                 string             `json:"joined_at"`
+	Version                  int64              `json:"version"`
+	LastActivity             *string            `json:"last_activity"`
+	CredentialVersion        int64              `json:"credential_version"`
+	SessionsRevokedAt        *string            `json:"sessions_revoked_at"`
+	Sectors                  []ProductionSector `json:"sectors"`
+	OffboardingBlockingCount int64              `json:"offboarding_blocking_count"`
 }
 
 type Invitation struct {
@@ -182,6 +192,23 @@ type MembershipMutationResponse struct {
 	Status       MembershipStatus `json:"status"`
 	Roles        []string         `json:"roles"`
 	Version      int64            `json:"version"`
+}
+
+type MembershipResponsibilityInventory struct {
+	CustomerOwnershipCount      int64 `json:"customer_ownership_count"`
+	SalesProjectOwnershipCount  int64 `json:"sales_project_ownership_count"`
+	EngineerAssignmentCount     int64 `json:"engineer_assignment_count"`
+	OpenWarrantyAssignmentCount int64 `json:"open_warranty_assignment_count"`
+	ActiveProductionClaimCount  int64 `json:"active_production_claim_count"`
+	TransferRequiredCount       int64 `json:"transfer_required_count"`
+	BlockingCount               int64 `json:"blocking_count"`
+}
+
+type MembershipOffboardingPreview struct {
+	MembershipID      string                            `json:"membership_id"`
+	MembershipVersion int64                             `json:"membership_version"`
+	ImpactVersion     string                            `json:"impact_version"`
+	Inventory         MembershipResponsibilityInventory `json:"inventory"`
 }
 
 type PlatformOrganization struct {
@@ -358,4 +385,102 @@ type AccountStatusMutationResponse struct {
 	UserID        string        `json:"user_id"`
 	AccountStatus AccountStatus `json:"account_status"`
 	UpdatedAt     string        `json:"updated_at"`
+}
+
+type TeamCapability string
+
+const (
+	TeamCapabilityTeamView             TeamCapability = "team:view"
+	TeamCapabilityTeamInviteSales      TeamCapability = "team:invite:sales"
+	TeamCapabilityTeamInviteProduction TeamCapability = "team:invite:production"
+	TeamCapabilityTeamManageSales      TeamCapability = "team:manage:sales"
+	TeamCapabilityTeamManageProduction TeamCapability = "team:manage:production"
+	TeamCapabilityTeamManageAll        TeamCapability = "team:manage:all"
+	TeamCapabilityTeamAssignAdmin      TeamCapability = "team:assign:admin"
+	TeamCapabilityTeamTransferAdmin    TeamCapability = "team:transfer_admin"
+	TeamCapabilityTeamManageSectors    TeamCapability = "team:manage:sectors"
+	TeamCapabilityTeamRevokeSessions   TeamCapability = "team:revoke_sessions"
+)
+
+type TeamSummary struct {
+	ActiveMembers       int64            `json:"active_members"`
+	SuspendedMembers    int64            `json:"suspended_members"`
+	LeftMembers         int64            `json:"left_members"`
+	MaxActiveMembers    *int64           `json:"max_active_members"`
+	TeamVersion         int64            `json:"team_version"`
+	EntitlementsVersion int64            `json:"entitlements_version"`
+	Capabilities        []TeamCapability `json:"capabilities"`
+}
+
+type TeamDirectory struct {
+	Items   []TeamMember `json:"items"`
+	Summary TeamSummary  `json:"summary"`
+}
+
+type ChangeMembershipRolesRequest struct {
+	Roles []string `json:"roles"`
+}
+
+type SuspendMembershipRequest struct {
+	Reason string `json:"reason"`
+}
+
+type RevokeMembershipSessionsRequest struct {
+	Reason string `json:"reason"`
+}
+
+type ProductionSector string
+
+const (
+	ProductionSectorWarehouse    ProductionSector = "warehouse"
+	ProductionSectorCutting      ProductionSector = "cutting"
+	ProductionSectorCnc          ProductionSector = "cnc"
+	ProductionSectorEdgeBanding  ProductionSector = "edge_banding"
+	ProductionSectorAssembly     ProductionSector = "assembly"
+	ProductionSectorPackaging    ProductionSector = "packaging"
+	ProductionSectorShipping     ProductionSector = "shipping"
+	ProductionSectorInstallation ProductionSector = "installation"
+	ProductionSectorHerrajes     ProductionSector = "herrajes"
+	ProductionSectorTableros     ProductionSector = "tableros"
+	ProductionSectorCintillas    ProductionSector = "cintillas"
+)
+
+type TransferOrganizationAdminRequest struct {
+	TargetMembershipID string `json:"target_membership_id"`
+	TargetVersion      int64  `json:"target_version"`
+	DemoteSource       bool   `json:"demote_source"`
+	Reason             string `json:"reason"`
+}
+
+type AdminTransferResponse struct {
+	Source MembershipMutationResponse `json:"source"`
+	Target MembershipMutationResponse `json:"target"`
+}
+
+type ChangeMembershipSectorsRequest struct {
+	Sectors []ProductionSector `json:"sectors"`
+	Reason  string             `json:"reason"`
+}
+
+type MembershipSectorMutationResponse struct {
+	Member  MembershipMutationResponse `json:"member"`
+	Sectors []ProductionSector         `json:"sectors"`
+}
+
+type MembershipReassignmentPlan struct {
+	CustomerOwnerMembershipID      *string `json:"customer_owner_membership_id,omitempty"`
+	SalesProjectOwnerMembershipID  *string `json:"sales_project_owner_membership_id,omitempty"`
+	EngineerMembershipID           *string `json:"engineer_membership_id,omitempty"`
+	WarrantyTechnicianMembershipID *string `json:"warranty_technician_membership_id,omitempty"`
+}
+
+type OffboardMembershipRequest struct {
+	ImpactVersion string                     `json:"impact_version"`
+	Reason        string                     `json:"reason"`
+	Reassignment  MembershipReassignmentPlan `json:"reassignment"`
+}
+
+type OffboardMembershipResponse struct {
+	Member    MembershipMutationResponse        `json:"member"`
+	Inventory MembershipResponsibilityInventory `json:"inventory"`
 }

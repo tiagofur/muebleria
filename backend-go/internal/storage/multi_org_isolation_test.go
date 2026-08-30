@@ -26,7 +26,7 @@ func isolationSetup(t *testing.T) (*storage.PostgresStore, string, string) {
 	// Organization B alongside the backfilled initial organization.
 	const orgB = "aaaaaaaa-0000-0000-0000-00000000000b"
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug) VALUES ($1, 'Taller Beta', 'taller-beta')`, orgB); err != nil {
+		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Beta', 'taller-beta', FALSE)`, orgB); err != nil {
 		t.Fatalf("create org B: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
@@ -210,6 +210,18 @@ func TestIsolation_UserDirectoryByOrganization(t *testing.T) {
 			t.Fatalf("seed: %v (%s)", err, s[:60])
 		}
 	}
+	tx, err := store.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, `UPDATE organizations SET active=TRUE WHERE id IN ($1, $2)`, orgA, orgB); err == nil {
+		err = tx.Commit(ctx)
+	} else {
+		_ = tx.Rollback(ctx)
+	}
+	if err != nil {
+		t.Fatalf("activate organizations with their seeded administrators: %v", err)
+	}
 
 	listA, err := store.ListUsersByOrganization(scoped(ctx, orgA))
 	if err != nil {
@@ -240,7 +252,7 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 
 	factory := &domain.Organization{
 		Name: "Fábrica Alpha", Slug: "fabrica-alpha",
-		Type: domain.OrganizationTypeFactory, Active: true,
+		Type: domain.OrganizationTypeFactory, Active: false,
 	}
 	if err := store.CreateOrganization(ctx, factory); err != nil {
 		t.Fatalf("create factory: %v", err)
@@ -248,7 +260,7 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 
 	tienda := &domain.Organization{
 		Name: "Tienda GDL", Slug: "tienda-gdl",
-		Type: domain.OrganizationTypeStore, Active: true,
+		Type: domain.OrganizationTypeStore, Active: false,
 		ParentOrganizationID: &factory.ID,
 	}
 	if err := store.CreateOrganization(ctx, tienda); err != nil {
@@ -257,7 +269,7 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 
 	independent := &domain.Organization{
 		Name: "Taller Independiente", Slug: "taller-independiente",
-		Type: domain.OrganizationTypeFactory, Active: true,
+		Type: domain.OrganizationTypeFactory, Active: false,
 	}
 	if err := store.CreateOrganization(ctx, independent); err != nil {
 		t.Fatalf("create independent: %v", err)
@@ -292,7 +304,7 @@ func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {
 
 	org := &domain.Organization{
 		Name: "Fábrica Update", Slug: "fabrica-update",
-		Type: domain.OrganizationTypeFactory, Active: true,
+		Type: domain.OrganizationTypeFactory, Active: false,
 	}
 	if err := store.CreateOrganization(ctx, org); err != nil {
 		t.Fatalf("create: %v", err)

@@ -581,15 +581,11 @@ func isValidSector(s domain.ProductionSector) bool {
 
 // userHasSectorAccess checks if a user has access to a specific sector.
 // userCanWorkSector — F094 semantics, mirroring RoleCanAdvanceStation:
-// produccion with NO assignments works every station (legacy operators);
-// with assignments, only members; almacen always needs explicit membership.
+// produccion and almacen need explicit membership sector assignments.
 func (s *Server) userCanWorkSector(ctx context.Context, role domain.UserRole, userID string, sector domain.ProductionSector) bool {
 	sectors, err := s.Store.ListUserSectors(ctx, userID)
 	if err != nil {
 		return false
-	}
-	if role == domain.RoleProduccion && len(sectors) == 0 {
-		return true
 	}
 	for _, us := range sectors {
 		if domain.ProductionSector(us.Sector) == sector {

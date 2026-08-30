@@ -208,7 +208,7 @@ func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
 		{`SELECT organization_id FROM projects WHERE id = '44444444-4444-4444-4444-444444444444'`, "projects"},
 		{`SELECT organization_id FROM customers WHERE id = '33333333-3333-3333-3333-333333333333'`, "customers"},
 		{`SELECT organization_id FROM material_boards WHERE id = '55555555-5555-5555-5555-555555555555'`, "material_boards"},
-		{`SELECT organization_id FROM user_sectors WHERE user_id = '11111111-1111-1111-1111-111111111111' AND sector = 'cutting'`, "user_sectors"},
+		{`SELECT ms.organization_id FROM membership_sectors ms JOIN memberships m ON m.id = ms.membership_id WHERE m.user_id = '11111111-1111-1111-1111-111111111111' AND ms.sector = 'cutting'`, "membership_sectors"},
 		{`SELECT organization_id FROM workshop_settings WHERE id = 1`, "workshop_settings"},
 	} {
 		var orgID string
@@ -249,7 +249,7 @@ func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
 
 	const org2 = "99999999-9999-9999-9999-999999999999"
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug) VALUES ($1, 'Taller Dos', 'taller-dos')`, org2); err != nil {
+		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Dos', 'taller-dos', FALSE)`, org2); err != nil {
 		t.Fatalf("create org 2: %v", err)
 	}
 
@@ -372,6 +372,16 @@ func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
 		t.Fatalf("legacy catalog row lost during rollback (boards=%d err=%v)", boards, err)
 	}
 
+	// The structural 000090 rollback restores legacy role with a safe default,
+	// not the historical role. Restore the fixture's exact roles so replay can
+	// satisfy both the active-admin and membership-sector invariants.
+	if _, err := pool.Exec(ctx, `UPDATE users SET role=CASE id
+		WHEN '11111111-1111-1111-1111-111111111111' THEN 'produccion'
+		WHEN '22222222-2222-2222-2222-222222222222' THEN 'admin'
+		ELSE role END
+		WHERE id IN ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222')`); err != nil {
+		t.Fatalf("restore legacy role fixtures for replay: %v", err)
+	}
 	// Re-applying the chain after a rollback must work (idempotent lifecycle).
 	if err := store.RunMigrations(ctx); err != nil {
 		t.Fatalf("re-apply after rollback: %v", err)

@@ -40,9 +40,36 @@ import {
   roleCanMarkPicking,
   roleCanManagePurchasing,
   roleCanAppendProjectEvent,
+  teamCapabilitiesForRoles,
+  hasTeamCapability,
 } from './rbac';
 
 describe('rbac (F035 / OC-004)', () => {
+  it('matches the Team capability contract by organization type and role', () => {
+    const contract = rolesContract as typeof rolesContract & {
+      teamCapabilities: {
+        all: readonly string[];
+        byOrganizationType: Record<string, Record<string, readonly string[]>>;
+      };
+    };
+    expect(teamCapabilitiesForRoles(['admin'], 'factory')).toEqual(contract.teamCapabilities.all);
+    for (const [organizationType, byRole] of Object.entries(contract.teamCapabilities.byOrganizationType)) {
+      for (const [role, capabilities] of Object.entries(byRole)) {
+        expect(teamCapabilitiesForRoles([role], organizationType)).toEqual(capabilities);
+      }
+    }
+  });
+
+  it('unions Team capabilities and fails closed for invalid role or organization', () => {
+    expect(teamCapabilitiesForRoles(['gerente_ventas', 'gerente_produccion'], 'factory')).toEqual([
+      'team:view', 'team:invite:sales', 'team:invite:production', 'team:manage:sales',
+      'team:manage:production', 'team:manage:sectors',
+    ]);
+    expect(teamCapabilitiesForRoles(['produccion'], 'factory')).toEqual([]);
+    expect(teamCapabilitiesForRoles(['gerente_produccion'], 'store')).toEqual([]);
+    expect(hasTeamCapability(['gerente_ventas'], 'factory', 'team:manage:sales')).toBe(true);
+  });
+
   it('matches the shared roles contract and rejects legacy labels', () => {
     const { canonicalRoles, rejectedRoles } = rolesContract;
 
@@ -328,9 +355,9 @@ describe('rbac (F035 / OC-004)', () => {
     expect(roleCanAdvanceStation('gerente_ventas', 'packaged')).toBe(true);
     expect(roleCanAdvanceStation('ingeniero', 'cut')).toBe(true);
 
-    // produccion without assignments: legacy full access.
-    expect(roleCanAdvanceStation('produccion', 'edged', [])).toBe(true);
-    expect(roleCanAdvanceStation('produccion', 'edged', null)).toBe(true);
+    // produccion without assignments: deny by default.
+    expect(roleCanAdvanceStation('produccion', 'edged', [])).toBe(false);
+    expect(roleCanAdvanceStation('produccion', 'edged', null)).toBe(false);
 
     // produccion assigned to cutting only.
     const cutter = roleCanAdvanceStation('produccion', 'cut', ['cutting']);
@@ -551,5 +578,12 @@ describe('guia-de-uso doc pins canonical role labels', () => {
     for (const r of rolesContract.rejectedRoles) {
       expect(doc).not.toContain(r);
     }
+  });
+});
+
+describe('membership sector enforcement', () => {
+  it('fails closed for produccion without memberships sectors', () => {
+    expect(roleCanAdvanceStation('produccion', 'cut', [])).toBe(false);
+    expect(roleCanAdvanceStation('produccion', 'cut', ['cutting'])).toBe(true);
   });
 });

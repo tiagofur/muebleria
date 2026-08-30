@@ -4906,6 +4906,56 @@
         "F191",
         "F192"
       ]
+    },
+    {
+      "id": "F196",
+      "title": "Administración segura de Team, último admin y offboarding (#451)",
+      "description": "Implementa la administración segura organization-scoped de memberships: capabilities contractuales, último admin race-safe, entitlement de asientos, revocación por membership, sectores tenant-safe, suspensión/offboarding con reasignación explícita, commands OpenAPI idempotentes y UI mínima.",
+      "tags": [
+        "organization-foundation",
+        "identity",
+        "membership",
+        "team",
+        "security",
+        "backend-go",
+        "postgresql",
+        "web",
+        "p0"
+      ],
+      "created": "2026-08-29",
+      "acceptance": [
+        "Capabilities de Team derivan de contracts/roles.json y el servidor las aplica por tipo de organización, rol actual y rol destino",
+        "Un organization activa nunca queda sin admin activo bajo API, carreras concurrentes ni SQL directo",
+        "Los asientos activos se aplican transaccionalmente cuando el entitlement es finito; legacy sin mapping comercial explícito permanece unlimited",
+        "Suspender, offboardear o revocar sesiones invalida tokens de esa membership sin extender la sesión absoluta de 18h; reactivar no revive tokens anteriores",
+        "Sectors pertenecen a Membership+Organization, migran sin fallback inseguro y producción sin sectores queda fail-closed",
+        "Offboarding preview/execute exige reason, versión, reasignaciones compatibles y bloquea responsabilidades vigentes sin reescribir historia",
+        "Commands Team usan OpenAPI generado, If-Match, Idempotency-Key, errores tipados y audit durable en la misma transacción",
+        "RLS, migrations fresh/upgrade/down, direct-SQL, race, API, auth y UI tienen pruebas ejecutables sin skips de gate",
+        "La UI Team muestra estados separados, acciones capability-gated y errores accionables después del commit autoritativo"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/451",
+        "https://github.com/tiagofur/muebleria/issues/452",
+        "https://github.com/tiagofur/muebleria/issues/458",
+        "https://github.com/tiagofur/muebleria/issues/460",
+        "https://github.com/tiagofur/muebleria/issues/461",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/verification.md",
+        "contracts/roles.json",
+        "contracts/openapi/granete-api.v1.yaml",
+        "progress/implementation_451.md",
+        "progress/review_F196.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F191",
+        "F192",
+        "F194"
+      ]
     }
   ]
 }

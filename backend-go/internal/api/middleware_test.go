@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func okHandler() http.HandlerFunc {
@@ -36,6 +38,18 @@ type staticUsers struct {
 	byID        map[string]*domain.User
 	err         error
 	memberships map[string]*domain.MembershipWithOrg
+}
+
+type commitFailingUsers struct {
+	*staticUsers
+	commitErr error
+}
+
+func (s *commitFailingUsers) WithinTenantTx(ctx context.Context, _ storage.TenantActor, execute func(context.Context) error) error {
+	if err := execute(ctx); err != nil {
+		return err
+	}
+	return s.commitErr
 }
 
 func (s *staticUsers) GetUserByID(_ context.Context, id string) (*domain.User, error) {
@@ -119,8 +133,8 @@ func TestAuthMiddleware(t *testing.T) {
 		memberships: map[string]*domain.MembershipWithOrg{
 			"user-1:org-1": {
 				Membership: domain.Membership{
-					OrganizationID: "org-1", UserID: "user-1",
-					Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
+					ID: "user-1:org-1", OrganizationID: "org-1", UserID: "user-1",
+					CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
 				},
 				Organization: domain.Organization{ID: "org-1", Active: true},
 			},
@@ -172,7 +186,7 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 
 	// Case 4: Valid org-scoped Token + active user in DB → 200.
-	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, secret)
+	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,6 +199,43 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 	if rr.Body.String() != "user@test.com" {
 		t.Errorf("valid token: expected email in body, got %s", rr.Body.String())
+	}
+}
+
+func TestAuthMiddleware_MapsDeferredTeamInvariantCommitError(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	users := &commitFailingUsers{
+		staticUsers: &staticUsers{
+			byID: map[string]*domain.User{
+				"user-1": {ID: "user-1", Email: "user@test.com", AccountStatus: domain.AccountStatusActive},
+			},
+			memberships: map[string]*domain.MembershipWithOrg{
+				"user-1:org-1": {
+					Membership:   domain.Membership{ID: "user-1:org-1", OrganizationID: "org-1", UserID: "user-1", CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive},
+					Organization: domain.Organization{ID: "org-1", Active: true},
+				},
+			},
+		},
+		commitErr: &pgconn.PgError{Code: "23514", ConstraintName: organizationRequiresActiveAdminConstraint},
+	}
+	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/org/memberships/member-2/roles", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusConflict, rr.Body.String())
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || body.Code != "LAST_ADMIN" {
+		t.Fatalf("deferred typed error code=%q err=%v body=%s", body.Code, err, rr.Body.String())
 	}
 }
 
@@ -285,8 +336,8 @@ func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 		memberships: map[string]*domain.MembershipWithOrg{
 			"a-1:org-1": {
 				Membership: domain.Membership{
-					OrganizationID: "org-1", UserID: "a-1",
-					Roles: []domain.UserRole{domain.RoleUser}, Status: domain.MembershipStatusActive,
+					ID: "a-1:org-1", OrganizationID: "org-1", UserID: "a-1",
+					CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleUser}, Status: domain.MembershipStatusActive,
 				},
 				Organization: domain.Organization{ID: "org-1", Active: true},
 			},
@@ -297,7 +348,7 @@ func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 		w.Write([]byte("admin-ok"))
 	}))
 
-	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, secret)
+	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "a-1:org-1", MembershipCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,15 +371,15 @@ func TestAdminMiddleware(t *testing.T) {
 		memberships: map[string]*domain.MembershipWithOrg{
 			"u-1:org-1": {
 				Membership: domain.Membership{
-					OrganizationID: "org-1", UserID: "u-1",
-					Roles: []domain.UserRole{domain.RoleUser}, Status: domain.MembershipStatusActive,
+					ID: "u-1:org-1", OrganizationID: "org-1", UserID: "u-1",
+					CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleUser}, Status: domain.MembershipStatusActive,
 				},
 				Organization: domain.Organization{ID: "org-1", Active: true},
 			},
 			"a-1:org-1": {
 				Membership: domain.Membership{
-					OrganizationID: "org-1", UserID: "a-1",
-					Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
+					ID: "a-1:org-1", OrganizationID: "org-1", UserID: "a-1",
+					CredentialVersion: 1, Roles: []domain.UserRole{domain.RoleAdmin}, Status: domain.MembershipStatusActive,
 				},
 				Organization: domain.Organization{ID: "org-1", Active: true},
 			},
@@ -340,7 +391,7 @@ func TestAdminMiddleware(t *testing.T) {
 	}))
 
 	// Non-admin role → 403 JSON.
-	userToken, err := auth.GenerateToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, secret)
+	userToken, err := auth.GenerateToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u-1:org-1", MembershipCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +407,7 @@ func TestAdminMiddleware(t *testing.T) {
 	}
 
 	// Admin role → 200.
-	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1"}, secret)
+	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "a-1:org-1", MembershipCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +510,7 @@ func orgScopedToken(t *testing.T, secret, userID, orgID string, roles []domain.U
 		strRoles[i] = string(r)
 	}
 	token, err := auth.GenerateToken(userID, "u@test.com", auth.TokenContext{
-		Roles: strRoles, OrgID: orgID,
+		Roles: strRoles, OrgID: orgID, MembershipID: userID + ":" + orgID, MembershipCredentialVersion: 1,
 	}, secret)
 	if err != nil {
 		t.Fatal(err)
@@ -470,7 +521,8 @@ func orgScopedToken(t *testing.T, secret, userID, orgID string, roles []domain.U
 func memEntry(userID, orgID string, roles []domain.UserRole, orgActive bool) *domain.MembershipWithOrg {
 	return &domain.MembershipWithOrg{
 		Membership: domain.Membership{
-			OrganizationID: orgID, UserID: userID, Roles: roles, Status: domain.MembershipStatusActive,
+			ID: userID + ":" + orgID, OrganizationID: orgID, UserID: userID, Roles: roles,
+			Status: domain.MembershipStatusActive, CredentialVersion: 1,
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "T", Slug: "t", Active: orgActive,
@@ -713,5 +765,51 @@ func TestAuthMiddleware_SupportTokenRequiresPlatformAdmin(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("forged support claim: esperaba 401, got %d", rr.Code)
+	}
+}
+
+func TestAuthMiddleware_RejectsMembershipIdentityCredentialAndSessionRevocationMismatches(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	started := time.Now().UTC().Add(-time.Hour)
+	membership := memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, true)
+	users := &staticUsers{
+		byID: map[string]*domain.User{
+			"u-1": {ID: "u-1", Email: "u@test.com", AccountStatus: domain.AccountStatusActive},
+		},
+		memberships: map[string]*domain.MembershipWithOrg{"u-1:org-1": membership},
+	}
+	token, err := auth.GenerateToken("u-1", "u@test.com", auth.TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: membership.ID,
+		MembershipCredentialVersion: membership.CredentialVersion, AuthStartedAt: started,
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serve := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		AuthMiddleware(secret, users)(okHandler()).ServeHTTP(rr, req)
+		return rr.Code
+	}
+	if got := serve(); got != http.StatusOK {
+		t.Fatalf("matching live membership = %d, want 200", got)
+	}
+
+	membership.ID = "replacement-membership"
+	if got := serve(); got != http.StatusUnauthorized {
+		t.Fatalf("membership identity replacement = %d, want 401", got)
+	}
+	membership.ID = "u-1:org-1"
+	membership.CredentialVersion++
+	if got := serve(); got != http.StatusUnauthorized {
+		t.Fatalf("credential revocation = %d, want 401", got)
+	}
+	membership.CredentialVersion--
+	revokedAt := started.Add(time.Minute)
+	membership.SessionsRevokedAt = &revokedAt
+	if got := serve(); got != http.StatusUnauthorized {
+		t.Fatalf("revoked-after-auth-start = %d, want 401", got)
 	}
 }

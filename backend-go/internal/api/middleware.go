@@ -129,6 +129,22 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 					return nil
 				})
 				if err != nil {
+					// Deferred Team constraints fire on transaction commit, after the
+					// handler has rendered into the capture writer. Preserve their typed
+					// public contract instead of returning a generic transaction error.
+					if eventType := teamInvariantAuditEvent(err); eventType != "" {
+						if recorder, ok := users.(interface {
+							RecordTeamInvariantBlocked(context.Context, string, string, string, string, string, string) error
+						}); ok {
+							if auditErr := recorder.RecordTeamInvariantBlocked(r.Context(), claims.OrgID, claims.UserID, eventType, r.URL.Path, clientIP(r), RequestIDFromContext(r.Context())); auditErr != nil {
+								respondWithInternalError(w, auditErr, "team invariant audit")
+								return
+							}
+						}
+					}
+					if respondWithTeamInvariantError(w, err) {
+						return
+					}
 					respondWithInternalError(w, err, "tenant transaction")
 					return
 				}
@@ -195,7 +211,9 @@ func serveAuthenticatedRequest(
 			claims.Role = string(domain.RoleAdmin)
 		} else if claims.OrgID != "" {
 			m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
-			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 {
+			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 ||
+				m.ID != claims.MembershipID || m.CredentialVersion != claims.MembershipCredentialVersion ||
+				(m.SessionsRevokedAt != nil && !claims.AuthStartedAt.Time.After(*m.SessionsRevokedAt)) {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}

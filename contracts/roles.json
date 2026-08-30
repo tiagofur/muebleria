@@ -44,5 +44,34 @@
       "vendedor",
       "gerente_ventas"
     ]
+  },
+  "teamCapabilities": {
+    "all": [
+      "team:view",
+      "team:invite:sales",
+      "team:invite:production",
+      "team:manage:sales",
+      "team:manage:production",
+      "team:manage:all",
+      "team:assign:admin",
+      "team:transfer_admin",
+      "team:manage:sectors",
+      "team:revoke_sessions"
+    ],
+    "byOrganizationType": {
+      "factory": {
+        "admin": ["team:view", "team:invite:sales", "team:invite:production", "team:manage:sales", "team:manage:production", "team:manage:all", "team:assign:admin", "team:transfer_admin", "team:manage:sectors", "team:revoke_sessions"],
+        "gerente_ventas": ["team:view", "team:invite:sales", "team:manage:sales"],
+        "gerente_produccion": ["team:view", "team:invite:production", "team:manage:production", "team:manage:sectors"]
+      },
+      "store": {
+        "admin": ["team:view", "team:invite:sales", "team:manage:sales", "team:manage:all", "team:assign:admin", "team:transfer_admin", "team:revoke_sessions"],
+        "gerente_ventas": ["team:view", "team:invite:sales", "team:manage:sales"]
+      },
+      "dealer": {
+        "admin": ["team:view", "team:invite:sales", "team:manage:sales", "team:manage:all", "team:assign:admin", "team:transfer_admin", "team:revoke_sessions"],
+        "gerente_ventas": ["team:view", "team:invite:sales", "team:manage:sales"]
+      }
+    }
   }
 }
