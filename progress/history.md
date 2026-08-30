@@ -1764,3 +1764,24 @@ Verificación final: `./init.sh`, OpenAPI, TypeScript, Go con race serial,
 PostgreSQL fresh/upgrade/rollback/RLS, pilot gate efímero, detector Impeccable,
 Playwright 6/6 a 390/768/1280, screenshots/no-overflow, CI remoto y readback de
 rama.
+
+---
+
+## F196 — Administración segura de Team, último admin y offboarding (#451) — 2026-08-30
+
+Rama `codex/451-safe-team-administration`. Se implementaron capabilities Team
+derivadas del contrato, commands OpenAPI versionados e idempotentes, invariantes
+PostgreSQL de último admin y asientos, revocación por membership, sectores
+tenant-safe, transferencia explícita de admin y offboarding con preview exacto,
+reasignaciones, blockers, rollback y auditoría durable.
+
+La revisión independiente encontró y se corrigieron rutas ServeMux inválidas,
+capability gating incompleto, aceptación de invitaciones sin traducción de seats,
+fixtures contractuales stale, compatibilidad semántica de sectores evadible por SQL
+directo y una carrera write-skew roles↔sectores. Las migrations `000098` y
+`000099` cierran vocabulario, tipo de organización, roles y concurrencia mediante
+locks advisory transaccionales ordenados organización→membership.
+
+Evidencia final: `./init.sh`, OpenAPI drift, TypeScript, Go serializado, runtime-role
+SQL, carreras concurrentes, pilot HTTP/PostgreSQL, UI y Ruby/RBZ verdes. La revisión
+independiente quedó **APPROVED** en `progress/review_F196.md`.

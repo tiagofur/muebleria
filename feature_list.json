@@ -4946,9 +4946,11 @@
         "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
         "docs/verification.md",
         "contracts/roles.json",
-        "contracts/openapi/granete-api.v1.yaml"
+        "contracts/openapi/granete-api.v1.yaml",
+        "progress/implementation_451.md",
+        "progress/review_F196.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F191",
         "F192",
