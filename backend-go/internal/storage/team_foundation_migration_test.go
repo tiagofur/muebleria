@@ -141,6 +141,67 @@ func TestTeamFoundationMigration_EnforcesCountersSeatsAndRLS(t *testing.T) {
 	}
 }
 
+func TestUpdateMembershipStatus_RevokesCredentialsWhenLeavingActiveState(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 96)
+	ctx := context.Background()
+	const (
+		orgID        = "b2000000-0000-0000-0000-000000000009"
+		adminID      = "b1000000-0000-0000-0000-000000000009"
+		memberID     = "b1000000-0000-0000-0000-000000000010"
+		membershipID = "b3000000-0000-0000-0000-000000000009"
+	)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations (id, name, slug) VALUES ($1, 'Credential State', 'credential-state')`, []any{orgID}},
+		{`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status) VALUES ($1, 'credential-admin@example.test', 'credential-admin@example.test', 'x', 'Admin', 'active')`, []any{adminID}},
+		{`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status) VALUES ($1, 'credential-member@example.test', 'credential-member@example.test', 'x', 'Member', 'active')`, []any{memberID}},
+		{`INSERT INTO memberships (organization_id, user_id, roles, status, joined_at) VALUES ($1, $2, '{admin}', 'active', NOW())`, []any{orgID, adminID}},
+		{`INSERT INTO memberships (id, organization_id, user_id, roles, status, joined_at) VALUES ($1, $2, $3, '{vendedor}', 'active', NOW())`, []any{membershipID, orgID, memberID}},
+	} {
+		if _, err := tx.Exec(ctx, statement.query, statement.args...); err != nil {
+			_ = tx.Rollback(ctx)
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &storage.PostgresStore{Pool: pool}
+	member, err := store.UpdateMembershipStatus(scoped(ctx, orgID), orgID, membershipID, "suspended", "security hold", adminID, 1)
+	if err != nil || member.Version != 2 {
+		t.Fatalf("suspend member=%#v err=%v", member, err)
+	}
+	var credentialVersion int64
+	var revokedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT credential_version, sessions_revoked_at FROM memberships WHERE id=$1`, membershipID).Scan(&credentialVersion, &revokedAt); err != nil || credentialVersion != 2 || revokedAt == nil {
+		t.Fatalf("suspend credential_version=%d revoked_at=%v err=%v", credentialVersion, revokedAt, err)
+	}
+
+	member, err = store.UpdateMembershipStatus(scoped(ctx, orgID), orgID, membershipID, "active", "", adminID, 2)
+	if err != nil || member.Version != 3 {
+		t.Fatalf("reactivate member=%#v err=%v", member, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT credential_version, sessions_revoked_at FROM memberships WHERE id=$1`, membershipID).Scan(&credentialVersion, &revokedAt); err != nil || credentialVersion != 2 || revokedAt == nil {
+		t.Fatalf("reactivation must not revive credentials: version=%d revoked_at=%v err=%v", credentialVersion, revokedAt, err)
+	}
+
+	member, err = store.UpdateMembershipStatus(scoped(ctx, orgID), orgID, membershipID, "left", "offboarding", adminID, 3)
+	if err != nil || member.Version != 4 {
+		t.Fatalf("leave member=%#v err=%v", member, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT credential_version, sessions_revoked_at FROM memberships WHERE id=$1`, membershipID).Scan(&credentialVersion, &revokedAt); err != nil || credentialVersion != 3 || revokedAt == nil {
+		t.Fatalf("leave credential_version=%d revoked_at=%v err=%v", credentialVersion, revokedAt, err)
+	}
+}
+
 func TestTeamFoundationMigration_DownFailsAfterCredentialRevocation(t *testing.T) {
 	pool := multiOrgFreshDB(t)
 	identityApplyThrough(t, pool, 96)

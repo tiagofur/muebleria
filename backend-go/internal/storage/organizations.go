@@ -499,10 +499,30 @@ func (s *PostgresStore) UpdateMembershipStatus(ctx context.Context, organization
 			left_at=CASE WHEN $3='left' THEN NOW() ELSE NULL END,
 			left_by=CASE WHEN $3='left' THEN NULLIF($5,'')::uuid ELSE NULL END,
 			leave_reason=CASE WHEN $3='left' THEN NULLIF($4,'') ELSE NULL END,
+			credential_version=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN credential_version+1 ELSE credential_version END,
+			sessions_revoked_at=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NOW() ELSE sessions_revoked_at END,
+			sessions_revoked_by=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NULLIF($5,'')::uuid ELSE sessions_revoked_by END,
+			sessions_revocation_reason=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NULLIF($4,'') ELSE sessions_revocation_reason END,
 			updated_at=NOW(), version=version+1
 		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$6 AND u.id=m.user_id
 		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
 		organizationID, membershipID, status, reason, actorID, expectedVersion))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
+	}
+	return out, err
+}
+
+// RevokeMembershipSessions invalidates every token issued for a tenant-scoped
+// membership without changing its lifecycle state.
+func (s *PostgresStore) RevokeMembershipSessions(ctx context.Context, organizationID, membershipID, actorID, reason string, expectedVersion int64) (*OrgTeamMember, error) {
+	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
+		UPDATE memberships m SET credential_version=credential_version+1,
+			sessions_revoked_at=NOW(), sessions_revoked_by=NULLIF($3,'')::uuid,
+			sessions_revocation_reason=NULLIF($4,''), updated_at=NOW(), version=version+1
+		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$5 AND u.id=m.user_id
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		organizationID, membershipID, actorID, reason, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
 	}

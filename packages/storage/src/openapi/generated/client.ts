@@ -2,6 +2,7 @@
 import type {
   AcceptInvitationRequest,
   AccountStatusMutationResponse,
+  ChangeMembershipRolesRequest,
   CreateFactoryOrganizationRequest,
   CreateFactoryOrganizationResponse,
   CreateInvitationRequest,
@@ -20,11 +21,13 @@ import type {
   ResendInvitationResponse,
   RevokeInvitationRequest,
   RevokeInvitationResponse,
+  RevokeMembershipSessionsRequest,
   SalesNetworkReadModel,
   SecurityAuditEvent,
   SelectOrganizationRequest,
   StartSupportSessionRequest,
   SupportSessionResponse,
+  SuspendMembershipRequest,
   TeamDirectory,
   TeamSummary,
   UpdateAccountStatusRequest,
@@ -72,4 +75,8 @@ export abstract class GeneratedGraneteApiClient {
   revokeInvitation(token: string, invitationId: string, version: number, body: RevokeInvitationRequest, key = this.createIdempotencyKey()): Promise<RevokeInvitationResponse> { return this.request("POST", `/org/invitations/${encodeURIComponent(invitationId)}:revoke`, { schema: "RevokeInvitationResponse", token, ifMatch: version, bodySchema: "RevokeInvitationRequest", body, idempotencyKey: key }); }
   setPlatformUserAccountStatus(token: string, userId: string, body: UpdateAccountStatusRequest, key = this.createIdempotencyKey()): Promise<AccountStatusMutationResponse> { return this.request("POST", `/platform/users/${encodeURIComponent(userId)}:set-account-status`, { schema: "AccountStatusMutationResponse", token, bodySchema: "UpdateAccountStatusRequest", body, idempotencyKey: key }); }
   getTeamSummary(token: string): Promise<TeamSummary> { return this.request("GET", "/org/team/summary", { schema: "TeamSummary", token }); }
+  changeMembershipRoles(token: string, membershipId: string, version: number, body: ChangeMembershipRolesRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:change-roles`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "ChangeMembershipRolesRequest", body, idempotencyKey: key }); }
+  suspendMembership(token: string, membershipId: string, version: number, body: SuspendMembershipRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:suspend`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "SuspendMembershipRequest", body, idempotencyKey: key }); }
+  reactivateMembership(token: string, membershipId: string, version: number, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:reactivate`, { schema: "MembershipMutationResponse", token, ifMatch: version, idempotencyKey: key }); }
+  revokeMembershipSessions(token: string, membershipId: string, version: number, body: RevokeMembershipSessionsRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:revoke-sessions`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "RevokeMembershipSessionsRequest", body, idempotencyKey: key }); }
 }

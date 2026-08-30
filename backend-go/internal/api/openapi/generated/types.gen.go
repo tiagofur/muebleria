@@ -389,3 +389,15 @@ type TeamDirectory struct {
 	Items   []TeamMember `json:"items"`
 	Summary TeamSummary  `json:"summary"`
 }
+
+type ChangeMembershipRolesRequest struct {
+	Roles []string `json:"roles"`
+}
+
+type SuspendMembershipRequest struct {
+	Reason string `json:"reason"`
+}
+
+type RevokeMembershipSessionsRequest struct {
+	Reason string `json:"reason"`
+}

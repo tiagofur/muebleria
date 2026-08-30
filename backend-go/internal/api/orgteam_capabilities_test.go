@@ -17,12 +17,14 @@ import (
 
 type teamCapabilitiesStore struct {
 	*stubStore
-	team          []storage.OrgTeamMember
-	rolesUpdated  bool
-	statusUpdated bool
-	rolesErr      error
-	statusErr     error
-	summary       *storage.OrgTeamSummary
+	team            []storage.OrgTeamMember
+	rolesUpdated    bool
+	statusUpdated   bool
+	sessionsRevoked bool
+	rolesErr        error
+	statusErr       error
+	revokeErr       error
+	summary         *storage.OrgTeamSummary
 }
 
 func (s *teamCapabilitiesStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
@@ -49,6 +51,14 @@ func (s *teamCapabilitiesStore) UpdateMembershipStatus(_ context.Context, _ stri
 		return nil, s.statusErr
 	}
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "target", Status: status, Version: version + 1}, nil
+}
+
+func (s *teamCapabilitiesStore) RevokeMembershipSessions(_ context.Context, _ string, membershipID, _ string, _ string, version int64) (*storage.OrgTeamMember, error) {
+	s.sessionsRevoked = true
+	if s.revokeErr != nil {
+		return nil, s.revokeErr
+	}
+	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "target", Status: domain.MembershipStatusActive, Version: version + 1}, nil
 }
 
 func teamCapabilityServer(orgType domain.OrganizationType, team []storage.OrgTeamMember) (*Server, *teamCapabilitiesStore) {
@@ -190,6 +200,54 @@ func TestOrgMemberStatusRequiresReasonToSuspend(t *testing.T) {
 	}
 	if store.statusUpdated {
 		t.Fatal("suspension without a reason must not write")
+	}
+}
+
+func TestCanonicalTeamCommandsUseNarrowGeneratedBodies(t *testing.T) {
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: []domain.UserRole{domain.RoleVendedor}}
+	tests := []struct {
+		name   string
+		handle func(*Server, http.ResponseWriter, *http.Request)
+		path   string
+		body   string
+		assert func(*teamCapabilitiesStore) bool
+	}{
+		{name: "change roles", handle: (*Server).HandleChangeMembershipRoles, path: "/api/org/memberships/target-membership:change-roles", body: `{"roles":["vendedor"]}`, assert: func(s *teamCapabilitiesStore) bool { return s.rolesUpdated }},
+		{name: "suspend", handle: (*Server).HandleSuspendMembership, path: "/api/org/memberships/target-membership:suspend", body: `{"reason":"staffing change"}`, assert: func(s *teamCapabilitiesStore) bool { return s.statusUpdated }},
+		{name: "reactivate", handle: (*Server).HandleReactivateMembership, path: "/api/org/memberships/target-membership:reactivate", body: "", assert: func(s *teamCapabilitiesStore) bool { return s.statusUpdated }},
+		{name: "revoke sessions", handle: (*Server).HandleRevokeMembershipSessions, path: "/api/org/memberships/target-membership:revoke-sessions", body: `{"reason":"device lost"}`, assert: func(s *teamCapabilitiesStore) bool { return s.sessionsRevoked }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+			rr := httptest.NewRecorder()
+			tt.handle(srv, rr, teamCapabilityRequest(http.MethodPost, tt.path, "actor", []string{string(domain.RoleAdmin)}, tt.body))
+			if rr.Code != http.StatusOK || !tt.assert(store) {
+				t.Fatalf("status=%d wrote=%t body=%s", rr.Code, tt.assert(store), rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestCanonicalRevokeSessionsRequiresCapabilityAndReason(t *testing.T) {
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Roles: []domain.UserRole{domain.RoleVendedor}}
+	srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+	for _, tt := range []struct {
+		roles []string
+		body  string
+		want  int
+	}{
+		{roles: []string{string(domain.RoleGerenteVentas)}, body: `{"reason":"device lost"}`, want: http.StatusForbidden},
+		{roles: []string{string(domain.RoleAdmin)}, body: `{"reason":"   "}`, want: http.StatusBadRequest},
+	} {
+		rr := httptest.NewRecorder()
+		srv.HandleRevokeMembershipSessions(rr, teamCapabilityRequest(http.MethodPost, "/api/org/memberships/target-membership:revoke-sessions", "actor", tt.roles, tt.body))
+		if rr.Code != tt.want {
+			t.Fatalf("status=%d want=%d body=%s", rr.Code, tt.want, rr.Body.String())
+		}
+	}
+	if store.sessionsRevoked {
+		t.Fatal("denied revocation must not write")
 	}
 }
 

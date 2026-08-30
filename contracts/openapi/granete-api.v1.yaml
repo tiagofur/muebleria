@@ -827,6 +827,180 @@
           }
         }
       }
+    },
+    "/org/memberships/{membershipId}:change-roles": {
+      "post": {
+        "operationId": "changeMembershipRoles",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Membership command applied",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMembershipRolesRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:suspend": {
+      "post": {
+        "operationId": "suspendMembership",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Membership command applied",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendMembershipRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:reactivate": {
+      "post": {
+        "operationId": "reactivateMembership",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Membership command applied",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:revoke-sessions": {
+      "post": {
+        "operationId": "revokeMembershipSessions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Membership command applied",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeMembershipSessionsRequest"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2210,6 +2384,49 @@
           },
           "summary": {
             "$ref": "#/components/schemas/TeamSummary"
+          }
+        }
+      },
+      "ChangeMembershipRolesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "roles"
+        ],
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SuspendMembershipRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "RevokeMembershipSessionsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
           }
         }
       }

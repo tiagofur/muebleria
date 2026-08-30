@@ -190,6 +190,24 @@ func (s *Server) HandleOrgTeamSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
+	var body openapi.UpdateMemberRolesRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	s.changeMembershipRoles(w, r, body.Roles)
+}
+
+// HandleChangeMembershipRoles is the canonical command route. The legacy PUT
+// route remains temporarily for existing clients and delegates to the same flow.
+func (s *Server) HandleChangeMembershipRoles(w http.ResponseWriter, r *http.Request) {
+	var body openapi.ChangeMembershipRolesRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	s.changeMembershipRoles(w, r, body.Roles)
+}
+
+func (s *Server) changeMembershipRoles(w http.ResponseWriter, r *http.Request, requestedRoles []string) {
 	claims, org, ok := s.requireOrgTeamMutation(w, r)
 	if !ok {
 		return
@@ -198,12 +216,8 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body openapi.UpdateMemberRolesRequest
-	if !decodeGeneratedJSONBody(w, r, &body) {
-		return
-	}
-	roles := make([]domain.UserRole, len(body.Roles))
-	for i, v := range body.Roles {
+	roles := make([]domain.UserRole, len(requestedRoles))
+	for i, v := range requestedRoles {
 		roles[i] = domain.UserRole(v)
 	}
 	if !domain.RolesAllowedInOrg(roles, org.Type) {
@@ -217,7 +231,7 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 	if membershipMutationError(w, err) {
 		return
 	}
-	if err := s.auditRequired(r.Context(), "membership_roles_updated", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"membership_id": member.MembershipID, "roles": roles}); err != nil {
+	if err := s.auditRequired(r.Context(), "membership_roles_changed", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"membership_id": member.MembershipID, "roles": roles}); err != nil {
 		respondWithInternalError(w, err, "audit membership roles")
 		return
 	}
@@ -226,6 +240,30 @@ func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
+	var body openapi.UpdateMembershipStatusRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	s.changeMembershipStatus(w, r, domain.MembershipStatus(body.Status), body.Reason)
+}
+
+// HandleSuspendMembership is the canonical command route. Its request cannot
+// smuggle a lifecycle status different from suspension.
+func (s *Server) HandleSuspendMembership(w http.ResponseWriter, r *http.Request) {
+	var body openapi.SuspendMembershipRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	s.changeMembershipStatus(w, r, domain.MembershipStatusSuspended, &body.Reason)
+}
+
+// HandleReactivateMembership is the canonical command route. It intentionally
+// has no request body because reactivation has no client-controlled fields.
+func (s *Server) HandleReactivateMembership(w http.ResponseWriter, r *http.Request) {
+	s.changeMembershipStatus(w, r, domain.MembershipStatusActive, nil)
+}
+
+func (s *Server) changeMembershipStatus(w http.ResponseWriter, r *http.Request, status domain.MembershipStatus, bodyReason *string) {
 	claims, org, ok := s.requireOrgTeamMutation(w, r)
 	if !ok {
 		return
@@ -234,15 +272,10 @@ func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body openapi.UpdateMembershipStatusRequest
-	if !decodeGeneratedJSONBody(w, r, &body) {
-		return
-	}
 	reason := ""
-	if body.Reason != nil {
-		reason = strings.TrimSpace(*body.Reason)
+	if bodyReason != nil {
+		reason = strings.TrimSpace(*bodyReason)
 	}
-	status := domain.MembershipStatus(body.Status)
 	if status != domain.MembershipStatusActive && status != domain.MembershipStatusSuspended {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "el offboarding de membresías queda reservado para el flujo de Team", nil)
 		return
@@ -264,6 +297,45 @@ func (s *Server) HandleOrgMemberStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.auditRequired(r.Context(), event, claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"membership_id": member.MembershipID, "reason": reason}); err != nil {
 		respondWithInternalError(w, err, "audit membership status")
+		return
+	}
+	w.Header().Set("ETag", FormatVersionETag(member.Version))
+	respondWithJSON(w, http.StatusOK, membershipMutationResponse(*member))
+}
+
+// HandleRevokeMembershipSessions invalidates the target membership's token
+// generation without changing membership lifecycle or roles.
+func (s *Server) HandleRevokeMembershipSessions(w http.ResponseWriter, r *http.Request) {
+	claims, org, ok := s.requireOrgTeamCapability(w, r, domain.TeamCapabilityRevokeSessions)
+	if !ok {
+		return
+	}
+	if claims.Support != nil {
+		respondWithError(w, http.StatusForbidden, "la sesión de soporte sólo puede consultar Team")
+		return
+	}
+	expected, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	var body openapi.RevokeMembershipSessionsRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if reason == "" {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "reason es obligatorio para revocar sesiones", nil)
+		return
+	}
+	if _, ok := s.teamMutationTarget(w, r, claims, org, nil); !ok {
+		return
+	}
+	member, err := s.Store.RevokeMembershipSessions(r.Context(), claims.OrgID, r.PathValue("membershipId"), claims.UserID, reason, expected)
+	if membershipMutationError(w, err) {
+		return
+	}
+	if err := s.auditRequired(r.Context(), "membership_sessions_revoked", claims.UserID, claims.OrgID, clientIP(r), map[string]interface{}{"membership_id": member.MembershipID, "reason": reason}); err != nil {
+		respondWithInternalError(w, err, "audit membership session revocation")
 		return
 	}
 	w.Header().Set("ETag", FormatVersionETag(member.Version))
