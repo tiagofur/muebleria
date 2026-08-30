@@ -140,7 +140,7 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 		t.Fatalf("expected width/height/depth parameters, got %d", len(base.Parameters))
 	}
 	width := parameterByName(base.Parameters, "widthMm")
-	if width == nil || width.DefaultValue != 600 || width.Min != 600 || width.Max != 900 || width.Unit != "mm" {
+	if width == nil || width.DefaultValue != float64(600) || numberPtrValue(width.Min) != 600 || numberPtrValue(width.Max) != 900 || width.Unit != "mm" {
 		t.Fatalf("widthMm parameter not derived from module + presets: %+v", width)
 	}
 	// Modules without a catalog category fall into an explicit bucket.

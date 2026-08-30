@@ -6,6 +6,13 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
+func numberPtrValue(value *float64) float64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
 func TestBuildWorkshopCatalogPreservesModuleIdentity(t *testing.T) {
 	module := domain.Module{
 		ID: "11111111-1111-1111-1111-111111111111", Code: "MOD-BASE-600", Name: "Base Cocina 600",
@@ -41,11 +48,11 @@ func TestBuildWorkshopCatalogDerivesRangesFromPresets(t *testing.T) {
 	def := catalog.Definitions["m1"]
 
 	width := parameterByName(def.Parameters, "widthMm")
-	if width == nil || width.DefaultValue != 600 || width.Min != 450 || width.Max != 900 {
+	if width == nil || width.DefaultValue != float64(600) || numberPtrValue(width.Min) != 450 || numberPtrValue(width.Max) != 900 {
 		t.Fatalf("widthMm must span presets + module default: %+v", width)
 	}
 	depth := parameterByName(def.Parameters, "depthMm")
-	if depth == nil || depth.DefaultValue != 500 || depth.Min != 350 || depth.Max != 500 {
+	if depth == nil || depth.DefaultValue != float64(500) || numberPtrValue(depth.Min) != 350 || numberPtrValue(depth.Max) != 500 {
 		t.Fatalf("depthMm must span preset values: %+v", depth)
 	}
 }
@@ -61,14 +68,15 @@ func TestBuildWorkshopCatalogBandWithoutPresets(t *testing.T) {
 		if p == nil {
 			t.Fatalf("missing parameter %s", name)
 		}
-		if p.Min > p.DefaultValue || p.Max < p.DefaultValue {
-			t.Fatalf("%s default %d outside editable range [%d, %d]", name, p.DefaultValue, p.Min, p.Max)
+		defaultValue, ok := p.DefaultValue.(float64)
+		if !ok || numberPtrValue(p.Min) > defaultValue || numberPtrValue(p.Max) < defaultValue {
+			t.Fatalf("%s default %v outside editable range [%v, %v]", name, p.DefaultValue, p.Min, p.Max)
 		}
 	}
 	// Small dimensions must not get a floor above their own default.
 	depth := parameterByName(def.Parameters, "depthMm")
-	if depth.Min != 50 || depth.Max != 120 {
-		t.Fatalf("depthMm band for 60mm default = [%d, %d], want [50, 120]", depth.Min, depth.Max)
+	if numberPtrValue(depth.Min) != 50 || numberPtrValue(depth.Max) != 120 {
+		t.Fatalf("depthMm band for 60mm default = [%v, %v], want [50, 120]", depth.Min, depth.Max)
 	}
 }
 
@@ -97,7 +105,7 @@ func TestBuildWorkshopCatalogDefaultsFromPresetsWhenModuleHasNoDims(t *testing.T
 
 	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, nil, domain.Catalog{})
 	width := parameterByName(catalog.Definitions["m1"].Parameters, "widthMm")
-	if width == nil || width.DefaultValue != 400 || width.Min != 400 || width.Max != 800 {
+	if width == nil || width.DefaultValue != float64(400) || numberPtrValue(width.Min) != 400 || numberPtrValue(width.Max) != 800 {
 		t.Fatalf("widthMm must default to smallest preset: %+v", width)
 	}
 }
@@ -150,6 +158,31 @@ func TestWorkshopCatalogRevisionIsContentAddressed(t *testing.T) {
 
 	if workshopCatalogRevisionID(catA) == workshopCatalogRevisionID(catB) {
 		t.Fatal("revision must change when materialCategories change")
+	}
+}
+
+func TestWorkshopCatalogRevisionCoversParameterRulesAndDefaults(t *testing.T) {
+	parameter := func(max, defaultValue float64) domain.FurnitureParameterDefinition {
+		return domain.FurnitureParameterDefinition{
+			Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
+			DefaultValue: defaultValue, Required: true, Unit: domain.FurnitureParameterUnitCount,
+			Category: domain.FurnitureParameterCategoryConfiguration,
+			Min:      float64Ptr(0), Max: float64Ptr(max), Step: float64Ptr(1), Integer: true,
+		}
+	}
+	module := func(rule domain.FurnitureParameterDefinition) domain.Module {
+		return domain.Module{ID: "m1", Code: "M1", Name: "Module", WidthMm: 600, HeightMm: 720, DepthMm: 500, ParameterDefinitions: []domain.FurnitureParameterDefinition{rule}}
+	}
+	base := buildWorkshopFurnitureCatalog([]domain.Module{module(parameter(5, 1))}, nil, nil, domain.Catalog{})
+	maxChanged := buildWorkshopFurnitureCatalog([]domain.Module{module(parameter(6, 1))}, nil, nil, domain.Catalog{})
+	defaultChanged := buildWorkshopFurnitureCatalog([]domain.Module{module(parameter(5, 2))}, nil, nil, domain.Catalog{})
+
+	if workshopCatalogRevisionID(base) == workshopCatalogRevisionID(maxChanged) || workshopCatalogRevisionID(base) == workshopCatalogRevisionID(defaultChanged) {
+		t.Fatal("changing only a parameter rule/default must invalidate the catalog pin")
+	}
+	definition := base.Definitions["m1"]
+	if definition.SchemaRevision != 1 || definition.DefinitionHash == "" {
+		t.Fatalf("definition is not versioned: %+v", definition)
 	}
 }
 
