@@ -103,6 +103,13 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 	module := domain.Module{
 		ID: authoringFixtureModuleID, Code: "AUTH-600", Name: "Gabinete Authoring 600",
 		WidthMm: 600, HeightMm: 720, DepthMm: 560, StructureID: "st-authoring",
+		ParameterDefinitions: []domain.FurnitureParameterDefinition{
+			{Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(5), Step: authoringFloatPtr(1), Integer: true},
+			{Name: "softClose", Label: "Soft close", Type: domain.FurnitureParameterTypeBoolean, DefaultValue: false, Required: false, Category: domain.FurnitureParameterCategoryHardware},
+			{Name: "style", Label: "Style", Type: domain.FurnitureParameterTypeEnum, DefaultValue: "classic", Required: true, Category: domain.FurnitureParameterCategoryStyle, Options: []string{"classic", "minimal"}},
+			{Name: "label", Label: "Label", Type: domain.FurnitureParameterTypeString, DefaultValue: "standard", Required: false, Category: domain.FurnitureParameterCategoryStyle},
+			{Name: "tiltDeg", Label: "Tilt", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(0), Required: false, Unit: domain.FurnitureParameterUnitDeg, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(90), Step: authoringFloatPtr(0.25)},
+		},
 		Components: []domain.ComponentInstance{
 			{ComponentID: "comp-shelf", Quantity: 1},
 			{
@@ -209,12 +216,13 @@ func postAuthoringResolve(server *Server, token, query string, body any) *httpte
 // --- shared contract fixture -------------------------------------------------
 
 type authoringFixtureFile struct {
-	SchemaVersion         int                     `json:"schemaVersion"`
-	Comment               string                  `json:"comment"`
-	Schema                authoringFixtureSchema  `json:"schema"`
-	FurnitureDefinitionID string                  `json:"furnitureDefinitionId"`
-	Joinery               authoringFixtureJoinery `json:"joinery"`
-	Scenarios             []authoringFixtureCase  `json:"scenarios"`
+	SchemaVersion         int                                   `json:"schemaVersion"`
+	Comment               string                                `json:"comment"`
+	Schema                authoringFixtureSchema                `json:"schema"`
+	FurnitureDefinitionID string                                `json:"furnitureDefinitionId"`
+	ParameterDefinitions  []domain.FurnitureParameterDefinition `json:"parameterDefinitions"`
+	Joinery               authoringFixtureJoinery               `json:"joinery"`
+	Scenarios             []authoringFixtureCase                `json:"scenarios"`
 }
 
 type authoringFixtureSchema struct {
@@ -456,6 +464,28 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			request.IdempotencyKey = "fixture:cost-only-hardware:0001"
 			return run("12-cost-only-manual-hardware", "", request, http.StatusOK)
 		}(),
+
+		// Definition-driven scalar families: no handler allowlist changes are
+		// needed when a valid definition owns the parameter.
+		run("13-definition-driven-typed-parameters", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{
+				"widthMm": 650.0, "shelfCount": 3.0, "softClose": true,
+				"style": "minimal", "label": "custom", "tiltDeg": 12.25,
+			}
+		})), http.StatusOK),
+
+		run("neg-parameter-wrong-type", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"softClose": "true"}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-out-of-range", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"shelfCount": 6.0}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-invalid-step", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"tiltDeg": 12.1}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-invalid-enum", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"style": "ornate"}
+		})), http.StatusUnprocessableEntity),
 	}
 }
 
@@ -527,6 +557,10 @@ const authoringFixturePath = "../../../contracts/sketchupAuthoringResolve.contra
 func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 	server, token := authoringStubServer(t)
 	_, catalog := authoringAPICabinetFixture()
+	snapshot, err := server.loadWorkshopCatalogOnce(httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil))
+	if err != nil {
+		t.Fatalf("load parameter definitions: %v", err)
+	}
 
 	scenarios := authoringFixtureScenarios(t, server, token)
 	fixture := authoringFixtureFile{
@@ -542,6 +576,7 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 			SchemaVersion: engine.AuthoringResolveSchemaVersion,
 		},
 		FurnitureDefinitionID: authoringFixtureModuleID,
+		ParameterDefinitions:  snapshot.Projection.Definitions[authoringFixtureModuleID].Parameters,
 		Joinery:               buildAuthoringFixtureJoinery(t, scenarios, catalog),
 		Scenarios:             scenarios,
 	}

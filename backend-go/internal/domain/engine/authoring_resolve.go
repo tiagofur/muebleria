@@ -122,6 +122,7 @@ type AuthoringResolveInput struct {
 	Relationships           []AuthoringRelationship
 	ManualPlacements        []AuthoringManualPlacement
 	ManualPlacementsPresent bool
+	EvaluatedParameters     map[string]any
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -628,10 +629,14 @@ func resolveFacePlaneOffsets(board *layoutBoard, hp domain.HardwarePlacement) [2
 // buildNormalizedIntent echoes the complete effective authoring state with
 // server-filled identity fields and transport-rounded millimeters.
 func buildNormalizedIntent(input AuthoringResolveInput, layout FurnitureLayout, boards []layoutBoard, placements []effectiveManualPlacement) NormalizedAuthoringIntent {
-	parameters := map[string]any{
-		"widthMm":  layout.DimensionsMm[0],
-		"heightMm": layout.DimensionsMm[1],
-		"depthMm":  layout.DimensionsMm[2],
+	parameters := make(map[string]any, len(input.EvaluatedParameters))
+	for name, value := range input.EvaluatedParameters {
+		parameters[name] = value
+	}
+	for index, name := range []string{"widthMm", "heightMm", "depthMm"} {
+		if _, declared := parameters[name]; declared {
+			parameters[name] = layout.DimensionsMm[index]
+		}
 	}
 	choices := map[string]string{}
 	for role, material := range input.OptionChoices {
