@@ -17,7 +17,7 @@ import (
 func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 	t.Run("fresh schema has an empty authoritative definition list", func(t *testing.T) {
 		pool := multiOrgFreshDB(t)
-		identityApplyThrough(t, pool, 100)
+		identityApplyThrough(t, pool, 103)
 
 		var defaultValue string
 		var nullable string
@@ -39,7 +39,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 
 	t.Run("upgrade preserves an existing legacy module", func(t *testing.T) {
 		pool := multiOrgFreshDB(t)
-		identityApplyThrough(t, pool, 99)
+		identityApplyThrough(t, pool, 102)
 		ctx := context.Background()
 		const moduleID = "f1970000-0000-0000-0000-000000000001"
 		if _, err := pool.Exec(ctx, `
@@ -67,7 +67,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 
 func TestModuleParameterDefinitionsMigrationDownRemovesColumn(t *testing.T) {
 	pool := multiOrgFreshDB(t)
-	identityApplyThrough(t, pool, 100)
+	identityApplyThrough(t, pool, 103)
 	downSQL, err := os.ReadFile("../../db/migration/000103_module_parameter_definitions.down.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pool := multiOrgFreshDB(t)
-			identityApplyThrough(t, pool, 100)
+			identityApplyThrough(t, pool, 103)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)
@@ -146,7 +146,7 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	pool := multiOrgFreshDB(t)
-	identityApplyThrough(t, pool, 100)
+	identityApplyThrough(t, pool, 103)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 	min, max, step := 0.0, 5.0, 1.0
@@ -241,7 +241,7 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 	for index, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			pool := multiOrgFreshDB(t)
-			identityApplyThrough(t, pool, 100)
+			identityApplyThrough(t, pool, 103)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 
@@ -283,12 +283,12 @@ func applyModuleParameterDefinitionsMigration(t *testing.T, pool *pgxpool.Pool, 
 		t.Fatalf("embedded migrations: %v", err)
 	}
 	for _, migration := range migrations {
-		if migration.Version == 100 {
+		if migration.Version == 103 {
 			if _, err := pool.Exec(ctx, migration.SQL); err != nil {
-				t.Fatalf("apply migration 100: %v", err)
+				t.Fatalf("apply migration 103: %v", err)
 			}
 			return
 		}
 	}
-	t.Fatal("migration 100 is not embedded")
+	t.Fatal("migration 103 is not embedded")
 }

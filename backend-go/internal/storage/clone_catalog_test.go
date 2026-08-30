@@ -197,7 +197,7 @@ func TestCloneCatalog_RollsBackWhenParameterBindingTargetCannotBeRemapped(t *tes
 	const destinationOrg = "bbbbbbbb-0000-0000-0000-00000000000c"
 	const missingComponent = "dddddddd-0000-0000-0000-000000000099"
 	seed := []string{
-		`INSERT INTO organizations (id, name, slug, active) VALUES ('` + destinationOrg + `', 'Rollback clone', 'rollback-clone', FALSE)`,
+		`INSERT INTO organizations (id, name, slug, status) VALUES ('` + destinationOrg + `', 'Rollback clone', 'rollback-clone', 'provisioning')`,
 		`INSERT INTO module_categories (id, name, organization_id) VALUES ('dddddddd-0000-0000-0000-000000000001', 'Source category', '` + multiOrgInitialOrgID + `')`,
 		`INSERT INTO components (id, code, name, placement, active, length_mm, width_mm, thickness_mm, organization_id)
 		 VALUES ('dddddddd-0000-0000-0000-000000000002', 'COMP-BOUND', 'Bound component', 'interior', true, 500, 500, 18, '` + multiOrgInitialOrgID + `')`,

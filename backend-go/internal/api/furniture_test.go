@@ -167,13 +167,13 @@ func TestFurnitureDefinitionsFailsClosedOnInvalidPublishedParameter(t *testing.T
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{
 		getUserByEmail: u,
-		getOrgByID:     &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Active: true},
+		getOrgByID:     &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Status: domain.OrganizationStatusActive, CredentialVersion: 1},
 		listModules: []domain.Module{{
 			ID: "m1", Code: "M1", Name: "Invalid",
 			ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}},
 		}},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u1:org-1", MembershipCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
