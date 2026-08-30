@@ -33,7 +33,7 @@
 - Fresh migration and upgrade from the pre-#452 schema backfill canonical status, lifecycle metadata, credential epoch and entitlement defaults.
 - A historical partial fixture without the final #451 columns is normalized before lifecycle functions are replaced.
 - Rollback/reapply is green before lifecycle facts exist; the down migration fails closed once new lifecycle-only facts would be lossy.
-- Migration head is `000101_remove_organization_active`; no runtime Go/OpenAPI/React authority remains on the boolean.
+- Migration head is `000102_support_session_credential_epoch`; no runtime Go/OpenAPI/React authority remains on the removed boolean.
 
 ## Verification evidence
 
@@ -48,7 +48,7 @@
 
 ## Delivery state
 
-The implementation and correction commits are integrated on the tracker branch. Independent review approved implementation head `bedfad356d3e0dd859f08238492e61a058537a84` in review commit `e91b1d24e503b296e87536ec09657da0c6f6deca`; remote readback matched and the post-review CI run was fully green. F197 is closed after this executable approval.
+The prior independent approval at implementation head `bedfad356d3e0dd859f08238492e61a058537a84` is historical evidence only. F197 was reopened because a later audit found a support-session/lifecycle race and credential-epoch gaps. The correction remains `in_progress` until a new independent reviewer evaluates the corrected remote head.
 
 ## Independent review correction round 1
 
@@ -69,3 +69,13 @@ The implementation and correction commits are integrated on the tracker branch. 
 
 - Platform readiness and entitlement reads now establish the same org-less, exact-target authorization context as lifecycle preview/commands.
 - The inherited-runtime HTTP/PostgreSQL proof checks owner-visible readiness facts and entitlement rows, and proves missing targets never return success.
+
+## Post-delivery security correction — support session lifecycle
+
+- `StartSupportSession` now runs through the application service transaction, acquires the same Organization command lock as lifecycle transitions, rechecks `active` after the lock, and persists the session plus required audit atomically.
+- Migration `000102_support_session_credential_epoch` backfills and immutably stores the Organization credential epoch on every support session, admits the canonical `org_offboarding` end reason, and fails closed on a lossy down migration.
+- Support JWTs carry the session epoch. Every authenticated support request revalidates session identity, actor, Organization, expiry, live Organization status, session epoch and live Organization epoch. Reactivation cannot revive an old token.
+- Manual support-session end now uses the application service transaction; a required-audit failure rolls back the end mutation.
+- A real PostgreSQL race proof executes both commit orders of `StartSupportSession <-> SuspendOrganization`; the final state is always suspended with zero open support sessions.
+- The inherited-runtime HTTP proof covers active support access, suspension denial, old-token denial after reactivation, new-token success, offboarding denial and durable `org_offboarding` closure.
+- Final verification: `pnpm openapi:check`, `git diff --check`, the complete isolated `./init.sh` harness on fresh PostgreSQL 16, and `scripts/pilot-gate.sh --fresh-container` all passed. The harness included all TypeScript and Go suites, Ruby 3.2.11 with 241 tests / 2230 assertions, contract fixtures with 3 tests / 1029 assertions, and deterministic RBZ verification.
