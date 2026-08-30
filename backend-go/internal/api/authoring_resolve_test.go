@@ -820,13 +820,18 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	}
 	assertIssueCode(t, rec.Body.Bytes(), "CATALOG_REFERENCE_MISSING")
 
-	// Method boundary: the resolve is POST-only.
+	// Method boundary: exercise the real registered router. A method-specific
+	// ServeMux pattern alone would return a bare 405 before the contract handler.
 	req = httptest.NewRequest(http.MethodGet, "/api/furniture/authoring/resolve", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	recorder = httptest.NewRecorder()
-	handler.ServeHTTP(recorder, req)
+	RegisterRoutes(server).ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET resolve status = %d", recorder.Code)
+	}
+	assertIssueCode(t, recorder.Body.Bytes(), "METHOD_NOT_ALLOWED")
+	if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Fatalf("GET resolve content type = %q, want application/json media type", got)
 	}
 }
 

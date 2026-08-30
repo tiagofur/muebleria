@@ -433,6 +433,11 @@ Codes conceptuales mínimos:
 - `MACHINE_CAPABILITY_UNSUPPORTED`;
 - `IDEMPOTENCY_CONFLICT`.
 
+`Module` no publica hoy un lifecycle `active/inactive`: una definición es
+resoluble sólo si está presente en el catálogo pineado; si fue retirada o no
+está publicada, el resolve devuelve `CATALOG_REFERENCE_MISSING`. El contrato no
+expone un código `CATALOG_DEFINITION_INACTIVE` imposible de producir.
+
 También se requieren codes explícitos para `SOURCE_REVISION_CONFLICT`,
 `ENTITY_TOMBSTONE_INVALID`, `STABLE_ID_REUSE`, `SCHEMA_ID_MISMATCH` y
 `SCHEMA_MIGRATION_UNSAFE`.
@@ -863,7 +868,8 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
   `clear|blocked`: es la validación del subset del resolve y NUNCA el
   veredicto de fabricación del modelo #347 — ese modelo sólo se enlaza vía
   `preflightContract` (link para obtener el resultado autoritativo);
-- HTTP: 200 accepted; 400 schema/malformed/query-params/oversized; 422
+- HTTP: 200 accepted; 400 schema/malformed/query-params/oversized; 405 con
+  envelope `METHOD_NOT_ALLOWED`; 422
   rechazo semántico. Rejected nunca incluye `resolved` (sin resultado
   parcial aceptado).
 
