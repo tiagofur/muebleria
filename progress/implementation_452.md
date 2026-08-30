@@ -48,7 +48,7 @@
 
 ## Delivery state
 
-The implementation and correction commits are integrated on the approved tracker branch. F197 remains `in_progress` until an independent reviewer approves the pushed tip and remote CI/readback are green.
+The implementation and correction commits are integrated on the tracker branch. Independent review approved implementation head `bedfad356d3e0dd859f08238492e61a058537a84` in review commit `e91b1d24e503b296e87536ec09657da0c6f6deca`; remote readback matched and the post-review CI run was fully green. F197 is closed after this executable approval.
 
 ## Independent review correction round 1
 

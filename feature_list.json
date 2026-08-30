@@ -5007,8 +5007,7 @@
         "PR #481 head 7703f0e8: re-review encontró schema incompleto para campos material visual/PBR del NativeLayout, coherencia Ruby demasiado estricta para hardware manual semántico sin preview y pérdida de códigos tipados en 405/415. F195 vuelve a in_progress hasta corrección y nueva revisión independiente.",
         "PR #481 r6: los gaps de la re-review de 7703f0e8 quedaron corregidos en 8433cbdf: NativeLayout visual/PBR alineado Go→Schema/Ajv→TS→Ruby, hardware manual sin preview preservado semánticamente como proyección visual subset y 405/415 tipados en Ruby. TestUp oficial 6/6/58, CI remota verde y nueva revisión independiente APPROVED en 21fb41a8 sobre 051512f3."
       ]
-    }
-    ,
+    },
     {
       "id": "F197",
       "title": "Lifecycle explícito y provisioning atómico de organizaciones (#452)",
@@ -5044,12 +5043,16 @@
         "docs/verification.md",
         "contracts/openapi/granete-api.v1.yaml"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F191",
         "F192",
         "F194",
         "F196"
+      ],
+      "review_notes": [
+        "PR #484: implementation head bedfad356d3e0dd859f08238492e61a058537a84 passed the full isolated harness, fresh pilot gate, direct runtime-role RLS proofs, rollback/replay/concurrency coverage and all six remote CI checks.",
+        "Independent review APPROVED in e91b1d24e503b296e87536ec09657da0c6f6deca after closing Factory scope, inherited-runtime command authority and exact-target Platform readiness/entitlement reads."
       ]
     }
   ]
