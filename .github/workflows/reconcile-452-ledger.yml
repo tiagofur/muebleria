@@ -1,0 +1,50 @@
+name: Reconcile merged issue 452 ledger
+
+on:
+  push:
+    branches:
+      - chore/reconcile-ledger-after-452
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-452-ledger
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Reconcile ledger
+        run: python3 scripts/reconcile_452_ledger.py
+
+      - name: Validate ledger JSON
+        run: |
+          python3 -m json.tool feature_list.json >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('feature_list.json').read_text())
+          active = [item['id'] for item in data['features'] if item.get('status') == 'in_progress']
+          assert active == [], active
+          assert next(item for item in data['features'] if item['id'] == 'F197')['status'] == 'done'
+          assert Path('progress/current.md').read_text().strip() == '# Sin feature activa'
+          PY
+
+      - name: Commit reconciliation and remove one-shot automation
+        run: |
+          rm -f scripts/reconcile_452_ledger.py .github/workflows/reconcile-452-ledger.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add feature_list.json progress/current.md progress/history.md
+          git add -u scripts/reconcile_452_ledger.py .github/workflows/reconcile-452-ledger.yml
+          git diff --cached --check
+          git commit -m "chore(ledger): close F197 after PR 484 merge"
+          git push origin HEAD:chore/reconcile-ledger-after-452
