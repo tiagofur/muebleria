@@ -50,7 +50,6 @@ Path("progress/current.md").write_text("# Sin feature activa\n", encoding="utf-8
 history_path = Path("progress/history.md")
 history = history_path.read_text(encoding="utf-8") if history_path.exists() else "# Historial\n"
 entry = f"""
-
 ## {TODAY} — F197 / #452 cerrado después del merge de PR #484
 
 - `main` incorporó el lifecycle explícito y provisioning atómico de organizaciones mediante PR #484.
@@ -59,4 +58,4 @@ entry = f"""
 - El PR #486 debe rebasarse sobre `main` y usar un feature ID/migrations disponibles antes de cualquier merge posterior.
 """
 if "F197 / #452 cerrado después del merge de PR #484" not in history:
-    history_path.write_text(history.rstrip() + entry + "\n", encoding="utf-8")
+    history_path.write_text(history.rstrip() + "\n\n" + entry.rstrip() + "\n", encoding="utf-8")
