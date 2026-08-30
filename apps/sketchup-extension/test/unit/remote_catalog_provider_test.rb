@@ -59,11 +59,13 @@ class RemoteCatalogProviderTest < Minitest::Test
         'name' => 'Módulo Base',
         'category' => 'inferior',
         'version' => '1.0.0',
+        'schemaRevision' => 1,
+        'definitionHash' => 'sha256-definition',
         'description' => 'Módulo inferior.',
         'parameters' => [
           { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number',
             'defaultValue' => 600, 'min' => 450, 'max' => 900, 'step' => 10, 'unit' => 'mm',
-            'category' => 'dimension' }
+            'category' => 'dimension', 'required' => true, 'integer' => true }
         ]
       },
       '22222222-2222-2222-2222-222222222222' => {
@@ -97,11 +99,16 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal '11111111-1111-1111-1111-111111111111', base['furniture_definition_id']
     assert_equal 'Módulo Base', base['name']
     assert_equal 'inferior', base['category']
+    assert_equal 1, base['schemaRevision']
+    assert_equal 'sha256-definition', base['definitionHash']
     param = base['parameters'].first
     assert_equal 'widthMm', param['name']
     assert_equal 600, param['defaultValue']
     assert_equal 450, param['min']
     assert_equal 'mm', param['unit']
+    assert_equal true, param['required']
+    assert_equal true, param['integer']
+    assert_equal 'dimension', param['category']
     assert_equal '11111111-1111-1111-1111-111111111111',
                  provider.find_definition('11111111-1111-1111-1111-111111111111')['furniture_definition_id']
     assert_equal 1, provider.all_presets.length

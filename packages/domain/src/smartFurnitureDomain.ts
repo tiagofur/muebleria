@@ -178,12 +178,14 @@ export interface FurnitureParameter {
   readonly name: string;
   readonly label: string;
   readonly type: ParameterType;
-  readonly defaultValue: string | number | boolean;
+  readonly defaultValue?: string | number | boolean;
+  readonly required?: boolean;
   readonly unit?: "mm" | "deg" | "count";
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
   readonly options?: readonly string[];
+  readonly integer?: boolean;
   readonly category: "dimension" | "configuration" | "style" | "hardware";
 }
 

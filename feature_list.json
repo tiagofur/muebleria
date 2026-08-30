@@ -5035,9 +5035,13 @@
         "docs/architecture/parametric-furniture-library.md",
         "docs/verification.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F195"
+      ],
+      "review_notes": [
+        "Receipt-driven review mode remained disabled/unmanaged by explicit repository switch; delivery followed ordinary repository policy without a fabricated approval.",
+        "Issue #483 delivered as a size-bounded Feature Branch Chain: typed definition core, evaluator, persistence/catalog, resolve contract, and cross-runtime parity."
       ]
     }
   ]

@@ -1814,3 +1814,26 @@ TypeScript, Go y Ruby verdes; TestUp oficial SketchUp 26.2.242 / Ruby 3.2.2
 **6/6 con 58 assertions** contra RBZ `7c82a347…`; seis checks CI remotos verdes.
 La nueva revisión independiente quedó **APPROVED** en
 `progress/review_F195.md` (`21fb41a8` sobre `051512f3`).
+
+---
+
+## F197 — Parámetros tipados definition-driven para rich authoring resolve (#483) — 2026-08-30
+
+Cadena `feat/483-typed-parameters*`. El catálogo ahora persiste y publica definiciones
+versionadas `number|string|boolean|enum` con defaults, required, unidades,
+min/max/step, integer/count y options. El hash de definición y la revisión de
+catálogo cubren reglas y defaults; los módulos legacy conservan W/H/D mediante una
+proyección canónica compatible.
+
+`POST /api/furniture/authoring/resolve` evalúa exclusivamente contra la definición
+pineada, aplica defaults server-side, devuelve el snapshot normalizado completo y
+separa códigos estables para unknown, required, type, range, step y enum. El fixture
+generado por Go demuestra paridad de evaluación en TypeScript y preservación
+fail-closed en Ruby.
+
+Evidencia local: `go test -p 1 ./...` completo verde contra PostgreSQL 16 aislado;
+migración fresh/upgrade y roundtrip verdes; `pnpm typecheck` y `pnpm test` completos
+verdes; Ruby `rake verify` verde (241 unit + 3 boundary, RBZ determinista). El fallo
+`organizations.active` de la base compartida se reprodujo sin cambios sobre
+`origin/main` d85d6fd2. Review mode permaneció `disabled/unmanaged` y no se fabricó
+aprobación.

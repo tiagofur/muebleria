@@ -145,12 +145,12 @@ the complete authoring snapshot and returning the accepted/resolved result.
 No feature may express these intents as query parameters or a parallel
 payload shape.
 
-The v1 server projection resolves the parameter definitions it actually owns
-today (`widthMm`, `heightMm`, `depthMm`). It must reject, never echo as a
-no-op, any undeclared parameter. #483 adds the persisted/versioned typed
-`FurnitureDefinition.parameters` projection for future number/string/boolean/
-enum families; the occurrence and HardwarePlacement first slices of
-#467/#468 do not depend on it.
+The v1 server projection resolves the persisted, versioned
+`FurnitureDefinition.parameters` contract (`number|string|boolean|enum`) with
+server-side defaults and strict required/type/range/step/options validation.
+Every rule and default participates in the definition hash and catalog pin;
+undeclared parameters fail closed. Legacy modules project their existing
+`widthMm`/`heightMm`/`depthMm` columns into the same contract.
 
 ## 6. Furniture parameter/material update
 
