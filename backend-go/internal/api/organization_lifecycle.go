@@ -263,7 +263,20 @@ func (s *Server) HandleOrganizationOffboardingPreview(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
-	preview, err := service.PreviewOffboarding(r.Context(), r.PathValue("id"))
+	ctx := r.Context()
+	if setter, ok := s.Store.(tenantActorSetter); ok {
+		claims := claimsFromRequest(r)
+		var err error
+		ctx, err = setter.SetTenantActor(ctx, storage.TenantActor{
+			UserID:                    claims.UserID,
+			AuthorizedOrganizationIDs: []string{r.PathValue("id")},
+		})
+		if err != nil {
+			respondWithOrganizationCommandError(w, err)
+			return
+		}
+	}
+	preview, err := service.PreviewOffboarding(ctx, r.PathValue("id"))
 	if err != nil {
 		respondWithOrganizationCommandError(w, err)
 		return

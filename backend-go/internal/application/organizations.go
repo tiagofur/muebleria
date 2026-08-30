@@ -105,6 +105,13 @@ type OrganizationService struct {
 	now   func() time.Time
 }
 
+func platformLifecycleActor(organizationID, userID string) storage.TenantActor {
+	return storage.TenantActor{
+		UserID:                    userID,
+		AuthorizedOrganizationIDs: []string{organizationID},
+	}
+}
+
 func NewOrganizationService(store OrganizationStore) *OrganizationService {
 	return &OrganizationService{store: store, now: time.Now}
 }
@@ -278,7 +285,7 @@ func (s *OrganizationService) UpdateEntitlements(ctx context.Context, cmd Lifecy
 		return nil, fmt.Errorf("%w: %v", ErrInvalidOrganizationCommand, err)
 	}
 	var result *domain.OrganizationEntitlements
-	err := s.store.WithinTenantTx(ctx, storage.TenantActor{OrganizationID: cmd.OrganizationID, UserID: cmd.ActorUserID}, func(txCtx context.Context) error {
+	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
 		before, err := s.store.GetOrganizationEntitlements(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err
@@ -303,7 +310,7 @@ func (s *OrganizationService) SuspendOrganization(ctx context.Context, cmd Lifec
 func (s *OrganizationService) ReactivateOrganization(ctx context.Context, cmd LifecycleCommand) (*domain.Organization, OrganizationReadiness, error) {
 	var readiness OrganizationReadiness
 	var result *domain.Organization
-	err := s.store.WithinTenantTx(ctx, storage.TenantActor{OrganizationID: cmd.OrganizationID, UserID: cmd.ActorUserID}, func(txCtx context.Context) error {
+	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
 		org, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err
@@ -377,7 +384,7 @@ func (s *OrganizationService) TerminateOrganization(ctx context.Context, cmd Lif
 
 func (s *OrganizationService) offboardingTransition(ctx context.Context, cmd LifecycleCommand, to domain.OrganizationStatus, event string, cutSupport bool) (*domain.Organization, error) {
 	var result *domain.Organization
-	err := s.store.WithinTenantTx(ctx, storage.TenantActor{OrganizationID: cmd.OrganizationID, UserID: cmd.ActorUserID}, func(txCtx context.Context) error {
+	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
 		org, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err
@@ -416,7 +423,7 @@ func (s *OrganizationService) offboardingTransition(ctx context.Context, cmd Lif
 
 func (s *OrganizationService) transition(ctx context.Context, cmd LifecycleCommand, from, to domain.OrganizationStatus, event string, cutSupport, requireReady bool) (*domain.Organization, error) {
 	var result *domain.Organization
-	err := s.store.WithinTenantTx(ctx, storage.TenantActor{OrganizationID: cmd.OrganizationID, UserID: cmd.ActorUserID}, func(txCtx context.Context) error {
+	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
 		org, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err

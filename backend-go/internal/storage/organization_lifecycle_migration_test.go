@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -322,6 +323,28 @@ func TestOrganizationLifecyclePrivileges_DirectOrganizationDMLDeniedButCommandAl
 			})
 		})
 	}
+	for _, command := range []struct {
+		name string
+		sql  string
+	}{
+		{"create function", `SELECT * FROM command_create_organization('Unauthorized','unauthorized-org','factory','none',NULL,'provisioning',NULL,$1,NULL)`},
+		{"metadata function", `SELECT * FROM command_update_organization_metadata($1,'Unauthorized','none',NULL,1)`},
+		{"transition function", `SELECT * FROM command_transition_organization_status($1,'active','suspended',$2,'unauthorized',1)`},
+	} {
+		t.Run(command.name, func(t *testing.T) {
+			withRLSActor(t, fx.app, rlsOrgB, rlsUserB, func(tx pgx.Tx) {
+				args := []any{rlsOrgB}
+				if command.name == "create function" {
+					args = []any{rlsUserB}
+				} else if command.name == "transition function" {
+					args = append(args, rlsUserB)
+				}
+				if _, err := tx.Exec(ctx, command.sql, args...); err == nil {
+					t.Fatalf("direct inherited-login %s unexpectedly succeeded", command.name)
+				}
+			})
+		})
+	}
 
 	adminStore := &storage.PostgresStore{Pool: fx.admin}
 	before, err := adminStore.GetOrganizationByID(ctx, rlsOrgA)
@@ -443,4 +466,90 @@ func TestFactoryProvisioningHTTPPostgresRuntimeRoleSuccessRollbackAndReplay(t *t
 	`, childID).Scan(new(int), new(int), new(int), &count); err != nil || count == 0 {
 		t.Fatalf("child provisioning materialization catalog=%d err=%v", count, err)
 	}
+}
+
+func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+	const (
+		secret = "platform-lifecycle-runtime-test-secret"
+		orgID  = "c2000000-0000-0000-0000-000000000200"
+	)
+	adminStore := &storage.PostgresStore{Pool: fx.admin}
+	organization := &domain.Organization{
+		ID: orgID, Name: "Platform Lifecycle", Slug: "platform-lifecycle-runtime",
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,
+	}
+	if err := adminStore.CreateOrganization(ctx, organization); err != nil {
+		t.Fatal(err)
+	}
+	if err := adminStore.EnsureMembership(ctx, organization.ID, rlsUserA, []domain.UserRole{domain.RoleAdmin}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adminStore.UpsertWorkshopSettingsForOrganization(ctx, organization.ID, domain.DefaultWorkshopSettings()); err != nil {
+		t.Fatal(err)
+	}
+	organization, err := adminStore.TransitionOrganizationStatus(
+		ctx, organization.ID, domain.OrganizationStatusProvisioning, domain.OrganizationStatusActive,
+		rlsUserA, "fixture activation", organization.Version,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := auth.GenerateToken(rlsUserA, "rls-a@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := api.RegisterRoutes(api.NewServer(fx.store, secret, nil, 100, 100))
+	command := func(action, body, key string, version int64) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/organizations/"+organization.ID+":"+action, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", key)
+		req.Header.Set("If-Match", api.FormatVersionETag(version))
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", action, recorder.Code, recorder.Body.String())
+		}
+		return recorder
+	}
+	preview := func() (string, int64) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/organizations/"+organization.ID+"/offboarding-preview", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("preview status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+		var body struct {
+			ImpactVersion       string `json:"impact_version"`
+			OrganizationVersion int64  `json:"organization_version"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil || body.ImpactVersion == "" {
+			t.Fatalf("preview body=%s err=%v", recorder.Body.String(), err)
+		}
+		return body.ImpactVersion, body.OrganizationVersion
+	}
+	load := func(want domain.OrganizationStatus) *domain.Organization {
+		t.Helper()
+		current, err := adminStore.GetOrganizationByID(ctx, organization.ID)
+		if err != nil || current.Status != want {
+			t.Fatalf("status=%v want=%s err=%v", current, want, err)
+		}
+		return current
+	}
+
+	command("suspend", `{"reason":"platform suspension"}`, "platform-suspend", organization.Version)
+	organization = load(domain.OrganizationStatusSuspended)
+	command("reactivate", `{"reason":"platform reactivation"}`, "platform-reactivate", organization.Version)
+	organization = load(domain.OrganizationStatusActive)
+	impact, version := preview()
+	command("begin-offboarding", `{"reason":"platform offboarding","impact_version":"`+impact+`"}`, "platform-offboarding", version)
+	organization = load(domain.OrganizationStatusOffboarding)
+	impact, version = preview()
+	command("terminate", `{"reason":"platform termination","impact_version":"`+impact+`"}`, "platform-terminate", version)
+	load(domain.OrganizationStatusTerminated)
 }

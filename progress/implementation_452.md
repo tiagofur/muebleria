@@ -57,3 +57,10 @@ The implementation and correction commits are integrated on the approved tracker
 - Added HTTP/PostgreSQL Factory rollback/retry/replay proof and direct own/foreign Organization mutation denials with an authoritative-command positive control.
 - Made the canonical `provisioning_failed -> terminated` cleanup path executable through the service and database while preserving terminal lifecycle timestamps.
 - Synced the integrated tracker with current `main@d85d6fd2` and migrated the concurrently added authoring fixture from the removed Organization `active` boolean to canonical `status`.
+
+## Independent review correction round 2
+
+- Runtime command authorization now recognizes every safe inherited member of `granete_app` while excluding superusers, privileged roles and the Organization table owner.
+- Added direct inherited-login denial proofs for privileged create, metadata update and lifecycle transition functions.
+- Platform lifecycle keeps an org-less actor and authorizes only the exact target through `app.authorized_organization_ids`; bounded command functions provide the required Organization row locks.
+- Added an HTTP + PostgreSQL inherited-runtime proof for suspend, reactivate, offboarding preview/start and termination.

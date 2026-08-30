@@ -70,12 +70,12 @@ func (s *PostgresStore) GetOrganizationOffboardingPreview(ctx context.Context, o
 		name  string
 		query string
 	}{
-		{"organization", `SELECT id::text FROM organizations WHERE id=$1 FOR UPDATE`},
+		{"organization", `SELECT command_lock_organization($1)::text`},
 		{"projects", `SELECT id::text FROM projects WHERE organization_id=$1 OR sales_organization_id=$1 OR manufacturing_organization_id=$1 ORDER BY id FOR UPDATE`},
 		{"production activities", `SELECT id::text FROM production_activities WHERE organization_id=$1 AND type='claim' AND finished_at IS NULL ORDER BY id FOR UPDATE`},
 		{"purchase orders", `SELECT id::text FROM purchase_orders WHERE organization_id=$1 AND status IN ('borrador','emitida') ORDER BY id FOR UPDATE`},
 		{"warranty tickets", `SELECT id::text FROM warranty_tickets WHERE organization_id=$1 AND status NOT IN ('resolved','closed','cancelled') ORDER BY id FOR UPDATE`},
-		{"child organizations", `SELECT id::text FROM organizations WHERE parent_organization_id=$1 AND status <> 'terminated' ORDER BY id FOR UPDATE`},
+		{"child organizations", `SELECT command_lock_child_organizations($1)::text`},
 	} {
 		rows, err := s.db(ctx).Query(ctx, lock.query, organizationID)
 		if err != nil {

@@ -92,6 +92,32 @@ $$;
 REVOKE ALL ON FUNCTION app_current_user_is_platform_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_current_user_is_platform_admin() TO granete_app;
 
+CREATE FUNCTION app_session_is_runtime()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+    SELECT pg_has_role(session_user, 'granete_app', 'member')
+       AND EXISTS (
+            SELECT 1 FROM pg_roles role
+             WHERE role.rolname=session_user
+               AND NOT role.rolsuper
+               AND NOT role.rolbypassrls
+               AND NOT role.rolcreaterole
+               AND NOT role.rolcreatedb
+       )
+       AND NOT EXISTS (
+            SELECT 1 FROM pg_class relation
+            JOIN pg_namespace namespace ON namespace.oid=relation.relnamespace
+             WHERE namespace.nspname='public'
+               AND relation.relname='organizations'
+               AND relation.relowner=(SELECT oid FROM pg_roles WHERE rolname=session_user)
+       )
+$$;
+REVOKE ALL ON FUNCTION app_session_is_runtime() FROM PUBLIC;
+
 CREATE FUNCTION command_create_organization(
     p_name TEXT,
     p_slug TEXT,
@@ -108,8 +134,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-    runtime_caller BOOLEAN := session_user = 'granete_app'
-        OR current_setting('role', TRUE) = 'granete_app';
+    runtime_caller BOOLEAN := app_session_is_runtime();
     current_organization UUID := app_current_organization_id();
 BEGIN
     IF runtime_caller THEN
@@ -163,8 +188,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-    runtime_caller BOOLEAN := session_user = 'granete_app'
-        OR current_setting('role', TRUE) = 'granete_app';
+    runtime_caller BOOLEAN := app_session_is_runtime();
 BEGIN
     IF runtime_caller AND (
         NOT app_current_user_is_platform_admin()
@@ -199,8 +223,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-    runtime_caller BOOLEAN := session_user = 'granete_app'
-        OR current_setting('role', TRUE) = 'granete_app';
+    runtime_caller BOOLEAN := app_session_is_runtime();
     current_organization UUID := app_current_organization_id();
 BEGIN
     IF NOT (
@@ -264,12 +287,59 @@ BEGIN
 END
 $$;
 
+CREATE FUNCTION command_lock_organization(p_id UUID)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    locked_id UUID;
+BEGIN
+    IF app_session_is_runtime() AND NOT (
+        app_current_user_is_platform_admin()
+        AND app_current_organization_id() IS NULL
+        AND app_has_organization_access(p_id)
+    ) THEN
+        RAISE EXCEPTION 'organization lock is not authorized' USING ERRCODE='42501';
+    END IF;
+    SELECT id INTO locked_id FROM organizations WHERE id=p_id FOR UPDATE;
+    RETURN locked_id;
+END
+$$;
+
+CREATE FUNCTION command_lock_child_organizations(p_parent_id UUID)
+RETURNS SETOF UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    IF app_session_is_runtime() AND NOT (
+        app_current_user_is_platform_admin()
+        AND app_current_organization_id() IS NULL
+        AND app_has_organization_access(p_parent_id)
+    ) THEN
+        RAISE EXCEPTION 'child organization lock is not authorized' USING ERRCODE='42501';
+    END IF;
+    RETURN QUERY
+    SELECT id FROM organizations
+     WHERE parent_organization_id=p_parent_id AND status <> 'terminated'
+     ORDER BY id
+     FOR UPDATE;
+END
+$$;
+
 REVOKE ALL ON FUNCTION command_create_organization(TEXT,TEXT,TEXT,TEXT,TIMESTAMPTZ,TEXT,TEXT,UUID,UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION command_update_organization_metadata(UUID,TEXT,TEXT,TIMESTAMPTZ,BIGINT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION command_transition_organization_status(UUID,TEXT,TEXT,UUID,TEXT,BIGINT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION command_lock_organization(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION command_lock_child_organizations(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION command_create_organization(TEXT,TEXT,TEXT,TEXT,TIMESTAMPTZ,TEXT,TEXT,UUID,UUID) TO granete_app;
 GRANT EXECUTE ON FUNCTION command_update_organization_metadata(UUID,TEXT,TEXT,TIMESTAMPTZ,BIGINT) TO granete_app;
 GRANT EXECUTE ON FUNCTION command_transition_organization_status(UUID,TEXT,TEXT,UUID,TEXT,BIGINT) TO granete_app;
+GRANT EXECUTE ON FUNCTION command_lock_organization(UUID) TO granete_app;
+GRANT EXECUTE ON FUNCTION command_lock_child_organizations(UUID) TO granete_app;
 REVOKE INSERT, UPDATE, DELETE ON organizations FROM granete_app;
 
 DO $$
