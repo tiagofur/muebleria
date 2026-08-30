@@ -24,6 +24,7 @@
 - JWT organization epoch changes on suspension, reactivation, offboarding and termination, so credentials issued before a transition never revive.
 - Suspension and offboarding end open support sessions transactionally; another Organization membership on the same User keeps its independent credential epoch.
 - Runtime-role SQL allows recovery reads for suspended/offboarding organizations while denying direct `INSERT`, `UPDATE`, `DELETE` and `UPSERT` writes.
+- Runtime `INSERT`, `UPDATE` and `DELETE` privileges on `organizations` are revoked. Narrow `SECURITY DEFINER` commands validate Platform or active Factory-admin authority, actor, parent/type, transition and expected version before creating or mutating a row.
 - RLS, Team last-admin/seat invariants and membership credential epochs remain the existing authorities; #452 does not duplicate them.
 - Offboarding locks the responsible project rows, recomputes a deterministic impact fingerprint inside the lifecycle transaction and never deletes business history.
 
@@ -39,11 +40,19 @@
 - `pnpm openapi:check` — generated operation and schema drift checks green.
 - `pnpm typecheck` — all workspaces green.
 - `pnpm test` — domain 1156, storage 176, excel 93, desktop 17, mobile 49, UI 1458 and web 326 tests green.
-- `go test ./... -count=1` with `GOFLAGS=-p=1` on a fresh PostgreSQL database — all backend, storage and pilot readiness packages green.
-- `PATH="$HOME/.rbenv/shims:$PATH" GOFLAGS=-p=1 ./init.sh` on that fresh PostgreSQL database — complete harness green, including Ruby 3.2.11 and deterministic RBZ verification.
+- `go test -p=1 -parallel=1 ./... -count=1` on a fresh PostgreSQL database — all backend, storage and pilot readiness packages green.
+- `PATH="$HOME/.rbenv/shims:$PATH" GOFLAGS='-p=1 -parallel=1' ./init.sh` on a fresh PostgreSQL database — complete harness green, including Ruby 3.2.11 and deterministic RBZ verification.
+- `GOFLAGS='-p=1 -parallel=1' scripts/pilot-gate.sh --fresh-container` — direct runtime-role RLS plus the complete no-skip Pilot Readiness gate green on ephemeral PostgreSQL 16.
 - Impeccable detector on the modified Platform/Settings UI — zero findings.
 - `git diff --check` — green.
 
 ## Delivery state
 
 Implementation is ready to be committed and pushed in the approved draft Feature Branch Chain. F197 remains `in_progress` until an independent reviewer approves the pushed implementation and remote CI/readback are green.
+
+## Independent review correction round 1
+
+- Closed Factory runtime provisioning access by granting the transaction only the exact source + newly inserted child after a database-authorized create command.
+- Closed direct lifecycle bypass by revoking runtime `INSERT`, `UPDATE` and `DELETE` on `organizations`; metadata and lifecycle writes now cross narrow command functions.
+- Added HTTP/PostgreSQL Factory rollback/retry/replay proof and direct own/foreign Organization mutation denials with an authoritative-command positive control.
+- Made the canonical `provisioning_failed -> terminated` cleanup path executable through the service and database while preserving terminal lifecycle timestamps.

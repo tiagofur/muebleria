@@ -270,6 +270,30 @@ func TestBeginOffboardingRejectsBlockers(t *testing.T) {
 	}
 }
 
+func TestTerminateOrganizationAllowsFailedProvisioningCleanup(t *testing.T) {
+	store := &organizationStoreFake{
+		organization: &domain.Organization{ID: "00000000-0000-0000-0000-000000000111", Status: domain.OrganizationStatusProvisioningFailed, Version: 3, CredentialVersion: 2},
+	}
+	service := NewOrganizationService(store)
+	preview, err := service.PreviewOffboarding(context.Background(), store.organization.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.TerminateOrganization(context.Background(), LifecycleCommand{
+		OrganizationID:  store.organization.ID,
+		ActorUserID:     "00000000-0000-0000-0000-000000000222",
+		Reason:          "abandon failed provisioning",
+		ExpectedVersion: 3,
+		ImpactVersion:   preview.ImpactVersion,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != domain.OrganizationStatusTerminated || result.CredentialVersion != 3 {
+		t.Fatalf("terminated failed provisioning=%+v", result)
+	}
+}
+
 func TestOrganizationOffboardingPreviewIncludesPhysicalWorkInDeterministicFingerprint(t *testing.T) {
 	store := &organizationStoreFake{
 		organization: &domain.Organization{ID: "00000000-0000-0000-0000-000000000111", Status: domain.OrganizationStatusActive, Version: 3},

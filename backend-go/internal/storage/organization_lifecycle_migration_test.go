@@ -3,12 +3,16 @@ package storage_test
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/tiagofur/muebles-backend/internal/api"
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -146,6 +150,29 @@ func TestOrganizationLifecycleStorage_TransitionsEpochAndReadiness(t *testing.T)
 		userID, "invalid", suspended.Version); err == nil {
 		t.Fatal("invalid transition must fail")
 	}
+
+	failedOrganization := &domain.Organization{
+		Name: "Failed lifecycle", Slug: "failed-lifecycle-100", Type: domain.OrganizationTypeStore,
+		Status: domain.OrganizationStatusProvisioning,
+	}
+	if err := store.CreateOrganization(ctx, failedOrganization); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := store.TransitionOrganizationStatus(ctx, failedOrganization.ID,
+		domain.OrganizationStatusProvisioning, domain.OrganizationStatusProvisioningFailed,
+		userID, "bootstrap failed", failedOrganization.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminated, err := store.TransitionOrganizationStatus(ctx, failedOrganization.ID,
+		domain.OrganizationStatusProvisioningFailed, domain.OrganizationStatusTerminated,
+		userID, "abandon failed provisioning", failed.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if terminated.Status != domain.OrganizationStatusTerminated || terminated.TerminatedAt == nil {
+		t.Fatalf("terminated failed provisioning=%+v", terminated)
+	}
 }
 
 func TestOrganizationOffboardingPreviewCountsExecutableProductionAndInstallationWork(t *testing.T) {
@@ -271,5 +298,149 @@ func TestOrganizationLifecycleRLS_NonActiveTenantCanReadButCannotMutateDirectSQL
 				t.Fatalf("%s mutation changed customer count=%d err=%v", status, count, err)
 			}
 		})
+	}
+}
+
+func TestOrganizationLifecyclePrivileges_DirectOrganizationDMLDeniedButCommandAllowed(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+	for _, mutation := range []struct {
+		name string
+		sql  string
+	}{
+		{"insert", `INSERT INTO organizations (name,slug,type,status) VALUES ('Direct','direct-org','store','provisioning')`},
+		{"update own", `UPDATE organizations SET status='suspended',version=version+1,credential_version=credential_version+1 WHERE id='` + rlsOrgA + `'`},
+		{"update other", `UPDATE organizations SET status='suspended',version=version+1,credential_version=credential_version+1 WHERE id='` + rlsOrgB + `'`},
+		{"delete own", `DELETE FROM organizations WHERE id='` + rlsOrgA + `'`},
+		{"delete other", `DELETE FROM organizations WHERE id='` + rlsOrgB + `'`},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			withRLSActor(t, fx.app, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+				if _, err := tx.Exec(ctx, mutation.sql); err == nil {
+					t.Fatalf("direct organization %s unexpectedly succeeded", mutation.name)
+				}
+			})
+		})
+	}
+
+	adminStore := &storage.PostgresStore{Pool: fx.admin}
+	before, err := adminStore.GetOrganizationByID(ctx, rlsOrgA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeStore := &storage.PostgresStore{Pool: fx.app}
+	err = runtimeStore.WithinTenantTx(ctx, storage.TenantActor{UserID: rlsUserA}, func(txCtx context.Context) error {
+		_, transitionErr := runtimeStore.TransitionOrganizationStatus(
+			txCtx, rlsOrgA, domain.OrganizationStatusActive, domain.OrganizationStatusSuspended,
+			rlsUserA, "platform command proof", before.Version,
+		)
+		return transitionErr
+	})
+	if err != nil {
+		t.Fatalf("authoritative lifecycle command: %v", err)
+	}
+	after, err := adminStore.GetOrganizationByID(ctx, rlsOrgA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Status != domain.OrganizationStatusSuspended || after.Version != before.Version+1 || after.CredentialVersion != before.CredentialVersion+1 {
+		t.Fatalf("authoritative transition=%+v before=%+v", after, before)
+	}
+}
+
+func TestFactoryProvisioningHTTPPostgresRuntimeRoleSuccessRollbackAndReplay(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+	const (
+		secret = "organization-runtime-role-test-secret"
+		slug   = "factory-runtime-child"
+		key    = "factory-runtime-child-key"
+	)
+	var membershipID string
+	var membershipCredentialVersion, organizationCredentialVersion int64
+	if err := fx.admin.QueryRow(ctx, `
+		SELECT membership.id, membership.credential_version, organization.credential_version
+		FROM memberships membership
+		JOIN organizations organization ON organization.id=membership.organization_id
+		WHERE membership.organization_id=$1 AND membership.user_id=$2`, rlsOrgA, rlsUserA).
+		Scan(&membershipID, &membershipCredentialVersion, &organizationCredentialVersion); err != nil {
+		t.Fatal(err)
+	}
+	token, err := auth.GenerateToken(rlsUserA, "rls-a@example.test", auth.TokenContext{
+		Roles: []string{string(domain.RoleAdmin)}, OrgID: rlsOrgA, MembershipID: membershipID,
+		MembershipCredentialVersion:   membershipCredentialVersion,
+		OrganizationCredentialVersion: organizationCredentialVersion,
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := api.RegisterRoutes(api.NewServer(fx.store, secret, nil, 100, 100))
+	request := func() *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/organizations", strings.NewReader(
+			`{"name":"Runtime Child","slug":"`+slug+`","type":"store","license_plan":"none"}`,
+		))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", key)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+
+	if _, err := fx.admin.Exec(ctx, `
+		CREATE FUNCTION fail_runtime_child_settings() RETURNS TRIGGER
+		LANGUAGE plpgsql AS $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM organizations WHERE id=NEW.organization_id AND slug='`+slug+`') THEN
+				RAISE EXCEPTION 'injected child settings failure';
+			END IF;
+			RETURN NEW;
+		END $$;
+		CREATE TRIGGER fail_runtime_child_settings
+		BEFORE INSERT ON workshop_settings
+		FOR EACH ROW EXECUTE FUNCTION fail_runtime_child_settings()
+	`); err != nil {
+		t.Fatal(err)
+	}
+	failed := request()
+	if failed.Code != http.StatusInternalServerError {
+		t.Fatalf("failure status=%d body=%s", failed.Code, failed.Body.String())
+	}
+	var count int
+	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM organizations WHERE slug=$1`, slug).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("failed provisioning leaked organizations=%d err=%v", count, err)
+	}
+	if _, err := fx.admin.Exec(ctx, `
+		DROP TRIGGER fail_runtime_child_settings ON workshop_settings;
+		DROP FUNCTION fail_runtime_child_settings()
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	created := request()
+	if created.Code != http.StatusCreated || created.Header().Get("Idempotency-Replayed") != "" {
+		t.Fatalf("create status=%d replay=%q body=%s", created.Code, created.Header().Get("Idempotency-Replayed"), created.Body.String())
+	}
+	replayed := request()
+	if replayed.Code != http.StatusCreated || replayed.Header().Get("Idempotency-Replayed") != "true" || replayed.Body.String() != created.Body.String() {
+		t.Fatalf("replay status=%d replay=%q body=%s", replayed.Code, replayed.Header().Get("Idempotency-Replayed"), replayed.Body.String())
+	}
+	var childID, status, parentID string
+	if err := fx.admin.QueryRow(ctx, `SELECT id::text,status,parent_organization_id::text FROM organizations WHERE slug=$1`, slug).
+		Scan(&childID, &status, &parentID); err != nil {
+		t.Fatal(err)
+	}
+	if status != "active" || parentID != rlsOrgA {
+		t.Fatalf("child status=%s parent=%s", status, parentID)
+	}
+	if err := fx.admin.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*) FROM memberships WHERE organization_id=$1),
+			(SELECT count(*) FROM workshop_settings WHERE organization_id=$1),
+			(SELECT count(*) FROM organization_entitlements WHERE organization_id=$1),
+			(SELECT count(*) FROM modules WHERE organization_id=$1)
+	`, childID).Scan(new(int), new(int), new(int), &count); err != nil || count == 0 {
+		t.Fatalf("child provisioning materialization catalog=%d err=%v", count, err)
 	}
 }
