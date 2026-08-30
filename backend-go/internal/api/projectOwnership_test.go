@@ -35,7 +35,7 @@ func membershipFor(userID, orgID string, orgType domain.OrganizationType, roles 
 			Roles: roles, Status: domain.MembershipStatusActive,
 		},
 		Organization: domain.Organization{
-			ID: orgID, Name: "Org " + orgID, Slug: orgID, Type: orgType, Active: true,
+			ID: orgID, Name: "Org " + orgID, Slug: orgID, Type: orgType, Status: domain.OrganizationStatusActive, CredentialVersion: 1,
 		},
 	}
 }

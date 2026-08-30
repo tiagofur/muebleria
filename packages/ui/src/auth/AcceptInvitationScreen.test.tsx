@@ -30,7 +30,7 @@ describe('AcceptInvitationScreen lifecycle', () => {
       user,
       license: { plan: 'pro', status: 'active' },
       roles: ['vendedor'],
-      organization: { id: 'org-1', name: 'Taller', slug: 'taller', type: 'factory', license: { plan: 'pro', status: 'active' } },
+      organization: { id: 'org-1', name: 'Taller', slug: 'taller', type: 'factory', status: 'active', license: { plan: 'pro', status: 'active' } },
       memberships: [],
       selection_required: false,
       transport: 'web',
@@ -73,7 +73,7 @@ describe('AcceptInvitationScreen lifecycle', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       token: 'org-scoped-token', user,
       license: { plan: 'none', status: 'none' }, roles: ['user'],
-      organization: { id: 'org-1', name: 'Taller', slug: 'taller', type: 'factory', license: { plan: 'none', status: 'none' } },
+      organization: { id: 'org-1', name: 'Taller', slug: 'taller', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
       memberships: [], selection_required: false, transport: 'web',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchMock);

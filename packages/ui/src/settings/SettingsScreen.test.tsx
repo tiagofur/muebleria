@@ -154,12 +154,21 @@ describe('SettingsScreen — Red de Ventas (#326)', () => {
       if (url.endsWith('/factory/organizations') && (!init || init.method === undefined)) {
         return jsonOk([]);
       }
-      if (url.endsWith('/factory/organizations') && init?.method === 'POST') {
+      if (url.endsWith('/organizations') && init?.method === 'POST') {
         return new Response(
           JSON.stringify({
             organization: {
               id: 'org-store-9', name: 'Tienda Monterrey', slug: 'tienda-monterrey',
-              type: 'store', active: true, created_at: '2026-08-28T00:00:00Z', version: 1,
+              type: 'store', status: 'active', license_plan: 'none', license_expires_at: null,
+              parent_organization_id: null, member_count: 1,
+              created_at: '2026-08-28T00:00:00Z', updated_at: '2026-08-28T00:00:00Z', version: 1,
+            },
+            readiness: {
+              organization_id: '11111111-1111-4111-8111-111111111111',
+              organization_version: 1,
+              ready: true,
+              checks: [],
+              checked_at: '2026-08-28T00:00:00Z',
             },
           }),
           { status: 201, headers: { 'Content-Type': 'application/json' } },
@@ -186,7 +195,8 @@ describe('SettingsScreen — Red de Ventas (#326)', () => {
 
     const created = await screen.findByTestId('sales-network-created');
     expect(created).toBeTruthy();
-    const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    const createCall = fetchMock.mock.calls.find(([url, init]) => String(url).endsWith('/organizations') && init?.method === 'POST');
+    expect(String(createCall?.[0])).toBe('http://test/api/organizations');
     expect(new Headers(createCall?.[1]?.headers).get('Idempotency-Key')).toMatch(/^web:/);
     await user.click(screen.getByTestId('sales-network-enter'));
     expect(onEnterOrg).toHaveBeenCalledWith('org-store-9', 'Tienda Monterrey');

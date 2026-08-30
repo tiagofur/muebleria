@@ -477,56 +477,55 @@ func (f *fixture) createPilotOrg(name, slug, ownerEmail, currency string, margin
 	var o pilotOrg
 	o.name, o.slug = name, slug
 
-	// 1. Platform creates the org with the base catalog cloned.
-	var created struct {
-		ID string `json:"id"`
+	// 1. Provisioning requires a real active bootstrap administrator. Pilot
+	// identity setup is direct because global user creation has no public
+	// platform endpoint; organization access itself is created by provisioning.
+	hash, err := auth.HashPassword(pilotPassword)
+	if err != nil {
+		return o, fmt.Errorf("hash owner password %s: %w", slug, err)
 	}
-	err := f.request(&created, http.MethodPost, "/api/platform/organizations", f.platform.token, map[string]any{
+	owner := mustStorageUser(f, ownerEmail, "Owner "+name, hash)
+	var created struct {
+		Organization struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"organization"`
+		Readiness struct {
+			Ready bool `json:"ready"`
+		} `json:"readiness"`
+	}
+	err = f.request(&created, http.MethodPost, "/api/organizations", f.platform.token, map[string]any{
 		"name": name, "slug": slug, "type": "factory", "license_plan": "trial",
-		"clone_catalog_from": storage.InitialOrganizationID,
+		"bootstrap_admin_user_id": owner.ID,
+		"clone_catalog_from":      storage.InitialOrganizationID,
+		"entitlements": map[string]any{
+			"max_active_members": 100, "max_sales_partners": 0,
+			"manufacturing_enabled": true, "sales_network_enabled": false,
+			"sketchup_seats": 1, "advanced_audit_enabled": false,
+		},
 	}, http.StatusCreated)
 	if err != nil {
 		return o, fmt.Errorf("create org %s: %w", slug, err)
 	}
-	o.id = created.ID
+	if created.Organization.Status != "active" || !created.Readiness.Ready {
+		return o, fmt.Errorf("create org %s returned incomplete provisioning: %+v", slug, created)
+	}
+	o.id = created.Organization.ID
 
-	// 2. Support session (audited) invites the owner — no SMTP in pilots.
-	var ss struct {
-		Token     string `json:"token"`
-		SessionID string `json:"session_id"`
-	}
-	err = f.request(&ss, http.MethodPost, "/api/platform/organizations/"+o.id+"/support-session",
-		f.platform.token, map[string]string{"reason": "pilot readiness fixture onboarding"}, http.StatusCreated)
-	if err != nil {
-		return o, fmt.Errorf("support session %s: %w", slug, err)
-	}
-	var inv struct {
-		InvitationToken string `json:"invitation_token"`
-	}
-	err = f.request(&inv, http.MethodPost, "/api/org/invitations", ss.Token, map[string]any{
-		"email": ownerEmail, "roles": []string{"admin"},
-	}, http.StatusCreated)
-	if err != nil {
-		return o, fmt.Errorf("invite owner %s: %w", slug, err)
-	}
-	var ended map[string]bool
-	if err := f.request(&ended, http.MethodDelete, "/api/platform/support-sessions/"+ss.SessionID,
-		f.platform.token, nil, http.StatusOK); err != nil {
-		return o, fmt.Errorf("end support session %s: %w", slug, err)
-	}
-
-	// 3. Owner accepts and enters the workshop.
-	var accept loginResponse
-	err = f.request(&accept, http.MethodPost, "/api/auth/invitations:accept", "", map[string]string{
-		"token": inv.InvitationToken, "password": pilotPassword, "name": "Owner " + name,
+	// 2. The bootstrap administrator logs directly into the committed active
+	// organization; no invitation is needed for access already established by
+	// the authoritative provisioning command.
+	var login loginResponse
+	err = f.request(&login, http.MethodPost, "/api/auth/login", "", map[string]string{
+		"email": ownerEmail, "password": pilotPassword, "transport": "web", "org": slug,
 	}, http.StatusOK)
 	if err != nil {
-		return o, fmt.Errorf("accept invitation %s: %w", slug, err)
+		return o, fmt.Errorf("bootstrap administrator login %s: %w", slug, err)
 	}
-	if accept.Organization == nil || accept.Organization.Slug != slug {
-		return o, fmt.Errorf("accept invitation %s: expected scoped token for %s", slug, slug)
+	if login.Organization == nil || login.Organization.Slug != slug {
+		return o, fmt.Errorf("bootstrap administrator login %s did not enter the provisioned organization", slug)
 	}
-	o.admin = pilotUser{id: accept.User.ID, email: ownerEmail, token: accept.Token}
+	o.admin = pilotUser{id: login.User.ID, email: ownerEmail, token: login.Token}
 	tok := o.admin.token
 
 	// 4. Workshop data, all through the public APIs.

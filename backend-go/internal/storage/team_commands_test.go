@@ -32,7 +32,7 @@ func seedCommandAdministrators(t *testing.T, store *storage.PostgresStore, organ
 		{`INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES ($1,'command-replacement@example.test','command-replacement@example.test','x','Command Replacement','active')`, []any{commandReplacementUser}},
 		{`INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES ($1,$2,$3,'{admin,gerente_ventas}','active',NOW())`, []any{commandAdminMembership, organizationID, commandAdminUser}},
 		{`INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES ($1,$2,$3,'{ingeniero}','active',NOW())`, []any{commandReplacement, organizationID, commandReplacementUser}},
-		{`UPDATE organizations SET active=TRUE WHERE id=$1`, []any{organizationID}},
+		{`UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, []any{organizationID}},
 	}
 	for _, statement := range statements {
 		if _, err := tx.Exec(ctx, statement.query, statement.args...); err != nil {

@@ -22,7 +22,7 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 
 	const orgB = "bbbbbbbb-0000-0000-0000-00000000000b"
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Clon', 'taller-clon', FALSE)`, orgB); err != nil {
+		`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Taller Clon', 'taller-clon', 'provisioning')`, orgB); err != nil {
 		t.Fatalf("create org B: %v", err)
 	}
 

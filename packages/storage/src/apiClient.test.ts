@@ -39,7 +39,7 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
   it('enforces generated minimum and date-time constraints', async () => {
     const organization = {
       id: 'org1', name: 'Factory', slug: 'factory', type: 'factory', license_plan: 'none',
-      active: true, member_count: 0, created_at: '2026-08-28T00:00:00Z',
+      status: 'active', member_count: 0, created_at: '2026-08-28T00:00:00Z',
       updated_at: '2026-08-28T00:00:00Z', version: 1,
     };
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([{ ...organization, version: 0 }]));
@@ -48,6 +48,52 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
 
     fetchImpl.mockResolvedValueOnce(json([{ ...organization, created_at: 'not-a-date' }]));
     await expect(client.listPlatformOrganizations('token')).rejects.toThrow('date-time');
+  });
+
+  it('uses the canonical organization provisioning boundary and rejects partial success', async () => {
+    const organization = {
+      id: '11111111-1111-4111-8111-111111111111', name: 'Factory', slug: 'factory',
+      type: 'factory', status: 'active', license_plan: 'trial', license_expires_at: null,
+      parent_organization_id: null, member_count: 1, created_at: '2026-08-30T00:00:00Z',
+      updated_at: '2026-08-30T00:00:00Z', version: 2,
+    };
+    const readiness = {
+      organization_id: organization.id, organization_version: 2, ready: true, checks: [],
+      checked_at: '2026-08-30T00:00:00Z',
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ organization, readiness }, 201));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    await expect(client.provisionOrganization('token', {
+      name: 'Factory', slug: 'factory', type: 'factory', license_plan: 'trial',
+      bootstrap_admin_user_id: '22222222-2222-4222-8222-222222222222',
+    }, 'web:organization-provision')).resolves.toEqual({ organization, readiness });
+
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('http://api.test/organizations');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('web:organization-provision');
+
+    fetchImpl.mockResolvedValueOnce(json({ organization }));
+    await expect(client.provisionOrganization('token', {
+      name: 'Factory', type: 'factory', license_plan: 'trial',
+    })).rejects.toThrow('$.readiness');
+  });
+
+  it('sends versioned idempotent organization lifecycle commands', async () => {
+    const organization = {
+      id: '11111111-1111-4111-8111-111111111111', name: 'Factory', slug: 'factory',
+      type: 'factory', status: 'suspended', license_plan: 'trial', license_expires_at: null,
+      parent_organization_id: null, member_count: 1, created_at: '2026-08-30T00:00:00Z',
+      updated_at: '2026-08-30T00:00:00Z', version: 3,
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ organization }));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    await client.suspendOrganization('token', organization.id, 2, { reason: 'Riesgo operativo' });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(`http://api.test/organizations/${organization.id}:suspend`);
+    const headers = new Headers(init?.headers);
+    expect(headers.get('If-Match')).toBe('"v2"');
+    expect(headers.get('Idempotency-Key')).toMatch(/^web:/);
   });
 
   it('rejects unknown generated request properties before fetch', async () => {

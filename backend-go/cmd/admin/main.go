@@ -12,10 +12,14 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,6 +27,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -73,7 +79,7 @@ func usage() {
   admin create-platform-admin --email <email>
   admin grant-membership --email <email> [--org <slug>] --role <rol>
   admin create-org --name <nombre> --slug <slug> [--type factory|store|dealer]
-                   [--admin-email <email>] [--license trial|pro|none]
+                   --admin-email <email> --idempotency-key <key> [--license trial|pro|none]
   admin seed [--org <slug>]
   admin clean-media [--apply]
   admin clean-demo-data [--apply] [--org <slug>]   (borra el catálogo demo del seed)
@@ -588,29 +594,129 @@ func mediaFilenameFromURL(raw string) string {
 
 // slugPattern matches the URL-safe slug enforced by the organizations table.
 var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$`)
+var cliIdempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
 
-// runCreateOrg provisions a new organization (taller). Catalog cloning from a
-// base organization lands with the F172 platform console; pilots start with
-// an empty catalog or a documented SQL import until then.
+type cliOrganizationStore interface {
+	application.OrganizationStore
+	cliReceiptStore
+}
+
+type cliReceiptStore interface {
+	ExecuteIdempotent(context.Context, storage.IdempotencyRequest, func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error)
+	InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error
+}
+
+func provisionOrganizationIdempotently(ctx context.Context, store cliOrganizationStore, command application.ProvisionOrganizationCommand, key string) (*application.ProvisionOrganizationResult, bool, error) {
+	return provisionOrganizationWithReceipt(ctx, store, command, key, func(txCtx context.Context, command application.ProvisionOrganizationCommand) (*application.ProvisionOrganizationResult, error) {
+		return application.NewOrganizationService(store).ProvisionOrganization(txCtx, command)
+	})
+}
+
+func provisionOrganizationWithReceipt(ctx context.Context, store cliReceiptStore, command application.ProvisionOrganizationCommand, key string, provision func(context.Context, application.ProvisionOrganizationCommand) (*application.ProvisionOrganizationResult, error)) (*application.ProvisionOrganizationResult, bool, error) {
+	if !cliIdempotencyKeyPattern.MatchString(key) {
+		return nil, false, errors.New("invalid idempotency key")
+	}
+	scopeOrganizationID := ""
+	if command.ParentOrganizationID != nil {
+		scopeOrganizationID = *command.ParentOrganizationID
+	}
+	scopeDigest := sha256.Sum256([]byte(command.ActorUserID + "\x00" + scopeOrganizationID + "\x00admin.create-org\x00" + key))
+	command.RequestID = "cli-org-" + hex.EncodeToString(scopeDigest[:12])
+	canonicalCommand, err := json.Marshal(command)
+	if err != nil {
+		return nil, false, err
+	}
+	fingerprint := sha256.Sum256(canonicalCommand)
+	target := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(command.Slug))))
+	request := storage.IdempotencyRequest{
+		ScopeKey: hex.EncodeToString(scopeDigest[:]), Fingerprint: hex.EncodeToString(fingerprint[:]),
+		ActorUserID: command.ActorUserID, OrganizationID: scopeOrganizationID,
+	}
+	request.AfterRollback = func(auditCtx context.Context, response storage.IdempotencyResponse) error {
+		var failure struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(response.Body, &failure)
+		eventType := "organization_provisioning_failed"
+		if failure.Code == "ORGANIZATION_NOT_READY" {
+			eventType = "organization_readiness_failed"
+		}
+		return store.InsertSecurityAuditEvent(auditCtx, storage.SecurityAuditEvent{
+			EventType: eventType, ActorUserID: command.ActorUserID, OrganizationID: scopeOrganizationID,
+			Details: map[string]interface{}{"target_hash": hex.EncodeToString(target[:]), "error_code": failure.Code, "request_id": command.RequestID},
+		})
+	}
+	response, replayed, err := store.ExecuteIdempotent(ctx, request, func(txCtx context.Context) (storage.IdempotencyResponse, error) {
+		result, provisionErr := provision(txCtx, command)
+		if provisionErr != nil {
+			status, code := cliProvisioningError(provisionErr)
+			body, marshalErr := json.Marshal(map[string]string{"code": code})
+			if marshalErr != nil {
+				return storage.IdempotencyResponse{}, marshalErr
+			}
+			return storage.IdempotencyResponse{Status: status, Header: http.Header{"Content-Type": {"application/json"}}, Body: body}, nil
+		}
+		body, marshalErr := json.Marshal(result)
+		if marshalErr != nil {
+			return storage.IdempotencyResponse{}, marshalErr
+		}
+		return storage.IdempotencyResponse{Status: http.StatusCreated, Header: http.Header{"Content-Type": {"application/json"}}, Body: body}, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if response.Status >= http.StatusBadRequest {
+		var failure struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(response.Body, &failure)
+		return nil, replayed, fmt.Errorf("command failed with %s", failure.Code)
+	}
+	var result application.ProvisionOrganizationResult
+	if err := json.Unmarshal(response.Body, &result); err != nil {
+		return nil, replayed, err
+	}
+	return &result, replayed, nil
+}
+
+func cliProvisioningError(err error) (int, string) {
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.Is(err, application.ErrInvalidOrganizationCommand):
+		return http.StatusBadRequest, "BAD_REQUEST"
+	case errors.Is(err, application.ErrOrganizationNotReady):
+		return http.StatusConflict, "ORGANIZATION_NOT_READY"
+	case errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "slug"):
+		return http.StatusConflict, "ORGANIZATION_SLUG_CONFLICT"
+	default:
+		return http.StatusInternalServerError, "INTERNAL_ERROR"
+	}
+}
+
+// runCreateOrg provisions a new organization through the same authoritative
+// application command and durable receipt boundary as the HTTP adapters.
 func runCreateOrg(args []string) {
 	fs := flag.NewFlagSet("create-org", flag.ExitOnError)
 	name := fs.String("name", "", "organization display name (required)")
 	slug := fs.String("slug", "", "URL-safe slug (required)")
 	orgType := fs.String("type", string(domain.OrganizationTypeFactory), "factory|store|dealer")
-	adminEmail := fs.String("admin-email", "", "existing user email to grant admin membership")
+	adminEmail := fs.String("admin-email", "", "existing active bootstrap administrator email (required)")
+	idempotencyKey := fs.String("idempotency-key", "", "stable retry key, 16-128 URL-safe characters (required)")
 	license := fs.String("license", string(domain.LicensePlanNone), "trial|pro|none")
 	_ = fs.Parse(args)
 
-	if *name == "" || *slug == "" {
-		fatal(fmt.Errorf("--name and --slug are required"))
+	if *name == "" || *slug == "" || *adminEmail == "" || !cliIdempotencyKeyPattern.MatchString(*idempotencyKey) {
+		fatal(fmt.Errorf("--name, --slug, --admin-email and a valid --idempotency-key are required"))
 	}
 	if !slugPattern.MatchString(*slug) {
 		fatal(fmt.Errorf("invalid slug %q: lowercase letters, digits and single dashes, 3-64 chars", *slug))
 	}
-	if !domain.IsValidOrganizationType(domain.OrganizationType(*orgType)) {
+	kind := domain.OrganizationType(*orgType)
+	if !domain.IsValidOrganizationType(kind) {
 		fatal(fmt.Errorf("invalid organization type %q", *orgType))
 	}
-	if !domain.IsValidLicensePlan(domain.LicensePlan(*license)) {
+	plan := domain.LicensePlan(*license)
+	if !domain.IsValidLicensePlan(plan) {
 		fatal(fmt.Errorf("invalid license %q (trial|pro|none)", *license))
 	}
 
@@ -619,50 +725,21 @@ func runCreateOrg(args []string) {
 		fatal(err)
 	}
 	defer closeStore()
-
 	ctx := context.Background()
-	org := &domain.Organization{
-		Name: *name, Slug: *slug,
-		Type:        domain.OrganizationType(*orgType),
-		LicensePlan: domain.LicensePlan(*license),
-		Active:      true,
+	admin, err := store.GetUserByEmailAnyState(ctx, *adminEmail)
+	if err != nil || admin == nil || admin.AccountStatus != domain.AccountStatusActive {
+		fatal(fmt.Errorf("bootstrap administrator must be an existing active user"))
 	}
-	if err := store.CreateOrganization(ctx, org); err != nil {
-		fatal(fmt.Errorf("creating organization: %w", err))
+	command := application.ProvisionOrganizationCommand{
+		ActorUserID: admin.ID, BootstrapAdminUserID: admin.ID,
+		Name: strings.TrimSpace(*name), Slug: strings.TrimSpace(*slug), Type: kind,
+		LicensePlan: plan, AllowEmptyCatalog: true,
 	}
-	if err := store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-		EventType:      "organization_created",
-		OrganizationID: org.ID,
-		Details:        map[string]interface{}{"name": *name, "slug": *slug, "type": *orgType, "source": "cmd/admin"},
-	}); err != nil {
-		fatal(fmt.Errorf("auditing organization creation: %w", err))
+	result, replayed, err := provisionOrganizationIdempotently(ctx, store, command, *idempotencyKey)
+	if err != nil {
+		fatal(fmt.Errorf("provisioning organization: %w", err))
 	}
-
-	if *adminEmail != "" {
-		u, err := store.GetUserByEmailAnyState(ctx, *adminEmail)
-		if err != nil {
-			fatal(fmt.Errorf("locating admin user: %w", err))
-		}
-		if err := store.EnsureMembership(ctx, org.ID, u.ID, []domain.UserRole{domain.RoleAdmin}); err != nil {
-			fatal(fmt.Errorf("granting admin membership: %w", err))
-		}
-		if err := store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-			EventType:      "membership_granted",
-			TargetUserID:   u.ID,
-			OrganizationID: org.ID,
-			Details:        map[string]interface{}{"roles": []string{"admin"}, "source": "cmd/admin create-org"},
-		}); err != nil {
-			fatal(fmt.Errorf("auditing membership grant: %w", err))
-		}
-	}
-
-	log.Printf("Organization created: %s (slug=%s id=%s license=%s)", *name, *slug, org.ID, *license)
-	if *adminEmail == "" {
-		log.Printf("No admin assigned: use 'admin grant-membership --email <email> --org %s --role admin'", *slug)
-	} else {
-		log.Printf("Admin membership granted to %s", *adminEmail)
-	}
-	log.Printf("NOTE: the catalog starts empty; base-catalog cloning arrives with the platform console (F172).")
+	log.Printf("Organization provisioned: %s (slug=%s id=%s status=%s license=%s admin=%s replayed=%t)", result.Organization.Name, result.Organization.Slug, result.Organization.ID, result.Organization.Status, result.Organization.LicensePlan, *adminEmail, replayed)
 }
 
 // runCleanDemoData removes the demo seed rows (F181). Dry-run by default:

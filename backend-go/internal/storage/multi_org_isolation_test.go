@@ -26,7 +26,7 @@ func isolationSetup(t *testing.T) (*storage.PostgresStore, string, string) {
 	// Organization B alongside the backfilled initial organization.
 	const orgB = "aaaaaaaa-0000-0000-0000-00000000000b"
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Beta', 'taller-beta', FALSE)`, orgB); err != nil {
+		`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Taller Beta', 'taller-beta', 'provisioning')`, orgB); err != nil {
 		t.Fatalf("create org B: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
@@ -214,7 +214,7 @@ func TestIsolation_UserDirectoryByOrganization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec(ctx, `UPDATE organizations SET active=TRUE WHERE id IN ($1, $2)`, orgA, orgB); err == nil {
+	if _, err = tx.Exec(ctx, `UPDATE organizations SET status='active', status_reason=NULL WHERE id IN ($1, $2)`, orgA, orgB); err == nil {
 		err = tx.Commit(ctx)
 	} else {
 		_ = tx.Rollback(ctx)
@@ -252,7 +252,7 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 
 	factory := &domain.Organization{
 		Name: "Fábrica Alpha", Slug: "fabrica-alpha",
-		Type: domain.OrganizationTypeFactory, Active: false,
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,
 	}
 	if err := store.CreateOrganization(ctx, factory); err != nil {
 		t.Fatalf("create factory: %v", err)
@@ -260,7 +260,7 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 
 	tienda := &domain.Organization{
 		Name: "Tienda GDL", Slug: "tienda-gdl",
-		Type: domain.OrganizationTypeStore, Active: false,
+		Type: domain.OrganizationTypeStore, Status: domain.OrganizationStatusProvisioning,
 		ParentOrganizationID: &factory.ID,
 	}
 	if err := store.CreateOrganization(ctx, tienda); err != nil {
@@ -269,7 +269,7 @@ func TestConnectedOrganizations_ParentAndListing(t *testing.T) {
 
 	independent := &domain.Organization{
 		Name: "Taller Independiente", Slug: "taller-independiente",
-		Type: domain.OrganizationTypeFactory, Active: false,
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,
 	}
 	if err := store.CreateOrganization(ctx, independent); err != nil {
 		t.Fatalf("create independent: %v", err)
@@ -304,18 +304,17 @@ func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {
 
 	org := &domain.Organization{
 		Name: "Fábrica Update", Slug: "fabrica-update",
-		Type: domain.OrganizationTypeFactory, Active: false,
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,
 	}
 	if err := store.CreateOrganization(ctx, org); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	org.Name = "Fábrica Renombrada"
-	org.Active = false
 	if err := store.UpdateOrganization(ctx, org); err != nil {
-		t.Fatalf("update (rename+suspend): %v", err)
+		t.Fatalf("update rename: %v", err)
 	}
-	if org.Name != "Fábrica Renombrada" || org.Active {
+	if org.Name != "Fábrica Renombrada" || org.Status != domain.OrganizationStatusProvisioning {
 		t.Fatalf("scan did not round-trip: %+v", org)
 	}
 
@@ -323,7 +322,7 @@ func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-read: %v", err)
 	}
-	if got.Name != "Fábrica Renombrada" || got.Active {
+	if got.Name != "Fábrica Renombrada" || got.Status != domain.OrganizationStatusProvisioning {
 		t.Fatalf("update did not persist: %+v", got)
 	}
 }

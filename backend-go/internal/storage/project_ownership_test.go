@@ -19,7 +19,7 @@ func TestProjectOwnership_SplitSalesAndManufacturing(t *testing.T) {
 	// Third organization (unrelated third party)
 	const orgThird = "aaaaaaaa-0000-0000-0000-00000000000c"
 	if _, err := store.Pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Gamma', 'taller-gamma', FALSE)`, orgThird); err != nil {
+		`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Taller Gamma', 'taller-gamma', 'provisioning')`, orgThird); err != nil {
 		t.Fatalf("create org Gamma: %v", err)
 	}
 

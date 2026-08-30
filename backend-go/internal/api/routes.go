@@ -27,6 +27,25 @@ func membershipCommandRouter(commands map[string]http.Handler) http.Handler {
 	})
 }
 
+func organizationCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("organizationCommand")
+		organizationID, command, ok := strings.Cut(segment, ":")
+		if !ok || organizationID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("id", organizationID)
+		r.SetPathValue("command", command)
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func RegisterRoutes(server *Server) http.Handler {
 	mux := http.NewServeMux()
 
@@ -61,7 +80,6 @@ func RegisterRoutes(server *Server) http.Handler {
 	// audit and audited support sessions. Platform staff only.
 	platformMW := PlatformAdminMiddleware(server.JWTSecret, server.Store)
 	mux.Handle("GET /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformListOrganizations)))
-	mux.Handle("POST /api/platform/organizations", platformMW(server.RequireIdempotency("platform.create-organization", http.HandlerFunc(server.HandlePlatformCreateOrganization))))
 	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
 	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
@@ -72,7 +90,20 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Factory sales network (#326): a factory admin lists/creates its
 	// connected store/dealer organizations (cloned from the factory catalog).
 	mux.Handle("GET /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
-	mux.Handle("POST /api/factory/organizations", authMW(server.RequireIdempotency("factory.create-organization", http.HandlerFunc(server.HandleFactoryOrganizations))))
+
+	// Organization lifecycle commands share one authoritative application
+	// service across Platform, Factory and the admin CLI.
+	mux.Handle("POST /api/organizations", authMW(server.RequireIdempotency("organizations.provision", http.HandlerFunc(server.HandleProvisionOrganization))))
+	mux.Handle("GET /api/organizations/{id}/readiness", platformMW(http.HandlerFunc(server.HandleOrganizationReadiness)))
+	mux.Handle("GET /api/organizations/{id}/offboarding-preview", platformMW(http.HandlerFunc(server.HandleOrganizationOffboardingPreview)))
+	mux.Handle("GET /api/organizations/{id}/entitlements", platformMW(http.HandlerFunc(server.HandleOrganizationEntitlements)))
+	mux.Handle("PUT /api/organizations/{id}/entitlements", platformMW(server.RequireIdempotency("organizations.update-entitlements", http.HandlerFunc(server.HandleOrganizationEntitlements))))
+	mux.Handle("POST /api/organizations/{organizationCommand...}", organizationCommandRouter(map[string]http.Handler{
+		"suspend":           platformMW(server.RequireIdempotency("organizations.suspend", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
+		"reactivate":        platformMW(server.RequireIdempotency("organizations.reactivate", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
+		"begin-offboarding": platformMW(server.RequireIdempotency("organizations.begin-offboarding", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
+		"terminate":         platformMW(server.RequireIdempotency("organizations.terminate", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
+	}))
 
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/memberships", authMW(http.HandlerFunc(server.HandleOrgTeam)))

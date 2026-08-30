@@ -23,16 +23,29 @@ import (
 const InitialOrganizationID = "00000000-0000-0000-0000-000000000001"
 
 var (
-	ErrMembershipNotFound = errors.New("membership not found")
-	ErrVersionConflict    = errors.New("resource version conflict")
+	ErrMembershipNotFound         = errors.New("membership not found")
+	ErrVersionConflict            = errors.New("resource version conflict")
+	ErrOrganizationStatusConflict = errors.New("organization status conflict")
 )
 
-const organizationColumns = `id, name, slug, type, license_plan, license_expires_at, active, parent_organization_id, created_at, updated_at, version`
+const organizationColumns = `id, name, slug, type, license_plan, license_expires_at,
+	status, credential_version, status_changed_at, status_changed_by::text,
+	status_reason, suspended_at, offboarding_started_at, terminated_at,
+	parent_organization_id, created_at, updated_at, version`
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
 
 func scanOrganization(row pgx.Row) (*domain.Organization, error) {
 	var o domain.Organization
 	err := row.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-		&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
+		&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
+		&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
+		&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("organization not found")
@@ -62,7 +75,9 @@ func (s *PostgresStore) ListOrganizations(ctx context.Context) ([]domain.Organiz
 	for rows.Next() {
 		var o domain.Organization
 		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version); err != nil {
+			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
+			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
+			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -80,13 +95,22 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 	if plan == "" {
 		plan = domain.LicensePlanNone
 	}
+	status := o.Status
+	if status == "" {
+		status = domain.OrganizationStatusProvisioning
+	}
+	if !domain.IsValidOrganizationStatus(status) {
+		return fmt.Errorf("invalid organization status")
+	}
 	err := s.db(ctx).QueryRow(ctx, `
-		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, active, parent_organization_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, status, status_reason, status_changed_by, parent_organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid, $9)
 		RETURNING `+organizationColumns,
-		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, o.Active, o.ParentOrganizationID).
+		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, status, stringValue(o.StatusReason), stringValue(o.StatusChangedBy), o.ParentOrganizationID).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
+			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
+			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
+			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
 	if err != nil {
 		return err
 	}
@@ -113,7 +137,9 @@ func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOr
 	for rows.Next() {
 		var o domain.Organization
 		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version); err != nil {
+			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
+			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
+			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -123,13 +149,19 @@ func (s *PostgresStore) ListConnectedOrganizations(ctx context.Context, parentOr
 
 const membershipWithOrgColumns = `
 	m.id, m.organization_id, m.user_id, m.roles, m.status, m.joined_at, m.suspended_at, m.suspended_by::text, m.suspension_reason, m.left_at, m.left_by::text, m.leave_reason, m.created_at, m.updated_at, m.version, m.credential_version, m.sessions_revoked_at,
-	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at, o.active, o.parent_organization_id, o.created_at, o.updated_at, o.version`
+	o.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at,
+	o.status, o.credential_version, o.status_changed_at, o.status_changed_by::text,
+	o.status_reason, o.suspended_at, o.offboarding_started_at, o.terminated_at,
+	o.parent_organization_id, o.created_at, o.updated_at, o.version`
 
 func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 	var m domain.MembershipWithOrg
 	err := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,
 		&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
-		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
+		&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt,
+		&m.Organization.Status, &m.Organization.CredentialVersion, &m.Organization.StatusChangedAt,
+		&m.Organization.StatusChangedBy, &m.Organization.StatusReason, &m.Organization.SuspendedAt,
+		&m.Organization.OffboardingStartedAt, &m.Organization.TerminatedAt,
 		&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -156,7 +188,7 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 		SELECT `+membershipWithOrgColumns+`
 		FROM memberships m
 		JOIN organizations o ON o.id = m.organization_id
-		WHERE m.user_id = $1 AND m.status = 'active' AND o.active
+		WHERE m.user_id = $1 AND m.status = 'active' AND o.status = 'active'
 		ORDER BY o.created_at`, userID)
 	if err != nil {
 		return nil, err
@@ -167,7 +199,10 @@ func (s *PostgresStore) ListMembershipsByUser(ctx context.Context, userID string
 		var m domain.MembershipWithOrg
 		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,
 			&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,
-			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt, &m.Organization.Active,
+			&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt,
+			&m.Organization.Status, &m.Organization.CredentialVersion, &m.Organization.StatusChangedAt,
+			&m.Organization.StatusChangedBy, &m.Organization.StatusReason, &m.Organization.SuspendedAt,
+			&m.Organization.OffboardingStartedAt, &m.Organization.TerminatedAt,
 			&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version); err != nil {
 			return nil, err
 		}
@@ -1167,31 +1202,153 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 	return nil
 }
 
-// UpdateOrganization persists mutable fields (name/license/active). The
+// UpdateOrganization persists mutable metadata. Lifecycle mutations must use
+// TransitionOrganizationStatus so the credential epoch and audit boundary
+// cannot be bypassed. The
 // parent link is NOT mutable here — it is set at creation (#326) and only
 // returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
 	return s.db(ctx).QueryRow(ctx, `
 		UPDATE organizations SET name = $2, license_plan = $3, license_expires_at = $4,
-			active = $5, updated_at = CURRENT_TIMESTAMP, version = version + 1
+			updated_at = CURRENT_TIMESTAMP, version = version + 1
 		WHERE id = $1
 		RETURNING `+organizationColumns,
-		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, o.Active).
+		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
+			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
+			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
+			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
 }
 
 func (s *PostgresStore) UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error {
 	err := s.db(ctx).QueryRow(ctx, `
 		UPDATE organizations SET name=$2, license_plan=$3, license_expires_at=$4,
-			active=$5, updated_at=CURRENT_TIMESTAMP, version=version+1
-		WHERE id=$1 AND version=$6
+			updated_at=CURRENT_TIMESTAMP, version=version+1
+		WHERE id=$1 AND version=$5
 		RETURNING `+organizationColumns,
-		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, o.Active, expectedVersion).
+		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, expectedVersion).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
-			&o.Active, &o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
+			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
+			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
+			&o.ParentOrganizationID, &o.CreatedAt, &o.UpdatedAt, &o.Version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrVersionConflict
 	}
 	return err
+}
+
+func (s *PostgresStore) TransitionOrganizationStatus(
+	ctx context.Context,
+	id string,
+	from, to domain.OrganizationStatus,
+	actorID, reason string,
+	expectedVersion int64,
+) (*domain.Organization, error) {
+	if !domain.CanTransitionOrganizationStatus(from, to) {
+		return nil, ErrOrganizationStatusConflict
+	}
+	if to != domain.OrganizationStatusActive && strings.TrimSpace(reason) == "" {
+		return nil, fmt.Errorf("organization lifecycle reason is required")
+	}
+	tx, owned, err := s.beginOrUseTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+	var currentStatus domain.OrganizationStatus
+	var currentVersion int64
+	err = tx.QueryRow(ctx, `SELECT status, version FROM organizations WHERE id=$1 FOR UPDATE`, id).
+		Scan(&currentStatus, &currentVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("organization not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if currentVersion != expectedVersion {
+		return nil, ErrVersionConflict
+	}
+	if currentStatus != from {
+		return nil, ErrOrganizationStatusConflict
+	}
+	row := tx.QueryRow(ctx, `
+		UPDATE organizations
+		SET status=$2,
+			status_changed_at=NOW(),
+			status_changed_by=nullif($3, '')::uuid,
+			status_reason=nullif($4, ''),
+			suspended_at=CASE WHEN $2='suspended' THEN NOW() ELSE suspended_at END,
+			offboarding_started_at=CASE WHEN $2='offboarding' THEN NOW() ELSE offboarding_started_at END,
+			terminated_at=CASE WHEN $2='terminated' THEN NOW() ELSE terminated_at END,
+			credential_version=credential_version+1,
+			updated_at=NOW(),
+			version=version+1
+		WHERE id=$1
+		RETURNING `+organizationColumns,
+		id, to, actorID, strings.TrimSpace(reason))
+	organization, err := scanOrganization(row)
+	if err != nil {
+		return nil, err
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return organization, nil
+}
+
+func (s *PostgresStore) GetOrganizationEntitlements(ctx context.Context, organizationID string) (*domain.OrganizationEntitlements, error) {
+	out := &domain.OrganizationEntitlements{}
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT organization_id, max_active_members, max_sales_partners,
+			manufacturing_enabled, sales_network_enabled, sketchup_seats,
+			advanced_audit_enabled, source, defaults_revision, version, updated_at
+		FROM organization_entitlements WHERE organization_id=$1`, organizationID).
+		Scan(&out.OrganizationID, &out.MaxActiveMembers, &out.MaxSalesPartners,
+			&out.ManufacturingEnabled, &out.SalesNetworkEnabled, &out.SketchupSeats,
+			&out.AdvancedAuditEnabled, &out.Source, &out.DefaultsRevision,
+			&out.Version, &out.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("organization entitlements not found")
+	}
+	return out, err
+}
+
+func (s *PostgresStore) UpdateOrganizationEntitlementsVersion(
+	ctx context.Context,
+	entitlements domain.OrganizationEntitlements,
+	expectedVersion int64,
+) (*domain.OrganizationEntitlements, error) {
+	if entitlements.MaxActiveMembers != nil && *entitlements.MaxActiveMembers < 1 {
+		return nil, fmt.Errorf("max active members must be positive")
+	}
+	if entitlements.MaxSalesPartners < 0 || entitlements.SketchupSeats < 0 || strings.TrimSpace(entitlements.DefaultsRevision) == "" {
+		return nil, fmt.Errorf("invalid organization entitlements")
+	}
+	err := s.db(ctx).QueryRow(ctx, `
+		UPDATE organization_entitlements
+		SET max_active_members=$2, max_sales_partners=$3,
+			manufacturing_enabled=$4, sales_network_enabled=$5,
+			sketchup_seats=$6, advanced_audit_enabled=$7, source=$8,
+			defaults_revision=$9, version=version+1, updated_at=NOW()
+		WHERE organization_id=$1 AND version=$10
+		RETURNING organization_id, max_active_members, max_sales_partners,
+			manufacturing_enabled, sales_network_enabled, sketchup_seats,
+			advanced_audit_enabled, source, defaults_revision, version, updated_at`,
+		entitlements.OrganizationID, entitlements.MaxActiveMembers, entitlements.MaxSalesPartners,
+		entitlements.ManufacturingEnabled, entitlements.SalesNetworkEnabled,
+		entitlements.SketchupSeats, entitlements.AdvancedAuditEnabled,
+		entitlements.Source, strings.TrimSpace(entitlements.DefaultsRevision), expectedVersion).
+		Scan(&entitlements.OrganizationID, &entitlements.MaxActiveMembers, &entitlements.MaxSalesPartners,
+			&entitlements.ManufacturingEnabled, &entitlements.SalesNetworkEnabled,
+			&entitlements.SketchupSeats, &entitlements.AdvancedAuditEnabled,
+			&entitlements.Source, &entitlements.DefaultsRevision,
+			&entitlements.Version, &entitlements.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrVersionConflict
+	}
+	return &entitlements, err
 }

@@ -5,11 +5,8 @@ import type {
   AdminTransferResponse,
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
-  CreateFactoryOrganizationRequest,
-  CreateFactoryOrganizationResponse,
   CreateInvitationRequest,
   CreateInvitationResponse,
-  CreatePlatformOrganizationRequest,
   EndSupportSessionResponse,
   FactoryOrganization,
   Invitation,
@@ -21,9 +18,17 @@ import type {
   MembershipSectorMutationResponse,
   OffboardMembershipRequest,
   OffboardMembershipResponse,
+  OrganizationEntitlements,
+  OrganizationLifecycleMutationRequest,
+  OrganizationLifecycleMutationResponse,
+  OrganizationOffboardingMutationRequest,
+  OrganizationOffboardingPreview,
+  OrganizationProvisioningResult,
+  OrganizationReadiness,
   OrganizationRelationship,
   PlatformOrganization,
   PlatformUser,
+  ProvisionOrganizationRequest,
   ResendInvitationResponse,
   RevokeInvitationRequest,
   RevokeInvitationResponse,
@@ -41,6 +46,7 @@ import type {
   UpdateAccountStatusRequest,
   UpdateMemberRolesRequest,
   UpdateMembershipStatusRequest,
+  UpdateOrganizationEntitlementsRequest,
   UpdatePlatformOrganizationRequest,
 } from './types';
 
@@ -65,7 +71,15 @@ export abstract class GeneratedGraneteApiClient {
   listInvitations(token: string): Promise<ReadonlyArray<Invitation>> { return this.request("GET", "/org/invitations", { arrayOf: "Invitation", token }); }
   createInvitation(token: string, body: CreateInvitationRequest, key = this.createIdempotencyKey()): Promise<CreateInvitationResponse> { return this.request("POST", "/org/invitations", { schema: "CreateInvitationResponse", token, bodySchema: "CreateInvitationRequest", body, idempotencyKey: key }); }
   listPlatformOrganizations(token: string): Promise<ReadonlyArray<PlatformOrganization>> { return this.request("GET", "/platform/organizations", { arrayOf: "PlatformOrganization", token }); }
-  createPlatformOrganization(token: string, body: CreatePlatformOrganizationRequest, key = this.createIdempotencyKey()): Promise<PlatformOrganization> { return this.request("POST", "/platform/organizations", { schema: "PlatformOrganization", token, bodySchema: "CreatePlatformOrganizationRequest", body, idempotencyKey: key }); }
+  provisionOrganization(token: string, body: ProvisionOrganizationRequest, key = this.createIdempotencyKey()): Promise<OrganizationProvisioningResult> { return this.request("POST", "/organizations", { schema: "OrganizationProvisioningResult", token, bodySchema: "ProvisionOrganizationRequest", body, idempotencyKey: key }); }
+  getOrganizationReadiness(token: string, id: string): Promise<OrganizationReadiness> { return this.request("GET", `/organizations/${encodeURIComponent(id)}/readiness`, { schema: "OrganizationReadiness", token }); }
+  suspendOrganization(token: string, id: string, version: number, body: OrganizationLifecycleMutationRequest, key = this.createIdempotencyKey()): Promise<OrganizationLifecycleMutationResponse> { return this.request("POST", `/organizations/${encodeURIComponent(id)}:suspend`, { schema: "OrganizationLifecycleMutationResponse", token, ifMatch: version, bodySchema: "OrganizationLifecycleMutationRequest", body, idempotencyKey: key }); }
+  reactivateOrganization(token: string, id: string, version: number, body: OrganizationLifecycleMutationRequest, key = this.createIdempotencyKey()): Promise<OrganizationLifecycleMutationResponse> { return this.request("POST", `/organizations/${encodeURIComponent(id)}:reactivate`, { schema: "OrganizationLifecycleMutationResponse", token, ifMatch: version, bodySchema: "OrganizationLifecycleMutationRequest", body, idempotencyKey: key }); }
+  previewOrganizationOffboarding(token: string, id: string): Promise<OrganizationOffboardingPreview> { return this.request("GET", `/organizations/${encodeURIComponent(id)}/offboarding-preview`, { schema: "OrganizationOffboardingPreview", token }); }
+  beginOrganizationOffboarding(token: string, id: string, version: number, body: OrganizationOffboardingMutationRequest, key = this.createIdempotencyKey()): Promise<OrganizationLifecycleMutationResponse> { return this.request("POST", `/organizations/${encodeURIComponent(id)}:begin-offboarding`, { schema: "OrganizationLifecycleMutationResponse", token, ifMatch: version, bodySchema: "OrganizationOffboardingMutationRequest", body, idempotencyKey: key }); }
+  terminateOrganization(token: string, id: string, version: number, body: OrganizationOffboardingMutationRequest, key = this.createIdempotencyKey()): Promise<OrganizationLifecycleMutationResponse> { return this.request("POST", `/organizations/${encodeURIComponent(id)}:terminate`, { schema: "OrganizationLifecycleMutationResponse", token, ifMatch: version, bodySchema: "OrganizationOffboardingMutationRequest", body, idempotencyKey: key }); }
+  getOrganizationEntitlements(token: string, id: string): Promise<OrganizationEntitlements> { return this.request("GET", `/organizations/${encodeURIComponent(id)}/entitlements`, { schema: "OrganizationEntitlements", token }); }
+  updateOrganizationEntitlements(token: string, id: string, version: number, body: UpdateOrganizationEntitlementsRequest, key = this.createIdempotencyKey()): Promise<OrganizationEntitlements> { return this.request("PUT", `/organizations/${encodeURIComponent(id)}/entitlements`, { schema: "OrganizationEntitlements", token, ifMatch: version, bodySchema: "UpdateOrganizationEntitlementsRequest", body, idempotencyKey: key }); }
   listPlatformUsers(token: string): Promise<ReadonlyArray<PlatformUser>> { return this.request("GET", "/platform/users", { arrayOf: "PlatformUser", token }); }
   listSecurityAudit(token: string, id: string): Promise<ReadonlyArray<SecurityAuditEvent>> { return this.request("GET", `/platform/organizations/${encodeURIComponent(id)}/audit`, { arrayOf: "SecurityAuditEvent", token }); }
   listOrganizationRelationships(token: string): Promise<ReadonlyArray<OrganizationRelationship>> { return this.request("GET", "/organization-relationships", { arrayOf: "OrganizationRelationship", token }); }
@@ -74,7 +88,6 @@ export abstract class GeneratedGraneteApiClient {
   startSupportSession(token: string, id: string, body: StartSupportSessionRequest, key = this.createIdempotencyKey()): Promise<SupportSessionResponse> { return this.request("POST", `/platform/organizations/${encodeURIComponent(id)}/support-session`, { schema: "SupportSessionResponse", token, bodySchema: "StartSupportSessionRequest", body, idempotencyKey: key }); }
   endSupportSession(token: string, sessionId: string): Promise<EndSupportSessionResponse> { return this.request("DELETE", `/platform/support-sessions/${encodeURIComponent(sessionId)}`, { schema: "EndSupportSessionResponse", token }); }
   listFactoryOrganizations(token: string): Promise<ReadonlyArray<FactoryOrganization>> { return this.request("GET", "/factory/organizations", { arrayOf: "FactoryOrganization", token }); }
-  createFactoryOrganization(token: string, body: CreateFactoryOrganizationRequest, key = this.createIdempotencyKey()): Promise<CreateFactoryOrganizationResponse> { return this.request("POST", "/factory/organizations", { schema: "CreateFactoryOrganizationResponse", token, bodySchema: "CreateFactoryOrganizationRequest", body, idempotencyKey: key }); }
   acceptInvitation(body: AcceptInvitationRequest, key = this.createIdempotencyKey()): Promise<LoginResponse> { return this.request("POST", "/auth/invitations:accept", { schema: "LoginResponse", bodySchema: "AcceptInvitationRequest", body, idempotencyKey: key }); }
   listMemberships(token: string): Promise<TeamDirectory> { return this.request("GET", "/org/memberships", { schema: "TeamDirectory", token }); }
   updateMembershipRoles(token: string, membershipId: string, version: number, body: UpdateMemberRolesRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/roles`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMemberRolesRequest", body, idempotencyKey: key }); }
