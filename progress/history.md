@@ -1802,7 +1802,15 @@ redondeo por step, divergencia Unicode, 405 bare del ServeMux, códigos imposibl
 y correlación/coherencia Ruby. El alcance de parámetros tipados generales quedó
 honestamente separado en #483.
 
-Evidencia final: `./init.sh` completo verde; scenario compartido
-`10-unicode-quarter-step` consumido por Go/TS/Ruby; TestUp real 5/5 con 50
-assertions contra RBZ `17ae1bfa…`; seis checks CI remotos verdes. La revisión
-independiente quedó **APPROVED** en `progress/review_F195.md` (`aa812ca0`).
+La re-review del head `7703f0e8` reabrió F195 por tres gaps finales: campos
+visual/PBR producidos por Go pero ausentes del schema, igualdad incorrecta entre
+hardware semántico y su proyección visual, y pérdida de issues tipados en 405/415.
+El head `8433cbdf` los cerró con escenarios compartidos `11-material-pbr-roundtrip`
+y `12-cost-only-manual-hardware`, validación cross-runtime y transporte Ruby
+fail-closed.
+
+Evidencia final: gate completo verde contra PostgreSQL aislado; fixture/schema,
+TypeScript, Go y Ruby verdes; TestUp oficial SketchUp 26.2.242 / Ruby 3.2.2
+**6/6 con 58 assertions** contra RBZ `7c82a347…`; seis checks CI remotos verdes.
+La nueva revisión independiente quedó **APPROVED** en
+`progress/review_F195.md` (`21fb41a8` sobre `051512f3`).

@@ -4993,7 +4993,7 @@
         "contracts/sketchupAuthoringResolve.contract.json",
         "progress/review_F195.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F161",
         "F162",
@@ -5004,7 +5004,8 @@
         "PR #481 r1: la revision pidio correcciones (reproducibilidad del catalogo pineado, contratos paralelos TS/Go/Ruby, preflight subset sin claim del modelo #347, fingerprint de manufactura real, reglas tecnicas versionadas por codigo, aceptaciones parciales, rotation/handedness aparentes, parser Ruby fail-closed y TestUp real). Corregidas en r2 con evidencia de host.",
         "PR #481 r2: la re-revision encontro TOCTOU definition/catalog, falta de schema ejecutable y response validator TS, parser Ruby aun fail-open, precision 0.25/UTF-8 divergentes, reglas industriales fuera del pin, claims demasiado amplios de parametros y gaps de transporte. Corregidos en r3: un snapshot autoritativo, schema JSON + validators estrictos, SHA-256, rule pin, TestUp corrupt-envelope y alcance parametrico honesto con follow-up #483. F195 permanece in_progress hasta aprobacion independiente.",
         "PR #481 r5: revisión independiente APPROVED en aa812ca0 sobre 1d1c90cb; init completo, schema/fixture cross-runtime, router real, UTF-8 + precisionMm=0.25, Ruby fail-closed, TestUp 5/5/50, CI remota y readback verdes.",
-        "PR #481 head 7703f0e8: re-review encontró schema incompleto para campos material visual/PBR del NativeLayout, coherencia Ruby demasiado estricta para hardware manual semántico sin preview y pérdida de códigos tipados en 405/415. F195 vuelve a in_progress hasta corrección y nueva revisión independiente."
+        "PR #481 head 7703f0e8: re-review encontró schema incompleto para campos material visual/PBR del NativeLayout, coherencia Ruby demasiado estricta para hardware manual semántico sin preview y pérdida de códigos tipados en 405/415. F195 vuelve a in_progress hasta corrección y nueva revisión independiente.",
+        "PR #481 r6: los gaps de la re-review de 7703f0e8 quedaron corregidos en 8433cbdf: NativeLayout visual/PBR alineado Go→Schema/Ajv→TS→Ruby, hardware manual sin preview preservado semánticamente como proyección visual subset y 405/415 tipados en Ruby. TestUp oficial 6/6/58, CI remota verde y nueva revisión independiente APPROVED en 21fb41a8 sobre 051512f3."
       ]
     }
   ]
