@@ -56,3 +56,4 @@ Implementation is ready to be committed and pushed in the approved draft Feature
 - Closed direct lifecycle bypass by revoking runtime `INSERT`, `UPDATE` and `DELETE` on `organizations`; metadata and lifecycle writes now cross narrow command functions.
 - Added HTTP/PostgreSQL Factory rollback/retry/replay proof and direct own/foreign Organization mutation denials with an authoritative-command positive control.
 - Made the canonical `provisioning_failed -> terminated` cleanup path executable through the service and database while preserving terminal lifecycle timestamps.
+- Synced the integrated tracker with current `main@d85d6fd2` and migrated the concurrently added authoring fixture from the removed Organization `active` boolean to canonical `status`.

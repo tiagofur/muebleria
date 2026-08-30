@@ -804,7 +804,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	// Inactive license blocks exactly like the catalog family.
 	noLicense := &domain.Organization{
 		ID: "org-1", Name: "Taller Test", Slug: "taller-test",
-		Type: domain.OrganizationTypeFactory, Active: true,
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive,
 	}
 	licenseless := licenseTestServer(t, u, noLicense)
 	module, catalog := authoringAPICabinetFixture()
