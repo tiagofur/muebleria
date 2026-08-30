@@ -39,16 +39,16 @@
 
 - `pnpm openapi:check` — generated operation and schema drift checks green.
 - `pnpm typecheck` — all workspaces green.
-- `pnpm test` — domain 1156, storage 176, excel 93, desktop 17, mobile 49, UI 1458 and web 326 tests green.
+- `pnpm test` — domain 1181, storage 176, excel 93, desktop 17, mobile 49, UI 1458 and web 326 tests green.
 - `go test -p=1 -parallel=1 ./... -count=1` on a fresh PostgreSQL database — all backend, storage and pilot readiness packages green.
-- `PATH="$HOME/.rbenv/shims:$PATH" GOFLAGS='-p=1 -parallel=1' ./init.sh` on a fresh PostgreSQL database — complete harness green, including Ruby 3.2.11 and deterministic RBZ verification.
+- `PATH="$HOME/.rbenv/shims:$PATH" GOFLAGS='-p=1 -parallel=1' ./init.sh` against an isolated fresh PostgreSQL 16 container — complete harness green, including Ruby 3.2.11 (241 tests / 2230 assertions) and deterministic RBZ verification.
 - `GOFLAGS='-p=1 -parallel=1' scripts/pilot-gate.sh --fresh-container` — direct runtime-role RLS plus the complete no-skip Pilot Readiness gate green on ephemeral PostgreSQL 16.
 - Impeccable detector on the modified Platform/Settings UI — zero findings.
 - `git diff --check` — green.
 
 ## Delivery state
 
-Implementation is ready to be committed and pushed in the approved draft Feature Branch Chain. F197 remains `in_progress` until an independent reviewer approves the pushed implementation and remote CI/readback are green.
+The implementation and correction commits are integrated on the approved tracker branch. F197 remains `in_progress` until an independent reviewer approves the pushed tip and remote CI/readback are green.
 
 ## Independent review correction round 1
 
