@@ -373,12 +373,15 @@ func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
 	}
 
 	// The structural 000090 rollback restores legacy role with a safe default,
-	// not the historical role. Restore this fixture's legacy admin so the
-	// replay can satisfy the active-organization admin invariant.
-	if _, err := pool.Exec(ctx, `UPDATE users SET role='admin' WHERE id='22222222-2222-2222-2222-222222222222'`); err != nil {
-		t.Fatalf("restore legacy admin fixture for replay: %v", err)
+	// not the historical role. Restore the fixture's exact roles so replay can
+	// satisfy both the active-admin and membership-sector invariants.
+	if _, err := pool.Exec(ctx, `UPDATE users SET role=CASE id
+		WHEN '11111111-1111-1111-1111-111111111111' THEN 'produccion'
+		WHEN '22222222-2222-2222-2222-222222222222' THEN 'admin'
+		ELSE role END
+		WHERE id IN ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222')`); err != nil {
+		t.Fatalf("restore legacy role fixtures for replay: %v", err)
 	}
-
 	// Re-applying the chain after a rollback must work (idempotent lifecycle).
 	if err := store.RunMigrations(ctx); err != nil {
 		t.Fatalf("re-apply after rollback: %v", err)

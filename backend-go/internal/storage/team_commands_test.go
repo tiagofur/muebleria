@@ -179,12 +179,19 @@ func TestChangeMembershipSectors_ValidatesLiveRolesTypeVersionAndScope(t *testin
 	if !errors.Is(err, storage.ErrMembershipNotFound) {
 		t.Fatalf("cross-tenant sector error=%v", err)
 	}
+	result, err = store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
+		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
+		ExpectedMembershipVersion: 2, Sectors: []domain.ProductionSector{}, Reason: "clear before type change",
+	})
+	if err != nil || result.Member.Version != 3 {
+		t.Fatalf("clear sectors before type change result=%#v err=%v", result, err)
+	}
 	if _, err := store.Pool.Exec(ctx, `UPDATE organizations SET type='store' WHERE id=$1`, orgID); err != nil {
 		t.Fatal(err)
 	}
 	_, err = store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
-		ExpectedMembershipVersion: 2, Sectors: []domain.ProductionSector{domain.SectorShipping},
+		ExpectedMembershipVersion: 3, Sectors: []domain.ProductionSector{domain.SectorShipping},
 	})
 	if !errors.Is(err, storage.ErrSectorAssignmentInvalid) {
 		t.Fatalf("store sector error=%v", err)

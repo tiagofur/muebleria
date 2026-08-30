@@ -154,6 +154,9 @@ func TestMembershipSectorsRLS_DirectSQLCannotCrossTenant(t *testing.T) {
 	if err := fx.admin.QueryRow(ctx, `SELECT id FROM memberships WHERE organization_id=$1`, rlsOrgB).Scan(&membershipB); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := fx.admin.Exec(ctx, `UPDATE memberships SET roles='{produccion}' WHERE id = ANY($1::uuid[])`, []string{membershipA, membershipB}); err != nil {
+		t.Fatal(err)
+	}
 	for _, row := range []struct{ membership, org string }{{membershipA, rlsOrgA}, {membershipB, rlsOrgB}} {
 		if _, err := fx.admin.Exec(ctx, `INSERT INTO membership_sectors (membership_id, organization_id, sector) VALUES ($1, $2, 'cutting')`, row.membership, row.org); err != nil {
 			t.Fatal(err)
