@@ -220,6 +220,29 @@ func TestChangeMembershipSectors_AuditFailureRollsBack(t *testing.T) {
 	}
 }
 
+func TestUpdateMembershipRolesRejectsResidualIncompatibleSectors(t *testing.T) {
+	store, _, orgID := isolationSetup(t)
+	seedCommandAdministrators(t, store, orgID)
+	ctx := scoped(context.Background(), orgID)
+	if _, err := store.Pool.Exec(context.Background(), `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.ChangeMembershipSectors(ctx, storage.ChangeMembershipSectorsCommand{
+		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
+		ExpectedMembershipVersion: 1, Sectors: []domain.ProductionSector{domain.SectorCutting}, Reason: "floor assignment",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = store.WithinTenantTx(ctx, storage.TenantActor{OrganizationID: orgID, UserID: commandAdminUser}, func(txCtx context.Context) error {
+		_, updateErr := store.UpdateMembershipRolesByOrg(txCtx, orgID, commandReplacement, []domain.UserRole{domain.RoleIngeniero}, result.Member.Version)
+		return updateErr
+	})
+	if !errors.Is(err, storage.ErrSectorAssignmentInvalid) {
+		t.Fatalf("incompatible residual sectors error=%v", err)
+	}
+}
+
 func TestOffboardMember_ReassignsAllResponsibilitiesAndRevokesCredentials(t *testing.T) {
 	store, orgA, orgID := isolationSetup(t)
 	seedOffboardingTarget(t, store, orgID)

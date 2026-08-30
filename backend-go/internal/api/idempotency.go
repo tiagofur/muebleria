@@ -124,6 +124,7 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			ActorUserID:    actorID,
 			OrganizationID: org,
 		}
+		acceptanceTokenHash := ""
 		if sensitiveIdempotencyOperations[operation] {
 			seal, open, cipherErr := idempotencyReceiptCipher(s.JWTSecret)
 			if cipherErr != nil {
@@ -141,6 +142,7 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 				}
 				if json.Unmarshal(body, &payload) == nil && payload.Token != "" {
 					tokenHash := hashInvitationToken(payload.Token)
+					acceptanceTokenHash = tokenHash
 					request.AfterRollback = func(ctx context.Context, response storage.IdempotencyResponse) error {
 						var apiErr openapi.ApiError
 						reason := "rejected"
@@ -172,6 +174,22 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			return
 		}
 		if err != nil {
+			// Public idempotent commands do not pass through AuthMiddleware's
+			// tenant-transaction commit hook. Translate the same deferred Team
+			// invariants here so invitation acceptance never degrades to a 500.
+			if eventType := teamInvariantAuditEvent(err); eventType == "seat_limit_blocked" && acceptanceTokenHash != "" {
+				if recorder, ok := s.Store.(interface {
+					RecordInvitationAcceptanceFailure(context.Context, string, string, string) error
+				}); ok {
+					if auditErr := recorder.RecordInvitationAcceptanceFailure(r.Context(), acceptanceTokenHash, "SEAT_LIMIT_REACHED", clientIP(r)); auditErr != nil {
+						respondWithInternalError(w, auditErr, "seat limit audit")
+						return
+					}
+				}
+			}
+			if respondWithTeamInvariantError(w, err) {
+				return
+			}
 			respondWithInternalError(w, err, "durable idempotency")
 			return
 		}

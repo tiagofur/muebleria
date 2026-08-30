@@ -132,6 +132,16 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 					// Deferred Team constraints fire on transaction commit, after the
 					// handler has rendered into the capture writer. Preserve their typed
 					// public contract instead of returning a generic transaction error.
+					if eventType := teamInvariantAuditEvent(err); eventType != "" {
+						if recorder, ok := users.(interface {
+							RecordTeamInvariantBlocked(context.Context, string, string, string, string, string, string) error
+						}); ok {
+							if auditErr := recorder.RecordTeamInvariantBlocked(r.Context(), claims.OrgID, claims.UserID, eventType, r.URL.Path, clientIP(r), RequestIDFromContext(r.Context())); auditErr != nil {
+								respondWithInternalError(w, auditErr, "team invariant audit")
+								return
+							}
+						}
+					}
 					if respondWithTeamInvariantError(w, err) {
 						return
 					}

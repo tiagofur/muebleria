@@ -118,6 +118,20 @@ func (s *PostgresStore) withTeamCommandTx(ctx context.Context, organizationID, a
 	return s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: actorUserID}, execute)
 }
 
+// RecordTeamInvariantBlocked persists denial lineage only after the rejected
+// business transaction has rolled back and the protected state is safe.
+func (s *PostgresStore) RecordTeamInvariantBlocked(ctx context.Context, organizationID, actorUserID, eventType, commandPath, ip, requestID string) error {
+	if eventType != "last_admin_blocked" && eventType != "seat_limit_blocked" {
+		return errors.New("invalid team invariant audit event")
+	}
+	return s.withTeamCommandTx(ctx, organizationID, actorUserID, func(txCtx context.Context) error {
+		return s.InsertSecurityAuditEvent(txCtx, SecurityAuditEvent{
+			EventType: eventType, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip,
+			Details: map[string]interface{}{"command_path": commandPath, "request_id": requestID},
+		})
+	})
+}
+
 func (s *PostgresStore) lockTeamState(ctx context.Context, organizationID string) error {
 	var locked string
 	err := s.db(ctx).QueryRow(ctx, `SELECT organization_id FROM organization_team_state WHERE organization_id=$1 FOR UPDATE`, organizationID).Scan(&locked)

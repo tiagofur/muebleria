@@ -2,11 +2,13 @@ package storage_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -199,6 +201,112 @@ func TestUpdateMembershipStatus_RevokesCredentialsWhenLeavingActiveState(t *test
 	}
 	if err := pool.QueryRow(ctx, `SELECT credential_version, sessions_revoked_at FROM memberships WHERE id=$1`, membershipID).Scan(&credentialVersion, &revokedAt); err != nil || credentialVersion != 3 || revokedAt == nil {
 		t.Fatalf("leave credential_version=%d revoked_at=%v err=%v", credentialVersion, revokedAt, err)
+	}
+}
+
+func TestTeamFoundationMigration_AllowsOnlyOneWayAdminBootstrap(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 96)
+	ctx := context.Background()
+	const orgID = "b2000000-0000-0000-0000-000000000077"
+	const userID = "b1000000-0000-0000-0000-000000000077"
+	const membershipID = "b3000000-0000-0000-0000-000000000077"
+	if _, err := pool.Exec(ctx, `INSERT INTO organizations (id,name,slug,active) VALUES ($1,'Bootstrap','bootstrap-team',TRUE)`, orgID); err != nil {
+		t.Fatal(err)
+	}
+	var pending bool
+	if err := pool.QueryRow(ctx, `SELECT admin_bootstrap_pending FROM organization_team_state WHERE organization_id=$1`, orgID).Scan(&pending); err != nil || !pending {
+		t.Fatalf("bootstrap pending=%v err=%v", pending, err)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES ($1,'bootstrap@example.test','bootstrap@example.test','x','Bootstrap Admin','active')`, userID); err == nil {
+		_, err = tx.Exec(ctx, `INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES ($1,$2,$3,'{admin}','active',NOW())`, membershipID, orgID, userID)
+	}
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT admin_bootstrap_pending FROM organization_team_state WHERE organization_id=$1`, orgID).Scan(&pending); err != nil || pending {
+		t.Fatalf("bootstrap did not close pending=%v err=%v", pending, err)
+	}
+	tx, err = pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM memberships WHERE id=$1`, membershipID); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err == nil {
+		t.Fatal("last admin deletion reopened bootstrap")
+	}
+}
+
+func TestTeamFoundationMigration_ConcurrentAdminsCannotBothSuspend(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 96)
+	store := &storage.PostgresStore{Pool: pool}
+	ctx := context.Background()
+	const orgID = "b2000000-0000-0000-0000-000000000088"
+	users := []string{"b1000000-0000-0000-0000-000000000088", "b1000000-0000-0000-0000-000000000089"}
+	memberships := []string{"b3000000-0000-0000-0000-000000000088", "b3000000-0000-0000-0000-000000000089"}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO organizations (id,name,slug,active) VALUES ($1,'Admin Race','admin-race',TRUE)`, orgID); err == nil {
+		for i := range users {
+			_, err = tx.Exec(ctx, `INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES ($1,$2,$2,'x','Race Admin','active')`, users[i], "admin-race-"+string(rune('a'+i))+"@example.test")
+			if err == nil {
+				_, err = tx.Exec(ctx, `INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES ($1,$2,$3,'{admin}','active',NOW())`, memberships[i], orgID, users[i])
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for i := range memberships {
+		go func(i int) {
+			<-start
+			err := store.WithinTenantTx(scoped(ctx, orgID), storage.TenantActor{OrganizationID: orgID, UserID: users[i]}, func(txCtx context.Context) error {
+				_, updateErr := store.UpdateMembershipStatus(txCtx, orgID, memberships[i], "suspended", "concurrent handoff", users[i], 1)
+				return updateErr
+			})
+			results <- err
+		}(i)
+	}
+	close(start)
+	successes, blocked := 0, 0
+	for range 2 {
+		err := <-results
+		if err == nil {
+			successes++
+			continue
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == "organization_requires_active_admin" {
+			blocked++
+			continue
+		}
+		t.Fatalf("unexpected concurrent suspension error: %v", err)
+	}
+	if successes != 1 || blocked != 1 {
+		t.Fatalf("successes=%d blocked=%d", successes, blocked)
 	}
 }
 

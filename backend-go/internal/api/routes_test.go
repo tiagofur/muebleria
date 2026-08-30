@@ -34,6 +34,9 @@ func TestRegisterRoutesAcceptsTeamCommandPaths(t *testing.T) {
 		"reactivate",
 		"revoke-sessions",
 		"offboarding-preview",
+		"transfer-admin",
+		"change-sectors",
+		"offboard",
 	}
 	for _, command := range commands {
 		t.Run(command, func(t *testing.T) {

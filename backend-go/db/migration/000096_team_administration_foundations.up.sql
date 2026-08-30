@@ -35,6 +35,7 @@ CREATE TABLE organization_team_state (
     organization_id UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
     active_admin_count INTEGER NOT NULL DEFAULT 0 CHECK (active_admin_count >= 0),
     active_member_count INTEGER NOT NULL DEFAULT 0 CHECK (active_member_count >= 0),
+	admin_bootstrap_pending BOOLEAN NOT NULL DEFAULT FALSE,
     version BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -59,7 +60,7 @@ SELECT id FROM organizations;
 CREATE OR REPLACE FUNCTION initialize_organization_team_foundations()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 BEGIN
-    INSERT INTO organization_team_state (organization_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;
+	INSERT INTO organization_team_state (organization_id, admin_bootstrap_pending) VALUES (NEW.id, TRUE) ON CONFLICT DO NOTHING;
     INSERT INTO organization_entitlements (organization_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;
     RETURN NULL;
 END $$;
@@ -74,6 +75,7 @@ BEGIN
     UPDATE organization_team_state
     SET active_member_count = active_member_count + member_delta,
         active_admin_count = active_admin_count + admin_delta,
+		admin_bootstrap_pending = CASE WHEN active_admin_count + admin_delta > 0 THEN FALSE ELSE admin_bootstrap_pending END,
         version = version + 1,
         updated_at = NOW()
     WHERE organization_id = target_organization_id;
@@ -105,13 +107,13 @@ FOR EACH ROW EXECUTE FUNCTION refresh_team_state_on_membership_change();
 
 CREATE OR REPLACE FUNCTION check_organization_team_invariants(target UUID)
 RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE active_org BOOLEAN; admins INTEGER; members INTEGER; max_members INTEGER;
+DECLARE active_org BOOLEAN; admins INTEGER; members INTEGER; max_members INTEGER; bootstrap_pending BOOLEAN;
 BEGIN
-    SELECT o.active, s.active_admin_count, s.active_member_count, e.max_active_members
-      INTO active_org, admins, members, max_members
+	SELECT o.active, s.active_admin_count, s.active_member_count, e.max_active_members, s.admin_bootstrap_pending
+	  INTO active_org, admins, members, max_members, bootstrap_pending
       FROM organizations o JOIN organization_team_state s ON s.organization_id=o.id
       JOIN organization_entitlements e ON e.organization_id=o.id WHERE o.id=target;
-    IF active_org AND admins = 0 THEN
+	IF active_org AND admins = 0 AND NOT bootstrap_pending THEN
         RAISE EXCEPTION 'organization team invariant: active organization requires an active admin' USING ERRCODE='23514', CONSTRAINT='organization_requires_active_admin';
     END IF;
     IF max_members IS NOT NULL AND members > max_members THEN
@@ -163,4 +165,6 @@ ON CONFLICT (table_name) DO UPDATE SET classification=EXCLUDED.classification, r
  write_scope=EXCLUDED.write_scope, rationale=EXCLUDED.rationale, policy_version=rls_policy_inventory.policy_version + 1, updated_at=NOW();
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON organization_team_state, organization_entitlements TO granete_app;
+REVOKE UPDATE ON organization_team_state FROM granete_app;
+GRANT UPDATE (active_admin_count, active_member_count, version, updated_at) ON organization_team_state TO granete_app;
 REVOKE ALL ON FUNCTION initialize_organization_team_foundations(), apply_organization_team_delta(UUID, INTEGER, INTEGER), refresh_team_state_on_membership_change(), check_organization_team_invariants(UUID), enforce_team_invariants_from_membership(), enforce_team_invariants_from_organization(), enforce_team_invariants_from_entitlement() FROM PUBLIC;

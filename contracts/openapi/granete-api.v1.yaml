@@ -1043,6 +1043,201 @@
           }
         }
       }
+    },
+    "/org/memberships/{membershipId}": {
+      "get": {
+        "operationId": "getOrganizationMembership",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization membership detail",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMember"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:transfer-admin": {
+      "post": {
+        "operationId": "transferOrganizationAdmin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferOrganizationAdminRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Administration transferred atomically",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTransferResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:change-sectors": {
+      "post": {
+        "operationId": "changeMembershipSectors",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMembershipSectorsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Membership sectors replaced atomically",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipSectorMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:offboard": {
+      "post": {
+        "operationId": "offboardMembership",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OffboardMembershipRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Membership offboarded with explicit reassignment",
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OffboardMembershipResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1160,7 +1355,12 @@
           "INVITATION_TOKEN_ROTATED",
           "ACCOUNT_DISABLED",
           "MEMBERSHIP_ALREADY_ACTIVE",
-          "ACCOUNT_NOT_FOUND"
+          "ACCOUNT_NOT_FOUND",
+          "OFFBOARDING_BLOCKED",
+          "REASSIGNMENT_REQUIRED",
+          "SECTOR_NOT_ALLOWED",
+          "ADMIN_TRANSFER_INVALID",
+          "IMPACT_VERSION_CONFLICT"
         ]
       },
       "ApiError": {
@@ -1538,7 +1738,9 @@
           "membership_status",
           "roles",
           "joined_at",
-          "version"
+          "version",
+          "sectors",
+          "offboarding_blocking_count"
         ],
         "properties": {
           "membership_id": {
@@ -1575,6 +1777,16 @@
           "version": {
             "type": "integer",
             "minimum": 1
+          },
+          "sectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductionSector"
+            }
+          },
+          "offboarding_blocking_count": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -1775,13 +1987,34 @@
           "blocking_count"
         ],
         "properties": {
-          "customer_ownership_count": { "type": "integer", "minimum": 0 },
-          "sales_project_ownership_count": { "type": "integer", "minimum": 0 },
-          "engineer_assignment_count": { "type": "integer", "minimum": 0 },
-          "open_warranty_assignment_count": { "type": "integer", "minimum": 0 },
-          "active_production_claim_count": { "type": "integer", "minimum": 0 },
-          "transfer_required_count": { "type": "integer", "minimum": 0 },
-          "blocking_count": { "type": "integer", "minimum": 0 }
+          "customer_ownership_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sales_project_ownership_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "engineer_assignment_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "open_warranty_assignment_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_production_claim_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transfer_required_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocking_count": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
       "MembershipOffboardingPreview": {
@@ -1794,10 +2027,21 @@
           "inventory"
         ],
         "properties": {
-          "membership_id": { "type": "string", "format": "uuid" },
-          "membership_version": { "type": "integer", "minimum": 1 },
-          "impact_version": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "inventory": { "$ref": "#/components/schemas/MembershipResponsibilityInventory" }
+          "membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "membership_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "impact_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/MembershipResponsibilityInventory"
+          }
         }
       },
       "PlatformOrganization": {
@@ -2507,6 +2751,165 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500
+          }
+        }
+      },
+      "ProductionSector": {
+        "type": "string",
+        "enum": [
+          "warehouse",
+          "cutting",
+          "cnc",
+          "edge_banding",
+          "assembly",
+          "packaging",
+          "shipping",
+          "installation",
+          "herrajes",
+          "tableros",
+          "cintillas"
+        ]
+      },
+      "TransferOrganizationAdminRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_membership_id",
+          "target_version",
+          "demote_source",
+          "reason"
+        ],
+        "properties": {
+          "target_membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "demote_source": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "AdminTransferResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "target"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/MembershipMutationResponse"
+          },
+          "target": {
+            "$ref": "#/components/schemas/MembershipMutationResponse"
+          }
+        }
+      },
+      "ChangeMembershipSectorsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sectors",
+          "reason"
+        ],
+        "properties": {
+          "sectors": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ProductionSector"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "MembershipSectorMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "member",
+          "sectors"
+        ],
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/MembershipMutationResponse"
+          },
+          "sectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductionSector"
+            }
+          }
+        }
+      },
+      "MembershipReassignmentPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "customer_owner_membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sales_project_owner_membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "engineer_membership_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warranty_technician_membership_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "OffboardMembershipRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "impact_version",
+          "reason",
+          "reassignment"
+        ],
+        "properties": {
+          "impact_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reassignment": {
+            "$ref": "#/components/schemas/MembershipReassignmentPlan"
+          }
+        }
+      },
+      "OffboardMembershipResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "member",
+          "inventory"
+        ],
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/MembershipMutationResponse"
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/MembershipResponsibilityInventory"
           }
         }
       }

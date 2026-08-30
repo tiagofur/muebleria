@@ -76,6 +76,7 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/memberships", authMW(http.HandlerFunc(server.HandleOrgTeam)))
+	mux.Handle("GET /api/org/memberships/{membershipId}", authMW(http.HandlerFunc(server.HandleOrgTeamMember)))
 	mux.Handle("GET /api/org/team/summary", authMW(http.HandlerFunc(server.HandleOrgTeamSummary)))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles))))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/status", authMW(server.RequireIdempotency("org.update-membership-status", http.HandlerFunc(server.HandleOrgMemberStatus))))
@@ -85,6 +86,9 @@ func RegisterRoutes(server *Server) http.Handler {
 		"reactivate":          authMW(server.RequireIdempotency("org.reactivate-membership", http.HandlerFunc(server.HandleReactivateMembership))),
 		"revoke-sessions":     authMW(server.RequireIdempotency("org.revoke-membership-sessions", http.HandlerFunc(server.HandleRevokeMembershipSessions))),
 		"offboarding-preview": authMW(server.RequireIdempotency("org.offboarding-preview", http.HandlerFunc(server.HandleMembershipOffboardingPreview))),
+		"transfer-admin":      authMW(server.RequireIdempotency("org.transfer-admin", http.HandlerFunc(server.HandleTransferOrganizationAdmin))),
+		"change-sectors":      authMW(server.RequireIdempotency("org.change-membership-sectors", http.HandlerFunc(server.HandleChangeMembershipSectors))),
+		"offboard":            authMW(server.RequireIdempotency("org.offboard-membership", http.HandlerFunc(server.HandleOffboardMembership))),
 	}))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
 	mux.Handle("POST /api/org/invitations", authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation))))
