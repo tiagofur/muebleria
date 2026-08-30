@@ -18,6 +18,7 @@ module Granete
         metadata/store
         library/catalog_provider
         library/layout_contract
+        library/authoring_resolve_contract
         assets/asset_resolver
         assets/asset_loader
         assets/texture_cache

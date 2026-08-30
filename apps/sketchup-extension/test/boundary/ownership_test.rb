@@ -9,7 +9,9 @@ class OwnershipTest < Minitest::Test
   # singular "part" is deliberately absent: since #476 it is the canonical
   # SELECTION kind of the authoring interaction contract
   # (kind = furniture|aggregate|part|hardware|unmanaged), not a BOM concept.
-  # The plural "parts" and the resolved-parts family stay banned.
+  # The plural "parts" and the resolved-parts family stay banned. `preflight`
+  # is deliberately not banned: #477 makes its server-authored subset/link a
+  # required wire response that Ruby validates but never computes.
   FORBIDDEN_RUNTIME_TERMS = %w[
     bom
     cutlist
@@ -22,7 +24,6 @@ class OwnershipTest < Minitest::Test
     parts
     postprocessing
     postprocessor
-    preflight
     release
     released
     releases

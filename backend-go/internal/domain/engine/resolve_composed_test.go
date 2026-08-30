@@ -99,7 +99,7 @@ func TestResolveBom_ComposedModule(t *testing.T) {
 	}
 	st := domain.Structure{
 		ID: "st-1", Code: "EST", Name: "Cuerpo", WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true,
-		Presets: []domain.DimensionPreset{{ID: "p1", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
+		Presets:    []domain.DimensionPreset{{ID: "p1", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
 		Components: []domain.ComponentInstance{{ComponentID: "comp-costado", Quantity: 2}},
 	}
 	mod := domain.Module{
@@ -191,8 +191,8 @@ func TestResolveBomWithPin_HistoricalRevision(t *testing.T) {
 	// Live structure is rev 2 (1 costado). History rev 1 had 3 costados.
 	st := domain.Structure{
 		ID: "st-1", Code: "EST", Name: "Cuerpo", WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true,
-		Revision:  2,
-		Presets:   []domain.DimensionPreset{{ID: "p1", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
+		Revision:   2,
+		Presets:    []domain.DimensionPreset{{ID: "p1", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
 		Components: []domain.ComponentInstance{{ComponentID: "comp-costado", Quantity: 1}},
 		History: []domain.StructureRevision{
 			{

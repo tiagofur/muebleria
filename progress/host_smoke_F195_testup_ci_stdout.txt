@@ -1,0 +1,10 @@
+[TestUp] status: Success
+[TestUp] total: 6, assertions: 58, failures: 0, errors: 0, skips: 0
+[TestUp] test_unknown_schema_version_never_mutates_the_host: passed (8 assertions)
+[TestUp] test_cost_only_manual_hardware_remains_semantic_and_allows_atomic_rebuild: passed (8 assertions)
+[TestUp] test_accepted_response_parses_and_drives_one_atomic_native_operation: passed (22 assertions)
+[TestUp] test_malformed_envelope_never_mutates_the_host: passed (6 assertions)
+[TestUp] test_rejected_orphan_anchor_never_mutates_the_host: passed (8 assertions)
+[TestUp] test_incoherent_snapshot_never_mutates_the_host: passed (6 assertions)
+[TestUp] source_commit: 8433cbdfad2649f606273ef8e9147d29b625aa81
+[TestUp] rbz_sha256: 7c82a347863c46607c4712b6552f864f0c70b4cc69fb169307bac24c04d0ebd0

@@ -69,6 +69,15 @@ module Granete
           body = resolved_layout(definition_id, parameters, choices)
           body && LayoutContract.parse!(body)
         end
+
+        # #477 — stateless rich authoring resolve: submits the semantic
+        # authoring intent (a granete.sketchup-authoring-resolve.v1 request
+        # envelope built by AuthoringResolveContract.build_request) and
+        # returns the parsed authoritative result. nil = this provider cannot
+        # resolve authoring (no local guess ever replaces the server).
+        def resolve_authoring(_request_payload)
+          nil
+        end
       end
 
       class StaticCatalogProvider < BaseCatalogProvider
@@ -247,13 +256,33 @@ module Granete
           return nil unless @transport&.configured? && @auth_provider&.configured?
 
           @auth_provider.refresh_if_needed if @auth_provider.respond_to?(:refresh_if_needed)
-          path = "/furniture/definitions/#{definition_id}/layout#{layout_query(parameters, choices)}"
+          path = "/furniture/definitions/#{definition_id}/layout#{RemoteLayoutTransport.layout_query(parameters,
+                                                                                                     choices)}"
           response = @transport.request({ 'method' => 'GET', 'path' => path },
                                         authorization_header: @auth_provider.authorization_header)
-          interpret_layout_response(response)
+          RemoteLayoutTransport.interpret(response, logger: @logger)
         rescue Transport::RequestError => e
           @logger&.info('layout_remote_failed', error: e)
           raise LayoutResolutionError, "Error de conexión al resolver composición: #{e.message}"
+        end
+
+        # #477 — submits the versioned authoring resolve request and parses
+        # the authoritative result. The intent rides the POST body by
+        # contract; this transport never appends authoring query parameters.
+        # Rejections arrive as structured issue codes (AuthoringResolveError
+        # carries them) — callers branch on codes, not message substrings.
+        def resolve_authoring(request_payload)
+          return nil unless @transport&.configured? && @auth_provider&.configured?
+
+          @auth_provider.refresh_if_needed if @auth_provider.respond_to?(:refresh_if_needed)
+          response = @transport.request(
+            { 'method' => 'POST', 'path' => '/furniture/authoring/resolve', 'body' => request_payload },
+            authorization_header: @auth_provider.authorization_header
+          )
+          AuthoringResolveTransport.interpret(response, expected_request: request_payload, logger: @logger)
+        rescue Transport::RequestError => e
+          @logger&.info('authoring_resolve_remote_failed', error: e)
+          raise AuthoringResolveError, "Error de conexión al resolver autoría: #{e.message}"
         end
 
         # Drops the cached contract so the next read re-fetches with the
@@ -345,49 +374,6 @@ module Granete
           result
         end
 
-        # Maps a layout response onto the layout body or raises LayoutResolutionError.
-        def interpret_layout_response(response)
-          status = response['status']
-          case status
-          when 200
-            body = response['body']
-            unless body.is_a?(Hash) && body['components'].is_a?(Array)
-              raise LayoutResolutionError.new('Respuesta de composición inválida del servidor', status: 200)
-            end
-
-            body
-          when 401
-            @logger&.info('layout_session_invalid')
-            raise LayoutResolutionError.new('Sesión inválida o expirada', status: 401)
-          when 403
-            @logger&.info('layout_license_blocked')
-            raise LayoutResolutionError.new('Licencia requerida para composición 3D', status: 403)
-          when 422
-            msg = response.dig('body', 'error') || 'Composición no resoluble para los parámetros seleccionados'
-            @logger&.info('layout_resolution_unprocessable', error: msg)
-            raise LayoutResolutionError.new(msg, status: 422)
-          else
-            msg = response.dig('body', 'error') || "Error del servidor al resolver composición (HTTP #{status})"
-            @logger&.info('layout_remote_unavailable', status: status)
-            raise LayoutResolutionError.new(msg, status: status)
-          end
-        end
-
-        def layout_query(parameters, choices = {})
-          segments = LAYOUT_QUERY_PARAMS.filter_map do |name|
-            value = parameters[name]
-            next if value.nil? || value.to_s.empty?
-
-            "#{name}=#{URI.encode_www_form_component(value.to_s)}"
-          end
-          choices.each do |role, material_id|
-            next if role.to_s.empty? || material_id.to_s.empty?
-
-            segments << "choice.#{role}=#{URI.encode_www_form_component(material_id.to_s)}"
-          end
-          segments.empty? ? '' : "?#{segments.join('&')}"
-        end
-
         def translate_definitions(contract)
           contract.fetch('definitions', {}).map do |_id, defn|
             item = {
@@ -420,6 +406,56 @@ module Granete
 
       # Default Factory
       class CatalogProvider < StaticCatalogProvider
+      end
+
+      # Transport mapping for the layout endpoint (GET): HTTP status → body
+      # or LayoutResolutionError. Extracted from RemoteCatalogProvider so the
+      # provider class stays focused on catalog state (#477 followed the same
+      # shape for the authoring resolve transport).
+      module RemoteLayoutTransport
+        module_function
+
+        def interpret(response, logger: nil)
+          status = response['status']
+          case status
+          when 200
+            body = response['body']
+            unless body.is_a?(Hash) && body['components'].is_a?(Array)
+              raise LayoutResolutionError.new('Respuesta de composición inválida del servidor', status: 200)
+            end
+
+            body
+          when 401
+            logger&.info('layout_session_invalid')
+            raise LayoutResolutionError.new('Sesión inválida o expirada', status: 401)
+          when 403
+            logger&.info('layout_license_blocked')
+            raise LayoutResolutionError.new('Licencia requerida para composición 3D', status: 403)
+          when 422
+            msg = response.dig('body', 'error') || 'Composición no resoluble para los parámetros seleccionados'
+            logger&.info('layout_resolution_unprocessable', error: msg)
+            raise LayoutResolutionError.new(msg, status: 422)
+          else
+            msg = response.dig('body', 'error') || "Error del servidor al resolver composición (HTTP #{status})"
+            logger&.info('layout_remote_unavailable', status: status)
+            raise LayoutResolutionError.new(msg, status: status)
+          end
+        end
+
+        def layout_query(parameters, choices = {})
+          segments = RemoteCatalogProvider::LAYOUT_QUERY_PARAMS.filter_map do |name|
+            value = parameters[name]
+            next if value.nil? || value.to_s.empty?
+
+            "#{name}=#{URI.encode_www_form_component(value.to_s)}"
+          end
+          choices.each do |role, material_id|
+            next if role.to_s.empty? || material_id.to_s.empty?
+
+            segments << "choice.#{role}=#{URI.encode_www_form_component(material_id.to_s)}"
+          end
+          segments.empty? ? '' : "?#{segments.join('&')}"
+        end
       end
     end
   end
