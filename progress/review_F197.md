@@ -1,47 +1,50 @@
 # Review — feature F197
 
-**Veredicto:** CHANGES_REQUESTED
+**Veredicto:** APPROVED
 
 **Rama revisada:** `feat/483-typed-parameters`
-**Head de implementación/evidencia:** `8417157e2c32cc84fe871601f534d10c261eec5c`
+**Head de implementación/evidencia:** `fec1c4e734774ccffc78d0c3aa7ff09b5728f66c`
 **Base:** `d85d6fd21aa040c4d1f08c5c76c0ab099db7c83b`
 
 ## Checkpoints
 
-- C1: [x] Harness completo; `./init.sh` terminó con exit code 0 contra PostgreSQL 16 aislado.
-- C2: [x] Sólo F197 está `in_progress`; `progress/current.md` describe la corrección activa.
-- C3: [ ] La ruta TypeScript todavía separa validación estructural/publicada de evaluación y permite definiciones que el contrato declara inválidas.
-- C4: [ ] Las suites están verdes, pero el corpus no cubre los dos bypasses TypeScript reproducibles detallados abajo ni las negativas Create/Update requeridas por el review del owner.
-- C5: [x] Head local y remoto coinciden, no hay commits locales ni archivos sospechosos; F197 permanece correctamente abierto hasta corregir y re-revisar.
+- C1: [x] `./init.sh` terminó con exit code 0 contra PostgreSQL 16 aislado; TypeScript, Go, Pilot Readiness y Ruby/RBZ pasaron.
+- C2: [x] F197 es la única feature `in_progress`; el cierre queda correctamente posterior a esta aprobación independiente.
+- C3: [x] La evaluación publicada exige bindings autoritativos antes de componer y los tres entry points fallan con error tipado ante definiciones inválidas.
+- C4: [x] El corpus compartido cubre shapes anidados corruptos y la matriz PostgreSQL Create/Update demuestra rechazo atómico sin persistencia parcial.
+- C5: [x] El head de implementación local/remoto coincidió exactamente, el diff no tuvo whitespace errors y los seis checks CI del head terminaron `SUCCESS`.
+
+## Revisión de las correcciones
+
+1. **Validación publicada en todos los entry points: resuelto.**
+   `evaluateFurnitureParameters` ejecuta `validatePublishedFurnitureParameterDefinitions`; `instantiateFurniture`, `evaluateInteractive` y `resolveFurnitureLayout` heredan el mismo límite fail-closed. La matriz negativa prueba definiciones sin binding y bindings anidados inválidos en los tres caminos, con `PARAMETER_DEFINITION_INVALID` y sin partes/componentes de layout. La reproducción independiente de `shelfCount` sin binding ahora devuelve `FurnitureParameterDefinitionsError` con issue estructurado en `binding`.
+
+2. **Parser de bindings anidados sin `TypeError`: resuelto.**
+   La validación de forma comprueba `binding`, `relationship` y cada target antes de la validación semántica. El corpus compartido incluye binding/relationship/targets/target entries y campos anidados con tipos inválidos. Las reproducciones con `componentId: 5` y `relationship.kind: 5` ahora devuelven `FurnitureParameterDefinitionsError` / `PARAMETER_DEFINITION_INVALID`; ninguna escapa como `TypeError`.
+
+3. **Create/Update negativos y atomicidad: resuelto.**
+   `TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions` cubre `widthMm` con default divergente, `heightMm` con tipo/default incompatible y `depthMm` decimal. Create deja cero filas; Update conserva `width_mm = 600` y definiciones vacías, probando cero mutación parcial.
 
 ## Evidencia ejecutada
 
-- `./init.sh`: verde; TypeScript completo, Go completo con PostgreSQL 16, Pilot Readiness y Ruby/RBZ.
-- `pnpm --filter @granete/domain test`: 96 archivos / 1198 tests verdes.
-- Go enfocado de parámetros/catalog/resolve: verde.
-- PostgreSQL enfocado: fresh/upgrade/down, direct-SQL corrupto, tenant scope y round-trip verdes.
-- `bundle exec rake verify`: 248 unit tests + 3 boundary tests verdes; RBZ `ad149f46bb500a564505ce8a1a02efa7d6d4fb24eb683f816fa2e78a6ee48f45`.
-- TestUp real-host: SketchUp `26.2.242`, 8/8 tests, 98 assertions, cero failures/errors/skips. El RBZ instalado coincide byte a byte con el artifact; golden y test file coinciden con los hashes declarados.
-- Readback remoto: head exacto `8417157e...`; seis checks CI `SUCCESS`; PR abierto, draft y mergeable; issue #483 abierta.
+- `pnpm --filter @granete/domain test`: 96 archivos / 1205 tests verdes; incluye 16 casos en `furnitureCompositionEngine.parameters.test.ts`.
+- Go enfocado de dominio/engine: verde.
+- PostgreSQL 16 aislado: fresh/upgrade/down, direct-SQL corrupto, tenant scope, round-trip y matriz negativa Create/Update verdes.
+- `./init.sh`: exit code 0; Go completo, TypeScript completo y Ruby 3.2.11 completos.
+- Ruby/RBZ: 248 tests / 2349 assertions y 3 boundary tests / 1067 assertions, cero failures/errors/skips; RBZ SHA-256 `ad149f46bb500a564505ce8a1a02efa7d6d4fb24eb683f816fa2e78a6ee48f45`.
+- TestUp real-host previo, aplicable porque la corrección no modificó Ruby ni evidencia host: SketchUp `26.2.242`, 8/8 tests, 98 assertions, cero failures/errors/skips; árbol instalado verificado byte a byte contra el RBZ.
+- Readback remoto previo al commit de este artifact: PR #486 abierto, draft y mergeable; head exacto `fec1c4e7...`; seis checks `COMPLETED/SUCCESS`; base exacta `d85d6fd...`.
+- `git diff --check 876c9d3f..fec1c4e7`: limpio; la corrección sólo toca los ocho archivos esperados de dominio, contratos/fixtures y storage tests.
 
-## Cambios requeridos
-
-1. **P1 — Los entry points TypeScript aceptan un parámetro físico sin consumidor.**
-   `evaluateFurnitureParameters` llama sólo a `validateFurnitureParameterDefinitions` (`packages/domain/src/furnitureParameters.ts:275-280`), mientras la regla que exige binding vive aparte en `validatePublishedFurnitureParameterDefinitions` (`:149-165`). `instantiateFurniture` y `evaluateInteractive` consumen directamente ese evaluator (`packages/domain/src/furnitureCompositionEngine.ts:61-90,144-175`), por lo que una definición `shelfCount` de categoría `configuration` sin binding devuelve `normalized: { shelfCount: 2 }` y cero issues, aunque el validador publicado reporta `binding: non-metadata parameters require an authoritative binding`. Esto deja exactamente una ruta real de resolve que acepta intención física no vinculada. Hacé que los tres entry points fallen con `PARAMETER_DEFINITION_INVALID` antes de composición y añadí el negative proof en `furnitureCompositionEngine.parameters.test.ts`.
-
-2. **P1 — El parser TypeScript de catálogo corrupto no garantiza el error tipado.**
-   `parsedDefinitionShapeIssues` sólo verifica que `binding` sea un objeto (`packages/domain/src/furnitureParameters.ts:199-231`); después `validateBinding` invoca `.trim()` y accede a `relationship.targets` sin validar tipos anidados (`:235-270`). Con `componentId: 5` o `relationship.kind: 5`, `parseFurnitureParameterDefinitions` lanza `TypeError` (`...trim is not a function`) en vez de `FurnitureParameterDefinitionsError`/`PARAMETER_DEFINITION_INVALID`. El composition engine sólo traduce la clase tipada (`packages/domain/src/furnitureCompositionEngine.ts:81-90,160-170`), así que este input puede escapar como excepción no estructurada. Validá exhaustivamente la forma anidada, agregá estos casos al corpus compartido y probá parser + los tres entry points fail-closed.
-
-3. **P2 — Falta la matriz negativa Create/Update exigida por el review del owner.**
-   `backend-go/internal/storage/module_parameter_definitions_migration_test.go:146-183` sólo prueba Create/Update positivos con metadata. El corpus/direct-SQL y POST cubren otros boundaries, pero no demuestran que Create y Update rechacen dimensiones reservadas/default divergente/tipo incompatible. Añadí negativas ejecutables para ambos writes; mantené además GET/catalog y POST decimal/type como pruebas separadas.
-
-## Blockers del review de `97194c9a`
+## Blockers del review anterior
 
 - Binding autoritativo Go y efecto `shelfCount=1` vs `3`: [x]
 - Evaluator estricto en valores de los entry points TS: [x]
-- Definiciones inválidas/bindings en todos los entry points TS: [ ]
-- W/H/D con única fuente, proyección y `sortOrder`: [x] implementación; [ ] cobertura Create/Update solicitada.
+- Definiciones inválidas/bindings en todos los entry points TS: [x]
+- W/H/D con única fuente, proyección, `sortOrder` y negativas Create/Update: [x]
 - Publicación/read fail-closed Go y Ruby + hash no ignorado: [x]
-- Corpus corrupto compartido: [ ] incompleto para shapes anidados TS.
+- Corpus corrupto compartido, incluidos shapes anidados TS: [x]
 - TestUp real-host con cero mutación en rechazos: [x]
 - Down migration, tenant isolation e issues estructurados: [x]
+
+No quedan cambios requeridos en el alcance revisado. Esta aprobación no mergea el PR ni cierra la issue; el owner todavía debe cerrar el ledger/progreso y volver a verificar CI/readback sobre ese commit final.
