@@ -92,6 +92,186 @@ $$;
 REVOKE ALL ON FUNCTION app_current_user_is_platform_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_current_user_is_platform_admin() TO granete_app;
 
+CREATE FUNCTION command_create_organization(
+    p_name TEXT,
+    p_slug TEXT,
+    p_type TEXT,
+    p_license_plan TEXT,
+    p_license_expires_at TIMESTAMPTZ,
+    p_status TEXT,
+    p_status_reason TEXT,
+    p_status_changed_by UUID,
+    p_parent_organization_id UUID
+) RETURNS SETOF organizations
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    runtime_caller BOOLEAN := session_user = 'granete_app'
+        OR current_setting('role', TRUE) = 'granete_app';
+    current_organization UUID := app_current_organization_id();
+BEGIN
+    IF runtime_caller THEN
+        IF p_status_changed_by IS DISTINCT FROM app_current_user_id() THEN
+            RAISE EXCEPTION 'organization create actor mismatch' USING ERRCODE='42501';
+        END IF;
+        IF app_current_user_is_platform_admin() AND current_organization IS NULL THEN
+            NULL;
+        ELSIF current_organization IS NOT NULL
+          AND p_parent_organization_id = current_organization
+          AND p_type IN ('store', 'dealer')
+          AND p_license_plan = 'none'
+          AND p_status = 'provisioning'
+          AND EXISTS (
+              SELECT 1 FROM organizations source
+              JOIN memberships membership ON membership.organization_id=source.id
+               AND membership.user_id=app_current_user_id()
+               AND membership.status='active'
+               AND membership.roles @> ARRAY['admin']::TEXT[]
+              WHERE source.id=current_organization
+                AND source.type='factory'
+                AND source.status='active'
+          ) THEN
+            NULL;
+        ELSE
+            RAISE EXCEPTION 'organization create is not authorized' USING ERRCODE='42501';
+        END IF;
+    END IF;
+
+    RETURN QUERY
+    INSERT INTO organizations (
+        name, slug, type, license_plan, license_expires_at, status,
+        status_reason, status_changed_by, parent_organization_id
+    ) VALUES (
+        p_name, p_slug, p_type, p_license_plan, p_license_expires_at, p_status,
+        nullif(p_status_reason, ''), p_status_changed_by, p_parent_organization_id
+    )
+    RETURNING *;
+END
+$$;
+
+CREATE FUNCTION command_update_organization_metadata(
+    p_id UUID,
+    p_name TEXT,
+    p_license_plan TEXT,
+    p_license_expires_at TIMESTAMPTZ,
+    p_expected_version BIGINT
+) RETURNS SETOF organizations
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    runtime_caller BOOLEAN := session_user = 'granete_app'
+        OR current_setting('role', TRUE) = 'granete_app';
+BEGIN
+    IF runtime_caller AND (
+        NOT app_current_user_is_platform_admin()
+        OR app_current_organization_id() IS NOT NULL
+        OR p_expected_version IS NULL
+    ) THEN
+        RAISE EXCEPTION 'organization metadata update is not authorized' USING ERRCODE='42501';
+    END IF;
+    RETURN QUERY
+    UPDATE organizations
+       SET name=p_name,
+           license_plan=p_license_plan,
+           license_expires_at=p_license_expires_at,
+           updated_at=NOW(),
+           version=version+1
+     WHERE id=p_id
+       AND (p_expected_version IS NULL OR version=p_expected_version)
+    RETURNING *;
+END
+$$;
+
+CREATE FUNCTION command_transition_organization_status(
+    p_id UUID,
+    p_from TEXT,
+    p_to TEXT,
+    p_actor UUID,
+    p_reason TEXT,
+    p_expected_version BIGINT
+) RETURNS SETOF organizations
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    runtime_caller BOOLEAN := session_user = 'granete_app'
+        OR current_setting('role', TRUE) = 'granete_app';
+    current_organization UUID := app_current_organization_id();
+BEGIN
+    IF NOT (
+        (p_from='provisioning' AND p_to IN ('active','provisioning_failed'))
+        OR (p_from='provisioning_failed' AND p_to IN ('provisioning','terminated'))
+        OR (p_from='active' AND p_to IN ('suspended','offboarding'))
+        OR (p_from='suspended' AND p_to IN ('active','offboarding'))
+        OR (p_from='offboarding' AND p_to='terminated')
+    ) THEN
+        RAISE EXCEPTION 'invalid organization status transition' USING ERRCODE='22023';
+    END IF;
+    IF p_to <> 'active' AND nullif(btrim(p_reason), '') IS NULL THEN
+        RAISE EXCEPTION 'organization lifecycle reason is required' USING ERRCODE='22023';
+    END IF;
+    IF runtime_caller THEN
+        IF p_actor IS DISTINCT FROM app_current_user_id() THEN
+            RAISE EXCEPTION 'organization lifecycle actor mismatch' USING ERRCODE='42501';
+        END IF;
+        IF app_current_user_is_platform_admin() AND current_organization IS NULL THEN
+            NULL;
+        ELSIF p_from='provisioning' AND p_to='active'
+          AND EXISTS (
+              SELECT 1 FROM organizations child
+              JOIN organizations source ON source.id=child.parent_organization_id
+              JOIN memberships membership ON membership.organization_id=source.id
+               AND membership.user_id=app_current_user_id()
+               AND membership.status='active'
+               AND membership.roles @> ARRAY['admin']::TEXT[]
+              WHERE child.id=p_id
+                AND child.parent_organization_id=current_organization
+                AND child.id::TEXT = ANY(string_to_array(
+                    NULLIF(current_setting('app.authorized_organization_ids', TRUE), ''), ','
+                ))
+                AND source.type='factory'
+                AND source.status='active'
+          ) THEN
+            NULL;
+        ELSE
+            RAISE EXCEPTION 'organization lifecycle transition is not authorized' USING ERRCODE='42501';
+        END IF;
+    END IF;
+
+    RETURN QUERY
+    UPDATE organizations
+       SET status=p_to,
+           status_changed_at=NOW(),
+           status_changed_by=p_actor,
+           status_reason=nullif(btrim(p_reason), ''),
+           suspended_at=CASE WHEN p_to='suspended' THEN NOW() ELSE suspended_at END,
+           offboarding_started_at=CASE
+               WHEN p_to='offboarding' THEN NOW()
+               WHEN p_to='terminated' THEN COALESCE(offboarding_started_at, NOW())
+               ELSE offboarding_started_at
+           END,
+           terminated_at=CASE WHEN p_to='terminated' THEN NOW() ELSE terminated_at END,
+           credential_version=credential_version+1,
+           updated_at=NOW(),
+           version=version+1
+     WHERE id=p_id AND status=p_from AND version=p_expected_version
+    RETURNING *;
+END
+$$;
+
+REVOKE ALL ON FUNCTION command_create_organization(TEXT,TEXT,TEXT,TEXT,TIMESTAMPTZ,TEXT,TEXT,UUID,UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION command_update_organization_metadata(UUID,TEXT,TEXT,TIMESTAMPTZ,BIGINT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION command_transition_organization_status(UUID,TEXT,TEXT,UUID,TEXT,BIGINT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION command_create_organization(TEXT,TEXT,TEXT,TEXT,TIMESTAMPTZ,TEXT,TEXT,UUID,UUID) TO granete_app;
+GRANT EXECUTE ON FUNCTION command_update_organization_metadata(UUID,TEXT,TEXT,TIMESTAMPTZ,BIGINT) TO granete_app;
+GRANT EXECUTE ON FUNCTION command_transition_organization_status(UUID,TEXT,TEXT,UUID,TEXT,BIGINT) TO granete_app;
+REVOKE INSERT, UPDATE, DELETE ON organizations FROM granete_app;
+
 DO $$
 DECLARE table_name TEXT;
 BEGIN

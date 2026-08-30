@@ -102,11 +102,17 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 	if !domain.IsValidOrganizationStatus(status) {
 		return fmt.Errorf("invalid organization status")
 	}
+	statusChangedBy := stringValue(o.StatusChangedBy)
+	actor, hasActor := TenantActorFromCtx(ctx)
+	if statusChangedBy == "" && hasActor && actor.UserID != "" {
+		statusChangedBy = actor.UserID
+	}
 	err := s.db(ctx).QueryRow(ctx, `
-		INSERT INTO organizations (name, slug, type, license_plan, license_expires_at, status, status_reason, status_changed_by, parent_organization_id)
-		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''), nullif($8, '')::uuid, $9)
-		RETURNING `+organizationColumns,
-		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, status, stringValue(o.StatusReason), stringValue(o.StatusChangedBy), o.ParentOrganizationID).
+		SELECT `+organizationColumns+`
+		FROM command_create_organization(
+			$1, $2, $3, $4, $5, $6, $7, nullif($8, '')::uuid, $9
+		)`,
+		o.Name, o.Slug, o.Type, plan, o.LicenseExpiresAt, status, stringValue(o.StatusReason), statusChangedBy, o.ParentOrganizationID).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
 			&o.StatusReason, &o.SuspendedAt, &o.OffboardingStartedAt, &o.TerminatedAt,
@@ -114,11 +120,16 @@ func (s *PostgresStore) CreateOrganization(ctx context.Context, o *domain.Organi
 	if err != nil {
 		return err
 	}
-	// A platform provisioning transaction begins org-less. Once the server has
-	// generated and inserted the destination ID, explicitly authorize only that
-	// new organization for its bounded clone/audit tail.
-	if actor, ok := TenantActorFromCtx(ctx); ok && actor.OrganizationID == "" && actor.UserID != "" {
-		return authorizeTenantOrganizations(ctx, o.ID)
+	// The database command validated the caller and parent before insertion.
+	// Extend only this transaction's exact scope: platform gets the new child;
+	// Factory keeps its source plus the one child it just created.
+	if hasActor && actor.UserID != "" {
+		if actor.OrganizationID == "" {
+			return authorizeTenantOrganizations(ctx, o.ID)
+		}
+		if o.ParentOrganizationID != nil && *o.ParentOrganizationID == actor.OrganizationID {
+			return authorizeTenantOrganizations(ctx, actor.OrganizationID, o.ID)
+		}
 	}
 	return nil
 }
@@ -1209,10 +1220,8 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 // returned by the scan.
 func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organization) error {
 	return s.db(ctx).QueryRow(ctx, `
-		UPDATE organizations SET name = $2, license_plan = $3, license_expires_at = $4,
-			updated_at = CURRENT_TIMESTAMP, version = version + 1
-		WHERE id = $1
-		RETURNING `+organizationColumns,
+		SELECT `+organizationColumns+`
+		FROM command_update_organization_metadata($1, $2, $3, $4, NULL)`,
 		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
@@ -1222,10 +1231,8 @@ func (s *PostgresStore) UpdateOrganization(ctx context.Context, o *domain.Organi
 
 func (s *PostgresStore) UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error {
 	err := s.db(ctx).QueryRow(ctx, `
-		UPDATE organizations SET name=$2, license_plan=$3, license_expires_at=$4,
-			updated_at=CURRENT_TIMESTAMP, version=version+1
-		WHERE id=$1 AND version=$5
-		RETURNING `+organizationColumns,
+		SELECT `+organizationColumns+`
+		FROM command_update_organization_metadata($1, $2, $3, $4, $5)`,
 		o.ID, o.Name, o.LicensePlan, o.LicenseExpiresAt, expectedVersion).
 		Scan(&o.ID, &o.Name, &o.Slug, &o.Type, &o.LicensePlan, &o.LicenseExpiresAt,
 			&o.Status, &o.CredentialVersion, &o.StatusChangedAt, &o.StatusChangedBy,
@@ -1257,38 +1264,28 @@ func (s *PostgresStore) TransitionOrganizationStatus(
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-	var currentStatus domain.OrganizationStatus
-	var currentVersion int64
-	err = tx.QueryRow(ctx, `SELECT status, version FROM organizations WHERE id=$1 FOR UPDATE`, id).
-		Scan(&currentStatus, &currentVersion)
+	row := tx.QueryRow(ctx, `
+		SELECT `+organizationColumns+`
+		FROM command_transition_organization_status(
+			$1, $2, $3, nullif($4, '')::uuid, $5, $6
+		)`, id, from, to, actorID, strings.TrimSpace(reason), expectedVersion)
+	organization, err := scanOrganization(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("organization not found")
-	}
-	if err != nil {
-		return nil, err
-	}
-	if currentVersion != expectedVersion {
-		return nil, ErrVersionConflict
-	}
-	if currentStatus != from {
+		var currentStatus domain.OrganizationStatus
+		var currentVersion int64
+		lookupErr := tx.QueryRow(ctx, `SELECT status, version FROM organizations WHERE id=$1`, id).
+			Scan(&currentStatus, &currentVersion)
+		if errors.Is(lookupErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("organization not found")
+		}
+		if lookupErr != nil {
+			return nil, lookupErr
+		}
+		if currentVersion != expectedVersion {
+			return nil, ErrVersionConflict
+		}
 		return nil, ErrOrganizationStatusConflict
 	}
-	row := tx.QueryRow(ctx, `
-		UPDATE organizations
-		SET status=$2,
-			status_changed_at=NOW(),
-			status_changed_by=nullif($3, '')::uuid,
-			status_reason=nullif($4, ''),
-			suspended_at=CASE WHEN $2='suspended' THEN NOW() ELSE suspended_at END,
-			offboarding_started_at=CASE WHEN $2='offboarding' THEN NOW() ELSE offboarding_started_at END,
-			terminated_at=CASE WHEN $2='terminated' THEN NOW() ELSE terminated_at END,
-			credential_version=credential_version+1,
-			updated_at=NOW(),
-			version=version+1
-		WHERE id=$1
-		RETURNING `+organizationColumns,
-		id, to, actorID, strings.TrimSpace(reason))
-	organization, err := scanOrganization(row)
 	if err != nil {
 		return nil, err
 	}

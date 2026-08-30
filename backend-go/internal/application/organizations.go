@@ -383,7 +383,8 @@ func (s *OrganizationService) offboardingTransition(ctx context.Context, cmd Lif
 			return err
 		}
 		fromOK := to == domain.OrganizationStatusOffboarding && (org.Status == domain.OrganizationStatusActive || org.Status == domain.OrganizationStatusSuspended)
-		fromOK = fromOK || (to == domain.OrganizationStatusTerminated && org.Status == domain.OrganizationStatusOffboarding)
+		fromOK = fromOK || (to == domain.OrganizationStatusTerminated &&
+			(org.Status == domain.OrganizationStatusOffboarding || org.Status == domain.OrganizationStatusProvisioningFailed))
 		if !fromOK || org.Version != cmd.ExpectedVersion {
 			return ErrOrganizationStatusConflict
 		}

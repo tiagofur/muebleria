@@ -28,6 +28,11 @@ BEGIN
     END IF;
 END $$;
 
+GRANT INSERT, UPDATE, DELETE ON organizations TO granete_app;
+DROP FUNCTION command_transition_organization_status(UUID,TEXT,TEXT,UUID,TEXT,BIGINT);
+DROP FUNCTION command_update_organization_metadata(UUID,TEXT,TEXT,TIMESTAMPTZ,BIGINT);
+DROP FUNCTION command_create_organization(TEXT,TEXT,TEXT,TEXT,TIMESTAMPTZ,TEXT,TEXT,UUID,UUID);
+
 DROP POLICY support_session_update ON support_sessions;
 CREATE POLICY support_session_update ON support_sessions FOR UPDATE
 USING (
