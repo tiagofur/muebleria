@@ -143,7 +143,7 @@ func (s *PostgresStore) lockTeamState(ctx context.Context, organizationID string
 
 func (s *PostgresStore) lockTeamMember(ctx context.Context, organizationID, membershipID string) (*OrgTeamMember, error) {
 	member, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
-		SELECT m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version
+		SELECT m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at
 		FROM memberships m JOIN users u ON u.id=m.user_id
 		WHERE m.organization_id=$1 AND m.id=$2
 		FOR UPDATE OF m`, organizationID, membershipID))
@@ -329,7 +329,7 @@ func (s *PostgresStore) ChangeMembershipSectors(ctx context.Context, command Cha
 		updated, err := scanOrgTeamMember(s.db(txCtx).QueryRow(txCtx, `
 			UPDATE memberships m SET version=version+1,updated_at=NOW() FROM users u
 			WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$3 AND u.id=m.user_id
-			RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`, command.OrganizationID, member.MembershipID, member.Version))
+			RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`, command.OrganizationID, member.MembershipID, member.Version))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrVersionConflict
 		}

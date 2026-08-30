@@ -1739,6 +1739,9 @@
           "roles",
           "joined_at",
           "version",
+          "last_activity",
+          "credential_version",
+          "sessions_revoked_at",
           "sectors",
           "offboarding_blocking_count"
         ],
@@ -1777,6 +1780,24 @@
           "version": {
             "type": "integer",
             "minimum": 1
+          },
+          "last_activity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "credential_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sessions_revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           },
           "sectors": {
             "type": "array",

@@ -147,6 +147,9 @@ type TeamMember struct {
 	Roles                    []string           `json:"roles"`
 	JoinedAt                 string             `json:"joined_at"`
 	Version                  int64              `json:"version"`
+	LastActivity             *string            `json:"last_activity"`
+	CredentialVersion        int64              `json:"credential_version"`
+	SessionsRevokedAt        *string            `json:"sessions_revoked_at"`
 	Sectors                  []ProductionSector `json:"sectors"`
 	OffboardingBlockingCount int64              `json:"offboarding_blocking_count"`
 }

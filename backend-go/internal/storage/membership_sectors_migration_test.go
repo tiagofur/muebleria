@@ -5,9 +5,63 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
+
+func TestListOrgTeamProjectsActivityAndMembershipSessionState(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 97)
+	ctx := context.Background()
+	const (
+		orgID        = "b4100000-0000-0000-0000-000000000001"
+		adminUserID  = "b4100000-0000-0000-0000-000000000002"
+		memberUserID = "b4100000-0000-0000-0000-000000000003"
+		membershipID = "b4100000-0000-0000-0000-000000000004"
+	)
+	lastActivity := time.Date(2026, time.August, 30, 14, 0, 0, 0, time.UTC)
+	revokedAt := lastActivity.Add(time.Hour)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations (id,name,slug,type) VALUES ($1,'Read Model','team-read-model','factory')`, []any{orgID}},
+		{`INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES ($1,'read-admin@example.test','read-admin@example.test','x','Admin','active')`, []any{adminUserID}},
+		{`INSERT INTO users (id,email,normalized_email,password_hash,name,account_status,last_login_at) VALUES ($1,'read-member@example.test','read-member@example.test','x','Member','active',$2)`, []any{memberUserID, lastActivity}},
+		{`INSERT INTO memberships (organization_id,user_id,roles,status,joined_at) VALUES ($1,$2,'{admin}','active',NOW())`, []any{orgID, adminUserID}},
+		{`INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at,credential_version,sessions_revoked_at) VALUES ($1,$2,$3,'{produccion}','active',NOW(),4,$4)`, []any{membershipID, orgID, memberUserID, revokedAt}},
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(ctx, statement.query, statement.args...); err != nil {
+			_ = tx.Rollback(ctx)
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	members, err := (&storage.PostgresStore{Pool: pool}).ListOrgTeam(scoped(ctx, orgID), orgID, adminUserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, member := range members {
+		if member.MembershipID != membershipID {
+			continue
+		}
+		if member.LastActivity == nil || !member.LastActivity.Equal(lastActivity) || member.CredentialVersion != 4 || member.SessionsRevokedAt == nil || !member.SessionsRevokedAt.Equal(revokedAt) {
+			t.Fatalf("session projection=%+v", member)
+		}
+		return
+	}
+	t.Fatalf("membership %s missing from Team projection", membershipID)
+}
 
 func TestMembershipSectorsMigration_BackfillsExactMembershipAndRLS(t *testing.T) {
 	pool := multiOrgFreshDB(t)

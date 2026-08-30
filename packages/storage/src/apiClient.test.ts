@@ -17,7 +17,8 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       membership_id: '11111111-1111-1111-1111-111111111111', user_id: '22222222-2222-2222-2222-222222222222',
       email: 'team@example.test', name: 'Team Member', account_status: 'active', membership_status: 'active',
       roles: ['vendedor'], sectors: [], offboarding_blocking_count: 0,
-      joined_at: '2026-08-29T00:00:00Z', version: 2,
+      joined_at: '2026-08-29T00:00:00Z', version: 2, last_activity: '2026-08-30T00:00:00Z',
+      credential_version: 2, sessions_revoked_at: '2026-08-30T01:00:00Z',
     };
     const summary = {
       active_members: 1, suspended_members: 0, left_members: 0, max_active_members: null,
@@ -159,6 +160,7 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       membership_id: 'membership-1', user_id: 'user-1', email: 'owner@example.test', name: 'Owner',
       account_status: 'active', membership_status: 'suspended', roles: ['admin'],
       sectors: [], offboarding_blocking_count: 0, joined_at: '2026-08-28T00:00:00Z', version: 2,
+      last_activity: null, credential_version: 1, sessions_revoked_at: null,
     };
     const summary = {
       active_members: 0, suspended_members: 1, left_members: 0, max_active_members: null,

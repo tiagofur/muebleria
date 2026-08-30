@@ -157,12 +157,21 @@ func teamMemberToOpenAPI(m storage.OrgTeamMember) openapi.TeamMember {
 	for i, sector := range m.Sectors {
 		sectors[i] = openapi.ProductionSector(sector)
 	}
-	return openapi.TeamMember{
+	out := openapi.TeamMember{
 		MembershipID: m.MembershipID, UserID: m.UserID, Email: m.Email, Name: m.Name,
 		AccountStatus: openapi.AccountStatus(m.AccountStatus), MembershipStatus: openapi.MembershipStatus(m.Status),
 		Roles: roleStrings(m.Roles), JoinedAt: m.JoinedAt.UTC().Format(time.RFC3339Nano), Version: m.Version,
-		Sectors: sectors, OffboardingBlockingCount: m.OffboardingBlockingCount,
+		CredentialVersion: m.CredentialVersion, Sectors: sectors, OffboardingBlockingCount: m.OffboardingBlockingCount,
 	}
+	if m.LastActivity != nil {
+		value := m.LastActivity.UTC().Format(time.RFC3339Nano)
+		out.LastActivity = &value
+	}
+	if m.SessionsRevokedAt != nil {
+		value := m.SessionsRevokedAt.UTC().Format(time.RFC3339Nano)
+		out.SessionsRevokedAt = &value
+	}
+	return out
 }
 
 func teamSummaryToOpenAPI(summary storage.OrgTeamSummary, claims *auth.Claims, org *domain.Organization) openapi.TeamSummary {

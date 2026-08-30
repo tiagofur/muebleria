@@ -381,6 +381,9 @@ type OrgTeamMember struct {
 	Roles                    []domain.UserRole
 	JoinedAt                 time.Time
 	Version                  int64
+	LastActivity             *time.Time
+	CredentialVersion        int64
+	SessionsRevokedAt        *time.Time
 	Sectors                  []domain.ProductionSector
 	OffboardingBlockingCount int64
 }
@@ -388,7 +391,8 @@ type OrgTeamMember struct {
 func scanOrgTeamMember(row pgx.Row) (*OrgTeamMember, error) {
 	var out OrgTeamMember
 	err := row.Scan(&out.MembershipID, &out.UserID, &out.Email, &out.Name,
-		&out.AccountStatus, &out.Status, &out.Roles, &out.JoinedAt, &out.Version)
+		&out.AccountStatus, &out.Status, &out.Roles, &out.JoinedAt, &out.Version,
+		&out.LastActivity, &out.CredentialVersion, &out.SessionsRevokedAt)
 	return &out, err
 }
 
@@ -442,7 +446,8 @@ func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID, actorID
 		return out, err
 	}
 	rows, err := s.db(ctx).Query(ctx, `SELECT m.id, u.id, u.email, u.name,
-		u.account_status, m.status, m.roles, m.joined_at, m.version
+		u.account_status, m.status, m.roles, m.joined_at, m.version,
+		u.last_login_at, m.credential_version, m.sessions_revoked_at
 		FROM memberships m JOIN users u ON u.id=m.user_id
 		WHERE m.organization_id=$1 ORDER BY m.joined_at`, organizationID)
 	if err != nil {
@@ -549,7 +554,7 @@ func (s *PostgresStore) UpdateMembershipRolesByOrg(ctx context.Context, organiza
 	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
 		UPDATE memberships m SET roles=$3, updated_at=NOW(), version=version+1
 		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$4 AND u.id=m.user_id
-		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
 		organizationID, membershipID, roles, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
@@ -575,7 +580,7 @@ func (s *PostgresStore) UpdateMembershipStatus(ctx context.Context, organization
 			sessions_revocation_reason=CASE WHEN m.status='active' AND $3 IN ('suspended','left') THEN NULLIF($4,'') ELSE sessions_revocation_reason END,
 			updated_at=NOW(), version=version+1
 		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$6 AND u.id=m.user_id
-		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
 		organizationID, membershipID, status, reason, actorID, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
@@ -591,7 +596,7 @@ func (s *PostgresStore) RevokeMembershipSessions(ctx context.Context, organizati
 			sessions_revoked_at=NOW(), sessions_revoked_by=NULLIF($3,'')::uuid,
 			sessions_revocation_reason=NULLIF($4,''), updated_at=NOW(), version=version+1
 		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$5 AND u.id=m.user_id
-		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version`,
+		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
 		organizationID, membershipID, actorID, reason, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)

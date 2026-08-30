@@ -225,7 +225,9 @@ func TestCanonicalAdministrationCommandsReachTransactionalStore(t *testing.T) {
 }
 
 func TestOrgTeamMemberReturnsMembershipOwnedReadModel(t *testing.T) {
-	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Email: "target@example.test", Name: "Target", AccountStatus: domain.AccountStatusActive, Status: domain.MembershipStatusActive, Roles: []domain.UserRole{domain.RoleProduccion}, JoinedAt: time.Now(), Version: 2, Sectors: []domain.ProductionSector{domain.SectorCutting}, OffboardingBlockingCount: 1}
+	lastActivity := time.Date(2026, time.August, 30, 12, 0, 0, 0, time.UTC)
+	revokedAt := lastActivity.Add(time.Hour)
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Email: "target@example.test", Name: "Target", AccountStatus: domain.AccountStatusActive, Status: domain.MembershipStatusActive, Roles: []domain.UserRole{domain.RoleProduccion}, JoinedAt: time.Now(), Version: 2, LastActivity: &lastActivity, CredentialVersion: 3, SessionsRevokedAt: &revokedAt, Sectors: []domain.ProductionSector{domain.SectorCutting}, OffboardingBlockingCount: 1}
 	srv, _ := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
 	req := teamCapabilityRequest(http.MethodGet, "/api/org/memberships/target-membership", "actor", []string{string(domain.RoleGerenteProduccion)}, "")
 	rr := httptest.NewRecorder()
@@ -237,7 +239,7 @@ func TestOrgTeamMemberReturnsMembershipOwnedReadModel(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &member); err != nil {
 		t.Fatal(err)
 	}
-	if len(member.Sectors) != 1 || member.Sectors[0] != openapi.ProductionSectorCutting || member.OffboardingBlockingCount != 1 {
+	if len(member.Sectors) != 1 || member.Sectors[0] != openapi.ProductionSectorCutting || member.OffboardingBlockingCount != 1 || member.LastActivity == nil || *member.LastActivity != lastActivity.Format(time.RFC3339Nano) || member.CredentialVersion != 3 || member.SessionsRevokedAt == nil || *member.SessionsRevokedAt != revokedAt.Format(time.RFC3339Nano) {
 		t.Fatalf("member=%+v", member)
 	}
 }
