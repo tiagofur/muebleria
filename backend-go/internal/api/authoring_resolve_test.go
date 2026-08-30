@@ -408,6 +408,21 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			f.Components = defaultOccurrencesJSON()
 			f.HardwarePlacements = []authoringPlacementWire{}
 		})), http.StatusOK),
+
+		// Cross-runtime determinism proof: arbitrary step rounding and a
+		// non-ASCII occurrence identity both participate in the shared
+		// Go-authored response/fingerprint consumed by TS and Ruby.
+		func() authoringFixtureCase {
+			request := authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+				occ := defaultOccurrencesJSON()
+				occ[5] = occurrenceJSON("entrepaño-ñ-01", "mod-comp-shelf", []float64{18.12, 18.12, 519.87})
+				f.Components = occ
+			}))
+			request.MessageID = "msg-fixture-unicode-step"
+			request.IdempotencyKey = "fixture:unicode-step:0001"
+			request.Units.PrecisionMm = 0.25
+			return run("10-unicode-quarter-step", "", request, http.StatusOK)
+		}(),
 	}
 }
 

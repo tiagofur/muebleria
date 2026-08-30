@@ -56,7 +56,7 @@ class AuthoringResolveContractTest < Minitest::Test
 
   def test_parses_every_golden_scenario_fail_closed
     fixture['scenarios'].each do |raw|
-      result = parse_response(raw['response'])
+      result = parse_response(raw['response'], expected_request: raw['request'])
       assert_equal CONTRACT, raw['response']['schemaId']
       if raw['expectedHttpStatus'] == 200
         assert result.accepted?

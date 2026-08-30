@@ -174,12 +174,35 @@ describe('#477 shared authoring resolve contract fixture', () => {
       '06-replace-hinge',
       '07-orphan-anchor-rejection',
       '08-unknown-schema-version',
+      '10-unicode-quarter-step',
       'neg-query-parameter',
       'neg-adhoc-body-parameter',
       'neg-duplicate-occurrence-id',
     ]) {
       expect(ids).toContain(required);
     }
+  });
+
+  test('shared fixture proves UTF-8 fingerprinting and arbitrary-step precision', () => {
+    const scenario = fixture.scenarios.find((entry) => entry.id === '10-unicode-quarter-step')!;
+    expect(scenario.request.units.precisionMm).toBe(0.25);
+    expect(
+      scenario.request.furniture.components?.some((component) =>
+        /[^\x00-\x7F]/u.test(component.componentInstanceId),
+      ),
+    ).toBe(true);
+
+    const shelf = scenario.response.normalizedSnapshot?.components.find(
+      (component) => component.componentInstanceId === 'entrepaño-ñ-01',
+    );
+    expect(shelf).toBeDefined();
+    expect(shelf!.transform!.translationMm[0] / 0.25).toBe(
+      Math.round(shelf!.transform!.translationMm[0] / 0.25),
+    );
+    expect(shelf!.transform!.translationMm[2] / 0.25).toBe(
+      Math.round(shelf!.transform!.translationMm[2] / 0.25),
+    );
+    expect(scenario.response.resolved!.machining.manufacturingFingerprint).toMatch(/^sha256-[0-9a-f]{64}$/u);
   });
 
   test('every response echoes the capability marker before any host mutation', () => {
