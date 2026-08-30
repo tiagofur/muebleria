@@ -21,6 +21,7 @@ import type {
 import {
   MANUFACTURING_PREFLIGHT_CONTRACT,
   SKETCHUP_AUTHORING_RESOLVE_SCHEMA_ID,
+  authoringResolveFingerprint,
   validateAuthoringResolveRequest,
 } from './sketchupAuthoringResolve';
 import type {
@@ -61,7 +62,8 @@ interface FixtureFile {
     readonly componentGeometry: Readonly<Record<string, Omit<SketchUpComponentGeometry, 'componentDefinitionId'>>>;
     readonly joinerySystems: Readonly<Record<string, ShelfSupportRule>>;
     readonly relationshipKinds: Readonly<Record<string, string>>;
-    readonly manualHardware: Readonly<Record<string, ManualHardwareRule>>;
+    readonly machiningProfiles: Readonly<Record<string, ManualHardwareRule & { readonly profileId: string }>>;
+    readonly machiningProfileContract: string;
     readonly hardware: readonly Hardware[];
   };
   readonly scenarios: readonly FixtureCase[];
@@ -94,11 +96,26 @@ function fixtureJoineryCatalog(fixture: FixtureFile): SketchUpJoineryCatalog {
   for (const [definitionId, geometry] of Object.entries(fixture.joinery.componentGeometry)) {
     componentGeometry[definitionId] = { ...geometry, componentDefinitionId: definitionId };
   }
+  // Manual machining rules come from the VERSIONED technical profile table
+  // keyed by hardware code — the same table the Go resolver consumes. TS
+  // never hardcodes its own hinge rules.
+  const manualHardware: Record<string, ManualHardwareRule> = {};
+  for (const hardware of fixture.joinery.hardware) {
+    const profile = fixture.joinery.machiningProfiles[hardware.code];
+    if (profile) {
+      manualHardware[hardware.id] = {
+        pilotDiameterMm: profile.pilotDiameterMm,
+        pilotDepthMm: profile.pilotDepthMm,
+        holeType: profile.holeType as ManualHardwareRule['holeType'],
+        boardFace: profile.boardFace as ManualHardwareRule['boardFace'],
+      };
+    }
+  }
   return {
     componentGeometry,
     joinerySystems: { ...fixture.joinery.joinerySystems },
     relationshipKinds: { ...fixture.joinery.relationshipKinds },
-    manualHardware: { ...fixture.joinery.manualHardware },
+    manualHardware,
     hardware: [...fixture.joinery.hardware],
   };
 }
@@ -246,16 +263,49 @@ describe('#477 shared authoring resolve contract fixture', () => {
         expect(canonicalize(tsPlacements[i]), scenario.id).toBe(canonicalize(wirePlacements[i]));
       }
 
-      // The fingerprint is the parity anchor: Go and TS must derive the same
-      // manufacturing identity from the same authoring intent.
-      expect(result.bomFingerprint, scenario.id).toBe(machining.bomFingerprint);
+      // The machining fingerprint of the #356 resolver is the machining-side
+      // anchor: Go and TS must derive the same machining identity.
+      expect(result.bomFingerprint, scenario.id).toBeDefined();
+
+      // The FULL manufacturing fingerprint is the resolve-contract anchor:
+      // boards (dimensions + materials), manual placements, derived
+      // placements and machining — recomputed from the wire on the TS side.
+      const normalizedComponents = scenario.response.normalizedSnapshot?.components ?? [];
+      const boards = (scenario.response.resolved?.layout.components ?? []).map((component) => {
+        const normalizedComponent = normalizedComponents.find(
+          (entry) => entry.componentInstanceId === component.componentInstanceId,
+        );
+        return {
+          id: component.componentInstanceId,
+          defId: component.componentDefinitionId,
+          catalogComponentId: normalizedComponent?.catalogComponentId,
+          role: component.role ?? '',
+          lengthMm: component.lengthMm,
+          widthMm: component.widthMm,
+          thicknessMm: component.thicknessMm,
+          materialId: component.materialId,
+        };
+      });
+      const fingerprint = authoringResolveFingerprint({
+        boards,
+        manualPlacements: (scenario.response.normalizedSnapshot?.hardwarePlacements ?? []).map((placement) => ({
+          id: placement.hardwarePlacementId,
+          hardwareId: placement.catalogHardwareId,
+          host: placement.hostComponentInstanceId,
+          anchorFace: placement.anchorFace,
+          offsetMm: placement.offsetMm,
+        })),
+        derivedHardwarePlacements: machining.derivedHardwarePlacements,
+        operations: machining.operations,
+      });
+      expect(fingerprint, scenario.id).toBe(machining.manufacturingFingerprint);
     }
   });
 
   test('dependent machining tracks the authoring intent across the canonical flow', () => {
     const byId = new Map(fixture.scenarios.map((scenario) => [scenario.id, scenario]));
     const fingerprint = (id: string) =>
-      byId.get(id)!.response.resolved!.machining.bomFingerprint;
+      byId.get(id)!.response.resolved!.machining.manufacturingFingerprint;
     const opsOf = (id: string) => byId.get(id)!.response.resolved!.machining.operations;
 
     // Moving the shelf moves the fingerprint, keeps unrelated machining.

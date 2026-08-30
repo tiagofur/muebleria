@@ -27,7 +27,6 @@ import type {
   ContractIssue,
   CoordinateSystem,
   DerivedHardwarePlacement,
-  HardwarePlacementIntent,
   ParameterValue,
   PartRelationshipIntent,
   StableEntityId,
@@ -102,20 +101,36 @@ export type AuthoringOccurrenceTransformV1 = {
 };
 
 /**
+ * The resolve-scoped manual placement intent. v1 carries no
+ * rotationDeg/handedness: fields that do not drive resolution are not part
+ * of the wire (an apparent capability is worse than an absent one); #468
+ * adds them together with their resolution semantics.
+ */
+export type AuthoringHardwarePlacementV1 = {
+  readonly hardwarePlacementId: StableEntityId;
+  readonly catalogHardwareId: string;
+  readonly hostComponentInstanceId: StableEntityId;
+  readonly anchorFace: string;
+  readonly offsetMm: readonly [number, number];
+};
+
+/**
  * The furniture authoring snapshot to resolve. `components` absent = the
  * definition's default occurrence set (parity with the GET layout endpoint);
  * present = the complete authored occurrence set (add/remove/move).
  * `hardwarePlacements` absent = the definition's default manual placements;
  * present (even empty) = the complete manual placement set the user authored.
+ * `catalogRevision` is REQUIRED: the resolve is only reproducible against a
+ * pinned catalog (no implicit latest).
  */
 export type AuthoringFurnitureIntentV1 = {
   readonly furnitureDefinitionId: string;
-  readonly catalogRevision?: string;
+  readonly catalogRevision: string;
   readonly parameters?: Readonly<Record<string, ParameterValue>>;
   readonly materialChoices?: Readonly<Record<string, string>>;
   readonly components?: readonly AuthoringComponentOccurrenceV1[];
   readonly relationships?: readonly PartRelationshipIntent[];
-  readonly hardwarePlacements?: readonly HardwarePlacementIntent[];
+  readonly hardwarePlacements?: readonly AuthoringHardwarePlacementV1[];
 };
 
 export type AuthoringResolveRequestV1 = {
@@ -142,6 +157,10 @@ export type ResolvedLayoutWireV1 = {
     readonly componentDefinitionId: string;
     readonly slotId: string;
     readonly role?: string;
+    readonly lengthMm: number;
+    readonly widthMm: number;
+    readonly thicknessMm: number;
+    readonly materialId?: string;
     readonly transform: { readonly translationMm: readonly [number, number, number] };
   }[];
   readonly hardware: readonly {
@@ -175,11 +194,17 @@ export type ResolvedMachiningOperationV1 = {
 export type ResolvedMachiningV1 = {
   readonly operations: readonly ResolvedMachiningOperationV1[];
   readonly derivedHardwarePlacements: readonly DerivedHardwarePlacement[];
-  readonly bomFingerprint: string;
+  readonly manufacturingFingerprint: string;
 };
 
+/**
+ * Resolve-scoped validation of the accepted intent. `scope` pins the
+ * semantics: this subset NEVER claims the #347 fabrication-readiness
+ * verdict — the full preflight is only linked through `preflightContract`.
+ */
 export type ResolvedPreflightV1 = {
-  readonly status: 'ready' | 'warning' | 'blocked';
+  readonly scope: 'authoring-resolve-subset';
+  readonly status: 'clear' | 'blocked';
   readonly issues: readonly ContractIssue[];
   readonly preflightContract: typeof MANUFACTURING_PREFLIGHT_CONTRACT;
 };
@@ -199,7 +224,7 @@ export type NormalizedAuthoringIntentV1 = {
     readonly transform?: { readonly frame: 'assembly'; readonly translationMm: readonly [number, number, number] };
   })[];
   readonly relationships: readonly PartRelationshipIntent[];
-  readonly hardwarePlacements: readonly HardwarePlacementIntent[];
+  readonly hardwarePlacements: readonly AuthoringHardwarePlacementV1[];
 };
 
 export type AuthoringResolveResponseV1 = {
@@ -210,6 +235,7 @@ export type AuthoringResolveResponseV1 = {
   readonly responseMessageId: string;
   readonly inReplyToMessageId: string;
   readonly idempotencyKey: string;
+  readonly catalogRevision: string;
   readonly status: 'accepted' | 'rejected';
   readonly normalizedSnapshot?: NormalizedAuthoringIntentV1;
   readonly resolved?: {
@@ -255,10 +281,15 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
 
   if (!isNonEmptyString(request.messageId)) push('REQUEST_INVALID', 'messageId is required', 'messageId');
   if (!isNonEmptyString(request.idempotencyKey)) push('REQUEST_INVALID', 'idempotencyKey is required', 'idempotencyKey');
+  if (request.idempotencyKey !== undefined && request.idempotencyKey.length > 128) {
+    push('REQUEST_INVALID', 'idempotencyKey cannot exceed 128 characters', 'idempotencyKey');
+  }
   if (!isNonEmptyString(request.sentAt)) push('REQUEST_INVALID', 'sentAt is required', 'sentAt');
   if (request.source?.client === undefined || !isNonEmptyString(request.source.client) ||
-    request.source.host === undefined || !isNonEmptyString(request.source.host)) {
-    push('REQUEST_INVALID', 'source client/host are required', 'source');
+    request.source.host === undefined || !isNonEmptyString(request.source.host) ||
+    request.source.clientVersion === undefined || !isNonEmptyString(request.source.clientVersion) ||
+    request.source.hostVersion === undefined || !isNonEmptyString(request.source.hostVersion)) {
+    push('REQUEST_INVALID', 'source client/clientVersion/host/hostVersion are required', 'source');
   }
 
   const units = request.units;
@@ -276,6 +307,11 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
   if (!furniture || !isNonEmptyString(furniture.furnitureDefinitionId)) {
     push('CATALOG_REFERENCE_MISSING', 'furniture.furnitureDefinitionId is required', 'furniture.furnitureDefinitionId');
     return issues;
+  }
+  if (!isNonEmptyString(furniture.catalogRevision)) {
+    push('REQUEST_INVALID',
+      'furniture.catalogRevision is required: the resolve is only reproducible against a pinned catalog',
+      'furniture.catalogRevision');
   }
 
   const parameters = furniture.parameters ?? {};
@@ -314,12 +350,19 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
     }
   }
 
+  const seenRelationshipIds = new Set<string>();
   for (const [index, relationship] of (furniture.relationships ?? []).entries()) {
     const path = `furniture.relationships[${index}]`;
     if (!isNonEmptyString(relationship?.relationshipId)) {
       push('REQUEST_INVALID', 'relationshipId is required', `${path}.relationshipId`);
       continue;
     }
+    if (seenRelationshipIds.has(relationship.relationshipId)) {
+      push('REQUEST_INVALID',
+        `relationshipId ${relationship.relationshipId} appears more than once`,
+        `${path}.relationshipId`);
+    }
+    seenRelationshipIds.add(relationship.relationshipId);
     if (!isNonEmptyString(relationship.kind)) {
       push('RELATIONSHIP_INVALID', `relationship ${relationship.relationshipId} has no kind`, `${path}.kind`);
     }
@@ -341,12 +384,19 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
     }
   }
 
+  const seenPlacementIds = new Set<string>();
   for (const [index, placement] of (furniture.hardwarePlacements ?? []).entries()) {
     const path = `furniture.hardwarePlacements[${index}]`;
     if (!isNonEmptyString(placement?.hardwarePlacementId)) {
       push('REQUEST_INVALID', 'hardwarePlacementId is required', `${path}.hardwarePlacementId`);
       continue;
     }
+    if (seenPlacementIds.has(placement.hardwarePlacementId)) {
+      push('REQUEST_INVALID',
+        `hardwarePlacementId ${placement.hardwarePlacementId} appears more than once`,
+        `${path}.hardwarePlacementId`);
+    }
+    seenPlacementIds.add(placement.hardwarePlacementId);
     if (!isNonEmptyString(placement.catalogHardwareId)) {
       push('HARDWARE_REFERENCE_INVALID', `placement ${placement.hardwarePlacementId} has no catalogHardwareId`,
         `${path}.catalogHardwareId`);
@@ -369,15 +419,15 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
       push('HARDWARE_PLACEMENT_INVALID', `placement ${placement.hardwarePlacementId} offsetMm must be two finite millimeters`,
         `${path}.offsetMm`);
     }
-    if (placement.rotationDeg !== undefined &&
-      (typeof placement.rotationDeg !== 'number' || !Number.isFinite(placement.rotationDeg) ||
-        placement.rotationDeg % 360 !== 0)) {
+    const placementRecord = placement as unknown as Record<string, unknown>;
+    if (placementRecord.rotationDeg !== undefined) {
       push('HARDWARE_PLACEMENT_INVALID',
-        `placement ${placement.hardwarePlacementId} rotationDeg must be 0 (mod 360) in resolve v1`,
+        `placement ${placement.hardwarePlacementId}: rotationDeg is not part of resolve v1 (added with #468 resolution semantics)`,
         `${path}.rotationDeg`);
     }
-    if (placement.handedness !== undefined && !HARDWARE_HANDEDNESS.has(placement.handedness)) {
-      push('HARDWARE_PLACEMENT_INVALID', `placement ${placement.hardwarePlacementId} has unknown handedness`,
+    if (placementRecord.handedness !== undefined) {
+      push('HARDWARE_PLACEMENT_INVALID',
+        `placement ${placement.hardwarePlacementId}: handedness is not part of resolve v1 (added with #468 resolution semantics)`,
         `${path}.handedness`);
     }
   }
@@ -386,8 +436,136 @@ export function validateAuthoringResolveRequest(request: AuthoringResolveRequest
 }
 
 const HARDWARE_ANCHOR_FACES = new Set(['front', 'back', 'left', 'right', 'top', 'bottom']);
-const HARDWARE_HANDEDNESS = new Set(['left', 'right', 'neutral']);
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+// --- Manufacturing fingerprint (parity with the Go resolver) -----------------
+
+/** Board identity/dimensions/material entering the manufacturing fingerprint. */
+export interface FingerprintBoard {
+  readonly id: string;
+  readonly defId: string;
+  readonly catalogComponentId?: string;
+  readonly role: string;
+  readonly lengthMm: number;
+  readonly widthMm: number;
+  readonly thicknessMm: number;
+  readonly materialId?: string;
+}
+
+/** Manual placement identity entering the manufacturing fingerprint. */
+export interface FingerprintPlacement {
+  readonly id: string;
+  readonly hardwareId: string;
+  readonly host: string;
+  readonly anchorFace: string;
+  readonly offsetMm: readonly [number, number];
+}
+
+/**
+ * Deterministic fingerprint over the FULL manufacturing identity of a
+ * resolved authoring state — boards (occurrence identity + dimensions +
+ * selected material), manual placements, derived placements and machining
+ * operations. Parity-pinned against the Go resolver over the shared
+ * contract fixture: both sides must derive the same string from the same
+ * scenario, so a handle swap, a same-drilling substitution or a material
+ * change all move it.
+ */
+export function authoringResolveFingerprint(input: {
+  readonly boards: readonly FingerprintBoard[];
+  readonly manualPlacements: readonly FingerprintPlacement[];
+  readonly derivedHardwarePlacements: readonly {
+    readonly derivedHardwarePlacementId: string;
+    readonly hostComponentInstanceId: string;
+    readonly provenance: { readonly sourceKind: string; readonly relationshipId: string };
+  }[];
+  readonly operations: readonly {
+    readonly operationId: string;
+    readonly hostComponentInstanceId: string;
+    readonly provenance: Record<string, unknown>;
+    readonly holes: readonly ResolveHoleV1[];
+  }[];
+}): string {
+  const boards = input.boards
+    .map((board) => {
+      const body: Record<string, unknown> = {
+        id: board.id, defId: board.defId, role: board.role,
+        lengthMm: board.lengthMm, widthMm: board.widthMm, thicknessMm: board.thicknessMm,
+      };
+      if (board.catalogComponentId) body.catalogComponentId = board.catalogComponentId;
+      if (board.materialId) body.materialId = board.materialId;
+      return { sort: board.id, body };
+    })
+    .sort((a, b) => a.sort.localeCompare(b.sort))
+    .map((entry) => entry.body);
+
+  const manualPlacements = input.manualPlacements
+    .map((placement) => ({
+      sort: placement.id,
+      body: {
+        id: placement.id, hardwareId: placement.hardwareId, host: placement.host,
+        anchorFace: placement.anchorFace, offsetMm: [...placement.offsetMm],
+      },
+    }))
+    .sort((a, b) => a.sort.localeCompare(b.sort))
+    .map((entry) => entry.body);
+
+  const derived = input.derivedHardwarePlacements
+    .map((placement) => ({
+      sort: placement.derivedHardwarePlacementId,
+      body: {
+        id: placement.derivedHardwarePlacementId,
+        host: placement.hostComponentInstanceId,
+        prov: { sourceKind: placement.provenance.sourceKind, relationshipId: placement.provenance.relationshipId },
+      },
+    }))
+    .sort((a, b) => a.sort.localeCompare(b.sort))
+    .map((entry) => entry.body);
+
+  const operations = input.operations
+    .map((operation) => ({
+      sort: operation.operationId,
+      body: {
+        id: operation.operationId,
+        host: operation.hostComponentInstanceId,
+        prov: operation.provenance,
+        holes: operation.holes.map((hole) => ({
+          face: hole.face, xMm: hole.xMm, yMm: hole.yMm,
+          diameterMm: hole.diameterMm, depthMm: hole.depthMm, type: hole.type,
+        })),
+      },
+    }))
+    .sort((a, b) => a.sort.localeCompare(b.sort))
+    .map((entry) => entry.body);
+
+  return fnv1aHex(canonicalizeJson({
+    boards,
+    manualPlacements,
+    derivedHardwarePlacements: derived,
+    operations,
+  }));
+}
+
+function canonicalizeJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalizeJson).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(record[key])}`)
+    .join(',')}}`;
+}
+
+/** 32-bit FNV-1a over UTF-16 code units — byte-equal to the Go port on the
+ * ASCII identifiers the contract carries. */
+function fnv1aHex(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `fnv1a-${hash.toString(16).padStart(8, '0')}`;
 }

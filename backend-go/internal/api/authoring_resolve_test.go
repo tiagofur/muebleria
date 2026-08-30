@@ -123,7 +123,8 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 	return &module, catalog
 }
 
-func authoringFixtureRequest(furniture authoringResolveFurniture) authoringResolveRequest {
+func authoringFixtureRequest(revision string, furniture authoringResolveFurniture) authoringResolveRequest {
+	furniture.CatalogRevision = revision
 	return authoringResolveRequest{
 		SchemaID:         engine.AuthoringResolveSchemaID,
 		SchemaName:       engine.AuthoringResolveSchemaName,
@@ -138,16 +139,34 @@ func authoringFixtureRequest(furniture authoringResolveFurniture) authoringResol
 	}
 }
 
-func occurrenceJSON(instanceID, defID string, translation *[3]float64) engine.AuthoringOccurrence {
-	occ := engine.AuthoringOccurrence{ComponentInstanceID: instanceID, ComponentDefinitionID: defID}
+// authoringCatalogRevision computes the same content-addressed revision the
+// handler pins against, from the stub store's catalog lists.
+func authoringCatalogRevision(t *testing.T, server *Server) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+	composition, _, err := server.loadWorkshopCatalogOnce(req)
+	if err != nil {
+		t.Fatalf("load catalog once: %v", err)
+	}
+	catalog := buildWorkshopFurnitureCatalog(
+		server.Store.(*stubStore).listModules,
+		server.Store.(*stubStore).listCategories,
+		server.Store.(*stubStore).listMaterialCategories,
+		composition,
+	)
+	return workshopCatalogRevisionID(catalog)
+}
+
+func occurrenceJSON(instanceID, defID string, translation []float64) authoringOccurrenceWire {
+	occ := authoringOccurrenceWire{ComponentInstanceID: instanceID, ComponentDefinitionID: defID}
 	if translation != nil {
-		occ.Transform = &engine.AuthoringOccurrenceTransform{Frame: "assembly", TranslationMm: *translation}
+		occ.Transform = &authoringTransformWire{Frame: "assembly", TranslationMm: translation}
 	}
 	return occ
 }
 
-func defaultOccurrencesJSON() []engine.AuthoringOccurrence {
-	return []engine.AuthoringOccurrence{
+func defaultOccurrencesJSON() []authoringOccurrenceWire {
+	return []authoringOccurrenceWire{
 		occurrenceJSON("side-left-01", "st-comp-side", nil),
 		occurrenceJSON("side-right-01", "st-comp-side-r", nil),
 		occurrenceJSON("floor-01", "st-comp-base", nil),
@@ -199,11 +218,12 @@ type authoringFixtureSchema struct {
 }
 
 type authoringFixtureJoinery struct {
-	ComponentGeometry map[string]authoringFixtureGeometry           `json:"componentGeometry"`
-	JoinerySystems    map[string]engine.ShelfSupportJoineryRule     `json:"joinerySystems"`
-	RelationshipKinds map[string]string                             `json:"relationshipKinds"`
-	ManualHardware    map[string]engine.ManualHardwareMachiningRule `json:"manualHardware"`
-	Hardware          []authoringFixtureHardware                    `json:"hardware"`
+	ComponentGeometry        map[string]authoringFixtureGeometry       `json:"componentGeometry"`
+	JoinerySystems           map[string]engine.ShelfSupportJoineryRule `json:"joinerySystems"`
+	RelationshipKinds        map[string]string                         `json:"relationshipKinds"`
+	MachiningProfiles        map[string]engine.ManualMachiningProfile  `json:"machiningProfiles"`
+	MachiningProfileContract string                                    `json:"machiningProfileContract"`
+	Hardware                 []authoringFixtureHardware                `json:"hardware"`
 }
 
 type authoringFixtureGeometry struct {
@@ -234,6 +254,7 @@ type authoringFixtureCase struct {
 // wire bodies the TS/Ruby parity tests consume.
 func authoringFixtureScenarios(t *testing.T, server *Server, token string) []authoringFixtureCase {
 	t.Helper()
+	revision := authoringCatalogRevision(t, server)
 	run := func(id, query string, request any, wantStatus int) authoringFixtureCase {
 		t.Helper()
 		requestBody, err := json.Marshal(request)
@@ -258,29 +279,29 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 	}
 
 	furniture := func(mutate func(f *authoringResolveFurniture)) authoringResolveFurniture {
-		f := authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}
+		f := authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID, CatalogRevision: revision}
 		mutate(&f)
 		return f
 	}
 
 	return []authoringFixtureCase{
 		// 1. Existing cabinet parameters/materials resolve with GET parity.
-		run("01-params-materials-parity", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("01-params-materials-parity", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}
 			f.MaterialChoices = map[string]string{"FRENTE": "mat-oak18"}
 		})), http.StatusOK),
 
 		// 2. Move shelf → dependent relationship/machining update.
-		run("02-move-shelf", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("02-move-shelf", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			occ := defaultOccurrencesJSON()
-			occ[5] = occurrenceJSON("shelf-01", "mod-comp-shelf", &[3]float64{18, 18, 520})
+			occ[5] = occurrenceJSON("shelf-01", "mod-comp-shelf", []float64{18, 18, 520})
 			f.Components = occ
 			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")}
 		})), http.StatusOK),
 
 		// 3. Add a second shelf sharing the reusable definition.
-		run("03-add-shelf-shared-definition", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
-			occ := append(defaultOccurrencesJSON(), occurrenceJSON("shelf-02", "mod-comp-shelf", &[3]float64{18, 18, 560}))
+		run("03-add-shelf-shared-definition", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			occ := append(defaultOccurrencesJSON(), occurrenceJSON("shelf-02", "mod-comp-shelf", []float64{18, 18, 560}))
 			f.Components = occ
 			f.Relationships = []engine.AuthoringRelationship{
 				shelfRelJSON("rel-shelf-01", "shelf-01"),
@@ -289,41 +310,56 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		})), http.StatusOK),
 
 		// 4. Remove shelf → only its dependent machining disappears.
-		run("04-remove-shelf", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("04-remove-shelf", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			occ := defaultOccurrencesJSON()[:5]
 			f.Components = append(occ, defaultOccurrencesJSON()[6])
 		})), http.StatusOK),
 
 		// 5. Move manual hinge → hinge machining moves, shelf machining stable.
-		run("05-move-manual-hinge", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("05-move-manual-hinge", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
 			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")}
-			f.HardwarePlacements = []engine.AuthoringManualPlacement{
+			f.HardwarePlacements = []authoringPlacementWire{
 				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "door-01",
-					AnchorFace: "front", OffsetMm: [2]float64{298, 480}, RotationDeg: 0},
+					AnchorFace: "front", OffsetMm: []float64{298, 480}},
 				{HardwarePlacementID: "hp-handle-01", CatalogHardwareID: "hw-handle", HostComponentInstanceID: "door-01",
-					AnchorFace: "front", OffsetMm: [2]float64{40, 360}, RotationDeg: 0},
+					AnchorFace: "front", OffsetMm: []float64{40, 360}},
 			}
 		})), http.StatusOK),
 
 		// 6. Replace hinge → machining follows the selected definition.
-		run("06-replace-hinge", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("06-replace-hinge", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
-			f.HardwarePlacements = []engine.AuthoringManualPlacement{
+			f.HardwarePlacements = []authoringPlacementWire{
 				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge-b", HostComponentInstanceID: "door-01",
-					AnchorFace: "front", OffsetMm: [2]float64{298, 100}, RotationDeg: 0},
+					AnchorFace: "front", OffsetMm: []float64{298, 100}},
 			}
 		})), http.StatusOK),
 
 		// 7. Invalid/orphan identity → structured rejection, no partial result.
-		run("07-orphan-anchor-rejection", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("07-orphan-anchor-rejection", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
 			f.Relationships = []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-ghost")}
 		})), http.StatusUnprocessableEntity),
 
+		// 7b. One valid + one orphaned target still rejects: partial target
+		// sets are never silently dropped.
+		run("neg-orphan-target-among-valid", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{{
+				RelationshipID: "rel-shelf-01",
+				Kind:           "shelf-support",
+				Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "shelf-01", Role: "shelf-edge"},
+				Targets: []engine.AuthoringRelationshipAnchor{
+					{ComponentInstanceID: "side-left-01", Role: "inside-face"},
+					{ComponentInstanceID: "side-ghost", Role: "inside-face"},
+				},
+			}}
+		})), http.StatusUnprocessableEntity),
+
 		// 8. Unknown schema/version → fail closed.
 		func() authoringFixtureCase {
-			request := authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+			request := authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 				f.Parameters = map[string]any{"widthMm": 600.0}
 			}))
 			request.SchemaVersion = "9.9"
@@ -331,24 +367,45 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		}(),
 
 		// Negative proof: ad-hoc query parameters can never carry authoring.
-		run("neg-query-parameter", "?shelf2Z=520&hinge1Offset=48", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("neg-query-parameter", "?shelf2Z=520&hinge1Offset=48", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"widthMm": 600.0}
 		})), http.StatusBadRequest),
 
+		// Negative proof: missing catalog revision → no implicit latest.
+		func() authoringFixtureCase {
+			request := authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {}))
+			request.Furniture.CatalogRevision = ""
+			return run("neg-missing-catalog-revision", "", request, http.StatusBadRequest)
+		}(),
+
 		// Negative proof: ad-hoc parameter keys in the body fail closed too.
-		run("neg-adhoc-body-parameter", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("neg-adhoc-body-parameter", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"shelf2Z": 520.0}
 		})), http.StatusUnprocessableEntity),
 
 		// Negative proof: duplicate occurrence identity.
-		run("neg-duplicate-occurrence-id", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("neg-duplicate-occurrence-id", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = append(defaultOccurrencesJSON(), occurrenceJSON("shelf-01", "mod-comp-shelf", nil))
 		})), http.StatusUnprocessableEntity),
 
+		// Negative proof: wrong-length translationMm (fixed Go arrays would
+		// silently truncate/extend — the wire layer enforces the exact size).
+		func() authoringFixtureCase {
+			request := map[string]any{}
+			raw, _ := json.Marshal(authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+				f.Components = defaultOccurrencesJSON()
+			})))
+			_ = json.Unmarshal(raw, &request)
+			request["furniture"].(map[string]any)["components"].([]any)[5].(map[string]any)["transform"] = map[string]any{
+				"frame": "assembly", "translationMm": []float64{18, 520},
+			}
+			return run("neg-wrong-length-translation", "", request, http.StatusBadRequest)
+		}(),
+
 		// Complete empty manual set: definition placements fully replaced.
-		run("09-empty-manual-placement-set", "", authoringFixtureRequest(furniture(func(f *authoringResolveFurniture) {
+		run("09-empty-manual-placement-set", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
-			f.HardwarePlacements = []engine.AuthoringManualPlacement{}
+			f.HardwarePlacements = []authoringPlacementWire{}
 		})), http.StatusOK),
 	}
 }
@@ -396,21 +453,20 @@ func buildAuthoringFixtureJoinery(t *testing.T, scenarios []authoringFixtureCase
 		})
 	}
 
+	// The versioned TECHNICAL rule tables ship IN the fixture: both runtimes'
+	// compiled tables are asserted equal to this data by their parity tests,
+	// so no parallel rule set can diverge.
+	profiles := map[string]engine.ManualMachiningProfile{}
+	for code, profile := range engine.AuthoringManualMachiningProfiles() {
+		profiles[code] = profile
+	}
 	return authoringFixtureJoinery{
-		ComponentGeometry: geometry,
-		JoinerySystems: map[string]engine.ShelfSupportJoineryRule{
-			"minifix-dowel": {
-				JoinerySystemID: "minifix-dowel", MinifixCode: "HER-MIN-15", DowelCode: "HER-TAQ-8X30",
-				EndMarginMm: 50, MaxSpacingMm: 512, GridMm: 32, WithDowels: true,
-				CamDiameterMm: 15, CamDepthMm: 12.5, DowelDiameterMm: 8, DowelDepthMm: 12, DowelEndDepthMm: 20,
-			},
-		},
-		RelationshipKinds: map[string]string{"shelf-support": "minifix-dowel"},
-		ManualHardware: map[string]engine.ManualHardwareMachiningRule{
-			"hw-hinge":   {PilotDiameterMm: 35, PilotDepthMm: 12.5, HoleType: "hinge", BoardFace: "front"},
-			"hw-hinge-b": {PilotDiameterMm: 32, PilotDepthMm: 12.5, HoleType: "hinge", BoardFace: "front"},
-		},
-		Hardware: hardware,
+		ComponentGeometry:        geometry,
+		JoinerySystems:           engine.AuthoringJoinerySystems(),
+		RelationshipKinds:        map[string]string{"shelf-support": "minifix-dowel"},
+		MachiningProfiles:        profiles,
+		MachiningProfileContract: engine.ManualMachiningProfileContract,
+		Hardware:                 hardware,
 	}
 }
 
@@ -471,6 +527,7 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 			SchemaID        string `json:"schemaId"`
 			ResolveContract string `json:"resolveContract"`
 			Status          string `json:"status"`
+			CatalogRevision string `json:"catalogRevision"`
 			Resolved        *struct {
 				Layout struct {
 					TransformContract string `json:"transformContract"`
@@ -483,9 +540,10 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					} `json:"hardware"`
 				} `json:"layout"`
 				Machining struct {
-					BomFingerprint string `json:"bomFingerprint"`
+					ManufacturingFingerprint string `json:"manufacturingFingerprint"`
 				} `json:"machining"`
 				Preflight struct {
+					Scope             string `json:"scope"`
 					Status            string `json:"status"`
 					PreflightContract string `json:"preflightContract"`
 				} `json:"preflight"`
@@ -506,11 +564,23 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 			if response.Resolved.Layout.TransformContract != engine.LayoutTransformContractV1 {
 				t.Fatalf("scenario %s: transform contract marker lost", scenario.ID)
 			}
-			if response.Resolved.Machining.BomFingerprint == "" {
-				t.Fatalf("scenario %s: fingerprint missing", scenario.ID)
+			if response.Resolved.Machining.ManufacturingFingerprint == "" {
+				t.Fatalf("scenario %s: manufacturing fingerprint missing", scenario.ID)
+			}
+			// The validation section is the resolve-scoped subset — never a
+			// fabrication-readiness claim — and links the #347 model.
+			if response.Resolved.Preflight.Scope != engine.AuthoringValidationScope {
+				t.Fatalf("scenario %s: validation scope = %q", scenario.ID, response.Resolved.Preflight.Scope)
+			}
+			if response.Resolved.Preflight.Status != engine.AuthoringValidationClear &&
+				response.Resolved.Preflight.Status != engine.AuthoringValidationBlocked {
+				t.Fatalf("scenario %s: validation status = %q", scenario.ID, response.Resolved.Preflight.Status)
 			}
 			if response.Resolved.Preflight.PreflightContract != engine.ManufacturingPreflightContract {
 				t.Fatalf("scenario %s: preflight contract marker lost", scenario.ID)
+			}
+			if response.CatalogRevision == "" {
+				t.Fatalf("scenario %s: accepted resolve must echo the pinned catalog revision", scenario.ID)
 			}
 			for _, component := range response.Resolved.Layout.Components {
 				if component.ComponentInstanceID == "" {
@@ -553,7 +623,7 @@ func TestAuthoringResolveParityWithGetLayout(t *testing.T) {
 		t.Fatalf("GET layout status = %d body=%s", getRec.Code, getRec.Body.String())
 	}
 
-	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringResolveFurniture{
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
 		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
 		MaterialChoices:       map[string]string{"FRENTE": "mat-oak18"},
@@ -583,7 +653,7 @@ func TestAuthoringResolveParityWithGetLayout(t *testing.T) {
 func TestAuthoringResolveDeterministicRetries(t *testing.T) {
 	server, token := authoringStubServer(t)
 
-	request := authoringFixtureRequest(authoringResolveFurniture{
+	request := authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
 		Components:            defaultOccurrencesJSON(),
 		Relationships:         []engine.AuthoringRelationship{shelfRelJSON("rel-shelf-01", "shelf-01")},
@@ -608,7 +678,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	server, _ := authoringStubServer(t)
 
 	// No token → 401.
-	rec := postAuthoringResolve(server, "", "", authoringFixtureRequest(authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+	rec := postAuthoringResolve(server, "", "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no-token status = %d", rec.Code)
 	}
@@ -616,7 +686,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	// Org-less token → fail closed before the handler.
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	orgless, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
-	rec = postAuthoringResolve(server, orgless, "", authoringFixtureRequest(authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+	rec = postAuthoringResolve(server, orgless, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("org-less status = %d", rec.Code)
 	}
@@ -624,7 +694,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	// Extension tokens hold the EXPLICIT authoring-resolve POST capability
 	// (#460 coordination) and stay read-only everywhere else.
 	extension, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
-	rec = postAuthoringResolve(server, extension, "", authoringFixtureRequest(authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+	rec = postAuthoringResolve(server, extension, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("extension token resolve status = %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -655,7 +725,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 		listStructures: catalog.Structures, listComponents: catalog.Components, listHardwares: catalog.Hardware,
 	}
 	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
-	rec = postAuthoringResolve(licenseless, webToken, "", authoringFixtureRequest(authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+	rec = postAuthoringResolve(licenseless, webToken, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("inactive license status = %d", rec.Code)
 	}
@@ -663,10 +733,13 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 
 func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	server, token := authoringStubServer(t)
-	valid := authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID, Parameters: map[string]any{"widthMm": 600.0}}
+	valid := authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID, CatalogRevision: authoringCatalogRevision(t, server),
+		Parameters: map[string]any{"widthMm": 600.0},
+	}
 
 	// Unknown schema id.
-	request := authoringFixtureRequest(valid)
+	request := authoringFixtureRequest("", valid)
 	request.SchemaID = "granete.sketchup-authoring.v1"
 	rec := postAuthoringResolve(server, token, "", request)
 	if rec.Code != http.StatusBadRequest {
@@ -687,7 +760,7 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 
 	// Unknown fields fail closed — the server never guesses a schema.
 	var withUnknown map[string]any
-	raw, _ := json.Marshal(authoringFixtureRequest(valid))
+	raw, _ := json.Marshal(authoringFixtureRequest("", valid))
 	_ = json.Unmarshal(raw, &withUnknown)
 	withUnknown["shelf2Z"] = 520.0
 	rec = postAuthoringResolve(server, token, "", withUnknown)
@@ -697,7 +770,7 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	assertIssueCode(t, rec.Body.Bytes(), "REQUEST_INVALID")
 
 	// Payload limit is explicit.
-	oversized := authoringFixtureRequest(valid)
+	oversized := authoringFixtureRequest("", valid)
 	oversized.MessageID = strings.Repeat("x", 3<<20)
 	rec = postAuthoringResolve(server, token, "", oversized)
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -706,16 +779,15 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	assertIssueCode(t, rec.Body.Bytes(), "PAYLOAD_TOO_LARGE")
 
 	// Ad-hoc query parameters are rejected before any resolution.
-	rec = postAuthoringResolve(server, token, "?shelf2Z=520", authoringFixtureRequest(valid))
+	rec = postAuthoringResolve(server, token, "?shelf2Z=520", authoringFixtureRequest("", valid))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("query param status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	assertIssueCode(t, rec.Body.Bytes(), "QUERY_PARAMETERS_UNSUPPORTED")
 
 	// Catalog revision mismatch rejects with the structured code.
-	stale := "workshop-stale"
-	request = authoringFixtureRequest(valid)
-	request.Furniture.CatalogRevision = &stale
+	request = authoringFixtureRequest("", valid)
+	request.Furniture.CatalogRevision = "workshop-stale"
 	rec = postAuthoringResolve(server, token, "", request)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("stale catalog status = %d body=%s", rec.Code, rec.Body.String())
@@ -723,7 +795,7 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	assertIssueCode(t, rec.Body.Bytes(), "CATALOG_REVISION_STALE")
 
 	// Unknown material choice keeps the structured code.
-	request = authoringFixtureRequest(authoringResolveFurniture{
+	request = authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
 		MaterialChoices:       map[string]string{"FRENTE": "mat-ghost"},
 	})
@@ -735,7 +807,7 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 
 	// Unknown definition is a structured rejection, not a bare 404.
 	server.Store.(*stubStore).moduleReturnedByID = nil
-	request = authoringFixtureRequest(authoringResolveFurniture{FurnitureDefinitionID: "mod-ghost"})
+	request = authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{FurnitureDefinitionID: "mod-ghost"})
 	rec = postAuthoringResolve(server, token, "", request)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unknown definition status = %d body=%s", rec.Code, rec.Body.String())

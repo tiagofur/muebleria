@@ -1,0 +1,54 @@
+15:04:26 runner start
+15:04:26 testup ready
+15:04:26 tc loaded
+15:04:26 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
+15:04:26 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.276s)
+15:04:26 test_malformed_envelope_never_mutates_the_host — PASS (0.106s)
+15:04:26 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.108s)
+15:04:26 test_unknown_schema_version_never_mutates_the_host — PASS (0.109s)
+15:04:26 evidence written (Success)
+15:13:48 runner start
+15:13:48 testup ready
+15:13:48 tc loaded
+15:13:48 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
+15:13:48 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.167s)
+15:13:48 test_malformed_envelope_never_mutates_the_host — PASS (0.103s)
+15:13:48 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.101s)
+15:13:48 test_unknown_schema_version_never_mutates_the_host — PASS (0.106s)
+15:13:48 evidence written (Success)
+15:18:01 runner start
+15:18:01 testup ready
+15:18:01 tc loaded
+15:18:01 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
+15:18:01 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.284s)
+15:18:01 test_malformed_envelope_never_mutates_the_host — PASS (0.127s)
+15:18:01 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.124s)
+15:18:01 test_unknown_schema_version_never_mutates_the_host — PASS (0.125s)
+15:18:01 evidence written (Success)
+15:20:06 runner start
+15:20:06 testup ready
+15:20:06 tc loaded
+15:20:06 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
+15:20:07 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.261s)
+15:20:07 test_malformed_envelope_never_mutates_the_host — PASS (0.123s)
+15:20:07 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.117s)
+15:20:07 test_unknown_schema_version_never_mutates_the_host — PASS (0.125s)
+15:20:07 evidence written (Success)
+15:20:43 runner start
+15:20:43 testup ready
+15:20:43 tc loaded
+15:20:43 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
+15:20:43 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.264s)
+15:20:43 test_malformed_envelope_never_mutates_the_host — PASS (0.105s)
+15:20:43 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.118s)
+15:20:43 test_unknown_schema_version_never_mutates_the_host — PASS (0.109s)
+15:20:43 evidence written (Success)
+15:23:27 runner start
+15:23:27 testup ready
+15:23:27 tc loaded
+15:23:27 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
+15:23:27 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.270s)
+15:23:27 test_malformed_envelope_never_mutates_the_host — PASS (0.107s)
+15:23:27 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.110s)
+15:23:27 test_unknown_schema_version_never_mutates_the_host — PASS (0.116s)
+15:23:27 evidence written (Success)

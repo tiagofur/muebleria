@@ -1,0 +1,55 @@
+{
+  "status": {
+    "code": "Success",
+    "color": "green"
+  },
+  "summary": {
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "assertions": 44
+  },
+  "metadata": {
+    "generated_by": "granete synchronous startup runner (Minitest direct; TestUp TestCase)",
+    "ruby_version": "3.2.2",
+    "ruby_platform": "arm64-darwin",
+    "sketchup_version": "26.2.242",
+    "target": "installed RBZ granete_for_sketchup (plugins folder)",
+    "time": "2026-08-30T15:23:27Z"
+  },
+  "tests": [
+    {
+      "name": "test_accepted_response_parses_and_drives_one_atomic_native_operation",
+      "status": "passed",
+      "time": 0.26986400003079325,
+      "failures": [
+
+      ]
+    },
+    {
+      "name": "test_malformed_envelope_never_mutates_the_host",
+      "status": "passed",
+      "time": 0.1066759999957867,
+      "failures": [
+
+      ]
+    },
+    {
+      "name": "test_rejected_orphan_anchor_never_mutates_the_host",
+      "status": "passed",
+      "time": 0.10958000004757196,
+      "failures": [
+
+      ]
+    },
+    {
+      "name": "test_unknown_schema_version_never_mutates_the_host",
+      "status": "passed",
+      "time": 0.11560799996368587,
+      "failures": [
+
+      ]
+    }
+  ]
+}

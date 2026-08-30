@@ -24,7 +24,7 @@ func TestStructureRevisionNumber_LegacyDefaults(t *testing.T) {
 func TestBumpStructureRevision(t *testing.T) {
 	current := domain.Structure{
 		ID: "st-1", Code: "OLD", Name: "Old",
-		Revision: 2,
+		Revision:   2,
 		Components: []domain.ComponentInstance{{ComponentID: "c1", Quantity: 1}},
 		History: []domain.StructureRevision{
 			{Revision: 1, Code: "v1"},
@@ -140,7 +140,7 @@ func TestResolveStructureRevision(t *testing.T) {
 func TestResolveStructureForPin_ReifiesStructure(t *testing.T) {
 	st := domain.Structure{
 		ID: "st-1", Code: "CUR", Name: "Current", WidthMm: 600, HeightMm: 720, DepthMm: 560,
-		Revision: 2,
+		Revision:   2,
 		Components: []domain.ComponentInstance{{ComponentID: "c-cur", Quantity: 2}},
 		History: []domain.StructureRevision{
 			{
@@ -183,7 +183,7 @@ func TestCaptureProjectItemStructurePins(t *testing.T) {
 		{ID: "i1", ModuleID: "mod-st"},
 		{ID: "i2", ModuleID: "mod-flat"},
 		{ID: "i3", ModuleID: "mod-missing"},
-		{ID: "i4", ModuleID: "mod-unknown"}, // module not in catalog
+		{ID: "i4", ModuleID: "mod-unknown"},                             // module not in catalog
 		{ID: "i5", ModuleID: "mod-st", StructureRevisionPin: intPtr(1)}, // stale pin should be overwritten
 	}
 

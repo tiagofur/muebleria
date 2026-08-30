@@ -53,6 +53,19 @@
       }
     },
     "joinerySystems": {
+      "dowel-only": {
+        "joinerySystemId": "dowel-only",
+        "dowelCode": "HER-TAQ-8X30",
+        "endMarginMm": 50,
+        "maxSpacingMm": 512,
+        "gridMm": 32,
+        "withDowels": true,
+        "camDiameterMm": 15,
+        "camDepthMm": 12.5,
+        "dowelDiameterMm": 8,
+        "dowelDepthMm": 12,
+        "dowelEndDepthMm": 20
+      },
       "minifix-dowel": {
         "joinerySystemId": "minifix-dowel",
         "minifixCode": "HER-MIN-15",
@@ -71,20 +84,23 @@
     "relationshipKinds": {
       "shelf-support": "minifix-dowel"
     },
-    "manualHardware": {
-      "hw-hinge": {
-        "pilotDiameterMm": 35,
-        "pilotDepthMm": 12.5,
+    "machiningProfiles": {
+      "BIS-CL100": {
+        "profileId": "hinge-cup-32",
         "holeType": "hinge",
-        "boardFace": "front"
-      },
-      "hw-hinge-b": {
+        "boardFace": "front",
         "pilotDiameterMm": 32,
-        "pilotDepthMm": 12.5,
+        "pilotDepthMm": 12.5
+      },
+      "BIS-CL110": {
+        "profileId": "hinge-cup-35",
         "holeType": "hinge",
-        "boardFace": "front"
+        "boardFace": "front",
+        "pilotDiameterMm": 35,
+        "pilotDepthMm": 12.5
       }
     },
+    "machiningProfileContract": "granete.machining-profile.v1",
     "hardware": [
       {
         "id": "hw-handle",
@@ -138,6 +154,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "materialChoices": {
             "FRENTE": "mat-oak18"
@@ -175,6 +192,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -239,8 +257,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "hardwarePlacementId": "mod-comp-door-copy-0-hw-1",
@@ -250,8 +267,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -688,10 +704,11 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "bomFingerprint": "fnv1a-e81ed4b7"
+            "manufacturingFingerprint": "fnv1a-a948a1cb"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }
@@ -708,6 +725,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -795,6 +813,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -884,8 +903,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "hardwarePlacementId": "door-01-hw-1",
@@ -895,8 +913,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -1618,10 +1635,11 @@
                 }
               }
             ],
-            "bomFingerprint": "fnv1a-2965af39"
+            "manufacturingFingerprint": "fnv1a-d1386dfe"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }
@@ -1638,6 +1656,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -1747,6 +1766,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -1860,8 +1880,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "hardwarePlacementId": "door-01-hw-1",
@@ -1871,8 +1890,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -2930,10 +2948,11 @@
                 }
               }
             ],
-            "bomFingerprint": "fnv1a-d3434c0c"
+            "manufacturingFingerprint": "fnv1a-359cfa5a"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }
@@ -2950,6 +2969,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3005,6 +3025,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -3067,8 +3088,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "hardwarePlacementId": "door-01-hw-1",
@@ -3078,8 +3098,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -3513,10 +3532,11 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "bomFingerprint": "fnv1a-78c5e02f"
+            "manufacturingFingerprint": "fnv1a-08a946d2"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }
@@ -3533,6 +3553,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3573,8 +3594,7 @@
               "offsetMm": [
                 298,
                 480
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "anchorFace": "front",
@@ -3584,8 +3604,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ],
           "relationships": [
@@ -3636,6 +3655,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -3717,8 +3737,7 @@
               "offsetMm": [
                 298,
                 480
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "hardwarePlacementId": "hp-handle-01",
@@ -3728,8 +3747,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -4451,10 +4469,11 @@
                 }
               }
             ],
-            "bomFingerprint": "fnv1a-88d0f49a"
+            "manufacturingFingerprint": "fnv1a-5b91551a"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }
@@ -4471,6 +4490,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -4511,8 +4531,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -4543,6 +4562,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -4605,8 +4625,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -5015,10 +5034,11 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "bomFingerprint": "fnv1a-94b05f50"
+            "manufacturingFingerprint": "fnv1a-f89055d8"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }
@@ -5035,6 +5055,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5114,6 +5135,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "rejected",
         "issues": [
           {
@@ -5128,6 +5150,109 @@
       }
     },
     {
+      "id": "neg-orphan-target-among-valid",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "relationships": [
+            {
+              "kind": "shelf-support",
+              "relationshipId": "rel-shelf-01",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-ghost",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "RELATIONSHIP_ORPHANED",
+            "message": "anchor references componentInstanceId side-ghost that is not part of this snapshot",
+            "severity": "error",
+            "entityId": "rel-shelf-01",
+            "path": "furniture.relationships[relationshipId=rel-shelf-01]",
+            "remediation": "Anchor the relationship to component instances present in the snapshot."
+          }
+        ]
+      }
+    },
+    {
       "id": "08-unknown-schema-version",
       "request": {
         "coordinateSystem": {
@@ -5136,6 +5261,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -5168,6 +5294,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "rejected",
         "issues": [
           {
@@ -5189,6 +5316,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -5219,9 +5347,10 @@
         "schemaName": "granete.sketchup-authoring-resolve",
         "schemaVersion": "1.0",
         "resolveContract": "granete.sketchup-authoring-resolve.v1",
-        "responseMessageId": "resolve-",
+        "responseMessageId": "",
         "inReplyToMessageId": "",
         "idempotencyKey": "",
+        "catalogRevision": "",
         "status": "rejected",
         "issues": [
           {
@@ -5235,6 +5364,58 @@
       }
     },
     {
+      "id": "neg-missing-catalog-revision",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "",
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222"
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 400,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "REQUEST_INVALID",
+            "message": "furniture.catalogRevision es obligatorio: el resolve sólo es reproducible contra un catálogo pineado",
+            "severity": "error",
+            "path": "furniture.catalogRevision",
+            "remediation": "Carry the revisionId served by GET /api/furniture/definitions."
+          }
+        ]
+      }
+    },
+    {
       "id": "neg-adhoc-body-parameter",
       "request": {
         "coordinateSystem": {
@@ -5243,6 +5424,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelf2Z": 520
@@ -5275,6 +5457,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "rejected",
         "issues": [
           {
@@ -5296,6 +5479,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5359,6 +5543,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "rejected",
         "issues": [
           {
@@ -5373,6 +5558,94 @@
       }
     },
     {
+      "id": "neg-wrong-length-translation",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  18,
+                  520
+                ]
+              }
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222"
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 400,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "TRANSFORM_INVALID",
+            "message": "translationMm must carry exactly 3 millimeters, got 2",
+            "severity": "error",
+            "path": "furniture.components[5].transform.translationMm"
+          }
+        ]
+      }
+    },
+    {
       "id": "09-empty-manual-placement-set",
       "request": {
         "coordinateSystem": {
@@ -5381,6 +5654,7 @@
           "upAxis": "z"
         },
         "furniture": {
+          "catalogRevision": "workshop-cc2be93b79e1",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5440,6 +5714,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-cc2be93b79e1",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -5502,8 +5777,7 @@
               "offsetMm": [
                 298,
                 100
-              ],
-              "rotationDeg": 0
+              ]
             },
             {
               "hardwarePlacementId": "door-01-hw-1",
@@ -5513,8 +5787,7 @@
               "offsetMm": [
                 40,
                 360
-              ],
-              "rotationDeg": 0
+              ]
             }
           ]
         },
@@ -5948,10 +6221,11 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "bomFingerprint": "fnv1a-78c5e02f"
+            "manufacturingFingerprint": "fnv1a-87e166ac"
           },
           "preflight": {
-            "status": "ready",
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
           }

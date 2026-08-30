@@ -30,6 +30,10 @@ class AuthoringResolveContractTest < Minitest::Test
       raise("missing scenario #{id} in golden")
   end
 
+  def snapshot_placement
+    scenario('01-params-materials-parity')['response']['normalizedSnapshot']['hardwarePlacements'][0]
+  end
+
   def accepted_scenario(id)
     result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(scenario(id)['response'])
     assert result.accepted?, "scenario #{id} must parse as accepted"
@@ -43,7 +47,8 @@ class AuthoringResolveContractTest < Minitest::Test
       if raw['expectedHttpStatus'] == 200
         assert result.accepted?
         refute_nil result.layout
-        refute_nil result.bom_fingerprint
+        refute_nil result.manufacturing_fingerprint
+        refute_empty result.catalog_revision
       else
         refute result.accepted?
         refute result.issues.empty?
@@ -78,7 +83,7 @@ class AuthoringResolveContractTest < Minitest::Test
                  .flat_map(&:holes)
     side_holes.each { |hole| assert_equal 520, hole['yMm'] }
 
-    assert_match(/\Afnv1a-[0-9a-f]{8}\z/, result.bom_fingerprint)
+    assert_match(/\Afnv1a-[0-9a-f]{8}\z/, result.manufacturing_fingerprint)
   end
 
   def test_rejected_resolve_carries_structured_codes_not_messages
@@ -153,7 +158,7 @@ class AuthoringResolveContractTest < Minitest::Test
           'transform' => { 'frame' => 'assembly', 'translationMm' => [18, 18, 350] } }
       ]
     }
-    request = Granete::SketchUpExtension::Library::AuthoringResolveContract.build_request(
+    request = Granete::SketchUpExtension::Library::AuthoringResolveRequest.build_request(
       message_id: 'msg-ruby-1', idempotency_key: 'skp:resolve:msg-ruby-1', furniture: furniture
     )
 
@@ -167,6 +172,74 @@ class AuthoringResolveContractTest < Minitest::Test
     # No authoring intent may ever degrade into flat parameter keys.
     refute request.key?('shelf2Z')
     refute request['furniture'].key?('shelf2Z')
+  end
+
+  def test_wrong_schema_name_fails_closed
+    body = scenario('01-params-materials-parity')['response'].merge('schemaName' => 'granete.sketchup-authoring')
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_wrong_schema_version_fails_closed
+    body = scenario('01-params-materials-parity')['response'].merge('schemaVersion' => '1.1')
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_partial_empty_correlation_fails_closed
+    body = scenario('01-params-materials-parity')['response'].merge('responseMessageId' => '')
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_unknown_issue_code_fails_closed
+    body = scenario('07-orphan-anchor-rejection')['response']
+    body['issues'][0] = body['issues'][0].merge('code' => 'SHELF2Z_UNSUPPORTED')
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_malformed_fingerprint_fails_closed
+    resolved = scenario('01-params-materials-parity')['response']['resolved']
+    machining = resolved['machining'].merge('manufacturingFingerprint' => 'fnv1a-ZZZZZZZZ')
+    body = scenario('01-params-materials-parity')['response']
+           .merge('resolved' => resolved.merge('machining' => machining))
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_missing_catalog_revision_fails_closed
+    body = scenario('01-params-materials-parity')['response'].merge('catalogRevision' => '')
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_snapshot_echo_with_removed_v1_fields_fails_closed
+    snapshot = scenario('01-params-materials-parity')['response']['normalizedSnapshot']
+               .merge('hardwarePlacements' => [
+                        snapshot_placement.merge('rotationDeg' => 0)
+                      ])
+    body = scenario('01-params-materials-parity')['response'].merge('normalizedSnapshot' => snapshot)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
+  end
+
+  def test_snapshot_echo_with_non_finite_offset_fails_closed
+    snapshot = scenario('01-params-materials-parity')['response']['normalizedSnapshot']
+               .merge('hardwarePlacements' => [
+                        snapshot_placement.merge('offsetMm' => [Float::INFINITY, 100])
+                      ])
+    body = scenario('01-params-materials-parity')['response'].merge('normalizedSnapshot' => snapshot)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+    end
   end
 
   # --- provider integration --------------------------------------------------
@@ -206,7 +279,7 @@ class AuthoringResolveContractTest < Minitest::Test
   end
 
   def test_provider_posts_the_authoring_intent_and_parses_the_result
-    request_payload = Granete::SketchUpExtension::Library::AuthoringResolveContract.build_request(
+    request_payload = Granete::SketchUpExtension::Library::AuthoringResolveRequest.build_request(
       message_id: 'msg-1', idempotency_key: 'key-1',
       furniture: { 'furnitureDefinitionId' => 'mod-1' }
     )

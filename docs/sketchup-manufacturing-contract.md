@@ -782,14 +782,24 @@ units { length: mm, angle: deg, precisionMm ∈ (0,1] }
 coordinateSystem { handedness: right, upAxis: z, projectFrameId }
 furniture {
   furnitureDefinitionId                    (definición autoritativa)
-  catalogRevision?                         (si viene, mismatch → CATALOG_REVISION_STALE; sin latest implícito)
+  catalogRevision                          OBLIGATORIO (revisionId de GET /api/furniture/definitions;
+                                           mismatch → CATALOG_REVISION_STALE; nunca hay latest implícito)
   parameters { widthMm, heightMm, depthMm } (sólo este vocabulario v1; claves ad-hoc → PARAMETER_INVALID)
   materialChoices { ROLE → materialId }
   components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
-  relationships?                           (PartRelationshipIntent)
-  hardwarePlacements?                      (set completo manual; ausente = defaults del definition; [] = ninguno)
+  relationships?                           (PartRelationshipIntent, incl. parameters)
+  hardwarePlacements?                      (set completo manual; ausente = defaults del definition; [] = ninguno;
+                                           SIN rotationDeg/handedness en v1 — un campo que no mueve la
+                                           resolución no viaja: #468 los agrega CON semántica de resolución)
 }
 ```
+
+Reproducibilidad: el handler hace UNA sola lectura de catálogo que alimenta
+el check de revisión Y el resolve (dos lecturas podrían observar estados
+distintos); la respuesta echa `catalogRevision` (la revisión pineada usada).
+Arrays estrictos: `translationMm` (exactamente 3) y `offsetMm` (exactamente
+2) se decodifican como slices y validan longitud exacta — los arrays fijos
+de Go truncarían/extenderían en silencio.
 
 Reglas de ocurrencias:
 
@@ -807,6 +817,12 @@ Reglas de ocurrencias:
   reutilizable y exige IDs nuevos; los templates estructurales/agregados
   mantienen el count del definition (`OCCURRENCE_COUNT_UNSUPPORTED`/
   `SNAPSHOT_INCOMPLETE` en caso contrario);
+- un template referenciado por MÚLTIPLES entradas del definition (que
+  podrían llevar fórmulas/overrides distintos por copia) se rechaza
+  siempre: agruparlo honraría sólo la primera entrada en silencio;
+- TODOS los anchors de una relationship deben resolver: aceptar porque al
+  menos un target existe dejaría caer el resto inválido en silencio
+  (`RELATIONSHIP_ORPHANED`);
 - el orden del array no decide nada: sin transform se asignan slots default
   por ID ordenado (determinista e insensible al orden).
 
@@ -829,11 +845,19 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
 - `machining` es el puerto Go del resolver #356 sobre la geometría resuelta
   (server-authoritative): mover un entrepaño mueve sólo el machining
   dependiente; mover una bisagra no toca el machining de entrepaños; el
-  pilot de herraje manual sigue la definición seleccionada (reemplazo
-  cambia diámetro/BOM);
-- `bomFingerprint` (fnv1a sobre JSON canónico) es el ancla de paridad
-  TS↔Go: el test de contract TS lo recomputa con `deriveRelationshipMachining`
-  sobre el mismo escenario y debe ser igual al wire Go;
+  pilot de herraje manual sigue el perfil técnico de la definición
+  seleccionada (reemplazo cambia diámetro/BOM);
+- `manufacturingFingerprint` (fnv1a sobre JSON canónico) cubre la identidad
+  manufacturera COMPLETA — tableros (identidad de ocurrencia + dimensiones +
+  material seleccionado), placements manuales, placements derivados y
+  operaciones — de modo que cambiar una manija, sustituir herrajes con el
+  mismo patrón de taladro o cambiar un material mueve el fingerprint. Es el
+  ancla de paridad TS↔Go: el test de contract TS lo recomputa desde el wire
+  (`authoringResolveFingerprint`) y debe ser igual al generado por Go;
+- `preflight` lleva `scope: authoring-resolve-subset` y estados
+  `clear|blocked`: es la validación del subset del resolve y NUNCA el
+  veredicto de fabricación del modelo #347 — ese modelo sólo se enlaza vía
+  `preflightContract` (link para obtener el resultado autoritativo);
 - HTTP: 200 accepted; 400 schema/malformed/query-params/oversized; 422
   rechazo semántico. Rejected nunca incluye `resolved` (sin resultado
   parcial aceptado).
@@ -858,10 +882,26 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
 
 `contracts/sketchupAuthoringResolve.contract.json` es golden generado por el
 resolver Go (regenerar con `UPDATE_AUTHORING_RESOLVE_GOLDEN=1`) con los
-escenarios canónicos 1-8 de #477 + negative proofs (query param, parámetro
-ad-hoc en body, ocurrencia duplicada) y la sección `joinery` con la geometría
-resuelta que TS usa para recomputar el fingerprint. TS, Go y Ruby lo consumen:
-ningún payload paralelo puede divergir.
+escenarios canónicos 1-8 de #477 + negative proofs (query param, revisión de
+catálogo ausente, parámetro ad-hoc en body, ocurrencia duplicada,
+translationMm de longitud incorrecta, target huérfano entre válidos) y la
+sección `joinery` con la geometría resuelta, los sistemas de unión y los
+`machiningProfiles` (tabla técnica versionada
+`granete.machining-profile.v1` por código de herraje — NUNCA deducida de
+campos visuales como PreviewShape/PreviewDiameter). TS, Go y Ruby lo consumen:
+las tablas compiladas de cada runtime se afirman iguales al fixture por sus
+tests de paridad, así que ningún payload ni regla paralela puede divergir.
+
+El parser Ruby es fail-closed sobre TODO lo que consume: triple de schema
+exacta (id+name+version), correlación completa (el único caso sin correlación
+es el rechazo transport-level que nunca leyó el body), `catalogRevision`
+no-vacía en accepted, códigos de issue del set cerrado, severidades
+conocidas, exclusividad real de provenance (una variante y sólo sus claves),
+formato exacto del fingerprint (`fnv1a-[0-9a-f]{8}`), snapshot normalizado
+validado en profundidad (identidad, transforms de 3 finitos, offsets de 2
+finitos, sin campos fuera del contrato v1). La sección preflight no se
+consume en Ruby v1: #466 es dueño de su presentación y el boundary de
+vocabulario manufacturero del runtime se mantiene.
 
 ## References
 

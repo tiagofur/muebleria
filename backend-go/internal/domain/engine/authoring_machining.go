@@ -38,14 +38,24 @@ type ShelfSupportJoineryRule struct {
 	DowelEndDepthMm float64 `json:"dowelEndDepthMm,omitempty"`
 }
 
-// ManualHardwareMachiningRule mirrors TS ManualHardwareRule: pilot machining
-// for a manually placed hardware classification.
-type ManualHardwareMachiningRule struct {
-	PilotDiameterMm float64 `json:"pilotDiameterMm"`
-	PilotDepthMm    float64 `json:"pilotDepthMm"`
+// ManualMachiningProfile is the versioned TECHNICAL machining rule for a
+// manually placed hardware item (contract granete.machining-profile.v1).
+// It is keyed by the hardware commercial code — never by preview/visual
+// fields: preview geometry belongs to representation, machining truth to a
+// versioned rule table. The table ships in the shared contract fixture; both
+// runtimes' compiled tables are asserted equal to it by their parity tests.
+// When the catalog gains a real MachiningProfile family (post-Gate A), the
+// table defers to it.
+type ManualMachiningProfile struct {
+	ProfileID       string  `json:"profileId"`
 	HoleType        string  `json:"holeType"`
 	BoardFace       string  `json:"boardFace"`
+	PilotDiameterMm float64 `json:"pilotDiameterMm"`
+	PilotDepthMm    float64 `json:"pilotDepthMm"`
 }
+
+// ManualMachiningProfileContract identifies the versioned rule table.
+const ManualMachiningProfileContract = "granete.machining-profile.v1"
 
 // Default joinery systems — Go mirror of the TS defaults
 // (DEFAULT_SHELF_SUPPORT_RULE + the dowel-only variant in the #356 fixture).
@@ -80,10 +90,12 @@ var authoringRelationshipKindDefaults = map[string]string{
 	"shelf-support": defaultShelfSupportRule.JoinerySystemID,
 }
 
-// Manual machining keyed by hardware classification (catalog preview shape):
-// hinges drill a pilot; pulls/knobs/slides ride the surface and drill nothing.
-var authoringManualHardwareMachining = map[string]ManualHardwareMachiningRule{
-	"hinge": {PilotDiameterMm: 35, PilotDepthMm: 12.5, HoleType: "hinge", BoardFace: "front"},
+// Versioned manual machining profiles keyed by hardware commercial code.
+// Hinges drill a pilot; pulls/knobs/slides ride the surface and drill
+// nothing (absent profile = no machining, never a guessed rule).
+var authoringManualMachiningProfiles = map[string]ManualMachiningProfile{
+	"BIS-CL110": {ProfileID: "hinge-cup-35", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 35, PilotDepthMm: 12.5},
+	"BIS-CL100": {ProfileID: "hinge-cup-32", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 32, PilotDepthMm: 12.5},
 }
 
 // ResolveHole is one board-local drilling hole of a machining operation
@@ -147,7 +159,13 @@ type DerivedHardwarePlacement struct {
 type AuthoringMachining struct {
 	Operations                []ResolvedMachiningOperation `json:"operations"`
 	DerivedHardwarePlacements []DerivedHardwarePlacement   `json:"derivedHardwarePlacements"`
-	BomFingerprint            string                       `json:"bomFingerprint"`
+	// ManufacturingFingerprint covers the FULL manufacturing identity —
+	// resolved boards (dimensions + selected materials), manual hardware
+	// placements, derived placements and machining operations — so any
+	// manufacturing-relevant change (a handle swap, a hardware substitution
+	// with identical drilling, a material change) moves it. Parity-pinned
+	// against the TS recomputation over the shared fixture.
+	ManufacturingFingerprint string `json:"manufacturingFingerprint"`
 }
 
 // snapValueTo mirrors TS snapValue (hardwarePlacement.ts): grid snapping with
@@ -246,7 +264,6 @@ func deriveAuthoringMachining(
 	return AuthoringMachining{
 		Operations:                operations,
 		DerivedHardwarePlacements: derived,
-		BomFingerprint:            authoringBomFingerprint(derived, operations),
 	}, issues
 }
 
@@ -437,31 +454,20 @@ func deriveManualPlacementMachining(
 		// Structural: validation must have caught this; skip defensively.
 		return
 	}
-	shape := ""
-	if hw.PreviewShape != nil {
-		shape = *hw.PreviewShape
-	}
-	rule, ok := authoringManualHardwareMachining[shape]
+	profile, ok := authoringManualMachiningProfiles[hw.Code]
 	if !ok {
-		// Hardware that rides the surface (pulls, knobs, slides) drills nothing.
+		// Hardware that rides the surface (pulls, knobs, slides) drills
+		// nothing: an absent TECHNICAL profile never becomes a guessed rule.
 		return
 	}
 
-	// The pilot diameter follows the SELECTED definition's nominal diameter
-	// (#477 replacement scenario): machining resolves from the chosen
-	// hardware, not from a fixed class constant.
-	pilotDiameter := rule.PilotDiameterMm
-	if hw.PreviewDiameterMm != nil && *hw.PreviewDiameterMm > 0 {
-		pilotDiameter = *hw.PreviewDiameterMm
-	}
-
 	holes := []ResolveHole{{
-		Face:       rule.BoardFace,
+		Face:       profile.BoardFace,
 		XMm:        placement.intent.OffsetMm[0],
 		YMm:        placement.intent.OffsetMm[1],
-		DiameterMm: pilotDiameter,
-		DepthMm:    rule.PilotDepthMm,
-		Type:       rule.HoleType,
+		DiameterMm: profile.PilotDiameterMm,
+		DepthMm:    profile.PilotDepthMm,
+		Type:       profile.HoleType,
 	}}
 	*operations = append(*operations, ResolvedMachiningOperation{
 		OperationID:             fmt.Sprintf("%s:op-1", placement.intent.HardwarePlacementID),
@@ -473,51 +479,96 @@ func deriveManualPlacementMachining(
 		Holes: holes,
 	})
 
-	// Compatibility first cut (#477 scenario 6): a pilot deeper than the host
-	// board's effective thickness cannot be drilled — block preflight, keep
-	// the operation visible with its provenance.
-	if rule.PilotDepthMm > placement.board.thicknessMm {
+	// Compatibility (#477 scenario 6): a pilot deeper than the host board's
+	// effective thickness cannot be drilled — block the resolve validation,
+	// keep the operation visible with its provenance.
+	if profile.PilotDepthMm > placement.board.thicknessMm {
 		*issues = append(*issues, domain.ContractIssue{
 			Code:        "DRILLING_CONFLICT",
-			Message:     fmt.Sprintf("hardware %s pilots %.2fmm deep into a %.2fmm host board", hw.Code, rule.PilotDepthMm, placement.board.thicknessMm),
+			Message:     fmt.Sprintf("hardware %s pilots %.2fmm deep into a %.2fmm host board", hw.Code, profile.PilotDepthMm, placement.board.thicknessMm),
 			Severity:    domain.IssueSeverityError,
 			EntityID:    placement.intent.HardwarePlacementID,
 			Path:        fmt.Sprintf("furniture.hardwarePlacements[hardwarePlacementId=%s]", placement.intent.HardwarePlacementID),
 			Remediation: "Choose a hardware definition whose pilot fits the host board, or a thicker board for that role.",
 			Details: map[string]any{
-				"pilotDepthMm":    rule.PilotDepthMm,
+				"profileId":       profile.ProfileID,
+				"pilotDepthMm":    profile.PilotDepthMm,
 				"hostThicknessMm": placement.board.thicknessMm,
 			},
 		})
 	}
 }
 
-// authoringBomFingerprint ports TS relationshipBomFingerprint: deterministic
-// fingerprint over canonicalized manufacturing inputs (derived placements +
-// operations, sorted by id). The canonical JSON is built from maps so key
-// order is sorted exactly like the TS canonicalJson.
-func authoringBomFingerprint(derived []DerivedHardwarePlacement, operations []ResolvedMachiningOperation) string {
-	type placementCanonical struct {
-		id   string
-		body map[string]any
-	}
-	type operationCanonical struct {
-		id   string
-		body map[string]any
+// authoringManufacturingFingerprint hashes the FULL manufacturing identity of
+// a resolved authoring state: boards (occurrence identity + dimensions +
+// selected material), manual hardware placements, derived placements and
+// machining operations, canonicalized with sorted keys so Go and TS derive
+// the same string from the same fixture. Swapping a handle, substituting
+// hardware with identical drilling or changing a material all move it.
+func authoringManufacturingFingerprint(
+	layout FurnitureLayout,
+	boards []layoutBoard,
+	placements []effectivePlacementForMachining,
+	derived []DerivedHardwarePlacement,
+	operations []ResolvedMachiningOperation,
+) string {
+	catalogComponentByBoard := make(map[string]string, len(boards))
+	for i := range boards {
+		catalogComponentByBoard[boards[i].id] = boards[i].catalogComponentID
 	}
 
-	placements := make([]placementCanonical, 0, len(derived))
-	for _, d := range derived {
-		placements = append(placements, placementCanonical{id: d.DerivedHardwarePlacementID, body: map[string]any{
-			"id":   d.DerivedHardwarePlacementID,
-			"host": d.HostComponentInstanceID,
-			"prov": map[string]any{
-				"sourceKind":     d.Provenance.SourceKind,
-				"relationshipId": d.Provenance.RelationshipID,
-			},
-		}})
+	boardBodies := make([]any, 0, len(layout.Components))
+	for _, component := range layout.Components {
+		body := map[string]any{
+			"id":          component.ComponentInstanceID,
+			"defId":       component.ComponentDefinitionID,
+			"role":        component.Role,
+			"lengthMm":    component.LengthMm,
+			"widthMm":     component.WidthMm,
+			"thicknessMm": component.ThicknessMm,
+		}
+		if catalogComponent := catalogComponentByBoard[component.ComponentInstanceID]; catalogComponent != "" {
+			body["catalogComponentId"] = catalogComponent
+		}
+		if component.MaterialID != "" {
+			body["materialId"] = component.MaterialID
+		}
+		boardBodies = append(boardBodies, map[string]any{
+			"sort": component.ComponentInstanceID, "body": body,
+		})
 	}
-	ops := make([]operationCanonical, 0, len(operations))
+
+	placementBodies := make([]any, 0, len(placements))
+	for _, placement := range placements {
+		intent := placement.intent
+		placementBodies = append(placementBodies, map[string]any{
+			"sort": intent.HardwarePlacementID,
+			"body": map[string]any{
+				"id":         intent.HardwarePlacementID,
+				"hardwareId": intent.CatalogHardwareID,
+				"host":       intent.HostComponentInstanceID,
+				"anchorFace": intent.AnchorFace,
+				"offsetMm":   [2]float64{intent.OffsetMm[0], intent.OffsetMm[1]},
+			},
+		})
+	}
+
+	placementCanonical := make([]any, 0, len(derived))
+	for _, d := range derived {
+		placementCanonical = append(placementCanonical, map[string]any{
+			"sort": d.DerivedHardwarePlacementID,
+			"body": map[string]any{
+				"id":   d.DerivedHardwarePlacementID,
+				"host": d.HostComponentInstanceID,
+				"prov": map[string]any{
+					"sourceKind":     d.Provenance.SourceKind,
+					"relationshipId": d.Provenance.RelationshipID,
+				},
+			},
+		})
+	}
+
+	operationCanonical := make([]any, 0, len(operations))
 	for _, o := range operations {
 		holes := make([]any, 0, len(o.Holes))
 		for _, h := range o.Holes {
@@ -526,39 +577,47 @@ func authoringBomFingerprint(derived []DerivedHardwarePlacement, operations []Re
 				"diameterMm": h.DiameterMm, "depthMm": h.DepthMm, "type": h.Type,
 			})
 		}
-		ops = append(ops, operationCanonical{id: o.OperationID, body: map[string]any{
-			"id":    o.OperationID,
-			"host":  o.HostComponentInstanceID,
-			"prov":  o.Provenance.canonical(),
-			"holes": holes,
-		}})
+		operationCanonical = append(operationCanonical, map[string]any{
+			"sort": o.OperationID,
+			"body": map[string]any{
+				"id":    o.OperationID,
+				"host":  o.HostComponentInstanceID,
+				"prov":  o.Provenance.canonical(),
+				"holes": holes,
+			},
+		})
 	}
 
-	sort.Slice(placements, func(i, j int) bool { return placements[i].id < placements[j].id })
-	sort.Slice(ops, func(i, j int) bool { return ops[i].id < ops[j].id })
+	return fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, operationCanonical)
+}
 
-	placementBodies := make([]any, 0, len(placements))
-	for _, p := range placements {
-		placementBodies = append(placementBodies, p.body)
-	}
-	operationBodies := make([]any, 0, len(ops))
-	for _, o := range ops {
-		operationBodies = append(operationBodies, o.body)
-	}
-
+// fingerprintBodiesHash marshals the sorted canonical bodies and hashes them.
+// map[string]any trees marshal with sorted keys and JS-compatible number
+// formatting, matching the TS canonicalize byte-for-byte on the fixture.
+func fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, operationCanonical []any) string {
 	canonical := map[string]any{
-		"placements": placementBodies,
-		"operations": operationBodies,
+		"boards":                    sortedBodies(boardBodies),
+		"manualPlacements":          sortedBodies(placementBodies),
+		"derivedHardwarePlacements": sortedBodies(placementCanonical),
+		"operations":                sortedBodies(operationCanonical),
 	}
-	// map[string]any trees marshal with sorted keys and JS-compatible number
-	// formatting, matching the TS canonicalJson byte-for-byte on the fixture.
 	raw, err := json.Marshal(canonical)
 	if err != nil {
-		// Maps of plain values cannot fail in practice; keep a stable constant
-		// rather than panicking inside a resolve.
 		return "fnv1a-unavailable"
 	}
 	return fnv1aHex(string(raw))
+}
+
+// sortedBodies strips the sort wrappers in ascending id order.
+func sortedBodies(entries []any) []any {
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].(map[string]any)["sort"].(string) < entries[j].(map[string]any)["sort"].(string)
+	})
+	out := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, entry.(map[string]any)["body"])
+	}
+	return out
 }
 
 // fnv1aHex ports the TS fnv1aHex (32-bit FNV-1a over UTF-16 code units —
@@ -570,4 +629,26 @@ func fnv1aHex(value string) string {
 		h *= 0x01000193
 	}
 	return fmt.Sprintf("fnv1a-%08x", h)
+}
+
+// AuthoringManualMachiningProfiles returns the versioned manual machining
+// table keyed by hardware commercial code (copy). The shared contract
+// fixture ships this table and the parity tests assert both runtimes match
+// it — one technical rule set, no parallel copies.
+func AuthoringManualMachiningProfiles() map[string]ManualMachiningProfile {
+	out := make(map[string]ManualMachiningProfile, len(authoringManualMachiningProfiles))
+	for code, profile := range authoringManualMachiningProfiles {
+		out[code] = profile
+	}
+	return out
+}
+
+// AuthoringJoinerySystems returns the compiled joinery systems (copy) for
+// the shared contract fixture.
+func AuthoringJoinerySystems() map[string]ShelfSupportJoineryRule {
+	out := make(map[string]ShelfSupportJoineryRule, len(authoringJoinerySystems))
+	for id, rule := range authoringJoinerySystems {
+		out[id] = rule
+	}
+	return out
 }

@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
-
+	"fmt"
 	"math"
 	"net/http"
 	"strings"
@@ -148,37 +148,47 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	structures, components, agregados, hardware, materials, err := s.loadResolutionCatalog(r)
+	// ONE catalog read feeds BOTH the revision check and the resolve (#477
+	// review: two reads could observe different catalog states and make the
+	// resolve non-reproducible against the pinned revision).
+	composition, revision, err := s.loadWorkshopCatalogOnce(r)
 	if err != nil {
 		respondWithInternalError(w, err, "load resolution catalog")
 		return
 	}
-	catalog := domain.Catalog{
-		Structures: structures,
-		Components: components,
-		Agregados:  agregados,
-		Hardware:   hardware,
-		Materials:  materials,
+	catalog := composition
+
+	// No implicit latest: the request MUST pin the catalog revision it was
+	// authored against, and a drifted catalog rejects with the structured
+	// code so the client refetches instead of resolving against moved truth.
+	if req.Furniture.CatalogRevision == "" {
+		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, []domain.ContractIssue{{
+			Code:     "REQUEST_INVALID",
+			Message:  "furniture.catalogRevision es obligatorio: el resolve sólo es reproducible contra un catálogo pineado",
+			Severity: domain.IssueSeverityError, Path: "furniture.catalogRevision",
+			Remediation: "Carry the revisionId served by GET /api/furniture/definitions.",
+		}})
+		return
+	}
+	if revision != req.Furniture.CatalogRevision {
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+			Code:     "CATALOG_REVISION_STALE",
+			Message:  "el request fue armado contra la revisión " + req.Furniture.CatalogRevision + " del catálogo y la actual es " + revision,
+			Severity: domain.IssueSeverityError, Path: "furniture.catalogRevision",
+			Remediation: "Refetch the workshop catalog and rebuild the authoring snapshot against the new revision.",
+		}})
+		return
 	}
 
-	// No implicit latest: when the request pins the catalog revision it was
-	// authored against, a drifted catalog rejects with the structured code so
-	// the client refetches instead of resolving against moved truth.
-	if req.Furniture.CatalogRevision != nil && *req.Furniture.CatalogRevision != "" {
-		revision, err := s.currentWorkshopCatalogRevision(r)
-		if err != nil {
-			respondWithInternalError(w, err, "compute catalog revision")
-			return
-		}
-		if revision != *req.Furniture.CatalogRevision {
-			s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
-				Code:     "CATALOG_REVISION_STALE",
-				Message:  "el request fue armado contra la revisión " + *req.Furniture.CatalogRevision + " del catálogo y la actual es " + revision,
-				Severity: domain.IssueSeverityError, Path: "furniture.catalogRevision",
-				Remediation: "Refetch the workshop catalog and rebuild the authoring snapshot against the new revision.",
-			}})
-			return
-		}
+	occurrences, occurrenceIssues := authoringOccurrencesFromWire(req.Furniture.Components)
+	if len(occurrenceIssues) > 0 {
+		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, occurrenceIssues)
+		return
+	}
+	placements, placementIssues := authoringPlacementsFromWire(req.Furniture.HardwarePlacements)
+	if len(placementIssues) > 0 {
+		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, placementIssues)
+		return
 	}
 
 	dims, issues := authoringDimsFromParameters(req.Furniture.Parameters, module)
@@ -197,9 +207,9 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		Dims:                    dims,
 		OptionChoices:           req.Furniture.MaterialChoices,
 		PrecisionMm:             req.Units.PrecisionMm,
-		Occurrences:             req.Furniture.Components,
+		Occurrences:             occurrences,
 		Relationships:           req.Furniture.Relationships,
-		ManualPlacements:        req.Furniture.HardwarePlacements,
+		ManualPlacements:        placements,
 		ManualPlacementsPresent: req.Furniture.HardwarePlacements != nil,
 	})
 	if err != nil {
@@ -215,7 +225,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	s.writeAuthoringResolveAccepted(w, req, result)
+	s.writeAuthoringResolveAccepted(w, req, revision, result)
 }
 
 // authoringResolveMaxBodyBytes caps the resolve payload explicitly (contract
@@ -255,13 +265,36 @@ type authoringResolveCoordinateSystem struct {
 }
 
 type authoringResolveFurniture struct {
-	FurnitureDefinitionID string                            `json:"furnitureDefinitionId"`
-	CatalogRevision       *string                           `json:"catalogRevision,omitempty"`
-	Parameters            map[string]any                    `json:"parameters,omitempty"`
-	MaterialChoices       map[string]string                 `json:"materialChoices,omitempty"`
-	Components            []engine.AuthoringOccurrence      `json:"components,omitempty"`
-	Relationships         []engine.AuthoringRelationship    `json:"relationships,omitempty"`
-	HardwarePlacements    []engine.AuthoringManualPlacement `json:"hardwarePlacements,omitempty"`
+	FurnitureDefinitionID string `json:"furnitureDefinitionId"`
+	// CatalogRevision is REQUIRED (#477 review: the resolve is reproducible
+	// only against a pinned catalog; there is no implicit latest).
+	CatalogRevision    string                         `json:"catalogRevision"`
+	Parameters         map[string]any                 `json:"parameters,omitempty"`
+	MaterialChoices    map[string]string              `json:"materialChoices,omitempty"`
+	Components         []authoringOccurrenceWire      `json:"components,omitempty"`
+	Relationships      []engine.AuthoringRelationship `json:"relationships,omitempty"`
+	HardwarePlacements []authoringPlacementWire       `json:"hardwarePlacements,omitempty"`
+}
+
+type authoringOccurrenceWire struct {
+	ComponentInstanceID   string                  `json:"componentInstanceId"`
+	ComponentDefinitionID string                  `json:"componentDefinitionId,omitempty"`
+	CatalogComponentID    string                  `json:"catalogComponentId,omitempty"`
+	Role                  string                  `json:"role,omitempty"`
+	Transform             *authoringTransformWire `json:"transform,omitempty"`
+}
+
+type authoringTransformWire struct {
+	Frame         string    `json:"frame"`
+	TranslationMm []float64 `json:"translationMm"`
+}
+
+type authoringPlacementWire struct {
+	HardwarePlacementID     string    `json:"hardwarePlacementId"`
+	CatalogHardwareID       string    `json:"catalogHardwareId"`
+	HostComponentInstanceID string    `json:"hostComponentInstanceId"`
+	AnchorFace              string    `json:"anchorFace"`
+	OffsetMm                []float64 `json:"offsetMm"`
 }
 
 type authoringResolveResponse struct {
@@ -272,6 +305,7 @@ type authoringResolveResponse struct {
 	ResponseMessageID  string                            `json:"responseMessageId"`
 	InReplyToMessageID string                            `json:"inReplyToMessageId"`
 	IdempotencyKey     string                            `json:"idempotencyKey"`
+	CatalogRevision    string                            `json:"catalogRevision"`
 	Status             string                            `json:"status"`
 	NormalizedSnapshot *engine.NormalizedAuthoringIntent `json:"normalizedSnapshot,omitempty"`
 	Resolved           *authoringResolveResolved         `json:"resolved,omitempty"`
@@ -285,6 +319,10 @@ type authoringResolveResolved struct {
 }
 
 type authoringResolvePreflight struct {
+	// Scope pins the semantics: this is the resolve-scoped validation
+	// subset, NEVER the #347 fabrication-readiness verdict — the full model
+	// is only linked through PreflightContract.
+	Scope             string                 `json:"scope"`
 	Status            string                 `json:"status"`
 	Issues            []domain.ContractIssue `json:"issues"`
 	PreflightContract string                 `json:"preflightContract"`
@@ -299,14 +337,21 @@ const (
 // envelope. The schema triple echoed is always the SERVER's contract version
 // (the capability marker), even on mismatch, so clients can detect drift.
 func (s *Server) writeAuthoringResolveEnvelope(w http.ResponseWriter, httpStatus int, req authoringResolveRequest, status string, issues []domain.ContractIssue) {
+	// No half-correlation ever: an envelope whose request message was never
+	// read (transport-level rejection) carries NO correlation fields' values.
+	responseMessageID := ""
+	if req.MessageID != "" {
+		responseMessageID = "resolve-" + req.MessageID
+	}
 	response := authoringResolveResponse{
 		SchemaID:           engine.AuthoringResolveSchemaID,
 		SchemaName:         engine.AuthoringResolveSchemaName,
 		SchemaVersion:      engine.AuthoringResolveSchemaVersion,
 		ResolveContract:    engine.AuthoringResolveSchemaID,
-		ResponseMessageID:  "resolve-" + req.MessageID,
+		ResponseMessageID:  responseMessageID,
 		InReplyToMessageID: req.MessageID,
 		IdempotencyKey:     req.IdempotencyKey,
+		CatalogRevision:    req.Furniture.CatalogRevision,
 		Status:             status,
 		Issues:             issues,
 	}
@@ -326,10 +371,10 @@ func (s *Server) writeAuthoringResolveEnvelope(w http.ResponseWriter, httpStatus
 
 // writeAuthoringResolveAccepted serializes the accepted result with the
 // normalized snapshot and the resolved sections.
-func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req authoringResolveRequest, result *engine.AuthoringResolveResult) {
-	preflightIssues := result.PreflightIssues
-	if preflightIssues == nil {
-		preflightIssues = []domain.ContractIssue{}
+func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req authoringResolveRequest, revision string, result *engine.AuthoringResolveResult) {
+	validationIssues := result.ValidationIssues
+	if validationIssues == nil {
+		validationIssues = []domain.ContractIssue{}
 	}
 	response := authoringResolveResponse{
 		SchemaID:           engine.AuthoringResolveSchemaID,
@@ -339,18 +384,20 @@ func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req author
 		ResponseMessageID:  "resolve-" + req.MessageID,
 		InReplyToMessageID: req.MessageID,
 		IdempotencyKey:     req.IdempotencyKey,
+		CatalogRevision:    revision,
 		Status:             authoringStatusAccepted,
 		NormalizedSnapshot: &result.Normalized,
 		Resolved: &authoringResolveResolved{
 			Layout:    result.Layout,
 			Machining: result.Machining,
 			Preflight: authoringResolvePreflight{
-				Status:            result.PreflightStatus,
-				Issues:            preflightIssues,
+				Scope:             engine.AuthoringValidationScope,
+				Status:            result.ValidationStatus,
+				Issues:            validationIssues,
 				PreflightContract: engine.ManufacturingPreflightContract,
 			},
 		},
-		Issues: preflightIssues,
+		Issues: validationIssues,
 	}
 	body, err := json.Marshal(response)
 	if err != nil {
@@ -477,54 +524,47 @@ func validateMaterialChoices(choices map[string]string, materials []domain.Mater
 	return nil
 }
 
-// loadResolutionCatalog loads the lists the resolver needs.
-func (s *Server) loadResolutionCatalog(r *http.Request) ([]domain.Structure, []domain.Component, []domain.Agregado, []domain.Hardware, []domain.MaterialBoard, error) {
-	structures, err := s.Store.ListStructures(r.Context())
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	components, err := s.Store.ListComponents(r.Context())
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	agregados, err := s.Store.ListAgregados(r.Context())
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	hardware, err := s.Store.ListHardwares(r.Context())
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	materials, err := s.Store.ListMaterialBoards(r.Context())
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	return structures, components, agregados, hardware, materials, nil
-}
-
-// currentWorkshopCatalogRevision computes the same content-addressed
-// revision GET /api/furniture/definitions serves (and ETags), so a pinned
-// catalogRevision compares against exactly what the client cached.
-func (s *Server) currentWorkshopCatalogRevision(r *http.Request) (string, error) {
+// loadWorkshopCatalogOnce performs ONE read of every catalog list and
+// returns both the resolution catalog and the content-addressed workshop
+// revision computed from the SAME data (the revision GET
+// /api/furniture/definitions serves and ETags). One read = the pinned check
+// and the resolve observe the same catalog state.
+func (s *Server) loadWorkshopCatalogOnce(r *http.Request) (domain.Catalog, string, error) {
 	modules, err := s.Store.ListModules(r.Context())
 	if err != nil {
-		return "", err
+		return domain.Catalog{}, "", err
 	}
 	categories, err := s.Store.ListCategories(r.Context())
 	if err != nil {
-		return "", err
+		return domain.Catalog{}, "", err
 	}
 	materialCategories, err := s.Store.ListMaterialCategories(r.Context())
 	if err != nil {
-		return "", err
+		return domain.Catalog{}, "", err
 	}
 	optionGroups, err := s.Store.ListOptionGroups(r.Context())
 	if err != nil {
-		return "", err
+		return domain.Catalog{}, "", err
 	}
-	structures, components, agregados, hardware, materials, err := s.loadResolutionCatalog(r)
+	structures, err := s.Store.ListStructures(r.Context())
 	if err != nil {
-		return "", err
+		return domain.Catalog{}, "", err
+	}
+	components, err := s.Store.ListComponents(r.Context())
+	if err != nil {
+		return domain.Catalog{}, "", err
+	}
+	agregados, err := s.Store.ListAgregados(r.Context())
+	if err != nil {
+		return domain.Catalog{}, "", err
+	}
+	hardware, err := s.Store.ListHardwares(r.Context())
+	if err != nil {
+		return domain.Catalog{}, "", err
+	}
+	materials, err := s.Store.ListMaterialBoards(r.Context())
+	if err != nil {
+		return domain.Catalog{}, "", err
 	}
 	composition := domain.Catalog{
 		Structures:   structures,
@@ -535,5 +575,104 @@ func (s *Server) currentWorkshopCatalogRevision(r *http.Request) (string, error)
 		OptionGroups: optionGroups,
 	}
 	catalog := buildWorkshopFurnitureCatalog(modules, categories, materialCategories, composition)
-	return workshopCatalogRevisionID(catalog), nil
+	return composition, workshopCatalogRevisionID(catalog), nil
+}
+
+// authoringOccurrencesFromWire converts wire occurrences (slice-based
+// arrays) into engine occurrences, rejecting wrong-length or non-finite
+// translations: Go fixed arrays silently truncate/extend on JSON decode, so
+// the exact length is enforced here.
+func authoringOccurrencesFromWire(wire []authoringOccurrenceWire) ([]engine.AuthoringOccurrence, []domain.ContractIssue) {
+	if wire == nil {
+		return nil, nil
+	}
+	issues := []domain.ContractIssue{}
+	out := make([]engine.AuthoringOccurrence, 0, len(wire))
+	for i, occurrence := range wire {
+		path := fmt.Sprintf("furniture.components[%d]", i)
+		engineOccurrence := engine.AuthoringOccurrence{
+			ComponentInstanceID:   occurrence.ComponentInstanceID,
+			ComponentDefinitionID: occurrence.ComponentDefinitionID,
+			CatalogComponentID:    occurrence.CatalogComponentID,
+			Role:                  occurrence.Role,
+		}
+		if occurrence.Transform != nil {
+			translation, issue := wireTranslation(occurrence.Transform, path)
+			if issue != nil {
+				issues = append(issues, *issue)
+				continue
+			}
+			engineOccurrence.Transform = translation
+		}
+		out = append(out, engineOccurrence)
+	}
+	return out, issues
+}
+
+func wireTranslation(transform *authoringTransformWire, path string) (*engine.AuthoringOccurrenceTransform, *domain.ContractIssue) {
+	if transform.Frame != "assembly" {
+		return nil, &domain.ContractIssue{
+			Code:     "TRANSFORM_INVALID",
+			Message:  "occurrence transform frame must be assembly",
+			Severity: domain.IssueSeverityError, Path: path + ".transform.frame",
+		}
+	}
+	if len(transform.TranslationMm) != 3 {
+		return nil, &domain.ContractIssue{
+			Code:     "TRANSFORM_INVALID",
+			Message:  fmt.Sprintf("translationMm must carry exactly 3 millimeters, got %d", len(transform.TranslationMm)),
+			Severity: domain.IssueSeverityError, Path: path + ".transform.translationMm",
+		}
+	}
+	for _, value := range transform.TranslationMm {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return nil, &domain.ContractIssue{
+				Code:     "TRANSFORM_INVALID",
+				Message:  "translationMm must be finite millimeters",
+				Severity: domain.IssueSeverityError, Path: path + ".transform.translationMm",
+			}
+		}
+	}
+	return &engine.AuthoringOccurrenceTransform{
+		Frame:         "assembly",
+		TranslationMm: [3]float64{transform.TranslationMm[0], transform.TranslationMm[1], transform.TranslationMm[2]},
+	}, nil
+}
+
+// authoringPlacementsFromWire converts wire placements, enforcing the exact
+// offsetMm length and finiteness.
+func authoringPlacementsFromWire(wire []authoringPlacementWire) ([]engine.AuthoringManualPlacement, []domain.ContractIssue) {
+	if wire == nil {
+		return nil, nil
+	}
+	issues := []domain.ContractIssue{}
+	out := make([]engine.AuthoringManualPlacement, 0, len(wire))
+	for i, placement := range wire {
+		path := fmt.Sprintf("furniture.hardwarePlacements[%d]", i)
+		if len(placement.OffsetMm) != 2 {
+			issues = append(issues, domain.ContractIssue{
+				Code:     "HARDWARE_PLACEMENT_INVALID",
+				Message:  fmt.Sprintf("offsetMm must carry exactly 2 millimeters, got %d", len(placement.OffsetMm)),
+				Severity: domain.IssueSeverityError, Path: path + ".offsetMm",
+			})
+			continue
+		}
+		if math.IsNaN(placement.OffsetMm[0]) || math.IsInf(placement.OffsetMm[0], 0) ||
+			math.IsNaN(placement.OffsetMm[1]) || math.IsInf(placement.OffsetMm[1], 0) {
+			issues = append(issues, domain.ContractIssue{
+				Code:     "HARDWARE_PLACEMENT_INVALID",
+				Message:  "offsetMm must be finite millimeters",
+				Severity: domain.IssueSeverityError, Path: path + ".offsetMm",
+			})
+			continue
+		}
+		out = append(out, engine.AuthoringManualPlacement{
+			HardwarePlacementID:     placement.HardwarePlacementID,
+			CatalogHardwareID:       placement.CatalogHardwareID,
+			HostComponentInstanceID: placement.HostComponentInstanceID,
+			AnchorFace:              placement.AnchorFace,
+			OffsetMm:                [2]float64{placement.OffsetMm[0], placement.OffsetMm[1]},
+		})
+	}
+	return out, issues
 }

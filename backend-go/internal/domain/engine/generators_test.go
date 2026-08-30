@@ -66,7 +66,7 @@ func generatorsFixture() (domain.Catalog, domain.Project) {
 			{
 				ID: "p-front", Code: "MOD-CAJ-01-P01", Description: "Frente Cajon",
 				Quantity: 1, LengthMm: 500, WidthMm: 150,
-				Edges: validEdges(),
+				Edges:      validEdges(),
 				OptionRole: "EXTERIOR",
 			},
 		},

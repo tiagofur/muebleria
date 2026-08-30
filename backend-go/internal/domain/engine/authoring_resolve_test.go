@@ -243,7 +243,7 @@ func TestAuthoringResolveMoveShelf(t *testing.T) {
 	if sideOpY != 520 {
 		t.Fatalf("side machining must follow the shelf to y=520, got %v", sideOpY)
 	}
-	if before.Machining.BomFingerprint == after.Machining.BomFingerprint {
+	if before.Machining.ManufacturingFingerprint == after.Machining.ManufacturingFingerprint {
 		t.Fatal("moving a shelf must move the manufacturing fingerprint")
 	}
 
@@ -359,7 +359,7 @@ func TestAuthoringResolveRemoveShelf(t *testing.T) {
 	if hingeOps != 1 {
 		t.Fatalf("unrelated hinge machining must survive the removal, got %d ops", hingeOps)
 	}
-	if result.Machining.BomFingerprint == after.Machining.BomFingerprint {
+	if result.Machining.ManufacturingFingerprint == after.Machining.ManufacturingFingerprint {
 		t.Fatal("removing a shelf must change the fingerprint")
 	}
 }
@@ -374,12 +374,12 @@ func TestAuthoringResolveMoveHinge(t *testing.T) {
 			{
 				HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge",
 				HostComponentInstanceID: "door-01", AnchorFace: "front",
-				OffsetMm: offset, RotationDeg: 0,
+				OffsetMm: offset,
 			},
 			{
 				HardwarePlacementID: "hp-handle-01", CatalogHardwareID: "hw-handle",
 				HostComponentInstanceID: "door-01", AnchorFace: "front",
-				OffsetMm: [2]float64{40, 360}, RotationDeg: 0,
+				OffsetMm: [2]float64{40, 360},
 			},
 		}
 		result, err := ResolveAuthoringLayout(AuthoringResolveInput{
@@ -450,7 +450,7 @@ func TestAuthoringResolveReplaceHinge(t *testing.T) {
 			{
 				HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: hardwareID,
 				HostComponentInstanceID: "door-01", AnchorFace: "front",
-				OffsetMm: [2]float64{298, 100}, RotationDeg: 0,
+				OffsetMm: [2]float64{298, 100},
 			},
 		}
 	}
@@ -482,7 +482,7 @@ func TestAuthoringResolveReplaceHinge(t *testing.T) {
 	if diameter(withA) != 35 || diameter(withB) != 32 {
 		t.Fatalf("replacement must resolve machining from the selected definition: A=%v B=%v", diameter(withA), diameter(withB))
 	}
-	if withA.Machining.BomFingerprint == withB.Machining.BomFingerprint {
+	if withA.Machining.ManufacturingFingerprint == withB.Machining.ManufacturingFingerprint {
 		t.Fatal("a machining-relevant replacement must move the fingerprint")
 	}
 
@@ -521,7 +521,7 @@ func TestAuthoringResolveOrphanAnchorRejected(t *testing.T) {
 	if result.StructuralIssues[0].Code != "RELATIONSHIP_ORPHANED" {
 		t.Fatalf("orphan anchor code = %s", result.StructuralIssues[0].Code)
 	}
-	if result.PreflightStatus != "" || result.Machining.BomFingerprint != "" || len(result.Normalized.Components) != 0 {
+	if result.ValidationStatus != "" || result.Machining.ManufacturingFingerprint != "" || len(result.Normalized.Components) != 0 {
 		t.Fatalf("rejected request must not carry a partial accepted result: %+v", result)
 	}
 }
@@ -715,17 +715,17 @@ func TestAuthoringResolveDrillingConflictBlocksPreflight(t *testing.T) {
 	if len(result.StructuralIssues) != 0 {
 		t.Fatalf("drilling conflict is manufacturing, not structural: %+v", result.StructuralIssues)
 	}
-	if result.PreflightStatus != AuthoringPreflightBlocked {
-		t.Fatalf("preflight = %s, want blocked", result.PreflightStatus)
+	if result.ValidationStatus != AuthoringValidationBlocked {
+		t.Fatalf("preflight = %s, want blocked", result.ValidationStatus)
 	}
 	found := false
-	for _, issue := range result.PreflightIssues {
+	for _, issue := range result.ValidationIssues {
 		if issue.Code == "DRILLING_CONFLICT" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected a DRILLING_CONFLICT issue: %+v", result.PreflightIssues)
+		t.Fatalf("expected a DRILLING_CONFLICT issue: %+v", result.ValidationIssues)
 	}
 }
 
@@ -745,28 +745,120 @@ func TestJointFastenerPositionsParityAnchors(t *testing.T) {
 	}
 }
 
-func TestAuthoringBomFingerprintCanonicalization(t *testing.T) {
-	// Fingerprint must be stable under input order and key order.
-	ops := []ResolvedMachiningOperation{{
-		OperationID:             "rel-a:op-1",
-		HostComponentInstanceID: "side-left-01",
-		Provenance:              ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "rel-a", CatalogRuleID: "minifix-dowel"},
-		Holes:                   []ResolveHole{{Face: "front", XMm: 50, YMm: 350, DiameterMm: 15, DepthMm: 12.5, Type: "minifix"}},
-	}}
-	first := authoringBomFingerprint(nil, ops)
-
-	reordered := []ResolvedMachiningOperation{{
-		OperationID:             "rel-a:op-1",
-		Provenance:              ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "rel-a", CatalogRuleID: "minifix-dowel"},
-		HostComponentInstanceID: "side-left-01",
-		Holes:                   []ResolveHole{{Type: "minifix", DepthMm: 12.5, DiameterMm: 15, YMm: 350, XMm: 50, Face: "front"}},
-	}}
-	second := authoringBomFingerprint(nil, reordered)
-
-	if first != second {
-		t.Fatalf("fingerprint must be canonical: %s vs %s", first, second)
+func TestAuthoringResolveFingerprintCoversFullManufacturingIdentity(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	base := func(placements []AuthoringManualPlacement) *AuthoringResolveResult {
+		result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+			Module: module, Catalog: catalog, PrecisionMm: 0.01,
+			Occurrences:             defaultAuthoringOccurrences(),
+			Relationships:           []AuthoringRelationship{shelfRelationship("rel-shelf-01", "shelf-01")},
+			ManualPlacements:        placements,
+			ManualPlacementsPresent: true,
+		})
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		if len(result.StructuralIssues) != 0 {
+			t.Fatalf("rejected: %+v", result.StructuralIssues)
+		}
+		return result
 	}
-	if len(first) != 6+8 || first[:6] != "fnv1a-" {
-		t.Fatalf("fingerprint shape = %q", first)
+	hinge := AuthoringManualPlacement{
+		HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge",
+		HostComponentInstanceID: "door-01", AnchorFace: "front",
+		OffsetMm: [2]float64{298, 100},
+	}
+	handle := AuthoringManualPlacement{
+		HardwarePlacementID: "hp-handle-01", CatalogHardwareID: "hw-handle",
+		HostComponentInstanceID: "door-01", AnchorFace: "front",
+		OffsetMm: [2]float64{40, 360},
+	}
+
+	withHinge := base([]AuthoringManualPlacement{hinge})
+	withBoth := base([]AuthoringManualPlacement{hinge, handle})
+
+	// A non-machining hardware swap (the handle) must move the fingerprint:
+	// it is part of the manufacturing identity even without drilling.
+	if withHinge.Machining.ManufacturingFingerprint == withBoth.Machining.ManufacturingFingerprint {
+		t.Fatal("adding a manual hardware placement must move the manufacturing fingerprint")
+	}
+
+	// Two hinges with DIFFERENT technical profiles but same drilling pattern
+	// would collide on a machining-only fingerprint; the hardware identity in
+	// the fingerprint prevents it (replacement scenario).
+	replaced := base([]AuthoringManualPlacement{{
+		HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge-b",
+		HostComponentInstanceID: "door-01", AnchorFace: "front",
+		OffsetMm: [2]float64{298, 100},
+	}})
+	if replaced.Machining.ManufacturingFingerprint == withHinge.Machining.ManufacturingFingerprint {
+		t.Fatal("hardware substitution must move the manufacturing fingerprint")
+	}
+
+	// A material change moves the fingerprint even with identical machining.
+	oak := catalog
+	oak.Materials = []domain.MaterialBoard{
+		{ID: "mat-oak18", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, Active: true},
+	}
+	withMaterial, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: oak, OptionChoices: map[string]string{"FRENTE": "mat-oak18"}, PrecisionMm: 0.01,
+		Occurrences:      defaultAuthoringOccurrences(),
+		Relationships:    []AuthoringRelationship{shelfRelationship("rel-shelf-01", "shelf-01")},
+		ManualPlacements: []AuthoringManualPlacement{hinge}, ManualPlacementsPresent: true,
+	})
+	if err != nil {
+		t.Fatalf("resolve with material: %v", err)
+	}
+	if withMaterial.Machining.ManufacturingFingerprint == withHinge.Machining.ManufacturingFingerprint {
+		t.Fatal("a material change must move the manufacturing fingerprint")
+	}
+}
+
+func TestAuthoringResolveRejectsPartialTargetSets(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+
+	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences: defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{{
+			RelationshipID: "rel-shelf-01",
+			Kind:           "shelf-support",
+			Source:         AuthoringRelationshipAnchor{ComponentInstanceID: "shelf-01", Role: "shelf-edge"},
+			Targets: []AuthoringRelationshipAnchor{
+				{ComponentInstanceID: "side-left-01", Role: "inside-face"},
+				{ComponentInstanceID: "side-ghost", Role: "inside-face"},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) == 0 {
+		t.Fatal("a relationship with one valid and one orphaned target must reject")
+	}
+	if result.StructuralIssues[0].Code != "RELATIONSHIP_ORPHANED" {
+		t.Fatalf("code = %s, want RELATIONSHIP_ORPHANED", result.StructuralIssues[0].Code)
+	}
+}
+
+func TestAuthoringResolveRejectsMultiEntryTemplates(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	// Duplicate the shelf entry: the component is now instantiated by two
+	// definition entries (possibly with different formulas/overrides).
+	module.Components = append([]domain.ComponentInstance{{ComponentID: "comp-shelf", Quantity: 1}}, module.Components...)
+
+	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) == 0 {
+		t.Fatal("planning a template with multiple definition entries must always reject")
+	}
+	if result.StructuralIssues[0].Code != "OCCURRENCE_COUNT_UNSUPPORTED" {
+		t.Fatalf("code = %s, want OCCURRENCE_COUNT_UNSUPPORTED", result.StructuralIssues[0].Code)
 	}
 }

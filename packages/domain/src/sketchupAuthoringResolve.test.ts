@@ -29,7 +29,7 @@ function request(furniture: Partial<AuthoringFurnitureIntentV1> = {}): Authoring
     source: { client: 'granete-for-sketchup', clientVersion: '0.1.0', host: 'sketchup', hostVersion: '2026.2' },
     units: { length: 'mm', angle: 'deg', precisionMm: 0.01 },
     coordinateSystem: { handedness: 'right', upAxis: 'z', projectFrameId: 'frame-1' },
-    furniture: { furnitureDefinitionId: 'mod-1', ...furniture },
+    furniture: { furnitureDefinitionId: 'mod-1', catalogRevision: 'workshop-test', ...furniture },
   };
 }
 
@@ -146,7 +146,7 @@ describe('validateAuthoringResolveRequest', () => {
     expect(codes(validateAuthoringResolveRequest(noTargets))).toContain('RELATIONSHIP_INVALID');
   });
 
-  test('hardware placements: host, face, offsets, rotation and handedness', () => {
+  test('hardware placements: host, face, offsets and removed v1 fields', () => {
     const invalid = request({
       components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
       hardwarePlacements: [
@@ -157,8 +157,8 @@ describe('validateAuthoringResolveRequest', () => {
           anchorFace: 'diagonal',
           offsetMm: [Number.POSITIVE_INFINITY, 0],
           rotationDeg: 17,
-          handedness: 'ambi' as unknown as 'left',
-        },
+          handedness: 'left',
+        } as never,
       ],
     });
     const issueCodes = codes(validateAuthoringResolveRequest(invalid));
@@ -167,6 +167,9 @@ describe('validateAuthoringResolveRequest', () => {
     for (const expected of ['HARDWARE_HOST_INVALID', 'HARDWARE_PLACEMENT_INVALID']) {
       expect(issueCodes).toContain(expected);
     }
+    // rotationDeg/handedness are NOT part of resolve v1: sending them (even
+    // with valid values) is an apparent-capability error.
+    expect(issueCodes.filter((code) => code === 'HARDWARE_PLACEMENT_INVALID').length).toBeGreaterThanOrEqual(3);
 
     const valid = request({
       components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
@@ -177,8 +180,6 @@ describe('validateAuthoringResolveRequest', () => {
           hostComponentInstanceId: 'door-01',
           anchorFace: 'front',
           offsetMm: [298, 100],
-          rotationDeg: 360,
-          handedness: 'left',
         },
       ],
     });

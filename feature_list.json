@@ -4991,12 +4991,15 @@
         "docs/sketchup-excellence-execution-plan.md",
         "contracts/sketchupAuthoringResolve.contract.json"
       ],
-      "status": "done",
+      "status": "in_progress",
       "depends_on": [
         "F161",
         "F162",
         "F163",
         "F186"
+      ],
+      "review_notes": [
+        "PR #481 r1: la revision pidio correcciones (reproducibilidad del catalogo pineado, contratos paralelos TS/Go/Ruby, preflight subset sin claim del modelo #347, fingerprint de manufactura real, reglas tecnicas versionadas por codigo, aceptaciones parciales, rotation/handedness aparentes, parser Ruby fail-closed y TestUp real). Corregidas en r2 con evidencia de host; a la espera de nueva revision independiente antes de volver a done."
       ]
     }
   ]

@@ -28,12 +28,14 @@ const (
 	AuthoringResolveSchemaID      = AuthoringResolveSchemaName + ".v1"
 )
 
-// Preflight statuses of the resolve-scoped preflight subset (#347 owns the
-// full model; this marker links to it).
+// Resolve-scoped validation of the accepted intent. This is deliberately
+// NOT the #347 manufacturing preflight verdict: it never claims fabrication
+// readiness, and the full preflight contract is published as the link to
+// obtain the authoritative result (#347 owns that model).
 const (
-	AuthoringPreflightReady        = "ready"
-	AuthoringPreflightWarning      = "warning"
-	AuthoringPreflightBlocked      = "blocked"
+	AuthoringValidationScope       = "authoring-resolve-subset"
+	AuthoringValidationClear       = "clear"
+	AuthoringValidationBlocked     = "blocked"
 	ManufacturingPreflightContract = "granete.manufacturing-preflight.v1"
 )
 
@@ -72,17 +74,19 @@ type AuthoringRelationship struct {
 	Source          AuthoringRelationshipAnchor   `json:"source"`
 	Targets         []AuthoringRelationshipAnchor `json:"targets"`
 	JoinerySystemID string                        `json:"joinerySystemId,omitempty"`
+	Parameters      map[string]any                `json:"parameters,omitempty"`
 }
 
-// AuthoringManualPlacement mirrors the TS HardwarePlacementIntent.
+// AuthoringManualPlacement is the resolve-scoped manual placement intent.
+// v1 carries no rotationDeg/handedness: fields that do not drive resolution
+// are not accepted (an apparent capability is worse than an absent one);
+// #468 adds them together with their resolution semantics.
 type AuthoringManualPlacement struct {
 	HardwarePlacementID     string     `json:"hardwarePlacementId"`
 	CatalogHardwareID       string     `json:"catalogHardwareId"`
 	HostComponentInstanceID string     `json:"hostComponentInstanceId"`
 	AnchorFace              string     `json:"anchorFace"`
 	OffsetMm                [2]float64 `json:"offsetMm"`
-	RotationDeg             float64    `json:"rotationDeg"`
-	Handedness              string     `json:"handedness,omitempty"`
 }
 
 // NormalizedAuthoringComponent is the server-normalized occurrence echo.
@@ -126,8 +130,8 @@ type AuthoringResolveResult struct {
 	Layout           FurnitureLayout
 	Normalized       NormalizedAuthoringIntent
 	Machining        AuthoringMachining
-	PreflightStatus  string
-	PreflightIssues  []domain.ContractIssue
+	ValidationStatus string
+	ValidationIssues []domain.ContractIssue
 	StructuralIssues []domain.ContractIssue
 }
 
@@ -241,16 +245,18 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	}
 	machining, machiningIssues := deriveAuthoringMachining(boards, input.Relationships, machiningForPlacements, input.Catalog)
 	manufacturing = append(manufacturing, machiningIssues...)
+	machining.ManufacturingFingerprint = authoringManufacturingFingerprint(
+		layout, boards, machiningForPlacements, machining.DerivedHardwarePlacements, machining.Operations)
 
 	// 7. Normalized snapshot (stateless receipt).
 	normalized := buildNormalizedIntent(input, layout, boards, effectivePlacements)
 
 	return &AuthoringResolveResult{
-		Layout:          layout,
-		Normalized:      normalized,
-		Machining:       machining,
-		PreflightStatus: preflightStatusFor(manufacturing),
-		PreflightIssues: manufacturing,
+		Layout:           layout,
+		Normalized:       normalized,
+		Machining:        machining,
+		ValidationStatus: validationStatusFor(manufacturing),
+		ValidationIssues: manufacturing,
 	}, nil
 }
 
@@ -354,33 +360,26 @@ func planOccurrences(plan *authoringPlan, occurrences []AuthoringOccurrence, ind
 			})
 			continue
 		}
-		if count != template.defaultCount {
-			if !movable {
-				*issues = append(*issues, domain.ContractIssue{
-					Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
-					Message:  fmt.Sprintf("template %s authors %d occurrences, the definition instantiates %d", defID, count, template.defaultCount),
-					Severity: domain.IssueSeverityError, Path: "furniture.components",
-					Remediation: "v1 lets authoring change the occurrence count of movable internals (interno placement) backed by a single definition entry; agregados and structural templates keep the definition count.",
-				})
-				continue
-			}
-		}
 		if template.entryCount > 1 {
-			hasTransform := false
-			for _, occurrence := range grouped[defID] {
-				if occurrence.Transform != nil {
-					hasTransform = true
-					break
-				}
-			}
-			if hasTransform {
-				*issues = append(*issues, domain.ContractIssue{
-					Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
-					Message:  fmt.Sprintf("template %s is instantiated by multiple definition entries; its occurrences cannot carry authored transforms", defID),
-					Severity: domain.IssueSeverityError, Path: "furniture.components",
-				})
-				continue
-			}
+			// Multiple definition entries may carry different formulas and
+			// overrides per copy; grouping them under one template would
+			// silently honor only the first entry. Fail closed instead.
+			*issues = append(*issues, domain.ContractIssue{
+				Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
+				Message:  fmt.Sprintf("template %s is instantiated by multiple definition entries; its occurrences cannot be authoring-planned", defID),
+				Severity: domain.IssueSeverityError, Path: "furniture.components",
+				Remediation: "Authoring v1 plans templates backed by exactly one definition entry.",
+			})
+			continue
+		}
+		if count != template.defaultCount && !movable {
+			*issues = append(*issues, domain.ContractIssue{
+				Code:     "OCCURRENCE_COUNT_UNSUPPORTED",
+				Message:  fmt.Sprintf("template %s authors %d occurrences, the definition instantiates %d", defID, count, template.defaultCount),
+				Severity: domain.IssueSeverityError, Path: "furniture.components",
+				Remediation: "v1 lets authoring change the occurrence count of movable internals (interno placement) backed by a single definition entry; agregados and structural templates keep the definition count.",
+			})
+			continue
 		}
 	}
 
@@ -500,22 +499,6 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 			})
 			continue
 		}
-		if intent.RotationDeg != 0 && math.Mod(math.Abs(intent.RotationDeg), 360) != 0 {
-			issues = append(issues, domain.ContractIssue{
-				Code:     "HARDWARE_PLACEMENT_INVALID",
-				Message:  fmt.Sprintf("placement %s rotationDeg must be 0 (mod 360) in resolve v1", intent.HardwarePlacementID),
-				Severity: domain.IssueSeverityError, EntityID: intent.HardwarePlacementID, Path: path + ".rotationDeg",
-			})
-			continue
-		}
-		if intent.Handedness != "" && intent.Handedness != "left" && intent.Handedness != "right" && intent.Handedness != "neutral" {
-			issues = append(issues, domain.ContractIssue{
-				Code:     "HARDWARE_PLACEMENT_INVALID",
-				Message:  fmt.Sprintf("placement %s has unknown handedness %s", intent.HardwarePlacementID, intent.Handedness),
-				Severity: domain.IssueSeverityError, EntityID: intent.HardwarePlacementID, Path: path + ".handedness",
-			})
-			continue
-		}
 		out = append(out, effectiveManualPlacement{intent: intent, board: board})
 	}
 	return out, issues
@@ -565,20 +548,25 @@ func validateRelationships(relationships []AuthoringRelationship, boards []layou
 			})
 			continue
 		}
-		hasTarget := false
-		for _, anchor := range relationship.Targets {
-			if ids[anchor.ComponentInstanceID] {
-				hasTarget = true
-				break
-			}
-		}
-		if !hasTarget {
+		if len(relationship.Targets) == 0 {
 			issues = append(issues, domain.ContractIssue{
-				Code:     "RELATIONSHIP_ORPHANED",
-				Message:  fmt.Sprintf("relationship %s has no target anchor in this snapshot", relationship.RelationshipID),
-				Severity: domain.IssueSeverityError, EntityID: relationship.RelationshipID, Path: path,
-				Remediation: "Anchor the relationship to a component instance present in the snapshot.",
+				Code:     "RELATIONSHIP_INVALID",
+				Message:  fmt.Sprintf("relationship %s has no target anchors", relationship.RelationshipID),
+				Severity: domain.IssueSeverityError, EntityID: relationship.RelationshipID, Path: path + ".targets",
 			})
+			continue
+		}
+		for _, anchor := range relationship.Targets {
+			// Every target must resolve: accepting a relationship because at
+			// least one target exists would silently drop the invalid rest.
+			if !ids[anchor.ComponentInstanceID] {
+				issues = append(issues, domain.ContractIssue{
+					Code:     "RELATIONSHIP_ORPHANED",
+					Message:  fmt.Sprintf("anchor references componentInstanceId %s that is not part of this snapshot", anchor.ComponentInstanceID),
+					Severity: domain.IssueSeverityError, EntityID: relationship.RelationshipID, Path: path,
+					Remediation: "Anchor the relationship to component instances present in the snapshot.",
+				})
+			}
 		}
 	}
 	return issues
@@ -692,15 +680,11 @@ func roundToPrecision(value, precisionMm float64) float64 {
 	return math.Round(value*factor) / factor
 }
 
-func preflightStatusFor(issues []domain.ContractIssue) string {
-	status := AuthoringPreflightReady
+func validationStatusFor(issues []domain.ContractIssue) string {
 	for _, issue := range issues {
 		if issue.Severity == domain.IssueSeverityError {
-			return AuthoringPreflightBlocked
-		}
-		if issue.Severity == domain.IssueSeverityWarning {
-			status = AuthoringPreflightWarning
+			return AuthoringValidationBlocked
 		}
 	}
-	return status
+	return AuthoringValidationClear
 }
