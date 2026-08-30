@@ -73,7 +73,20 @@ export function instantiateFurniture(
   // 1. Validate & evaluate parameters against definition contract
   const evaluatedParams: Record<string, number | string | boolean> = {};
   for (const param of definition.parameters) {
-    const rawVal = rawParams[param.name] ?? param.defaultValue;
+    const hasValue = Object.hasOwn(rawParams, param.name);
+    const rawVal = hasValue ? rawParams[param.name] : param.defaultValue;
+    if (rawVal === undefined) {
+      if (param.required) {
+        issues.push({
+          code: "PARAMETER_REQUIRED",
+          message: `Parameter ${param.name} is required.`,
+          severity: "error",
+          entityId: definition.furnitureDefinitionId,
+          remediation: `Set ${param.name} before resolving the furniture.`,
+        });
+      }
+      continue;
+    }
     const validated = validateParameter(param, rawVal);
     if (!validated.valid) {
       issues.push({
@@ -290,7 +303,18 @@ export function validateInteractiveParameters(
   const issues: InteractiveValidationIssue[] = [];
 
   for (const param of definition.parameters) {
-    const val = rawParameters[param.name] ?? param.defaultValue;
+    const val = Object.hasOwn(rawParameters, param.name) ? rawParameters[param.name] : param.defaultValue;
+    if (val === undefined) {
+      if (param.required) {
+        issues.push({
+          code: "PARAMETER_REQUIRED",
+          message: `El parámetro ${param.label} es obligatorio.`,
+          severity: "error",
+          parameterName: param.name
+        });
+      }
+      continue;
+    }
 
     if (param.type === "number") {
       const num = Number(val);
@@ -356,7 +380,8 @@ export function resolveFurnitureLayout(
 
   const evaluated: Record<string, string | number | boolean> = {};
   for (const param of definition.parameters) {
-    evaluated[param.name] = rawParameters[param.name] ?? param.defaultValue;
+    const value = Object.hasOwn(rawParameters, param.name) ? rawParameters[param.name] : param.defaultValue;
+    if (value !== undefined) evaluated[param.name] = value;
   }
 
   const furnitureInstance: FurnitureInstance = {

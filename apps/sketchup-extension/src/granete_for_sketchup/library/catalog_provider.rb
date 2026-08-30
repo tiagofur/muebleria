@@ -383,6 +383,8 @@ module Granete
               'description' => defn['description'],
               'parameters' => translate_parameters(defn['parameters'])
             }
+            item['schemaRevision'] = defn['schemaRevision'] unless defn['schemaRevision'].nil?
+            item['definitionHash'] = defn['definitionHash'] if defn['definitionHash']
             image_url = defn['imageUrl'] || defn['thumbnailUrl'] || defn['previewUrl']
             item['imageUrl'] = image_url if image_url
             item['categoryId'] = defn['categoryId'] if defn['categoryId']
@@ -398,7 +400,9 @@ module Granete
               'name' => param['name'], 'label' => param['label'],
               'type' => param['type'], 'defaultValue' => param['defaultValue']
             }
-            %w[min max step unit options].each { |k| translated[k] = param[k] unless param[k].nil? }
+            %w[min max step unit options required integer category].each do |key|
+              translated[key] = param[key] unless param[key].nil?
+            end
             translated
           end
         end

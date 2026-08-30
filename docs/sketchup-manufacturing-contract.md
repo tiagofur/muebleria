@@ -789,9 +789,9 @@ furniture {
   furnitureDefinitionId                    (definición autoritativa)
   catalogRevision                          OBLIGATORIO (revisionId de GET /api/furniture/definitions;
                                            mismatch → CATALOG_REVISION_STALE; nunca hay latest implícito)
-  parameters { widthMm, heightMm, depthMm } (proyección paramétrica autoritativa disponible en Go v1;
-                                           claves fuera de la definición proyectada → PARAMETER_INVALID;
-                                           el catálogo tipado universal se sigue en #483)
+  parameters { name → scalar }             (proyección tipada autoritativa de la definición: number/string/
+                                           boolean/enum, defaults/required/min/max/step/options/integer;
+                                           claves o valores inválidos → códigos PARAMETER_* estables)
   materialChoices { ROLE → materialId }
   components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
   relationships?                           (PartRelationshipIntent, incl. parameters)
@@ -927,10 +927,11 @@ transforms de 3 finitos, offsets de 2 finitos, sin duplicados ni campos fuera
 del contrato v1) y coherencia snapshot↔layout. El transport pasa el request
 esperado al parser, que exige correlación exacta antes de devolver un layout.
 
-El v1 NO acepta parámetros arbitrarios que el modelo Go no pueda resolver:
-eso sería eco de intención sin efecto autoritativo. La proyección actual
-incluye dimensiones; #483 agrega el catálogo persistido/versionado de
-`FurnitureDefinition.parameters` para familias futuras number/string/boolean/enum.
+El v1 NO acepta parámetros arbitrarios: sólo evalúa los declarados por la
+`FurnitureDefinition` persistida y pineada. El servidor aplica defaults y
+restricciones, devuelve el set evaluado completo y el hash/revision del
+catálogo cambia si cambia una regla o default. Los módulos legacy sin contrato
+explícito proyectan width/height/depth con la misma semántica anterior.
 Los primeros slices de #467/#468 se expresan mediante occurrences,
 relationships y HardwarePlacement y no dependen de ese follow-up.
 
