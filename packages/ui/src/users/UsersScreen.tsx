@@ -26,6 +26,7 @@ import {
   ASSIGNABLE_ROLES,
   roleLabelEs,
   type ProductRole,
+  type TeamCapability,
 } from '@granete/domain';
 import { GraneteApiClient, GraneteApiError, type TeamMember, type Invitation, type TeamSummary } from '@granete/storage';
 
@@ -45,6 +46,74 @@ export interface UsersScreenProps {
   readonly orgType?: string | null;
 }
 
+const SALES_TEAM_ROLES: readonly ProductRole[] = ['vendedor'];
+const PRODUCTION_TEAM_ROLES: readonly ProductRole[] = ['produccion', 'almacen'];
+const SALES_INVITATION_ROLES: readonly ProductRole[] = ['vendedor', 'gerente_ventas'];
+const PRODUCTION_INVITATION_ROLES: readonly ProductRole[] = [
+  'gerente_produccion',
+  'ingeniero',
+  'produccion',
+  'almacen',
+];
+
+function hasCapability(
+  capabilities: readonly TeamCapability[],
+  capability: TeamCapability,
+): boolean {
+  return capabilities.includes(capability);
+}
+
+function canManageRoleSet(
+  capabilities: readonly TeamCapability[],
+  roles: readonly string[],
+): boolean {
+  if (roles.length === 0) return false;
+  if (hasCapability(capabilities, 'team:manage:all')) return true;
+
+  return roles.every((role) =>
+    (SALES_TEAM_ROLES.includes(role as ProductRole)
+      && hasCapability(capabilities, 'team:manage:sales'))
+    || (PRODUCTION_TEAM_ROLES.includes(role as ProductRole)
+      && hasCapability(capabilities, 'team:manage:production')),
+  );
+}
+
+function canAssignRoleSet(
+  capabilities: readonly TeamCapability[],
+  roles: readonly string[],
+): boolean {
+  return canManageRoleSet(capabilities, roles)
+    && (!roles.includes('admin') || hasCapability(capabilities, 'team:assign:admin'));
+}
+
+function canInviteRoleSet(
+  capabilities: readonly TeamCapability[],
+  roles: readonly string[],
+): boolean {
+  if (roles.length === 0) return false;
+  const canInviteAny = hasCapability(capabilities, 'team:invite:sales')
+    || hasCapability(capabilities, 'team:invite:production');
+
+  return roles.every((role) => {
+    if (role === 'admin') {
+      return canInviteAny
+        && hasCapability(capabilities, 'team:manage:all')
+        && hasCapability(capabilities, 'team:assign:admin');
+    }
+    if (SALES_INVITATION_ROLES.includes(role as ProductRole)) {
+      return hasCapability(capabilities, 'team:invite:sales')
+        && (hasCapability(capabilities, 'team:manage:all')
+          || SALES_TEAM_ROLES.includes(role as ProductRole));
+    }
+    if (PRODUCTION_INVITATION_ROLES.includes(role as ProductRole)) {
+      return hasCapability(capabilities, 'team:invite:production')
+        && (hasCapability(capabilities, 'team:manage:all')
+          || PRODUCTION_TEAM_ROLES.includes(role as ProductRole));
+    }
+    return false;
+  });
+}
+
 // Friendly labels come from the domain (roleLabelEs) so every surface —
 // chips, modals, invitations, org picker, platform console — shows the same
 // name for the same canonical role. The assignable list itself is also the
@@ -59,6 +128,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [invitationLoadError, setInvitationLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Multi-role edit modal
@@ -91,10 +161,12 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   );
 
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
-  const capabilities = summary?.capabilities ?? [];
-  const canInvite = capabilities.includes('team:invite:sales') || capabilities.includes('team:invite:production');
-  const canManageMembers = capabilities.includes('team:manage:all') || capabilities.includes('team:manage:sales') || capabilities.includes('team:manage:production');
-  const canRevokeSessions = capabilities.includes('team:revoke_sessions');
+  const capabilities = (summary?.capabilities ?? []) as readonly TeamCapability[];
+  const invitationRoles = assignableRoles.filter((role) =>
+    role !== 'user' && canInviteRoleSet(capabilities, [role]),
+  );
+  const canInvite = invitationRoles.length > 0;
+  const canRevokeSessions = hasCapability(capabilities, 'team:revoke_sessions');
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -105,13 +177,27 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setLoading(true);
     setLoadError(null);
     try {
-      const [team, pendingInvitations] = await Promise.all([
-        api.listMemberships(token),
-        api.listInvitations(token),
-      ]);
+      const team = await api.listMemberships(token);
       setUsers([...team.items]);
       setSummary(team.summary);
-      setInvitations([...pendingInvitations]);
+      const grantedCapabilities = team.summary.capabilities as readonly TeamCapability[];
+      const mayInvite = ASSIGNABLE_ROLES.some((role) =>
+        role !== 'user' && canInviteRoleSet(grantedCapabilities, [role]),
+      );
+      if (mayInvite) {
+        setInvitationLoadError(null);
+        try {
+          const pendingInvitations = await api.listInvitations(token);
+          setInvitations([...pendingInvitations]);
+        } catch {
+          setInvitations([]);
+          setInvitationLoadError('No se pudieron cargar las invitaciones. El directorio del equipo sigue disponible.');
+        }
+      } else {
+        setInvitations([]);
+        setInvitationLoadError(null);
+        setFilter((current) => current === 'invitations' ? 'active' : current);
+      }
     } catch {
       setLoadError('No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.');
     } finally {
@@ -293,13 +379,13 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             className="btn btn--primary btn--small"
             onClick={() => {
               setInviteEmail('');
-              setInviteRoles(['vendedor']);
+              setInviteRoles([invitationRoles[0]!]);
               setCreatedInviteLink(null);
               setInviteError(null);
               setShowInviteModal(true);
             }}
           >
-            <UserPlus size={15} strokeWidth={1.5} aria-hidden="true" /> Invitar Miembro
+            <UserPlus size={15} strokeWidth={1.5} aria-hidden="true" /> Invitar miembro
           </button>
           ) : null
         }
@@ -337,7 +423,9 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         <StatusChips<UserFilter>
           options={[
             { value: 'active', label: `Membresías activas (${activeCount})` },
-            { value: 'invitations', label: `Invitaciones (${invitations.length})` },
+            ...(canInvite
+              ? [{ value: 'invitations' as const, label: `Invitaciones (${invitations.length})` }]
+              : []),
             { value: 'all', label: `Todo el equipo (${users.length})` },
             ...(suspendedCount > 0
               ? [{ value: 'suspended' as const, label: `Membresías suspendidas (${suspendedCount})` }]
@@ -364,14 +452,21 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
         />
       ) : filter === 'invitations' ? (
         /* INVITATIONS VIEW */
-        invitations.length === 0 ? (
+        invitationLoadError ? (
+          <EmptyState
+            title="No se pudieron cargar las invitaciones"
+            description={invitationLoadError}
+            actionLabel="Reintentar"
+            onAction={() => void load()}
+          />
+        ) : invitations.length === 0 ? (
           <EmptyState
             title="Sin invitaciones"
-            description="Todavía no hay invitaciones. Podés crear una con el botón 'Invitar Miembro'."
+            description="Todavía no hay invitaciones. Podés crear una con el botón 'Invitar miembro'."
             actionLabel={canInvite ? 'Invitar miembro' : undefined}
             onAction={canInvite ? () => {
               setInviteEmail('');
-              setInviteRoles(['vendedor']);
+              setInviteRoles([invitationRoles[0]!]);
               setCreatedInviteLink(null);
               setInviteError(null);
               setShowInviteModal(true);
@@ -420,7 +515,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                       </span>
                     </td>
                     <td className="users-table__align-right">
-                      {['pending', 'delivered', 'opened', 'expired'].includes(inv.status) ? (
+                      {canInviteRoleSet(capabilities, inv.roles)
+                        && ['pending', 'delivered', 'opened', 'expired'].includes(inv.status) ? (
                         <div className="users-table__actions">
                           <button type="button" className="btn btn--secondary btn--small" onClick={() => void handleResendInvitation(inv)} disabled={actionId === inv.id}>
                             <RefreshCw size={13} strokeWidth={1.5} aria-hidden="true" /> Reenviar
@@ -463,6 +559,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             <tbody>
               {filtered.map((u) => {
                 const isWorking = actionId === u.membership_id;
+                const canManageMember = canManageRoleSet(capabilities, u.roles);
 
                 return (
                   <tr key={u.membership_id}>
@@ -473,7 +570,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                     <td>
                       <div className="users-member-roles">
                         {roleChips(u)}
-                        {canManageMembers ? <button
+                        {canManageMember ? <button
                           type="button"
                           className="btn btn--ghost btn--small"
                           onClick={() => {
@@ -503,22 +600,24 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                     </td>
                     <td className="users-table__align-right">
                       <div className="users-table__actions users-table__actions--end">
-                        {u.membership_status === 'suspended' && canManageMembers ? (
+                        {u.membership_status === 'suspended' && canManageMember ? (
                           <button
                             type="button"
                             className="btn btn--primary btn--small"
                             onClick={() => void reactivateMember(u)}
                             disabled={isWorking || u.account_status !== 'active'}
                             title={u.account_status !== 'active' ? 'La cuenta global está deshabilitada' : undefined}
+                            aria-label={`Reactivar membresía de ${u.name || u.email}`}
                           >
                             <CheckCircle2 size={13} strokeWidth={1.5} aria-hidden="true" /> Reactivar membresía
                           </button>
-                        ) : u.membership_status === 'active' && canManageMembers ? (
+                        ) : u.membership_status === 'active' && canManageMember ? (
                           <button
                             type="button"
                             className="btn btn--secondary btn--small"
                             onClick={() => { setSuspendMember(u); setSuspendReason(''); }}
                             disabled={isWorking}
+                            aria-label={`Suspender membresía de ${u.name || u.email}`}
                           >
                             <MinusCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Suspender membresía
                           </button>
@@ -528,10 +627,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           className="btn btn--ghost btn--small"
                           onClick={() => { setRevokeSessionsMember(u); setRevokeSessionsReason(''); }}
                           disabled={isWorking}
+                          aria-label={`Revocar sesiones de ${u.name || u.email}`}
                         >
                           Revocar sesiones
                         </button> : null}
-                        {!canManageMembers && !canRevokeSessions ? <span aria-hidden="true">—</span> : null}
+                        {!canManageMember && !canRevokeSessions ? <span aria-hidden="true">—</span> : null}
                       </div>
                     </td>
                   </tr>
@@ -561,7 +661,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           )}
 
           <div className="users-role-options users-role-options--single">
-            {assignableRoles.map((r) => {
+            {assignableRoles.filter((role) => canAssignRoleSet(capabilities, [role])).map((r) => {
               const isChecked = selectedRoles.includes(r);
               return (
                 <label
@@ -599,7 +699,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                 }
               }}
             >
-              Guardar Roles
+              Guardar roles
             </button>
           </div>
         </div>
@@ -609,7 +709,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
       <Modal
         open={showInviteModal}
         onClose={() => setShowInviteModal(false)}
-        title="Invitar Miembro al Taller"
+        title="Invitar miembro al taller"
         size="md"
       >
         {createdInviteLink ? (
@@ -672,7 +772,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             <div>
               <label className="label">Roles a asignar *</label>
               <div className="users-role-options">
-                {assignableRoles.filter((r) => r !== 'user').map((r) => {
+                {invitationRoles.map((r) => {
                   const isChecked = inviteRoles.includes(r);
                   return (
                     <label

@@ -86,7 +86,13 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     version: 1,
   };
 
-  const teamDirectory = (items: readonly unknown[], capabilities = ['team:invite:sales', 'team:manage:all', 'team:revoke_sessions']) => ({
+  const teamDirectory = (items: readonly unknown[], capabilities = [
+    'team:invite:sales',
+    'team:invite:production',
+    'team:manage:all',
+    'team:assign:admin',
+    'team:revoke_sessions',
+  ]) => ({
     items,
     summary: {
       active_members: items.filter((item: any) => item.membership_status === 'active').length,
@@ -159,7 +165,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     trigger.focus();
     await actor.keyboard('{Enter}');
 
-    const dialog = await screen.findByRole('dialog', { name: 'Invitar Miembro al Taller' });
+    const dialog = await screen.findByRole('dialog', { name: 'Invitar miembro al taller' });
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await actor.keyboard('{Escape}');
     await waitFor(() => expect(document.activeElement).toBe(trigger));
@@ -258,7 +264,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
 
     await user.click(await screen.findByRole('button', { name: /Membresías suspendidas/ }));
-    await user.click(await screen.findByRole('button', { name: 'Reactivar membresía' }));
+    await user.click(await screen.findByRole('button', { name: 'Reactivar membresía de Ana Pérez' }));
 
     await waitFor(() => {
       expect(requests.some(({ url }) => url.includes('/org/memberships/11111111-1111-4111-8111-111111111111:reactivate'))).toBe(true);
@@ -366,14 +372,118 @@ describe('UsersScreen (#451 safe team boundary)', () => {
   });
 
   it('does not render mutation controls when the server grants only team:view', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
-      ? new Response(JSON.stringify(directory(['team:view'], 5)), { status: 200 })
-      : new Response(JSON.stringify([]), { status: 200 })));
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      return url.endsWith('/org/memberships')
+        ? new Response(JSON.stringify(directory(['team:view'], 5)), { status: 200 })
+        : new Response(JSON.stringify({ code: 'FORBIDDEN' }), { status: 403 });
+    }));
     render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
     await screen.findByText('Ana Pérez');
     expect(screen.queryByRole('button', { name: /Invitar miembro/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Modificar roles/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Suspender membresía/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Revocar sesiones/i })).toBeNull();
+    expect(requests.some((url) => url.endsWith('/org/invitations'))).toBe(false);
+  });
+
+  it('keeps the Team directory available when invitations return forbidden', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/org/memberships')) {
+        return new Response(JSON.stringify(directory([
+          'team:view',
+          'team:invite:sales',
+          'team:manage:sales',
+        ], 5)), { status: 200 });
+      }
+      return new Response(JSON.stringify({ code: 'FORBIDDEN' }), { status: 403 });
+    }));
+
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    expect(await screen.findByText('Ana Pérez')).toBeTruthy();
+    expect(screen.queryByText('No se pudo cargar el equipo')).toBeNull();
+    await actor.click(screen.getByRole('button', { name: 'Invitaciones (0)' }));
+    expect(screen.getByText('No se pudieron cargar las invitaciones')).toBeTruthy();
+  });
+
+  it('limits sales-manager invitation and member controls to sales targets', async () => {
+    const productionMember = {
+      ...member,
+      membership_id: '33333333-3333-4333-8333-333333333333',
+      user_id: '44444444-4444-4444-8444-444444444444',
+      name: 'Bruno Producción',
+      email: 'bruno@taller.com',
+      roles: ['produccion'],
+    } as const;
+    const capabilities = ['team:view', 'team:invite:sales', 'team:manage:sales'];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify({ ...directory(capabilities, 5), items: [member, productionMember] }), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    expect(await screen.findByRole('button', { name: 'Modificar roles de Ana Pérez' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Modificar roles de Bruno Producción' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Suspender membresía de Ana Pérez' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Suspender membresía de Bruno Producción' })).toBeNull();
+
+    await actor.click(screen.getByRole('button', { name: 'Invitar miembro' }));
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox', { name: roleLabelEs('vendedor') })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: roleLabelEs('admin') })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Invitar miembro al taller' })).toBeTruthy();
+  });
+
+  it('limits production-manager controls to production and warehouse targets', async () => {
+    const productionMember = {
+      ...member,
+      membership_id: '33333333-3333-4333-8333-333333333333',
+      user_id: '44444444-4444-4444-8444-444444444444',
+      name: 'Bruno Producción',
+      email: 'bruno@taller.com',
+      roles: ['produccion'],
+    } as const;
+    const warehouseMember = {
+      ...member,
+      membership_id: '55555555-5555-4555-8555-555555555555',
+      user_id: '66666666-6666-4666-8666-666666666666',
+      name: 'Carla Almacén',
+      email: 'carla@taller.com',
+      roles: ['almacen'],
+    } as const;
+    const capabilities = ['team:view', 'team:invite:production', 'team:manage:production'];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify({ ...directory(capabilities, 5), items: [member, productionMember, warehouseMember] }), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await screen.findByText('Bruno Producción');
+    expect(screen.queryByRole('button', { name: 'Modificar roles de Ana Pérez' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Modificar roles de Bruno Producción' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Modificar roles de Carla Almacén' })).toBeTruthy();
+  });
+
+  it('uses sentence case for Team action and dialog labels', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/org/memberships')
+      ? new Response(JSON.stringify(directory([
+        'team:view',
+        'team:invite:sales',
+        'team:manage:all',
+        'team:assign:admin',
+      ], 5)), { status: 200 })
+      : new Response(JSON.stringify([]), { status: 200 })));
+    const actor = userEvent.setup();
+    render(<UsersScreen baseUrl="http://api.test" token="t" orgType="factory" />);
+
+    await actor.click(await screen.findByRole('button', { name: 'Modificar roles de Ana Pérez' }));
+    expect(screen.getByRole('button', { name: 'Guardar roles' })).toBeTruthy();
+    await actor.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await actor.click(screen.getByRole('button', { name: 'Invitar miembro' }));
+    expect(screen.getByRole('dialog', { name: 'Invitar miembro al taller' })).toBeTruthy();
   });
 });
