@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -177,12 +178,30 @@ func (s *Server) organizationService(w http.ResponseWriter) (*application.Organi
 	return application.NewOrganizationService(store), true
 }
 
+func (s *Server) platformOrganizationContext(ctx context.Context, organizationID, userID string) (context.Context, error) {
+	setter, ok := s.Store.(tenantActorSetter)
+	if !ok {
+		return ctx, nil
+	}
+	return setter.SetTenantActor(ctx, storage.TenantActor{
+		UserID:                    userID,
+		AuthorizedOrganizationIDs: []string{organizationID},
+	})
+}
+
 func (s *Server) HandleOrganizationReadiness(w http.ResponseWriter, r *http.Request) {
 	service, ok := s.organizationService(w)
 	if !ok {
 		return
 	}
-	readiness, err := service.GetReadiness(r.Context(), r.PathValue("id"), claimsFromRequest(r).UserID)
+	organizationID := r.PathValue("id")
+	claims := claimsFromRequest(r)
+	ctx, err := s.platformOrganizationContext(r.Context(), organizationID, claims.UserID)
+	if err != nil {
+		respondWithOrganizationCommandError(w, err)
+		return
+	}
+	readiness, err := service.GetReadiness(ctx, organizationID, claims.UserID)
 	if err != nil {
 		respondWithOrganizationCommandError(w, err)
 		return
@@ -263,18 +282,10 @@ func (s *Server) HandleOrganizationOffboardingPreview(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
-	ctx := r.Context()
-	if setter, ok := s.Store.(tenantActorSetter); ok {
-		claims := claimsFromRequest(r)
-		var err error
-		ctx, err = setter.SetTenantActor(ctx, storage.TenantActor{
-			UserID:                    claims.UserID,
-			AuthorizedOrganizationIDs: []string{r.PathValue("id")},
-		})
-		if err != nil {
-			respondWithOrganizationCommandError(w, err)
-			return
-		}
+	ctx, err := s.platformOrganizationContext(r.Context(), r.PathValue("id"), claimsFromRequest(r).UserID)
+	if err != nil {
+		respondWithOrganizationCommandError(w, err)
+		return
 	}
 	preview, err := service.PreviewOffboarding(ctx, r.PathValue("id"))
 	if err != nil {
@@ -303,7 +314,12 @@ func (s *Server) HandleOrganizationEntitlements(w http.ResponseWriter, r *http.R
 	}
 	organizationID := r.PathValue("id")
 	if r.Method == http.MethodGet {
-		value, err := service.GetEntitlements(r.Context(), organizationID)
+		ctx, err := s.platformOrganizationContext(r.Context(), organizationID, claimsFromRequest(r).UserID)
+		if err != nil {
+			respondWithOrganizationCommandError(w, err)
+			return
+		}
+		value, err := service.GetEntitlements(ctx, organizationID)
 		if err != nil {
 			respondWithOrganizationCommandError(w, err)
 			return

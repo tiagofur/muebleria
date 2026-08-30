@@ -501,6 +501,57 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := api.RegisterRoutes(api.NewServer(fx.store, secret, nil, 100, 100))
+	get := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+	readinessResponse := get("/api/organizations/" + organization.ID + "/readiness")
+	if readinessResponse.Code != http.StatusOK {
+		t.Fatalf("readiness status=%d body=%s", readinessResponse.Code, readinessResponse.Body.String())
+	}
+	var readiness struct {
+		OrganizationID string `json:"organization_id"`
+		Checks         []struct {
+			Code  string `json:"code"`
+			Ready bool   `json:"ready"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(readinessResponse.Body.Bytes(), &readiness); err != nil || readiness.OrganizationID != organization.ID {
+		t.Fatalf("readiness body=%s err=%v", readinessResponse.Body.String(), err)
+	}
+	readyChecks := map[string]bool{}
+	for _, check := range readiness.Checks {
+		readyChecks[check.Code] = check.Ready
+	}
+	for _, code := range []string{"bootstrap_admin", "workshop_settings", "entitlements"} {
+		if !readyChecks[code] {
+			t.Fatalf("readiness check %s hidden by RLS: %+v", code, readiness.Checks)
+		}
+	}
+	entitlementsResponse := get("/api/organizations/" + organization.ID + "/entitlements")
+	if entitlementsResponse.Code != http.StatusOK {
+		t.Fatalf("entitlements status=%d body=%s", entitlementsResponse.Code, entitlementsResponse.Body.String())
+	}
+	var entitlements struct {
+		OrganizationID string `json:"organization_id"`
+		Version        int64  `json:"version"`
+	}
+	if err := json.Unmarshal(entitlementsResponse.Body.Bytes(), &entitlements); err != nil || entitlements.OrganizationID != organization.ID || entitlements.Version < 1 {
+		t.Fatalf("entitlements body=%s err=%v", entitlementsResponse.Body.String(), err)
+	}
+	const missingOrganizationID = "c2000000-0000-0000-0000-000000000999"
+	for _, path := range []string{
+		"/api/organizations/" + missingOrganizationID + "/readiness",
+		"/api/organizations/" + missingOrganizationID + "/entitlements",
+	} {
+		if response := get(path); response.Code == http.StatusOK {
+			t.Fatalf("missing target %s unexpectedly returned 200: %s", path, response.Body.String())
+		}
+	}
 	command := func(action, body, key string, version int64) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodPost, "/api/organizations/"+organization.ID+":"+action, strings.NewReader(body))

@@ -64,3 +64,8 @@ The implementation and correction commits are integrated on the approved tracker
 - Added direct inherited-login denial proofs for privileged create, metadata update and lifecycle transition functions.
 - Platform lifecycle keeps an org-less actor and authorizes only the exact target through `app.authorized_organization_ids`; bounded command functions provide the required Organization row locks.
 - Added an HTTP + PostgreSQL inherited-runtime proof for suspend, reactivate, offboarding preview/start and termination.
+
+## Independent review correction round 3
+
+- Platform readiness and entitlement reads now establish the same org-less, exact-target authorization context as lifecycle preview/commands.
+- The inherited-runtime HTTP/PostgreSQL proof checks owner-visible readiness facts and entitlement rows, and proves missing targets never return success.
