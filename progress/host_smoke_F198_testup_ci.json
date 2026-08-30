@@ -16,8 +16,8 @@
       "verbose": true,
       "seed": 483,
       "testup_ci": true,
-      "testup_ci_out": "/tmp/host_smoke_F197_final-1788132830.json",
-      "args": "\"-n /^(Granete::SketchUpExtension::TC_AuthoringResolveSmoke#.+)$/\" --verbose --seed 483 --testup_ci --testup_ci_out=/tmp/host_smoke_F197_final-1788132830.json"
+      "testup_ci_out": "/tmp/host_smoke_F198_final-1788132830.json",
+      "args": "\"-n /^(Granete::SketchUpExtension::TC_AuthoringResolveSmoke#.+)$/\" --verbose --seed 483 --testup_ci --testup_ci_out=/tmp/host_smoke_F198_final-1788132830.json"
     },
     "verification": {
       "sketchup_version": "26.2.242",

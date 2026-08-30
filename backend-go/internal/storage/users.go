@@ -138,7 +138,7 @@ func (s *PostgresStore) ListUsersByOrganization(ctx context.Context) ([]domain.U
 		SELECT u.id, u.email, u.normalized_email, u.password_hash, u.name, u.account_status,
 		u.email_verified_at, u.last_login_at, u.platform_admin, u.created_at, u.updated_at
 		FROM users u JOIN memberships m ON m.user_id=u.id AND m.status='active'
-		JOIN organizations o ON o.id=m.organization_id AND o.active
+		JOIN organizations o ON o.id=m.organization_id AND o.status='active'
 		WHERE m.organization_id=$1 ORDER BY u.account_status DESC, u.created_at DESC`, orgID)
 	if err != nil {
 		return nil, err

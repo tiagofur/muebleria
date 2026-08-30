@@ -25,7 +25,7 @@ func (s *Server) requireOrgAdmin(w http.ResponseWriter, r *http.Request) (*auth.
 		return nil, nil, false
 	}
 	org, err := s.Store.GetOrganizationByID(r.Context(), claims.OrgID)
-	if err != nil || org == nil || !org.Active {
+	if err != nil || org == nil || org.Status != domain.OrganizationStatusActive {
 		respondWithError(w, http.StatusNotFound, "organización no encontrada")
 		return nil, nil, false
 	}
@@ -43,7 +43,7 @@ func (s *Server) requireOrgTeamCapability(w http.ResponseWriter, r *http.Request
 		return nil, nil, false
 	}
 	org, err := s.Store.GetOrganizationByID(r.Context(), claims.OrgID)
-	if err != nil || org == nil || !org.Active {
+	if err != nil || org == nil || org.Status != domain.OrganizationStatusActive {
 		respondWithError(w, http.StatusNotFound, "organización no encontrada")
 		return nil, nil, false
 	}

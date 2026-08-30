@@ -9,7 +9,11 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Network, Store, Plus, LogIn, RefreshCw } from 'lucide-react';
-import { GraneteApiClient, type FactoryOrganization } from '@granete/storage';
+import {
+  GraneteApiClient,
+  type FactoryOrganization,
+  type OrganizationStatus,
+} from '@granete/storage';
 import { EmptyState } from '../common';
 
 export type SalesNetworkSectionProps = {
@@ -22,6 +26,15 @@ export type SalesNetworkSectionProps = {
 const TYPE_LABELS: Record<FactoryOrganization['type'], string> = {
   store: 'Tienda comercial',
   dealer: 'Distribuidor',
+};
+
+const STATUS_LABELS: Record<OrganizationStatus, string> = {
+  provisioning: 'Aprovisionando',
+  active: 'Activa',
+  suspended: 'Suspendida',
+  offboarding: 'En cierre',
+  terminated: 'Terminada',
+  provisioning_failed: 'Aprovisionamiento fallido',
 };
 
 export function SalesNetworkSection({
@@ -65,9 +78,29 @@ export function SalesNetworkSection({
     setCreating(true);
     setCreateError(null);
     try {
-      const data = await api.createFactoryOrganization(token, { name: trimmed, type });
-      setOrgs((prev) => [data.organization, ...prev]);
-      setJustCreated(data.organization);
+      const data = await api.provisionOrganization(token, {
+        name: trimmed,
+        type,
+        license_plan: 'none',
+      });
+      const provisioned = data.organization;
+      if (provisioned.type !== 'store' && provisioned.type !== 'dealer') {
+        throw new Error('Organization provisioning returned an invalid connected organization type');
+      }
+      if (provisioned.status !== 'active' || !data.readiness.ready) {
+        throw new Error('Organization provisioning did not reach authoritative readiness');
+      }
+      const organization: FactoryOrganization = {
+        id: provisioned.id,
+        name: provisioned.name,
+        slug: provisioned.slug,
+        type: provisioned.type,
+        status: provisioned.status,
+        created_at: provisioned.created_at,
+        version: provisioned.version,
+      };
+      setOrgs((prev) => [organization, ...prev]);
+      setJustCreated(organization);
       setName('');
     } catch {
       setCreateError('No se pudo crear la organización. Revisá tu conexión.');
@@ -155,7 +188,7 @@ export function SalesNetworkSection({
                   <strong style={{ fontSize: 'var(--text-sm)' }}>{o.name}</strong>{' '}
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
                     {TYPE_LABELS[o.type] ?? o.type}
-                    {o.active ? '' : ' · suspendida'}
+                    {' · '}{STATUS_LABELS[o.status]}
                   </span>
                 </span>
               </span>
@@ -163,8 +196,8 @@ export function SalesNetworkSection({
                 type="button"
                 className="btn btn--secondary btn--small"
                 onClick={() => onEnterOrg(o.id, o.name)}
-                disabled={!o.active}
-                title={o.active ? undefined : 'Taller suspendido: la plataforma debe reactivarlo'}
+                disabled={o.status !== 'active'}
+                title={o.status === 'active' ? undefined : `No podés entrar mientras esté ${STATUS_LABELS[o.status].toLowerCase()}`}
               >
                 Entrar
               </button>

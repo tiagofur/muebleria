@@ -55,7 +55,7 @@ func init() {
 // TokenVersion identifies the claims layout. Tokens with any other version
 // are rejected: the multi-org claims (org context, roles[], platform_admin)
 // are a one-time breaking change and every client re-logs in once (ADR-0004 §6).
-const TokenVersion = 3
+const TokenVersion = 4
 
 type Claims struct {
 	UserID string `json:"user_id"`
@@ -74,6 +74,10 @@ type Claims struct {
 	// MembershipCredentialVersion invalidates tokens when Team revokes a
 	// membership's sessions. Middleware compares it to the live membership.
 	MembershipCredentialVersion int64 `json:"membership_credential_version,omitempty"`
+	// OrganizationCredentialVersion is the tenant-wide revocation epoch. It
+	// changes at lifecycle boundaries so a token issued before a suspension can
+	// never become valid again after reactivation.
+	OrganizationCredentialVersion int64 `json:"organization_credential_version,omitempty"`
 	// AuthStartedAt is the absolute session origin. Refresh and organization
 	// selection preserve it so they cannot extend the 18-hour web/mobile limit.
 	AuthStartedAt *jwt.NumericDate `json:"auth_started_at,omitempty"`
@@ -92,9 +96,10 @@ type Claims struct {
 
 // SupportClaims carries the support-session context (org + session id).
 type SupportClaims struct {
-	OrgID     string `json:"org_id"`
-	SessionID string `json:"session_id"`
-	Reason    string `json:"reason,omitempty"`
+	OrgID                         string `json:"org_id"`
+	SessionID                     string `json:"session_id"`
+	OrganizationCredentialVersion int64  `json:"organization_credential_version"`
+	Reason                        string `json:"reason,omitempty"`
 }
 
 // ValidatePassword enforces the registration password policy (issue #19):
@@ -135,12 +140,13 @@ func CheckPasswordHash(password, hash string) bool {
 // TokenContext is the organization scope embedded in a token: the active
 // membership's roles plus the platform staff flag.
 type TokenContext struct {
-	Roles                       []string
-	OrgID                       string
-	MembershipID                string
-	MembershipCredentialVersion int64
-	PlatformAdmin               bool
-	AuthStartedAt               time.Time
+	Roles                         []string
+	OrgID                         string
+	MembershipID                  string
+	MembershipCredentialVersion   int64
+	OrganizationCredentialVersion int64
+	PlatformAdmin                 bool
+	AuthStartedAt                 time.Time
 }
 
 // GenerateSupportToken issues the short-lived support-session token: org
@@ -154,6 +160,9 @@ func GenerateSupportToken(userID string, email string, sc SupportClaims, secret 
 // a support token is refreshed. Support remains a separate scoped read-only
 // boundary and intentionally carries no membership credentials.
 func GenerateSupportTokenFrom(userID string, email string, sc SupportClaims, authStartedAt time.Time, secret string) (string, error) {
+	if sc.OrgID == "" || sc.SessionID == "" || sc.OrganizationCredentialVersion < 1 {
+		return "", errors.New("support token requires organization, session, and credential version")
+	}
 	now := time.Now()
 	if authStartedAt.IsZero() {
 		authStartedAt = now
@@ -229,19 +238,23 @@ func generateToken(userID string, email string, tc TokenContext, client, transpo
 	if tc.OrgID != "" && tc.MembershipCredentialVersion < 1 {
 		return "", errors.New("organization-scoped token requires membership credential version")
 	}
+	if tc.OrgID != "" && tc.OrganizationCredentialVersion < 1 {
+		return "", errors.New("organization-scoped token requires organization credential version")
+	}
 	claims := &Claims{
-		UserID:                      userID,
-		Email:                       email,
-		Role:                        PrimaryRole(tc.Roles),
-		Roles:                       tc.Roles,
-		OrgID:                       tc.OrgID,
-		MembershipID:                tc.MembershipID,
-		MembershipCredentialVersion: tc.MembershipCredentialVersion,
-		PlatformAdmin:               tc.PlatformAdmin,
-		Client:                      client,
-		Transport:                   transport,
-		Ver:                         TokenVersion,
-		AuthStartedAt:               jwt.NewNumericDate(authStartedAt),
+		UserID:                        userID,
+		Email:                         email,
+		Role:                          PrimaryRole(tc.Roles),
+		Roles:                         tc.Roles,
+		OrgID:                         tc.OrgID,
+		MembershipID:                  tc.MembershipID,
+		MembershipCredentialVersion:   tc.MembershipCredentialVersion,
+		OrganizationCredentialVersion: tc.OrganizationCredentialVersion,
+		PlatformAdmin:                 tc.PlatformAdmin,
+		Client:                        client,
+		Transport:                     transport,
+		Ver:                           TokenVersion,
+		AuthStartedAt:                 jwt.NewNumericDate(authStartedAt),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(ttl)),
@@ -280,7 +293,11 @@ func ValidateToken(tokenStr string, secret string) (*Claims, error) {
 	if claims.AuthStartedAt == nil {
 		return nil, errors.New("token missing auth start")
 	}
-	if claims.Support == nil && claims.OrgID != "" && (claims.MembershipID == "" || claims.MembershipCredentialVersion < 1) {
+	if claims.Support != nil && (claims.OrgID == "" || claims.Support.OrgID != claims.OrgID ||
+		claims.Support.SessionID == "" || claims.Support.OrganizationCredentialVersion < 1) {
+		return nil, errors.New("token missing support session credentials")
+	}
+	if claims.Support == nil && claims.OrgID != "" && (claims.MembershipID == "" || claims.MembershipCredentialVersion < 1 || claims.OrganizationCredentialVersion < 1) {
 		return nil, errors.New("token missing membership credentials")
 	}
 

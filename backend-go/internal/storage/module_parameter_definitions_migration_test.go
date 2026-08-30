@@ -68,7 +68,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 func TestModuleParameterDefinitionsMigrationDownRemovesColumn(t *testing.T) {
 	pool := multiOrgFreshDB(t)
 	identityApplyThrough(t, pool, 100)
-	downSQL, err := os.ReadFile("../../db/migration/000100_module_parameter_definitions.down.sql")
+	downSQL, err := os.ReadFile("../../db/migration/000103_module_parameter_definitions.down.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

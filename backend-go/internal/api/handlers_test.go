@@ -280,7 +280,7 @@ func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Or
 			Type:             domain.OrganizationTypeFactory,
 			LicensePlan:      plan,
 			LicenseExpiresAt: s.orgLicenseExpiresAt,
-			Active:           true,
+			Status:           domain.OrganizationStatusActive, CredentialVersion: 1,
 		}, nil
 	}
 	return nil, errors.New("organization not found")
@@ -340,7 +340,7 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 			CredentialVersion: 1,
 		},
 		Organization: domain.Organization{
-			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,
+			ID: organizationID, Status: domain.OrganizationStatusActive, CredentialVersion: 1, Type: domain.OrganizationTypeFactory,
 		},
 	}, nil
 }
@@ -2449,12 +2449,13 @@ func (s *stubStore) UpdateOrganizationVersion(_ context.Context, o *domain.Organ
 	o.Version = expected + 1
 	return nil
 }
-func (s *stubStore) CloneCatalog(context.Context, string, string) error { return nil }
-func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration) (*domain.SupportSession, error) {
-	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte"}, nil
+func (s *stubStore) CloneCatalog(context.Context, string, string) error       { return nil }
+func (s *stubStore) LockOrganizationForCommand(context.Context, string) error { return nil }
+func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration, int64) (*domain.SupportSession, error) {
+	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte", OrganizationCredentialVersion: 1}, nil
 }
 func (s *stubStore) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
-	return nil, errors.New("support session not found")
+	return nil, storage.ErrSupportSessionNotFound
 }
 func (s *stubStore) EndOpenSupportSessionsByOrg(context.Context, string, string) (int64, error) {
 	return 0, nil

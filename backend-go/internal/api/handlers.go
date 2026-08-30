@@ -246,7 +246,7 @@ func toOpenAPIOrganization(o domain.Organization) openapi.OrganizationSummary {
 		value := o.LicenseExpiresAt.UTC().Format(time.RFC3339Nano)
 		license.ExpiresAt = &value
 	}
-	return openapi.OrganizationSummary{ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type), License: license}
+	return openapi.OrganizationSummary{ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type), Status: openapi.OrganizationStatus(o.Status), License: license}
 }
 
 type LicenseDTO = openapi.License
@@ -419,6 +419,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		tc.OrgID = chosen.OrganizationID
 		tc.MembershipID = chosen.ID
 		tc.MembershipCredentialVersion = chosen.CredentialVersion
+		tc.OrganizationCredentialVersion = chosen.Organization.CredentialVersion
 		sum := toOrgSummaryDTO(chosen.Organization)
 		orgDTO = &sum
 		license = sum.License
@@ -476,7 +477,7 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, body.OrganizationID)
-	if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 {
+	if err != nil || m == nil || m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive || len(m.Roles) == 0 {
 		respondWithError(w, http.StatusForbidden, "no tenés membresía activa en ese taller")
 		return
 	}
@@ -488,7 +489,8 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TokenContext{
 		Roles: roles, OrgID: m.OrganizationID, MembershipID: m.ID,
 		MembershipCredentialVersion: m.CredentialVersion, PlatformAdmin: claims.PlatformAdmin,
-		AuthStartedAt: claims.AuthStartedAt.Time,
+		OrganizationCredentialVersion: m.Organization.CredentialVersion,
+		AuthStartedAt:                 claims.AuthStartedAt.Time,
 	}
 	transport := authTransportFromClaims(claims)
 	if claims.Support != nil {
@@ -548,8 +550,9 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	// membership roles into claims.
 	tc := auth.TokenContext{
 		Roles: claims.Roles, OrgID: claims.OrgID, MembershipID: claims.MembershipID,
-		MembershipCredentialVersion: claims.MembershipCredentialVersion,
-		PlatformAdmin:               claims.PlatformAdmin, AuthStartedAt: claims.AuthStartedAt.Time,
+		MembershipCredentialVersion:   claims.MembershipCredentialVersion,
+		OrganizationCredentialVersion: claims.OrganizationCredentialVersion,
+		PlatformAdmin:                 claims.PlatformAdmin, AuthStartedAt: claims.AuthStartedAt.Time,
 	}
 	transport := authTransportFromClaims(claims)
 	var token string

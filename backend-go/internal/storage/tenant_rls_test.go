@@ -41,16 +41,18 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 	}
 
 	for _, statement := range []string{
-		`INSERT INTO organizations (id, name, slug, active) VALUES
-		 ('` + rlsOrgA + `', 'RLS A', 'rls-a', FALSE),
-		 ('` + rlsOrgB + `', 'RLS B', 'rls-b', FALSE),
-		 ('` + rlsOrgC + `', 'RLS C', 'rls-c', FALSE)`,
+		`INSERT INTO organizations (id, name, slug, status) VALUES
+		 ('` + rlsOrgA + `', 'RLS A', 'rls-a', 'provisioning'),
+		 ('` + rlsOrgB + `', 'RLS B', 'rls-b', 'provisioning'),
+		 ('` + rlsOrgC + `', 'RLS C', 'rls-c', 'provisioning')`,
 		`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status, platform_admin) VALUES
 		 ('` + rlsUserA + `', 'rls-a@example.test', 'rls-a@example.test', 'x', 'RLS A', 'active', TRUE),
 		 ('` + rlsUserB + `', 'rls-b@example.test', 'rls-b@example.test', 'x', 'RLS B', 'active', FALSE)`,
 		`INSERT INTO memberships (organization_id, user_id, roles) VALUES
 		 ('` + rlsOrgA + `', '` + rlsUserA + `', '{admin}'),
 		 ('` + rlsOrgB + `', '` + rlsUserB + `', '{admin}')`,
+		`UPDATE organizations SET status='active', status_reason=NULL
+		 WHERE id IN ('` + rlsOrgA + `', '` + rlsOrgB + `')`,
 		`INSERT INTO customers (id, name, organization_id) VALUES
 		 ('30000000-0000-0000-0000-00000000000a', 'Customer A', '` + rlsOrgA + `'),
 		 ('30000000-0000-0000-0000-00000000000b', 'Customer B', '` + rlsOrgB + `')`,
@@ -264,14 +266,20 @@ func TestTenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix(t *testing.T) 
 
 	var supportSessionID, supportSessionBID string
 	if err := fx.admin.QueryRow(ctx, `
-		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
-		VALUES ($1, $2, 'RLS test support', NOW() + INTERVAL '1 hour')
+		INSERT INTO support_sessions (
+			platform_admin_user_id, organization_id, organization_credential_version, reason, expires_at
+		)
+		SELECT $1, organization.id, organization.credential_version, 'RLS test support', NOW() + INTERVAL '1 hour'
+		FROM organizations organization WHERE organization.id=$2
 		RETURNING id`, rlsUserA, rlsOrgA).Scan(&supportSessionID); err != nil {
 		t.Fatal(err)
 	}
 	if err := fx.admin.QueryRow(ctx, `
-		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
-		VALUES ($1, $2, 'RLS test support B', NOW() + INTERVAL '1 hour')
+		INSERT INTO support_sessions (
+			platform_admin_user_id, organization_id, organization_credential_version, reason, expires_at
+		)
+		SELECT $1, organization.id, organization.credential_version, 'RLS test support B', NOW() + INTERVAL '1 hour'
+		FROM organizations organization WHERE organization.id=$2
 		RETURNING id`, rlsUserA, rlsOrgB).Scan(&supportSessionBID); err != nil {
 		t.Fatal(err)
 	}
@@ -424,10 +432,7 @@ func TestTenantRLS_CriticalCustomerPlanUsesTenantIndex(t *testing.T) {
 func TestTenantRLS_DownMigrationIsScopedAndComplete(t *testing.T) {
 	admin := multiOrgFreshDB(t)
 	ctx := context.Background()
-	store := &storage.PostgresStore{Pool: admin}
-	if err := store.RunMigrations(ctx); err != nil {
-		t.Fatal(err)
-	}
+	identityApplyThrough(t, admin, 94)
 	if _, err := admin.Exec(ctx, `
 		CREATE TABLE external_rls_sentinel (id integer primary key, owner_name text);
 		ALTER TABLE external_rls_sentinel ENABLE ROW LEVEL SECURITY;

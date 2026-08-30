@@ -1817,7 +1817,29 @@ La nueva revisión independiente quedó **APPROVED** en
 
 ---
 
-## F197 — Parámetros tipados definition-driven para rich authoring resolve (#483) — 2026-08-30
+## F197 — Lifecycle explícito y provisioning atómico de organizaciones (#452) — 2026-08-30
+
+Rama `feat/452-organization-lifecycle-provisioning`, PR #484. Se reemplazó
+`organizations.active` por seis estados canónicos y un epoch de credenciales; Platform,
+Factory y CLI convergen en provisioning PostgreSQL transaccional e idempotente con
+settings, entitlements, admin inicial, catálogo, readiness, auditoría y activación
+atómicos. También se implementaron suspensión, reactivación, offboarding y termination
+versionados, sin hard delete y con revocación acotada a la organización.
+
+Las revisiones independientes detectaron y cerraron autoridad RLS insuficiente para
+Factory, bypass por login runtime heredero y reads Platform sin contexto exacto. El head
+`bedfad356` añadió funciones privilegiadas acotadas, denegación DML directa, detección
+segura del runtime principal y autorización exacta para lifecycle, readiness y
+entitlements. La revisión final quedó **APPROVED** en `progress/review_F197.md`
+(`e91b1d24` sobre `bedfad356`).
+
+Evidencia final: `./init.sh` completo sobre PostgreSQL 16 aislado, OpenAPI drift,
+TypeScript, Go serializado, Ruby/RBZ, RLS SQL directo, rollback/replay/concurrencia,
+pilot gate fresh, UI y los seis checks CI remotos verdes; push y SHA remoto verificados.
+
+---
+
+## F198 — Parámetros tipados definition-driven para rich authoring resolve (#483) — 2026-08-30
 
 Cadena `feat/483-typed-parameters*`. El catálogo ahora persiste y publica definiciones
 versionadas `number|string|boolean|enum` con defaults, required, unidades,

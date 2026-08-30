@@ -44,6 +44,21 @@ func (s *PostgresStore) GetWorkshopSettings(ctx context.Context) (domain.Worksho
 // UpsertWorkshopSettings writes the taller settings row for the current
 // organization (id comes from the sequence default).
 func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.WorkshopSettings) (domain.WorkshopSettings, error) {
+	return s.UpsertWorkshopSettingsForOrganization(ctx, OrgFromCtx(ctx), ws)
+}
+
+// UpsertWorkshopSettingsForOrganization is the provisioning-safe variant: a
+// factory-scoped transaction can initialize its newly authorized destination
+// without changing the actor's source organization context.
+func (s *PostgresStore) UpsertWorkshopSettingsForOrganization(ctx context.Context, organizationID string, ws domain.WorkshopSettings) (domain.WorkshopSettings, error) {
+	if strings.TrimSpace(organizationID) == "" {
+		return domain.WorkshopSettings{}, fmt.Errorf("organization id is required")
+	}
+	if transactionFromContext(ctx) != nil {
+		if err := authorizeTenantOrganizations(ctx, organizationID); err != nil {
+			return domain.WorkshopSettings{}, err
+		}
+	}
 	ws = normalizeWorkshopSettings(ws)
 	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO workshop_settings (
@@ -58,7 +73,7 @@ func (s *PostgresStore) UpsertWorkshopSettings(ctx context.Context, ws domain.Wo
 			nav_mode = EXCLUDED.nav_mode,
 			updated_at = NOW()
 	`,
-		OrgFromCtx(ctx),
+		organizationID,
 		ws.DefaultMarginFactor,
 		ws.DefaultLaborFixedCost,
 		ws.DefaultCurrency,

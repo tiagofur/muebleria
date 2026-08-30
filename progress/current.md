@@ -1,6 +1,6 @@
 ## Feature en curso
 
-F197 — Parámetros tipados definition-driven para rich authoring resolve (#483 / SU-API-2)
+F198 — Parámetros tipados definition-driven para rich authoring resolve (#483 / SU-API-2)
 
 Reabierta: 2026-08-30 15:00 America/Mexico_City
 
@@ -24,3 +24,9 @@ Plan de corrección del re-review de `8556de52`:
 6. HtmlDialog edita los cuatro tipos sin crear una segunda pantalla ni mover autoridad al cliente.
 7. Todo rechazo ocurre antes de `start_operation`; TestUp prueba cero geometría y metadata.
 8. No se mergea PR #486 ni se cierra #483 en esta sesión.
+
+### Integración de base
+
+- `main` avanzó durante la corrección a `5f4eb311`; F197 quedó ocupado por #452.
+- #483 fue reasignada programáticamente al siguiente ID libre, F198.
+- La migration paramétrica se mueve a `000103`, después del head `000102` de Organization lifecycle.

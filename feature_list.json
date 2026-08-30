@@ -5010,6 +5010,55 @@
     },
     {
       "id": "F197",
+      "title": "Lifecycle explícito y provisioning atómico de organizaciones (#452)",
+      "description": "Reemplaza organizations.active por un lifecycle canónico, unifica las altas de Platform, Factory y CLI en un servicio transaccional e idempotente, extiende entitlements, añade readiness, revocación organizacional y offboarding seguro.",
+      "tags": [
+        "organization-foundation",
+        "organization",
+        "security",
+        "backend-go",
+        "postgresql",
+        "openapi",
+        "web",
+        "p0"
+      ],
+      "created": "2026-08-30",
+      "acceptance": [
+        "Organization usa un status canónico con las seis fases aprobadas y active deja de ser autoridad runtime",
+        "Platform, Factory y CLI crean organizaciones únicamente mediante ProvisionOrganization con bootstrap admin explícito",
+        "Settings, entitlements, admin, catálogo, readiness, audit y receipt confirman o revierten en una sola transacción",
+        "Slug, retries y concurrencia producen resultados idempotentes o errores tipados sin duplicados",
+        "Suspensión y reactivación invalidan credenciales de la organización sin afectar otras memberships del User",
+        "Offboarding y termination usan preview versionado, blockers reales, preservan historia y nunca hard-deletean",
+        "organization_entitlements conserva maxActiveMembers y agrega la autoridad única para network, manufacturing, SketchUp y advanced audit",
+        "Generated OpenAPI, RLS directo, migrations fresh/upgrade/down, race, API, auth y UI mínima tienen pruebas ejecutables"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/452",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/verification.md",
+        "contracts/openapi/granete-api.v1.yaml"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F191",
+        "F192",
+        "F194",
+        "F196"
+      ],
+      "review_notes": [
+        "PR #484: implementation head bedfad356d3e0dd859f08238492e61a058537a84 passed the full isolated harness, fresh pilot gate, direct runtime-role RLS proofs, rollback/replay/concurrency coverage and all six remote CI checks.",
+        "Independent review APPROVED in e91b1d24e503b296e87536ec09657da0c6f6deca after closing Factory scope, inherited-runtime command authority and exact-target Platform readiness/entitlement reads.",
+        "PR #484 correction round: reopened after the delivered head exposed a StartSupportSession versus SuspendOrganization race, missing support-session organization epoch binding, incomplete live support-token validation, and support logout/offboarding audit/constraint gaps. A new independent review is required after correction.",
+        "PR #484 merged as main@5f4eb311 after the correction review 9cc7653b; issue #452 closed and F197 archived before allocating F198."
+      ]
+    },
+    {
+      "id": "F198",
       "title": "Parámetros tipados definition-driven para rich authoring resolve (#483 / SU-API-2)",
       "description": "Proyecta y persiste una definición versionada de parámetros number/string/boolean/enum compartida por catálogo y authoring resolve; el servidor aplica defaults y validación estable, incorpora las reglas al catalog pin y conserva la paridad legacy width/height/depth.",
       "tags": [
@@ -5035,8 +5084,8 @@
         "docs/architecture/parametric-furniture-library.md",
         "docs/verification.md",
         "https://github.com/tiagofur/muebleria/pull/486",
-        "progress/review_F197.md",
-        "progress/host_smoke_F197_testup_ci.json"
+        "progress/review_F198.md",
+        "progress/host_smoke_F198_testup_ci.json"
       ],
       "status": "in_progress",
       "depends_on": [
@@ -5045,11 +5094,11 @@
       "review_notes": [
         "Receipt-driven review mode remained disabled/unmanaged by explicit repository switch; delivery followed ordinary repository policy without a fabricated approval.",
         "Issue #483 delivered as a size-bounded Feature Branch Chain: typed definition core, evaluator, persistence/catalog, resolve contract, and cross-runtime parity.",
-        "PR #486 owner review at 97194c9a found authoritative-consumer, TS evaluator, dimension-source, corrupt-definition, migration-down, structured-issue, tenant-isolation, and real-host evidence gaps; F197 reopened until correction and independent review.",
+        "PR #486 owner review at 97194c9a found authoritative-consumer, TS evaluator, dimension-source, corrupt-definition, migration-down, structured-issue, tenant-isolation, and real-host evidence gaps; F198 reopened until correction and independent review.",
         "PR #486 corrections: versioned authoritative bindings now drive component quantity and relationships; W/H/D are reserved column projections; Go, TypeScript and Ruby reject corrupt, unbound or divergent definitions fail-closed.",
         "Independent review first requested changes at 876c9d3f for a TypeScript publication-validation bypass, nested binding TypeError paths and missing Create/Update negatives; all three were corrected in fec1c4e7 with cross-runtime corpus and atomic storage proofs.",
         "Final independent review APPROVED in 35978fed over implementation head fec1c4e7 after full init, isolated PostgreSQL, 6/6 remote CI checks and TestUp 8/8 / 98 assertions on SketchUp 26.2.242 with installed RBZ SHA ad149f46bb500a564505ce8a1a02efa7d6d4fb24eb683f816fa2e78a6ee48f45.",
-        "PR #486 owner re-review at 8556de52 found missing componentCondition semantics, clone binding ID remap, ambiguous reusable-component targets, boolean/string HtmlDialog controls, unknown-field parity, string bounds/issue details and stale host evidence; F197 reopened until correction and fresh independent approval."
+        "PR #486 owner re-review at 8556de52 found missing componentCondition semantics, clone binding ID remap, ambiguous reusable-component targets, boolean/string HtmlDialog controls, unknown-field parity, string bounds/issue details and stale host evidence; F198 reopened until correction and fresh independent approval."
       ]
     }
   ]

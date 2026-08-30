@@ -4,38 +4,43 @@ package generated
 type ApiErrorCode string
 
 const (
-	ApiErrorCodeBadRequest                ApiErrorCode = "BAD_REQUEST"
-	ApiErrorCodeUnauthorized              ApiErrorCode = "UNAUTHORIZED"
-	ApiErrorCodeForbidden                 ApiErrorCode = "FORBIDDEN"
-	ApiErrorCodeNotFound                  ApiErrorCode = "NOT_FOUND"
-	ApiErrorCodeMethodNotAllowed          ApiErrorCode = "METHOD_NOT_ALLOWED"
-	ApiErrorCodeVersionConflict           ApiErrorCode = "VERSION_CONFLICT"
-	ApiErrorCodeConflict                  ApiErrorCode = "CONFLICT"
-	ApiErrorCodeInternalError             ApiErrorCode = "INTERNAL_ERROR"
-	ApiErrorCodePreconditionRequired      ApiErrorCode = "PRECONDITION_REQUIRED"
-	ApiErrorCodeMembershipNotFound        ApiErrorCode = "MEMBERSHIP_NOT_FOUND"
-	ApiErrorCodeMembershipVersionConflict ApiErrorCode = "MEMBERSHIP_VERSION_CONFLICT"
-	ApiErrorCodeRoleNotAllowed            ApiErrorCode = "ROLE_NOT_ALLOWED"
-	ApiErrorCodeLastAdmin                 ApiErrorCode = "LAST_ADMIN"
-	ApiErrorCodeSeatLimitReached          ApiErrorCode = "SEAT_LIMIT_REACHED"
-	ApiErrorCodeInvitationExpired         ApiErrorCode = "INVITATION_EXPIRED"
-	ApiErrorCodeInvitationAlreadyUsed     ApiErrorCode = "INVITATION_ALREADY_USED"
-	ApiErrorCodeOrganizationProvisioning  ApiErrorCode = "ORGANIZATION_PROVISIONING"
-	ApiErrorCodeRelationshipNotActive     ApiErrorCode = "RELATIONSHIP_NOT_ACTIVE"
-	ApiErrorCodeFactoryNotAuthorized      ApiErrorCode = "FACTORY_NOT_AUTHORIZED"
-	ApiErrorCodeCatalogVersionUnavailable ApiErrorCode = "CATALOG_VERSION_UNAVAILABLE"
-	ApiErrorCodeIdempotencyConflict       ApiErrorCode = "IDEMPOTENCY_CONFLICT"
-	ApiErrorCodeInvitationNotFound        ApiErrorCode = "INVITATION_NOT_FOUND"
-	ApiErrorCodeInvitationRevoked         ApiErrorCode = "INVITATION_REVOKED"
-	ApiErrorCodeInvitationTokenRotated    ApiErrorCode = "INVITATION_TOKEN_ROTATED"
-	ApiErrorCodeAccountDisabled           ApiErrorCode = "ACCOUNT_DISABLED"
-	ApiErrorCodeMembershipAlreadyActive   ApiErrorCode = "MEMBERSHIP_ALREADY_ACTIVE"
-	ApiErrorCodeAccountNotFound           ApiErrorCode = "ACCOUNT_NOT_FOUND"
-	ApiErrorCodeOffboardingBlocked        ApiErrorCode = "OFFBOARDING_BLOCKED"
-	ApiErrorCodeReassignmentRequired      ApiErrorCode = "REASSIGNMENT_REQUIRED"
-	ApiErrorCodeSectorNotAllowed          ApiErrorCode = "SECTOR_NOT_ALLOWED"
-	ApiErrorCodeAdminTransferInvalid      ApiErrorCode = "ADMIN_TRANSFER_INVALID"
-	ApiErrorCodeImpactVersionConflict     ApiErrorCode = "IMPACT_VERSION_CONFLICT"
+	ApiErrorCodeBadRequest                     ApiErrorCode = "BAD_REQUEST"
+	ApiErrorCodeUnauthorized                   ApiErrorCode = "UNAUTHORIZED"
+	ApiErrorCodeForbidden                      ApiErrorCode = "FORBIDDEN"
+	ApiErrorCodeNotFound                       ApiErrorCode = "NOT_FOUND"
+	ApiErrorCodeMethodNotAllowed               ApiErrorCode = "METHOD_NOT_ALLOWED"
+	ApiErrorCodeVersionConflict                ApiErrorCode = "VERSION_CONFLICT"
+	ApiErrorCodeConflict                       ApiErrorCode = "CONFLICT"
+	ApiErrorCodeInternalError                  ApiErrorCode = "INTERNAL_ERROR"
+	ApiErrorCodePreconditionRequired           ApiErrorCode = "PRECONDITION_REQUIRED"
+	ApiErrorCodeMembershipNotFound             ApiErrorCode = "MEMBERSHIP_NOT_FOUND"
+	ApiErrorCodeMembershipVersionConflict      ApiErrorCode = "MEMBERSHIP_VERSION_CONFLICT"
+	ApiErrorCodeRoleNotAllowed                 ApiErrorCode = "ROLE_NOT_ALLOWED"
+	ApiErrorCodeLastAdmin                      ApiErrorCode = "LAST_ADMIN"
+	ApiErrorCodeSeatLimitReached               ApiErrorCode = "SEAT_LIMIT_REACHED"
+	ApiErrorCodeInvitationExpired              ApiErrorCode = "INVITATION_EXPIRED"
+	ApiErrorCodeInvitationAlreadyUsed          ApiErrorCode = "INVITATION_ALREADY_USED"
+	ApiErrorCodeOrganizationProvisioning       ApiErrorCode = "ORGANIZATION_PROVISIONING"
+	ApiErrorCodeRelationshipNotActive          ApiErrorCode = "RELATIONSHIP_NOT_ACTIVE"
+	ApiErrorCodeFactoryNotAuthorized           ApiErrorCode = "FACTORY_NOT_AUTHORIZED"
+	ApiErrorCodeCatalogVersionUnavailable      ApiErrorCode = "CATALOG_VERSION_UNAVAILABLE"
+	ApiErrorCodeIdempotencyConflict            ApiErrorCode = "IDEMPOTENCY_CONFLICT"
+	ApiErrorCodeInvitationNotFound             ApiErrorCode = "INVITATION_NOT_FOUND"
+	ApiErrorCodeInvitationRevoked              ApiErrorCode = "INVITATION_REVOKED"
+	ApiErrorCodeInvitationTokenRotated         ApiErrorCode = "INVITATION_TOKEN_ROTATED"
+	ApiErrorCodeAccountDisabled                ApiErrorCode = "ACCOUNT_DISABLED"
+	ApiErrorCodeMembershipAlreadyActive        ApiErrorCode = "MEMBERSHIP_ALREADY_ACTIVE"
+	ApiErrorCodeAccountNotFound                ApiErrorCode = "ACCOUNT_NOT_FOUND"
+	ApiErrorCodeOffboardingBlocked             ApiErrorCode = "OFFBOARDING_BLOCKED"
+	ApiErrorCodeReassignmentRequired           ApiErrorCode = "REASSIGNMENT_REQUIRED"
+	ApiErrorCodeSectorNotAllowed               ApiErrorCode = "SECTOR_NOT_ALLOWED"
+	ApiErrorCodeAdminTransferInvalid           ApiErrorCode = "ADMIN_TRANSFER_INVALID"
+	ApiErrorCodeImpactVersionConflict          ApiErrorCode = "IMPACT_VERSION_CONFLICT"
+	ApiErrorCodeOrganizationStatusConflict     ApiErrorCode = "ORGANIZATION_STATUS_CONFLICT"
+	ApiErrorCodeOrganizationNotReady           ApiErrorCode = "ORGANIZATION_NOT_READY"
+	ApiErrorCodeOrganizationOffboardingBlocked ApiErrorCode = "ORGANIZATION_OFFBOARDING_BLOCKED"
+	ApiErrorCodeOrganizationSlugConflict       ApiErrorCode = "ORGANIZATION_SLUG_CONFLICT"
+	ApiErrorCodeOrganizationRecoveryOnly       ApiErrorCode = "ORGANIZATION_RECOVERY_ONLY"
 )
 
 type ApiError struct {
@@ -76,11 +81,12 @@ type License struct {
 }
 
 type OrganizationSummary struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Slug    string  `json:"slug"`
-	Type    string  `json:"type"`
-	License License `json:"license"`
+	ID      string             `json:"id"`
+	Name    string             `json:"name"`
+	Slug    string             `json:"slug"`
+	Type    string             `json:"type"`
+	Status  OrganizationStatus `json:"status"`
+	License License            `json:"license"`
 }
 
 type Membership struct {
@@ -212,27 +218,136 @@ type MembershipOffboardingPreview struct {
 }
 
 type PlatformOrganization struct {
-	ID                   string  `json:"id"`
-	Name                 string  `json:"name"`
-	Slug                 string  `json:"slug"`
-	Type                 string  `json:"type"`
-	LicensePlan          string  `json:"license_plan"`
-	LicenseExpiresAt     *string `json:"license_expires_at,omitempty"`
-	Active               bool    `json:"active"`
-	ParentOrganizationID *string `json:"parent_organization_id,omitempty"`
-	MemberCount          int64   `json:"member_count"`
-	CreatedAt            string  `json:"created_at"`
-	UpdatedAt            string  `json:"updated_at"`
-	Version              int64   `json:"version"`
+	ID                   string             `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	Type                 string             `json:"type"`
+	Status               OrganizationStatus `json:"status"`
+	LicensePlan          string             `json:"license_plan"`
+	LicenseExpiresAt     *string            `json:"license_expires_at,omitempty"`
+	ParentOrganizationID *string            `json:"parent_organization_id,omitempty"`
+	MemberCount          int64              `json:"member_count"`
+	CreatedAt            string             `json:"created_at"`
+	UpdatedAt            string             `json:"updated_at"`
+	Version              int64              `json:"version"`
 }
 
-type CreatePlatformOrganizationRequest struct {
-	Name             string  `json:"name"`
-	Slug             string  `json:"slug"`
-	Type             string  `json:"type"`
-	LicensePlan      string  `json:"license_plan"`
-	LicenseExpiresAt *string `json:"license_expires_at,omitempty"`
-	CloneCatalogFrom *string `json:"clone_catalog_from,omitempty"`
+type OrganizationStatus string
+
+const (
+	OrganizationStatusProvisioning       OrganizationStatus = "provisioning"
+	OrganizationStatusActive             OrganizationStatus = "active"
+	OrganizationStatusSuspended          OrganizationStatus = "suspended"
+	OrganizationStatusOffboarding        OrganizationStatus = "offboarding"
+	OrganizationStatusTerminated         OrganizationStatus = "terminated"
+	OrganizationStatusProvisioningFailed OrganizationStatus = "provisioning_failed"
+)
+
+type OrganizationType string
+
+const (
+	OrganizationTypeFactory OrganizationType = "factory"
+	OrganizationTypeStore   OrganizationType = "store"
+	OrganizationTypeDealer  OrganizationType = "dealer"
+)
+
+type OrganizationReadinessCheck struct {
+	Code     string `json:"code"`
+	Ready    bool   `json:"ready"`
+	Blocking bool   `json:"blocking"`
+	Message  string `json:"message"`
+}
+
+type OrganizationReadiness struct {
+	OrganizationID      string                       `json:"organization_id"`
+	OrganizationVersion int64                        `json:"organization_version"`
+	Ready               bool                         `json:"ready"`
+	Checks              []OrganizationReadinessCheck `json:"checks"`
+	CheckedAt           string                       `json:"checked_at"`
+}
+
+type OrganizationEntitlementSource string
+
+const (
+	OrganizationEntitlementSourceLegacyUnlimited  OrganizationEntitlementSource = "legacy_unlimited"
+	OrganizationEntitlementSourcePlanDefault      OrganizationEntitlementSource = "plan_default"
+	OrganizationEntitlementSourcePlatformOverride OrganizationEntitlementSource = "platform_override"
+)
+
+type OrganizationEntitlements struct {
+	OrganizationID       string                        `json:"organization_id"`
+	MaxActiveMembers     *int64                        `json:"max_active_members"`
+	MaxSalesPartners     int64                         `json:"max_sales_partners"`
+	ManufacturingEnabled bool                          `json:"manufacturing_enabled"`
+	SalesNetworkEnabled  bool                          `json:"sales_network_enabled"`
+	SketchupSeats        int64                         `json:"sketchup_seats"`
+	AdvancedAuditEnabled bool                          `json:"advanced_audit_enabled"`
+	Source               OrganizationEntitlementSource `json:"source"`
+	DefaultsRevision     string                        `json:"defaults_revision"`
+	Version              int64                         `json:"version"`
+	UpdatedAt            string                        `json:"updated_at"`
+}
+
+type ProvisionOrganizationEntitlements struct {
+	MaxActiveMembers     *int64 `json:"max_active_members"`
+	MaxSalesPartners     int64  `json:"max_sales_partners"`
+	ManufacturingEnabled bool   `json:"manufacturing_enabled"`
+	SalesNetworkEnabled  bool   `json:"sales_network_enabled"`
+	SketchupSeats        int64  `json:"sketchup_seats"`
+	AdvancedAuditEnabled bool   `json:"advanced_audit_enabled"`
+}
+
+type ProvisionOrganizationRequest struct {
+	Name                 string                             `json:"name"`
+	Slug                 *string                            `json:"slug,omitempty"`
+	Type                 OrganizationType                   `json:"type"`
+	LicensePlan          string                             `json:"license_plan"`
+	LicenseExpiresAt     *string                            `json:"license_expires_at,omitempty"`
+	BootstrapAdminUserID *string                            `json:"bootstrap_admin_user_id,omitempty"`
+	CloneCatalogFrom     *string                            `json:"clone_catalog_from,omitempty"`
+	Entitlements         *ProvisionOrganizationEntitlements `json:"entitlements,omitempty"`
+}
+
+type OrganizationProvisioningResult struct {
+	Organization PlatformOrganization  `json:"organization"`
+	Readiness    OrganizationReadiness `json:"readiness"`
+}
+
+type OrganizationLifecycleMutationRequest struct {
+	Reason string `json:"reason"`
+}
+
+type OrganizationOffboardingMutationRequest struct {
+	Reason        string `json:"reason"`
+	ImpactVersion string `json:"impact_version"`
+}
+
+type OrganizationLifecycleMutationResponse struct {
+	Organization PlatformOrganization   `json:"organization"`
+	Readiness    *OrganizationReadiness `json:"readiness,omitempty"`
+}
+
+type OrganizationOffboardingImpact struct {
+	Code    string `json:"code"`
+	Count   int64  `json:"count"`
+	Message string `json:"message"`
+}
+
+type OrganizationOffboardingPreview struct {
+	OrganizationID      string                          `json:"organization_id"`
+	OrganizationVersion int64                           `json:"organization_version"`
+	ImpactVersion       string                          `json:"impact_version"`
+	Blockers            []OrganizationOffboardingImpact `json:"blockers"`
+	Warnings            []OrganizationOffboardingImpact `json:"warnings"`
+}
+
+type UpdateOrganizationEntitlementsRequest struct {
+	MaxActiveMembers     *int64 `json:"max_active_members"`
+	MaxSalesPartners     int64  `json:"max_sales_partners"`
+	ManufacturingEnabled bool   `json:"manufacturing_enabled"`
+	SalesNetworkEnabled  bool   `json:"sales_network_enabled"`
+	SketchupSeats        int64  `json:"sketchup_seats"`
+	AdvancedAuditEnabled bool   `json:"advanced_audit_enabled"`
 }
 
 type PlatformUserMembership struct {
@@ -270,7 +385,6 @@ type UpdatePlatformOrganizationRequest struct {
 	Name             *string `json:"name,omitempty"`
 	LicensePlan      *string `json:"license_plan,omitempty"`
 	LicenseExpiresAt *string `json:"license_expires_at,omitempty"`
-	Active           *bool   `json:"active,omitempty"`
 }
 
 type SupportSessionResponse struct {
@@ -317,22 +431,13 @@ const (
 )
 
 type FactoryOrganization struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Slug      string `json:"slug"`
-	Type      string `json:"type"`
-	Active    bool   `json:"active"`
-	CreatedAt string `json:"created_at"`
-	Version   int64  `json:"version"`
-}
-
-type CreateFactoryOrganizationRequest struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-type CreateFactoryOrganizationResponse struct {
-	Organization FactoryOrganization `json:"organization"`
+	ID        string             `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	Type      string             `json:"type"`
+	Status    OrganizationStatus `json:"status"`
+	CreatedAt string             `json:"created_at"`
+	Version   int64              `json:"version"`
 }
 
 type AccountStatus string
