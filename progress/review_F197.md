@@ -1,16 +1,16 @@
 # Review — feature F197
 
-**Veredicto:** CHANGES_REQUESTED
+**Veredicto:** APPROVED
 
-**Implementation head revisado:** `977da45706b577057a0186a86078fcf0dfd7cc5d`
+**Implementation head revisado:** `bedfad356d3e0dd859f08238492e61a058537a84`
 
 ## Checkpoints
 
 - C1: [x] `PATH="$HOME/.rbenv/shims:$PATH" GOFLAGS='-p=1 -parallel=1' ./init.sh` terminó con exit code 0 contra PostgreSQL 16 aislado.
 - C2: [x] F197 es la única feature `in_progress` y el tracker integra el alcance de #452 sobre `main@d85d6fd2`.
-- C3: [x] Los dos P0 anteriores quedaron cerrados: todo runtime login admitido aplica autorización en los commands, y Platform lifecycle conserva contexto org-less con target acotado.
-- C4: [ ] Los comandos y gates pasan, pero dos read models nuevos de Platform siguen consultando tablas RLS sin autorizar el target y no devuelven la verdad persistida.
-- C5: [ ] No corresponde cerrar F197 hasta que readiness y entitlements tengan prueba HTTP + PostgreSQL bajo el runtime role real.
+- C3: [x] Los commands y read models de Organization lifecycle respetan separación Platform/tenant, autorización exacta y RLS bajo el runtime role real.
+- C4: [x] Las pruebas enfocadas verifican denegación SQL, truth de readiness/entitlements, missing-target fail-closed y rollback/replay de Factory; los gates completos también pasan.
+- C5: [x] El implementation tree estaba limpio y pushed antes del artifact; el ledger permanece correctamente `in_progress` hasta este veredicto y el cierre queda habilitado.
 
 ## Diseño UI/UX
 
@@ -25,24 +25,23 @@
 
 ## Evidencia ejecutada
 
-- Remote readback: tracker, PR #484 y `origin/feat/452-organization-lifecycle-provisioning` apuntaban a `977da457`; no había commits locales ni archivos sin commit antes de este reporte.
-- PR #484 estaba draft, mergeable y con sus seis checks GitHub `SUCCESS` para el head revisado.
-- `git diff --check d85d6fd2..977da457` pasó.
-- Suite enfocada PostgreSQL: direct DML/commands, Platform lifecycle HTTP completo y Factory rollback/retry/replay pasaron en PostgreSQL 16 aislado.
-- Repetición manual del exploit anterior: el login heredero de `granete_app` recibió `organization create actor mismatch`, exit 3, y dejó cero organizaciones con el slug atacado.
-- Platform HTTP + PostgreSQL pasó suspend, reactivate, offboarding preview/start y terminate bajo el login heredado real.
+- Remote readback previo al artifact: PR #484 y `origin/feat/452-organization-lifecycle-provisioning` apuntaban exactamente a `bedfad356`; no había commits locales, archivos sin commit ni errores de whitespace contra `main@d85d6fd2`.
+- GitHub CI run `33329798521` terminó verde para el implementation head: harness/contract drift, TypeScript, Go y SketchUp en Ubuntu, macOS y Windows.
+- Suite enfocada PostgreSQL 16 aislada, serial: `TestOrganizationLifecyclePrivileges_DirectOrganizationDMLDeniedButCommandAllowed`, `TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole` y `TestFactoryProvisioningHTTPPostgresRuntimeRoleSuccessRollbackAndReplay` pasaron.
+- El probe HTTP + PostgreSQL con login heredero de `granete_app` leyó readiness materializado y entitlements exactos; readiness y entitlements de targets inexistentes no devolvieron 200.
+- El mismo probe confirmó suspend, reactivate, offboarding preview/start y terminate sin otorgar acceso tenant general al actor Platform.
+- Las negativas directas conservaron denegados INSERT/UPDATE/DELETE y las funciones privilegiadas create/metadata/transition para el runtime login.
+- Factory provisioning conservó success atómico, rollback por step fallido, retry y replay idempotente.
 - `./init.sh` completo pasó: TypeScript, Go, Ruby 3.2.11 (241/2230), contrato Ruby (3/1029), Rubocop y RBZ.
-- `GOFLAGS='-p=1 -parallel=1' scripts/pilot-gate.sh --fresh-container` pasó sin skips.
-- Prueba directa del read model pendiente: una organización con `active_admin_count=1`, settings=1 y entitlements=1 para el owner produjo team_state=0, settings=0 y entitlements=0 bajo el mismo runtime login con el contexto org-less que establece `PlatformAdminMiddleware`.
+- `GOFLAGS='-p=1 -parallel=1' scripts/pilot-gate.sh --fresh-container` pasó sin skips sobre migraciones fresh hasta `00101`.
 
-## Revisión de P0 anteriores
+## Cierre de hallazgos anteriores
 
-- [x] `app_session_is_runtime()` reconoce miembros seguros heredados de `granete_app` y excluye superuser, bypass, create-role/create-db y owner de `organizations`.
+- [x] `app_session_is_runtime()` reconoce miembros seguros heredados de `granete_app` y excluye principals privilegiados.
 - [x] Invocaciones directas no autorizadas de create, metadata y transition quedan denegadas.
-- [x] Platform lifecycle usa `AuthorizedOrganizationIDs` sin convertir el actor platform en tenant actor.
-- [x] Los locks de Organization/offboarding atraviesan commands acotados y el flujo HTTP completo pasa.
+- [x] Platform lifecycle conserva actor org-less y autoriza únicamente el target exacto.
+- [x] Readiness y entitlements consultan con el mismo target acotado y devuelven la verdad persistida bajo RLS.
+- [x] Targets inexistentes fallan cerrados sin respuesta exitosa.
 - [x] Factory provisioning conserva success, rollback, retry y replay.
 
-## Cambio requerido
-
-1. **[P1] GET readiness y GET entitlements de Platform no autorizan el target bajo RLS.** `HandleOrganizationReadiness` llama el service con `r.Context()` sin establecer `AuthorizedOrganizationIDs` (`backend-go/internal/api/organization_lifecycle.go:180-191`), y `GetReadiness` consulta directamente team state, settings y entitlements (`backend-go/internal/application/organizations.go:268-273`; `backend-go/internal/storage/organization_lifecycle.go:25-43`). Con el token Platform org-less, RLS oculta las tres filas y el endpoint responde un readiness falso. El branch GET de `HandleOrganizationEntitlements` tiene el mismo defecto (`backend-go/internal/api/organization_lifecycle.go:299-313`; `backend-go/internal/storage/organizations.go:1300-1314`) y termina como error aunque la fila exista. Aplicá al target exacto el mismo contexto acotado que ya usa offboarding preview, y agregá pruebas HTTP + PostgreSQL para ambos GET que comparen la respuesta con filas owner-visible; incluí un target inexistente/ajeno para conservar fail-closed.
+No quedan hallazgos bloqueantes para F197.
