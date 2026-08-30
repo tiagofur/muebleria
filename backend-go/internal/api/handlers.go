@@ -1524,6 +1524,11 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.CreateModule(r.Context(), &m)
 		if err != nil {
+			var definitionsErr *domain.FurnitureParameterDefinitionsError
+			if errors.As(err, &definitionsErr) {
+				respondWithError(w, http.StatusBadRequest, definitionsErr.Error())
+				return
+			}
 			if isDuplicateKey(err) {
 				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
@@ -1570,6 +1575,11 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Store.UpdateModule(r.Context(), id, &m)
 		if err != nil {
+			var definitionsErr *domain.FurnitureParameterDefinitionsError
+			if errors.As(err, &definitionsErr) {
+				respondWithError(w, http.StatusBadRequest, definitionsErr.Error())
+				return
+			}
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return

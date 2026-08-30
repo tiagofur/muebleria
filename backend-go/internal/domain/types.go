@@ -336,6 +336,10 @@ type Module struct {
 	BaseClearanceMm *int `json:"base_clearance_mm,omitempty"`
 	// Presets are commercial measure options for sales (H09 / #104).
 	Presets []DimensionPreset `json:"presets,omitempty"`
+	// ParameterDefinitions is the authoritative typed authoring contract.
+	// Legacy modules keep this empty and are projected as width/height/depth
+	// definitions by the catalog adapter (#483).
+	ParameterDefinitions []FurnitureParameterDefinition `json:"parameter_definitions,omitempty"`
 	// Components are module-level component instances (doors, shelves, …) for
 	// composed modules, beyond those inherited from StructureID.
 	Components []ComponentInstance `json:"components,omitempty"`

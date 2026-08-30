@@ -1119,9 +1119,9 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 			SELECT gen_random_uuid(), $2, sm.new_id, s.name, s.width_mm, s.height_mm, s.depth_mm
 			FROM structure_presets s JOIN tmp_struct sm ON sm.old_id = s.structure_id`},
 		{"modules", 1, fmt.Sprintf(`INSERT INTO modules (id, organization_id, code, name, base_labor_cost, width_mm, height_mm, depth_mm,
-				notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados)
+				notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions)
 			SELECT m.new_id, $2, s.code, s.name, s.base_labor_cost, s.width_mm, s.height_mm, s.depth_mm,
-				s.notes, cm.new_id, s.image_url, st.new_id, s.furniture_type, s.base_mode, s.base_clearance_mm, %s
+				s.notes, cm.new_id, s.image_url, st.new_id, s.furniture_type, s.base_mode, s.base_clearance_mm, %s, s.parameter_definitions
 			FROM modules s
 			JOIN tmp_modules m ON m.old_id = s.id
 			LEFT JOIN tmp_modcat cm ON cm.old_id = s.category_id
