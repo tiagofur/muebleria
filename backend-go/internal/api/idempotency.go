@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -59,9 +60,10 @@ type durableIdempotencyStore interface {
 }
 
 type captureWriter struct {
-	header http.Header
-	status int
-	body   bytes.Buffer
+	header             http.Header
+	status             int
+	body               bytes.Buffer
+	commitFailureAudit bool
 }
 
 func (w *captureWriter) Header() http.Header { return w.header }
@@ -154,6 +156,33 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 				}
 			}
 		}
+		if operation == "organizations.provision" {
+			var payload struct {
+				Name string `json:"name"`
+				Slug string `json:"slug"`
+			}
+			_ = json.Unmarshal(body, &payload)
+			identifier := strings.TrimSpace(payload.Slug)
+			if identifier == "" {
+				identifier = strings.TrimSpace(payload.Name)
+			}
+			targetHash := sha256.Sum256([]byte(strings.ToLower(identifier)))
+			request.AfterRollback = func(ctx context.Context, response storage.IdempotencyResponse) error {
+				var apiErr openapi.ApiError
+				errorCode := string(openapi.ApiErrorCodeInternalError)
+				if json.Unmarshal(response.Body, &apiErr) == nil && apiErr.Code != "" {
+					errorCode = string(apiErr.Code)
+				}
+				eventType := "organization_provisioning_failed"
+				if apiErr.Code == openapi.ApiErrorCodeOrganizationNotReady {
+					eventType = "organization_readiness_failed"
+				}
+				return s.auditRequired(ctx, eventType, actorID, org, clientIP(r), map[string]interface{}{
+					"target_hash": hex.EncodeToString(targetHash[:]),
+					"error_code":  errorCode,
+				})
+			}
+		}
 		response, replayed, err := store.ExecuteIdempotent(r.Context(), request, func(ctx context.Context) (storage.IdempotencyResponse, error) {
 			if claims != nil {
 				if setter, ok := s.Store.(tenantActorSetter); ok {
@@ -198,6 +227,14 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 		response.Header = response.Header.Clone()
 		if replayed {
 			response.Header.Set("Idempotency-Replayed", "true")
+		}
+		if response.Status >= http.StatusInternalServerError && request.AfterRollback != nil {
+			// AuthMiddleware owns the outer transaction for authenticated routes.
+			// Mark its private capture writer so it knows the command savepoint was
+			// rolled back and only required failure evidence remains to commit.
+			if outer, ok := w.(*captureWriter); ok {
+				outer.commitFailureAudit = true
+			}
 		}
 		copyIdempotentResponse(w, response)
 	})

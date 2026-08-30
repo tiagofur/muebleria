@@ -5007,6 +5007,54 @@
         "PR #481 head 7703f0e8: re-review encontró schema incompleto para campos material visual/PBR del NativeLayout, coherencia Ruby demasiado estricta para hardware manual semántico sin preview y pérdida de códigos tipados en 405/415. F195 vuelve a in_progress hasta corrección y nueva revisión independiente.",
         "PR #481 r6: los gaps de la re-review de 7703f0e8 quedaron corregidos en 8433cbdf: NativeLayout visual/PBR alineado Go→Schema/Ajv→TS→Ruby, hardware manual sin preview preservado semánticamente como proyección visual subset y 405/415 tipados en Ruby. TestUp oficial 6/6/58, CI remota verde y nueva revisión independiente APPROVED en 21fb41a8 sobre 051512f3."
       ]
+    },
+    {
+      "id": "F197",
+      "title": "Lifecycle explícito y provisioning atómico de organizaciones (#452)",
+      "description": "Reemplaza organizations.active por un lifecycle canónico, unifica las altas de Platform, Factory y CLI en un servicio transaccional e idempotente, extiende entitlements, añade readiness, revocación organizacional y offboarding seguro.",
+      "tags": [
+        "organization-foundation",
+        "organization",
+        "security",
+        "backend-go",
+        "postgresql",
+        "openapi",
+        "web",
+        "p0"
+      ],
+      "created": "2026-08-30",
+      "acceptance": [
+        "Organization usa un status canónico con las seis fases aprobadas y active deja de ser autoridad runtime",
+        "Platform, Factory y CLI crean organizaciones únicamente mediante ProvisionOrganization con bootstrap admin explícito",
+        "Settings, entitlements, admin, catálogo, readiness, audit y receipt confirman o revierten en una sola transacción",
+        "Slug, retries y concurrencia producen resultados idempotentes o errores tipados sin duplicados",
+        "Suspensión y reactivación invalidan credenciales de la organización sin afectar otras memberships del User",
+        "Offboarding y termination usan preview versionado, blockers reales, preservan historia y nunca hard-deletean",
+        "organization_entitlements conserva maxActiveMembers y agrega la autoridad única para network, manufacturing, SketchUp y advanced audit",
+        "Generated OpenAPI, RLS directo, migrations fresh/upgrade/down, race, API, auth y UI mínima tienen pruebas ejecutables"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/452",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/verification.md",
+        "contracts/openapi/granete-api.v1.yaml"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F191",
+        "F192",
+        "F194",
+        "F196"
+      ],
+      "review_notes": [
+        "PR #484: implementation head bedfad356d3e0dd859f08238492e61a058537a84 passed the full isolated harness, fresh pilot gate, direct runtime-role RLS proofs, rollback/replay/concurrency coverage and all six remote CI checks.",
+        "Independent review APPROVED in e91b1d24e503b296e87536ec09657da0c6f6deca after closing Factory scope, inherited-runtime command authority and exact-target Platform readiness/entitlement reads.",
+        "PR #484 correction round: reopened after the delivered head exposed a StartSupportSession versus SuspendOrganization race, missing support-session organization epoch binding, incomplete live support-token validation, and support logout/offboarding audit/constraint gaps. A new independent review is required after correction."
+      ]
     }
   ]
 }

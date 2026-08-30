@@ -123,7 +123,7 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 				buffer := &captureWriter{header: make(http.Header)}
 				err := runner.WithinTenantTx(r.Context(), actor, func(ctx context.Context) error {
 					serveAuthenticatedRequest(buffer, r.WithContext(ctx), next, users, claims, actor)
-					if buffer.status >= http.StatusInternalServerError {
+					if buffer.status >= http.StatusInternalServerError && !buffer.commitFailureAudit {
 						return errTenantHandlerFailure
 					}
 					return nil
@@ -202,8 +202,13 @@ func serveAuthenticatedRequest(
 			}
 			ss, err := users.GetOpenSupportSession(r.Context(), claims.Support.SessionID)
 			if err != nil || ss == nil ||
+				ss.ID != claims.Support.SessionID ||
 				ss.OrganizationID != claims.OrgID ||
-				ss.PlatformAdminUserID != claims.UserID {
+				ss.PlatformAdminUserID != claims.UserID ||
+				ss.EndedAt != nil || !ss.ExpiresAt.After(time.Now()) ||
+				ss.OrganizationCredentialVersion != claims.Support.OrganizationCredentialVersion ||
+				ss.LiveOrganizationStatus != domain.OrganizationStatusActive ||
+				ss.LiveOrganizationCredentialVersion != ss.OrganizationCredentialVersion {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
@@ -211,8 +216,9 @@ func serveAuthenticatedRequest(
 			claims.Role = string(domain.RoleAdmin)
 		} else if claims.OrgID != "" {
 			m, err := users.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
-			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || !m.Organization.Active || len(m.Roles) == 0 ||
+			if err != nil || m == nil || m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive || len(m.Roles) == 0 ||
 				m.ID != claims.MembershipID || m.CredentialVersion != claims.MembershipCredentialVersion ||
+				m.Organization.CredentialVersion != claims.OrganizationCredentialVersion ||
 				(m.SessionsRevokedAt != nil && !claims.AuthStartedAt.Time.After(*m.SessionsRevokedAt)) {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
@@ -256,12 +262,14 @@ func serveAuthenticatedRequest(
 
 	// Business data requires an explicit organization scope (ADR-0005
 	// fail-closed): org-less tokens (platform staff between support
-	// sessions, users mid org-selection) may only reach the platform
-	// console and auth endpoints. Without this gate the storage layer's
-	// database context would otherwise be empty and every RLS policy
-	// must remain fail-closed.
+	// sessions, users mid org-selection) may only reach platform routes,
+	// canonical organization commands, and auth endpoints. Without this
+	// gate the storage layer's database context would otherwise be empty,
+	// and every RLS policy must remain fail-closed.
 	if claims.OrgID == "" &&
 		!strings.HasPrefix(r.URL.Path, "/api/platform/") &&
+		r.URL.Path != "/api/organizations" &&
+		!strings.HasPrefix(r.URL.Path, "/api/organizations/") &&
 		!strings.HasPrefix(r.URL.Path, "/api/auth/") {
 		respondWithError(w, http.StatusForbidden, "elegí un taller para continuar")
 		return

@@ -126,7 +126,7 @@ func TestPostgresIdempotencyClientErrorRollsBackMutationAndReplaysAfterSQLError(
 	scope := "contract-448-client-error-" + suffix
 	event := "idempotency_client_error_" + suffix
 	conflictSlug := "idempotency-conflict-" + suffix
-	seed := &domain.Organization{Name: "Idempotency conflict seed", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Active: false}
+	seed := &domain.Organization{Name: "Idempotency conflict seed", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning}
 	if err := one.CreateOrganization(ctx, seed); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestPostgresIdempotencyClientErrorRollsBackMutationAndReplaysAfterSQLError(
 		// Model a handler that catches a constraint/query error and maps it to a
 		// typed conflict response. PostgreSQL has aborted the transaction here.
 		if err := one.CreateOrganization(txCtx, &domain.Organization{
-			Name: "Duplicate slug", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Active: false,
+			Name: "Duplicate slug", Slug: conflictSlug, Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,
 		}); err == nil {
 			return storage.IdempotencyResponse{}, errors.New("expected SQL error")
 		}
@@ -180,34 +180,46 @@ func TestPostgresIdempotencyServerErrorRollsBackFactoryOrganizationProvisioning(
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	scope := "contract-448-factory-atomic-" + suffix
 	slug := "factory-atomic-" + suffix
+	failureEvent := "organization_provisioning_failed_" + suffix
 	t.Cleanup(func() {
 		_, _ = one.Pool.Exec(ctx, `DELETE FROM api_idempotency_receipts WHERE scope_key = $1`, scope)
+		_, _ = one.Pool.Exec(ctx, `DELETE FROM security_audit_events WHERE event_type = $1`, failureEvent)
 		_, _ = one.Pool.Exec(ctx, `DELETE FROM organizations WHERE slug = $1`, slug)
 	})
 
-	_, _, err := one.ExecuteIdempotent(ctx,
-		storage.IdempotencyRequest{ScopeKey: scope, Fingerprint: "factory-atomic"},
-		func(txCtx context.Context) (storage.IdempotencyResponse, error) {
-			organization := &domain.Organization{Name: "Atomic factory child", Slug: slug, Type: domain.OrganizationTypeStore, Active: true}
-			if err := one.CreateOrganization(txCtx, organization); err != nil {
-				return storage.IdempotencyResponse{}, err
-			}
-			// The generated factory command grants membership after clone. A
-			// missing actor models a provisioning failure after organization
-			// creation and must roll the entire command back.
-			if err := one.EnsureMembership(txCtx, organization.ID, "00000000-0000-0000-0000-000000000000", []domain.UserRole{domain.RoleAdmin}); err == nil {
-				return storage.IdempotencyResponse{}, errors.New("expected membership FK failure")
-			}
-			return storage.IdempotencyResponse{Status: http.StatusInternalServerError}, nil
-		})
-	if err == nil {
-		t.Fatal("failed provisioning unexpectedly committed")
+	calls := 0
+	request := storage.IdempotencyRequest{ScopeKey: scope, Fingerprint: "factory-atomic", AfterRollback: func(txCtx context.Context, _ storage.IdempotencyResponse) error {
+		return one.InsertSecurityAuditEvent(txCtx, storage.SecurityAuditEvent{EventType: failureEvent, Details: map[string]interface{}{
+			"target_hash": "sanitized-hash", "error_code": "INTERNAL_ERROR", "request_id": "request-atomic-500",
+		}})
+	}}
+	execute := func(txCtx context.Context) (storage.IdempotencyResponse, error) {
+		calls++
+		organization := &domain.Organization{Name: "Atomic factory child", Slug: slug, Type: domain.OrganizationTypeStore, Status: domain.OrganizationStatusProvisioning}
+		if err := one.CreateOrganization(txCtx, organization); err != nil {
+			return storage.IdempotencyResponse{}, err
+		}
+		// The generated factory command grants membership after clone. A
+		// missing actor models a provisioning failure after organization
+		// creation and must roll the entire command back.
+		if err := one.EnsureMembership(txCtx, organization.ID, "00000000-0000-0000-0000-000000000000", []domain.UserRole{domain.RoleAdmin}); err == nil {
+			return storage.IdempotencyResponse{}, errors.New("expected membership FK failure")
+		}
+		return storage.IdempotencyResponse{Status: http.StatusInternalServerError, Header: http.Header{"Content-Type": {"application/json"}}, Body: []byte(`{"code":"INTERNAL_ERROR"}`)}, nil
 	}
-	var organizations, receipts int
+	for attempt := 1; attempt <= 2; attempt++ {
+		response, replayed, err := one.ExecuteIdempotent(ctx, request, execute)
+		if err != nil || replayed || response.Status != http.StatusInternalServerError {
+			t.Fatalf("attempt=%d status=%d replay=%v err=%v", attempt, response.Status, replayed, err)
+		}
+	}
+	var organizations, receipts, failureEvents int
+	var leakedPII bool
 	_ = one.Pool.QueryRow(ctx, `SELECT count(*) FROM organizations WHERE slug=$1`, slug).Scan(&organizations)
 	_ = one.Pool.QueryRow(ctx, `SELECT count(*) FROM api_idempotency_receipts WHERE scope_key=$1`, scope).Scan(&receipts)
-	if organizations != 0 || receipts != 0 {
-		t.Fatalf("partial provisioning leaked organizations=%d receipts=%d", organizations, receipts)
+	_ = one.Pool.QueryRow(ctx, `SELECT count(*), bool_or(details::text LIKE '%' || $2 || '%') FROM security_audit_events WHERE event_type=$1`, failureEvent, slug).Scan(&failureEvents, &leakedPII)
+	if organizations != 0 || receipts != 0 || calls != 2 || failureEvents != 2 || leakedPII {
+		t.Fatalf("server failure atomicity organizations=%d receipts=%d calls=%d audits=%d leaked_pii=%v", organizations, receipts, calls, failureEvents, leakedPII)
 	}
 }
 

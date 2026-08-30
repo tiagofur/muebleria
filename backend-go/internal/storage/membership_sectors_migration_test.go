@@ -147,11 +147,25 @@ func membershipSectorsMigrationSQL(t *testing.T, suffix string) string {
 func TestMembershipSectorsRLS_DirectSQLCannotCrossTenant(t *testing.T) {
 	fx := newRLSFixture(t)
 	ctx := context.Background()
-	var membershipA, membershipB string
-	if err := fx.admin.QueryRow(ctx, `SELECT id FROM memberships WHERE organization_id=$1`, rlsOrgA).Scan(&membershipA); err != nil {
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO users (id, email, normalized_email, password_hash, name, account_status) VALUES
+		('20000000-0000-0000-0000-00000000001a', 'rls-admin-a@example.test', 'rls-admin-a@example.test', 'x', 'RLS Admin A', 'active'),
+		('20000000-0000-0000-0000-00000000001b', 'rls-admin-b@example.test', 'rls-admin-b@example.test', 'x', 'RLS Admin B', 'active')
+	`); err != nil {
 		t.Fatal(err)
 	}
-	if err := fx.admin.QueryRow(ctx, `SELECT id FROM memberships WHERE organization_id=$1`, rlsOrgB).Scan(&membershipB); err != nil {
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO memberships (organization_id, user_id, roles) VALUES
+		($1, '20000000-0000-0000-0000-00000000001a', '{admin}'),
+		($2, '20000000-0000-0000-0000-00000000001b', '{admin}')
+	`, rlsOrgA, rlsOrgB); err != nil {
+		t.Fatal(err)
+	}
+	var membershipA, membershipB string
+	if err := fx.admin.QueryRow(ctx, `SELECT id FROM memberships WHERE organization_id=$1 AND user_id=$2`, rlsOrgA, rlsUserA).Scan(&membershipA); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.admin.QueryRow(ctx, `SELECT id FROM memberships WHERE organization_id=$1 AND user_id=$2`, rlsOrgB, rlsUserB).Scan(&membershipB); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fx.admin.Exec(ctx, `UPDATE memberships SET roles='{produccion}' WHERE id = ANY($1::uuid[])`, []string{membershipA, membershipB}); err != nil {

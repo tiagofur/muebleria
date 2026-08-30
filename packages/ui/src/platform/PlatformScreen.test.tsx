@@ -11,7 +11,7 @@ const organization = {
   type: 'factory',
   license_plan: 'pro',
   license_expires_at: null,
-  active: true,
+  status: 'active',
   member_count: 2,
   created_at: '2026-08-28T00:00:00Z',
   updated_at: '2026-08-28T00:00:00Z',
@@ -96,5 +96,68 @@ describe('PlatformScreen audit UX', () => {
     const mutation = requests.find(({ url }) => url.includes(':set-account-status'))!;
     expect(new Headers(mutation.init?.headers).get('Idempotency-Key')).toBeTruthy();
     expect(mutation.init?.body).toBe(JSON.stringify({ account_status: 'disabled', reason: 'Cuenta comprometida' }));
+  });
+
+  it('provisions through the canonical command and confirms only authoritative readiness', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const bootstrapUser = {
+      id: '22222222-2222-4222-8222-222222222222',
+      email: 'owner@example.com',
+      name: 'Ana Owner',
+      platform_admin: false,
+      account_status: 'active',
+      created_at: '2026-08-30T00:00:00Z',
+      memberships: [],
+    };
+    const provisioned = {
+      ...organization,
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Taller Atómico',
+      slug: 'taller-atomico',
+      member_count: 1,
+      version: 2,
+    };
+    const jsonOk = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/platform/organizations')) return jsonOk([organization]);
+      if (url.endsWith('/platform/users')) return jsonOk([bootstrapUser]);
+      if (url.endsWith('/organizations') && init?.method === 'POST') {
+        return jsonOk({
+          organization: provisioned,
+          readiness: {
+            organization_id: provisioned.id,
+            organization_version: 2,
+            ready: true,
+            checks: [],
+            checked_at: '2026-08-30T00:00:00Z',
+          },
+        }, 201);
+      }
+      return jsonOk([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+
+    await actor.click(await screen.findByRole('button', { name: /Nueva Organización/ }));
+    await actor.type(screen.getByLabelText(/Nombre del Taller/), 'Taller Atómico');
+    await actor.clear(screen.getByLabelText(/Slug identificador/));
+    await actor.type(screen.getByLabelText(/Slug identificador/), 'taller-atomico');
+    await actor.selectOptions(await screen.findByLabelText(/Administrador inicial/), bootstrapUser.id);
+    await actor.click(screen.getByRole('button', { name: /^Crear Organización$/ }));
+
+    expect(await screen.findByText('✓ Organización activa y lista para operar')).toBeTruthy();
+    const request = requests.find(({ url, init }) => url.endsWith('/organizations') && init?.method === 'POST');
+    expect(request).toBeTruthy();
+    expect(JSON.parse(String(request?.init?.body))).toEqual(expect.objectContaining({
+      name: 'Taller Atómico',
+      slug: 'taller-atomico',
+      bootstrap_admin_user_id: bootstrapUser.id,
+    }));
+    expect(new Headers(request?.init?.headers).get('Idempotency-Key')).toMatch(/^web:/);
   });
 });
