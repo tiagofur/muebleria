@@ -86,6 +86,9 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     version: 1,
 	sectors: [],
 	offboarding_blocking_count: 0,
+    last_activity: null,
+    credential_version: 1,
+    sessions_revoked_at: null,
   };
 
   const teamDirectory = (items: readonly unknown[], capabilities = [
@@ -356,7 +359,7 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
 describe('UsersScreen (#451 safe team boundary)', () => {
   const member = {
     membership_id: '11111111-1111-4111-8111-111111111111', user_id: '22222222-2222-4222-8222-222222222222',
-	name: 'Ana Pérez', email: 'ana@taller.com', roles: ['vendedor'], account_status: 'active', membership_status: 'active', joined_at: '2026-08-28T00:00:00Z', version: 1, sectors: [], offboarding_blocking_count: 0,
+	name: 'Ana Pérez', email: 'ana@taller.com', roles: ['vendedor'], account_status: 'active', membership_status: 'active', joined_at: '2026-08-28T00:00:00Z', version: 1, sectors: [], offboarding_blocking_count: 0, last_activity: null, credential_version: 1, sessions_revoked_at: null,
   } as const;
   const directory = (capabilities: string[], maxActiveMembers: number | null) => ({
     items: [member], summary: { active_members: 1, suspended_members: 0, left_members: 0, max_active_members: maxActiveMembers, team_version: 4, entitlements_version: 2, capabilities },
