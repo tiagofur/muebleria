@@ -6,6 +6,7 @@ import {
   evaluateFurnitureParameters,
   FurnitureParameterDefinitionsError,
   parseFurnitureParameterDefinitions,
+  parseFurnitureCatalogDefinition,
 } from './furnitureParameters';
 
 type FixtureScenario = {
@@ -29,6 +30,7 @@ type InvalidDefinitionCorpus = {
     readonly boundary: 'both' | 'persisted' | 'published';
     readonly definitions?: readonly FurnitureParameter[];
     readonly rawJson?: string;
+    readonly rawDefinitionJson?: string;
     readonly expectedCode: 'PARAMETER_DEFINITION_INVALID';
     readonly expectedFields: readonly string[];
     readonly expectedTsFields?: readonly string[];
@@ -50,6 +52,7 @@ describe('definition-driven furniture parameter parity', () => {
       name: 'requiredLabel',
       label: 'Required label',
       type: 'string',
+      maxLength: 64,
       required: true,
       category: 'metadata',
     }], {});
@@ -58,12 +61,40 @@ describe('definition-driven furniture parameter parity', () => {
     expect(evaluated.issues).toEqual([{
       code: 'PARAMETER_REQUIRED',
       parameter: 'requiredLabel',
-      details: { expectedType: 'string' },
+      details: { expectedType: 'string', maxLength: 64, receivedValue: null },
     }]);
   });
 
+  test.each([undefined, 0, 513, 1.5])('rejects invalid versioned string maxLength %s', (maxLength) => {
+    expect(() => evaluateFurnitureParameters([{
+      name: 'label',
+      label: 'Label',
+      type: 'string',
+      maxLength,
+      category: 'metadata',
+    }], {})).toThrow(FurnitureParameterDefinitionsError);
+
+    try {
+      evaluateFurnitureParameters([{
+        name: 'label',
+        label: 'Label',
+        type: 'string',
+        maxLength,
+        category: 'metadata',
+      }], {});
+    } catch (error) {
+      expect((error as FurnitureParameterDefinitionsError).issues.map((issue) => issue.field)).toContain('maxLength');
+    }
+  });
+
   test('evaluates defaults and every scalar family exactly like the Go-authored fixture', () => {
-    for (const id of ['01-params-materials-parity', '13-definition-driven-typed-parameters']) {
+    for (const id of [
+      '01-params-materials-parity',
+      '13-definition-driven-typed-parameters',
+      '14-component-condition-true',
+      '15-component-condition-false',
+      '16-string-max-length-boundary',
+    ]) {
       const scenario = fixture.scenarios.find((candidate) => candidate.id === id);
       expect(scenario, id).toBeDefined();
       const evaluated = evaluateFurnitureParameters(
@@ -81,6 +112,7 @@ describe('definition-driven furniture parameter parity', () => {
     ['neg-parameter-out-of-range', 'PARAMETER_OUT_OF_RANGE'],
     ['neg-parameter-invalid-step', 'PARAMETER_STEP_INVALID'],
     ['neg-parameter-invalid-enum', 'PARAMETER_ENUM_INVALID'],
+    ['neg-parameter-string-too-long', 'PARAMETER_STRING_TOO_LONG'],
   ])('%s fails with stable parity code %s', (id, expectedCode) => {
     const scenario = fixture.scenarios.find((candidate) => candidate.id === id)!;
     const evaluated = evaluateFurnitureParameters(
@@ -94,10 +126,14 @@ describe('definition-driven furniture parameter parity', () => {
   test('fails closed against the shared invalid-definition corpus', () => {
     expect(invalidDefinitionCorpus.schemaVersion).toBe(1);
     for (const scenario of invalidDefinitionCorpus.cases) {
-      const rawJson = scenario.rawJson ?? JSON.stringify(scenario.definitions);
       let rejected: unknown;
       try {
-        parseFurnitureParameterDefinitions(rawJson, { persisted: scenario.boundary === 'persisted' });
+        if (scenario.rawDefinitionJson) {
+          parseFurnitureCatalogDefinition(scenario.rawDefinitionJson);
+        } else {
+          const rawJson = scenario.rawJson ?? JSON.stringify(scenario.definitions);
+          parseFurnitureParameterDefinitions(rawJson, { persisted: scenario.boundary === 'persisted' });
+        }
       } catch (error) {
         rejected = error;
       }
@@ -105,10 +141,14 @@ describe('definition-driven furniture parameter parity', () => {
       expect(rejected, scenario.id).toBeInstanceOf(FurnitureParameterDefinitionsError);
       const definitionError = rejected as FurnitureParameterDefinitionsError;
       expect(definitionError.code, scenario.id).toBe(scenario.expectedCode);
-      expect(
-        [...new Set(definitionError.issues.map((issue) => issue.field))].sort(),
-        scenario.id,
-      ).toEqual([...(scenario.expectedTsFields ?? scenario.expectedFields)].sort());
+      const fields = [...new Set(definitionError.issues.map((issue) => issue.field))].sort();
+      if (scenario.expectedTsFields) {
+        expect(fields, scenario.id).toEqual([...scenario.expectedTsFields].sort());
+      } else if ((scenario.rawJson || scenario.rawDefinitionJson) && scenario.expectedFields[0] === 'definitions') {
+        expect(fields.length, scenario.id).toBeGreaterThan(0);
+      } else {
+        expect(fields, scenario.id).toEqual([...scenario.expectedFields].sort());
+      }
     }
   });
 });

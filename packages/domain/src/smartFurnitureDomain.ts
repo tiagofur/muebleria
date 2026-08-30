@@ -176,7 +176,7 @@ export type ParameterType = "number" | "string" | "boolean" | "enum";
 
 export interface FurnitureParameterBinding {
   readonly version: number;
-  readonly kind: "componentQuantity" | "dimensionColumn";
+  readonly kind: "componentQuantity" | "componentCondition" | "dimensionColumn";
   readonly componentId?: string;
   readonly dimension?: "widthMm" | "heightMm" | "depthMm";
   readonly relationship?: {
@@ -199,6 +199,7 @@ export interface FurnitureParameter {
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
+  readonly maxLength?: number;
   readonly options?: readonly string[];
   readonly integer?: boolean;
   readonly sortOrder?: number;

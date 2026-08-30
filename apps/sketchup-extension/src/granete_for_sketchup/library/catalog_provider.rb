@@ -408,7 +408,7 @@ module Granete
               'name' => param['name'], 'label' => param['label'],
               'type' => param['type'], 'defaultValue' => param['defaultValue']
             }
-            %w[min max step unit options required integer category sortOrder binding].each do |key|
+            %w[min max step unit options required integer maxLength category sortOrder binding].each do |key|
               translated[key] = param[key] unless param[key].nil?
             end
             translated

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -189,10 +190,17 @@ func (idx *authoringTemplateIndex) note(defID, catalogComponentID, placement str
 func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResult, error) {
 	structural := []domain.ContractIssue{}
 	manufacturing := []domain.ContractIssue{}
+	if issues := domain.ValidateModuleFurnitureParameterConsumers(input.Module, input.Catalog); len(issues) != 0 {
+		return nil, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
 
 	if input.PrecisionMm <= 0 || math.IsNaN(input.PrecisionMm) || math.IsInf(input.PrecisionMm, 0) {
 		input.PrecisionMm = 0.01
 	}
+
+	// Condition bindings own their entry and its authored dependents. Dropping
+	// an entry removes only relationships/hardware anchored to that entry.
+	filterDisabledConditionDependents(&input)
 
 	// Apply declarative consumers before any authoritative expansion. Parameter
 	// names never select behavior here; only the versioned binding does.
@@ -211,7 +219,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if input.Occurrences != nil {
 		plan.active = true
 		planOccurrences(plan, input.Occurrences, templateIndex, &structural)
-		validateBoundOccurrenceCounts(input.Module.ParameterDefinitions, input.EvaluatedParameters, input.Occurrences, &structural)
+		validateBoundOccurrenceCounts(input.Module, input.EvaluatedParameters, input.Occurrences, &structural)
 	}
 
 	// 3. Resolve the layout with the plan (nil plan = default expansion).
@@ -271,21 +279,34 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 func applyAuthoringParameterBindings(module domain.Module, values map[string]any) domain.Module {
 	for _, definition := range module.ParameterDefinitions {
 		binding := definition.Binding
-		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity {
+		if binding == nil || (binding.Kind != domain.FurnitureParameterBindingComponentQuantity && binding.Kind != domain.FurnitureParameterBindingComponentCondition) {
 			continue
 		}
-		value, ok := values[definition.Name].(float64)
-		if !ok {
-			continue
+		quantity := -1
+		if binding.Kind == domain.FurnitureParameterBindingComponentQuantity {
+			value, ok := values[definition.Name].(float64)
+			if !ok {
+				continue
+			}
+			quantity = int(value)
+		} else {
+			value, ok := values[definition.Name].(bool)
+			if !ok {
+				continue
+			}
+			if !value {
+				quantity = 0
+			}
 		}
-		quantity := int(value)
 		updated := make([]domain.ComponentInstance, 0, len(module.Components))
 		for _, instance := range module.Components {
 			if instance.ComponentID == binding.ComponentID {
 				if quantity == 0 {
 					continue
 				}
-				instance.Quantity = quantity
+				if quantity > 0 {
+					instance.Quantity = quantity
+				}
 			}
 			updated = append(updated, instance)
 		}
@@ -294,27 +315,89 @@ func applyAuthoringParameterBindings(module domain.Module, values map[string]any
 	return module
 }
 
-func validateBoundOccurrenceCounts(definitions []domain.FurnitureParameterDefinition, values map[string]any, occurrences []AuthoringOccurrence, issues *[]domain.ContractIssue) {
+func filterDisabledConditionDependents(input *AuthoringResolveInput) {
+	disabledDefinitions := map[string]bool{}
+	for _, definition := range input.Module.ParameterDefinitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentCondition {
+			continue
+		}
+		if enabled, ok := input.EvaluatedParameters[definition.Name].(bool); ok && !enabled {
+			disabledDefinitions["mod-"+binding.ComponentID] = true
+		}
+	}
+	if len(disabledDefinitions) == 0 {
+		return
+	}
+	removedInstances := map[string]bool{}
+	if input.Occurrences != nil {
+		kept := make([]AuthoringOccurrence, 0, len(input.Occurrences))
+		for _, occurrence := range input.Occurrences {
+			if disabledDefinitions[occurrence.ComponentDefinitionID] {
+				removedInstances[occurrence.ComponentInstanceID] = true
+				continue
+			}
+			kept = append(kept, occurrence)
+		}
+		input.Occurrences = kept
+	}
+	isDisabledInstance := func(instanceID string) bool {
+		if removedInstances[instanceID] {
+			return true
+		}
+		for definitionID := range disabledDefinitions {
+			if strings.HasPrefix(instanceID, definitionID+"-copy-") {
+				return true
+			}
+		}
+		return false
+	}
+	relationships := make([]AuthoringRelationship, 0, len(input.Relationships))
+	for _, relationship := range input.Relationships {
+		dependent := isDisabledInstance(relationship.Source.ComponentInstanceID)
+		for _, target := range relationship.Targets {
+			dependent = dependent || isDisabledInstance(target.ComponentInstanceID)
+		}
+		if !dependent {
+			relationships = append(relationships, relationship)
+		}
+	}
+	input.Relationships = relationships
+	placements := make([]AuthoringManualPlacement, 0, len(input.ManualPlacements))
+	for _, placement := range input.ManualPlacements {
+		if !isDisabledInstance(placement.HostComponentInstanceID) {
+			placements = append(placements, placement)
+		}
+	}
+	input.ManualPlacements = placements
+}
+
+func validateBoundOccurrenceCounts(module domain.Module, values map[string]any, occurrences []AuthoringOccurrence, issues *[]domain.ContractIssue) {
 	counts := map[string]int{}
 	for _, occurrence := range occurrences {
 		counts[occurrence.ComponentDefinitionID]++
 	}
-	for _, definition := range definitions {
+	for _, definition := range module.ParameterDefinitions {
 		binding := definition.Binding
-		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity {
+		if binding == nil || (binding.Kind != domain.FurnitureParameterBindingComponentQuantity && binding.Kind != domain.FurnitureParameterBindingComponentCondition) {
 			continue
 		}
-		expected, ok := values[definition.Name].(float64)
-		if !ok {
+		if _, present := values[definition.Name]; !present {
 			continue
+		}
+		expectedCount := 0
+		for _, instance := range module.Components {
+			if instance.ComponentID == binding.ComponentID {
+				expectedCount += instance.Quantity
+			}
 		}
 		definitionID := "mod-" + binding.ComponentID
-		if counts[definitionID] != int(expected) {
+		if counts[definitionID] != expectedCount {
 			*issues = append(*issues, domain.ContractIssue{
-				Code: "PARAMETER_BINDING_CONFLICT", Message: fmt.Sprintf("%s requires %d occurrences of %s", definition.Name, int(expected), definitionID),
+				Code: "PARAMETER_BINDING_CONFLICT", Message: fmt.Sprintf("%s requires %d occurrences of %s", definition.Name, expectedCount, definitionID),
 				Severity: domain.IssueSeverityError, Path: "furniture.components",
 				Remediation: "Send a full occurrence snapshot consistent with the evaluated parameter value.",
-				Details:     map[string]any{"parameter": definition.Name, "expectedCount": int(expected), "receivedCount": counts[definitionID], "componentDefinitionId": definitionID},
+				Details:     map[string]any{"parameter": definition.Name, "expectedCount": expectedCount, "receivedCount": counts[definitionID], "componentDefinitionId": definitionID},
 			})
 		}
 	}

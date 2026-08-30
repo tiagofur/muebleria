@@ -18,7 +18,7 @@ module Granete
 
       # One structured ContractIssue of the resolve envelope.
       class AuthoringResolveIssue
-        attr_reader :code, :severity, :message, :entity_id, :path, :remediation
+        attr_reader :code, :severity, :message, :entity_id, :path, :remediation, :details
 
         def initialize(raw)
           @code = raw['code'].to_s
@@ -27,6 +27,7 @@ module Granete
           @entity_id = raw['entityId']
           @path = raw['path']
           @remediation = raw['remediation']
+          @details = raw['details'] || {}
         end
       end
 
@@ -233,6 +234,7 @@ module Granete
           PARAMETER_OUT_OF_RANGE
           PARAMETER_STEP_INVALID
           PARAMETER_ENUM_INVALID
+          PARAMETER_STRING_TOO_LONG
           PARAMETER_DEFINITION_INVALID
           PARAMETER_BINDING_CONFLICT
           MATERIAL_CHOICE_INVALID
@@ -251,6 +253,7 @@ module Granete
           DRILLING_CONFLICT
         ].freeze
         ISSUE_SEVERITIES = %w[error warning info].freeze
+        ISSUE_KEYS = %w[code message severity entityId path remediation details].freeze
 
         module_function
 
@@ -261,13 +264,52 @@ module Granete
             unless issue.is_a?(Hash) && issue['code'].is_a?(String) && ISSUE_CODES.include?(issue['code'])
               raise AuthoringResolveContract::ContractError, 'Issue de resolve sin código estable conocido'
             end
+            unless (issue.keys - ISSUE_KEYS).empty?
+              raise AuthoringResolveContract::ContractError, "Issue #{issue['code']} con campos desconocidos"
+            end
+
             unless ISSUE_SEVERITIES.include?(issue['severity']) &&
                    issue['message'].is_a?(String) && !issue['message'].empty?
               raise AuthoringResolveContract::ContractError, "Issue #{issue['code']} con severidad desconocida"
             end
 
+            validate_details!(issue['details'], issue['code']) if issue.key?('details')
+
             AuthoringResolveIssue.new(issue)
           end
+        end
+
+        def validate_details!(details, code)
+          unless details.is_a?(Hash) && details.length <= 32 &&
+                 details.keys.all? { |key| key.is_a?(String) && !key.empty? && key.length <= 64 }
+            raise AuthoringResolveContract::ContractError, "Issue #{code} con details inválidos"
+          end
+
+          details.each do |key, value|
+            next if valid_detail_value?(key, value)
+
+            raise AuthoringResolveContract::ContractError, "Issue #{code} con detail #{key} inválido"
+          end
+        end
+
+        def valid_detail_value?(key, value)
+          case key
+          when 'allowedOptions'
+            value.is_a?(Array) && value.length <= 64 &&
+              value.all? { |option| option.is_a?(String) && option.length <= 128 }
+          when 'integer'
+            [true, false].include?(value)
+          when 'min', 'max', 'step', 'maxLength', 'expectedCount', 'receivedCount'
+            value.is_a?(Numeric) && value.to_f.finite?
+          else
+            scalar_detail?(value)
+          end
+        end
+
+        def scalar_detail?(value)
+          value.nil? || value == true || value == false ||
+            (value.is_a?(Numeric) && value.to_f.finite?) ||
+            (value.is_a?(String) && value.length <= 129)
         end
       end
 

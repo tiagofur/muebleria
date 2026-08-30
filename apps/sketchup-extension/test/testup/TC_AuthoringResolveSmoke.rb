@@ -32,6 +32,9 @@ module Granete
       EXPECTED_NAME = 'Granete for SketchUp'
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       GOLDEN_PATH = File.join(REPOSITORY_ROOT, 'contracts', 'sketchupAuthoringResolve.contract.json').freeze
+      INVALID_DEFINITIONS_PATH = File.join(
+        REPOSITORY_ROOT, 'contracts', 'furnitureParameterDefinitions.invalid.json'
+      ).freeze
       GRANETE_DEFINITION_PREFIXES = ['Granete · Mueble · ', 'Granete · Parte · ',
                                      'Granete · Herraje · '].freeze
 
@@ -144,11 +147,43 @@ module Granete
                      }.sort
       end
 
+      def test_component_condition_true_includes_back_panel_in_native_host_truth
+        assert_component_condition(
+          '14-component-condition-true', true, 1,
+          'sha256-23443cc9d3d988aad2a8d4d2fd9dc5b5879f2ebe583efaf39a012a213b0176ab'
+        )
+      end
+
+      def test_component_condition_false_excludes_back_panel_in_native_host_truth
+        assert_component_condition(
+          '15-component-condition-false', false, 0,
+          'sha256-a629e7986fea42bf52f11cee357aa42c127bbec5a6ff46d73b1b86418f5c1885'
+        )
+      end
+
+      def test_string_max_length_boundary_reaches_native_metadata_without_coercion
+        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          scenario_response('16-string-max-length-boundary'),
+          expected_request: scenario_request('16-string-max-length-boundary')
+        )
+        value = result.normalized_snapshot.dig('parameters', 'label')
+        assert_equal 80, value.length
+
+        outcome = apply(result)
+        assert outcome['success'], "insert failed: #{outcome['error']}"
+        assert_equal 1, @transaction_observer.starts
+        top = granete_furniture_instances.first
+        refute_nil top
+        assert_equal value, metadata_store.read(top).dig('intent', 'parameters', 'label')
+      end
+
       def test_typed_parameter_rejections_start_no_transaction_or_host_mutation
         {
           'neg-parameter-wrong-type' => 'PARAMETER_TYPE_INVALID',
           'neg-parameter-invalid-enum' => 'PARAMETER_ENUM_INVALID',
-          'neg-parameter-invalid-step' => 'PARAMETER_STEP_INVALID'
+          'neg-parameter-invalid-step' => 'PARAMETER_STEP_INVALID',
+          'neg-parameter-string-too-long' => 'PARAMETER_STRING_TOO_LONG',
+          'neg-duplicate-occurrence-id' => 'PARAMETER_BINDING_CONFLICT'
         }.each do |scenario_id, expected_code|
           before = snapshot_host_state
           error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
@@ -157,6 +192,28 @@ module Granete
           assert_includes error.issues.map(&:code), expected_code
           assert_equal 0, @transaction_observer.starts,
                        "#{scenario_id} must fail before Model#start_operation"
+          assert_host_untouched(before)
+          assert_equal 0, @apply_calls
+        end
+      end
+
+      def test_invalid_definition_corpus_starts_no_transaction_or_host_mutation
+        corpus = JSON.parse(File.read(INVALID_DEFINITIONS_PATH))
+        new_cases = %w[
+          unknown-definition-field unknown-parameter-field unknown-binding-field
+          unknown-relationship-field unknown-relationship-target-field
+          component-condition-wrong-type string-max-length-missing string-max-length-limit
+        ]
+        new_cases.each do |case_id|
+          entry = corpus.fetch('cases').find { |candidate| candidate['id'] == case_id }
+          refute_nil entry, "missing invalid definition case #{case_id}"
+          before = snapshot_host_state
+          error = assert_raises(Granete::SketchUpExtension::Library::CatalogParameterContract::ContractError) do
+            validate_invalid_definition_case(entry)
+          end
+          assert_equal 'PARAMETER_DEFINITION_INVALID', error.code
+          assert_equal 0, @transaction_observer.starts,
+                       "#{case_id} must fail before Model#start_operation"
           assert_host_untouched(before)
           assert_equal 0, @apply_calls
         end
@@ -240,6 +297,45 @@ module Granete
       end
 
       private
+
+      def assert_component_condition(scenario_id, expected_value, expected_back_count, expected_fingerprint)
+        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          scenario_response(scenario_id), expected_request: scenario_request(scenario_id)
+        )
+        assert result.accepted?
+        assert_equal expected_value, result.normalized_snapshot.dig('parameters', 'hasBackPanel')
+        assert_equal expected_fingerprint, result.manufacturing_fingerprint
+        resolved_backs = result.layout.boards.select do |board|
+          board.component_definition_id == 'mod-comp-back'
+        end
+        assert_equal expected_back_count, resolved_backs.length
+
+        outcome = apply(result)
+        assert outcome['success'], "insert failed: #{outcome['error']}"
+        assert_equal 1, @transaction_observer.starts
+        top = granete_furniture_instances.first
+        refute_nil top
+        assert_equal expected_value, metadata_store.read(top).dig('intent', 'parameters', 'hasBackPanel')
+        host_backs = top.definition.entities.grep(Sketchup::ComponentInstance).select do |entity|
+          metadata_store.read(entity).dig('identity', 'componentDefinitionId') == 'mod-comp-back'
+        end
+        assert_equal expected_back_count, host_backs.length
+        assert_equal resolved_backs.map(&:component_instance_id).sort,
+                     host_backs.map { |entity|
+                       metadata_store.read(entity).dig('identity', 'componentInstanceId')
+                     }.sort
+      end
+
+      def validate_invalid_definition_case(entry)
+        contract = Granete::SketchUpExtension::Library::CatalogParameterContract
+        if entry['rawDefinitionJson']
+          contract.validate_definition!(JSON.parse(entry['rawDefinitionJson']), 'definitions')
+        elsif entry['rawJson']
+          contract.parse_parameter_definitions!(entry['rawJson'])
+        else
+          contract.validate_parameter_definitions!(entry['definitions'])
+        end
+      end
 
       # The apply path #467/#468 will wire: transport interpret FIRST (a
       # rejection raises there), mutate only after. The sentinel proves a

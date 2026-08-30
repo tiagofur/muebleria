@@ -42,6 +42,60 @@ type InteractiveParameterEvaluation = {
   readonly validation: InteractiveValidationResult;
 };
 
+const FURNITURE_DEFINITION_FIELDS = new Set([
+  "furnitureDefinitionId", "code", "name", "category", "version", "revisionId",
+  "schemaRevision", "definitionHash", "description", "assetId", "parameters",
+  "componentSlots", "relationshipTemplates", "defaultMaterialAssignments",
+]);
+
+function evaluateFurnitureDefinitionParameters(
+  definition: FurnitureDefinition,
+  rawParameters: Record<string, string | number | boolean>,
+) {
+  if (definition === null || typeof definition !== "object" || Array.isArray(definition)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: "",
+      field: "definition",
+      message: "must be an object",
+    }]);
+  }
+  const unknownFields = Object.keys(definition).filter((field) => !FURNITURE_DEFINITION_FIELDS.has(field));
+  if (unknownFields.length !== 0) {
+    throw new FurnitureParameterDefinitionsError(unknownFields.map((field) => ({
+      parameter: "",
+      field: `definition.${field}`,
+      message: "is not supported",
+    })));
+  }
+  if (!Array.isArray(definition.parameters)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: "",
+      field: "parameters",
+      message: "must be an array",
+    }]);
+  }
+  if (!Array.isArray(definition.componentSlots)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: "",
+      field: "componentSlots",
+      message: "must be an array",
+    }]);
+  }
+  const conditionIssues = definition.parameters.flatMap((parameter) => {
+    if (parameter?.binding?.kind !== "componentCondition") return [];
+    const directTargets = definition.componentSlots.filter(
+      (slot) => slot?.componentDefinitionId === parameter.binding!.componentId,
+    );
+    return directTargets.length === 1 ? [] : [{
+      parameter: parameter.name,
+      field: "binding.componentId",
+      message: "componentCondition must target exactly one direct component slot",
+    }];
+  });
+  if (conditionIssues.length !== 0) throw new FurnitureParameterDefinitionsError(conditionIssues);
+  return evaluateFurnitureParameters(definition.parameters, rawParameters);
+}
+
 function parameterContractIssue(
   definition: FurnitureDefinition,
   issue: FurnitureParameterIssue,
@@ -63,7 +117,7 @@ function evaluateInteractive(
   rawParameters: Record<string, string | number | boolean>,
 ): InteractiveParameterEvaluation {
   try {
-    const evaluation = evaluateFurnitureParameters(definition.parameters, rawParameters);
+    const evaluation = evaluateFurnitureDefinitionParameters(definition, rawParameters);
     const issues = evaluation.issues.map((issue): InteractiveValidationIssue => {
       const parameter = definition.parameters.find((candidate) => candidate.name === issue.parameter);
       return {
@@ -105,7 +159,22 @@ function parameterIssueMessage(label: string, code: FurnitureParameterIssue["cod
       return `El parámetro ${label} no respeta el incremento permitido.`;
     case "PARAMETER_ENUM_INVALID":
       return `El parámetro ${label} no contiene una opción permitida.`;
+    case "PARAMETER_STRING_TOO_LONG":
+      return `El parámetro ${label} supera la longitud permitida.`;
   }
+}
+
+function excludedComponentDefinitionIds(
+  definition: FurnitureDefinition,
+  parameters: Readonly<Record<string, string | number | boolean>>,
+): ReadonlySet<string> {
+  const excluded = new Set<string>();
+  for (const parameter of definition.parameters) {
+    if (parameter.binding?.kind === "componentCondition" && parameters[parameter.name] === false) {
+      excluded.add(parameter.binding.componentId!);
+    }
+  }
+  return excluded;
 }
 
 export interface InstantiationOptions {
@@ -154,7 +223,7 @@ export function instantiateFurniture(
   // 1. Validate & evaluate parameters against the canonical strict contract.
   let evaluatedParams: Readonly<Record<string, number | string | boolean>> = {};
   try {
-    const evaluation = evaluateFurnitureParameters(definition.parameters, rawParams);
+    const evaluation = evaluateFurnitureDefinitionParameters(definition, rawParams);
     evaluatedParams = evaluation.normalized;
     issues.push(...evaluation.issues.map((issue) => parameterContractIssue(definition, issue)));
   } catch (error) {
@@ -284,6 +353,31 @@ export function instantiateFurniture(
     });
   }
 
+  for (const parameter of definition.parameters) {
+    if (parameter.binding?.kind !== "componentCondition" || evaluatedParams[parameter.name] !== true) continue;
+    const slot = definition.componentSlots.find(
+      (candidate) => candidate.componentDefinitionId === parameter.binding!.componentId,
+    );
+    if (!slot || components.some((component) => component.componentDefinitionId === slot.componentDefinitionId)) continue;
+    components.push({
+      componentInstanceId: `condition-${slot.slotId}-01`,
+      componentDefinitionId: slot.componentDefinitionId,
+      role: slot.role,
+      transform: makeTransform("assembly"),
+    });
+  }
+
+  const excludedDefinitionIds = excludedComponentDefinitionIds(definition, evaluatedParams);
+  const activeComponents = components.filter((component) => !excludedDefinitionIds.has(component.componentDefinitionId));
+  const activeComponentIds = new Set(activeComponents.map((component) => component.componentInstanceId));
+  const activeRelationships = relationships.filter((relationship) =>
+    activeComponentIds.has(relationship.source.componentInstanceId) &&
+    relationship.targets.every((target) => activeComponentIds.has(target.componentInstanceId))
+  );
+  const activeHardwarePlacements = hardwarePlacements.filter((placement) =>
+    activeComponentIds.has(placement.hostComponentInstanceId)
+  );
+
   const assembly: DesignAssembly = {
     assemblyId,
     catalogItemId: "module-base-600",
@@ -291,9 +385,9 @@ export function instantiateFurniture(
     displayName: definition.name,
     transform: makeTransform("project", options.translationMm ?? [0, 0, 0], options.rotationQuaternion ?? [0, 0, 0, 1]),
     parameters: evaluatedParams,
-    components,
-    relationships,
-    hardwarePlacements,
+    components: activeComponents,
+    relationships: activeRelationships,
+    hardwarePlacements: activeHardwarePlacements,
   };
 
   const envelope: AuthoringEnvelopeV1 = {
@@ -384,7 +478,17 @@ export function resolveFurnitureLayout(
   }
 
   let partIdx = 1;
-  const makePart = (role: string, name: string, x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+  const makePart = (
+    role: string,
+    name: string,
+    x: number,
+    y: number,
+    z: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    componentDefinitionId = `def-${role}`,
+  ) => {
     const compId = `comp-${furnitureInstanceId}-${partIdx}`;
     const partId = `part-${furnitureInstanceId}-${partIdx}`;
     partIdx++;
@@ -393,7 +497,7 @@ export function resolveFurnitureLayout(
       componentInstanceId: compId,
       furnitureInstanceId,
       slotId: role,
-      componentDefinitionId: `def-${role}`,
+      componentDefinitionId,
       role,
       transform: { translationMm: [x, y, z] },
       dimensionsMm: [dx, dy, dz]
@@ -425,7 +529,17 @@ export function resolveFurnitureLayout(
     if (shelfCount > 0) {
       const spacing = height / (shelfCount + 1);
       for (let i = 1; i <= shelfCount; i++) {
-        makePart("shelf", `Entrepaño ${i}`, thickness, 0, spacing * i, width - 2 * thickness, depth, thickness);
+        makePart(
+          "shelf",
+          `Entrepaño ${i}`,
+          thickness,
+          0,
+          spacing * i,
+          width - 2 * thickness,
+          depth,
+          thickness,
+          "definition-shelf",
+        );
       }
     }
 
@@ -442,10 +556,33 @@ export function resolveFurnitureLayout(
     makePart("leg_right", "Pata Derecha", width - thickness, 0, 0, thickness, depth, height - thickness);
   }
 
+  for (const parameter of definition.parameters) {
+    if (parameter.binding?.kind !== "componentCondition" || evaluated[parameter.name] !== true) continue;
+    const slot = definition.componentSlots.find(
+      (candidate) => candidate.componentDefinitionId === parameter.binding!.componentId,
+    );
+    if (!slot || components.some((component) => component.componentDefinitionId === slot.componentDefinitionId)) continue;
+    makePart(
+      slot.role,
+      slot.role,
+      0,
+      0,
+      0,
+      width,
+      thickness,
+      height,
+      slot.componentDefinitionId,
+    );
+  }
+
+  const excludedDefinitionIds = excludedComponentDefinitionIds(definition, evaluated);
+  const activeComponents = components.filter((component) => !excludedDefinitionIds.has(component.componentDefinitionId));
+  const activeComponentIds = new Set(activeComponents.map((component) => component.componentInstanceId));
+
   return {
     furnitureInstance,
-    components,
-    parts,
+    components: activeComponents,
+    parts: parts.filter((part) => activeComponentIds.has(part.componentInstanceId)),
     validation
   };
 }

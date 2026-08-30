@@ -133,6 +133,21 @@ class AuthoringResolveContractTest < Minitest::Test
     assert_includes codes, 'RELATIONSHIP_ORPHANED'
   end
 
+  def test_parameter_issue_preserves_safe_details_and_rejects_object_values
+    raw = scenario('neg-parameter-wrong-type')
+    result = parse_response(raw['response'], expected_request: raw['request'])
+    issue = result.issues.first
+    assert_equal 'PARAMETER_TYPE_INVALID', issue.code
+    assert_equal 'boolean', issue.details['expectedType']
+    assert_equal 'string', issue.details['receivedType']
+
+    body = deep_copy(raw['response'])
+    body['issues'][0]['details']['receivedValue'] = { 'secret' => 'not scalar' }
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body, expected_request: raw['request'])
+    end
+  end
+
   def test_unknown_schema_fails_closed
     body = scenario('01-params-materials-parity')['response'].merge('schemaId' => 'granete.sketchup-authoring.v1')
     error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do

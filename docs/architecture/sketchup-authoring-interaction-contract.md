@@ -156,14 +156,28 @@ published projection derives their type, default and range from the module
 columns. `sortOrder` controls authoring presentation without changing identity.
 
 A non-metadata parameter must declare a versioned authoritative consumer.
-The first supported binding, `componentQuantity`, changes composition count
-and can materialize relationship templates for every resulting occurrence;
-the resolver selects behavior from the binding, never from the parameter
-name. Parameters intentionally used only as authoring metadata must declare
-the `metadata` category and cannot carry a binding. Missing, incompatible or
-unresolvable consumers make the complete definition unavailable with
-`PARAMETER_DEFINITION_INVALID`; an occurrence snapshot that contradicts an
-evaluated binding fails with `PARAMETER_BINDING_CONFLICT`.
+`componentQuantity` changes composition count and can materialize relationship
+templates for every resulting occurrence. `componentCondition` accepts only a
+boolean and includes its one direct component when true or excludes it when
+false; exclusion also removes relationships, machining, manual placements and
+hardware that depend on that component. The resolver selects behavior from the
+binding, never from the parameter name. Because v1 domain instances do not
+retain the persisted module-component entry ID, a direct or relationship target
+that matches more than one component entry is ambiguous and fails closed rather
+than choosing the first match. Parameters intentionally used only as authoring
+metadata must declare the `metadata` category and cannot carry a binding.
+Missing, incompatible, ambiguous or unresolvable consumers make the complete
+definition unavailable with `PARAMETER_DEFINITION_INVALID`; an occurrence
+snapshot that contradicts an evaluated binding fails with
+`PARAMETER_BINDING_CONFLICT`.
+
+All definition, parameter, binding, relationship and relationship-target JSON
+objects are closed shapes. String parameters declare `maxLength` from 1 through
+512; the constraint participates in the definition hash and catalog pin. Error
+details expose integer intent and only a safe scalar `receivedValue`, truncated
+to 128 Unicode code points. The SketchUp inspector renders native accessible
+controls for booleans and strings and preserves explicit `false` and empty-string
+values instead of treating them as absent.
 
 ## 6. Furniture parameter/material update
 

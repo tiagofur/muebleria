@@ -5,10 +5,38 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strings"
 )
+
+type FurnitureParameterDefinitionBoundary string
+
+const (
+	FurnitureParameterDefinitionBoundaryPersisted FurnitureParameterDefinitionBoundary = "persisted"
+	FurnitureParameterDefinitionBoundaryPublished FurnitureParameterDefinitionBoundary = "published"
+)
+
+func DecodeFurnitureParameterDefinitions(raw []byte, boundary FurnitureParameterDefinitionBoundary) ([]FurnitureParameterDefinition, error) {
+	definitions := []FurnitureParameterDefinition{}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&definitions); err != nil {
+		return nil, &FurnitureParameterDefinitionsError{Issues: []FurnitureParameterDefinitionIssue{{Field: "definitions", Message: "invalid JSON: " + err.Error()}}}
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, &FurnitureParameterDefinitionsError{Issues: []FurnitureParameterDefinitionIssue{{Field: "definitions", Message: "must contain exactly one JSON array"}}}
+	}
+	issues := ValidatePublishedFurnitureParameterDefinitions(definitions)
+	if boundary == FurnitureParameterDefinitionBoundaryPersisted {
+		issues = ValidatePersistedFurnitureParameterDefinitions(definitions)
+	}
+	if len(issues) > 0 {
+		return nil, &FurnitureParameterDefinitionsError{Issues: issues}
+	}
+	return definitions, nil
+}
 
 type FurnitureParameterType string
 
@@ -38,17 +66,20 @@ const (
 )
 
 const (
-	MaxFurnitureParameterDefinitions  = 64
-	MaxFurnitureParameterNameLength   = 64
-	MaxFurnitureParameterLabelLength  = 160
-	MaxFurnitureParameterOptions      = 64
-	MaxFurnitureParameterOptionLength = 128
+	MaxFurnitureParameterDefinitions         = 64
+	MaxFurnitureParameterNameLength          = 64
+	MaxFurnitureParameterLabelLength         = 160
+	MaxFurnitureParameterOptions             = 64
+	MaxFurnitureParameterOptionLength        = 128
+	MaxFurnitureParameterStringLength        = 512
+	MaxFurnitureParameterReceivedValueLength = 128
 )
 
 const (
-	FurnitureParameterBindingVersion           = 1
-	FurnitureParameterBindingComponentQuantity = "componentQuantity"
-	FurnitureParameterBindingDimensionColumn   = "dimensionColumn"
+	FurnitureParameterBindingVersion            = 1
+	FurnitureParameterBindingComponentQuantity  = "componentQuantity"
+	FurnitureParameterBindingComponentCondition = "componentCondition"
+	FurnitureParameterBindingDimensionColumn    = "dimensionColumn"
 )
 
 // FurnitureParameterBinding declares the authoritative consumer of a value.
@@ -88,6 +119,7 @@ type FurnitureParameterDefinition struct {
 	Step         *float64                   `json:"step,omitempty"`
 	Options      []string                   `json:"options,omitempty"`
 	Integer      bool                       `json:"integer,omitempty"`
+	MaxLength    *int                       `json:"maxLength,omitempty"`
 	Binding      *FurnitureParameterBinding `json:"binding,omitempty"`
 }
 
@@ -115,12 +147,13 @@ func (e *FurnitureParameterDefinitionsError) Error() string {
 type FurnitureParameterIssueCode string
 
 const (
-	FurnitureParameterUnknown     FurnitureParameterIssueCode = "PARAMETER_UNKNOWN"
-	FurnitureParameterRequired    FurnitureParameterIssueCode = "PARAMETER_REQUIRED"
-	FurnitureParameterTypeInvalid FurnitureParameterIssueCode = "PARAMETER_TYPE_INVALID"
-	FurnitureParameterOutOfRange  FurnitureParameterIssueCode = "PARAMETER_OUT_OF_RANGE"
-	FurnitureParameterStepInvalid FurnitureParameterIssueCode = "PARAMETER_STEP_INVALID"
-	FurnitureParameterEnumInvalid FurnitureParameterIssueCode = "PARAMETER_ENUM_INVALID"
+	FurnitureParameterUnknown       FurnitureParameterIssueCode = "PARAMETER_UNKNOWN"
+	FurnitureParameterRequired      FurnitureParameterIssueCode = "PARAMETER_REQUIRED"
+	FurnitureParameterTypeInvalid   FurnitureParameterIssueCode = "PARAMETER_TYPE_INVALID"
+	FurnitureParameterOutOfRange    FurnitureParameterIssueCode = "PARAMETER_OUT_OF_RANGE"
+	FurnitureParameterStepInvalid   FurnitureParameterIssueCode = "PARAMETER_STEP_INVALID"
+	FurnitureParameterEnumInvalid   FurnitureParameterIssueCode = "PARAMETER_ENUM_INVALID"
+	FurnitureParameterStringTooLong FurnitureParameterIssueCode = "PARAMETER_STRING_TOO_LONG"
 )
 
 type FurnitureParameterIssue struct {
@@ -184,6 +217,15 @@ func ValidateFurnitureParameterDefinitions(definitions []FurnitureParameterDefin
 			if definition.Unit != "" {
 				add("unit", "unit requires type number")
 			}
+		}
+		if definition.Type == FurnitureParameterTypeString {
+			if definition.MaxLength == nil {
+				add("maxLength", "is required for string parameters")
+			} else if *definition.MaxLength < 1 || *definition.MaxLength > MaxFurnitureParameterStringLength {
+				add("maxLength", fmt.Sprintf("must be between 1 and %d", MaxFurnitureParameterStringLength))
+			}
+		} else if definition.MaxLength != nil {
+			add("maxLength", "requires type string")
 		}
 
 		if definition.Type == FurnitureParameterTypeEnum {
@@ -330,8 +372,12 @@ func validateFurnitureParameterValue(definition FurnitureParameterDefinition, va
 			}
 		}
 	case FurnitureParameterTypeString:
-		if _, ok := value.(string); !ok {
+		text, ok := value.(string)
+		if !ok {
 			return FurnitureParameterTypeInvalid
+		}
+		if definition.MaxLength != nil && len([]rune(text)) > *definition.MaxLength {
+			return FurnitureParameterStringTooLong
 		}
 	case FurnitureParameterTypeBoolean:
 		if _, ok := value.(bool); !ok {
@@ -356,12 +402,13 @@ func validateFurnitureParameterValue(definition FurnitureParameterDefinition, va
 
 func furnitureParameterIssue(code FurnitureParameterIssueCode, definition FurnitureParameterDefinition, value any) FurnitureParameterIssue {
 	messages := map[FurnitureParameterIssueCode]string{
-		FurnitureParameterUnknown:     "parameter is not declared by the furniture definition",
-		FurnitureParameterRequired:    "required parameter is missing and has no default",
-		FurnitureParameterTypeInvalid: "parameter value has the wrong JSON type",
-		FurnitureParameterOutOfRange:  "numeric parameter is outside its allowed range",
-		FurnitureParameterStepInvalid: "numeric parameter does not align with its allowed step",
-		FurnitureParameterEnumInvalid: "enum parameter is not one of its allowed options",
+		FurnitureParameterUnknown:       "parameter is not declared by the furniture definition",
+		FurnitureParameterRequired:      "required parameter is missing and has no default",
+		FurnitureParameterTypeInvalid:   "parameter value has the wrong JSON type",
+		FurnitureParameterOutOfRange:    "numeric parameter is outside its allowed range",
+		FurnitureParameterStepInvalid:   "numeric parameter does not align with its allowed step",
+		FurnitureParameterEnumInvalid:   "enum parameter is not one of its allowed options",
+		FurnitureParameterStringTooLong: "string parameter exceeds its allowed length",
 	}
 	details := map[string]any{"expectedType": string(definition.Type)}
 	if value != nil {
@@ -378,6 +425,15 @@ func furnitureParameterIssue(code FurnitureParameterIssueCode, definition Furnit
 	}
 	if len(definition.Options) > 0 {
 		details["allowedOptions"] = append([]string(nil), definition.Options...)
+	}
+	if definition.Integer {
+		details["integer"] = true
+	}
+	if definition.MaxLength != nil {
+		details["maxLength"] = *definition.MaxLength
+	}
+	if received, ok := safeFurnitureParameterReceivedValue(value); ok {
+		details["receivedValue"] = received
 	}
 	return FurnitureParameterIssue{Code: code, Parameter: definition.Name, Message: messages[code], Details: details}
 }
@@ -424,6 +480,16 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 				}
 			}
 		}
+	case FurnitureParameterBindingComponentCondition:
+		if definition.Type != FurnitureParameterTypeBoolean {
+			add("binding.kind", "componentCondition requires a boolean parameter")
+		}
+		if strings.TrimSpace(b.ComponentID) == "" {
+			add("binding.componentId", "is required for componentCondition")
+		}
+		if b.Dimension != "" || b.Relationship != nil {
+			add("binding", "componentCondition cannot declare dimension or relationship")
+		}
 	case FurnitureParameterBindingDimensionColumn:
 		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer || definition.Unit != FurnitureParameterUnitMM {
 			add("binding.kind", "dimensionColumn requires an integer millimeter number parameter")
@@ -435,7 +501,7 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 			add("binding", "dimensionColumn cannot target composition")
 		}
 	default:
-		add("binding.kind", "must be componentQuantity or dimensionColumn")
+		add("binding.kind", "must be componentQuantity, componentCondition, or dimensionColumn")
 	}
 }
 
@@ -494,6 +560,23 @@ func furnitureParameterJSONType(value any) string {
 	}
 }
 
+func safeFurnitureParameterReceivedValue(value any) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		runes := []rune(typed)
+		if len(runes) > MaxFurnitureParameterReceivedValueLength {
+			return string(runes[:MaxFurnitureParameterReceivedValueLength]) + "…", true
+		}
+		return typed, true
+	case float64, bool:
+		return typed, true
+	case nil:
+		return nil, true
+	default:
+		return nil, false
+	}
+}
+
 func sortedFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinition {
 	ordered := append([]FurnitureParameterDefinition(nil), definitions...)
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -509,11 +592,22 @@ func sortedFurnitureParameterDefinitions(definitions []FurnitureParameterDefinit
 // points at composition that this module can actually resolve.
 func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) []FurnitureParameterDefinitionIssue {
 	issues := []FurnitureParameterDefinitionIssue{}
-	direct := map[string]bool{}
-	available := map[string]bool{}
+	directEntries := map[string]int{}
+	allEntries := map[string]int{}
+	occurrences := map[string]int{}
+	note := func(instance ComponentInstance, direct bool) {
+		allEntries[instance.ComponentID]++
+		quantity := instance.Quantity
+		if quantity <= 0 {
+			quantity = 1
+		}
+		occurrences[instance.ComponentID] += quantity
+		if direct {
+			directEntries[instance.ComponentID]++
+		}
+	}
 	for _, instance := range module.Components {
-		direct[instance.ComponentID] = true
-		available[instance.ComponentID] = true
+		note(instance, true)
 	}
 	if module.StructureID != "" {
 		for _, structure := range catalog.Structures {
@@ -521,25 +615,25 @@ func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) [
 				continue
 			}
 			for _, instance := range structure.Components {
-				available[instance.ComponentID] = true
+				note(instance, false)
 			}
 			break
 		}
 	}
 	for _, definition := range module.ParameterDefinitions {
 		binding := definition.Binding
-		if binding == nil || binding.Kind != FurnitureParameterBindingComponentQuantity {
+		if binding == nil || (binding.Kind != FurnitureParameterBindingComponentQuantity && binding.Kind != FurnitureParameterBindingComponentCondition) {
 			continue
 		}
-		if !direct[binding.ComponentID] {
-			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.componentId", Message: "must reference a component placed directly on the module"})
+		if directEntries[binding.ComponentID] != 1 || allEntries[binding.ComponentID] != 1 {
+			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.componentId", Message: "must reference exactly one unambiguous component entry placed directly on the module"})
 		}
 		if binding.Relationship == nil {
 			continue
 		}
 		for _, target := range binding.Relationship.Targets {
-			if !available[target.ComponentID] {
-				issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "must reference components in the module composition"})
+			if allEntries[target.ComponentID] != 1 || occurrences[target.ComponentID] != 1 {
+				issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "must reference exactly one unambiguous component occurrence in the module composition"})
 			}
 		}
 	}

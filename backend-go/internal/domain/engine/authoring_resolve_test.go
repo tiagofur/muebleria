@@ -243,6 +243,70 @@ func TestAuthoringResolveComponentQuantityBindingChangesAuthoritativeOutput(t *t
 	}
 }
 
+func TestAuthoringResolveComponentConditionRemovesOnlyDependentIntent(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	structure := &catalog.Structures[0]
+	kept := make([]domain.ComponentInstance, 0, len(structure.Components))
+	for _, instance := range structure.Components {
+		if instance.ComponentID != "comp-back" {
+			kept = append(kept, instance)
+		}
+	}
+	structure.Components = kept
+	module.Components = append([]domain.ComponentInstance{{ComponentID: "comp-back", Quantity: 1}}, module.Components...)
+	module.ParameterDefinitions = []domain.FurnitureParameterDefinition{{
+		Name: "hasBackPanel", Label: "Has back panel", Type: domain.FurnitureParameterTypeBoolean, DefaultValue: true, Required: true, Category: domain.FurnitureParameterCategoryConfiguration,
+		Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentCondition, ComponentID: "comp-back"},
+	}}
+	resolve := func(enabled bool) *AuthoringResolveResult {
+		input := AuthoringResolveInput{Module: module, Catalog: catalog, PrecisionMm: 0.01, EvaluatedParameters: map[string]any{"hasBackPanel": enabled},
+			Relationships:    []AuthoringRelationship{{RelationshipID: "rel-back-dependent", Kind: "shelf-support", Source: AuthoringRelationshipAnchor{ComponentInstanceID: "mod-comp-shelf-copy-0", Role: "shelf-edge"}, Targets: []AuthoringRelationshipAnchor{{ComponentInstanceID: "mod-comp-back-copy-0", Role: "inside-face"}}}},
+			ManualPlacements: []AuthoringManualPlacement{{HardwarePlacementID: "hp-back-dependent", CatalogHardwareID: "hw-minifix", HostComponentInstanceID: "mod-comp-back-copy-0", AnchorFace: "front", OffsetMm: [2]float64{100, 100}}}, ManualPlacementsPresent: true}
+		result, err := ResolveAuthoringLayout(input)
+		if err != nil {
+			t.Fatalf("resolve condition=%v: %v", enabled, err)
+		}
+		if len(result.StructuralIssues) != 0 {
+			t.Fatalf("condition=%v rejected: %+v", enabled, result.StructuralIssues)
+		}
+		retry, err := ResolveAuthoringLayout(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(result, retry) {
+			t.Fatalf("condition=%v retry drifted", enabled)
+		}
+		return result
+	}
+	withBack, withoutBack := resolve(true), resolve(false)
+	hasBack := func(result *AuthoringResolveResult) bool {
+		for _, component := range result.Layout.Components {
+			if component.ComponentDefinitionID == "mod-comp-back" {
+				if component.ComponentInstanceID != "mod-comp-back-copy-0" {
+					t.Fatalf("condition entry id is not deterministic: %s", component.ComponentInstanceID)
+				}
+				return true
+			}
+		}
+		return false
+	}
+	if !hasBack(withBack) || hasBack(withoutBack) {
+		t.Fatalf("condition did not include/exclude entry: true=%v false=%v", hasBack(withBack), hasBack(withoutBack))
+	}
+	if len(withBack.Normalized.Relationships) != 1 || len(withoutBack.Normalized.Relationships) != 0 {
+		t.Fatalf("dependent relationships true=%d false=%d", len(withBack.Normalized.Relationships), len(withoutBack.Normalized.Relationships))
+	}
+	if len(withBack.Normalized.HardwarePlacements) != 1 || len(withoutBack.Normalized.HardwarePlacements) != 0 {
+		t.Fatalf("dependent hardware true=%d false=%d", len(withBack.Normalized.HardwarePlacements), len(withoutBack.Normalized.HardwarePlacements))
+	}
+	if len(withBack.Machining.Operations) == 0 || len(withoutBack.Machining.Operations) != 0 {
+		t.Fatalf("dependent machining true=%d false=%d", len(withBack.Machining.Operations), len(withoutBack.Machining.Operations))
+	}
+	if withBack.Machining.ManufacturingFingerprint == withoutBack.Machining.ManufacturingFingerprint {
+		t.Fatal("condition must change manufacturing fingerprint")
+	}
+}
+
 // Scenario 2: move shelf → the occurrence keeps its identity, the dependent
 // relationship machining follows the new height, and the fingerprint moves.
 func TestAuthoringResolveMoveShelf(t *testing.T) {

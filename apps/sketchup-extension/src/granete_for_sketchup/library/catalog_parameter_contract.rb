@@ -14,12 +14,23 @@ module Granete
         MAX_NAME_LENGTH = 64
         MAX_LABEL_LENGTH = 160
         MAX_OPTION_LENGTH = 128
+        MAX_STRING_LENGTH = 512
         HASH_PATTERN = /\Asha256-[0-9a-f]{64}\z/
         TYPES = %w[number string boolean enum].freeze
         UNITS = %w[mm deg count].freeze
         CATEGORIES = %w[dimension configuration style hardware metadata].freeze
         RESERVED_DIMENSIONS = %w[widthMm heightMm depthMm].freeze
-        BINDING_KINDS = %w[componentQuantity dimensionColumn].freeze
+        BINDING_KINDS = %w[componentQuantity componentCondition dimensionColumn].freeze
+        DEFINITION_KEYS = %w[
+          furnitureDefinitionId code name category categoryId version schemaRevision definitionHash description
+          imageUrl thumbnailUrl previewUrl parameters estimatedPartCount estimatedHardwareCount materialRoles
+        ].freeze
+        PARAMETER_KEYS = %w[
+          name label sortOrder type defaultValue required unit category min max step options integer maxLength binding
+        ].freeze
+        BINDING_KEYS = %w[version kind componentId dimension relationship].freeze
+        RELATIONSHIP_KEYS = %w[kind sourceRole targets].freeze
+        TARGET_KEYS = %w[componentId role].freeze
 
         class ContractError < StandardError
           attr_reader :code, :path
@@ -51,6 +62,7 @@ module Granete
 
         def validate_definition!(definition, path, expected_id: nil)
           fail_at(path, 'must be an object') unless definition.is_a?(Hash)
+          validate_closed_shape!(definition, DEFINITION_KEYS, path)
           definition_id = definition['furnitureDefinitionId']
           validate_text!(definition_id, "#{path}.furnitureDefinitionId", max: 256)
           if expected_id && definition_id != expected_id
@@ -89,8 +101,9 @@ module Granete
           parameters
         end
 
-        def validate_parameter!(parameter, path) # rubocop:disable Metrics/AbcSize
+        def validate_parameter!(parameter, path) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
           fail_at(path, 'must be an object') unless parameter.is_a?(Hash)
+          validate_closed_shape!(parameter, PARAMETER_KEYS, path)
           name = parameter['name']
           validate_text!(name, "#{path}.name", max: MAX_NAME_LENGTH)
           fail_at("#{path}.name", 'must not contain surrounding whitespace') unless name == name.strip
@@ -106,6 +119,12 @@ module Granete
           end
           unit = parameter['unit']
           fail_at("#{path}.unit", 'is invalid') if !unit.nil? && !UNITS.include?(unit)
+          if parameter.key?('required') && ![true, false].include?(parameter['required'])
+            fail_at("#{path}.required", 'must be a boolean')
+          end
+          if parameter.key?('integer') && ![true, false].include?(parameter['integer'])
+            fail_at("#{path}.integer", 'must be a boolean')
+          end
 
           validate_type_rules!(parameter, path)
           validate_binding!(parameter, path)
@@ -118,7 +137,7 @@ module Granete
         end
 
         # Dense by design: this is the single fail-closed type/rule boundary.
-        def validate_type_rules!(parameter, path) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def validate_type_rules!(parameter, path) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
           type = parameter['type']
           numeric_keys = %w[min max step]
           if type == 'number'
@@ -140,6 +159,15 @@ module Granete
             end
             fail_at("#{path}.integer", 'integer requires type number') if parameter['integer'] == true
             fail_at("#{path}.unit", 'unit requires type number') if parameter.key?('unit')
+          end
+
+          if type == 'string'
+            max_length = parameter['maxLength']
+            unless max_length.is_a?(Integer) && max_length.between?(1, MAX_STRING_LENGTH)
+              fail_at("#{path}.maxLength", "must be an integer between 1 and #{MAX_STRING_LENGTH}")
+            end
+          elsif parameter.key?('maxLength')
+            fail_at("#{path}.maxLength", 'requires type string')
           end
 
           options = parameter['options']
@@ -168,7 +196,7 @@ module Granete
         end
 
         # Binding variants are validated together so no new kind can bypass authority checks.
-        def validate_binding!(parameter, path) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def validate_binding!(parameter, path) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
           binding = parameter['binding']
           if parameter['category'] == 'metadata'
             unless binding.nil?
@@ -182,6 +210,7 @@ module Granete
             fail_at("#{path}.binding",
                     'non-metadata parameters require an authoritative consumer')
           end
+          validate_closed_shape!(binding, BINDING_KEYS, "#{path}.binding")
           fail_at("#{path}.binding.version", 'must equal 1') unless binding['version'] == 1
           kind = binding['kind']
           fail_at("#{path}.binding.kind", 'is invalid') unless BINDING_KINDS.include?(kind)
@@ -195,6 +224,14 @@ module Granete
             if binding.key?('relationship')
               validate_relationship_binding!(binding['relationship'],
                                              "#{path}.binding.relationship")
+            end
+          when 'componentCondition'
+            unless parameter['type'] == 'boolean'
+              fail_at("#{path}.binding.kind", 'componentCondition requires a boolean parameter')
+            end
+            validate_text!(binding['componentId'], "#{path}.binding.componentId", max: MAX_NAME_LENGTH)
+            if binding.key?('dimension') || binding.key?('relationship')
+              fail_at("#{path}.binding", 'componentCondition only accepts one direct component target')
             end
           when 'dimensionColumn'
             valid = parameter['type'] == 'number' && parameter['integer'] == true && parameter['unit'] == 'mm' &&
@@ -210,15 +247,19 @@ module Granete
 
         def validate_relationship_binding!(relationship, path)
           fail_at(path, 'must be an object') unless relationship.is_a?(Hash)
+          validate_closed_shape!(relationship, RELATIONSHIP_KEYS, path)
           validate_text!(relationship['kind'], "#{path}.kind", max: MAX_NAME_LENGTH)
           validate_text!(relationship['sourceRole'], "#{path}.sourceRole", max: MAX_NAME_LENGTH)
           targets = relationship['targets']
           fail_at("#{path}.targets", 'must be a non-empty array') unless targets.is_a?(Array) && !targets.empty?
           targets.each_with_index do |target, index|
             fail_at("#{path}.targets[#{index}]", 'must be an object') unless target.is_a?(Hash)
+            validate_closed_shape!(target, TARGET_KEYS, "#{path}.targets[#{index}]")
             validate_text!(target['componentId'], "#{path}.targets[#{index}].componentId", max: MAX_NAME_LENGTH)
             validate_text!(target['role'], "#{path}.targets[#{index}].role", max: MAX_NAME_LENGTH)
           end
+          target_keys = targets.map { |target| [target['componentId'], target['role']] }
+          fail_at("#{path}.targets", 'targets must be unique') unless target_keys.uniq.length == target_keys.length
         end
 
         def validate_value!(parameter, value, path) # rubocop:disable Metrics/CyclomaticComplexity
@@ -231,6 +272,7 @@ module Granete
             validate_step!(parameter, value, path) if parameter.key?('step')
           when 'string'
             fail_at(path, 'must be a string') unless value.is_a?(String)
+            fail_at(path, 'exceeds maxLength') if value.length > parameter['maxLength']
           when 'boolean'
             fail_at(path, 'must be a boolean') unless [true, false].include?(value)
           when 'enum'
@@ -256,6 +298,11 @@ module Granete
         def validate_text!(value, path, max:)
           fail_at(path, 'must be a non-empty string') unless value.is_a?(String) && !value.strip.empty?
           fail_at(path, "must not exceed #{max} characters") if value.length > max
+        end
+
+        def validate_closed_shape!(value, allowed_keys, path)
+          unknown = value.keys.reject { |key| allowed_keys.include?(key) }.sort
+          fail_at("#{path}.#{unknown.first}", 'is not allowed') unless unknown.empty?
         end
 
         def fail_at(path, message)

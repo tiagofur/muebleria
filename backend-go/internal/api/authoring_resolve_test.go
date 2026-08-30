@@ -18,6 +18,7 @@ const authoringFixtureModuleID = "22222222-2222-2222-2222-222222222222"
 
 func authoringStrPtr(s string) *string     { return &s }
 func authoringFloatPtr(f float64) *float64 { return &f }
+func authoringIntPtr(v int) *int           { return &v }
 
 // authoringStubServer builds the #477 fixture cabinet behind the API stub
 // store (same shape as the engine's authoringCabinetCatalog).
@@ -97,7 +98,6 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 			{ComponentID: "comp-side-r", Quantity: 1},
 			{ComponentID: "comp-base", Quantity: 1},
 			{ComponentID: "comp-top", Quantity: 1},
-			{ComponentID: "comp-back", Quantity: 1},
 		},
 	}
 	module := domain.Module{
@@ -106,12 +106,15 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 		ParameterDefinitions: []domain.FurnitureParameterDefinition{
 			{Name: "shelfCount", Label: "Shelf count", SortOrder: 40, Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(5), Step: authoringFloatPtr(1), Integer: true,
 				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shelf", Relationship: &domain.FurnitureParameterRelationshipBinding{Kind: "shelf-support", SourceRole: "shelf-edge", Targets: []domain.FurnitureParameterRelationshipTarget{{ComponentID: "comp-side", Role: "inside-face"}, {ComponentID: "comp-side-r", Role: "inside-face"}}}}},
+			{Name: "hasBackPanel", Label: "Has back panel", SortOrder: 50, Type: domain.FurnitureParameterTypeBoolean, DefaultValue: true, Required: true, Category: domain.FurnitureParameterCategoryConfiguration,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentCondition, ComponentID: "comp-back"}},
 			{Name: "softClose", Label: "Soft close", SortOrder: 50, Type: domain.FurnitureParameterTypeBoolean, DefaultValue: false, Required: false, Category: domain.FurnitureParameterCategoryMetadata},
 			{Name: "style", Label: "Style", SortOrder: 60, Type: domain.FurnitureParameterTypeEnum, DefaultValue: "classic", Required: true, Category: domain.FurnitureParameterCategoryMetadata, Options: []string{"classic", "minimal"}},
-			{Name: "label", Label: "Label", SortOrder: 70, Type: domain.FurnitureParameterTypeString, DefaultValue: "standard", Required: false, Category: domain.FurnitureParameterCategoryMetadata},
+			{Name: "label", Label: "Label", SortOrder: 70, Type: domain.FurnitureParameterTypeString, DefaultValue: "standard", Required: false, Category: domain.FurnitureParameterCategoryMetadata, MaxLength: authoringIntPtr(80)},
 			{Name: "tiltDeg", Label: "Tilt", SortOrder: 80, Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(0), Required: false, Unit: domain.FurnitureParameterUnitDeg, Category: domain.FurnitureParameterCategoryMetadata, Min: authoringFloatPtr(0), Max: authoringFloatPtr(90), Step: authoringFloatPtr(0.25)},
 		},
 		Components: []domain.ComponentInstance{
+			{ComponentID: "comp-back", Quantity: 1},
 			{ComponentID: "comp-shelf", Quantity: 1},
 			{
 				ComponentID: "comp-door", Quantity: 1,
@@ -185,7 +188,7 @@ func defaultOccurrencesJSON() []authoringOccurrenceWire {
 		occurrenceJSON("side-right-01", "st-comp-side-r", nil),
 		occurrenceJSON("floor-01", "st-comp-base", nil),
 		occurrenceJSON("top-01", "st-comp-top", nil),
-		occurrenceJSON("back-01", "st-comp-back", nil),
+		occurrenceJSON("back-01", "mod-comp-back", nil),
 		occurrenceJSON("shelf-01", "mod-comp-shelf", nil),
 		occurrenceJSON("door-01", "mod-comp-door", nil),
 	}
@@ -477,6 +480,16 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}
 		})), http.StatusOK),
 
+		run("14-component-condition-true", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"hasBackPanel": true}
+		})), http.StatusOK),
+		run("15-component-condition-false", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"hasBackPanel": false}
+		})), http.StatusOK),
+		run("16-string-max-length-boundary", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"label": strings.Repeat("x", 80)}
+		})), http.StatusOK),
+
 		run("neg-parameter-wrong-type", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"softClose": "true"}
 		})), http.StatusUnprocessableEntity),
@@ -488,6 +501,9 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		})), http.StatusUnprocessableEntity),
 		run("neg-parameter-invalid-enum", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"style": "ornate"}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-string-too-long", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"label": strings.Repeat("x", 200)}
 		})), http.StatusUnprocessableEntity),
 	}
 }
@@ -609,6 +625,7 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		t.Fatalf("decode golden: %v", err)
 	}
+	conditionFingerprints := map[string]string{}
 	for _, scenario := range probe.Scenarios {
 		var response struct {
 			SchemaID        string `json:"schemaId"`
@@ -730,6 +747,19 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					t.Fatalf("typed quantity did not change authoritative output: shelves=%d relationships=%d operations=%d", shelves, len(response.NormalizedSnapshot.Relationships), len(response.Resolved.Machining.Operations))
 				}
 			}
+			if scenario.ID == "14-component-condition-true" || scenario.ID == "15-component-condition-false" {
+				hasBack := false
+				for _, component := range response.NormalizedSnapshot.Components {
+					if component.ComponentDefinitionID == "mod-comp-back" {
+						hasBack = true
+					}
+				}
+				wantBack := scenario.ID == "14-component-condition-true"
+				if hasBack != wantBack {
+					t.Fatalf("scenario %s back presence=%v want=%v", scenario.ID, hasBack, wantBack)
+				}
+				conditionFingerprints[scenario.ID] = response.Resolved.Machining.ManufacturingFingerprint
+			}
 		default:
 			if response.Status != "rejected" || response.Resolved != nil {
 				t.Fatalf("scenario %s: expected rejected without resolved payload", scenario.ID)
@@ -743,6 +773,9 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 				}
 			}
 		}
+	}
+	if conditionFingerprints["14-component-condition-true"] == conditionFingerprints["15-component-condition-false"] {
+		t.Fatal("componentCondition true/false must change manufacturing fingerprint")
 	}
 }
 
@@ -1037,7 +1070,7 @@ func TestAuthoringResolveRejectsDimensionTypeAndDecimalsWithDetails(t *testing.T
 			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 				t.Fatal(err)
 			}
-			if len(response.Issues) != 1 || response.Issues[0].Code != "PARAMETER_TYPE_INVALID" || response.Issues[0].Details["expectedType"] != "number" || response.Issues[0].Details["receivedType"] != tt.received {
+			if len(response.Issues) != 1 || response.Issues[0].Code != "PARAMETER_TYPE_INVALID" || response.Issues[0].Details["expectedType"] != "number" || response.Issues[0].Details["receivedType"] != tt.received || response.Issues[0].Details["integer"] != true || response.Issues[0].Details["receivedValue"] == nil {
 				t.Fatalf("unexpected issue: %+v", response.Issues)
 			}
 		})

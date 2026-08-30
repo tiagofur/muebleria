@@ -790,7 +790,7 @@ furniture {
   catalogRevision                          OBLIGATORIO (revisionId de GET /api/furniture/definitions;
                                            mismatch → CATALOG_REVISION_STALE; nunca hay latest implícito)
   parameters { name → scalar }             (proyección tipada autoritativa de la definición: number/string/
-                                           boolean/enum, defaults/required/min/max/step/options/integer;
+                                           boolean/enum, defaults/required/min/max/step/options/integer/maxLength;
                                            claves o valores inválidos → códigos PARAMETER_* estables)
   materialChoices { ROLE → materialId }
   components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
@@ -821,16 +821,30 @@ Contrato de definición tipada:
   autoritativo. `componentQuantity` modifica el número de ocurrencias y puede
   materializar una relationship template por ocurrencia. El motor despacha por
   `binding.kind`, nunca por un nombre como `shelfCount`;
+- `componentCondition` es boolean-only: `true` incluye su único componente
+  directo y `false` lo excluye junto con relationships, machining, manual
+  placements y hardware dependientes; el resultado es determinista y participa
+  en hashes/pins;
+- como v1 no conserva la identidad persistida de la entrada de componente en el
+  dominio, cualquier target directo o de relationship que coincida con más de
+  una entrada se rechaza como ambiguo; nunca se elige el primer match;
 - `metadata` representa explícitamente un valor sin efecto físico y no admite
   binding. Cualquier otro parámetro sin consumidor se rechaza;
 - catálogo, lectura de storage, publicación, TypeScript y Ruby validan la misma
-  forma y límites de manera fail-closed. JSON corrupto, duplicados, defaults o
-  enums inválidos, dimensiones reservadas incompatibles y exceso de definiciones
+  forma cerrada y límites de manera fail-closed. JSON corrupto, campos desconocidos,
+  duplicados, defaults o enums inválidos, dimensiones reservadas incompatibles y exceso de definiciones
   producen `PARAMETER_DEFINITION_INVALID`; nunca se publica una definición
   parcial;
 - los issues de valor incluyen `expectedType`/`receivedType` y, cuando aplica,
-  `min`/`max`/`step`/`allowedOptions`. Un snapshot de ocurrencias incompatible
+  `integer`/`min`/`max`/`step`/`allowedOptions`/`maxLength`. Strings requieren
+  `maxLength` entre 1 y 512 y `receivedValue` sólo expone escalares seguros,
+  truncados a 128 code points Unicode. Un snapshot de ocurrencias incompatible
   con el binding devuelve `PARAMETER_BINDING_CONFLICT` antes de mutar el host.
+- el inspector SketchUp usa controles accesibles reales para boolean y string,
+  preservando `false` y `""` como valores explícitos;
+- al clonar catálogo, todos los `componentId` dentro de bindings y relationship
+  targets se remapean transaccionalmente a los componentes destino; una referencia
+  irresoluble aborta el clone completo.
 
 Reglas de ocurrencias:
 

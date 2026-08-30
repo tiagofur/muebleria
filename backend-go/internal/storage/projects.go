@@ -1,13 +1,11 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -18,17 +16,11 @@ import (
 )
 
 func decodePersistedFurnitureParameterDefinitions(raw []byte, target *[]domain.FurnitureParameterDefinition) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return &domain.FurnitureParameterDefinitionsError{Issues: []domain.FurnitureParameterDefinitionIssue{{Field: "definitions", Message: "invalid JSON: " + err.Error()}}}
+	definitions, err := domain.DecodeFurnitureParameterDefinitions(raw, domain.FurnitureParameterDefinitionBoundaryPersisted)
+	if err != nil {
+		return err
 	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return &domain.FurnitureParameterDefinitionsError{Issues: []domain.FurnitureParameterDefinitionIssue{{Field: "definitions", Message: "must contain exactly one JSON array"}}}
-	}
-	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(*target); len(issues) != 0 {
-		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
-	}
+	*target = definitions
 	return nil
 }
 

@@ -28,6 +28,8 @@ function createMockElement(id = '', tagName = 'DIV') {
     title: '',
     value: '',
     checked: false,
+    required: false,
+    maxLength: -1,
     get className() {
       return classNameValue;
     },
@@ -48,6 +50,10 @@ function createMockElement(id = '', tagName = 'DIV') {
     addEventListener: (evt, cb) => {
       listeners[evt] = listeners[evt] || [];
       listeners[evt].push(cb);
+    },
+    dispatchEvent: (event) => {
+      (listeners[event.type] || []).forEach((cb) => cb(event));
+      return true;
     },
     click: () => {
       (listeners['click'] || []).forEach((cb) => cb({ preventDefault: () => {} }));
@@ -137,6 +143,10 @@ function el(sandbox, id) {
 
 function visible(elm) {
   return elm.style.display !== 'none';
+}
+
+function descendants(root) {
+  return (root.children || []).reduce((all, child) => all.concat([child], descendants(child)), []);
 }
 
 const DEFINITION = {
@@ -270,6 +280,41 @@ function runTests() {
   check(!el(sandbox, 'inspector-edit-fieldset').disabled, 'fieldset stays enabled');
   check(!visible(el(sandbox, 'inspector-materials-card')), 'materials card obeys canEditMaterialRoles, not canEditParameters');
   check(el(sandbox, 'btn-update').disabled === false, 'update still available for parameters');
+
+  // --- typed parameter controls execute real change handlers and preserve
+  //     explicit false / empty string values instead of falling back to defaults ---
+  const typedDefinition = Object.assign({}, DEFINITION, {
+    parameters: DEFINITION.parameters.concat([
+      { name: 'hasBackPanel', defaultValue: true, type: 'boolean', label: 'Respaldo', required: true },
+      { name: 'customerNote', defaultValue: 'default', type: 'string', label: 'Nota', required: false, maxLength: 32 }
+    ])
+  });
+  dialog.onSelectionChange(furnitureContext({
+    definition: typedDefinition,
+    parameters: { widthMm: 600, hasBackPanel: false, customerNote: '' }
+  }));
+  const paramControls = descendants(el(sandbox, 'inspector-params-container'));
+  const booleanControl = paramControls.find((node) => node.id === 'param-hasBackPanel-inspector-params-container');
+  const stringControl = paramControls.find((node) => node.id === 'param-customerNote-inspector-params-container');
+  check(booleanControl && booleanControl.type === 'checkbox', 'boolean renders a native checkbox');
+  check(booleanControl.checked === false, 'explicit false is preserved over the true default');
+  check(booleanControl.getAttribute('aria-label') === 'Respaldo', 'boolean control has an accessible name');
+  check(stringControl && stringControl.type === 'text', 'string renders a native text input');
+  check(stringControl.value === '', 'explicit empty string is preserved over the non-empty default');
+  check(stringControl.maxLength === 32, 'string input exposes the contract maxLength');
+  booleanControl.checked = true;
+  booleanControl.dispatchEvent({ type: 'change' });
+  stringControl.value = 'Visible note';
+  stringControl.dispatchEvent({ type: 'change' });
+  el(sandbox, 'btn-update').click();
+  const typedUpdate = sandbox.__bridge.filter((call) => call.action === 'update_furniture').pop();
+  check(typedUpdate.payload.parameters.hasBackPanel === true, 'boolean change reaches the update payload');
+  check(typedUpdate.payload.parameters.customerNote === 'Visible note', 'string change reaches the update payload');
+
+  // Structured server codes produce stable user guidance without parsing messages.
+  dialog.onUpdateResult({ success: false, issues: [{ code: 'PARAMETER_STRING_TOO_LONG', parameter: 'customerNote' }] });
+  check(el(sandbox, 'toast-message').textContent.includes('longitud permitida'),
+    'structured parameter code renders actionable copy');
 
   // --- multi-selection: inspectable, every mutation fail-closed ---
   dialog.onSelectionChange(furnitureContext({ selectionCount: 3 }));

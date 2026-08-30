@@ -7,7 +7,24 @@ export const FURNITURE_PARAMETER_ISSUE_CODES = [
   'PARAMETER_OUT_OF_RANGE',
   'PARAMETER_STEP_INVALID',
   'PARAMETER_ENUM_INVALID',
+  'PARAMETER_STRING_TOO_LONG',
 ] as const;
+
+export const MAX_FURNITURE_PARAMETER_STRING_LENGTH = 512;
+export const MAX_FURNITURE_PARAMETER_RECEIVED_VALUE_LENGTH = 128;
+
+const PARAMETER_FIELDS = new Set([
+  'name', 'label', 'sortOrder', 'type', 'defaultValue', 'required', 'unit', 'category',
+  'min', 'max', 'step', 'maxLength', 'options', 'integer', 'binding',
+]);
+const BINDING_FIELDS = new Set(['version', 'kind', 'componentId', 'dimension', 'relationship']);
+const RELATIONSHIP_FIELDS = new Set(['kind', 'sourceRole', 'targets']);
+const RELATIONSHIP_TARGET_FIELDS = new Set(['componentId', 'role']);
+const CATALOG_DEFINITION_FIELDS = new Set([
+  'furnitureDefinitionId', 'code', 'name', 'category', 'categoryId', 'version',
+  'schemaRevision', 'definitionHash', 'description', 'imageUrl', 'thumbnailUrl',
+  'previewUrl', 'parameters', 'estimatedPartCount', 'estimatedHardwareCount', 'materialRoles',
+]);
 
 export type FurnitureParameterIssueCode = (typeof FURNITURE_PARAMETER_ISSUE_CODES)[number];
 export type FurnitureParameterValue = string | number | boolean;
@@ -43,6 +60,9 @@ export type FurnitureParameterEvaluation = {
 export function validateFurnitureParameterDefinitions(
   definitions: readonly FurnitureParameter[],
 ): readonly FurnitureParameterDefinitionIssue[] {
+  const shapeIssues = parsedDefinitionShapeIssues(definitions as readonly unknown[]);
+  if (shapeIssues.length !== 0) return shapeIssues;
+
   const issues: FurnitureParameterDefinitionIssue[] = [];
   const seen = new Set<string>();
 
@@ -54,6 +74,8 @@ export function validateFurnitureParameterDefinitions(
     const add = (field: string, message: string): void => {
       issues.push({ parameter: definition.name, field, message });
     };
+
+    addUnknownFields(definition as unknown as Record<string, unknown>, PARAMETER_FIELDS, '', add);
 
     if (definition.name === '' || definition.name.trim() !== definition.name) {
       add('name', 'must be non-empty and must not have surrounding whitespace');
@@ -100,6 +122,15 @@ export function validateFurnitureParameterDefinitions(
       if (definition.unit !== undefined) add('unit', 'unit requires type number');
     }
 
+    if (definition.type === 'string') {
+      if (definition.maxLength === undefined || !Number.isInteger(definition.maxLength) ||
+          definition.maxLength < 1 || definition.maxLength > MAX_FURNITURE_PARAMETER_STRING_LENGTH) {
+        add('maxLength', `must be an integer from 1 to ${MAX_FURNITURE_PARAMETER_STRING_LENGTH}`);
+      }
+    } else if (definition.maxLength !== undefined) {
+      add('maxLength', 'requires type string');
+    }
+
     if (definition.type === 'enum') {
       if (!definition.options || definition.options.length === 0) add('options', 'enum requires at least one option');
       if ((definition.options?.length ?? 0) > 64) add('options', 'enum must contain at most 64 options');
@@ -127,6 +158,7 @@ export function validatePersistedFurnitureParameterDefinitions(
   definitions: readonly FurnitureParameter[],
 ): readonly FurnitureParameterDefinitionIssue[] {
   const issues = [...validatePublishedFurnitureParameterDefinitions(definitions)];
+  if (issues.length !== 0) return issues;
   for (const definition of definitions) {
     if (['widthMm', 'heightMm', 'depthMm'].includes(definition.name)) {
       issues.push({
@@ -150,6 +182,7 @@ export function validatePublishedFurnitureParameterDefinitions(
   definitions: readonly FurnitureParameter[],
 ): readonly FurnitureParameterDefinitionIssue[] {
   const issues = [...validateFurnitureParameterDefinitions(definitions)];
+  if (issues.length !== 0) return issues;
   for (const definition of definitions) {
     const add = (field: string, message: string): void => {
       issues.push({ parameter: definition.name, field, message });
@@ -196,6 +229,45 @@ export function parseFurnitureParameterDefinitions(
   return definitions;
 }
 
+export function parseFurnitureCatalogDefinition(rawJson: string): Readonly<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: '',
+      field: 'definition',
+      message: 'must be valid JSON',
+    }]);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: '',
+      field: 'definition',
+      message: 'must be an object',
+    }]);
+  }
+  const definition = parsed as Record<string, unknown>;
+  const issues: FurnitureParameterDefinitionIssue[] = [];
+  for (const key of Object.keys(definition)) {
+    if (!CATALOG_DEFINITION_FIELDS.has(key)) {
+      issues.push({ parameter: '', field: `definition.${key}`, message: 'is not supported' });
+    }
+  }
+  if (!Array.isArray(definition.parameters)) {
+    issues.push({ parameter: '', field: 'definition.parameters', message: 'must be an array' });
+  } else {
+    issues.push(...parsedDefinitionShapeIssues(definition.parameters));
+    if (issues.length === 0) {
+      issues.push(...validatePublishedFurnitureParameterDefinitions(
+        definition.parameters as readonly FurnitureParameter[],
+      ));
+    }
+  }
+  if (issues.length !== 0) throw new FurnitureParameterDefinitionsError(issues);
+  return definition;
+}
+
 function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParameterDefinitionIssue[] {
   const issues: FurnitureParameterDefinitionIssue[] = [];
   for (const candidate of parsed) {
@@ -215,7 +287,10 @@ function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParam
         issues.push({ parameter, field, message: 'must be a boolean' });
       }
     }
-    for (const field of ['min', 'max', 'step', 'sortOrder'] as const) {
+    for (const key of Object.keys(definition)) {
+      if (!PARAMETER_FIELDS.has(key)) issues.push({ parameter, field: key, message: 'is not supported' });
+    }
+    for (const field of ['min', 'max', 'step', 'sortOrder', 'maxLength'] as const) {
       if (definition[field] !== undefined && typeof definition[field] !== 'number') {
         issues.push({ parameter, field, message: 'must be a number' });
       }
@@ -231,6 +306,11 @@ function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParam
     }
     if (definition.binding !== undefined) {
       const binding = definition.binding as unknown as Record<string, unknown>;
+      for (const key of Object.keys(binding)) {
+        if (!BINDING_FIELDS.has(key)) {
+          issues.push({ parameter, field: `binding.${key}`, message: 'is not supported' });
+        }
+      }
       if (typeof binding.version !== 'number') {
         issues.push({ parameter, field: 'binding.version', message: 'must be a number' });
       }
@@ -249,6 +329,11 @@ function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParam
           continue;
         }
         const relationship = binding.relationship as Record<string, unknown>;
+        for (const key of Object.keys(relationship)) {
+          if (!RELATIONSHIP_FIELDS.has(key)) {
+            issues.push({ parameter, field: `binding.relationship.${key}`, message: 'is not supported' });
+          }
+        }
         for (const field of ['kind', 'sourceRole'] as const) {
           if (typeof relationship[field] !== 'string') {
             issues.push({ parameter, field: `binding.relationship.${field}`, message: 'must be a string' });
@@ -264,6 +349,15 @@ function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParam
             continue;
           }
           const record = target as Record<string, unknown>;
+          for (const key of Object.keys(record)) {
+            if (!RELATIONSHIP_TARGET_FIELDS.has(key)) {
+              issues.push({
+                parameter,
+                field: `binding.relationship.targets.${key}`,
+                message: 'is not supported',
+              });
+            }
+          }
           if (typeof record.componentId !== 'string' || typeof record.role !== 'string') {
             issues.push({
               parameter,
@@ -288,6 +382,7 @@ function validateBinding(
     return;
   }
   const binding = candidate as Record<string, unknown>;
+  addUnknownFields(binding, BINDING_FIELDS, 'binding.', add);
   if (binding.version !== 1) add('binding.version', 'must be 1');
   if (binding.kind === 'componentQuantity') {
     if (definition.type !== 'number' || !definition.integer) {
@@ -306,6 +401,7 @@ function validateBinding(
         return;
       }
       const relationship = binding.relationship as Record<string, unknown>;
+      addUnknownFields(relationship, RELATIONSHIP_FIELDS, 'binding.relationship.', add);
       if (typeof relationship.kind !== 'string' || !relationship.kind.trim()) {
         add('binding.relationship.kind', 'is required');
       }
@@ -321,12 +417,23 @@ function validateBinding(
             continue;
           }
           const record = target as Record<string, unknown>;
+          addUnknownFields(record, RELATIONSHIP_TARGET_FIELDS, 'binding.relationship.targets.', add);
           if (typeof record.componentId !== 'string' || !record.componentId.trim() ||
               typeof record.role !== 'string' || !record.role.trim()) {
             add('binding.relationship.targets', 'componentId and role are required');
           }
         }
       }
+    }
+  } else if (binding.kind === 'componentCondition') {
+    if (definition.type !== 'boolean') {
+      add('binding.kind', 'componentCondition requires a boolean parameter');
+    }
+    if (typeof binding.componentId !== 'string' || !binding.componentId.trim()) {
+      add('binding.componentId', 'is required for componentCondition');
+    }
+    if (binding.dimension !== undefined || binding.relationship !== undefined) {
+      add('binding', 'componentCondition cannot declare dimension or relationship');
     }
   } else if (binding.kind === 'dimensionColumn') {
     if (definition.type !== 'number' || !definition.integer || definition.unit !== 'mm') {
@@ -340,7 +447,18 @@ function validateBinding(
       add('binding', 'dimensionColumn cannot target composition');
     }
   } else {
-    add('binding.kind', 'must be componentQuantity or dimensionColumn');
+    add('binding.kind', 'must be componentQuantity, componentCondition, or dimensionColumn');
+  }
+}
+
+function addUnknownFields(
+  value: Readonly<Record<string, unknown>>,
+  allowed: ReadonlySet<string>,
+  prefix: string,
+  add: (field: string, message: string) => void,
+): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) add(`${prefix}${key}`, 'is not supported');
   }
 }
 
@@ -405,7 +523,8 @@ function validateValue(definition: FurnitureParameter, value: unknown): Furnitur
       return undefined;
     }
     case 'string':
-      return typeof value === 'string' ? undefined : 'PARAMETER_TYPE_INVALID';
+      if (typeof value !== 'string') return 'PARAMETER_TYPE_INVALID';
+      return [...value].length <= (definition.maxLength ?? 0) ? undefined : 'PARAMETER_STRING_TOO_LONG';
     case 'boolean':
       return typeof value === 'boolean' ? undefined : 'PARAMETER_TYPE_INVALID';
     case 'enum':
@@ -421,10 +540,26 @@ function issueDetails(
   const details: Record<string, unknown> = { expectedType: definition.type };
   if (value !== undefined) {
     details.receivedType = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    const receivedValue = safeReceivedValue(value);
+    if (receivedValue !== undefined) details.receivedValue = receivedValue;
+  } else {
+    details.receivedValue = null;
   }
+  if (definition.integer) details.integer = true;
   if (definition.min !== undefined) details.min = definition.min;
   if (definition.max !== undefined) details.max = definition.max;
   if (definition.step !== undefined) details.step = definition.step;
   if (definition.options && definition.options.length !== 0) details.allowedOptions = [...definition.options];
+  if (definition.maxLength !== undefined) details.maxLength = definition.maxLength;
   return details;
+}
+
+function safeReceivedValue(value: unknown): string | number | boolean | null | undefined {
+  if (value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const characters = [...value];
+  if (characters.length <= MAX_FURNITURE_PARAMETER_RECEIVED_VALUE_LENGTH) return value;
+  return `${characters.slice(0, MAX_FURNITURE_PARAMETER_RECEIVED_VALUE_LENGTH).join('')}…`;
 }

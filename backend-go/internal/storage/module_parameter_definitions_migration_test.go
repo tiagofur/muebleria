@@ -117,7 +117,7 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 	store, orgA, orgB := isolationSetup(t)
 	ctx := context.Background()
 	for _, row := range []struct{ org, id, code, defaultValue string }{{orgA, "f1970000-0000-0000-0000-00000000000a", "PARAM-A", "alpha"}, {orgB, "f1970000-0000-0000-0000-00000000000b", "PARAM-B", "beta"}} {
-		raw := `[{"name":"label","label":"Label","type":"string","defaultValue":"` + row.defaultValue + `","required":false,"category":"metadata"}]`
+		raw := `[{"name":"label","label":"Label","type":"string","defaultValue":"` + row.defaultValue + `","required":false,"category":"metadata","maxLength":80}]`
 		if _, err := store.Pool.Exec(ctx, `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES ($1,$2,$3,$3,$4::jsonb)`, row.id, row.org, row.code, raw); err != nil {
 			t.Fatal(err)
 		}

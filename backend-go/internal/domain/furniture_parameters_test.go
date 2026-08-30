@@ -2,9 +2,11 @@ package domain
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -16,12 +18,13 @@ func TestInvalidFurnitureParameterDefinitionCorpus(t *testing.T) {
 	var corpus struct {
 		SchemaVersion int `json:"schemaVersion"`
 		Cases         []struct {
-			ID             string                         `json:"id"`
-			Boundary       string                         `json:"boundary"`
-			RawJSON        string                         `json:"rawJson"`
-			Definitions    []FurnitureParameterDefinition `json:"definitions"`
-			ExpectedCode   string                         `json:"expectedCode"`
-			ExpectedFields []string                       `json:"expectedFields"`
+			ID                string                         `json:"id"`
+			Boundary          string                         `json:"boundary"`
+			RawJSON           string                         `json:"rawJson"`
+			RawDefinitionJSON string                         `json:"rawDefinitionJson"`
+			Definitions       []FurnitureParameterDefinition `json:"definitions"`
+			ExpectedCode      string                         `json:"expectedCode"`
+			ExpectedFields    []string                       `json:"expectedFields"`
 		} `json:"cases"`
 	}
 	if err := json.Unmarshal(raw, &corpus); err != nil {
@@ -32,15 +35,19 @@ func TestInvalidFurnitureParameterDefinitionCorpus(t *testing.T) {
 	}
 	for _, testCase := range corpus.Cases {
 		t.Run(testCase.ID, func(t *testing.T) {
+			if testCase.RawDefinitionJSON != "" {
+				t.Skip("catalog definition envelope is exercised by the API corpus test")
+			}
 			issues := []FurnitureParameterDefinitionIssue{}
 			if testCase.RawJSON != "" {
-				var definitions []FurnitureParameterDefinition
-				if err := json.Unmarshal([]byte(testCase.RawJSON), &definitions); err != nil {
-					issues = append(issues, FurnitureParameterDefinitionIssue{Field: "definitions", Message: err.Error()})
-				} else if testCase.Boundary == "published" {
-					issues = ValidatePublishedFurnitureParameterDefinitions(definitions)
-				} else {
-					issues = ValidatePersistedFurnitureParameterDefinitions(definitions)
+				boundary := FurnitureParameterDefinitionBoundaryPersisted
+				if testCase.Boundary == "published" {
+					boundary = FurnitureParameterDefinitionBoundaryPublished
+				}
+				_, err := DecodeFurnitureParameterDefinitions([]byte(testCase.RawJSON), boundary)
+				var definitionErr *FurnitureParameterDefinitionsError
+				if errors.As(err, &definitionErr) {
+					issues = definitionErr.Issues
 				}
 			} else if testCase.Boundary == "published" {
 				issues = ValidatePublishedFurnitureParameterDefinitions(testCase.Definitions)
@@ -68,7 +75,7 @@ func TestInvalidFurnitureParameterDefinitionCorpus(t *testing.T) {
 func TestFurnitureParameterDefinitionJSONRoundTrip(t *testing.T) {
 	raw := []byte(`[
 		{"name":"widthMm","label":"Width","type":"number","defaultValue":600,"required":true,"unit":"mm","category":"dimension","min":300,"max":1200,"step":10,"integer":true},
-		{"name":"note","label":"Note","type":"string","defaultValue":"","required":false,"category":"configuration"},
+		{"name":"note","label":"Note","type":"string","defaultValue":"","required":false,"category":"configuration","maxLength":80},
 		{"name":"hasBack","label":"Has back","type":"boolean","defaultValue":false,"required":false,"category":"configuration"},
 		{"name":"doorStyle","label":"Door style","type":"enum","defaultValue":"slab","required":true,"category":"style","options":["slab","shaker"]}
 	]`)
@@ -330,6 +337,21 @@ func TestFurnitureParameterDefinitionHashIsCanonicalAndCoversRulesAndDefaults(t 
 	if hash == first {
 		t.Fatalf("changing enum options reused definition hash %s", hash)
 	}
+	maxLength := 80
+	label := FurnitureParameterDefinition{Name: "label", Label: "Label", Type: FurnitureParameterTypeString, DefaultValue: "", Category: FurnitureParameterCategoryMetadata, MaxLength: &maxLength}
+	stringHash, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{label})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedMax := 81
+	label.MaxLength = &changedMax
+	changedHash, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{label})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stringHash == changedHash {
+		t.Fatal("changing maxLength reused definition hash")
+	}
 }
 
 func TestFurnitureParameterDefinitionHashRejectsInvalidDefinitions(t *testing.T) {
@@ -339,6 +361,75 @@ func TestFurnitureParameterDefinitionHashRejectsInvalidDefinitions(t *testing.T)
 	}
 	if _, ok := err.(*FurnitureParameterDefinitionsError); !ok {
 		t.Fatalf("expected typed definition error, got %T", err)
+	}
+}
+
+func TestFurnitureParameterStringLengthAndSafeIssueDetails(t *testing.T) {
+	maxLength := 4
+	definition := FurnitureParameterDefinition{Name: "label", Label: "Label", Type: FurnitureParameterTypeString, DefaultValue: "", Category: FurnitureParameterCategoryMetadata, MaxLength: &maxLength}
+	for _, tt := range []struct {
+		name, value string
+		wantCode    FurnitureParameterIssueCode
+	}{{"boundary", "1234", ""}, {"off by one", "12345", FurnitureParameterStringTooLong}} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, issues, err := EvaluateFurnitureParameters([]FurnitureParameterDefinition{definition}, map[string]any{"label": tt.value})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.wantCode == "" {
+				if len(issues) != 0 {
+					t.Fatalf("unexpected issues: %+v", issues)
+				}
+				return
+			}
+			if len(issues) != 1 || issues[0].Code != tt.wantCode || issues[0].Details["maxLength"] != 4 {
+				t.Fatalf("unexpected issue: %+v", issues)
+			}
+		})
+	}
+	long := strings.Repeat("á", MaxFurnitureParameterReceivedValueLength+20)
+	_, issues, err := EvaluateFurnitureParameters([]FurnitureParameterDefinition{definition}, map[string]any{"label": long})
+	if err != nil {
+		t.Fatal(err)
+	}
+	received, ok := issues[0].Details["receivedValue"].(string)
+	if !ok || len([]rune(received)) != MaxFurnitureParameterReceivedValueLength+1 || !strings.HasSuffix(received, "…") {
+		t.Fatalf("receivedValue not safely truncated: %#v", issues[0].Details)
+	}
+	integer := numberDefinition("count", 1, nil, nil, nil)
+	integer.Integer = true
+	_, issues, err = EvaluateFurnitureParameters([]FurnitureParameterDefinition{integer}, map[string]any{"count": 1.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 1 || issues[0].Details["integer"] != true || issues[0].Details["receivedValue"] != 1.5 {
+		t.Fatalf("integer details incomplete: %+v", issues)
+	}
+	_, issues, err = EvaluateFurnitureParameters([]FurnitureParameterDefinition{definition}, map[string]any{"label": map[string]any{"secret": "do-not-echo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := issues[0].Details["receivedValue"]; present {
+		t.Fatalf("object value leaked into issue details: %+v", issues)
+	}
+}
+
+func TestModuleFurnitureParameterConsumersRejectAmbiguousEntriesAndTargets(t *testing.T) {
+	quantity := FurnitureParameterDefinition{Name: "count", Label: "Count", Type: FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Integer: true, Unit: FurnitureParameterUnitCount, Category: FurnitureParameterCategoryConfiguration, Binding: &FurnitureParameterBinding{Version: 1, Kind: FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shared"}}
+	condition := FurnitureParameterDefinition{Name: "visible", Label: "Visible", Type: FurnitureParameterTypeBoolean, DefaultValue: true, Required: true, Category: FurnitureParameterCategoryConfiguration, Binding: &FurnitureParameterBinding{Version: 1, Kind: FurnitureParameterBindingComponentCondition, ComponentID: "comp-shared"}}
+	for _, definition := range []FurnitureParameterDefinition{quantity, condition} {
+		module := Module{ParameterDefinitions: []FurnitureParameterDefinition{definition}, Components: []ComponentInstance{{ComponentID: "comp-shared", Quantity: 1}, {ComponentID: "comp-shared", Quantity: 1}}}
+		issues := ValidateModuleFurnitureParameterConsumers(module, Catalog{})
+		if !hasDefinitionIssueField(issues, "binding.componentId") {
+			t.Fatalf("%s accepted duplicate component entries: %+v", definition.Binding.Kind, issues)
+		}
+	}
+	quantity.Binding.Relationship = &FurnitureParameterRelationshipBinding{Kind: "shelf-support", SourceRole: "shelf-edge", Targets: []FurnitureParameterRelationshipTarget{{ComponentID: "comp-side", Role: "inside-face"}}}
+	module := Module{ParameterDefinitions: []FurnitureParameterDefinition{quantity}, Components: []ComponentInstance{{ComponentID: "comp-shared", Quantity: 1}}, StructureID: "structure"}
+	catalog := Catalog{Structures: []Structure{{ID: "structure", Components: []ComponentInstance{{ComponentID: "comp-side", Quantity: 2}}}}}
+	issues := ValidateModuleFurnitureParameterConsumers(module, catalog)
+	if !hasDefinitionIssueField(issues, "binding.relationship.targets") {
+		t.Fatalf("ambiguous relationship target accepted: %+v", issues)
 	}
 }
 
@@ -357,13 +448,18 @@ func numberDefinition(name string, defaultValue float64, min, max, step *float64
 }
 
 func scalarDefinition(name string, parameterType FurnitureParameterType, defaultValue any) FurnitureParameterDefinition {
-	return FurnitureParameterDefinition{
+	definition := FurnitureParameterDefinition{
 		Name:         name,
 		Label:        name,
 		Type:         parameterType,
 		DefaultValue: defaultValue,
 		Category:     FurnitureParameterCategoryConfiguration,
 	}
+	if parameterType == FurnitureParameterTypeString {
+		maxLength := 80
+		definition.MaxLength = &maxLength
+	}
+	return definition
 }
 
 func enumDefinition(name, defaultValue string, options []string) FurnitureParameterDefinition {

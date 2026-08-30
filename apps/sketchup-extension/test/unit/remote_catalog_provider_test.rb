@@ -78,7 +78,12 @@ class RemoteCatalogProviderTest < Minitest::Test
           { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number',
             'defaultValue' => 600, 'min' => 450, 'max' => 900, 'step' => 10, 'unit' => 'mm',
             'category' => 'dimension', 'required' => true, 'integer' => true,
-            'binding' => { 'version' => 1, 'kind' => 'dimensionColumn', 'dimension' => 'widthMm' } }
+            'binding' => { 'version' => 1, 'kind' => 'dimensionColumn', 'dimension' => 'widthMm' } },
+          { 'name' => 'hasBackPanel', 'label' => 'Respaldo', 'type' => 'boolean',
+            'defaultValue' => true, 'category' => 'configuration', 'required' => true,
+            'binding' => { 'version' => 1, 'kind' => 'componentCondition', 'componentId' => 'comp-back' } },
+          { 'name' => 'customerNote', 'label' => 'Nota', 'type' => 'string',
+            'defaultValue' => '', 'category' => 'metadata', 'required' => false, 'maxLength' => 80 }
         ]
       },
       '22222222-2222-2222-2222-222222222222' => {
@@ -125,6 +130,10 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal true, param['integer']
     assert_equal 'dimension', param['category']
     assert_equal 'dimensionColumn', param.dig('binding', 'kind')
+    assert_equal 'componentCondition', base['parameters'][1].dig('binding', 'kind')
+    assert_equal 'comp-back', base['parameters'][1].dig('binding', 'componentId')
+    assert_equal '', base['parameters'][2]['defaultValue']
+    assert_equal 80, base['parameters'][2]['maxLength']
     assert_equal '11111111-1111-1111-1111-111111111111',
                  provider.find_definition('11111111-1111-1111-1111-111111111111')['furniture_definition_id']
     assert_equal 1, provider.all_presets.length

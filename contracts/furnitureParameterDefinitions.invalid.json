@@ -19,7 +19,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "duplicate",
@@ -27,7 +28,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         }
       ],
       "expectedCode": "PARAMETER_DEFINITION_INVALID",
@@ -97,7 +99,8 @@
             "version": 1,
             "kind": "dimensionColumn",
             "dimension": "heightMm"
-          }
+          },
+          "maxLength": 80
         }
       ],
       "expectedCode": "PARAMETER_DEFINITION_INVALID",
@@ -172,7 +175,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata01",
@@ -180,7 +184,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata02",
@@ -188,7 +193,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata03",
@@ -196,7 +202,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata04",
@@ -204,7 +211,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata05",
@@ -212,7 +220,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata06",
@@ -220,7 +229,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata07",
@@ -228,7 +238,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata08",
@@ -236,7 +247,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata09",
@@ -244,7 +256,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata10",
@@ -252,7 +265,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata11",
@@ -260,7 +274,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata12",
@@ -268,7 +283,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata13",
@@ -276,7 +292,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata14",
@@ -284,7 +301,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata15",
@@ -292,7 +310,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata16",
@@ -300,7 +319,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata17",
@@ -308,7 +328,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata18",
@@ -316,7 +337,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata19",
@@ -324,7 +346,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata20",
@@ -332,7 +355,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata21",
@@ -340,7 +364,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata22",
@@ -348,7 +373,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata23",
@@ -356,7 +382,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata24",
@@ -364,7 +391,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata25",
@@ -372,7 +400,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata26",
@@ -380,7 +409,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata27",
@@ -388,7 +418,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata28",
@@ -396,7 +427,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata29",
@@ -404,7 +436,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata30",
@@ -412,7 +445,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata31",
@@ -420,7 +454,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata32",
@@ -428,7 +463,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata33",
@@ -436,7 +472,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata34",
@@ -444,7 +481,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata35",
@@ -452,7 +490,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata36",
@@ -460,7 +499,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata37",
@@ -468,7 +508,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata38",
@@ -476,7 +517,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata39",
@@ -484,7 +526,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata40",
@@ -492,7 +535,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata41",
@@ -500,7 +544,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata42",
@@ -508,7 +553,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata43",
@@ -516,7 +562,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata44",
@@ -524,7 +571,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata45",
@@ -532,7 +580,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata46",
@@ -540,7 +589,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata47",
@@ -548,7 +598,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata48",
@@ -556,7 +607,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata49",
@@ -564,7 +616,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata50",
@@ -572,7 +625,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata51",
@@ -580,7 +634,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata52",
@@ -588,7 +643,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata53",
@@ -596,7 +652,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata54",
@@ -604,7 +661,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata55",
@@ -612,7 +670,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata56",
@@ -620,7 +679,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata57",
@@ -628,7 +688,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata58",
@@ -636,7 +697,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata59",
@@ -644,7 +706,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata60",
@@ -652,7 +715,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata61",
@@ -660,7 +724,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata62",
@@ -668,7 +733,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata63",
@@ -676,7 +742,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         },
         {
           "name": "metadata64",
@@ -684,7 +751,8 @@
           "type": "string",
           "required": false,
           "category": "metadata",
-          "sortOrder": 0
+          "sortOrder": 0,
+          "maxLength": 80
         }
       ],
       "expectedCode": "PARAMETER_DEFINITION_INVALID",
@@ -767,6 +835,110 @@
       "expectedTsFields": [
         "binding.relationship.kind",
         "binding.relationship.sourceRole"
+      ]
+    },
+    {
+      "id": "unknown-definition-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawDefinitionJson": "{\"furnitureDefinitionId\":\"m1\",\"code\":\"M1\",\"name\":\"Module\",\"category\":\"Test\",\"version\":\"1.0.0\",\"schemaRevision\":1,\"definitionHash\":\"sha256-test\",\"parameters\":[],\"unknownDefinition\":true}"
+    },
+    {
+      "id": "unknown-parameter-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"flag\",\"label\":\"Flag\",\"type\":\"boolean\",\"defaultValue\":true,\"required\":true,\"category\":\"configuration\",\"binding\":{\"version\":1,\"kind\":\"componentCondition\",\"componentId\":\"comp-back\"},\"unknownParameter\":true}]"
+    },
+    {
+      "id": "unknown-binding-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"flag\",\"label\":\"Flag\",\"type\":\"boolean\",\"defaultValue\":true,\"required\":true,\"category\":\"configuration\",\"binding\":{\"version\":1,\"kind\":\"componentCondition\",\"componentId\":\"comp-back\",\"unknownBinding\":true}}]"
+    },
+    {
+      "id": "unknown-relationship-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"count\",\"label\":\"Count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf-edge\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"inside-face\"}],\"unknownRelationship\":true}}}]"
+    },
+    {
+      "id": "unknown-relationship-target-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"count\",\"label\":\"Count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf-edge\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"inside-face\",\"unknownTarget\":true}]}}}]"
+    },
+    {
+      "id": "component-condition-wrong-type",
+      "boundary": "both",
+      "definitions": [
+        {
+          "name": "hasBackPanel",
+          "label": "Has back panel",
+          "type": "string",
+          "defaultValue": "true",
+          "required": true,
+          "category": "configuration",
+          "maxLength": 8,
+          "binding": {
+            "version": 1,
+            "kind": "componentCondition",
+            "componentId": "comp-back"
+          }
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.kind"
+      ]
+    },
+    {
+      "id": "string-max-length-missing",
+      "boundary": "both",
+      "definitions": [
+        {
+          "name": "label",
+          "label": "Label",
+          "type": "string",
+          "required": false,
+          "category": "metadata"
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "maxLength"
+      ]
+    },
+    {
+      "id": "string-max-length-limit",
+      "boundary": "both",
+      "definitions": [
+        {
+          "name": "label",
+          "label": "Label",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "maxLength": 513
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "maxLength"
       ]
     }
   ]
