@@ -1,8 +1,12 @@
 package domain
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -79,6 +83,12 @@ const (
 	FurnitureParameterEnumInvalid FurnitureParameterIssueCode = "PARAMETER_ENUM_INVALID"
 )
 
+type FurnitureParameterIssue struct {
+	Code      FurnitureParameterIssueCode `json:"code"`
+	Parameter string                      `json:"parameter"`
+	Message   string                      `json:"message"`
+}
+
 func ValidateFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinitionIssue {
 	issues := make([]FurnitureParameterDefinitionIssue, 0)
 	seen := make(map[string]struct{}, len(definitions))
@@ -149,6 +159,67 @@ func ValidateFurnitureParameterDefinitions(definitions []FurnitureParameterDefin
 	}
 
 	return issues
+}
+
+func EvaluateFurnitureParameters(definitions []FurnitureParameterDefinition, provided map[string]any) (map[string]any, []FurnitureParameterIssue, error) {
+	if definitionIssues := ValidateFurnitureParameterDefinitions(definitions); len(definitionIssues) != 0 {
+		return nil, nil, &FurnitureParameterDefinitionsError{Issues: definitionIssues}
+	}
+
+	ordered := sortedFurnitureParameterDefinitions(definitions)
+	declared := make(map[string]FurnitureParameterDefinition, len(ordered))
+	for _, definition := range ordered {
+		declared[definition.Name] = definition
+	}
+
+	issues := make([]FurnitureParameterIssue, 0)
+	unknown := make([]string, 0)
+	for name := range provided {
+		if _, ok := declared[name]; !ok {
+			unknown = append(unknown, name)
+		}
+	}
+	sort.Strings(unknown)
+	for _, name := range unknown {
+		issues = append(issues, furnitureParameterIssue(FurnitureParameterUnknown, name))
+	}
+
+	normalized := make(map[string]any, len(ordered))
+	for _, definition := range ordered {
+		value, present := provided[definition.Name]
+		if !present {
+			if definition.DefaultValue != nil {
+				normalized[definition.Name] = definition.DefaultValue
+			} else if definition.Required {
+				issues = append(issues, furnitureParameterIssue(FurnitureParameterRequired, definition.Name))
+			}
+			continue
+		}
+
+		if code := validateFurnitureParameterValue(definition, value); code != "" {
+			issues = append(issues, furnitureParameterIssue(code, definition.Name))
+			continue
+		}
+		normalized[definition.Name] = value
+	}
+
+	return normalized, issues, nil
+}
+
+func FurnitureParameterDefinitionHash(definitions []FurnitureParameterDefinition) (string, error) {
+	if issues := ValidateFurnitureParameterDefinitions(definitions); len(issues) != 0 {
+		return "", &FurnitureParameterDefinitionsError{Issues: issues}
+	}
+
+	var payload bytes.Buffer
+	encoder := json.NewEncoder(&payload)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(sortedFurnitureParameterDefinitions(definitions)); err != nil {
+		return "", fmt.Errorf("encode furniture parameter definitions: %w", err)
+	}
+	canonical := bytes.TrimSuffix(payload.Bytes(), []byte("\n"))
+	sum := sha256.Sum256(canonical)
+	return fmt.Sprintf("sha256-%x", sum), nil
 }
 
 func validateNumericDefinition(definition FurnitureParameterDefinition, add func(string, string)) {
@@ -222,6 +293,24 @@ func validateFurnitureParameterValue(definition FurnitureParameterDefinition, va
 		return FurnitureParameterTypeInvalid
 	}
 	return ""
+}
+
+func furnitureParameterIssue(code FurnitureParameterIssueCode, name string) FurnitureParameterIssue {
+	messages := map[FurnitureParameterIssueCode]string{
+		FurnitureParameterUnknown:     "parameter is not declared by the furniture definition",
+		FurnitureParameterRequired:    "required parameter is missing and has no default",
+		FurnitureParameterTypeInvalid: "parameter value has the wrong JSON type",
+		FurnitureParameterOutOfRange:  "numeric parameter is outside its allowed range",
+		FurnitureParameterStepInvalid: "numeric parameter does not align with its allowed step",
+		FurnitureParameterEnumInvalid: "enum parameter is not one of its allowed options",
+	}
+	return FurnitureParameterIssue{Code: code, Parameter: name, Message: messages[code]}
+}
+
+func sortedFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinition {
+	ordered := append([]FurnitureParameterDefinition(nil), definitions...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Name < ordered[j].Name })
+	return ordered
 }
 
 func validFurnitureParameterType(parameterType FurnitureParameterType) bool {

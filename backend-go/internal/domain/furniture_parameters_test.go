@@ -92,6 +92,197 @@ func TestValidateFurnitureParameterDefinitions(t *testing.T) {
 	}
 }
 
+func TestEvaluateFurnitureParametersAppliesDefaultsAndNormalizesStrictJSONScalars(t *testing.T) {
+	f := func(value float64) *float64 { return &value }
+	count := numberDefinition("shelfCount", 2, f(0), f(10), f(1))
+	count.Integer = true
+	count.Unit = FurnitureParameterUnitCount
+	definitions := []FurnitureParameterDefinition{
+		numberDefinition("widthMm", 600, f(300), f(1200), f(10)),
+		count,
+		scalarDefinition("note", FurnitureParameterTypeString, "factory default"),
+		scalarDefinition("hasBack", FurnitureParameterTypeBoolean, true),
+		enumDefinition("doorStyle", "slab", []string{"slab", "shaker"}),
+	}
+	provided := map[string]any{
+		"widthMm":   float64(750),
+		"hasBack":   false,
+		"doorStyle": "shaker",
+	}
+
+	normalized, issues, err := EvaluateFurnitureParameters(definitions, provided)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("valid values rejected: %+v", issues)
+	}
+	want := map[string]any{
+		"widthMm":    float64(750),
+		"shelfCount": float64(2),
+		"note":       "factory default",
+		"hasBack":    false,
+		"doorStyle":  "shaker",
+	}
+	if !reflect.DeepEqual(normalized, want) {
+		t.Fatalf("normalized parameters mismatch:\n got %#v\nwant %#v", normalized, want)
+	}
+	if !reflect.DeepEqual(provided, map[string]any{"widthMm": float64(750), "hasBack": false, "doorStyle": "shaker"}) {
+		t.Fatalf("evaluation mutated caller input: %#v", provided)
+	}
+}
+
+func TestEvaluateFurnitureParametersReturnsStableSeparatedCodes(t *testing.T) {
+	f := func(value float64) *float64 { return &value }
+	requiredString := scalarDefinition("requiredString", FurnitureParameterTypeString, nil)
+	requiredString.Required = true
+	count := numberDefinition("shelfCount", 2, f(0), f(10), f(1))
+	count.Integer = true
+	count.Unit = FurnitureParameterUnitCount
+	definitions := []FurnitureParameterDefinition{
+		requiredString,
+		numberDefinition("widthMm", 600, f(300), f(1200), f(10)),
+		numberDefinition("angle", 0, f(0), f(90), f(2.5)),
+		count,
+		scalarDefinition("note", FurnitureParameterTypeString, ""),
+		scalarDefinition("hasBack", FurnitureParameterTypeBoolean, true),
+		enumDefinition("doorStyle", "slab", []string{"slab", "shaker"}),
+	}
+	provided := map[string]any{
+		"unknown":    "value",
+		"widthMm":    float64(200),
+		"angle":      float64(11),
+		"shelfCount": float64(2.5),
+		"note":       true,
+		"hasBack":    "false",
+		"doorStyle":  "raised",
+	}
+
+	_, issues, err := EvaluateFurnitureParameters(definitions, provided)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]FurnitureParameterIssueCode{
+		"unknown":        FurnitureParameterUnknown,
+		"requiredString": FurnitureParameterRequired,
+		"widthMm":        FurnitureParameterOutOfRange,
+		"angle":          FurnitureParameterStepInvalid,
+		"shelfCount":     FurnitureParameterTypeInvalid,
+		"note":           FurnitureParameterTypeInvalid,
+		"hasBack":        FurnitureParameterTypeInvalid,
+		"doorStyle":      FurnitureParameterEnumInvalid,
+	}
+	if len(issues) != len(want) {
+		t.Fatalf("issue count mismatch: got %+v want %+v", issues, want)
+	}
+	for _, issue := range issues {
+		if want[issue.Parameter] != issue.Code {
+			t.Errorf("%s code = %s, want %s", issue.Parameter, issue.Code, want[issue.Parameter])
+		}
+	}
+}
+
+func TestEvaluateFurnitureParametersDoesNotCoerceValues(t *testing.T) {
+	f := func(value float64) *float64 { return &value }
+	definitions := []FurnitureParameterDefinition{
+		numberDefinition("widthMm", 600, f(300), f(1200), f(10)),
+		scalarDefinition("hasBack", FurnitureParameterTypeBoolean, true),
+		enumDefinition("doorStyle", "slab", []string{"slab", "shaker"}),
+	}
+	tests := []struct {
+		name  string
+		key   string
+		value any
+	}{
+		{name: "Go int is not JSON number representation", key: "widthMm", value: 600},
+		{name: "numeric string", key: "widthMm", value: "600"},
+		{name: "boolean string", key: "hasBack", value: "true"},
+		{name: "enum number", key: "doorStyle", value: float64(1)},
+		{name: "null", key: "hasBack", value: nil},
+		{name: "array", key: "doorStyle", value: []any{"slab"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, issues, err := EvaluateFurnitureParameters(definitions, map[string]any{tt.key: tt.value})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(issues) != 1 || issues[0].Code != FurnitureParameterTypeInvalid || issues[0].Parameter != tt.key {
+				t.Fatalf("expected strict wrong-type issue, got %+v", issues)
+			}
+		})
+	}
+}
+
+func TestFurnitureParameterDefinitionHashIsCanonicalAndCoversRulesAndDefaults(t *testing.T) {
+	f := func(value float64) *float64 { return &value }
+	width := numberDefinition("widthMm", 600, f(300), f(1200), f(10))
+	style := enumDefinition("doorStyle", "slab", []string{"slab", "shaker"})
+
+	first, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{width, style})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reordered, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{style, width})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != reordered {
+		t.Fatalf("definition order changed canonical hash: %s != %s", first, reordered)
+	}
+	if len(first) != len("sha256-")+64 || first[:len("sha256-")] != "sha256-" {
+		t.Fatalf("unexpected hash format: %q", first)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*FurnitureParameterDefinition)
+	}{
+		{name: "default", mutate: func(d *FurnitureParameterDefinition) { d.DefaultValue = float64(610) }},
+		{name: "minimum", mutate: func(d *FurnitureParameterDefinition) { d.Min = f(200) }},
+		{name: "maximum", mutate: func(d *FurnitureParameterDefinition) { d.Max = f(1300) }},
+		{name: "step", mutate: func(d *FurnitureParameterDefinition) { d.Step = f(5) }},
+		{name: "required", mutate: func(d *FurnitureParameterDefinition) { d.Required = !d.Required }},
+		{name: "integer", mutate: func(d *FurnitureParameterDefinition) { d.Integer = true }},
+		{name: "unit", mutate: func(d *FurnitureParameterDefinition) { d.Unit = FurnitureParameterUnitDeg }},
+		{name: "category", mutate: func(d *FurnitureParameterDefinition) { d.Category = FurnitureParameterCategoryConfiguration }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			changed := width
+			tt.mutate(&changed)
+			hash, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{changed, style})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hash == first {
+				t.Fatalf("changing %s reused definition hash %s", tt.name, hash)
+			}
+		})
+	}
+
+	changedOptions := style
+	changedOptions.Options = []string{"slab", "shaker", "raised"}
+	hash, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{width, changedOptions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash == first {
+		t.Fatalf("changing enum options reused definition hash %s", hash)
+	}
+}
+
+func TestFurnitureParameterDefinitionHashRejectsInvalidDefinitions(t *testing.T) {
+	_, err := FurnitureParameterDefinitionHash([]FurnitureParameterDefinition{{Name: "bad", Label: "Bad", Type: FurnitureParameterTypeEnum, Category: FurnitureParameterCategoryStyle}})
+	if err == nil {
+		t.Fatal("expected invalid definition error")
+	}
+	if _, ok := err.(*FurnitureParameterDefinitionsError); !ok {
+		t.Fatalf("expected typed definition error, got %T", err)
+	}
+}
+
 func numberDefinition(name string, defaultValue float64, min, max, step *float64) FurnitureParameterDefinition {
 	return FurnitureParameterDefinition{
 		Name:         name,
