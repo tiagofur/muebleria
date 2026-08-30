@@ -4990,9 +4990,10 @@
         "docs/architecture/sketchup-authoring-interaction-contract.md",
         "docs/sketchup-excellence-execution-plan.md",
         "contracts/sketchupAuthoringResolve.schema.json",
-        "contracts/sketchupAuthoringResolve.contract.json"
+        "contracts/sketchupAuthoringResolve.contract.json",
+        "progress/review_F195.md"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F161",
         "F162",
@@ -5001,7 +5002,8 @@
       ],
       "review_notes": [
         "PR #481 r1: la revision pidio correcciones (reproducibilidad del catalogo pineado, contratos paralelos TS/Go/Ruby, preflight subset sin claim del modelo #347, fingerprint de manufactura real, reglas tecnicas versionadas por codigo, aceptaciones parciales, rotation/handedness aparentes, parser Ruby fail-closed y TestUp real). Corregidas en r2 con evidencia de host.",
-        "PR #481 r2: la re-revision encontro TOCTOU definition/catalog, falta de schema ejecutable y response validator TS, parser Ruby aun fail-open, precision 0.25/UTF-8 divergentes, reglas industriales fuera del pin, claims demasiado amplios de parametros y gaps de transporte. Corregidos en r3: un snapshot autoritativo, schema JSON + validators estrictos, SHA-256, rule pin, TestUp corrupt-envelope y alcance parametrico honesto con follow-up #483. F195 permanece in_progress hasta aprobacion independiente."
+        "PR #481 r2: la re-revision encontro TOCTOU definition/catalog, falta de schema ejecutable y response validator TS, parser Ruby aun fail-open, precision 0.25/UTF-8 divergentes, reglas industriales fuera del pin, claims demasiado amplios de parametros y gaps de transporte. Corregidos en r3: un snapshot autoritativo, schema JSON + validators estrictos, SHA-256, rule pin, TestUp corrupt-envelope y alcance parametrico honesto con follow-up #483. F195 permanece in_progress hasta aprobacion independiente.",
+        "PR #481 r5: revisión independiente APPROVED en aa812ca0 sobre 1d1c90cb; init completo, schema/fixture cross-runtime, router real, UTF-8 + precisionMm=0.25, Ruby fail-closed, TestUp 5/5/50, CI remota y readback verdes."
       ]
     }
   ]

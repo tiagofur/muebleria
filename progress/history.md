@@ -1785,3 +1785,24 @@ locks advisory transaccionales ordenados organización→membership.
 Evidencia final: `./init.sh`, OpenAPI drift, TypeScript, Go serializado, runtime-role
 SQL, carreras concurrentes, pilot HTTP/PostgreSQL, UI y Ruby/RBZ verdes. La revisión
 independiente quedó **APPROVED** en `progress/review_F196.md`.
+
+---
+
+## F195 — Contrato versionado de resolve de autoría rica para SketchUp (#477) — 2026-08-30
+
+Rama `codex/477-rich-authoring-resolve`, PR #481. Se cerró el boundary stateless
+`granete.sketchup-authoring-resolve.v1` entre TypeScript, Go y Ruby: schema JSON
+canónico, snapshot/pin único de catálogo + reglas industriales, resolve de
+ocurrencias/relationships/HardwarePlacement, fingerprint SHA-256 UTF-8,
+transporte tipado y parser SketchUp fail-closed antes de cualquier mutación host.
+
+Las revisiones r1/r2 detectaron y se corrigieron TOCTOU de definición, shapes
+paralelos, preflight/fingerprint sobredimensionados, reglas fuera del pin,
+redondeo por step, divergencia Unicode, 405 bare del ServeMux, códigos imposibles
+y correlación/coherencia Ruby. El alcance de parámetros tipados generales quedó
+honestamente separado en #483.
+
+Evidencia final: `./init.sh` completo verde; scenario compartido
+`10-unicode-quarter-step` consumido por Go/TS/Ruby; TestUp real 5/5 con 50
+assertions contra RBZ `17ae1bfa…`; seis checks CI remotos verdes. La revisión
+independiente quedó **APPROVED** en `progress/review_F195.md` (`aa812ca0`).
