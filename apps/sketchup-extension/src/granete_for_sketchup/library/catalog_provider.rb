@@ -279,7 +279,7 @@ module Granete
             { 'method' => 'POST', 'path' => '/furniture/authoring/resolve', 'body' => request_payload },
             authorization_header: @auth_provider.authorization_header
           )
-          AuthoringResolveTransport.interpret(response, logger: @logger)
+          AuthoringResolveTransport.interpret(response, expected_request: request_payload, logger: @logger)
         rescue Transport::RequestError => e
           @logger&.info('authoring_resolve_remote_failed', error: e)
           raise AuthoringResolveError, "Error de conexión al resolver autoría: #{e.message}"

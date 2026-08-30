@@ -217,7 +217,13 @@ describe('#477 shared authoring resolve contract fixture', () => {
         // The Go rejection code must be one the TS validator also knows how
         // to produce from the same request (schema/field/content rules).
         if (!scenario.query) {
-          expect(goCodes.some((code) => tsCodes.has(code)), `${scenario.id}: go=${goCodes} ts=${[...tsCodes]}`).toBe(true);
+          // Definition membership/range is authoritative in Go because the
+          // transport-only TS validator has no catalog definition. It accepts
+          // finite scalar parameter shapes and deliberately does not hardcode
+          // a catalog's parameter names.
+          if (!goCodes.every((code) => code === 'PARAMETER_INVALID')) {
+            expect(goCodes.some((code) => tsCodes.has(code)), `${scenario.id}: go=${goCodes} ts=${[...tsCodes]}`).toBe(true);
+          }
         }
       }
     }

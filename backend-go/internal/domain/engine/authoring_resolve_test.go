@@ -729,9 +729,7 @@ func TestAuthoringResolveDrillingConflictBlocksPreflight(t *testing.T) {
 	}
 }
 
-// Parity anchors for the shared- fixture math: these are the TS semantics
-// (jointFastenerPositions + fnv1a fingerprint) pinned on values the contract
-// fixture reuses.
+// Parity anchors for the shared fixture math.
 func TestJointFastenerPositionsParityAnchors(t *testing.T) {
 	// span 542, margin 50, max 512, grid 32 → [50, 492]
 	got := jointFastenerPositions(542, 50, 512, 32)
@@ -742,6 +740,68 @@ func TestJointFastenerPositionsParityAnchors(t *testing.T) {
 	got = jointFastenerPositions(60, 50, 512, 32)
 	if len(got) != 1 || got[0] != 32 {
 		t.Fatalf("narrow span positions = %v, want [32]", got)
+	}
+}
+
+func TestRoundToPrecisionUsesArbitraryStep(t *testing.T) {
+	tests := []struct {
+		value float64
+		want  float64
+	}{
+		{10.12, 10},
+		{10.13, 10.25},
+		{-0.13, -0.25},
+		{0.375, 0.5},
+	}
+	for _, tc := range tests {
+		if got := roundToPrecision(tc.value, 0.25); got != tc.want {
+			t.Fatalf("roundToPrecision(%v, 0.25) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestRelationshipParametersRejectNonScalarJSON(t *testing.T) {
+	issues := validateRelationships([]AuthoringRelationship{{
+		RelationshipID: "rel-1",
+		Kind:           "shelf-support",
+		Source:         AuthoringRelationshipAnchor{ComponentInstanceID: "shelf-1"},
+		Targets:        []AuthoringRelationshipAnchor{{ComponentInstanceID: "side-1"}},
+		Parameters:     map[string]any{"positions": []any{32.0, 64.0}},
+	}}, []layoutBoard{{id: "shelf-1"}, {id: "side-1"}})
+	if len(issues) != 1 || issues[0].Code != "RELATIONSHIP_INVALID" {
+		t.Fatalf("issues = %#v, want one RELATIONSHIP_INVALID", issues)
+	}
+}
+
+func TestFingerprintIsSHA256OverUTF8CanonicalJSON(t *testing.T) {
+	a := fingerprintBodiesHash(
+		[]any{map[string]any{"sort": "puerta-á", "body": map[string]any{"id": "puerta-á"}}},
+		nil, nil, nil,
+	)
+	b := fingerprintBodiesHash(
+		[]any{map[string]any{"sort": "puerta-a", "body": map[string]any{"id": "puerta-a"}}},
+		nil, nil, nil,
+	)
+	if len(a) != len("sha256-")+64 || a[:len("sha256-")] != "sha256-" {
+		t.Fatalf("fingerprint format = %q", a)
+	}
+	if a == b {
+		t.Fatal("UTF-8-distinct identifiers must change the SHA-256 fingerprint")
+	}
+}
+
+func TestIndustrialRulesRevisionChangesWithRuleTruth(t *testing.T) {
+	before := AuthoringIndustrialRulesRevision()
+	profile := authoringManualMachiningProfiles["BIS-CL110"]
+	profile.PilotDepthMm++
+	authoringManualMachiningProfiles["BIS-CL110"] = profile
+	t.Cleanup(func() {
+		profile.PilotDepthMm--
+		authoringManualMachiningProfiles["BIS-CL110"] = profile
+	})
+	after := AuthoringIndustrialRulesRevision()
+	if before == after {
+		t.Fatal("an industrial machining-rule change must move its revision")
 	}
 }
 

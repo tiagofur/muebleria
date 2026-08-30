@@ -556,6 +556,27 @@ func validateRelationships(relationships []AuthoringRelationship, boards []layou
 			})
 			continue
 		}
+		parameterKeys := make([]string, 0, len(relationship.Parameters))
+		for key := range relationship.Parameters {
+			parameterKeys = append(parameterKeys, key)
+		}
+		sort.Strings(parameterKeys)
+		for _, key := range parameterKeys {
+			value := relationship.Parameters[key]
+			valid := false
+			switch typed := value.(type) {
+			case string, bool:
+				valid = true
+			case float64:
+				valid = !math.IsNaN(typed) && !math.IsInf(typed, 0)
+			}
+			if !valid {
+				issues = append(issues, domain.ContractIssue{
+					Code: "RELATIONSHIP_INVALID", Message: fmt.Sprintf("relationship parameter %s must be a finite scalar", key),
+					Severity: domain.IssueSeverityError, EntityID: relationship.RelationshipID, Path: path + ".parameters." + key,
+				})
+			}
+		}
 		for _, anchor := range relationship.Targets {
 			// Every target must resolve: accepting a relationship because at
 			// least one target exists would silently drop the invalid rest.
@@ -673,11 +694,11 @@ func roundToPrecision(value, precisionMm float64) float64 {
 	if precisionMm <= 0 || math.IsNaN(precisionMm) {
 		return value
 	}
-	factor := math.Round(math.Pow(10, math.Round(-math.Log10(precisionMm))))
-	if factor <= 0 {
-		return value
-	}
-	return math.Round(value*factor) / factor
+	// precisionMm is a STEP, not a number of decimal places. This handles
+	// non-decimal steps such as 0.25 correctly. The final normalization only
+	// removes binary floating-point residue from JSON-visible values.
+	snapped := math.Round(value/precisionMm) * precisionMm
+	return math.Round(snapped*1e9) / 1e9
 }
 
 func validationStatusFor(issues []domain.ContractIssue) string {

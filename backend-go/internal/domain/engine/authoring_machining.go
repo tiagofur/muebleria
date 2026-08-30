@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -603,9 +604,10 @@ func fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, ope
 	}
 	raw, err := json.Marshal(canonical)
 	if err != nil {
-		return "fnv1a-unavailable"
+		return "sha256-unavailable"
 	}
-	return fnv1aHex(string(raw))
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("sha256-%x", sum)
 }
 
 // sortedBodies strips the sort wrappers in ascending id order.
@@ -620,15 +622,29 @@ func sortedBodies(entries []any) []any {
 	return out
 }
 
-// fnv1aHex ports the TS fnv1aHex (32-bit FNV-1a over UTF-16 code units —
-// byte-equal for the ASCII identifiers the contract carries).
-func fnv1aHex(value string) string {
-	var h uint32 = 0x811c9dc5
-	for i := 0; i < len(value); i++ {
-		h ^= uint32(value[i])
-		h *= 0x01000193
+// AuthoringIndustrialRulesRevision pins every compiled industrial rule that
+// can affect an authoring resolve. The workshop catalog revision incorporates
+// this value, so a deploy that changes drilling or joinery truth invalidates
+// old request pins instead of producing a different result under the same
+// catalogRevision.
+func AuthoringIndustrialRulesRevision() string {
+	payload := struct {
+		JoinerySystems    map[string]ShelfSupportJoineryRule `json:"joinerySystems"`
+		RelationshipKinds map[string]string                  `json:"relationshipKinds"`
+		MachiningProfiles map[string]ManualMachiningProfile  `json:"machiningProfiles"`
+		ProfileContract   string                             `json:"machiningProfileContract"`
+	}{
+		JoinerySystems:    authoringJoinerySystems,
+		RelationshipKinds: authoringRelationshipKindDefaults,
+		MachiningProfiles: authoringManualMachiningProfiles,
+		ProfileContract:   ManualMachiningProfileContract,
 	}
-	return fmt.Sprintf("fnv1a-%08x", h)
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "sha256-unavailable"
+	}
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("sha256-%x", sum)
 }
 
 // AuthoringManualMachiningProfiles returns the versioned manual machining

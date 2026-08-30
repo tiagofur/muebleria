@@ -784,7 +784,9 @@ furniture {
   furnitureDefinitionId                    (definición autoritativa)
   catalogRevision                          OBLIGATORIO (revisionId de GET /api/furniture/definitions;
                                            mismatch → CATALOG_REVISION_STALE; nunca hay latest implícito)
-  parameters { widthMm, heightMm, depthMm } (sólo este vocabulario v1; claves ad-hoc → PARAMETER_INVALID)
+  parameters { widthMm, heightMm, depthMm } (proyección paramétrica autoritativa disponible en Go v1;
+                                           claves fuera de la definición proyectada → PARAMETER_INVALID;
+                                           el catálogo tipado universal se sigue en #483)
   materialChoices { ROLE → materialId }
   components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
   relationships?                           (PartRelationshipIntent, incl. parameters)
@@ -795,8 +797,10 @@ furniture {
 ```
 
 Reproducibilidad: el handler hace UNA sola lectura de catálogo que alimenta
-el check de revisión Y el resolve (dos lecturas podrían observar estados
-distintos); la respuesta echa `catalogRevision` (la revisión pineada usada).
+la selección de la definición, el check de revisión Y el resolve (una lectura
+separada de definición podría validar catálogo B y resolver definición A). El
+pin incluye también las tablas versionadas de joinery/machining que participan
+en el resultado; la respuesta echa `catalogRevision` (la revisión pineada usada).
 Arrays estrictos: `translationMm` (exactamente 3) y `offsetMm` (exactamente
 2) se decodifican como slices y validan longitud exacta — los arrays fijos
 de Go truncarían/extenderían en silencio.
@@ -836,7 +840,7 @@ normalizedSnapshot  (receipt stateless: estado authoring efectivo completo —
                      relationships, placements; es la única base del próximo request)
 resolved {
   layout            (FurnitureLayout #415 con transformContract; identidad exacta de ocurrencias)
-  machining { operations (provenance + holes), derivedHardwarePlacements, bomFingerprint }
+  machining { operations (provenance + holes), derivedHardwarePlacements, manufacturingFingerprint }
   preflight { status, issues, preflightContract → granete.manufacturing-preflight.v1 (#347) }
 }
 issues [] ContractIssue (códigos estables; nunca parsear mensajes)
@@ -847,7 +851,8 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
   dependiente; mover una bisagra no toca el machining de entrepaños; el
   pilot de herraje manual sigue el perfil técnico de la definición
   seleccionada (reemplazo cambia diámetro/BOM);
-- `manufacturingFingerprint` (fnv1a sobre JSON canónico) cubre la identidad
+- `manufacturingFingerprint` (`sha256-` + 64 hex sobre UTF-8 del JSON canónico)
+  es un change/check fingerprint determinista —no una identidad de release— y cubre la identidad
   manufacturera COMPLETA — tableros (identidad de ocurrencia + dimensiones +
   material seleccionado), placements manuales, placements derivados y
   operaciones — de modo que cambiar una manija, sustituir herrajes con el
@@ -867,8 +872,10 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
 - POST explícito: la intención de autoría es un body estructurado. **Cualquier
   query parameter presente falla cerrado** (`QUERY_PARAMETERS_UNSUPPORTED`) —
   la proliferación `?shelf2Z`/`?hinge1Offset` no puede volver a crecer;
-- límite explícito de payload (2 MiB), decodificación estricta (campos
-  desconocidos → `REQUEST_INVALID`), sin guessing de schema;
+- límite explícito de payload (2 MiB), `Content-Type: application/json`,
+  `sentAt` RFC3339, límites de strings/colecciones y decodificación estricta
+  (campos desconocidos o JSON top-level adicional → `REQUEST_INVALID`), sin
+  guessing de schema;
 - auth: capability POST explícita para tokens de extensión (#460): allowlist
   que nombra este endpoint; el resto sigue read-only. License y scope org
   como el resto de la familia furniture;
@@ -880,7 +887,9 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
 
 ### Fixture compartido
 
-`contracts/sketchupAuthoringResolve.contract.json` es golden generado por el
+`contracts/sketchupAuthoringResolve.schema.json` es el schema JSON canónico y
+machine-readable de request, accepted/rejected response, issues y uniones
+discriminadas. `contracts/sketchupAuthoringResolve.contract.json` es el golden generado por el
 resolver Go (regenerar con `UPDATE_AUTHORING_RESOLVE_GOLDEN=1`) con los
 escenarios canónicos 1-8 de #477 + negative proofs (query param, revisión de
 catálogo ausente, parámetro ad-hoc en body, ocurrencia duplicada,
@@ -892,16 +901,23 @@ campos visuales como PreviewShape/PreviewDiameter). TS, Go y Ruby lo consumen:
 las tablas compiladas de cada runtime se afirman iguales al fixture por sus
 tests de paridad, así que ningún payload ni regla paralela puede divergir.
 
-El parser Ruby es fail-closed sobre TODO lo que consume: triple de schema
+El parser Ruby es fail-closed sobre TODO lo que habilita host mutation: triple de schema
 exacta (id+name+version), correlación completa (el único caso sin correlación
 es el rechazo transport-level que nunca leyó el body), `catalogRevision`
 no-vacía en accepted, códigos de issue del set cerrado, severidades
 conocidas, exclusividad real de provenance (una variante y sólo sus claves),
-formato exacto del fingerprint (`fnv1a-[0-9a-f]{8}`), snapshot normalizado
-validado en profundidad (identidad, transforms de 3 finitos, offsets de 2
-finitos, sin campos fuera del contrato v1). La sección preflight no se
-consume en Ruby v1: #466 es dueño de su presentación y el boundary de
-vocabulario manufacturero del runtime se mantiene.
+formato exacto del fingerprint (`sha256-[0-9a-f]{64}`), preflight subset exacto,
+snapshot normalizado validado en profundidad (identidad, relationships,
+transforms de 3 finitos, offsets de 2 finitos, sin duplicados ni campos fuera
+del contrato v1) y coherencia snapshot↔layout. El transport pasa el request
+esperado al parser, que exige correlación exacta antes de devolver un layout.
+
+El v1 NO acepta parámetros arbitrarios que el modelo Go no pueda resolver:
+eso sería eco de intención sin efecto autoritativo. La proyección actual
+incluye dimensiones; #483 agrega el catálogo persistido/versionado de
+`FurnitureDefinition.parameters` para familias futuras number/string/boolean/enum.
+Los primeros slices de #467/#468 se expresan mediante occurrences,
+relationships y HardwarePlacement y no dependen de ese follow-up.
 
 ## References
 

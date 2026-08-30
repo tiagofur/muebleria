@@ -102,10 +102,11 @@ module Granete
         module_function
 
         def operations(raw)
-          return [] if raw.nil?
           raise AuthoringResolveContract::ContractError, 'Operaciones de machining inválidas' unless raw.is_a?(Array)
 
-          raw.map { |operation| operation(operation) }
+          parsed = raw.map { |operation| operation(operation) }
+          AuthoringResolveContract.ensure_unique!(parsed.map(&:operation_id), 'operationId de machining')
+          parsed
         end
 
         def operation(raw)
@@ -168,12 +169,14 @@ module Granete
         end
 
         def holes(raw, context)
-          return [] if raw.nil?
           raise AuthoringResolveContract::ContractError, "Hoyos inválidos en #{context}" unless raw.is_a?(Array)
 
           raw.map do |hole|
-            unless hole.is_a?(Hash) && hole['face'].is_a?(String) && HOLE_FACES.include?(hole['face']) &&
-                   HOLE_KEYS.all? { |key| hole[key].is_a?(String) || hole[key].is_a?(Numeric) }
+            unless hole.is_a?(Hash) && hole.keys.sort == HOLE_KEYS.sort &&
+                   hole['face'].is_a?(String) && HOLE_FACES.include?(hole['face']) &&
+                   hole['type'].is_a?(String) && !hole['type'].empty? &&
+                   %w[xMm yMm].all? { |key| finite_number?(hole[key]) && hole[key] >= 0 } &&
+                   %w[diameterMm depthMm].all? { |key| finite_number?(hole[key]) && hole[key].positive? }
               raise AuthoringResolveContract::ContractError, "Hoyo con campos inválidos en #{context}"
             end
 
@@ -182,17 +185,29 @@ module Granete
         end
 
         def derived_placements(raw)
-          return [] if raw.nil?
           raise AuthoringResolveContract::ContractError, 'Placements derivados inválidos' unless raw.is_a?(Array)
 
-          raw.map do |placement|
+          parsed = raw.map do |placement|
             unless placement.is_a?(Hash) && placement['derivedHardwarePlacementId'].is_a?(String) &&
-                   placement['hostComponentInstanceId'].is_a?(String)
+                   !placement['derivedHardwarePlacementId'].empty? &&
+                   placement['hostComponentInstanceId'].is_a?(String) &&
+                   !placement['hostComponentInstanceId'].empty?
               raise AuthoringResolveContract::ContractError, 'Placement derivado inválido'
             end
 
+            provenance(placement['provenance'], placement['derivedHardwarePlacementId'])
+
             placement
           end
+          AuthoringResolveContract.ensure_unique!(
+            parsed.map { |placement| placement['derivedHardwarePlacementId'] },
+            'derivedHardwarePlacementId'
+          )
+          parsed
+        end
+
+        def finite_number?(value)
+          value.is_a?(Numeric) && value.to_f.finite?
         end
       end
 
@@ -205,6 +220,10 @@ module Granete
           REQUEST_INVALID
           PAYLOAD_TOO_LARGE
           QUERY_PARAMETERS_UNSUPPORTED
+          METHOD_NOT_ALLOWED
+          AUTHENTICATION_REQUIRED
+          ACCESS_FORBIDDEN
+          CONTENT_TYPE_UNSUPPORTED
           CATALOG_REFERENCE_MISSING
           CATALOG_REVISION_STALE
           CATALOG_DEFINITION_INACTIVE
@@ -229,20 +248,91 @@ module Granete
         module_function
 
         def issues(raw)
-          return [] if raw.nil?
-
           raise AuthoringResolveContract::ContractError, 'Issues de resolve inválidos' unless raw.is_a?(Array)
 
           raw.map do |issue|
             unless issue.is_a?(Hash) && issue['code'].is_a?(String) && ISSUE_CODES.include?(issue['code'])
               raise AuthoringResolveContract::ContractError, 'Issue de resolve sin código estable conocido'
             end
-            if issue['severity'] && !ISSUE_SEVERITIES.include?(issue['severity'])
+            unless ISSUE_SEVERITIES.include?(issue['severity']) &&
+                   issue['message'].is_a?(String) && !issue['message'].empty?
               raise AuthoringResolveContract::ContractError, "Issue #{issue['code']} con severidad desconocida"
             end
 
             AuthoringResolveIssue.new(issue)
           end
+        end
+      end
+
+      module AuthoringSnapshotValues
+        module_function
+
+        def valid_identity?(hash, *keys)
+          return false unless hash.is_a?(Hash) && !drifted_v1_fields?(hash)
+
+          keys.all? { |key| non_empty_string?(hash[key]) } ||
+            raise(AuthoringResolveContract::ContractError,
+                  "Campos fuera del contrato v1 en #{hash['hardwarePlacementId'] || hash['componentInstanceId']}")
+        end
+
+        def valid_anchor?(anchor, component_ids)
+          anchor.is_a?(Hash) && anchor.keys.sort == AuthoringSnapshotParsing::ANCHOR_KEYS.sort &&
+            non_empty_string?(anchor['componentInstanceId']) && non_empty_string?(anchor['role']) &&
+            component_ids.include?(anchor['componentInstanceId'])
+        end
+
+        def validate_scalar_map(raw, context)
+          return if valid_scalar_map?(raw)
+
+          raise AuthoringResolveContract::ContractError, "#{context} del snapshot normalizado inválidos"
+        end
+
+        def valid_scalar_map?(raw)
+          raw.is_a?(Hash) && raw.all? { |key, value| non_empty_string?(key) && scalar_value?(value) }
+        end
+
+        def validate_material_choices(raw)
+          return if raw.is_a?(Hash) && raw.all? { |key, value| non_empty_string?(key) && non_empty_string?(value) }
+
+          raise AuthoringResolveContract::ContractError, 'materialChoices del snapshot normalizado inválidos'
+        end
+
+        def valid_offsets?(offsets)
+          offsets.is_a?(Array) && offsets.length == 2 && offsets.all? { |value| finite_number?(value) }
+        end
+
+        def finite_number?(value)
+          value.is_a?(Numeric) && value.to_f.finite?
+        end
+
+        def non_empty_string?(value)
+          value.is_a?(String) && !value.empty?
+        end
+
+        def scalar_value?(value)
+          value.is_a?(String) || value == true || value == false || finite_number?(value)
+        end
+
+        def drifted_v1_fields?(placement)
+          placement.key?('rotationDeg') || placement.key?('handedness')
+        end
+
+        def validate_relationship(relationship, component_ids)
+          valid = relationship.is_a?(Hash) &&
+                  relationship.keys.all? { |key| AuthoringSnapshotParsing::RELATIONSHIP_KEYS.include?(key) } &&
+                  non_empty_string?(relationship['relationshipId']) && non_empty_string?(relationship['kind']) &&
+                  valid_anchor?(relationship['source'], component_ids) && valid_targets?(relationship, component_ids)
+          valid &&= !relationship.key?('joinerySystemId') || non_empty_string?(relationship['joinerySystemId'])
+          valid &&= !relationship.key?('parameters') || valid_scalar_map?(relationship['parameters'])
+          raise AuthoringResolveContract::ContractError, 'Relationship del snapshot normalizado inválida' unless valid
+
+          targets = relationship['targets'].map { |target| [target['componentInstanceId'], target['role']] }
+          AuthoringResolveContract.ensure_unique!(targets, "target de #{relationship['relationshipId']}")
+        end
+
+        def valid_targets?(relationship, component_ids)
+          relationship['targets'].is_a?(Array) && !relationship['targets'].empty? &&
+            relationship['targets'].all? { |anchor| valid_anchor?(anchor, component_ids) }
         end
       end
 
@@ -253,25 +343,39 @@ module Granete
       # authoring truth.
       module AuthoringSnapshotParsing
         ANCHOR_FACES = %w[front back left right top bottom].freeze
-        COMPONENT_KEYS = %w[componentInstanceId componentDefinitionId catalogComponentId role].freeze
+        COMPONENT_KEYS = %w[componentInstanceId componentDefinitionId catalogComponentId role transform].freeze
+        PLACEMENT_KEYS = %w[hardwarePlacementId catalogHardwareId hostComponentInstanceId anchorFace offsetMm].freeze
+        RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters].freeze
+        ANCHOR_KEYS = %w[componentInstanceId role].freeze
 
         module_function
 
         def parse(raw)
-          return nil unless raw.is_a?(Hash)
+          raise AuthoringResolveContract::ContractError, 'Snapshot normalizado inválido' unless raw.is_a?(Hash)
 
           %w[parameters materialChoices components relationships hardwarePlacements].each do |key|
             raise AuthoringResolveContract::ContractError, "Snapshot normalizado sin #{key}" unless raw.key?(key)
           end
-          validate_components(Array(raw['components']))
-          validate_placements(Array(raw['hardwarePlacements']))
+          AuthoringSnapshotValues.validate_scalar_map(raw['parameters'], 'parameters')
+          AuthoringSnapshotValues.validate_material_choices(raw['materialChoices'])
+          component_ids = validate_components(raw['components'])
+          validate_relationships(raw['relationships'], component_ids)
+          validate_placements(raw['hardwarePlacements'], component_ids)
           raw
         end
 
         def validate_components(components)
+          unless components.is_a?(Array) && !components.empty?
+            raise AuthoringResolveContract::ContractError, 'Snapshot normalizado sin ocurrencias'
+          end
+
           components.each do |component|
-            unless valid_identity?(component, 'componentInstanceId', 'componentDefinitionId')
+            unless AuthoringSnapshotValues.valid_identity?(component, 'componentInstanceId', 'componentDefinitionId')
               raise AuthoringResolveContract::ContractError, 'Ocurrencia del snapshot normalizado sin identidad estable'
+            end
+            unless component.keys.all? { |key| COMPONENT_KEYS.include?(key) } &&
+                   %w[catalogComponentId role].all? { |key| AuthoringSnapshotValues.non_empty_string?(component[key]) }
+              raise AuthoringResolveContract::ContractError, 'Ocurrencia del snapshot normalizado inválida'
             end
 
             transform = component['transform']
@@ -279,57 +383,178 @@ module Granete
 
             validate_transform(transform, component['componentInstanceId'])
           end
+          ids = components.map { |component| component['componentInstanceId'] }
+          AuthoringResolveContract.ensure_unique!(ids, 'componentInstanceId')
+          ids
         end
 
         def validate_transform(transform, context)
-          return if transform['frame'] == 'assembly' && transform['translationMm'].is_a?(Array) &&
+          return if transform.is_a?(Hash) && transform.keys.sort == %w[frame translationMm].sort &&
+                    transform['frame'] == 'assembly' && transform['translationMm'].is_a?(Array) &&
                     transform['translationMm'].length == 3 &&
-                    transform['translationMm'].all? { |value| finite_number?(value) }
+                    transform['translationMm'].all? { |value| AuthoringSnapshotValues.finite_number?(value) }
 
           raise AuthoringResolveContract::ContractError, "Transform inválida en #{context}"
         end
 
-        def validate_placements(placements)
-          placements.each do |placement|
-            validate_placement(placement)
+        def validate_placements(placements, component_ids)
+          unless placements.is_a?(Array)
+            raise AuthoringResolveContract::ContractError,
+                  'Placements del snapshot normalizado inválidos'
           end
+
+          placements.each do |placement|
+            validate_placement(placement, component_ids)
+          end
+          AuthoringResolveContract.ensure_unique!(
+            placements.map { |placement| placement['hardwarePlacementId'] }, 'hardwarePlacementId'
+          )
         end
 
-        def validate_placement(placement)
-          unless valid_identity?(placement, 'hardwarePlacementId', 'catalogHardwareId', 'hostComponentInstanceId')
+        def validate_placement(placement, component_ids)
+          unless AuthoringSnapshotValues.valid_identity?(placement, 'hardwarePlacementId', 'catalogHardwareId',
+                                                         'hostComponentInstanceId')
             raise AuthoringResolveContract::ContractError, 'Placement del snapshot normalizado sin identidad estable'
           end
 
           id = placement['hardwarePlacementId']
+          unless placement.keys.sort == PLACEMENT_KEYS.sort &&
+                 component_ids.include?(placement['hostComponentInstanceId'])
+            raise AuthoringResolveContract::ContractError, "Placement #{id} con host o campos inválidos"
+          end
           unless ANCHOR_FACES.include?(placement['anchorFace'])
             raise AuthoringResolveContract::ContractError, "Placement #{id} con anchorFace desconocida"
           end
-          return if valid_offsets?(placement['offsetMm'])
+          return if AuthoringSnapshotValues.valid_offsets?(placement['offsetMm'])
 
           raise AuthoringResolveContract::ContractError, "Placement #{id} con offsetMm inválido"
         end
 
-        # v1 wire carries no rotation/handedness: an echo with them is a
-        # contract drift and fails closed instead of round-tripping apparent
-        # capabilities.
-        def drifted_v1_fields?(placement)
-          placement.key?('rotationDeg') || placement.key?('handedness')
+        def validate_relationships(relationships, component_ids)
+          unless relationships.is_a?(Array)
+            raise AuthoringResolveContract::ContractError, 'Relationships del snapshot normalizado inválidas'
+          end
+
+          relationships.each do |relationship|
+            AuthoringSnapshotValues.validate_relationship(relationship, component_ids)
+          end
+          AuthoringResolveContract.ensure_unique!(
+            relationships.map { |relationship| relationship['relationshipId'] }, 'relationshipId'
+          )
+        end
+      end
+
+      module AuthoringResolvedCoherence
+        module_function
+
+        def validate!(snapshot, layout, operations, derived_placements)
+          snapshot_components = snapshot['components'].to_h do |component|
+            [component['componentInstanceId'], component]
+          end
+          layout_components = validate_components(snapshot_components, layout)
+          manual_ids = validate_manual_placements(snapshot, layout)
+          validate_hosts!(snapshot_components.keys, layout, operations, derived_placements)
+          validate_provenance!(snapshot, manual_ids, operations, derived_placements)
+          layout_components
         end
 
-        def valid_identity?(hash, *keys)
-          return false unless hash.is_a?(Hash) && !drifted_v1_fields?(hash)
+        def validate_components(snapshot_components, layout)
+          AuthoringResolveContract.ensure_unique!(layout.boards.map(&:component_instance_id),
+                                                  'componentInstanceId del layout')
+          layout_components = layout.boards.to_h { |board| [board.component_instance_id, board] }
+          unless snapshot_components.keys.sort == layout_components.keys.sort
+            raise AuthoringResolveContract::ContractError, 'IDs del layout no coinciden con el snapshot normalizado'
+          end
 
-          keys.all? { |key| hash[key].is_a?(String) && !hash[key].empty? } ||
-            raise(AuthoringResolveContract::ContractError,
-                  "Campos fuera del contrato v1 en #{hash['hardwarePlacementId'] || hash['componentInstanceId']}")
+          snapshot_components.each do |id, component|
+            board = layout_components.fetch(id)
+            if board.component_definition_id == component['componentDefinitionId'] && board.role == component['role']
+              next
+            end
+
+            raise AuthoringResolveContract::ContractError, "Identidad del layout incoherente para #{id}"
+          end
+          layout_components
         end
 
-        def valid_offsets?(offsets)
-          offsets.is_a?(Array) && offsets.length == 2 && offsets.all? { |value| finite_number?(value) }
+        def validate_manual_placements(snapshot, layout)
+          AuthoringResolveContract.ensure_unique!(layout.hardware.map(&:placement_id), 'placementId del layout')
+          manual_snapshot = snapshot['hardwarePlacements'].to_h do |placement|
+            [placement['hardwarePlacementId'], placement]
+          end
+          manual_layout = layout.hardware.select { |placement| placement.placement_kind == 'manual' }
+                                .to_h { |placement| [placement.placement_id, placement] }
+          unless manual_snapshot.keys.sort == manual_layout.keys.sort
+            raise AuthoringResolveContract::ContractError,
+                  'Placements manuales del layout no coinciden con el snapshot normalizado'
+          end
+          manual_snapshot.each do |id, placement|
+            resolved = manual_layout.fetch(id)
+            next if resolved.hardware_id == placement['catalogHardwareId'] &&
+                    resolved.host_component_instance_id == placement['hostComponentInstanceId']
+
+            raise AuthoringResolveContract::ContractError, "Placement manual del layout incoherente para #{id}"
+          end
+          manual_snapshot.keys
         end
 
-        def finite_number?(value)
-          value.is_a?(Numeric) && value.to_f.finite?
+        def validate_hosts!(known_ids, layout, operations, derived_placements)
+          hosts = layout.hardware.map(&:host_component_instance_id) + operations.map(&:host_component_instance_id) +
+                  derived_placements.map { |placement| placement['hostComponentInstanceId'] }
+          return if hosts.compact.all? { |host| known_ids.include?(host) }
+
+          raise AuthoringResolveContract::ContractError,
+                'Resultado resuelto referencia un host fuera del snapshot normalizado'
+        end
+
+        def validate_provenance!(snapshot, manual_ids, operations, derived_placements)
+          relationship_ids = snapshot['relationships'].map { |relationship| relationship['relationshipId'] }
+          sources = operations.map(&:provenance) + derived_placements.map { |placement| placement['provenance'] }
+          valid = sources.all? do |source|
+            case source['sourceKind']
+            when 'relationship' then relationship_ids.include?(source['relationshipId'])
+            when 'manualHardwarePlacement' then manual_ids.include?(source['hardwarePlacementId'])
+            else false
+            end
+          end
+          return if valid
+
+          raise AuthoringResolveContract::ContractError,
+                'Provenance resuelta no corresponde al snapshot normalizado'
+        end
+      end
+
+      module AuthoringResolveCorrelation
+        KEYS = %w[responseMessageId inReplyToMessageId idempotencyKey].freeze
+
+        module_function
+
+        def parse(body, expected_request:, issues:)
+          values = KEYS.to_h { |key| [key, body[key]] }
+          non_empty = values.values.count { |value| value.is_a?(String) && !value.empty? }
+          return uncorrelated_rejection(body, issues) if non_empty.zero?
+
+          unless non_empty == KEYS.length
+            raise AuthoringResolveContract::ContractError,
+                  'Correlación incompleta: la respuesta no se procesa sin ella'
+          end
+          unless values['responseMessageId'] == "resolve-#{values['inReplyToMessageId']}"
+            raise AuthoringResolveContract::ContractError, 'responseMessageId no corresponde al request respondido'
+          end
+          unless expected_request.is_a?(Hash) &&
+                 values['inReplyToMessageId'] == expected_request['messageId'] &&
+                 values['idempotencyKey'] == expected_request['idempotencyKey']
+            raise AuthoringResolveContract::ContractError,
+                  'Correlación de respuesta no coincide con el request enviado'
+          end
+          values
+        end
+
+        def uncorrelated_rejection(body, issues)
+          return {} if body['status'] == 'rejected' && issues.map(&:code).include?('QUERY_PARAMETERS_UNSUPPORTED')
+
+          raise AuthoringResolveContract::ContractError,
+                'Correlación ausente fuera del rechazo de query parameters'
         end
       end
 
@@ -350,7 +575,7 @@ module Granete
         # ContractError (an AuthoringResolveError) on any violation; a
         # rejected envelope parses into a result with issues so callers can
         # branch on codes.
-        def parse!(body)
+        def parse!(body, expected_request: nil)
           raise ContractError, 'Respuesta de resolve de autoría inválida' unless body.is_a?(Hash)
 
           schema_id = body['schemaId']
@@ -374,33 +599,15 @@ module Granete
           issues = AuthoringIssueParsing.issues(body['issues'])
           case body['status']
           when 'rejected'
-            rejected_result(body, issues)
+            rejected_result(body, issues, expected_request)
           when 'accepted'
-            accepted_result(body, issues)
+            accepted_result(body, issues, expected_request)
           else
             raise ContractError, "Estado de resolve desconocido: #{body['status'].inspect}"
           end
         end
 
-        CORRELATION_KEYS = %w[responseMessageId inReplyToMessageId idempotencyKey].freeze
-
-        def correlation_of(body)
-          values = CORRELATION_KEYS.to_h { |key| [key, body[key]] }
-          non_empty = values.values.count { |value| value.is_a?(String) && !value.empty? }
-          if non_empty.zero?
-            # The transport-level rejection (query parameters) never reads
-            # the body, so the envelope honestly carries NO correlation —
-            # all-empty is the only uncorrelated shape allowed.
-            return {}
-          end
-          if non_empty != CORRELATION_KEYS.length
-            raise AuthoringResolveContract::ContractError, 'Correlación incompleta: la respuesta no se procesa sin ella'
-          end
-
-          values
-        end
-
-        FINGERPRINT_PATTERN = /\Afnv1a-[0-9a-f]{8}\z/
+        FINGERPRINT_PATTERN = /\Asha256-[0-9a-f]{64}\z/
 
         def fingerprint(raw)
           unless raw.is_a?(String) &&
@@ -412,14 +619,17 @@ module Granete
           raw
         end
 
-        def rejected_result(body, issues)
+        def rejected_result(body, issues, expected_request)
           raise ContractError, 'Resolve rechazado sin issues estructurados' if issues.empty?
+          raise ContractError, 'Resolve rechazado no puede incluir resultado parcial' if body.key?('resolved')
 
           AuthoringResolveResult.new(status: 'rejected', issues: issues,
-                                     correlation: correlation_of(body))
+                                     correlation: AuthoringResolveCorrelation.parse(
+                                       body, expected_request: expected_request, issues: issues
+                                     ))
         end
 
-        def accepted_result(body, issues)
+        def accepted_result(body, issues, expected_request)
           resolved = body['resolved']
           unless resolved.is_a?(Hash) && resolved['layout'].is_a?(Hash)
             raise ContractError, 'Resolve aceptado sin layout resuelto'
@@ -433,21 +643,46 @@ module Granete
             raise ContractError, 'Resolve aceptado sin revisión de catálogo pineada'
           end
 
+          snapshot = AuthoringSnapshotParsing.parse(body['normalizedSnapshot'])
+          preflight(resolved['preflight'])
+          layout = LayoutContract.parse!(resolved['layout'])
+          operations = AuthoringResolveWireParsing.operations(machining['operations'])
+          derived_placements = AuthoringResolveWireParsing.derived_placements(
+            machining['derivedHardwarePlacements']
+          )
+          AuthoringResolvedCoherence.validate!(snapshot, layout, operations, derived_placements)
+
           AuthoringResolveResult.new(
             status: 'accepted',
             issues: issues,
-            layout: LayoutContract.parse!(resolved['layout']),
+            layout: layout,
             machining: {
-              operations: AuthoringResolveWireParsing.operations(machining['operations']),
-              derived_hardware_placements:
-                AuthoringResolveWireParsing.derived_placements(machining['derivedHardwarePlacements']),
+              operations: operations,
+              derived_hardware_placements: derived_placements,
               manufacturing_fingerprint: fingerprint(machining['manufacturingFingerprint'])
             },
             catalog_revision: revision,
-            correlation: correlation_of(body),
-            normalized_snapshot:
-              AuthoringSnapshotParsing.parse(body['normalizedSnapshot'])
+            correlation: AuthoringResolveCorrelation.parse(
+              body, expected_request: expected_request, issues: issues
+            ),
+            normalized_snapshot: snapshot
           )
+        end
+
+        def preflight(raw)
+          unless raw.is_a?(Hash) && raw['scope'] == 'authoring-resolve-subset' &&
+                 %w[clear blocked].include?(raw['status']) &&
+                 raw['preflightContract'] == 'granete.manufacturing-preflight.v1'
+            raise ContractError, 'Preflight de resolve ausente o no soportado'
+          end
+
+          AuthoringIssueParsing.issues(raw['issues'])
+        end
+
+        def ensure_unique!(values, context)
+          return if values.length == values.uniq.length
+
+          raise ContractError, "IDs duplicados en #{context}"
         end
       end
 
@@ -491,12 +726,12 @@ module Granete
       module AuthoringResolveTransport
         module_function
 
-        def interpret(response, logger: nil)
+        def interpret(response, expected_request: nil, logger: nil)
           case response['status']
           when 200
-            AuthoringResolveContract.parse!(response['body'])
+            AuthoringResolveContract.parse!(response['body'], expected_request: expected_request)
           when 400, 404, 413, 422
-            result = AuthoringResolveContract.parse!(response['body'])
+            result = AuthoringResolveContract.parse!(response['body'], expected_request: expected_request)
             first = result.issues.first
             raise AuthoringResolveError.new(
               "La autoría fue rechazada (#{first&.code}): #{first&.message}",

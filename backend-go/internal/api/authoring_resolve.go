@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"mime"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,19 +40,28 @@ import (
 // POST allowlist in the auth middleware that names this endpoint.
 func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		s.writeAuthoringResolveEnvelope(w, http.StatusMethodNotAllowed, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{
+			Code: "METHOD_NOT_ALLOWED", Message: "el resolve de autoría sólo acepta POST",
+			Severity: domain.IssueSeverityError, Path: "method",
+		}})
 		return
 	}
 
 	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
 	if !ok || claims == nil {
-		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnauthorized, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{
+			Code: "AUTHENTICATION_REQUIRED", Message: "se requiere un token válido",
+			Severity: domain.IssueSeverityError, Path: "authorization",
+		}})
 		return
 	}
 
 	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
 	if err != nil || u == nil {
-		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnauthorized, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{
+			Code: "AUTHENTICATION_REQUIRED", Message: "se requiere un token válido",
+			Severity: domain.IssueSeverityError, Path: "authorization",
+		}})
 		return
 	}
 
@@ -60,8 +72,20 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 	if org == nil || domain.LicenseStatusAt(org.LicensePlan, org.LicenseExpiresAt, time.Now()) != domain.LicenseStatusActive {
-		respondWithError(w, http.StatusForbidden,
-			"la licencia del taller no está activa. Pedile al administrador del taller que la renueve (plan y vencimiento) para usar la biblioteca de Granete.")
+		s.writeAuthoringResolveEnvelope(w, http.StatusForbidden, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{
+			Code:     "ACCESS_FORBIDDEN",
+			Message:  "la licencia del taller no está activa. Pedile al administrador del taller que la renueve (plan y vencimiento) para usar la biblioteca de Granete.",
+			Severity: domain.IssueSeverityError, Path: "authorization",
+		}})
+		return
+	}
+
+	mediaType, _, contentTypeErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if contentTypeErr != nil || mediaType != "application/json" {
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnsupportedMediaType, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{
+			Code: "CONTENT_TYPE_UNSUPPORTED", Message: "Content-Type debe ser application/json",
+			Severity: domain.IssueSeverityError, Path: "contentType",
+		}})
 		return
 	}
 
@@ -102,7 +126,8 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		}})
 		return
 	}
-	if dec.More() {
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
 		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, []domain.ContractIssue{{
 			Code: "REQUEST_INVALID", Message: "el body contiene JSON adicional después del request",
 			Severity: domain.IssueSeverityError, Path: "body",
@@ -134,11 +159,15 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	module, err := s.Store.GetModuleByID(r.Context(), req.Furniture.FurnitureDefinitionID)
+	// ONE authoritative full-catalog read feeds the revision, definition
+	// selection and resolve. The definition can no longer come from a stale
+	// GetModuleByID read outside the snapshot being pinned.
+	snapshot, err := s.loadWorkshopCatalogOnce(r)
 	if err != nil {
-		respondWithInternalError(w, err, "load module")
+		respondWithInternalError(w, err, "load resolution catalog")
 		return
 	}
+	module := snapshot.module(req.Furniture.FurnitureDefinitionID)
 	if module == nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
 			Code: "CATALOG_REFERENCE_MISSING", Message: "la definición de mueble " + req.Furniture.FurnitureDefinitionID + " no existe",
@@ -147,16 +176,8 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		}})
 		return
 	}
-
-	// ONE catalog read feeds BOTH the revision check and the resolve (#477
-	// review: two reads could observe different catalog states and make the
-	// resolve non-reproducible against the pinned revision).
-	composition, revision, err := s.loadWorkshopCatalogOnce(r)
-	if err != nil {
-		respondWithInternalError(w, err, "load resolution catalog")
-		return
-	}
-	catalog := composition
+	catalog := snapshot.Composition
+	revision := snapshot.Revision
 
 	// No implicit latest: the request MUST pin the catalog revision it was
 	// authored against, and a drifted catalog rejects with the structured
@@ -191,7 +212,8 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	dims, issues := authoringDimsFromParameters(req.Furniture.Parameters, module)
+	definition := snapshot.Projection.Definitions[module.ID]
+	dims, issues := authoringDimsFromParameters(req.Furniture.Parameters, module, definition)
 	if len(issues) > 0 {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, issues)
 		return
@@ -329,8 +351,14 @@ type authoringResolvePreflight struct {
 }
 
 const (
-	authoringStatusAccepted = "accepted"
-	authoringStatusRejected = "rejected"
+	authoringStatusAccepted         = "accepted"
+	authoringStatusRejected         = "rejected"
+	authoringMaxIdentifierLength    = 128
+	authoringMaxParameterCount      = 256
+	authoringMaxMaterialChoiceCount = 256
+	authoringMaxOccurrenceCount     = 10_000
+	authoringMaxRelationshipCount   = 10_000
+	authoringMaxPlacementCount      = 10_000
 )
 
 // writeAuthoringResolveEnvelope serializes the deterministic resolve
@@ -423,6 +451,9 @@ func validateAuthoringResolveEnvelopeFields(req authoringResolveRequest) []domai
 	if strings.TrimSpace(req.MessageID) == "" {
 		invalid("messageId", "messageId es obligatorio")
 	}
+	if len(req.MessageID) > authoringMaxIdentifierLength {
+		invalid("messageId", "messageId no puede exceder 128 caracteres")
+	}
 	if strings.TrimSpace(req.IdempotencyKey) == "" {
 		invalid("idempotencyKey", "idempotencyKey es obligatorio")
 	}
@@ -431,10 +462,16 @@ func validateAuthoringResolveEnvelopeFields(req authoringResolveRequest) []domai
 	}
 	if strings.TrimSpace(req.SentAt) == "" {
 		invalid("sentAt", "sentAt es obligatorio")
+	} else if sentAt, err := time.Parse(time.RFC3339, req.SentAt); err != nil || sentAt.Year() < 2000 || sentAt.Year() > 2100 {
+		invalid("sentAt", "sentAt debe ser RFC3339 y estar entre los años 2000 y 2100")
 	}
 	if strings.TrimSpace(req.Source.Client) == "" || strings.TrimSpace(req.Source.Host) == "" ||
 		strings.TrimSpace(req.Source.ClientVersion) == "" || strings.TrimSpace(req.Source.HostVersion) == "" {
 		invalid("source", "source client/clientVersion/host/hostVersion son obligatorios")
+	}
+	if len(req.Source.Client) > authoringMaxIdentifierLength || len(req.Source.ClientVersion) > authoringMaxIdentifierLength ||
+		len(req.Source.Host) > authoringMaxIdentifierLength || len(req.Source.HostVersion) > authoringMaxIdentifierLength {
+		invalid("source", "cada campo de source no puede exceder 128 caracteres")
 	}
 	if req.Units.Length != "mm" || req.Units.Angle != "deg" ||
 		math.IsNaN(req.Units.PrecisionMm) || req.Units.PrecisionMm <= 0 || req.Units.PrecisionMm > 1 {
@@ -444,20 +481,42 @@ func validateAuthoringResolveEnvelopeFields(req authoringResolveRequest) []domai
 		strings.TrimSpace(req.CoordinateSystem.ProjectFrameID) == "" {
 		invalid("coordinateSystem", "coordinateSystem debe ser { handedness: right, upAxis: z, projectFrameId }")
 	}
+	if len(req.CoordinateSystem.ProjectFrameID) > authoringMaxIdentifierLength {
+		invalid("coordinateSystem.projectFrameId", "projectFrameId no puede exceder 128 caracteres")
+	}
 	if strings.TrimSpace(req.Furniture.FurnitureDefinitionID) == "" {
 		issues = append(issues, domain.ContractIssue{
 			Code: "CATALOG_REFERENCE_MISSING", Message: "furniture.furnitureDefinitionId es obligatorio",
 			Severity: domain.IssueSeverityError, Path: "furniture.furnitureDefinitionId",
 		})
 	}
+	if len(req.Furniture.FurnitureDefinitionID) > authoringMaxIdentifierLength || len(req.Furniture.CatalogRevision) > authoringMaxIdentifierLength {
+		invalid("furniture", "furnitureDefinitionId y catalogRevision no pueden exceder 128 caracteres")
+	}
+	if len(req.Furniture.Parameters) > authoringMaxParameterCount {
+		invalid("furniture.parameters", "parameters no puede exceder 256 entradas")
+	}
+	if len(req.Furniture.MaterialChoices) > authoringMaxMaterialChoiceCount {
+		invalid("furniture.materialChoices", "materialChoices no puede exceder 256 entradas")
+	}
+	if len(req.Furniture.Components) > authoringMaxOccurrenceCount {
+		invalid("furniture.components", "components no puede exceder 10000 entradas")
+	}
+	if len(req.Furniture.Relationships) > authoringMaxRelationshipCount {
+		invalid("furniture.relationships", "relationships no puede exceder 10000 entradas")
+	}
+	if len(req.Furniture.HardwarePlacements) > authoringMaxPlacementCount {
+		invalid("furniture.hardwarePlacements", "hardwarePlacements no puede exceder 10000 entradas")
+	}
 	return issues
 }
 
-// authoringDimsFromParameters maps the v1 parameter vocabulary
-// (widthMm/heightMm/depthMm) onto layout dims. Unknown keys fail closed —
-// feature-specific parameters are exactly the proliferation this endpoint
-// replaces.
-func authoringDimsFromParameters(parameters map[string]any, module *domain.Module) (*engine.LayoutDims, []domain.ContractIssue) {
+// authoringDimsFromParameters validates against the selected definition's
+// parameter declarations rather than a handler-owned allowlist. Today's
+// Module projection declares numeric width/height/depth parameters; future
+// parameter kinds must first exist in the authoritative FurnitureDefinition
+// domain contract and resolver before this transport can accept them.
+func authoringDimsFromParameters(parameters map[string]any, module *domain.Module, definition workshopFurnitureDefinition) (*engine.LayoutDims, []domain.ContractIssue) {
 	if parameters == nil {
 		return nil, nil
 	}
@@ -466,21 +525,31 @@ func authoringDimsFromParameters(parameters map[string]any, module *domain.Modul
 		HeightMm: module.HeightMm,
 		DepthMm:  module.DepthMm,
 	}
+	declared := make(map[string]workshopFurnitureParameter, len(definition.Parameters))
+	for _, parameter := range definition.Parameters {
+		declared[parameter.Name] = parameter
+	}
+	keys := make([]string, 0, len(parameters))
+	for key := range parameters {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
 	seen := false
-	for key, raw := range parameters {
-		switch key {
-		case "widthMm", "heightMm", "depthMm":
-		default:
+	for _, key := range keys {
+		raw := parameters[key]
+		parameter, ok := declared[key]
+		if !ok {
 			return nil, []domain.ContractIssue{{
 				Code: "PARAMETER_INVALID", Message: "parámetro desconocido " + key,
 				Severity: domain.IssueSeverityError, Path: "furniture.parameters." + key,
-				Remediation: "v1 resuelve widthMm/heightMm/depthMm; la intención semántica rica viaja en components/relationships/hardwarePlacements.",
+				Remediation: "Use a parameter declared by the pinned FurnitureDefinition.",
 			}}
 		}
 		value, ok := raw.(float64)
-		if !ok || value != math.Trunc(value) || value <= 0 || value > 1_000_000 {
+		if parameter.Type != "number" || !ok || value != math.Trunc(value) || value < float64(parameter.Min) || value > float64(parameter.Max) ||
+			(parameter.Step > 0 && int(value-float64(parameter.Min))%parameter.Step != 0) {
 			return nil, []domain.ContractIssue{{
-				Code: "PARAMETER_INVALID", Message: key + " debe ser un número entero de milímetros mayor a 0",
+				Code: "PARAMETER_INVALID", Message: fmt.Sprintf("%s debe cumplir el contrato number [%d,%d] step %d de la definición", key, parameter.Min, parameter.Max, parameter.Step),
 				Severity: domain.IssueSeverityError, Path: "furniture.parameters." + key,
 			}}
 		}
@@ -510,7 +579,13 @@ func validateMaterialChoices(choices map[string]string, materials []domain.Mater
 	for _, material := range materials {
 		active[material.ID] = material.Active
 	}
-	for role, materialID := range choices {
+	roles := make([]string, 0, len(choices))
+	for role := range choices {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	for _, role := range roles {
+		materialID := choices[role]
 		if active[materialID] {
 			continue
 		}
@@ -524,58 +599,43 @@ func validateMaterialChoices(choices map[string]string, materials []domain.Mater
 	return nil
 }
 
-// loadWorkshopCatalogOnce performs ONE read of every catalog list and
-// returns both the resolution catalog and the content-addressed workshop
-// revision computed from the SAME data (the revision GET
-// /api/furniture/definitions serves and ETags). One read = the pinned check
-// and the resolve observe the same catalog state.
-func (s *Server) loadWorkshopCatalogOnce(r *http.Request) (domain.Catalog, string, error) {
-	modules, err := s.Store.ListModules(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
+type authoringCatalogSnapshot struct {
+	Composition        domain.Catalog
+	MaterialCategories []domain.MaterialCategory
+	Projection         workshopFurnitureCatalog
+	Revision           string
+}
+
+func (s authoringCatalogSnapshot) module(id string) *domain.Module {
+	for i := range s.Composition.Modules {
+		if s.Composition.Modules[i].ID == id {
+			return &s.Composition.Modules[i]
+		}
 	}
-	categories, err := s.Store.ListCategories(r.Context())
+	return nil
+}
+
+// loadWorkshopCatalogOnce obtains the complete resolution catalog through
+// the store's authoritative full-catalog boundary. Its full Module objects
+// feed both definition selection and resolution; the projection and revision
+// are derived from those exact values, eliminating the prior GetModuleByID /
+// ListModules TOCTOU split.
+func (s *Server) loadWorkshopCatalogOnce(r *http.Request) (authoringCatalogSnapshot, error) {
+	composition, err := s.Store.GetFullCatalog(r.Context())
 	if err != nil {
-		return domain.Catalog{}, "", err
+		return authoringCatalogSnapshot{}, err
 	}
 	materialCategories, err := s.Store.ListMaterialCategories(r.Context())
 	if err != nil {
-		return domain.Catalog{}, "", err
+		return authoringCatalogSnapshot{}, err
 	}
-	optionGroups, err := s.Store.ListOptionGroups(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
-	}
-	structures, err := s.Store.ListStructures(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
-	}
-	components, err := s.Store.ListComponents(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
-	}
-	agregados, err := s.Store.ListAgregados(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
-	}
-	hardware, err := s.Store.ListHardwares(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
-	}
-	materials, err := s.Store.ListMaterialBoards(r.Context())
-	if err != nil {
-		return domain.Catalog{}, "", err
-	}
-	composition := domain.Catalog{
-		Structures:   structures,
-		Components:   components,
-		Agregados:    agregados,
-		Hardware:     hardware,
-		Materials:    materials,
-		OptionGroups: optionGroups,
-	}
-	catalog := buildWorkshopFurnitureCatalog(modules, categories, materialCategories, composition)
-	return composition, workshopCatalogRevisionID(catalog), nil
+	projection := buildWorkshopFurnitureCatalog(composition.Modules, composition.Categories, materialCategories, composition)
+	revision := workshopCatalogRevisionID(projection)
+	projection.RevisionID = revision
+	return authoringCatalogSnapshot{
+		Composition: composition, MaterialCategories: materialCategories,
+		Projection: projection, Revision: revision,
+	}, nil
 }
 
 // authoringOccurrencesFromWire converts wire occurrences (slice-based

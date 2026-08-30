@@ -145,6 +145,13 @@ the complete authoring snapshot and returning the accepted/resolved result.
 No feature may express these intents as query parameters or a parallel
 payload shape.
 
+The v1 server projection resolves the parameter definitions it actually owns
+today (`widthMm`, `heightMm`, `depthMm`). It must reject, never echo as a
+no-op, any undeclared parameter. #483 adds the persisted/versioned typed
+`FurnitureDefinition.parameters` projection for future number/string/boolean/
+enum families; the occurrence and HardwarePlacement first slices of
+#467/#468 do not depend on it.
+
 ## 6. Furniture parameter/material update
 
 Current update contract remains valid conceptually:

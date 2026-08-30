@@ -52,11 +52,13 @@ module Granete
 
       def test_accepted_response_parses_and_drives_one_atomic_native_operation
         response = scenario_response('02-move-shelf')
-        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(response)
+        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          response, expected_request: scenario_request('02-move-shelf')
+        )
 
         assert result.accepted?
         assert_equal 'granete.local-basis.v1', result.layout.transform_contract
-        assert_match(/\Afnv1a-[0-9a-f]{8}\z/, result.manufacturing_fingerprint)
+        assert_match(/\Asha256-[0-9a-f]{64}\z/, result.manufacturing_fingerprint)
         refute_empty result.catalog_revision
         # Occurrence identity survives request→resolve→this parser: the moved
         # shelf carries the client's exact componentInstanceId.
@@ -113,6 +115,18 @@ module Granete
         assert_equal 0, @apply_calls
       end
 
+      def test_incoherent_snapshot_never_mutates_the_host
+        corrupt = deep_copy(scenario_response('02-move-shelf'))
+        corrupt['normalizedSnapshot']['components'][0]['componentInstanceId'] = 'corrupt-occurrence'
+        before = snapshot_host_state
+
+        assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+          apply_parsed(corrupt, 200)
+        end
+        assert_host_untouched(before)
+        assert_equal 0, @apply_calls
+      end
+
       def test_unknown_schema_version_never_mutates_the_host
         body = scenario_response('08-unknown-schema-version')
         # The gateway already rejected it; simulating a drifted server, the
@@ -124,11 +138,14 @@ module Granete
         end
         # The recorded gateway rejection parses (rejected, with issues) and
         # the transport raises on it instead of returning a usable result.
-        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(body)
+        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          body, expected_request: scenario_request('08-unknown-schema-version')
+        )
         refute result.accepted?
         assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
           Granete::SketchUpExtension::Library::AuthoringResolveTransport.interpret(
-            { 'status' => 400, 'body' => body }
+            { 'status' => 400, 'body' => body },
+            expected_request: scenario_request('08-unknown-schema-version')
           )
         end
         assert_host_untouched(before)
@@ -142,7 +159,8 @@ module Granete
       # rejection never reaches FurnitureBuilder.
       def apply_parsed(raw_body, http_status = 422)
         result = Granete::SketchUpExtension::Library::AuthoringResolveTransport.interpret(
-          { 'status' => http_status, 'body' => raw_body }
+          { 'status' => http_status, 'body' => raw_body },
+          expected_request: scenario_request('02-move-shelf')
         )
         apply(result)
       end
@@ -174,8 +192,20 @@ module Granete
       end
 
       def scenario_response(id)
-        fixture['scenarios'].find { |scenario| scenario['id'] == id }['response'] ||
+        scenario(id)['response']
+      end
+
+      def scenario_request(id)
+        scenario(id)['request']
+      end
+
+      def scenario(id)
+        fixture['scenarios'].find { |entry| entry['id'] == id } ||
           raise("missing scenario #{id} in golden")
+      end
+
+      def deep_copy(value)
+        JSON.parse(JSON.generate(value))
       end
 
       def fixture

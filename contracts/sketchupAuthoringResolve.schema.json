@@ -1,0 +1,1128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://granete.app/contracts/sketchupAuthoringResolve.schema.json",
+  "title": "Granete SketchUp Authoring Resolve v1",
+  "description": "Canonical machine-readable transport contract for #477. The scenario fixture is conformance data, not the schema authority.",
+  "$ref": "#/$defs/message",
+  "$defs": {
+    "message": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/request"
+        },
+        {
+          "$ref": "#/$defs/acceptedResponse"
+        },
+        {
+          "$ref": "#/$defs/rejectedResponse"
+        }
+      ]
+    },
+    "parameterValue": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "relationshipAnchor": {
+      "type": "object",
+      "properties": {
+        "componentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "face": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "componentInstanceId",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "relationship": {
+      "type": "object",
+      "properties": {
+        "relationshipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "source": {
+          "$ref": "#/$defs/relationshipAnchor"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationshipAnchor"
+          },
+          "minItems": 1,
+          "maxItems": 256
+        },
+        "joinerySystemId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "parameters": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterValue"
+          },
+          "maxProperties": 256
+        }
+      },
+      "required": [
+        "relationshipId",
+        "kind",
+        "source",
+        "targets"
+      ],
+      "additionalProperties": false
+    },
+    "occurrenceTransform": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "const": "assembly"
+        },
+        "translationMm": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "frame",
+        "translationMm"
+      ],
+      "additionalProperties": false
+    },
+    "componentOccurrence": {
+      "type": "object",
+      "properties": {
+        "componentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "componentDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "catalogComponentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "transform": {
+          "$ref": "#/$defs/occurrenceTransform"
+        }
+      },
+      "required": [
+        "componentInstanceId",
+        "componentDefinitionId"
+      ],
+      "additionalProperties": false
+    },
+    "hardwarePlacement": {
+      "type": "object",
+      "properties": {
+        "hardwarePlacementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "catalogHardwareId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "hostComponentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "anchorFace": {
+          "enum": [
+            "front",
+            "back",
+            "left",
+            "right",
+            "top",
+            "bottom"
+          ]
+        },
+        "offsetMm": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "hardwarePlacementId",
+        "catalogHardwareId",
+        "hostComponentInstanceId",
+        "anchorFace",
+        "offsetMm"
+      ],
+      "additionalProperties": false
+    },
+    "issue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "SCHEMA_ID_MISMATCH",
+            "SCHEMA_VERSION_UNSUPPORTED",
+            "METHOD_NOT_ALLOWED",
+            "AUTHENTICATION_REQUIRED",
+            "ACCESS_FORBIDDEN",
+            "CONTENT_TYPE_UNSUPPORTED",
+            "REQUEST_INVALID",
+            "PAYLOAD_TOO_LARGE",
+            "QUERY_PARAMETERS_UNSUPPORTED",
+            "CATALOG_REFERENCE_MISSING",
+            "CATALOG_REVISION_STALE",
+            "CATALOG_DEFINITION_INACTIVE",
+            "PARAMETER_INVALID",
+            "MATERIAL_CHOICE_INVALID",
+            "RESOLVE_GEOMETRY_INVALID",
+            "OCCURRENCE_UNKNOWN_TEMPLATE",
+            "OCCURRENCE_DUPLICATE_ID",
+            "OCCURRENCE_COUNT_UNSUPPORTED",
+            "SNAPSHOT_INCOMPLETE",
+            "TRANSFORM_INVALID",
+            "RELATIONSHIP_INVALID",
+            "RELATIONSHIP_ORPHANED",
+            "JOINERY_SYSTEM_UNSUPPORTED",
+            "HARDWARE_HOST_INVALID",
+            "HARDWARE_REFERENCE_INVALID",
+            "HARDWARE_PLACEMENT_INVALID",
+            "DRILLING_CONFLICT"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ]
+        },
+        "entityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "remediation": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "severity"
+      ],
+      "additionalProperties": false
+    },
+    "furnitureIntent": {
+      "type": "object",
+      "properties": {
+        "furnitureDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "catalogRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "parameters": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterValue"
+          },
+          "maxProperties": 256
+        },
+        "materialChoices": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxProperties": 256
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/componentOccurrence"
+          },
+          "maxItems": 10000
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationship"
+          },
+          "maxItems": 10000
+        },
+        "hardwarePlacements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hardwarePlacement"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "furnitureDefinitionId",
+        "catalogRevision"
+      ],
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "const": "granete.sketchup-authoring-resolve.v1"
+        },
+        "schemaName": {
+          "const": "granete.sketchup-authoring-resolve"
+        },
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "client": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "clientVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "hostVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "client",
+            "clientVersion",
+            "host",
+            "hostVersion"
+          ],
+          "additionalProperties": false
+        },
+        "units": {
+          "type": "object",
+          "properties": {
+            "length": {
+              "const": "mm"
+            },
+            "angle": {
+              "const": "deg"
+            },
+            "precisionMm": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "length",
+            "angle",
+            "precisionMm"
+          ],
+          "additionalProperties": false
+        },
+        "coordinateSystem": {
+          "type": "object",
+          "properties": {
+            "handedness": {
+              "const": "right"
+            },
+            "upAxis": {
+              "const": "z"
+            },
+            "projectFrameId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "handedness",
+            "upAxis",
+            "projectFrameId"
+          ],
+          "additionalProperties": false
+        },
+        "furniture": {
+          "$ref": "#/$defs/furnitureIntent"
+        }
+      },
+      "required": [
+        "schemaId",
+        "schemaName",
+        "schemaVersion",
+        "messageId",
+        "idempotencyKey",
+        "sentAt",
+        "source",
+        "units",
+        "coordinateSystem",
+        "furniture"
+      ],
+      "additionalProperties": false
+    },
+    "normalizedComponent": {
+      "type": "object",
+      "properties": {
+        "componentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "componentDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "catalogComponentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "transform": {
+          "$ref": "#/$defs/occurrenceTransform"
+        }
+      },
+      "required": [
+        "componentInstanceId",
+        "componentDefinitionId",
+        "catalogComponentId",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "normalizedSnapshot": {
+      "type": "object",
+      "properties": {
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterValue"
+          }
+        },
+        "materialChoices": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/normalizedComponent"
+          },
+          "maxItems": 10000
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationship"
+          },
+          "maxItems": 10000
+        },
+        "hardwarePlacements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hardwarePlacement"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "parameters",
+        "materialChoices",
+        "components",
+        "relationships",
+        "hardwarePlacements"
+      ],
+      "additionalProperties": false
+    },
+    "resolvedLayoutComponent": {
+      "type": "object",
+      "properties": {
+        "componentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "componentDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "slotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "lengthMm": {
+          "type": "number"
+        },
+        "widthMm": {
+          "type": "number"
+        },
+        "thicknessMm": {
+          "type": "number"
+        },
+        "materialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "object",
+          "properties": {
+            "translationMm": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "translationMm"
+          ],
+          "additionalProperties": true
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "dimensionsMm": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "localTransform": {
+          "type": "object"
+        },
+        "optionRole": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "materialCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "materialName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "materialColorHex": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "componentInstanceId",
+        "componentDefinitionId",
+        "slotId",
+        "lengthMm",
+        "widthMm",
+        "thicknessMm",
+        "transform"
+      ],
+      "additionalProperties": false
+    },
+    "resolvedLayoutHardware": {
+      "type": "object",
+      "properties": {
+        "placementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "hardwareId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "hostComponentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "anchorFace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "placementKind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "placementId",
+        "hardwareId",
+        "hostComponentInstanceId",
+        "anchorFace",
+        "placementKind"
+      ],
+      "additionalProperties": true
+    },
+    "resolvedLayout": {
+      "type": "object",
+      "properties": {
+        "furnitureDefinitionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "definitionName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "transformContract": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "dimensionsMm": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resolvedLayoutComponent"
+          },
+          "maxItems": 10000
+        },
+        "hardware": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resolvedLayoutHardware"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "furnitureDefinitionId",
+        "definitionName",
+        "transformContract",
+        "dimensionsMm",
+        "components",
+        "hardware"
+      ],
+      "additionalProperties": false
+    },
+    "relationshipProvenance": {
+      "type": "object",
+      "properties": {
+        "sourceKind": {
+          "const": "relationship"
+        },
+        "relationshipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "catalogRuleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "sourceKind",
+        "relationshipId"
+      ],
+      "additionalProperties": false
+    },
+    "manualPlacementProvenance": {
+      "type": "object",
+      "properties": {
+        "sourceKind": {
+          "const": "manualHardwarePlacement"
+        },
+        "hardwarePlacementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "sourceKind",
+        "hardwarePlacementId"
+      ],
+      "additionalProperties": false
+    },
+    "hole": {
+      "type": "object",
+      "properties": {
+        "face": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "xMm": {
+          "type": "number"
+        },
+        "yMm": {
+          "type": "number"
+        },
+        "diameterMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "depthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "face",
+        "xMm",
+        "yMm",
+        "diameterMm",
+        "depthMm",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "machiningOperation": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "hostComponentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "provenance": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/relationshipProvenance"
+            },
+            {
+              "$ref": "#/$defs/manualPlacementProvenance"
+            }
+          ]
+        },
+        "holes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hole"
+          }
+        }
+      },
+      "required": [
+        "operationId",
+        "hostComponentInstanceId",
+        "provenance",
+        "holes"
+      ],
+      "additionalProperties": false
+    },
+    "derivedHardwarePlacement": {
+      "type": "object",
+      "properties": {
+        "derivedHardwarePlacementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "hostComponentInstanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "provenance": {
+          "$ref": "#/$defs/relationshipProvenance"
+        }
+      },
+      "required": [
+        "derivedHardwarePlacementId",
+        "hostComponentInstanceId",
+        "provenance"
+      ],
+      "additionalProperties": false
+    },
+    "resolvedMachining": {
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/machiningOperation"
+          }
+        },
+        "derivedHardwarePlacements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/derivedHardwarePlacement"
+          }
+        },
+        "manufacturingFingerprint": {
+          "type": "string",
+          "pattern": "^sha256-[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "operations",
+        "derivedHardwarePlacements",
+        "manufacturingFingerprint"
+      ],
+      "additionalProperties": false
+    },
+    "resolvedPreflight": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "const": "authoring-resolve-subset"
+        },
+        "status": {
+          "enum": [
+            "clear",
+            "blocked"
+          ]
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "maxItems": 10000
+        },
+        "preflightContract": {
+          "const": "granete.manufacturing-preflight.v1"
+        }
+      },
+      "required": [
+        "scope",
+        "status",
+        "issues",
+        "preflightContract"
+      ],
+      "additionalProperties": false
+    },
+    "resolved": {
+      "type": "object",
+      "properties": {
+        "layout": {
+          "$ref": "#/$defs/resolvedLayout"
+        },
+        "machining": {
+          "$ref": "#/$defs/resolvedMachining"
+        },
+        "preflight": {
+          "$ref": "#/$defs/resolvedPreflight"
+        }
+      },
+      "required": [
+        "layout",
+        "machining",
+        "preflight"
+      ],
+      "additionalProperties": false
+    },
+    "acceptedResponse": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "const": "granete.sketchup-authoring-resolve.v1"
+        },
+        "schemaName": {
+          "const": "granete.sketchup-authoring-resolve"
+        },
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "resolveContract": {
+          "const": "granete.sketchup-authoring-resolve.v1"
+        },
+        "responseMessageId": {
+          "type": "string",
+          "maxLength": 136
+        },
+        "inReplyToMessageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "catalogRevision": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "maxItems": 10000
+        },
+        "status": {
+          "const": "accepted"
+        },
+        "normalizedSnapshot": {
+          "$ref": "#/$defs/normalizedSnapshot"
+        },
+        "resolved": {
+          "$ref": "#/$defs/resolved"
+        }
+      },
+      "required": [
+        "schemaId",
+        "schemaName",
+        "schemaVersion",
+        "resolveContract",
+        "responseMessageId",
+        "inReplyToMessageId",
+        "idempotencyKey",
+        "catalogRevision",
+        "issues",
+        "status",
+        "normalizedSnapshot",
+        "resolved"
+      ],
+      "additionalProperties": false
+    },
+    "rejectedResponse": {
+      "type": "object",
+      "properties": {
+        "schemaId": {
+          "const": "granete.sketchup-authoring-resolve.v1"
+        },
+        "schemaName": {
+          "const": "granete.sketchup-authoring-resolve"
+        },
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "resolveContract": {
+          "const": "granete.sketchup-authoring-resolve.v1"
+        },
+        "responseMessageId": {
+          "type": "string",
+          "maxLength": 136
+        },
+        "inReplyToMessageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "catalogRevision": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "maxItems": 10000
+        },
+        "status": {
+          "const": "rejected"
+        }
+      },
+      "required": [
+        "schemaId",
+        "schemaName",
+        "schemaVersion",
+        "resolveContract",
+        "responseMessageId",
+        "inReplyToMessageId",
+        "idempotencyKey",
+        "catalogRevision",
+        "issues",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -26,20 +26,27 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 	module, catalog := authoringAPICabinetFixture()
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
+	materials := []domain.MaterialBoard{
+		{ID: "mat-oak18", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
+		{ID: "mat-white18", Code: "MEL-BLANCO", Name: "Melamina Blanca", ThicknessMm: 18, PreviewColor: "#f5f5f0", Active: true},
+	}
+	fullCatalog := catalog
+	fullCatalog.Modules = []domain.Module{*module}
+	fullCatalog.Materials = materials
 	server.Store = &stubStore{
 		getUserByEmail:     u,
 		moduleReturnedByID: module,
+		catalogOverride:    &fullCatalog,
 		listModules:        []domain.Module{*module},
 		listStructures:     catalog.Structures,
 		listComponents:     catalog.Components,
 		listAgregados:      catalog.Agregados,
 		listHardwares:      catalog.Hardware,
-		listMaterials: []domain.MaterialBoard{
-			{ID: "mat-oak18", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
-			{ID: "mat-white18", Code: "MEL-BLANCO", Name: "Melamina Blanca", ThicknessMm: 18, PreviewColor: "#f5f5f0", Active: true},
-		},
+		listMaterials:      materials,
 	}
-	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
+	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{
+		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1,
+	}, furnitureTestSecret)
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
@@ -144,17 +151,11 @@ func authoringFixtureRequest(revision string, furniture authoringResolveFurnitur
 func authoringCatalogRevision(t *testing.T, server *Server) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
-	composition, _, err := server.loadWorkshopCatalogOnce(req)
+	snapshot, err := server.loadWorkshopCatalogOnce(req)
 	if err != nil {
 		t.Fatalf("load catalog once: %v", err)
 	}
-	catalog := buildWorkshopFurnitureCatalog(
-		server.Store.(*stubStore).listModules,
-		server.Store.(*stubStore).listCategories,
-		server.Store.(*stubStore).listMaterialCategories,
-		composition,
-	)
-	return workshopCatalogRevisionID(catalog)
+	return snapshot.Revision
 }
 
 func occurrenceJSON(instanceID, defID string, translation []float64) authoringOccurrenceWire {
@@ -693,7 +694,9 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 
 	// Extension tokens hold the EXPLICIT authoring-resolve POST capability
 	// (#460 coordination) and stay read-only everywhere else.
-	extension, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
+	extension, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{
+		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1,
+	}, furnitureTestSecret)
 	rec = postAuthoringResolve(server, extension, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("extension token resolve status = %d body=%s", rec.Code, rec.Body.String())
@@ -724,7 +727,9 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 		getUserByEmail: u, getOrgByID: noLicense, moduleReturnedByID: module,
 		listStructures: catalog.Structures, listComponents: catalog.Components, listHardwares: catalog.Hardware,
 	}
-	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1"}, furnitureTestSecret)
+	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{
+		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1,
+	}, furnitureTestSecret)
 	rec = postAuthoringResolve(licenseless, webToken, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("inactive license status = %d", rec.Code)
@@ -751,6 +756,7 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
 	req := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/resolve", strings.NewReader("{not json"))
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusBadRequest {
@@ -821,6 +827,84 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	handler.ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET resolve status = %d", recorder.Code)
+	}
+}
+
+func TestAuthoringResolveUsesDefinitionFromPinnedSnapshot(t *testing.T) {
+	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	stale := *store.moduleReturnedByID
+	stale.WidthMm = 999
+	store.moduleReturnedByID = &stale
+
+	request := authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+	})
+	rec := postAuthoringResolve(server, token, "", request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Resolved struct {
+			Layout engine.FurnitureLayout `json:"layout"`
+		} `json:"resolved"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Resolved.Layout.DimensionsMm[0] != 600 {
+		t.Fatalf("resolved width = %v, want pinned-snapshot width 600 (stale GetModuleByID held 999)", response.Resolved.Layout.DimensionsMm[0])
+	}
+}
+
+func TestAuthoringResolveTransportMetadataValidation(t *testing.T) {
+	server, token := authoringStubServer(t)
+	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
+	valid := authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID})
+	raw, _ := json.Marshal(valid)
+
+	withoutType := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/resolve", bytes.NewReader(raw))
+	withoutType.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, withoutType)
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("missing content type status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertIssueCode(t, rec.Body.Bytes(), "CONTENT_TYPE_UNSUPPORTED")
+
+	trailing := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/resolve", bytes.NewReader(append(raw, []byte(` {}`)...)))
+	trailing.Header.Set("Authorization", "Bearer "+token)
+	trailing.Header.Set("Content-Type", "application/json; charset=utf-8")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, trailing)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("trailing JSON status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertIssueCode(t, rec.Body.Bytes(), "REQUEST_INVALID")
+
+	invalidSentAt := valid
+	invalidSentAt.SentAt = "yesterday"
+	rec = postAuthoringResolve(server, token, "", invalidSentAt)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid sentAt status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertIssueCode(t, rec.Body.Bytes(), "REQUEST_INVALID")
+
+	oversizedMessage := valid
+	oversizedMessage.MessageID = strings.Repeat("m", authoringMaxIdentifierLength+1)
+	rec = postAuthoringResolve(server, token, "", oversizedMessage)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("oversized messageId status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertIssueCode(t, rec.Body.Bytes(), "REQUEST_INVALID")
+}
+
+func TestWorkshopCatalogRevisionPinsIndustrialRules(t *testing.T) {
+	catalog := workshopFurnitureCatalog{Definitions: map[string]workshopFurnitureDefinition{}}
+	before := workshopCatalogRevisionIDWithRules(catalog, "sha256-rules-a")
+	after := workshopCatalogRevisionIDWithRules(catalog, "sha256-rules-b")
+	if before == after {
+		t.Fatal("industrial rules revision must be part of the workshop catalog pin")
 	}
 }
 

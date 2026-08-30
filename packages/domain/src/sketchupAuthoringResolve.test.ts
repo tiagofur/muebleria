@@ -75,16 +75,36 @@ describe('validateAuthoringResolveRequest', () => {
     expect(codes(validateAuthoringResolveRequest(coarse))).toEqual(['REQUEST_INVALID']);
   });
 
-  test('unknown or non-integer furniture parameters fail closed', () => {
+  test('allows definition-driven finite scalar parameters and rejects non-scalars', () => {
     expect(
-      codes(validateAuthoringResolveRequest(request({ parameters: { shelf2Z: 520 } }))),
-    ).toEqual(['PARAMETER_INVALID']);
+      validateAuthoringResolveRequest(request({ parameters: { shelfCount: 3, style: 'nórdico', softClose: true, widthMm: 600.5 } })),
+    ).toEqual([]);
     expect(
-      codes(validateAuthoringResolveRequest(request({ parameters: { widthMm: 600.5 } }))),
+      codes(validateAuthoringResolveRequest(request({ parameters: { nested: { value: 1 } } as never }))),
     ).toEqual(['PARAMETER_INVALID']);
-    expect(
-      codes(validateAuthoringResolveRequest(request({ parameters: { widthMm: -1 } }))),
-    ).toEqual(['PARAMETER_INVALID']);
+  });
+
+  test('requires componentDefinitionId and scalar relationship parameters', () => {
+    const missingDefinition = request({ components: [{ componentInstanceId: 'shelf-01' } as never] });
+    expect(codes(validateAuthoringResolveRequest(missingDefinition))).toContain('REQUEST_INVALID');
+
+    const invalidRelationshipParameter = request({
+      components: [{ componentInstanceId: 'shelf-01', componentDefinitionId: 'mod-comp-shelf' }],
+      relationships: [{
+        relationshipId: 'rel-1',
+        kind: 'shelf-support',
+        source: { componentInstanceId: 'shelf-01', role: 'edge' },
+        targets: [{ componentInstanceId: 'shelf-01', role: 'face' }],
+        parameters: { positions: [32, 64] } as never,
+      }],
+    });
+    expect(codes(validateAuthoringResolveRequest(invalidRelationshipParameter))).toContain('RELATIONSHIP_INVALID');
+  });
+
+  test('validates RFC3339 and rejects unknown envelope fields', () => {
+    expect(codes(validateAuthoringResolveRequest({ ...request(), sentAt: '2026-08-30' }))).toContain('REQUEST_INVALID');
+    const extra = { ...request(), surprise: true } as AuthoringResolveRequestV1;
+    expect(codes(validateAuthoringResolveRequest(extra))).toContain('REQUEST_INVALID');
   });
 
   test('occurrences: duplicate ids, wrong frame and non-finite translations', () => {
@@ -197,5 +217,6 @@ describe('validateAuthoringResolveRequest', () => {
     }
     expect(isAuthoringResolveIssueCode('SHELF2Z_UNSUPPORTED')).toBe(false);
     expect(AUTHORING_RESOLVE_ISSUE_CODES).toContain('QUERY_PARAMETERS_UNSUPPORTED');
+    expect(AUTHORING_RESOLVE_ISSUE_CODES).toContain('CONTENT_TYPE_UNSUPPORTED');
   });
 });
