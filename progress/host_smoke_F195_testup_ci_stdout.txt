@@ -1,0 +1,6 @@
+[runner] tests: test_accepted_response_parses_and_drives_one_atomic_native_operation, test_incoherent_snapshot_never_mutates_the_host, test_malformed_envelope_never_mutates_the_host, test_rejected_orphan_anchor_never_mutates_the_host, test_unknown_schema_version_never_mutates_the_host
+[runner] test_accepted_response_parses_and_drives_one_atomic_native_operation: passed (22 assertions)
+[runner] test_incoherent_snapshot_never_mutates_the_host: passed (6 assertions)
+[runner] test_malformed_envelope_never_mutates_the_host: passed (6 assertions)
+[runner] test_rejected_orphan_anchor_never_mutates_the_host: passed (8 assertions)
+[runner] test_unknown_schema_version_never_mutates_the_host: passed (8 assertions)

@@ -193,6 +193,16 @@ multi-selection fail-closed) is covered by the Node harness
 excellence features (#466/#467/#468/#470/#471) must consume this foundation
 instead of building parallel selection payloads.
 
+### Authoring resolve suite (#477)
+
+`TC_AuthoringResolveSmoke` consumes the shared versioned resolve fixture
+through the **installed** extension. It proves that an accepted response can
+drive one atomic native rebuild with exact occurrence identities, while
+rejected, malformed, unknown-version, and snapshot/layout-incoherent envelopes
+fail before `FurnitureBuilder` starts an operation or changes geometry,
+definitions, or Granete metadata. The parseable evidence records the installed
+RBZ SHA-256 and source commit in `progress/host_smoke_F195_testup_ci.json`.
+
 ## Configuration and security boundary
 
 The bootstrap injects two independent ports:
@@ -218,7 +228,7 @@ SketchUp operation. It is not a BOM, release, machine, or fabrication contract.
 
 | Host | Embedded Ruby | CEF | Status |
 |---|---:|---:|---|
-| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…`; in-host smoke 2026-08-27 (#415): TestUp CI 17/17 (7 bootstrap + 10 native entity), RBZ SHA-256 `efeab3fb…`; in-host smoke 2026-08-28 (#417): TestUp CI **28/28** (7 bootstrap + 11 native entity + 9 native validation + 1 OpenCutList 7.1.0 interop), 968 assertions, RBZ SHA-256 `5fb741e9…` |
+| SketchUp 2026.2 macOS | 3.2.2 | 137 | **Target — supported**; in-host smoke 2026-08-24: TestUp CI 7/7, RBZ SHA-256 `9b392da4…`; in-host smoke 2026-08-27 (#415): TestUp CI 17/17 (7 bootstrap + 10 native entity), RBZ SHA-256 `efeab3fb…`; in-host smoke 2026-08-28 (#417): TestUp CI **28/28** (7 bootstrap + 11 native entity + 9 native validation + 1 OpenCutList 7.1.0 interop), 968 assertions, RBZ SHA-256 `5fb741e9…`; in-host smoke 2026-08-30 (#477): TestUp **5/5**, 50 assertions, source `7e9a49ba…`, RBZ SHA-256 `7bf9d251…` |
 | SketchUp 2024/2025 macOS | 3.2.2 | 112/128 | Planned compatibility — not a target, no implied support |
 | SketchUp 2024/2025/2026.2 Windows | 3.2.2 | 112–137 | Planned compatibility — not a target, no implied support |
 
