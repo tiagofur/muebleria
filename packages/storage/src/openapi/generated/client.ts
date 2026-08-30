@@ -25,7 +25,8 @@ import type {
   SelectOrganizationRequest,
   StartSupportSessionRequest,
   SupportSessionResponse,
-  TeamMember,
+  TeamDirectory,
+  TeamSummary,
   UpdateAccountStatusRequest,
   UpdateMemberRolesRequest,
   UpdateMembershipStatusRequest,
@@ -64,10 +65,11 @@ export abstract class GeneratedGraneteApiClient {
   listFactoryOrganizations(token: string): Promise<ReadonlyArray<FactoryOrganization>> { return this.request("GET", "/factory/organizations", { arrayOf: "FactoryOrganization", token }); }
   createFactoryOrganization(token: string, body: CreateFactoryOrganizationRequest, key = this.createIdempotencyKey()): Promise<CreateFactoryOrganizationResponse> { return this.request("POST", "/factory/organizations", { schema: "CreateFactoryOrganizationResponse", token, bodySchema: "CreateFactoryOrganizationRequest", body, idempotencyKey: key }); }
   acceptInvitation(body: AcceptInvitationRequest, key = this.createIdempotencyKey()): Promise<LoginResponse> { return this.request("POST", "/auth/invitations:accept", { schema: "LoginResponse", bodySchema: "AcceptInvitationRequest", body, idempotencyKey: key }); }
-  listMemberships(token: string): Promise<ReadonlyArray<TeamMember>> { return this.request("GET", "/org/memberships", { arrayOf: "TeamMember", token }); }
+  listMemberships(token: string): Promise<TeamDirectory> { return this.request("GET", "/org/memberships", { schema: "TeamDirectory", token }); }
   updateMembershipRoles(token: string, membershipId: string, version: number, body: UpdateMemberRolesRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/roles`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMemberRolesRequest", body, idempotencyKey: key }); }
   updateMembershipStatus(token: string, membershipId: string, version: number, body: UpdateMembershipStatusRequest, key = this.createIdempotencyKey()): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/status`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMembershipStatusRequest", body, idempotencyKey: key }); }
   resendInvitation(token: string, invitationId: string, version: number, key = this.createIdempotencyKey()): Promise<ResendInvitationResponse> { return this.request("POST", `/org/invitations/${encodeURIComponent(invitationId)}:resend`, { schema: "ResendInvitationResponse", token, ifMatch: version, idempotencyKey: key }); }
   revokeInvitation(token: string, invitationId: string, version: number, body: RevokeInvitationRequest, key = this.createIdempotencyKey()): Promise<RevokeInvitationResponse> { return this.request("POST", `/org/invitations/${encodeURIComponent(invitationId)}:revoke`, { schema: "RevokeInvitationResponse", token, ifMatch: version, bodySchema: "RevokeInvitationRequest", body, idempotencyKey: key }); }
   setPlatformUserAccountStatus(token: string, userId: string, body: UpdateAccountStatusRequest, key = this.createIdempotencyKey()): Promise<AccountStatusMutationResponse> { return this.request("POST", `/platform/users/${encodeURIComponent(userId)}:set-account-status`, { schema: "AccountStatusMutationResponse", token, bodySchema: "UpdateAccountStatusRequest", body, idempotencyKey: key }); }
+  getTeamSummary(token: string): Promise<TeamSummary> { return this.request("GET", "/org/team/summary", { schema: "TeamSummary", token }); }
 }

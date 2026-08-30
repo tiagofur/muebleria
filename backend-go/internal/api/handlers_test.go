@@ -2465,6 +2465,9 @@ func (s *stubStore) EndSupportSession(context.Context, string, string, string) (
 func (s *stubStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
 	return nil, nil
 }
+func (s *stubStore) GetOrgTeamSummary(context.Context, string, string) (*storage.OrgTeamSummary, error) {
+	return &storage.OrgTeamSummary{TeamVersion: 1, EntitlementsVersion: 1}, nil
+}
 func (s *stubStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, membershipID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
 	return &storage.OrgTeamMember{MembershipID: membershipID, UserID: "u-1", Roles: roles, Status: domain.MembershipStatusActive, Version: version + 1}, nil
 }

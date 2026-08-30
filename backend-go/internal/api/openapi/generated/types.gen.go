@@ -359,3 +359,33 @@ type AccountStatusMutationResponse struct {
 	AccountStatus AccountStatus `json:"account_status"`
 	UpdatedAt     string        `json:"updated_at"`
 }
+
+type TeamCapability string
+
+const (
+	TeamCapabilityTeamView             TeamCapability = "team:view"
+	TeamCapabilityTeamInviteSales      TeamCapability = "team:invite:sales"
+	TeamCapabilityTeamInviteProduction TeamCapability = "team:invite:production"
+	TeamCapabilityTeamManageSales      TeamCapability = "team:manage:sales"
+	TeamCapabilityTeamManageProduction TeamCapability = "team:manage:production"
+	TeamCapabilityTeamManageAll        TeamCapability = "team:manage:all"
+	TeamCapabilityTeamAssignAdmin      TeamCapability = "team:assign:admin"
+	TeamCapabilityTeamTransferAdmin    TeamCapability = "team:transfer_admin"
+	TeamCapabilityTeamManageSectors    TeamCapability = "team:manage:sectors"
+	TeamCapabilityTeamRevokeSessions   TeamCapability = "team:revoke_sessions"
+)
+
+type TeamSummary struct {
+	ActiveMembers       int64            `json:"active_members"`
+	SuspendedMembers    int64            `json:"suspended_members"`
+	LeftMembers         int64            `json:"left_members"`
+	MaxActiveMembers    *int64           `json:"max_active_members"`
+	TeamVersion         int64            `json:"team_version"`
+	EntitlementsVersion int64            `json:"entitlements_version"`
+	Capabilities        []TeamCapability `json:"capabilities"`
+}
+
+type TeamDirectory struct {
+	Items   []TeamMember `json:"items"`
+	Summary TeamSummary  `json:"summary"`
+}

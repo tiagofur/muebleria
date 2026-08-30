@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,10 +22,17 @@ type teamCapabilitiesStore struct {
 	statusUpdated bool
 	rolesErr      error
 	statusErr     error
+	summary       *storage.OrgTeamSummary
 }
 
 func (s *teamCapabilitiesStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
 	return s.team, nil
+}
+func (s *teamCapabilitiesStore) GetOrgTeamSummary(context.Context, string, string) (*storage.OrgTeamSummary, error) {
+	if s.summary == nil {
+		return &storage.OrgTeamSummary{TeamVersion: 1, EntitlementsVersion: 1}, nil
+	}
+	return s.summary, nil
 }
 
 func (s *teamCapabilitiesStore) UpdateMembershipRolesByOrg(_ context.Context, _ string, membershipID string, roles []domain.UserRole, version int64) (*storage.OrgTeamMember, error) {
@@ -225,5 +233,40 @@ func TestOrgMemberMutationsMapNamedTeamInvariantConstraints(t *testing.T) {
 				t.Fatalf("typed error missing %s: %s", tt.wantCode, rr.Body.String())
 			}
 		})
+	}
+}
+
+func TestOrgTeamDirectoryReturnsAuthoritativeSummaryAndCapabilities(t *testing.T) {
+	target := storage.OrgTeamMember{MembershipID: "target-membership", UserID: "target", Email: "target@example.test", Name: "Target", AccountStatus: domain.AccountStatusActive, Status: domain.MembershipStatusSuspended, Roles: []domain.UserRole{domain.RoleVendedor}, Version: 2}
+	srv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})
+	store.summary = &storage.OrgTeamSummary{ActiveMembers: 2, SuspendedMembers: 1, LeftMembers: 3, TeamVersion: 7, EntitlementsVersion: 5}
+
+	rr := httptest.NewRecorder()
+	srv.HandleOrgTeam(rr, teamCapabilityRequest(http.MethodGet, "/api/org/memberships", "actor", []string{string(domain.RoleGerenteVentas)}, ""))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("directory status = %d: %s", rr.Code, rr.Body.String())
+	}
+	var directory openapi.TeamDirectory
+	if err := json.NewDecoder(rr.Body).Decode(&directory); err != nil {
+		t.Fatal(err)
+	}
+	if directory.Summary.ActiveMembers != 2 || directory.Summary.MaxActiveMembers != nil || directory.Summary.TeamVersion != 7 || len(directory.Items) != 1 {
+		t.Fatalf("directory summary/items = %#v", directory)
+	}
+	if got := directory.Summary.Capabilities; len(got) != 3 || got[0] != openapi.TeamCapabilityTeamView {
+		t.Fatalf("capabilities = %#v", got)
+	}
+
+	rr = httptest.NewRecorder()
+	srv.HandleOrgTeamSummary(rr, teamCapabilityRequest(http.MethodGet, "/api/org/team/summary", "actor", []string{string(domain.RoleGerenteVentas)}, ""))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("summary status = %d: %s", rr.Code, rr.Body.String())
+	}
+	var summary openapi.TeamSummary
+	if err := json.NewDecoder(rr.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.LeftMembers != 3 || summary.EntitlementsVersion != 5 {
+		t.Fatalf("summary = %#v", summary)
 	}
 }

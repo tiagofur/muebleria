@@ -54,9 +54,16 @@ for path in ("/org/memberships/{membershipId}/roles", "/org/memberships/{members
         raise RuntimeError(f"membership command {path} must declare If-Match and Idempotency-Key")
 if "ETag" not in patch_headers:
     raise RuntimeError("versioned organization mutations must declare response ETag")
+directory_response=spec["paths"]["/org/memberships"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+if directory_response.get("$ref") != "#/components/schemas/TeamDirectory":
+    raise RuntimeError("Team membership directory must expose the canonical TeamDirectory read model")
+summary_response=spec["paths"]["/org/team/summary"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+if summary_response.get("$ref") != "#/components/schemas/TeamSummary":
+    raise RuntimeError("Team summary must expose the canonical TeamSummary read model")
 
 required_paths={
     "/org/memberships",
+    "/org/team/summary",
     "/org/invitations",
     "/org/invitations/{invitationId}:resend",
     "/org/invitations/{invitationId}:revoke",
@@ -79,6 +86,10 @@ if published_legacy:
     raise RuntimeError(f"legacy identity lifecycle paths remain published: {sorted(published_legacy)}")
 
 schemas=spec["components"]["schemas"]
+expected_team_capabilities=["team:view","team:invite:sales","team:invite:production","team:manage:sales","team:manage:production","team:manage:all","team:assign:admin","team:transfer_admin","team:manage:sectors","team:revoke_sessions"]
+if schemas.get("TeamCapability", {}).get("enum") != expected_team_capabilities:
+    raise RuntimeError("TeamCapability must preserve the canonical Team capability vocabulary")
+
 invitation_statuses=schemas["InvitationStatus"].get("enum",[])
 expected_invitation_statuses=["pending","delivered","opened","accepted","expired","revoked"]
 if invitation_statuses != expected_invitation_statuses:

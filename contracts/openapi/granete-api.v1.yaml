@@ -555,10 +555,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TeamMember"
-                  }
+                  "$ref": "#/components/schemas/TeamDirectory"
                 }
               }
             }
@@ -804,6 +801,26 @@
           },
           "409": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/team/summary": {
+      "get": {
+        "operationId": "getTeamSummary",
+        "responses": {
+          "200": {
+            "description": "Organization team safety summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSummary"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/ApiError"
@@ -2111,6 +2128,88 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "TeamCapability": {
+        "type": "string",
+        "enum": [
+          "team:view",
+          "team:invite:sales",
+          "team:invite:production",
+          "team:manage:sales",
+          "team:manage:production",
+          "team:manage:all",
+          "team:assign:admin",
+          "team:transfer_admin",
+          "team:manage:sectors",
+          "team:revoke_sessions"
+        ]
+      },
+      "TeamSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "active_members",
+          "suspended_members",
+          "left_members",
+          "max_active_members",
+          "team_version",
+          "entitlements_version",
+          "capabilities"
+        ],
+        "properties": {
+          "active_members": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "suspended_members": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "left_members": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_active_members": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "team_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "entitlements_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamCapability"
+            }
+          }
+        }
+      },
+      "TeamDirectory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "summary"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamMember"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TeamSummary"
           }
         }
       }

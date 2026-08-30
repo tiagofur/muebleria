@@ -12,6 +12,28 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
     await expect(client.listMemberships('token')).rejects.toThrow('Invalid API response');
   });
 
+  it('decodes the generated Team directory and summary read models', async () => {
+    const member = {
+      membership_id: '11111111-1111-1111-1111-111111111111', user_id: '22222222-2222-2222-2222-222222222222',
+      email: 'team@example.test', name: 'Team Member', account_status: 'active', membership_status: 'active',
+      roles: ['vendedor'], joined_at: '2026-08-29T00:00:00Z', version: 2,
+    };
+    const summary = {
+      active_members: 1, suspended_members: 0, left_members: 0, max_active_members: null,
+      team_version: 3, entitlements_version: 4, capabilities: ['team:view', 'team:manage:sales'],
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(json({ items: [member], summary }))
+      .mockResolvedValueOnce(json(summary));
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+    const directory = await client.listMemberships('token');
+    expect(directory.items[0]?.email).toBe('team@example.test');
+    expect(directory.summary.max_active_members).toBeNull();
+    expect((await client.getTeamSummary('token')).capabilities).toContain('team:manage:sales');
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      'http://api.test/org/memberships', 'http://api.test/org/team/summary',
+    ]);
+  });
+
   it('enforces generated minimum and date-time constraints', async () => {
     const organization = {
       id: 'org1', name: 'Factory', slug: 'factory', type: 'factory', license_plan: 'none',
@@ -137,18 +159,22 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       account_status: 'active', membership_status: 'suspended', roles: ['admin'],
       joined_at: '2026-08-28T00:00:00Z', version: 2,
     };
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json([member]));
+    const summary = {
+      active_members: 0, suspended_members: 1, left_members: 0, max_active_members: null,
+      team_version: 1, entitlements_version: 1, capabilities: ['team:view'],
+    };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ items: [member], summary }));
     const client = new GraneteApiClient('http://api.test', fetchImpl);
     const members = await client.listMemberships('token');
-    expect(members[0]?.membership_status).toBe('suspended');
+    expect(members.items[0]?.membership_status).toBe('suspended');
 
-    fetchImpl.mockResolvedValueOnce(json([{
+    fetchImpl.mockResolvedValueOnce(json({ items: [{
       ...member,
       account_status: undefined,
       membership_status: undefined,
       account_active: true,
       membership_active: false,
-    }]));
+    }], summary }));
     await expect(client.listMemberships('token')).rejects.toThrow('Invalid API response');
   });
 

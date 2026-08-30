@@ -56,6 +56,7 @@ type Store interface {
 
 	// Org team & invitations (#326)
 	ListOrgTeam(ctx context.Context, organizationID, actorID string) ([]storage.OrgTeamMember, error)
+	GetOrgTeamSummary(ctx context.Context, organizationID, actorID string) (*storage.OrgTeamSummary, error)
 	UpdateMembershipRolesByOrg(ctx context.Context, organizationID, membershipID string, roles []domain.UserRole, expectedVersion int64) (*storage.OrgTeamMember, error)
 	UpdateMembershipStatus(ctx context.Context, organizationID, membershipID string, status domain.MembershipStatus, reason, actorID string, expectedVersion int64) (*storage.OrgTeamMember, error)
 	CreateInvitation(ctx context.Context, organizationID, email string, roles []domain.UserRole, tokenHash string, expiresAt time.Time, invitedBy string) (*storage.Invitation, error)

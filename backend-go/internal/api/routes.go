@@ -53,6 +53,7 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Org team management (#326): active-org admin (or support session).
 	mux.Handle("GET /api/org/memberships", authMW(http.HandlerFunc(server.HandleOrgTeam)))
+	mux.Handle("GET /api/org/team/summary", authMW(http.HandlerFunc(server.HandleOrgTeamSummary)))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles))))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/status", authMW(server.RequireIdempotency("org.update-membership-status", http.HandlerFunc(server.HandleOrgMemberStatus))))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))

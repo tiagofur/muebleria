@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 const teamFoundationOrg = "b2000000-0000-0000-0000-000000000001"
@@ -50,6 +52,10 @@ func TestTeamFoundationMigration_EnforcesCountersSeatsAndRLS(t *testing.T) {
 	}
 	if admins != 1 || members != 1 || maxMembers != nil {
 		t.Fatalf("unexpected backfill state admins=%d members=%d max=%v", admins, members, maxMembers)
+	}
+	teamSummary, err := (&storage.PostgresStore{Pool: pool}).GetOrgTeamSummary(ctx, teamFoundationOrg, "b1000000-0000-0000-0000-000000000001")
+	if err != nil || teamSummary.ActiveMembers != 1 || teamSummary.SuspendedMembers != 0 || teamSummary.LeftMembers != 0 || teamSummary.MaxActiveMembers != nil || teamSummary.TeamVersion < 1 || teamSummary.EntitlementsVersion < 1 {
+		t.Fatalf("team summary=%#v err=%v", teamSummary, err)
 	}
 
 	tx, err = pool.Begin(ctx)

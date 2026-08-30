@@ -390,6 +390,45 @@ func scanOrgTeamMember(row pgx.Row) (*OrgTeamMember, error) {
 	return &out, err
 }
 
+// OrgTeamSummary is the tenant-scoped Team read model backed by the
+// transactional counters and explicit entitlement authority.
+type OrgTeamSummary struct {
+	ActiveMembers       int64
+	SuspendedMembers    int64
+	LeftMembers         int64
+	MaxActiveMembers    *int64
+	TeamVersion         int64
+	EntitlementsVersion int64
+}
+
+func (s *PostgresStore) GetOrgTeamSummary(ctx context.Context, organizationID, actorID string) (*OrgTeamSummary, error) {
+	if transactionFromContext(ctx) == nil {
+		var out *OrgTeamSummary
+		err := s.WithinTenantTx(ctx, TenantActor{OrganizationID: organizationID, UserID: actorID}, func(txCtx context.Context) error {
+			var inner error
+			out, inner = s.GetOrgTeamSummary(txCtx, organizationID, actorID)
+			return inner
+		})
+		return out, err
+	}
+	out := &OrgTeamSummary{}
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT state.active_member_count,
+			count(*) FILTER (WHERE membership.status = 'suspended'),
+			count(*) FILTER (WHERE membership.status = 'left'),
+			entitlement.max_active_members, state.version, entitlement.version
+		FROM organization_team_state state
+		JOIN organization_entitlements entitlement ON entitlement.organization_id = state.organization_id
+		LEFT JOIN memberships membership ON membership.organization_id = state.organization_id
+		WHERE state.organization_id = $1
+		GROUP BY state.active_member_count, entitlement.max_active_members, state.version, entitlement.version`, organizationID).Scan(
+		&out.ActiveMembers, &out.SuspendedMembers, &out.LeftMembers, &out.MaxActiveMembers, &out.TeamVersion, &out.EntitlementsVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrMembershipNotFound
+	}
+	return out, err
+}
+
 func (s *PostgresStore) ListOrgTeam(ctx context.Context, organizationID, actorID string) ([]OrgTeamMember, error) {
 	if transactionFromContext(ctx) == nil {
 		var out []OrgTeamMember

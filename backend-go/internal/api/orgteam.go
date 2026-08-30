@@ -138,8 +138,34 @@ func teamMemberToOpenAPI(m storage.OrgTeamMember) openapi.TeamMember {
 	}
 }
 
+func teamSummaryToOpenAPI(summary storage.OrgTeamSummary, claims *auth.Claims, org *domain.Organization) openapi.TeamSummary {
+	capabilities := domain.TeamCapabilitiesForRoles(actorRoles(claims), org.Type)
+	out := make([]openapi.TeamCapability, len(capabilities))
+	for i, capability := range capabilities {
+		out[i] = openapi.TeamCapability(capability)
+	}
+	return openapi.TeamSummary{
+		ActiveMembers: summary.ActiveMembers, SuspendedMembers: summary.SuspendedMembers, LeftMembers: summary.LeftMembers,
+		MaxActiveMembers: summary.MaxActiveMembers, TeamVersion: summary.TeamVersion,
+		EntitlementsVersion: summary.EntitlementsVersion, Capabilities: out,
+	}
+}
+
+func (s *Server) orgTeamSummary(w http.ResponseWriter, r *http.Request) (*auth.Claims, *domain.Organization, openapi.TeamSummary, bool) {
+	claims, org, ok := s.requireOrgTeamCapability(w, r, domain.TeamCapabilityView)
+	if !ok {
+		return nil, nil, openapi.TeamSummary{}, false
+	}
+	summary, err := s.Store.GetOrgTeamSummary(r.Context(), claims.OrgID, claims.UserID)
+	if err != nil {
+		respondWithInternalError(w, err, "org team summary")
+		return nil, nil, openapi.TeamSummary{}, false
+	}
+	return claims, org, teamSummaryToOpenAPI(*summary, claims, org), true
+}
+
 func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
-	claims, _, ok := s.requireOrgTeamCapability(w, r, domain.TeamCapabilityView)
+	claims, _, summary, ok := s.orgTeamSummary(w, r)
 	if !ok {
 		return
 	}
@@ -152,7 +178,15 @@ func (s *Server) HandleOrgTeam(w http.ResponseWriter, r *http.Request) {
 	for i, m := range team {
 		out[i] = teamMemberToOpenAPI(m)
 	}
-	respondWithJSON(w, http.StatusOK, out)
+	respondWithJSON(w, http.StatusOK, openapi.TeamDirectory{Items: out, Summary: summary})
+}
+
+func (s *Server) HandleOrgTeamSummary(w http.ResponseWriter, r *http.Request) {
+	_, _, summary, ok := s.orgTeamSummary(w, r)
+	if !ok {
+		return
+	}
+	respondWithJSON(w, http.StatusOK, summary)
 }
 
 func (s *Server) HandleOrgMemberRoles(w http.ResponseWriter, r *http.Request) {
