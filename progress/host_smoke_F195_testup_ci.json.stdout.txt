@@ -1,54 +1,46 @@
-15:04:26 runner start
-15:04:26 testup ready
-15:04:26 tc loaded
-15:04:26 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
-15:04:26 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.276s)
-15:04:26 test_malformed_envelope_never_mutates_the_host — PASS (0.106s)
-15:04:26 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.108s)
-15:04:26 test_unknown_schema_version_never_mutates_the_host — PASS (0.109s)
-15:04:26 evidence written (Success)
-15:13:48 runner start
-15:13:48 testup ready
-15:13:48 tc loaded
-15:13:48 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
-15:13:48 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.167s)
-15:13:48 test_malformed_envelope_never_mutates_the_host — PASS (0.103s)
-15:13:48 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.101s)
-15:13:48 test_unknown_schema_version_never_mutates_the_host — PASS (0.106s)
-15:13:48 evidence written (Success)
-15:18:01 runner start
-15:18:01 testup ready
-15:18:01 tc loaded
-15:18:01 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
-15:18:01 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.284s)
-15:18:01 test_malformed_envelope_never_mutates_the_host — PASS (0.127s)
-15:18:01 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.124s)
-15:18:01 test_unknown_schema_version_never_mutates_the_host — PASS (0.125s)
-15:18:01 evidence written (Success)
-15:20:06 runner start
-15:20:06 testup ready
-15:20:06 tc loaded
-15:20:06 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
-15:20:07 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.261s)
-15:20:07 test_malformed_envelope_never_mutates_the_host — PASS (0.123s)
-15:20:07 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.117s)
-15:20:07 test_unknown_schema_version_never_mutates_the_host — PASS (0.125s)
-15:20:07 evidence written (Success)
-15:20:43 runner start
-15:20:43 testup ready
-15:20:43 tc loaded
-15:20:43 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
-15:20:43 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.264s)
-15:20:43 test_malformed_envelope_never_mutates_the_host — PASS (0.105s)
-15:20:43 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.118s)
-15:20:43 test_unknown_schema_version_never_mutates_the_host — PASS (0.109s)
-15:20:43 evidence written (Success)
-15:23:27 runner start
-15:23:27 testup ready
-15:23:27 tc loaded
-15:23:27 running 4 tests: [:test_accepted_response_parses_and_drives_one_atomic_native_operation, :test_malformed_envelope_never_mutates_the_host, :test_rejected_orphan_anchor_never_mutates_the_host, :test_unknown_schema_version_never_mutates_the_host]
-15:23:27 test_accepted_response_parses_and_drives_one_atomic_native_operation — PASS (0.270s)
-15:23:27 test_malformed_envelope_never_mutates_the_host — PASS (0.107s)
-15:23:27 test_rejected_orphan_anchor_never_mutates_the_host — PASS (0.110s)
-15:23:27 test_unknown_schema_version_never_mutates_the_host — PASS (0.116s)
-15:23:27 evidence written (Success)
+objc[70896]: Class SKTextPath is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/SketchUpAPI.framework/Versions/A/SketchUpAPI (0x109ed8390) and /Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp (0x103363830). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-08-30 11:38:10.077 SketchUp[70896:4960791] BugSplat start...
+2026-08-30 11:38:10.077 SketchUp[70896:4960791] BugSplat BugSplatDatabase set as [SU26Mac]
+2026-08-30 11:38:10.077 SketchUp[70896:4960791] BugSplat setServerURL: [https://SU26Mac.bugsplat.com/]
+objc[70896]: Class SkpTimerCaller is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp (0x1033637b8) and /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/LayOutAPI.framework/Versions/A/Libraries/libSketchUpViewerAPI.dylib (0x13c1f4ea0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[70896]: Class SKTextPath is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/SketchUpAPI.framework/Versions/A/SketchUpAPI (0x109ed8390) and /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/LayOutAPI.framework/Versions/A/Libraries/libSketchUpViewerAPI.dylib (0x13c1f4f18). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-08-30 11:38:11.846 SketchUp[70896:4960791] INFO: Start CrashManager processing
+2026-08-30 11:38:12.347 SketchUp[70896:4960791] [HockeySDK] -[BITCrashManager invokeDelayedProcessing]/900 [HockeySDK] WARNING: Another exception handler was added. If this invokes any kind exit() after processing the exception, which causes any subsequent error handler not to be invoked, these crashes will NOT be reported to HockeyApp!
+Device Manufacturer: Apple Inc.
+       Device Model: Mac17,9
+         OS Version: 26.6
+WGLUtils::UtilsState::ctor: Max GPU perf is 0
+Renderer information:
+  Graphics Engine Name: New Graphics Engine
+  Graphics API: Metal
+  GPU Name: Apple M5 Pro
+ValidateGraphicsPreferences: Starting up.
+SaveUserRendererSettingsToPreferences: Saving graphics preferences: MSAA: 4 FF: 1
+ValidateGraphicsPreferences: All done.
+2026-08-30 11:41:20.047 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:20.270 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.199 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.242 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.371 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.421 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.620 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.667 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:25.953 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:26.062 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:26.155 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:26.204 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:26.426 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:26.472 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+Cleanup document:
+2026-08-30 11:41:26.642 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:26.713 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+Application terminating
+2026-08-30 11:41:30.070 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:30.076 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:30.083 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:30.092 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:30.100 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+2026-08-30 11:41:30.110 SketchUp[70896:4960791] BugSplat [setValue:off forKey:rtv]
+Closing application
+Application requests completed
+Exit notification
