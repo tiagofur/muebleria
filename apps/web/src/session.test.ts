@@ -204,7 +204,7 @@ describe('selectOrgRequest', () => {
           token: 'jwt-org-scoped',
           user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
           license: { plan: 'none', status: 'none' },
-          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', license: { plan: 'none', status: 'none' } },
+          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
           roles: ['admin'],
           memberships: [],
           selection_required: false,
@@ -236,7 +236,7 @@ describe('meRequest', () => {
         JSON.stringify({
           user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
           roles: ['admin'],
-          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', license: { plan: 'none', status: 'none' } },
+          organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
           transport: 'web',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },

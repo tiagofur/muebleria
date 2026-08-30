@@ -122,7 +122,7 @@ func (s *teamCapabilitiesStore) OffboardMember(_ context.Context, command storag
 
 func teamCapabilityServer(orgType domain.OrganizationType, team []storage.OrgTeamMember) (*Server, *teamCapabilitiesStore) {
 	store := &teamCapabilitiesStore{
-		stubStore: &stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: orgType, Active: true}},
+		stubStore: &stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: orgType, Status: domain.OrganizationStatusActive, CredentialVersion: 1}},
 		team:      team,
 	}
 	return &Server{Store: store}, store

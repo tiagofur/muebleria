@@ -249,7 +249,7 @@ func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
 
 	const org2 = "99999999-9999-9999-9999-999999999999"
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug, active) VALUES ($1, 'Taller Dos', 'taller-dos', FALSE)`, org2); err != nil {
+		`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Taller Dos', 'taller-dos', 'provisioning')`, org2); err != nil {
 		t.Fatalf("create org 2: %v", err)
 	}
 

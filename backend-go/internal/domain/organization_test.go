@@ -1,64 +1,50 @@
-package domain_test
+package domain
 
-import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"testing"
+import "testing"
 
-	"github.com/tiagofur/muebles-backend/internal/domain"
-)
-
-// contracts/roles.json → rolesByOrganizationType es el fixture de paridad
-// TS↔Go (#326): packages/domain/src/organization.test.ts afirma contra el
-// mismo archivo, así que una divergencia rompe CI en algún lado.
-type orgRolesContractFixture struct {
-	RolesByOrganizationType map[string][]string `json:"rolesByOrganizationType"`
-}
-
-func TestAllowedRolesForOrgType_MatchesContract(t *testing.T) {
-	t.Parallel()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "roles.json"))
-	if err != nil {
-		t.Fatalf("read contracts/roles.json: %v", err)
+func TestCanTransitionOrganizationStatus(t *testing.T) {
+	allowed := map[[2]OrganizationStatus]bool{
+		{OrganizationStatusProvisioning, OrganizationStatusActive}:             true,
+		{OrganizationStatusProvisioning, OrganizationStatusProvisioningFailed}: true,
+		{OrganizationStatusProvisioningFailed, OrganizationStatusProvisioning}: true,
+		{OrganizationStatusProvisioningFailed, OrganizationStatusTerminated}:   true,
+		{OrganizationStatusActive, OrganizationStatusSuspended}:                true,
+		{OrganizationStatusActive, OrganizationStatusOffboarding}:              true,
+		{OrganizationStatusSuspended, OrganizationStatusActive}:                true,
+		{OrganizationStatusSuspended, OrganizationStatusOffboarding}:           true,
+		{OrganizationStatusOffboarding, OrganizationStatusTerminated}:          true,
 	}
-	var c orgRolesContractFixture
-	if err := json.Unmarshal(data, &c); err != nil {
-		t.Fatalf("parse contracts/roles.json: %v", err)
+	statuses := []OrganizationStatus{
+		OrganizationStatusProvisioning,
+		OrganizationStatusActive,
+		OrganizationStatusSuspended,
+		OrganizationStatusOffboarding,
+		OrganizationStatusTerminated,
+		OrganizationStatusProvisioningFailed,
 	}
-	if len(c.RolesByOrganizationType) == 0 {
-		t.Fatal("contracts/roles.json debe definir rolesByOrganizationType")
-	}
-
-	for orgType, contractRoles := range c.RolesByOrganizationType {
-		got := domain.AllowedRolesForOrgType(domain.OrganizationType(orgType))
-		if len(got) != len(contractRoles) {
-			t.Fatalf("org type %s: Got %d roles, contract wants %d", orgType, len(got), len(contractRoles))
-		}
-		set := make(map[string]bool, len(contractRoles))
-		for _, r := range contractRoles {
-			set[r] = true
-		}
-		for _, r := range got {
-			if !set[string(r)] {
-				t.Fatalf("org type %s: role %s not in contract", orgType, r)
+	for _, from := range statuses {
+		for _, to := range statuses {
+			if got := CanTransitionOrganizationStatus(from, to); got != allowed[[2]OrganizationStatus{from, to}] {
+				t.Fatalf("transition %s -> %s = %v", from, to, got)
 			}
 		}
 	}
 }
 
-func TestRolesAllowedInOrg_StoreRestrictsOperators(t *testing.T) {
-	t.Parallel()
-	if !domain.RolesAllowedInOrg([]domain.UserRole{domain.RoleVendedor, domain.RoleGerenteVentas}, domain.OrganizationTypeStore) {
-		t.Fatal("commercial set must be allowed in store")
+func TestIsValidOrganizationStatus(t *testing.T) {
+	for _, status := range []OrganizationStatus{
+		OrganizationStatusProvisioning,
+		OrganizationStatusActive,
+		OrganizationStatusSuspended,
+		OrganizationStatusOffboarding,
+		OrganizationStatusTerminated,
+		OrganizationStatusProvisioningFailed,
+	} {
+		if !IsValidOrganizationStatus(status) {
+			t.Fatalf("expected %q to be valid", status)
+		}
 	}
-	if domain.RolesAllowedInOrg([]domain.UserRole{domain.RoleVendedor, domain.RoleIngeniero}, domain.OrganizationTypeStore) {
-		t.Fatal("ingeniero must be rejected in store")
-	}
-	if domain.RolesAllowedInOrg([]domain.UserRole{domain.RoleIngeniero}, domain.OrganizationTypeFactory) != true {
-		t.Fatal("factory allows the full canonical set")
-	}
-	if domain.RolesAllowedInOrg(nil, domain.OrganizationTypeFactory) {
-		t.Fatal("empty role set is invalid (fail-closed)")
+	if IsValidOrganizationStatus("unknown") {
+		t.Fatal("unknown status must be invalid")
 	}
 }

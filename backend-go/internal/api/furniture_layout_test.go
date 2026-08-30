@@ -26,7 +26,7 @@ func layoutStubServer(t *testing.T) (*Server, string) {
 		listAgregados:      catalog.Agregados,
 		listHardwares:      catalog.Hardware,
 	}
-	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1}, furnitureTestSecret)
+	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 	// Org without an active license → the layout endpoint must block.
 	noLicense := &domain.Organization{
 		ID: "org-1", Name: "Taller Test", Slug: "taller-test",
-		Type: domain.OrganizationTypeFactory, Active: true,
+		Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1,
 	}
 	server := licenseTestServer(t, u, noLicense)
 	server.Store = &stubStore{
@@ -277,7 +277,7 @@ func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 		listComponents:     catalog.Components,
 		listHardwares:      catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
@@ -363,7 +363,7 @@ func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 				OptionIDs: []string{"hw-x"}},
 		},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
@@ -421,7 +421,7 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 		listComponents: catalog.Components,
 		listHardwares:  catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
 	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)

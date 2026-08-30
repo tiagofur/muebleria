@@ -153,8 +153,8 @@ func TestGenerateToken_PreservesAbsoluteSessionLifetimeAndMembershipCredentials(
 		Roles:                       []string{"admin"},
 		OrgID:                       "org-1",
 		MembershipID:                "membership-1",
-		MembershipCredentialVersion: 7,
-		AuthStartedAt:               started,
+		MembershipCredentialVersion: 7, OrganizationCredentialVersion: 1,
+		AuthStartedAt: started,
 	}, secret)
 	if err != nil {
 		t.Fatal(err)
@@ -165,6 +165,9 @@ func TestGenerateToken_PreservesAbsoluteSessionLifetimeAndMembershipCredentials(
 	}
 	if claims.MembershipID != "membership-1" || claims.MembershipCredentialVersion != 7 {
 		t.Fatalf("membership claims = %q/%d, want membership-1/7", claims.MembershipID, claims.MembershipCredentialVersion)
+	}
+	if claims.OrganizationCredentialVersion != 1 {
+		t.Fatalf("organization credential version = %d, want 1", claims.OrganizationCredentialVersion)
 	}
 	if got := claims.AuthStartedAt.Time; !got.Equal(started) {
 		t.Fatalf("auth_started_at = %s, want %s", got, started)
@@ -178,5 +181,17 @@ func TestGenerateToken_RejectsOrganizationScopeWithoutMembershipCredentials(t *t
 	_, err := GenerateToken("user-1", "user@example.com", TokenContext{OrgID: "org-1", Roles: []string{"admin"}}, "secret")
 	if err == nil {
 		t.Fatal("organization-scoped token without membership credentials must be rejected")
+	}
+}
+
+func TestGenerateToken_RejectsOrganizationScopeWithoutOrganizationCredentialVersion(t *testing.T) {
+	_, err := GenerateToken("user-1", "user@example.com", TokenContext{
+		OrgID:                       "org-1",
+		Roles:                       []string{"admin"},
+		MembershipID:                "membership-1",
+		MembershipCredentialVersion: 1,
+	}, "secret")
+	if err == nil {
+		t.Fatal("organization-scoped token without organization credential version must be rejected")
 	}
 }

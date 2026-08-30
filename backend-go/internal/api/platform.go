@@ -59,7 +59,7 @@ func toPlatformOrgDTO(o domain.Organization, memberCount int) PlatformOrgDTO {
 		Type:                 string(o.Type),
 		LicensePlan:          string(o.LicensePlan),
 		LicenseExpiresAt:     formatOptionalTime(o.LicenseExpiresAt),
-		Active:               o.Active,
+		Status:               openapi.OrganizationStatus(o.Status),
 		ParentOrganizationID: o.ParentOrganizationID,
 		CreatedAt:            o.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:            o.UpdatedAt.UTC().Format(time.RFC3339Nano),
@@ -92,90 +92,7 @@ func (s *Server) HandlePlatformListOrganizations(w http.ResponseWriter, r *http.
 	respondWithJSON(w, http.StatusOK, out)
 }
 
-// POST /api/platform/organizations {name, slug, type?, license_plan?, license_expires_at?, clone_catalog_from?}
-func (s *Server) HandlePlatformCreateOrganization(w http.ResponseWriter, r *http.Request) {
-	var body openapi.CreatePlatformOrganizationRequest
-	if !decodeGeneratedJSONBody(w, r, &body) {
-		return
-	}
-	if strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Slug) == "" || strings.TrimSpace(body.Type) == "" || strings.TrimSpace(body.LicensePlan) == "" {
-		respondWithError(w, http.StatusBadRequest, "name, slug, type y license_plan son obligatorios")
-		return
-	}
-	if len([]rune(strings.TrimSpace(body.Name))) > 120 || !validOrganizationSlug.MatchString(strings.TrimSpace(body.Slug)) {
-		respondWithError(w, http.StatusBadRequest, "name o slug inválido")
-		return
-	}
-	orgType := domain.OrganizationType(body.Type)
-	if !domain.IsValidOrganizationType(orgType) {
-		respondWithError(w, http.StatusBadRequest, "type inválido (factory|store|dealer)")
-		return
-	}
-	plan := domain.LicensePlan(body.LicensePlan)
-	if !domain.IsValidLicensePlan(plan) {
-		respondWithError(w, http.StatusBadRequest, "license_plan inválido")
-		return
-	}
-	claims := claimsFromRequest(r)
-	var licenseExpiresAt *time.Time
-	if body.LicenseExpiresAt != nil {
-		parsed, err := time.Parse(time.RFC3339, *body.LicenseExpiresAt)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "license_expires_at inválido (formato ISO 8601 requerido)")
-			return
-		}
-		licenseExpiresAt = &parsed
-	}
-	cloneSourceID := ""
-	if body.CloneCatalogFrom != nil && strings.TrimSpace(*body.CloneCatalogFrom) != "" {
-		source := strings.TrimSpace(*body.CloneCatalogFrom)
-		var sourceOrg *domain.Organization
-		var err error
-		if isValidUUID(source) {
-			sourceOrg, err = s.Store.GetOrganizationByID(r.Context(), source)
-		} else {
-			sourceOrg, err = s.Store.GetOrganizationBySlug(r.Context(), source)
-		}
-		if err != nil || sourceOrg == nil {
-			respondWithError(w, http.StatusBadRequest, "organización origen de clonación no encontrada")
-			return
-		}
-		cloneSourceID = sourceOrg.ID
-	}
-
-	org := &domain.Organization{
-		Name:             strings.TrimSpace(body.Name),
-		Slug:             strings.TrimSpace(body.Slug),
-		Type:             orgType,
-		LicensePlan:      plan,
-		LicenseExpiresAt: licenseExpiresAt,
-		Active:           true,
-	}
-	if err := s.Store.CreateOrganization(r.Context(), org); err != nil {
-		respondWithInternalError(w, err, "platform create org")
-		return
-	}
-
-	// Optional base-catalog clone. The source is resolved before inserting the
-	// destination so invalid input cannot create a partial organization even
-	// outside the idempotency transaction.
-	if cloneSourceID != "" {
-		if err := s.Store.CloneCatalog(r.Context(), cloneSourceID, org.ID); err != nil {
-			respondWithInternalError(w, err, "clone base catalog")
-			return
-		}
-	}
-
-	if err := s.auditRequired(r.Context(), "organization_created", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
-		"name": org.Name, "slug": org.Slug, "type": string(org.Type), "source": "platform console",
-	}); err != nil {
-		respondWithInternalError(w, err, "audit organization creation")
-		return
-	}
-	respondWithJSON(w, http.StatusCreated, toPlatformOrgDTO(*org, 0))
-}
-
-// PATCH /api/platform/organizations/{id} {name?, license_plan?, license_expires_at?, active?}
+// PATCH /api/platform/organizations/{id} {name?, license_plan?, license_expires_at?}
 func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	expectedVersion, ok := RequireIfMatch(w, r)
@@ -186,7 +103,7 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 	if !decodeGeneratedJSONBody(w, r, &raw) {
 		return
 	}
-	allowed := map[string]bool{"name": true, "license_plan": true, "license_expires_at": true, "active": true}
+	allowed := map[string]bool{"name": true, "license_plan": true, "license_expires_at": true}
 	for key := range raw {
 		if !allowed[key] {
 			respondWithError(w, http.StatusBadRequest, "invalid request body")
@@ -250,19 +167,6 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 		}
 	}
 
-	var activeChanged bool
-	if rawActive, ok := raw["active"]; ok {
-		var active bool
-		if err := json.Unmarshal(rawActive, &active); err != nil {
-			respondWithError(w, http.StatusBadRequest, "active inválido")
-			return
-		}
-		if org.Active != active {
-			activeChanged = true
-		}
-		org.Active = active
-	}
-
 	if err := s.Store.UpdateOrganizationVersion(r.Context(), org, expectedVersion); err != nil {
 		if errors.Is(err, storage.ErrVersionConflict) {
 			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "La organización fue modificada por otra sesión", nil)
@@ -277,26 +181,6 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 			"previous_name": previousName,
 			"name":          org.Name,
 		})
-	}
-	if activeChanged {
-		event := "organization_suspended"
-		if org.Active {
-			event = "organization_reactivated"
-		}
-		details := map[string]interface{}{}
-		if !org.Active {
-			// Suspending cuts every open support session immediately — the
-			// schema reserves ended_via='org_suspended' for this (000086).
-			ended, err := s.Store.EndOpenSupportSessionsByOrg(r.Context(), org.ID, "org_suspended")
-			if err != nil {
-				respondWithInternalError(w, err, "platform suspend: end support sessions")
-				return
-			}
-			if ended > 0 {
-				details["support_sessions_ended"] = ended
-			}
-		}
-		s.audit(r.Context(), event, claims.UserID, org.ID, clientIP(r), details)
 	}
 	if planChanged || expiryChanged {
 		s.audit(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
@@ -393,7 +277,7 @@ func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *htt
 		return
 	}
 	org, err := s.Store.GetOrganizationByID(r.Context(), orgID)
-	if err != nil || org == nil || !org.Active {
+	if err != nil || org == nil || org.Status != domain.OrganizationStatusActive {
 		respondWithError(w, http.StatusNotFound, "organización no encontrada o suspendida")
 		return
 	}
@@ -498,7 +382,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	roles := roleStrings(result.Membership.Roles)
-	token, err := auth.GenerateToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin}, s.JWTSecret)
+	token, err := auth.GenerateToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, OrganizationCredentialVersion: result.Organization.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin}, s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "accept invitation token")
 		return

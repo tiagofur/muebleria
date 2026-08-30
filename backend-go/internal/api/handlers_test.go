@@ -280,7 +280,7 @@ func (s *stubStore) GetOrganizationByID(_ context.Context, _ string) (*domain.Or
 			Type:             domain.OrganizationTypeFactory,
 			LicensePlan:      plan,
 			LicenseExpiresAt: s.orgLicenseExpiresAt,
-			Active:           true,
+			Status:           domain.OrganizationStatusActive, CredentialVersion: 1,
 		}, nil
 	}
 	return nil, errors.New("organization not found")
@@ -340,7 +340,7 @@ func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationI
 			CredentialVersion: 1,
 		},
 		Organization: domain.Organization{
-			ID: organizationID, Active: true, Type: domain.OrganizationTypeFactory,
+			ID: organizationID, Status: domain.OrganizationStatusActive, CredentialVersion: 1, Type: domain.OrganizationTypeFactory,
 		},
 	}, nil
 }

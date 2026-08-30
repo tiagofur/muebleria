@@ -122,12 +122,10 @@ func (s *PostgresStore) ExecuteIdempotent(
 	}
 
 	response, err := execute(context.WithValue(ctx, transactionContextKey{}, tx))
-	if err != nil || response.Status >= http.StatusInternalServerError {
-		if err == nil {
-			err = ErrIdempotencyRollback
-		}
+	if err != nil {
 		return IdempotencyResponse{}, false, err
 	}
+	serverError := response.Status >= http.StatusInternalServerError
 	if response.Status >= http.StatusBadRequest {
 		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT idempotent_command`); err != nil {
 			return IdempotencyResponse{}, false, err
@@ -146,6 +144,20 @@ func (s *PostgresStore) ExecuteIdempotent(
 	}
 	if _, err := tx.Exec(ctx, `RELEASE SAVEPOINT idempotent_command`); err != nil {
 		return IdempotencyResponse{}, false, err
+	}
+	if serverError {
+		// A 5xx is retryable and must never become a replayable receipt. The
+		// command savepoint was rolled back above; commit only required sanitized
+		// failure evidence, then remove the reservation so the same key may retry.
+		if _, err := tx.Exec(ctx, `DELETE FROM api_idempotency_receipts WHERE scope_key = $1`, req.ScopeKey); err != nil {
+			return IdempotencyResponse{}, false, err
+		}
+		if owned {
+			if err := tx.Commit(ctx); err != nil {
+				return IdempotencyResponse{}, false, err
+			}
+		}
+		return response, false, nil
 	}
 	headersJSON, err := json.Marshal(response.Header)
 	if err != nil {

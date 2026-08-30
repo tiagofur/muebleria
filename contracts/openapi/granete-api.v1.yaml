@@ -196,9 +196,11 @@
             "$ref": "#/components/responses/ApiError"
           }
         }
-      },
+      }
+    },
+        "/organizations": {
       "post": {
-        "operationId": "createPlatformOrganization",
+        "operationId": "provisionOrganization",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -209,19 +211,385 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreatePlatformOrganizationRequest"
+                "$ref": "#/components/schemas/ProvisionOrganizationRequest"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Organization created",
+            "description": "Organization provisioned atomically",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlatformOrganization"
+                  "$ref": "#/components/schemas/OrganizationProvisioningResult"
                 }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}/readiness": {
+      "get": {
+        "operationId": "getOrganizationReadiness",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative organization readiness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationReadiness"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}:suspend": {
+      "post": {
+        "operationId": "suspendOrganization",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationLifecycleMutationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization suspend transition committed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLifecycleMutationResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}:reactivate": {
+      "post": {
+        "operationId": "reactivateOrganization",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationLifecycleMutationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization reactivate transition committed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLifecycleMutationResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}/offboarding-preview": {
+      "get": {
+        "operationId": "previewOrganizationOffboarding",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current offboarding impact inventory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationOffboardingPreview"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}:begin-offboarding": {
+      "post": {
+        "operationId": "beginOrganizationOffboarding",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationOffboardingMutationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization begin-offboarding transition committed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLifecycleMutationResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}:terminate": {
+      "post": {
+        "operationId": "terminateOrganization",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationOffboardingMutationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization terminate transition committed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLifecycleMutationResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/organizations/{id}/entitlements": {
+      "get": {
+        "operationId": "getOrganizationEntitlements",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization entitlement snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationEntitlements"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateOrganizationEntitlements",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganizationEntitlementsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization entitlement snapshot updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationEntitlements"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
               }
             }
           },
@@ -467,39 +835,6 @@
                   "items": {
                     "$ref": "#/components/schemas/FactoryOrganization"
                   }
-                }
-              }
-            }
-          },
-          "default": {
-            "$ref": "#/components/responses/ApiError"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createFactoryOrganization",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateFactoryOrganizationRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Connected organization created atomically",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateFactoryOrganizationResponse"
                 }
               }
             }
@@ -1360,7 +1695,12 @@
           "REASSIGNMENT_REQUIRED",
           "SECTOR_NOT_ALLOWED",
           "ADMIN_TRANSFER_INVALID",
-          "IMPACT_VERSION_CONFLICT"
+          "IMPACT_VERSION_CONFLICT",
+          "ORGANIZATION_STATUS_CONFLICT",
+          "ORGANIZATION_NOT_READY",
+          "ORGANIZATION_OFFBOARDING_BLOCKED",
+          "ORGANIZATION_SLUG_CONFLICT",
+          "ORGANIZATION_RECOVERY_ONLY"
         ]
       },
       "ApiError": {
@@ -1500,6 +1840,7 @@
           "name",
           "slug",
           "type",
+          "status",
           "license"
         ],
         "properties": {
@@ -1519,6 +1860,9 @@
               "store",
               "dealer"
             ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrganizationStatus"
           },
           "license": {
             "$ref": "#/components/schemas/License"
@@ -2073,8 +2417,8 @@
           "name",
           "slug",
           "type",
+          "status",
           "license_plan",
-          "active",
           "member_count",
           "created_at",
           "updated_at",
@@ -2098,6 +2442,9 @@
               "dealer"
             ]
           },
+          "status": {
+            "$ref": "#/components/schemas/OrganizationStatus"
+          },
           "license_plan": {
             "type": "string"
           },
@@ -2107,9 +2454,6 @@
               "null"
             ],
             "format": "date-time"
-          },
-          "active": {
-            "type": "boolean"
           },
           "parent_organization_id": {
             "type": [
@@ -2134,12 +2478,201 @@
           }
         }
       },
-      "CreatePlatformOrganizationRequest": {
+            "OrganizationStatus": {
+        "type": "string",
+        "enum": [
+          "provisioning",
+          "active",
+          "suspended",
+          "offboarding",
+          "terminated",
+          "provisioning_failed"
+        ]
+      },
+      "OrganizationType": {
+        "type": "string",
+        "enum": [
+          "factory",
+          "store",
+          "dealer"
+        ]
+      },
+      "OrganizationReadinessCheck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "ready",
+          "blocking",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "OrganizationReadiness": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization_id",
+          "organization_version",
+          "ready",
+          "checks",
+          "checked_at"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationReadinessCheck"
+            }
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrganizationEntitlementSource": {
+        "type": "string",
+        "enum": [
+          "legacy_unlimited",
+          "plan_default",
+          "platform_override"
+        ]
+      },
+      "OrganizationEntitlements": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization_id",
+          "max_active_members",
+          "max_sales_partners",
+          "manufacturing_enabled",
+          "sales_network_enabled",
+          "sketchup_seats",
+          "advanced_audit_enabled",
+          "source",
+          "defaults_revision",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "max_active_members": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "max_sales_partners": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "manufacturing_enabled": {
+            "type": "boolean"
+          },
+          "sales_network_enabled": {
+            "type": "boolean"
+          },
+          "sketchup_seats": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "advanced_audit_enabled": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/OrganizationEntitlementSource"
+          },
+          "defaults_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProvisionOrganizationEntitlements": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_active_members",
+          "max_sales_partners",
+          "manufacturing_enabled",
+          "sales_network_enabled",
+          "sketchup_seats",
+          "advanced_audit_enabled"
+        ],
+        "properties": {
+          "max_active_members": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "max_sales_partners": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "manufacturing_enabled": {
+            "type": "boolean"
+          },
+          "sales_network_enabled": {
+            "type": "boolean"
+          },
+          "sketchup_seats": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "advanced_audit_enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProvisionOrganizationRequest": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "name",
-          "slug",
           "type",
           "license_plan"
         ],
@@ -2156,10 +2689,15 @@
             "pattern": "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])$"
           },
           "type": {
-            "type": "string"
+            "$ref": "#/components/schemas/OrganizationType"
           },
           "license_plan": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "none",
+              "trial",
+              "pro"
+            ]
           },
           "license_expires_at": {
             "type": [
@@ -2168,8 +2706,180 @@
             ],
             "format": "date-time"
           },
+          "bootstrap_admin_user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "clone_catalog_from": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid"
+          },
+          "entitlements": {
+            "$ref": "#/components/schemas/ProvisionOrganizationEntitlements"
+          }
+        }
+      },
+      "OrganizationProvisioningResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization",
+          "readiness"
+        ],
+        "properties": {
+          "organization": {
+            "$ref": "#/components/schemas/PlatformOrganization"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/OrganizationReadiness"
+          }
+        }
+      },
+      "OrganizationLifecycleMutationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 500
+          }
+        }
+      },
+      "OrganizationOffboardingMutationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "impact_version"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 500
+          },
+          "impact_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      },
+      "OrganizationLifecycleMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization"
+        ],
+        "properties": {
+          "organization": {
+            "$ref": "#/components/schemas/PlatformOrganization"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/OrganizationReadiness"
+          }
+        }
+      },
+      "OrganizationOffboardingImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "count",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "OrganizationOffboardingPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization_id",
+          "organization_version",
+          "impact_version",
+          "blockers",
+          "warnings"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "impact_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationOffboardingImpact"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationOffboardingImpact"
+            }
+          }
+        }
+      },
+      "UpdateOrganizationEntitlementsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_active_members",
+          "max_sales_partners",
+          "manufacturing_enabled",
+          "sales_network_enabled",
+          "sketchup_seats",
+          "advanced_audit_enabled"
+        ],
+        "properties": {
+          "max_active_members": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "max_sales_partners": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "manufacturing_enabled": {
+            "type": "boolean"
+          },
+          "sales_network_enabled": {
+            "type": "boolean"
+          },
+          "sketchup_seats": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "advanced_audit_enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -2319,9 +3029,6 @@
               "null"
             ],
             "format": "date-time"
-          },
-          "active": {
-            "type": "boolean"
           }
         }
       },
@@ -2465,7 +3172,7 @@
           "name",
           "slug",
           "type",
-          "active",
+          "status",
           "created_at",
           "version"
         ],
@@ -2486,8 +3193,8 @@
               "dealer"
             ]
           },
-          "active": {
-            "type": "boolean"
+          "status": {
+            "$ref": "#/components/schemas/OrganizationStatus"
           },
           "created_at": {
             "type": "string",
@@ -2496,40 +3203,6 @@
           "version": {
             "type": "integer",
             "minimum": 1
-          }
-        }
-      },
-      "CreateFactoryOrganizationRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "name",
-          "type"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "store",
-              "dealer"
-            ]
-          }
-        }
-      },
-      "CreateFactoryOrganizationResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "organization"
-        ],
-        "properties": {
-          "organization": {
-            "$ref": "#/components/schemas/FactoryOrganization"
           }
         }
       },

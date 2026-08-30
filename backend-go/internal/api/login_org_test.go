@@ -23,7 +23,7 @@ func orgTestMembership(userID, orgID, slug string, roles []domain.UserRole) doma
 		},
 		Organization: domain.Organization{
 			ID: orgID, Name: "Taller " + slug, Slug: slug, Type: domain.OrganizationTypeFactory,
-			Active: true},
+			Status: domain.OrganizationStatusActive, CredentialVersion: 1},
 	}
 }
 
@@ -221,11 +221,12 @@ func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	server, _ := loginTestServer(t)
 	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
-		Roles:                       []string{string(domain.RoleVendedor)},
-		OrgID:                       "org-1",
-		MembershipID:                "u1:org-1",
-		MembershipCredentialVersion: 1,
-		AuthStartedAt:               started,
+		Roles:                         []string{string(domain.RoleVendedor)},
+		OrgID:                         "org-1",
+		MembershipID:                  "u1:org-1",
+		MembershipCredentialVersion:   1,
+		OrganizationCredentialVersion: 1,
+		AuthStartedAt:                 started,
 	}, server.JWTSecret)
 	if err != nil {
 		t.Fatal(err)

@@ -24,6 +24,7 @@ import {
   GraneteApiClient,
   GraneteApiError,
   type PlatformOrganization,
+  type OrganizationStatus,
   type PlatformUser,
   type SecurityAuditEvent,
 } from '@granete/storage';
@@ -40,6 +41,15 @@ export type PlatformUserRow = PlatformUser;
 export type SecurityAuditEventRow = SecurityAuditEvent;
 
 type TabKey = 'organizations' | 'users' | 'audit';
+
+const ORGANIZATION_STATUS_LABELS: Record<OrganizationStatus, string> = {
+  provisioning: 'Aprovisionando',
+  active: 'Activa',
+  suspended: 'Suspendida',
+  offboarding: 'En cierre',
+  terminated: 'Terminada',
+  provisioning_failed: 'Aprovisionamiento fallido',
+};
 
 export function PlatformScreen({
   baseUrl,
@@ -73,15 +83,15 @@ export function PlatformScreen({
   const [newName, setNewName] = useState('');
   const [newSlug, setNewSlug] = useState('');
   const [newType, setNewType] = useState<'factory' | 'store' | 'dealer'>('factory');
-  const [newPlan, setNewPlan] = useState('trial');
+  const [newPlan, setNewPlan] = useState<'none' | 'trial' | 'pro'>('trial');
   const [newExpiry, setNewExpiry] = useState('');
   const [cloneFromOrgId, setCloneFromOrgId] = useState('');
+  const [newBootstrapAdminUserId, setNewBootstrapAdminUserId] = useState('');
 
   // Edit form state
   const [editName, setEditName] = useState('');
   const [editPlan, setEditPlan] = useState('trial');
   const [editExpiry, setEditExpiry] = useState('');
-  const [editActive, setEditActive] = useState(true);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,27 +200,32 @@ export function PlatformScreen({
   // Handle Create Organization
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newSlug.trim()) {
-      setModalError('Nombre y slug son requeridos');
+    if (!newName.trim() || !newSlug.trim() || !newBootstrapAdminUserId) {
+      setModalError('Nombre, slug y administrador inicial son requeridos');
       return;
     }
     setSubmitting(true);
     setModalError(null);
     try {
-      await api.createPlatformOrganization(token, {
+      const result = await api.provisionOrganization(token, {
           name: newName.trim(),
           slug: newSlug.trim().toLowerCase(),
           type: newType,
           license_plan: newPlan,
+          bootstrap_admin_user_id: newBootstrapAdminUserId,
           license_expires_at: newExpiry ? new Date(`${newExpiry}T23:59:59Z`).toISOString() : null,
           ...(cloneFromOrgId ? { clone_catalog_from: cloneFromOrgId } : {}),
       });
-      showToast('✓ Organización creada exitosamente');
+      if (result.organization.status !== 'active' || !result.readiness.ready) {
+        throw new Error('La organización no alcanzó el estado listo para operar.');
+      }
+      showToast('✓ Organización activa y lista para operar');
       setShowCreateModal(false);
       setNewName('');
       setNewSlug('');
       setNewExpiry('');
       setCloneFromOrgId('');
+      setNewBootstrapAdminUserId('');
       await loadOrganizations();
     } catch (err) {
       setModalError(err instanceof Error ? err.message : 'Error al crear organización');
@@ -230,7 +245,6 @@ export function PlatformScreen({
           name: editName.trim(),
           license_plan: editPlan,
           license_expires_at: editExpiry ? new Date(`${editExpiry}T23:59:59Z`).toISOString() : null,
-          active: editActive,
         });
       showToast('✓ Organización actualizada');
       setEditingOrg(null);
@@ -297,6 +311,11 @@ export function PlatformScreen({
             className="btn btn--primary"
             onClick={() => {
               setModalError(null);
+              if (users.length === 0) {
+                void loadUsers().catch(() => {
+                  setModalError('No se pudo cargar el directorio para elegir al administrador inicial.');
+                });
+              }
               setShowCreateModal(true);
             }}
           >
@@ -399,8 +418,8 @@ export function PlatformScreen({
                       <div className="platform-card__meta">
                         <div>
                           <strong>Estado:</strong>{' '}
-                          <span className={`platform-chip platform-chip--${org.active !== false ? 'active' : 'suspended'}`}>
-                            {org.active !== false ? 'Activo' : 'Suspendido'}
+                          <span className={`platform-chip platform-chip--${org.status}`}>
+                            {ORGANIZATION_STATUS_LABELS[org.status]}
                           </span>
                         </div>
                         <div>
@@ -432,7 +451,6 @@ export function PlatformScreen({
                             setEditName(org.name);
                             setEditPlan(currentPlan);
                             setEditExpiry(currentExpiry ? currentExpiry.slice(0, 10) : '');
-                            setEditActive(org.active !== false);
                           }}
                         >
                           <Edit2 size={13} strokeWidth={1.5} aria-hidden="true" /> Editar
@@ -440,7 +458,8 @@ export function PlatformScreen({
                         <button
                           type="button"
                           className="btn btn--primary btn--sm"
-                          disabled={!org.active}
+                          disabled={org.status !== 'active'}
+                          title={org.status === 'active' ? undefined : 'Sólo podés iniciar soporte en una organización activa'}
                           onClick={() => {
                             setModalError(null);
                             setSupportOrg(org);
@@ -725,13 +744,38 @@ export function PlatformScreen({
                 id="org-plan"
                 className="platform-select"
                 value={newPlan}
-                onChange={(e) => setNewPlan(e.target.value)}
+                onChange={(e) => setNewPlan(e.target.value as 'none' | 'trial' | 'pro')}
               >
                 <option value="trial">Prueba (Trial)</option>
                 <option value="pro">Profesional (Pro)</option>
                 <option value="none">Sin licencia</option>
               </select>
             </div>
+          </div>
+
+          <div className="platform-form-group">
+            <label className="platform-label" htmlFor="org-bootstrap-admin">
+              Administrador inicial *
+            </label>
+            <select
+              id="org-bootstrap-admin"
+              className="platform-select"
+              required
+              value={newBootstrapAdminUserId}
+              onChange={(event) => setNewBootstrapAdminUserId(event.target.value)}
+            >
+              <option value="">Seleccioná una cuenta activa</option>
+              {users
+                .filter((user) => user.account_status === 'active')
+                .map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name || user.email} ({user.email})
+                  </option>
+                ))}
+            </select>
+            <p className="platform-help-text">
+              Esta persona recibe la membresía admin dentro de la misma transacción.
+            </p>
           </div>
 
           <div className="platform-form-group">
@@ -847,19 +891,6 @@ export function PlatformScreen({
               Dejar en blanco para suscripción permanente o sin fecha límite estricta.
             </p>
           </div>
-
-          <label className="platform-checkbox-wrap" htmlFor="edit-active">
-            <input
-              type="checkbox"
-              id="edit-active"
-              className="platform-checkbox"
-              checked={editActive}
-              onChange={(e) => setEditActive(e.target.checked)}
-            />
-            <span>
-              <strong>Organización Activa</strong> — si se desmarca, se suspende el acceso a todos los usuarios del taller inmediatamente.
-            </span>
-          </label>
 
           <div className="platform-modal-actions">
             <button

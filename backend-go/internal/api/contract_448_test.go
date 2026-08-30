@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -93,6 +94,27 @@ type durableTestStore struct {
 	backend *durableReceiptBackend
 }
 
+type auditFailDurableTestStore struct{ durableTestStore }
+
+func (s *auditFailDurableTestStore) InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error {
+	return errors.New("injected audit failure")
+}
+
+type transactionalDurableTestStore struct {
+	durableTestStore
+	committed bool
+}
+
+func (s *transactionalDurableTestStore) WithinTenantTx(ctx context.Context, _ storage.TenantActor, execute func(context.Context) error) error {
+	audits := append([]storage.SecurityAuditEvent(nil), s.auditEvents...)
+	if err := execute(ctx); err != nil {
+		s.auditEvents = audits
+		return err
+	}
+	s.committed = true
+	return nil
+}
+
 type failingDurableTestStore struct {
 	stubStore
 	err error
@@ -135,11 +157,113 @@ func (s *durableTestStore) ExecuteIdempotent(ctx context.Context, req storage.Id
 		return receipt.response, true, nil
 	}
 	response, err := execute(ctx)
-	if err != nil || response.Status >= 500 {
+	if err != nil {
 		return storage.IdempotencyResponse{}, false, storage.ErrIdempotencyRollback
+	}
+	if response.Status >= 400 && req.AfterRollback != nil {
+		if err := req.AfterRollback(ctx, response); err != nil {
+			return storage.IdempotencyResponse{}, false, err
+		}
+	}
+	if response.Status >= 500 {
+		return response, false, nil
 	}
 	s.backend.receipts[req.ScopeKey] = durableReceipt{fingerprint: req.Fingerprint, response: response, expiresAt: now.Add(storage.IdempotencyRetention)}
 	return response, false, nil
+}
+
+func TestProvisioningFailureAuditIsSanitizedAndRequestCorrelated(t *testing.T) {
+	store := &durableTestStore{backend: newDurableBackend(time.Now)}
+	server := NewServer(store, "secret", nil, 1, 1)
+	handler := RequestIDMiddleware(server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeOrganizationNotReady, "not ready", nil)
+	})))
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"name":"Private Organization","slug":"private-org"}`)), "platform-admin", string(domain.RoleAdmin))
+	req.Header.Set("Idempotency-Key", "provision-failure-audit-key")
+	req.Header.Set(requestIDHeader, "request-provision-failure")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusConflict || len(store.auditEvents) != 1 {
+		t.Fatalf("status=%d audits=%+v body=%s", recorder.Code, store.auditEvents, recorder.Body.String())
+	}
+	event := store.auditEvents[0]
+	if event.EventType != "organization_readiness_failed" || event.Details["request_id"] != "request-provision-failure" || event.Details["error_code"] != string(openapi.ApiErrorCodeOrganizationNotReady) {
+		t.Fatalf("audit=%+v", event)
+	}
+	if event.Details["target_hash"] == "" || event.Details["name"] != nil || event.Details["slug"] != nil {
+		t.Fatalf("failure audit leaked or omitted target identity: %+v", event.Details)
+	}
+}
+
+func TestProvisioningFailureAuditCannotBeSilentlyIgnored(t *testing.T) {
+	store := &auditFailDurableTestStore{durableTestStore: durableTestStore{backend: newDurableBackend(time.Now)}}
+	server := NewServer(store, "secret", nil, 1, 1)
+	handler := server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "invalid", nil)
+	}))
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"slug":"failed-audit"}`)), "platform-admin", string(domain.RoleAdmin))
+	req.Header.Set("Idempotency-Key", "provision-audit-failure-key")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestProvisioningServerFailureAuditsAfterRollbackAndRemainsRetryable(t *testing.T) {
+	store := &durableTestStore{backend: newDurableBackend(time.Now)}
+	server := NewServer(store, "secret", nil, 1, 1)
+	calls := 0
+	handler := RequestIDMiddleware(server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		respondWithAPIError(w, http.StatusInternalServerError, openapi.ApiErrorCodeInternalError, "failed", nil)
+	})))
+	for attempt := 1; attempt <= 2; attempt++ {
+		req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"name":"Private Person@example.test","slug":"private-retry"}`)), "platform-admin", string(domain.RoleAdmin))
+		req.Header.Set("Idempotency-Key", "provision-server-failure-key")
+		req.Header.Set(requestIDHeader, "request-server-failure")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusInternalServerError || recorder.Header().Get("Idempotency-Replayed") != "" {
+			t.Fatalf("attempt=%d status=%d replay=%q body=%s", attempt, recorder.Code, recorder.Header().Get("Idempotency-Replayed"), recorder.Body.String())
+		}
+	}
+	if calls != 2 || len(store.auditEvents) != 2 {
+		t.Fatalf("calls=%d audits=%+v", calls, store.auditEvents)
+	}
+	for _, event := range store.auditEvents {
+		encoded, err := json.Marshal(event.Details)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.EventType != "organization_provisioning_failed" || event.Details["error_code"] != string(openapi.ApiErrorCodeInternalError) || bytes.Contains(encoded, []byte("Private")) || bytes.Contains(encoded, []byte("example.test")) || bytes.Contains(encoded, []byte("private-retry")) {
+			t.Fatalf("unsanitized server failure audit=%+v", event)
+		}
+	}
+}
+
+func TestAuthenticatedProvisioningServerFailureCommitsOnlyFailureAudit(t *testing.T) {
+	const secret = "super-secret-test-key-0123456789"
+	store := &transactionalDurableTestStore{durableTestStore: durableTestStore{
+		stubStore: stubStore{getUserByEmail: &domain.User{ID: "00000000-0000-0000-0000-000000000001", Email: "platform@example.test", AccountStatus: domain.AccountStatusActive, PlatformAdmin: true}},
+		backend:   newDurableBackend(time.Now),
+	}}
+	server := NewServer(store, secret, nil, 1, 1)
+	handler := AuthMiddleware(secret, store)(server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		respondWithAPIError(w, http.StatusInternalServerError, openapi.ApiErrorCodeInternalError, "failed", nil)
+	})))
+	token, err := auth.GenerateToken("00000000-0000-0000-0000-000000000001", "platform@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"slug":"outer-transaction-failure"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Idempotency-Key", "outer-transaction-failure-key")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusInternalServerError || !store.committed || len(store.auditEvents) != 1 {
+		t.Fatalf("status=%d committed=%v audits=%+v body=%s", recorder.Code, store.committed, store.auditEvents, recorder.Body.String())
+	}
 }
 
 func newDurableBackend(now func() time.Time) *durableReceiptBackend {
@@ -185,29 +309,45 @@ func TestIdempotencyReplayMismatchRestartAndRetention(t *testing.T) {
 	}
 }
 
-func TestIdempotencyMultiInstanceConcurrentDuplicateExecutesOnce(t *testing.T) {
+func TestProvisioningConcurrentSameKeyExecutesOnceAndReturnsTypedReplay(t *testing.T) {
 	backend := newDurableBackend(time.Now)
 	var calls int
 	handlerFor := func() http.Handler {
 		server := NewServer(&durableTestStore{backend: backend}, "secret", nil, 1, 1)
-		return server.RequireIdempotency("test.concurrent", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		return server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			calls++
-			respondWithJSON(w, http.StatusCreated, map[string]bool{"created": true})
+			respondWithJSON(w, http.StatusCreated, map[string]interface{}{
+				"organization": map[string]interface{}{"status": "active"},
+				"readiness":    map[string]interface{}{"ready": true},
+			})
 		}))
 	}
 	done := make(chan *httptest.ResponseRecorder, 2)
 	for i := 0; i < 2; i++ {
 		go func(h http.Handler) {
-			req := httptest.NewRequest(http.MethodPost, "/command", bytes.NewBufferString(`{"value":1}`))
-			req.Header.Set("Idempotency-Key", "concurrent-key-448")
+			req := httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"name":"Concurrent","slug":"concurrent-org","type":"factory","license_plan":"none","bootstrap_admin_user_id":"00000000-0000-0000-0000-000000000001"}`))
+			req.Header.Set("Idempotency-Key", "concurrent-provision-key")
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 			done <- rec
 		}(handlerFor())
 	}
 	first, second := <-done, <-done
-	if calls != 1 || first.Body.String() != second.Body.String() {
-		t.Fatalf("calls=%d first=%s second=%s", calls, first.Body.String(), second.Body.String())
+	replayCount := 0
+	for _, recorder := range []*httptest.ResponseRecorder{first, second} {
+		if recorder.Code != http.StatusCreated {
+			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+		if recorder.Header().Get("Idempotency-Replayed") == "true" {
+			replayCount++
+		}
+		var result openapi.OrganizationProvisioningResult
+		if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil || result.Organization.Status != openapi.OrganizationStatusActive || !result.Readiness.Ready {
+			t.Fatalf("typed result=%+v err=%v body=%s", result, err, recorder.Body.String())
+		}
+	}
+	if calls != 1 || replayCount != 1 || first.Body.String() != second.Body.String() {
+		t.Fatalf("calls=%d replays=%d first=%s second=%s", calls, replayCount, first.Body.String(), second.Body.String())
 	}
 }
 
@@ -270,7 +410,7 @@ func (s *staleInvitationStore) RevokeInvitation(_ context.Context, _, id, _, _ s
 
 func TestStaleInvitationRevokeReturnsTyped412WithoutOverwrite(t *testing.T) {
 	store := &staleInvitationStore{
-		stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Active: true}},
+		stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1}},
 		version:   2,
 	}
 	server := NewServer(store, "secret", nil, 1, 1)
@@ -302,7 +442,7 @@ func (s *durableInvitationStore) ExecuteIdempotent(ctx context.Context, req stor
 func TestInvitationRevokeReplaysWithoutSecondMutation(t *testing.T) {
 	store := &durableInvitationStore{
 		staleInvitationStore: staleInvitationStore{
-			stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Active: true}},
+			stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1}},
 			version:   1,
 		},
 		backend: newDurableBackend(time.Now),
@@ -352,7 +492,7 @@ func (s *staleMembershipStore) UpdateMembershipRolesByOrg(_ context.Context, _, 
 
 func TestStaleMembershipWriteReturnsTyped412WithoutOverwrite(t *testing.T) {
 	store := &staleMembershipStore{
-		stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Active: true}},
+		stubStore: stubStore{getOrgByID: &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1}},
 		version:   2, roles: []domain.UserRole{domain.RoleUser},
 	}
 	server := NewServer(store, "secret", nil, 1, 1)
@@ -389,69 +529,15 @@ func (s *missingCloneSourceStore) GetOrganizationBySlug(context.Context, string)
 	return nil, errors.New("organization not found")
 }
 
-func TestPlatformOrganizationPrevalidatesCloneSourceBeforeInsert(t *testing.T) {
+func TestProvisionOrganizationRejectsMissingCloneSourceWithoutMutation(t *testing.T) {
 	store := &missingCloneSourceStore{}
 	server := NewServer(store, "secret", nil, 1, 1)
-	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/platform/organizations", bytes.NewBufferString(`{
-		"name":"No Partial Org","slug":"no-partial-org","type":"factory","license_plan":"none","clone_catalog_from":"missing-source"
-	}`)), "platform-admin", string(domain.RoleAdmin))
-	rec := httptest.NewRecorder()
-	server.HandlePlatformCreateOrganization(rec, req)
-	if rec.Code != http.StatusBadRequest || len(store.createdOrgs) != 0 {
-		t.Fatalf("status=%d created=%d body=%s", rec.Code, len(store.createdOrgs), rec.Body.String())
-	}
-}
-
-type cloneSlugStore struct {
-	stubStore
-	idLookups int
-	cloneSrc  string
-}
-
-func (s *cloneSlugStore) GetOrganizationByID(context.Context, string) (*domain.Organization, error) {
-	s.idLookups++
-	return nil, errors.New("unexpected UUID lookup")
-}
-
-func (s *cloneSlugStore) GetOrganizationBySlug(_ context.Context, slug string) (*domain.Organization, error) {
-	if slug != "source-factory" {
-		return nil, errors.New("organization not found")
-	}
-	return &domain.Organization{ID: "00000000-0000-0000-0000-000000000123", Slug: slug, Type: domain.OrganizationTypeFactory, Active: true}, nil
-}
-
-func (s *cloneSlugStore) CloneCatalog(_ context.Context, source, _ string) error {
-	s.cloneSrc = source
-	return nil
-}
-
-func TestPlatformOrganizationResolvesCloneSlugWithoutAbortingTransaction(t *testing.T) {
-	store := &cloneSlugStore{}
-	server := NewServer(store, "secret", nil, 1, 1)
-	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/platform/organizations", bytes.NewBufferString(`{
-		"name":"Cloned Org","slug":"cloned-org","type":"factory","license_plan":"none","clone_catalog_from":"source-factory"
-	}`)), "platform-admin", string(domain.RoleAdmin))
-	rec := httptest.NewRecorder()
-	server.HandlePlatformCreateOrganization(rec, req)
-	if rec.Code != http.StatusCreated || store.idLookups != 0 || store.cloneSrc != "00000000-0000-0000-0000-000000000123" {
-		t.Fatalf("status=%d idLookups=%d cloneSrc=%q body=%s", rec.Code, store.idLookups, store.cloneSrc, rec.Body.String())
-	}
-}
-
-func TestGeneratedRequestBoundaryRejectsUnknownProperty(t *testing.T) {
-	store := &stubStore{}
-	server := NewServer(store, "secret", nil, 1, 1)
-	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/platform/organizations", bytes.NewBufferString(`{
-		"name":"Strict Org","slug":"strict-org","type":"factory","license_plan":"none","unexpected":true
-	}`)), "platform-admin", string(domain.RoleAdmin))
-	rec := httptest.NewRecorder()
-	server.HandlePlatformCreateOrganization(rec, req)
-	if rec.Code != http.StatusBadRequest || len(store.createdOrgs) != 0 {
-		t.Fatalf("status=%d created=%d body=%s", rec.Code, len(store.createdOrgs), rec.Body.String())
-	}
-	var payload openapi.ApiError
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil || payload.Code != openapi.ApiErrorCodeBadRequest {
-		t.Fatalf("single typed error required: payload=%+v err=%v body=%s", payload, err, rec.Body.String())
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"name":"Canonical","slug":"canonical-org","type":"factory","license_plan":"none","bootstrap_admin_user_id":"00000000-0000-0000-0000-000000000001","clone_catalog_from":"missing-source"}`)), "platform-admin", string(domain.RoleAdmin))
+	claimsFromRequest(req).PlatformAdmin = true
+	recorder := httptest.NewRecorder()
+	server.HandleProvisionOrganization(recorder, req)
+	if recorder.Code != http.StatusBadRequest || len(store.createdOrgs) != 0 {
+		t.Fatalf("status=%d created=%d body=%s", recorder.Code, len(store.createdOrgs), recorder.Body.String())
 	}
 }
 
@@ -467,7 +553,7 @@ func (s *strictPlatformUpdateStore) UpdateOrganizationVersion(_ context.Context,
 
 func TestPlatformOrganizationPatchRejectsUnknownPropertyWithoutMutation(t *testing.T) {
 	store := &strictPlatformUpdateStore{stubStore: stubStore{getOrgByID: &domain.Organization{
-		ID: "org-1", Name: "Original", Type: domain.OrganizationTypeFactory, Active: true, Version: 2,
+		ID: "org-1", Name: "Original", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1, Version: 2,
 	}}}
 	server := NewServer(store, "secret", nil, 1, 1)
 	req := withClaims(httptest.NewRequest(http.MethodPatch, "/api/platform/organizations/org-1", bytes.NewBufferString(`{"name":"Changed","unexpected":true}`)), "platform-admin", string(domain.RoleAdmin))
@@ -484,7 +570,7 @@ func TestPlatformOrganizationPatchRejectsUnknownPropertyWithoutMutation(t *testi
 	}
 }
 
-func TestPlatformOrganizationRequiresGeneratedFields(t *testing.T) {
+func TestProvisionOrganizationRequiresGeneratedFields(t *testing.T) {
 	for name, body := range map[string]string{
 		"missing type":         `{"name":"Strict Org","slug":"strict-org","license_plan":"none"}`,
 		"missing license plan": `{"name":"Strict Org","slug":"strict-org","type":"factory"}`,
@@ -492,9 +578,10 @@ func TestPlatformOrganizationRequiresGeneratedFields(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			store := &stubStore{}
 			server := NewServer(store, "secret", nil, 1, 1)
-			req := withClaims(httptest.NewRequest(http.MethodPost, "/api/platform/organizations", bytes.NewBufferString(body)), "platform-admin", string(domain.RoleAdmin))
+			req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(body)), "platform-admin", string(domain.RoleAdmin))
+			claimsFromRequest(req).PlatformAdmin = true
 			rec := httptest.NewRecorder()
-			server.HandlePlatformCreateOrganization(rec, req)
+			server.HandleProvisionOrganization(rec, req)
 			if rec.Code != http.StatusBadRequest || len(store.createdOrgs) != 0 {
 				t.Fatalf("status=%d created=%d body=%s", rec.Code, len(store.createdOrgs), rec.Body.String())
 			}

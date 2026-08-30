@@ -33,7 +33,7 @@ func newMembershipSectorRaceFixture(t *testing.T) *pgxpool.Pool {
 		query string
 		args  []any
 	}{
-		{`INSERT INTO organizations (id,name,slug,type,active) VALUES ($1,'Sector race','sector-race','factory',FALSE)`, []any{sectorRaceOrganization}},
+		{`INSERT INTO organizations (id,name,slug,type,status) VALUES ($1,'Sector race','sector-race','factory','provisioning')`, []any{sectorRaceOrganization}},
 		{`INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES ($1,'sector-race@example.test','sector-race@example.test','x','Sector Race','active')`, []any{sectorRaceUser}},
 		{`INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES ($1,$2,$3,'{produccion}','active',NOW())`, []any{sectorRaceMembership, sectorRaceOrganization, sectorRaceUser}},
 	} {
