@@ -7,6 +7,100 @@
     "schemaVersion": "1.0"
   },
   "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+  "parameterDefinitions": [
+    {
+      "name": "depthMm",
+      "label": "Fondo (mm)",
+      "type": "number",
+      "defaultValue": 560,
+      "required": true,
+      "unit": "mm",
+      "category": "dimension",
+      "min": 280,
+      "max": 1120,
+      "step": 10,
+      "integer": true
+    },
+    {
+      "name": "heightMm",
+      "label": "Alto (mm)",
+      "type": "number",
+      "defaultValue": 720,
+      "required": true,
+      "unit": "mm",
+      "category": "dimension",
+      "min": 360,
+      "max": 1440,
+      "step": 10,
+      "integer": true
+    },
+    {
+      "name": "label",
+      "label": "Label",
+      "type": "string",
+      "defaultValue": "standard",
+      "required": false,
+      "category": "style"
+    },
+    {
+      "name": "shelfCount",
+      "label": "Shelf count",
+      "type": "number",
+      "defaultValue": 1,
+      "required": true,
+      "unit": "count",
+      "category": "configuration",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "integer": true
+    },
+    {
+      "name": "softClose",
+      "label": "Soft close",
+      "type": "boolean",
+      "defaultValue": false,
+      "required": false,
+      "category": "hardware"
+    },
+    {
+      "name": "style",
+      "label": "Style",
+      "type": "enum",
+      "defaultValue": "classic",
+      "required": true,
+      "category": "style",
+      "options": [
+        "classic",
+        "minimal"
+      ]
+    },
+    {
+      "name": "tiltDeg",
+      "label": "Tilt",
+      "type": "number",
+      "defaultValue": 0,
+      "required": false,
+      "unit": "deg",
+      "category": "configuration",
+      "min": 0,
+      "max": 90,
+      "step": 0.25
+    },
+    {
+      "name": "widthMm",
+      "label": "Ancho (mm)",
+      "type": "number",
+      "defaultValue": 600,
+      "required": true,
+      "unit": "mm",
+      "category": "dimension",
+      "min": 300,
+      "max": 1200,
+      "step": 10,
+      "integer": true
+    }
+  ],
   "joinery": {
     "componentGeometry": {
       "mod-comp-door": {
@@ -154,7 +248,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "materialChoices": {
             "FRENTE": "mat-oak18"
@@ -192,12 +286,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {
@@ -733,7 +832,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -821,12 +920,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -1664,7 +1768,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -1774,12 +1878,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -2977,7 +3086,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3033,12 +3142,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -3561,7 +3675,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3663,12 +3777,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -4498,7 +4617,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -4570,12 +4689,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -5063,7 +5187,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5143,7 +5267,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "rejected",
         "issues": [
           {
@@ -5166,7 +5290,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5246,7 +5370,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "rejected",
         "issues": [
           {
@@ -5269,7 +5393,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -5302,7 +5426,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "rejected",
         "issues": [
           {
@@ -5324,7 +5448,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -5432,7 +5556,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelf2Z": 520
@@ -5465,15 +5589,15 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "rejected",
         "issues": [
           {
-            "code": "PARAMETER_INVALID",
-            "message": "parámetro desconocido shelf2Z",
+            "code": "PARAMETER_UNKNOWN",
+            "message": "parameter is not declared by the furniture definition",
             "severity": "error",
             "path": "furniture.parameters.shelf2Z",
-            "remediation": "Use a parameter declared by the pinned FurnitureDefinition."
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
           }
         ]
       }
@@ -5487,7 +5611,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5551,7 +5675,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "rejected",
         "issues": [
           {
@@ -5574,7 +5698,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5641,7 +5765,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "rejected",
         "issues": [
           {
@@ -5662,7 +5786,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5722,12 +5846,17 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -6250,7 +6379,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6318,12 +6447,17 @@
         "responseMessageId": "resolve-msg-fixture-unicode-step",
         "inReplyToMessageId": "msg-fixture-unicode-step",
         "idempotencyKey": "fixture:unicode-step:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -6854,7 +6988,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6917,12 +7051,17 @@
         "responseMessageId": "resolve-msg-fixture-material-pbr",
         "inReplyToMessageId": "msg-fixture-material-pbr",
         "idempotencyKey": "fixture:material-pbr:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {
@@ -7458,7 +7597,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-e6335ca4a21b",
+          "catalogRevision": "workshop-7ba89f219c09",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -7530,12 +7669,17 @@
         "responseMessageId": "resolve-msg-fixture-cost-only-hardware",
         "inReplyToMessageId": "msg-fixture-cost-only-hardware",
         "idempotencyKey": "fixture:cost-only-hardware:0001",
-        "catalogRevision": "workshop-e6335ca4a21b",
+        "catalogRevision": "workshop-7ba89f219c09",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
             "widthMm": 600
           },
           "materialChoices": {},
@@ -7967,6 +8111,797 @@
           }
         },
         "issues": []
+      }
+    },
+    {
+      "id": "13-definition-driven-typed-parameters",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-7ba89f219c09",
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "label": "custom",
+            "shelfCount": 3,
+            "softClose": true,
+            "style": "minimal",
+            "tiltDeg": 12.25,
+            "widthMm": 650
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-7ba89f219c09",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "heightMm": 720,
+            "label": "custom",
+            "shelfCount": 3,
+            "softClose": true,
+            "style": "minimal",
+            "tiltDeg": 12.25,
+            "widthMm": 650
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "st-comp-side-copy-0",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "st-comp-side-r-copy-0",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "st-comp-base-copy-0",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "st-comp-top-copy-0",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "st-comp-back-copy-0",
+              "componentDefinitionId": "st-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "mod-comp-shelf-copy-0",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "mod-comp-door-copy-0",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "mod-comp-door-copy-0-hw-0",
+              "catalogHardwareId": "hw-hinge",
+              "hostComponentInstanceId": "mod-comp-door-copy-0",
+              "anchorFace": "front",
+              "offsetMm": [
+                298,
+                100
+              ]
+            },
+            {
+              "hardwarePlacementId": "mod-comp-door-copy-0-hw-1",
+              "catalogHardwareId": "hw-handle",
+              "hostComponentInstanceId": "mod-comp-door-copy-0",
+              "anchorFace": "front",
+              "offsetMm": [
+                40,
+                360
+              ]
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              650,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "st-comp-side-copy-0",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "st-comp-side-r-copy-0",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    632,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    632,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "st-comp-base-copy-0",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  614,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 614,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "st-comp-top-copy-0",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  614,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 614,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "st-comp-back-copy-0",
+                "componentDefinitionId": "st-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  620
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 620,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "mod-comp-shelf-copy-0",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  614,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 614,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "mod-comp-door-copy-0",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  646,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 646,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "mod-comp-door-copy-0-hw-0",
+                "hardwareId": "hw-hinge",
+                "name": "Bisagra CL110",
+                "shape": "hinge",
+                "sizeMm": 96,
+                "diameterMm": 35,
+                "projectionMm": 25,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "mod-comp-door-copy-0",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    332.5,
+                    578,
+                    54
+                  ]
+                },
+                "dimensionsMm": [
+                  35,
+                  25,
+                  96
+                ]
+              },
+              {
+                "placementId": "mod-comp-door-copy-0-hw-1",
+                "hardwareId": "hw-handle",
+                "name": "Manija 160",
+                "shape": "bar-pull",
+                "sizeMm": 160,
+                "diameterMm": 32,
+                "projectionMm": 37,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "mod-comp-door-copy-0",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    592,
+                    578,
+                    282
+                  ]
+                },
+                "dimensionsMm": [
+                  32,
+                  37,
+                  160
+                ]
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "mod-comp-door-copy-0-hw-0:op-1",
+                "hostComponentInstanceId": "mod-comp-door-copy-0",
+                "provenance": {
+                  "sourceKind": "manualHardwarePlacement",
+                  "hardwarePlacementId": "mod-comp-door-copy-0-hw-0"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 298,
+                    "yMm": 100,
+                    "diameterMm": 35,
+                    "depthMm": 12.5,
+                    "type": "hinge"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [],
+            "manufacturingFingerprint": "sha256-c2ac02df379c9a68309da790bcd32481431692029a9ae81fb0efcff0078acc08"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "neg-parameter-wrong-type",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-7ba89f219c09",
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "softClose": "true"
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-7ba89f219c09",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "PARAMETER_TYPE_INVALID",
+            "message": "parameter value has the wrong JSON type",
+            "severity": "error",
+            "path": "furniture.parameters.softClose",
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+          }
+        ]
+      }
+    },
+    {
+      "id": "neg-parameter-out-of-range",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-7ba89f219c09",
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "shelfCount": 6
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-7ba89f219c09",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "PARAMETER_OUT_OF_RANGE",
+            "message": "numeric parameter is outside its allowed range",
+            "severity": "error",
+            "path": "furniture.parameters.shelfCount",
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+          }
+        ]
+      }
+    },
+    {
+      "id": "neg-parameter-invalid-step",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-7ba89f219c09",
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "tiltDeg": 12.1
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-7ba89f219c09",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "PARAMETER_STEP_INVALID",
+            "message": "numeric parameter does not align with its allowed step",
+            "severity": "error",
+            "path": "furniture.parameters.tiltDeg",
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+          }
+        ]
+      }
+    },
+    {
+      "id": "neg-parameter-invalid-enum",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-7ba89f219c09",
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "style": "ornate"
+          }
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 422,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-7ba89f219c09",
+        "status": "rejected",
+        "issues": [
+          {
+            "code": "PARAMETER_ENUM_INVALID",
+            "message": "enum parameter is not one of its allowed options",
+            "severity": "error",
+            "path": "furniture.parameters.style",
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+          }
+        ]
       }
     }
   ]
