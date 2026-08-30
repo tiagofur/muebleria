@@ -16,6 +16,7 @@ import (
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -276,33 +277,35 @@ func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *htt
 		respondWithError(w, http.StatusBadRequest, "la razón del acceso de soporte es obligatoria (mínimo 4 caracteres)")
 		return
 	}
-	org, err := s.Store.GetOrganizationByID(r.Context(), orgID)
-	if err != nil || org == nil || org.Status != domain.OrganizationStatusActive {
+	claims := claimsFromRequest(r)
+	service, ok := s.organizationService(w)
+	if !ok {
+		return
+	}
+	result, err := service.StartSupportSession(r.Context(), application.StartSupportSessionCommand{
+		OrganizationID: orgID, ActorUserID: claims.UserID,
+		Reason: strings.TrimSpace(body.Reason), TTL: auth.SupportTokenTTL,
+		IP: clientIP(r), RequestID: RequestIDFromContext(r.Context()),
+	})
+	if errors.Is(err, application.ErrOrganizationStatusConflict) || errors.Is(err, storage.ErrOrganizationNotFound) {
 		respondWithError(w, http.StatusNotFound, "organización no encontrada o suspendida")
 		return
 	}
-	claims := claimsFromRequest(r)
-
-	ss, err := s.Store.StartSupportSession(r.Context(), claims.UserID, org.ID, strings.TrimSpace(body.Reason), auth.SupportTokenTTL)
 	if err != nil {
 		respondWithInternalError(w, err, "support session start")
 		return
 	}
+	ss := result.Session
 	token, err := auth.GenerateSupportToken(claims.UserID, claims.Email, auth.SupportClaims{
-		OrgID: org.ID, SessionID: ss.ID, Reason: ss.Reason,
+		OrgID: result.Organization.ID, SessionID: ss.ID, Reason: ss.Reason,
+		OrganizationCredentialVersion: ss.OrganizationCredentialVersion,
 	}, s.JWTSecret)
 	if err != nil {
 		respondWithInternalError(w, err, "support token")
 		return
 	}
 
-	if err := s.auditRequired(r.Context(), "support_session_started", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
-		"session_id": ss.ID, "reason": ss.Reason, "expires_at": ss.ExpiresAt,
-	}); err != nil {
-		respondWithInternalError(w, err, "audit support session")
-		return
-	}
-	orgDTO := toOrgSummaryDTO(*org)
+	orgDTO := toOrgSummaryDTO(result.Organization)
 	respondWithJSON(w, http.StatusCreated, openapi.SupportSessionResponse{
 		Token: token, SessionID: ss.ID, Reason: ss.Reason,
 		ExpiresAt: ss.ExpiresAt.UTC().Format(time.RFC3339Nano), Organization: orgDTO, Support: true,
@@ -314,21 +317,18 @@ func (s *Server) HandlePlatformEndSupportSession(w http.ResponseWriter, r *http.
 	claims := claimsFromRequest(r)
 	sessionID := r.PathValue("sessionId")
 
-	// F179: attribute the end event to the organization the session was
-	// opened into, so the org's audit viewer shows the complete
-	// started/ended trail (an org-less event was invisible there).
-	orgID := ""
-	if ss, err := s.Store.GetOpenSupportSession(r.Context(), sessionID); err == nil && ss != nil {
-		orgID = ss.OrganizationID
+	service, ok := s.organizationService(w)
+	if !ok {
+		return
 	}
-	ended, err := s.Store.EndSupportSession(r.Context(), sessionID, claims.UserID, "logout")
+	ended, err := service.EndSupportSession(r.Context(), application.EndSupportSessionCommand{
+		SessionID: sessionID, ActorUserID: claims.UserID,
+		IP: clientIP(r), RequestID: RequestIDFromContext(r.Context()),
+	})
 	if err != nil {
 		respondWithInternalError(w, err, "support session end")
 		return
 	}
-	s.audit(r.Context(), "support_session_ended", claims.UserID, orgID, clientIP(r), map[string]interface{}{
-		"session_id": sessionID, "via": "logout", "found": ended,
-	})
 	respondWithJSON(w, http.StatusOK, openapi.EndSupportSessionResponse{Ended: ended})
 }
 

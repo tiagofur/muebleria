@@ -24,6 +24,8 @@ const InitialOrganizationID = "00000000-0000-0000-0000-000000000001"
 
 var (
 	ErrMembershipNotFound         = errors.New("membership not found")
+	ErrOrganizationNotFound       = errors.New("organization not found")
+	ErrSupportSessionNotFound     = errors.New("support session not found")
 	ErrVersionConflict            = errors.New("resource version conflict")
 	ErrOrganizationStatusConflict = errors.New("organization status conflict")
 )
@@ -336,19 +338,26 @@ func (s *PostgresStore) ListSecurityAuditEvents(ctx context.Context, organizatio
 
 // --- Support sessions (ADR-0005 §5 / #326) ---
 
-func (s *PostgresStore) StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration) (*domain.SupportSession, error) {
-	if transactionFromContext(ctx) != nil {
-		if err := authorizeTenantOrganizations(ctx, organizationID); err != nil {
-			return nil, err
-		}
+func (s *PostgresStore) StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration, organizationCredentialVersion int64) (*domain.SupportSession, error) {
+	if transactionFromContext(ctx) == nil {
+		return nil, errors.New("support session start requires an active transaction")
+	}
+	if err := authorizeTenantOrganizations(ctx, organizationID); err != nil {
+		return nil, err
 	}
 	out := &domain.SupportSession{}
 	err := s.db(ctx).QueryRow(ctx, `
-		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
-		VALUES ($1, $2, $3, NOW() + $4::interval)
-		RETURNING id, platform_admin_user_id, organization_id, reason, started_at, expires_at`,
-		adminUserID, organizationID, reason, fmt.Sprintf("%d seconds", int(ttl.Seconds()))).
-		Scan(&out.ID, &out.PlatformAdminUserID, &out.OrganizationID, &out.Reason, &out.StartedAt, &out.ExpiresAt)
+		INSERT INTO support_sessions (
+			platform_admin_user_id, organization_id, organization_credential_version,
+			reason, expires_at
+		)
+		VALUES ($1, $2, $3, $4, NOW() + $5::interval)
+		RETURNING id, platform_admin_user_id, organization_id,
+			organization_credential_version, reason, started_at, expires_at`,
+		adminUserID, organizationID, organizationCredentialVersion, reason,
+		fmt.Sprintf("%d seconds", int(ttl.Seconds()))).
+		Scan(&out.ID, &out.PlatformAdminUserID, &out.OrganizationID,
+			&out.OrganizationCredentialVersion, &out.Reason, &out.StartedAt, &out.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -359,10 +368,16 @@ func (s *PostgresStore) StartSupportSession(ctx context.Context, adminUserID, or
 func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error) {
 	var out domain.SupportSession
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT id, platform_admin_user_id, organization_id, reason, started_at, expires_at
-		FROM support_sessions
-		WHERE id = $1 AND ended_at IS NULL AND expires_at > NOW()`, sessionID).
-		Scan(&out.ID, &out.PlatformAdminUserID, &out.OrganizationID, &out.Reason, &out.StartedAt, &out.ExpiresAt)
+		SELECT session.id, session.platform_admin_user_id, session.organization_id,
+			session.organization_credential_version, organization.status,
+			organization.credential_version, session.reason, session.started_at,
+			session.expires_at
+		FROM support_sessions session
+		JOIN organizations organization ON organization.id = session.organization_id
+		WHERE session.id = $1 AND session.ended_at IS NULL AND session.expires_at > NOW()`, sessionID).
+		Scan(&out.ID, &out.PlatformAdminUserID, &out.OrganizationID,
+			&out.OrganizationCredentialVersion, &out.LiveOrganizationStatus,
+			&out.LiveOrganizationCredentialVersion, &out.Reason, &out.StartedAt, &out.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Lazy close: an open-but-expired session is finalized with
@@ -371,7 +386,7 @@ func (s *PostgresStore) GetOpenSupportSession(ctx context.Context, sessionID str
 			_, _ = s.db(ctx).Exec(ctx, `
 				UPDATE support_sessions SET ended_at = expires_at, ended_via = 'expiry'
 				WHERE id = $1 AND ended_at IS NULL AND expires_at <= NOW()`, sessionID)
-			return nil, fmt.Errorf("support session not found")
+			return nil, ErrSupportSessionNotFound
 		}
 		return nil, err
 	}
@@ -403,6 +418,9 @@ func (s *PostgresStore) EndOpenSupportSessionsByOrg(ctx context.Context, organiz
 
 // EndSupportSession closes an open session (idempotent for already-ended).
 func (s *PostgresStore) EndSupportSession(ctx context.Context, sessionID, adminUserID, via string) (bool, error) {
+	if transactionFromContext(ctx) == nil {
+		return false, errors.New("support session end requires an active transaction")
+	}
 	result, err := s.db(ctx).Exec(ctx, `
 		UPDATE support_sessions SET ended_at = NOW(), ended_via = $3
 		WHERE id = $1 AND platform_admin_user_id = $2 AND ended_at IS NULL`,

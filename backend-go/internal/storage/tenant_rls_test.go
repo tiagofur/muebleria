@@ -266,14 +266,20 @@ func TestTenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix(t *testing.T) 
 
 	var supportSessionID, supportSessionBID string
 	if err := fx.admin.QueryRow(ctx, `
-		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
-		VALUES ($1, $2, 'RLS test support', NOW() + INTERVAL '1 hour')
+		INSERT INTO support_sessions (
+			platform_admin_user_id, organization_id, organization_credential_version, reason, expires_at
+		)
+		SELECT $1, organization.id, organization.credential_version, 'RLS test support', NOW() + INTERVAL '1 hour'
+		FROM organizations organization WHERE organization.id=$2
 		RETURNING id`, rlsUserA, rlsOrgA).Scan(&supportSessionID); err != nil {
 		t.Fatal(err)
 	}
 	if err := fx.admin.QueryRow(ctx, `
-		INSERT INTO support_sessions (platform_admin_user_id, organization_id, reason, expires_at)
-		VALUES ($1, $2, 'RLS test support B', NOW() + INTERVAL '1 hour')
+		INSERT INTO support_sessions (
+			platform_admin_user_id, organization_id, organization_credential_version, reason, expires_at
+		)
+		SELECT $1, organization.id, organization.credential_version, 'RLS test support B', NOW() + INTERVAL '1 hour'
+		FROM organizations organization WHERE organization.id=$2
 		RETURNING id`, rlsUserA, rlsOrgB).Scan(&supportSessionBID); err != nil {
 		t.Fatal(err)
 	}

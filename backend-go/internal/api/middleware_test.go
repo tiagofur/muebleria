@@ -723,6 +723,8 @@ func TestAuthMiddleware_SupportSessionActsAsOrgAdmin(t *testing.T) {
 		},
 		openSession: &domain.SupportSession{
 			ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-9", Reason: "ayuda catálogo",
+			ExpiresAt: time.Now().Add(time.Hour), OrganizationCredentialVersion: 5,
+			LiveOrganizationStatus: domain.OrganizationStatusActive, LiveOrganizationCredentialVersion: 5,
 		},
 	}
 	var seenRole string
@@ -733,7 +735,7 @@ func TestAuthMiddleware_SupportSessionActsAsOrgAdmin(t *testing.T) {
 	}))
 
 	token, err := auth.GenerateSupportToken("pa-1", "soporte@granete.test", auth.SupportClaims{
-		OrgID: "org-9", SessionID: "ss-1", Reason: "ayuda catálogo",
+		OrgID: "org-9", SessionID: "ss-1", Reason: "ayuda catálogo", OrganizationCredentialVersion: 5,
 	}, secret)
 	if err != nil {
 		t.Fatal(err)
@@ -767,11 +769,15 @@ func TestAuthMiddleware_SupportTokenRequiresPlatformAdmin(t *testing.T) {
 				"u-1": {ID: "u-1", Email: "u@test.com", AccountStatus: domain.AccountStatusActive},
 			},
 		},
-		openSession: &domain.SupportSession{ID: "ss-x", PlatformAdminUserID: "u-1", OrganizationID: "org-9"},
+		openSession: &domain.SupportSession{
+			ID: "ss-x", PlatformAdminUserID: "u-1", OrganizationID: "org-9",
+			ExpiresAt: time.Now().Add(time.Hour), OrganizationCredentialVersion: 5,
+			LiveOrganizationStatus: domain.OrganizationStatusActive, LiveOrganizationCredentialVersion: 5,
+		},
 	}
 	handler := AuthMiddleware(secret, users)(okHandler())
 	token, _ := auth.GenerateSupportToken("u-1", "u@test.com", auth.SupportClaims{
-		OrgID: "org-9", SessionID: "ss-x",
+		OrgID: "org-9", SessionID: "ss-x", OrganizationCredentialVersion: 5,
 	}, secret)
 	req := httptest.NewRequest("GET", "/api/projects", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -779,6 +785,60 @@ func TestAuthMiddleware_SupportTokenRequiresPlatformAdmin(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("forged support claim: esperaba 401, got %d", rr.Code)
+	}
+}
+
+func TestAuthMiddleware_SupportSessionFailsClosedOnEveryLiveBoundary(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	tests := []struct {
+		name   string
+		mutate func(*supportSessionUsers)
+	}{
+		{"missing session", func(users *supportSessionUsers) { users.openSession = nil }},
+		{"wrong session", func(users *supportSessionUsers) { users.openSession.ID = "ss-other" }},
+		{"wrong admin", func(users *supportSessionUsers) { users.openSession.PlatformAdminUserID = "pa-other" }},
+		{"wrong organization", func(users *supportSessionUsers) { users.openSession.OrganizationID = "org-other" }},
+		{"ended", func(users *supportSessionUsers) { now := time.Now(); users.openSession.EndedAt = &now }},
+		{"expired", func(users *supportSessionUsers) { users.openSession.ExpiresAt = time.Now().Add(-time.Second) }},
+		{"suspended organization", func(users *supportSessionUsers) {
+			users.openSession.LiveOrganizationStatus = domain.OrganizationStatusSuspended
+		}},
+		{"offboarding organization", func(users *supportSessionUsers) {
+			users.openSession.LiveOrganizationStatus = domain.OrganizationStatusOffboarding
+		}},
+		{"terminated organization", func(users *supportSessionUsers) {
+			users.openSession.LiveOrganizationStatus = domain.OrganizationStatusTerminated
+		}},
+		{"session token epoch mismatch", func(users *supportSessionUsers) { users.openSession.OrganizationCredentialVersion++ }},
+		{"live organization epoch mismatch", func(users *supportSessionUsers) { users.openSession.LiveOrganizationCredentialVersion++ }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			users := &supportSessionUsers{
+				staticUsers: staticUsers{byID: map[string]*domain.User{
+					"pa-1": {ID: "pa-1", Email: "support@example.test", AccountStatus: domain.AccountStatusActive, PlatformAdmin: true},
+				}},
+				openSession: &domain.SupportSession{
+					ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-9",
+					ExpiresAt: time.Now().Add(time.Hour), OrganizationCredentialVersion: 5,
+					LiveOrganizationStatus: domain.OrganizationStatusActive, LiveOrganizationCredentialVersion: 5,
+				},
+			}
+			test.mutate(users)
+			token, err := auth.GenerateSupportToken("pa-1", "support@example.test", auth.SupportClaims{
+				OrgID: "org-9", SessionID: "ss-1", OrganizationCredentialVersion: 5,
+			}, secret)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			recorder := httptest.NewRecorder()
+			AuthMiddleware(secret, users)(okHandler()).ServeHTTP(recorder, req)
+			if recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+		})
 	}
 }
 

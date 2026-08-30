@@ -72,7 +72,7 @@ func TestSupportTransportOnlyComesFromAuditedSupportToken(t *testing.T) {
 	token, err := auth.GenerateSupportToken(
 		"00000000-0000-0000-0000-000000000001",
 		"support@example.test",
-		auth.SupportClaims{OrgID: "00000000-0000-0000-0000-000000000002", SessionID: "session-448", Reason: "customer support"},
+		auth.SupportClaims{OrgID: "00000000-0000-0000-0000-000000000002", SessionID: "session-448", OrganizationCredentialVersion: 1, Reason: "customer support"},
 		"secret",
 	)
 	if err != nil {

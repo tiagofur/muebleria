@@ -22,6 +22,20 @@ func (r OrganizationReadiness) Ready() bool {
 		r.EntitlementsReady && r.CatalogReady && r.MediaReady
 }
 
+func (s *PostgresStore) LockOrganizationForCommand(ctx context.Context, organizationID string) error {
+	if transactionFromContext(ctx) == nil {
+		return errors.New("organization command lock requires an active transaction")
+	}
+	var lockedID *string
+	if err := s.db(ctx).QueryRow(ctx, `SELECT command_lock_organization($1)::text`, organizationID).Scan(&lockedID); err != nil {
+		return fmt.Errorf("lock organization command: %w", err)
+	}
+	if lockedID == nil {
+		return ErrOrganizationNotFound
+	}
+	return nil
+}
+
 func (s *PostgresStore) GetOrganizationReadiness(ctx context.Context, organizationID string) (*OrganizationReadiness, error) {
 	out := &OrganizationReadiness{CatalogReady: true, MediaReady: true}
 	err := s.db(ctx).QueryRow(ctx, `

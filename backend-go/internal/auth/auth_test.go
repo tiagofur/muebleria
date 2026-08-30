@@ -195,3 +195,66 @@ func TestGenerateToken_RejectsOrganizationScopeWithoutOrganizationCredentialVers
 		t.Fatal("organization-scoped token without organization credential version must be rejected")
 	}
 }
+
+func TestGenerateSupportToken_PreservesCredentialEpochAndAbsoluteLifetime(t *testing.T) {
+	secret := "test-secret-key-12345"
+	started := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Second)
+	token, err := GenerateSupportTokenFrom("platform-admin-1", "support@example.com", SupportClaims{
+		OrgID:                         "organization-1",
+		SessionID:                     "support-session-1",
+		OrganizationCredentialVersion: 9,
+		Reason:                        "customer support",
+	}, started, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := ValidateToken(token, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.Support == nil || claims.Support.OrganizationCredentialVersion != 9 {
+		t.Fatalf("support claims = %+v, want credential version 9", claims.Support)
+	}
+	if !claims.AuthStartedAt.Time.Equal(started) {
+		t.Fatalf("auth started at = %s, want %s", claims.AuthStartedAt.Time, started)
+	}
+	if want := started.Add(SupportTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
+		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	}
+}
+
+func TestGenerateSupportToken_RejectsMissingSessionCredentials(t *testing.T) {
+	tests := []SupportClaims{
+		{SessionID: "support-session-1", OrganizationCredentialVersion: 1},
+		{OrgID: "organization-1", OrganizationCredentialVersion: 1},
+		{OrgID: "organization-1", SessionID: "support-session-1"},
+	}
+	for _, support := range tests {
+		if _, err := GenerateSupportToken("platform-admin-1", "support@example.com", support, "secret"); err == nil {
+			t.Fatalf("support claims %+v must be rejected", support)
+		}
+	}
+}
+
+func TestValidateToken_RejectsSupportOrganizationMismatch(t *testing.T) {
+	secret := "test-secret-key-12345"
+	now := time.Now()
+	claims := &Claims{
+		UserID: "platform-admin-1", Email: "support@example.com", OrgID: "organization-1",
+		Support:       &SupportClaims{OrgID: "organization-2", SessionID: "support-session-1", OrganizationCredentialVersion: 1},
+		Ver:           TokenVersion,
+		AuthStartedAt: jwt.NewNumericDate(now),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token, err := jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateToken(token, secret); err == nil {
+		t.Fatal("support organization mismatch must be rejected")
+	}
+}

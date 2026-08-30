@@ -163,14 +163,17 @@ func IsValidRoleSet(roles []UserRole) bool {
 // one organization (ADR-0005 §5). Effective role is admin of that org; the
 // real actor stays the platform admin in every write.
 type SupportSession struct {
-	ID                  string     `json:"id"`
-	PlatformAdminUserID string     `json:"platform_admin_user_id"`
-	OrganizationID      string     `json:"organization_id"`
-	Reason              string     `json:"reason"`
-	StartedAt           time.Time  `json:"started_at"`
-	ExpiresAt           time.Time  `json:"expires_at"`
-	EndedAt             *time.Time `json:"ended_at,omitempty"`
-	EndedVia            string     `json:"ended_via,omitempty"`
+	ID                                string             `json:"id"`
+	PlatformAdminUserID               string             `json:"platform_admin_user_id"`
+	OrganizationID                    string             `json:"organization_id"`
+	OrganizationCredentialVersion     int64              `json:"organization_credential_version"`
+	LiveOrganizationStatus            OrganizationStatus `json:"-"`
+	LiveOrganizationCredentialVersion int64              `json:"-"`
+	Reason                            string             `json:"reason"`
+	StartedAt                         time.Time          `json:"started_at"`
+	ExpiresAt                         time.Time          `json:"expires_at"`
+	EndedAt                           *time.Time         `json:"ended_at,omitempty"`
+	EndedVia                          string             `json:"ended_via,omitempty"`
 }
 
 // commercialRoleSet is what store/dealer organizations may use: commercial +

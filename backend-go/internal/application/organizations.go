@@ -61,6 +61,27 @@ type LifecycleCommand struct {
 	RequestID       string
 }
 
+type StartSupportSessionCommand struct {
+	OrganizationID string
+	ActorUserID    string
+	Reason         string
+	TTL            time.Duration
+	IP             string
+	RequestID      string
+}
+
+type StartSupportSessionResult struct {
+	Organization domain.Organization
+	Session      domain.SupportSession
+}
+
+type EndSupportSessionCommand struct {
+	SessionID   string
+	ActorUserID string
+	IP          string
+	RequestID   string
+}
+
 type ProvisionOrganizationCommand struct {
 	ActorUserID          string
 	ActorMembershipID    string
@@ -87,6 +108,7 @@ type OrganizationStore interface {
 	WithinTenantTx(context.Context, storage.TenantActor, func(context.Context) error) error
 	GetUserByID(context.Context, string) (*domain.User, error)
 	GetOrganizationByID(context.Context, string) (*domain.Organization, error)
+	LockOrganizationForCommand(context.Context, string) error
 	CreateOrganization(context.Context, *domain.Organization) error
 	EnsureMembership(context.Context, string, string, []domain.UserRole) error
 	CloneCatalog(context.Context, string, string) error
@@ -97,6 +119,9 @@ type OrganizationStore interface {
 	UpdateOrganizationEntitlementsVersion(context.Context, domain.OrganizationEntitlements, int64) (*domain.OrganizationEntitlements, error)
 	TransitionOrganizationStatus(context.Context, string, domain.OrganizationStatus, domain.OrganizationStatus, string, string, int64) (*domain.Organization, error)
 	InsertSecurityAuditEvent(context.Context, storage.SecurityAuditEvent) error
+	StartSupportSession(context.Context, string, string, string, time.Duration, int64) (*domain.SupportSession, error)
+	GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error)
+	EndSupportSession(context.Context, string, string, string) (bool, error)
 	EndOpenSupportSessionsByOrg(context.Context, string, string) (int64, error)
 }
 
@@ -307,10 +332,90 @@ func (s *OrganizationService) SuspendOrganization(ctx context.Context, cmd Lifec
 	return s.transition(ctx, cmd, domain.OrganizationStatusActive, domain.OrganizationStatusSuspended, "organization_suspended", true, false)
 }
 
+func (s *OrganizationService) StartSupportSession(ctx context.Context, cmd StartSupportSessionCommand) (*StartSupportSessionResult, error) {
+	cmd.Reason = strings.TrimSpace(cmd.Reason)
+	if cmd.OrganizationID == "" || cmd.ActorUserID == "" || len(cmd.Reason) < 4 || cmd.TTL <= 0 {
+		return nil, fmt.Errorf("%w: organization, actor, reason and positive ttl are required", ErrInvalidOrganizationCommand)
+	}
+	var result StartSupportSessionResult
+	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
+		if err := s.store.LockOrganizationForCommand(txCtx, cmd.OrganizationID); err != nil {
+			return err
+		}
+		organization, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
+		if err != nil {
+			return err
+		}
+		if organization.Status != domain.OrganizationStatusActive {
+			return ErrOrganizationStatusConflict
+		}
+		session, err := s.store.StartSupportSession(
+			txCtx, cmd.ActorUserID, organization.ID, cmd.Reason, cmd.TTL, organization.CredentialVersion,
+		)
+		if err != nil {
+			return err
+		}
+		if err := s.store.InsertSecurityAuditEvent(txCtx, storage.SecurityAuditEvent{
+			EventType: "support_session_started", ActorUserID: cmd.ActorUserID,
+			OrganizationID: organization.ID, IP: cmd.IP,
+			Details: map[string]interface{}{
+				"session_id": session.ID, "reason": session.Reason,
+				"expires_at": session.ExpiresAt, "organization_credential_version": organization.CredentialVersion,
+				"request_id": cmd.RequestID,
+			},
+		}); err != nil {
+			return err
+		}
+		result = StartSupportSessionResult{Organization: *organization, Session: *session}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (s *OrganizationService) EndSupportSession(ctx context.Context, cmd EndSupportSessionCommand) (bool, error) {
+	if cmd.SessionID == "" || cmd.ActorUserID == "" {
+		return false, fmt.Errorf("%w: session and actor are required", ErrInvalidOrganizationCommand)
+	}
+	ended := false
+	err := s.store.WithinTenantTx(ctx, storage.TenantActor{UserID: cmd.ActorUserID}, func(txCtx context.Context) error {
+		session, err := s.store.GetOpenSupportSession(txCtx, cmd.SessionID)
+		if errors.Is(err, storage.ErrSupportSessionNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if session.PlatformAdminUserID != cmd.ActorUserID {
+			return nil
+		}
+		ended, err = s.store.EndSupportSession(txCtx, session.ID, cmd.ActorUserID, "logout")
+		if err != nil || !ended {
+			return err
+		}
+		return s.store.InsertSecurityAuditEvent(txCtx, storage.SecurityAuditEvent{
+			EventType: "support_session_ended", ActorUserID: cmd.ActorUserID,
+			OrganizationID: session.OrganizationID, IP: cmd.IP,
+			Details: map[string]interface{}{
+				"session_id": session.ID, "via": "logout", "request_id": cmd.RequestID,
+			},
+		})
+	})
+	if err != nil {
+		return false, err
+	}
+	return ended, err
+}
+
 func (s *OrganizationService) ReactivateOrganization(ctx context.Context, cmd LifecycleCommand) (*domain.Organization, OrganizationReadiness, error) {
 	var readiness OrganizationReadiness
 	var result *domain.Organization
 	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
+		if err := s.store.LockOrganizationForCommand(txCtx, cmd.OrganizationID); err != nil {
+			return err
+		}
 		org, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err
@@ -385,6 +490,9 @@ func (s *OrganizationService) TerminateOrganization(ctx context.Context, cmd Lif
 func (s *OrganizationService) offboardingTransition(ctx context.Context, cmd LifecycleCommand, to domain.OrganizationStatus, event string, cutSupport bool) (*domain.Organization, error) {
 	var result *domain.Organization
 	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
+		if err := s.store.LockOrganizationForCommand(txCtx, cmd.OrganizationID); err != nil {
+			return err
+		}
 		org, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err
@@ -424,6 +532,9 @@ func (s *OrganizationService) offboardingTransition(ctx context.Context, cmd Lif
 func (s *OrganizationService) transition(ctx context.Context, cmd LifecycleCommand, from, to domain.OrganizationStatus, event string, cutSupport, requireReady bool) (*domain.Organization, error) {
 	var result *domain.Organization
 	err := s.store.WithinTenantTx(ctx, platformLifecycleActor(cmd.OrganizationID, cmd.ActorUserID), func(txCtx context.Context) error {
+		if err := s.store.LockOrganizationForCommand(txCtx, cmd.OrganizationID); err != nil {
+			return err
+		}
 		org, err := s.store.GetOrganizationByID(txCtx, cmd.OrganizationID)
 		if err != nil {
 			return err

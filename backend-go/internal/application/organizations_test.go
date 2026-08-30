@@ -4,26 +4,29 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 type organizationStoreFake struct {
-	user           *domain.User
-	organization   *domain.Organization
-	entitlements   *domain.OrganizationEntitlements
-	readiness      storage.OrganizationReadiness
-	offboarding    storage.OrganizationOffboardingPreview
-	cloneErr       error
-	entitlementErr error
-	settingsErr    error
-	membershipErr  error
-	readinessErr   error
-	transitionErr  error
-	auditErrEvent  string
-	audits         []storage.SecurityAuditEvent
-	supportCuts    int
+	user              *domain.User
+	organization      *domain.Organization
+	entitlements      *domain.OrganizationEntitlements
+	readiness         storage.OrganizationReadiness
+	offboarding       storage.OrganizationOffboardingPreview
+	cloneErr          error
+	entitlementErr    error
+	settingsErr       error
+	membershipErr     error
+	readinessErr      error
+	transitionErr     error
+	auditErrEvent     string
+	audits            []storage.SecurityAuditEvent
+	supportCuts       int
+	supportSession    *domain.SupportSession
+	organizationLocks int
 }
 
 func (f *organizationStoreFake) WithinTenantTx(ctx context.Context, _ storage.TenantActor, execute func(context.Context) error) error {
@@ -38,10 +41,19 @@ func (f *organizationStoreFake) WithinTenantTx(ctx context.Context, _ storage.Te
 		entitlements = &value
 	}
 	readiness, audits, supportCuts := f.readiness, append([]storage.SecurityAuditEvent(nil), f.audits...), f.supportCuts
+	var supportSession *domain.SupportSession
+	if f.supportSession != nil {
+		value := *f.supportSession
+		supportSession = &value
+	}
 	if err := execute(ctx); err != nil {
-		f.organization, f.entitlements, f.readiness, f.audits, f.supportCuts = organization, entitlements, readiness, audits, supportCuts
+		f.organization, f.entitlements, f.readiness, f.audits, f.supportCuts, f.supportSession = organization, entitlements, readiness, audits, supportCuts, supportSession
 		return err
 	}
+	return nil
+}
+func (f *organizationStoreFake) LockOrganizationForCommand(context.Context, string) error {
+	f.organizationLocks++
 	return nil
 }
 func (f *organizationStoreFake) GetUserByID(context.Context, string) (*domain.User, error) {
@@ -134,7 +146,36 @@ func (f *organizationStoreFake) InsertSecurityAuditEvent(_ context.Context, even
 }
 func (f *organizationStoreFake) EndOpenSupportSessionsByOrg(context.Context, string, string) (int64, error) {
 	f.supportCuts++
+	if f.supportSession != nil && f.supportSession.EndedAt == nil {
+		now := time.Now().UTC()
+		f.supportSession.EndedAt = &now
+	}
 	return 2, nil
+}
+func (f *organizationStoreFake) StartSupportSession(_ context.Context, actorID, organizationID, reason string, ttl time.Duration, credentialVersion int64) (*domain.SupportSession, error) {
+	now := time.Now().UTC()
+	f.supportSession = &domain.SupportSession{
+		ID: "00000000-0000-0000-0000-000000000444", PlatformAdminUserID: actorID,
+		OrganizationID: organizationID, OrganizationCredentialVersion: credentialVersion,
+		Reason: reason, StartedAt: now, ExpiresAt: now.Add(ttl),
+	}
+	copy := *f.supportSession
+	return &copy, nil
+}
+func (f *organizationStoreFake) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
+	if f.supportSession == nil || f.supportSession.EndedAt != nil {
+		return nil, storage.ErrSupportSessionNotFound
+	}
+	copy := *f.supportSession
+	return &copy, nil
+}
+func (f *organizationStoreFake) EndSupportSession(_ context.Context, _, actorID, _ string) (bool, error) {
+	if f.supportSession == nil || f.supportSession.EndedAt != nil || f.supportSession.PlatformAdminUserID != actorID {
+		return false, nil
+	}
+	now := time.Now().UTC()
+	f.supportSession.EndedAt = &now
+	return true, nil
 }
 
 func TestDefaultOrganizationEntitlementsFailClosed(t *testing.T) {
@@ -236,6 +277,84 @@ func TestSuspendOrganizationCutsSupportAndBumpsEpoch(t *testing.T) {
 	}
 	if store.audits[0].Details["request_id"] != "request-suspend-1" {
 		t.Fatalf("lifecycle audit lineage = %+v", store.audits[0])
+	}
+}
+
+func TestStartSupportSessionLocksActiveOrganizationAndBindsEpoch(t *testing.T) {
+	store := &organizationStoreFake{organization: &domain.Organization{
+		ID: "00000000-0000-0000-0000-000000000111", Status: domain.OrganizationStatusActive,
+		Version: 4, CredentialVersion: 7,
+	}}
+	result, err := NewOrganizationService(store).StartSupportSession(context.Background(), StartSupportSessionCommand{
+		OrganizationID: store.organization.ID, ActorUserID: "00000000-0000-0000-0000-000000000222",
+		Reason: "catalog support", TTL: time.Hour, RequestID: "request-support-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.organizationLocks != 1 || result.Session.OrganizationCredentialVersion != 7 || len(store.audits) != 1 {
+		t.Fatalf("locks=%d session=%+v audits=%+v", store.organizationLocks, result.Session, store.audits)
+	}
+	if store.audits[0].EventType != "support_session_started" || store.audits[0].Details["organization_credential_version"] != int64(7) {
+		t.Fatalf("audit=%+v", store.audits[0])
+	}
+}
+
+func TestStartSupportSessionRejectsNonActiveOrganizationAfterLock(t *testing.T) {
+	store := &organizationStoreFake{organization: &domain.Organization{
+		ID: "00000000-0000-0000-0000-000000000111", Status: domain.OrganizationStatusSuspended,
+		Version: 5, CredentialVersion: 8,
+	}}
+	_, err := NewOrganizationService(store).StartSupportSession(context.Background(), StartSupportSessionCommand{
+		OrganizationID: store.organization.ID, ActorUserID: "00000000-0000-0000-0000-000000000222",
+		Reason: "catalog support", TTL: time.Hour,
+	})
+	if !errors.Is(err, ErrOrganizationStatusConflict) || store.organizationLocks != 1 || store.supportSession != nil {
+		t.Fatalf("err=%v locks=%d session=%+v", err, store.organizationLocks, store.supportSession)
+	}
+}
+
+func TestSupportSessionAuditFailuresRollbackStartAndEnd(t *testing.T) {
+	t.Run("start", func(t *testing.T) {
+		store := &organizationStoreFake{organization: &domain.Organization{
+			ID: "00000000-0000-0000-0000-000000000111", Status: domain.OrganizationStatusActive,
+			CredentialVersion: 3,
+		}, auditErrEvent: "support_session_started"}
+		_, err := NewOrganizationService(store).StartSupportSession(context.Background(), StartSupportSessionCommand{
+			OrganizationID: store.organization.ID, ActorUserID: "00000000-0000-0000-0000-000000000222",
+			Reason: "catalog support", TTL: time.Hour,
+		})
+		if err == nil || store.supportSession != nil {
+			t.Fatalf("err=%v session=%+v", err, store.supportSession)
+		}
+	})
+
+	t.Run("end", func(t *testing.T) {
+		store := &organizationStoreFake{supportSession: &domain.SupportSession{
+			ID:                  "00000000-0000-0000-0000-000000000444",
+			PlatformAdminUserID: "00000000-0000-0000-0000-000000000222",
+			OrganizationID:      "00000000-0000-0000-0000-000000000111",
+		}, auditErrEvent: "support_session_ended"}
+		ended, err := NewOrganizationService(store).EndSupportSession(context.Background(), EndSupportSessionCommand{
+			SessionID: store.supportSession.ID, ActorUserID: store.supportSession.PlatformAdminUserID,
+		})
+		if err == nil || ended || store.supportSession.EndedAt != nil {
+			t.Fatalf("ended=%v err=%v session=%+v", ended, err, store.supportSession)
+		}
+	})
+}
+
+func TestEndSupportSessionDoesNotRevealOrEndAnotherAdminsSession(t *testing.T) {
+	store := &organizationStoreFake{supportSession: &domain.SupportSession{
+		ID:                  "00000000-0000-0000-0000-000000000444",
+		PlatformAdminUserID: "00000000-0000-0000-0000-000000000222",
+		OrganizationID:      "00000000-0000-0000-0000-000000000111",
+	}}
+	ended, err := NewOrganizationService(store).EndSupportSession(context.Background(), EndSupportSessionCommand{
+		SessionID: store.supportSession.ID, ActorUserID: "00000000-0000-0000-0000-000000000333",
+	})
+	if err != nil || ended || store.supportSession.EndedAt != nil || len(store.audits) != 0 {
+		t.Fatalf("ended=%v err=%v session=%+v audits=%+v", ended, err, store.supportSession, store.audits)
 	}
 }
 

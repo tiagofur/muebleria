@@ -96,9 +96,10 @@ type Claims struct {
 
 // SupportClaims carries the support-session context (org + session id).
 type SupportClaims struct {
-	OrgID     string `json:"org_id"`
-	SessionID string `json:"session_id"`
-	Reason    string `json:"reason,omitempty"`
+	OrgID                         string `json:"org_id"`
+	SessionID                     string `json:"session_id"`
+	OrganizationCredentialVersion int64  `json:"organization_credential_version"`
+	Reason                        string `json:"reason,omitempty"`
 }
 
 // ValidatePassword enforces the registration password policy (issue #19):
@@ -159,6 +160,9 @@ func GenerateSupportToken(userID string, email string, sc SupportClaims, secret 
 // a support token is refreshed. Support remains a separate scoped read-only
 // boundary and intentionally carries no membership credentials.
 func GenerateSupportTokenFrom(userID string, email string, sc SupportClaims, authStartedAt time.Time, secret string) (string, error) {
+	if sc.OrgID == "" || sc.SessionID == "" || sc.OrganizationCredentialVersion < 1 {
+		return "", errors.New("support token requires organization, session, and credential version")
+	}
 	now := time.Now()
 	if authStartedAt.IsZero() {
 		authStartedAt = now
@@ -288,6 +292,10 @@ func ValidateToken(tokenStr string, secret string) (*Claims, error) {
 	}
 	if claims.AuthStartedAt == nil {
 		return nil, errors.New("token missing auth start")
+	}
+	if claims.Support != nil && (claims.OrgID == "" || claims.Support.OrgID != claims.OrgID ||
+		claims.Support.SessionID == "" || claims.Support.OrganizationCredentialVersion < 1) {
+		return nil, errors.New("token missing support session credentials")
 	}
 	if claims.Support == nil && claims.OrgID != "" && (claims.MembershipID == "" || claims.MembershipCredentialVersion < 1 || claims.OrganizationCredentialVersion < 1) {
 		return nil, errors.New("token missing membership credentials")

@@ -2449,12 +2449,13 @@ func (s *stubStore) UpdateOrganizationVersion(_ context.Context, o *domain.Organ
 	o.Version = expected + 1
 	return nil
 }
-func (s *stubStore) CloneCatalog(context.Context, string, string) error { return nil }
-func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration) (*domain.SupportSession, error) {
-	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte"}, nil
+func (s *stubStore) CloneCatalog(context.Context, string, string) error       { return nil }
+func (s *stubStore) LockOrganizationForCommand(context.Context, string) error { return nil }
+func (s *stubStore) StartSupportSession(context.Context, string, string, string, time.Duration, int64) (*domain.SupportSession, error) {
+	return &domain.SupportSession{ID: "ss-1", PlatformAdminUserID: "pa-1", OrganizationID: "org-1", Reason: "soporte", OrganizationCredentialVersion: 1}, nil
 }
 func (s *stubStore) GetOpenSupportSession(context.Context, string) (*domain.SupportSession, error) {
-	return nil, errors.New("support session not found")
+	return nil, storage.ErrSupportSessionNotFound
 }
 func (s *stubStore) EndOpenSupportSessionsByOrg(context.Context, string, string) (int64, error) {
 	return 0, nil

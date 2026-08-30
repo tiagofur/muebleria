@@ -3,16 +3,20 @@ package storage_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/tiagofur/muebles-backend/internal/api"
+	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -23,12 +27,52 @@ func organizationLifecycleMigrationSQL(t *testing.T, version int, suffix string)
 	name := map[int]string{
 		100: "organization_lifecycle_foundations",
 		101: "remove_organization_active",
+		102: "support_session_credential_epoch",
 	}[version]
 	contents, err := os.ReadFile(fmt.Sprintf("../../db/migration/%06d_%s.%s.sql", version, name, suffix))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(contents)
+}
+
+func newNamedRuntimeOrganizationStore(t *testing.T, applicationName string) *storage.PostgresStore {
+	t.Helper()
+	config, err := pgxpool.ParseConfig(rlsDatabaseURL(t).String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.User = rlsAppRole
+	config.ConnConfig.Password = "rls-test-password"
+	config.ConnConfig.RuntimeParams["application_name"] = applicationName
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return &storage.PostgresStore{Pool: pool}
+}
+
+func waitForOrganizationLockWait(t *testing.T, admin *pgxpool.Pool, applicationName string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiting bool
+		err := admin.QueryRow(context.Background(), `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE application_name=$1 AND wait_event_type='Lock'
+			)`, applicationName).Scan(&waiting)
+		if err == nil && waiting {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("%s did not block on the organization lock", applicationName)
 }
 
 func TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements(t *testing.T) {
@@ -468,6 +512,98 @@ func TestFactoryProvisioningHTTPPostgresRuntimeRoleSuccessRollbackAndReplay(t *t
 	}
 }
 
+func TestSupportSessionStartAndOrganizationSuspendSerializeOnOrganizationLock(t *testing.T) {
+	tests := []struct {
+		name         string
+		startFirst   bool
+		wantStartErr error
+	}{
+		{name: "start commits before suspension and is closed", startFirst: true},
+		{name: "suspension commits before start and start is rejected", wantStartErr: application.ErrOrganizationStatusConflict},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fx := newRLSFixture(t)
+			ctx := context.Background()
+			adminStore := &storage.PostgresStore{Pool: fx.admin}
+			organization, err := adminStore.GetOrganizationByID(ctx, rlsOrgA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			firstName := "support-race-first"
+			secondName := "support-race-second"
+			startStore := newNamedRuntimeOrganizationStore(t, firstName)
+			suspendStore := newNamedRuntimeOrganizationStore(t, secondName)
+			if !test.startFirst {
+				startStore, suspendStore = newNamedRuntimeOrganizationStore(t, secondName), newNamedRuntimeOrganizationStore(t, firstName)
+			}
+			startService := application.NewOrganizationService(startStore)
+			suspendService := application.NewOrganizationService(suspendStore)
+
+			blocker, err := fx.admin.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer blocker.Rollback(ctx)
+			if _, err := blocker.Exec(ctx, `SELECT id FROM organizations WHERE id=$1 FOR UPDATE`, rlsOrgA); err != nil {
+				t.Fatal(err)
+			}
+
+			startResult := make(chan error, 1)
+			suspendResult := make(chan error, 1)
+			start := func() {
+				_, startErr := startService.StartSupportSession(ctx, application.StartSupportSessionCommand{
+					OrganizationID: rlsOrgA, ActorUserID: rlsUserA,
+					Reason: "concurrent lifecycle proof", TTL: time.Hour,
+				})
+				startResult <- startErr
+			}
+			suspend := func() {
+				_, suspendErr := suspendService.SuspendOrganization(ctx, application.LifecycleCommand{
+					OrganizationID: rlsOrgA, ActorUserID: rlsUserA,
+					Reason: "concurrent lifecycle proof", ExpectedVersion: organization.Version,
+				})
+				suspendResult <- suspendErr
+			}
+			if test.startFirst {
+				go start()
+			} else {
+				go suspend()
+			}
+			waitForOrganizationLockWait(t, fx.admin, firstName)
+			if test.startFirst {
+				go suspend()
+			} else {
+				go start()
+			}
+			waitForOrganizationLockWait(t, fx.admin, secondName)
+			if err := blocker.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			startErr := <-startResult
+			suspendErr := <-suspendResult
+			if !errors.Is(startErr, test.wantStartErr) {
+				t.Fatalf("start error=%v want=%v", startErr, test.wantStartErr)
+			}
+			if suspendErr != nil {
+				t.Fatalf("suspend error=%v", suspendErr)
+			}
+			var status domain.OrganizationStatus
+			var openSessions int
+			if err := fx.admin.QueryRow(ctx, `SELECT status FROM organizations WHERE id=$1`, rlsOrgA).Scan(&status); err != nil {
+				t.Fatal(err)
+			}
+			if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM support_sessions WHERE organization_id=$1 AND ended_at IS NULL`, rlsOrgA).Scan(&openSessions); err != nil {
+				t.Fatal(err)
+			}
+			if status != domain.OrganizationStatusSuspended || openSessions != 0 {
+				t.Fatalf("status=%s open support sessions=%d", status, openSessions)
+			}
+		})
+	}
+}
+
 func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 	fx := newRLSFixture(t)
 	ctx := context.Background()
@@ -592,14 +728,63 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 		}
 		return current
 	}
+	startSupport := func(key string) (string, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/platform/organizations/"+organization.ID+"/support-session", strings.NewReader(`{"reason":"lifecycle support proof"}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", key)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusCreated {
+			t.Fatalf("start support status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+		var response struct {
+			Token     string `json:"token"`
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || response.Token == "" || response.SessionID == "" {
+			t.Fatalf("start support body=%s err=%v", recorder.Body.String(), err)
+		}
+		return response.Token, response.SessionID
+	}
+	supportRequestStatus := func(supportToken string) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/customers", nil)
+		req.Header.Set("Authorization", "Bearer "+supportToken)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder.Code
+	}
 
+	firstSupportToken, _ := startSupport("platform-support-before-suspend")
+	if status := supportRequestStatus(firstSupportToken); status != http.StatusOK {
+		t.Fatalf("active support request status=%d", status)
+	}
 	command("suspend", `{"reason":"platform suspension"}`, "platform-suspend", organization.Version)
 	organization = load(domain.OrganizationStatusSuspended)
+	if status := supportRequestStatus(firstSupportToken); status != http.StatusUnauthorized {
+		t.Fatalf("suspended support request status=%d", status)
+	}
 	command("reactivate", `{"reason":"platform reactivation"}`, "platform-reactivate", organization.Version)
 	organization = load(domain.OrganizationStatusActive)
+	if status := supportRequestStatus(firstSupportToken); status != http.StatusUnauthorized {
+		t.Fatalf("reactivated old support request status=%d", status)
+	}
+	secondSupportToken, secondSupportSessionID := startSupport("platform-support-before-offboarding")
+	if status := supportRequestStatus(secondSupportToken); status != http.StatusOK {
+		t.Fatalf("second active support request status=%d", status)
+	}
 	impact, version := preview()
 	command("begin-offboarding", `{"reason":"platform offboarding","impact_version":"`+impact+`"}`, "platform-offboarding", version)
 	organization = load(domain.OrganizationStatusOffboarding)
+	if status := supportRequestStatus(secondSupportToken); status != http.StatusUnauthorized {
+		t.Fatalf("offboarding support request status=%d", status)
+	}
+	var endedVia string
+	if err := fx.admin.QueryRow(ctx, `SELECT ended_via FROM support_sessions WHERE id=$1`, secondSupportSessionID).Scan(&endedVia); err != nil || endedVia != "org_offboarding" {
+		t.Fatalf("offboarding support ended_via=%q err=%v", endedVia, err)
+	}
 	impact, version = preview()
 	command("terminate", `{"reason":"platform termination","impact_version":"`+impact+`"}`, "platform-terminate", version)
 	load(domain.OrganizationStatusTerminated)

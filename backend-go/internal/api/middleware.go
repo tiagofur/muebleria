@@ -202,8 +202,13 @@ func serveAuthenticatedRequest(
 			}
 			ss, err := users.GetOpenSupportSession(r.Context(), claims.Support.SessionID)
 			if err != nil || ss == nil ||
+				ss.ID != claims.Support.SessionID ||
 				ss.OrganizationID != claims.OrgID ||
-				ss.PlatformAdminUserID != claims.UserID {
+				ss.PlatformAdminUserID != claims.UserID ||
+				ss.EndedAt != nil || !ss.ExpiresAt.After(time.Now()) ||
+				ss.OrganizationCredentialVersion != claims.Support.OrganizationCredentialVersion ||
+				ss.LiveOrganizationStatus != domain.OrganizationStatusActive ||
+				ss.LiveOrganizationCredentialVersion != ss.OrganizationCredentialVersion {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
