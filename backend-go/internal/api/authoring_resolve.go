@@ -164,6 +164,15 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	// GetModuleByID read outside the snapshot being pinned.
 	snapshot, err := s.loadWorkshopCatalogOnce(r)
 	if err != nil {
+		if definitionErr, ok := furnitureParameterDefinitionsError(err); ok {
+			s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+				Code: "PARAMETER_DEFINITION_INVALID", Message: "the pinned furniture parameter definition is invalid",
+				Severity: domain.IssueSeverityError, Path: "furniture.parameters",
+				Remediation: "Correct and republish the furniture definition before resolving it.",
+				Details:     map[string]any{"issues": definitionErr.Issues},
+			}})
+			return
+		}
 		respondWithInternalError(w, err, "load resolution catalog")
 		return
 	}
@@ -531,6 +540,7 @@ func authoringParametersFromDefinition(parameters map[string]any, module *domain
 				Code: string(issue.Code), Message: issue.Message,
 				Severity: domain.IssueSeverityError, Path: "furniture.parameters." + issue.Parameter,
 				Remediation: "Use the type, default and constraints declared by the pinned FurnitureDefinition.",
+				Details:     issue.Details,
 			})
 		}
 		return nil, normalized, issues, nil
@@ -541,12 +551,19 @@ func authoringParametersFromDefinition(parameters map[string]any, module *domain
 		DepthMm:  module.DepthMm,
 	}
 	seenDimension := false
-	for key, target := range map[string]*int{"widthMm": &dims.WidthMm, "heightMm": &dims.HeightMm, "depthMm": &dims.DepthMm} {
-		value, ok := normalized[key].(float64)
-		if !ok {
+	for _, parameter := range definition.Parameters {
+		if parameter.Binding == nil || parameter.Binding.Kind != domain.FurnitureParameterBindingDimensionColumn {
 			continue
 		}
-		*target = int(value)
+		value := normalized[parameter.Name].(float64) // published validation guarantees integer number
+		switch parameter.Binding.Dimension {
+		case "widthMm":
+			dims.WidthMm = int(value)
+		case "heightMm":
+			dims.HeightMm = int(value)
+		case "depthMm":
+			dims.DepthMm = int(value)
+		}
 		seenDimension = true
 	}
 	if !seenDimension {
@@ -615,7 +632,10 @@ func (s *Server) loadWorkshopCatalogOnce(r *http.Request) (authoringCatalogSnaps
 	if err != nil {
 		return authoringCatalogSnapshot{}, err
 	}
-	projection := buildWorkshopFurnitureCatalog(composition.Modules, composition.Categories, materialCategories, composition)
+	projection, err := buildWorkshopFurnitureCatalogValidated(composition.Modules, composition.Categories, materialCategories, composition)
+	if err != nil {
+		return authoringCatalogSnapshot{}, err
+	}
 	revision := workshopCatalogRevisionID(projection)
 	projection.RevisionID = revision
 	return authoringCatalogSnapshot{

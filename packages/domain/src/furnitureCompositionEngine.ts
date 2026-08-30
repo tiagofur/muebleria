@@ -20,12 +20,93 @@ import type {
 } from "./sketchupAuthoringSchema";
 import type {
   ComponentDefinition,
+  ComponentInstance,
   FurnitureDefinition,
-  FurnitureParameter,
+  FurnitureInstance,
   HardwareDefinition,
+  InteractiveValidationIssue,
+  InteractiveValidationResult,
   MaterialAssignment,
   MaterialDefinition,
+  PartInstance,
+  ResolvedFurnitureLayout,
 } from "./smartFurnitureDomain";
+import {
+  evaluateFurnitureParameters,
+  FurnitureParameterDefinitionsError,
+  type FurnitureParameterIssue,
+} from "./furnitureParameters";
+
+type InteractiveParameterEvaluation = {
+  readonly normalized: Readonly<Record<string, string | number | boolean>>;
+  readonly validation: InteractiveValidationResult;
+};
+
+function parameterContractIssue(
+  definition: FurnitureDefinition,
+  issue: FurnitureParameterIssue,
+): ContractIssue {
+  const parameter = definition.parameters.find((candidate) => candidate.name === issue.parameter);
+  return {
+    code: issue.code,
+    message: parameterIssueMessage(parameter?.label ?? issue.parameter, issue.code),
+    severity: "error",
+    entityId: definition.furnitureDefinitionId,
+    path: `parameters.${issue.parameter}`,
+    details: { parameterName: issue.parameter, ...issue.details },
+    remediation: `Correct ${parameter?.label ?? issue.parameter} before resolving the furniture.`,
+  };
+}
+
+function evaluateInteractive(
+  definition: FurnitureDefinition,
+  rawParameters: Record<string, string | number | boolean>,
+): InteractiveParameterEvaluation {
+  try {
+    const evaluation = evaluateFurnitureParameters(definition.parameters, rawParameters);
+    const issues = evaluation.issues.map((issue): InteractiveValidationIssue => {
+      const parameter = definition.parameters.find((candidate) => candidate.name === issue.parameter);
+      return {
+        code: issue.code,
+        message: parameterIssueMessage(parameter?.label ?? issue.parameter, issue.code),
+        severity: "error",
+        parameterName: issue.parameter,
+        details: issue.details,
+      };
+    });
+    return {
+      normalized: evaluation.normalized,
+      validation: { valid: issues.length === 0, issues },
+    };
+  } catch (error) {
+    if (!(error instanceof FurnitureParameterDefinitionsError)) throw error;
+    const issues = error.issues.map((issue): InteractiveValidationIssue => ({
+      code: "PARAMETER_DEFINITION_INVALID",
+      message: `La definición de ${issue.parameter || "parámetros"} es inválida: ${issue.message}.`,
+      severity: "error",
+      parameterName: issue.parameter || undefined,
+      details: { field: issue.field },
+    }));
+    return { normalized: {}, validation: { valid: false, issues } };
+  }
+}
+
+function parameterIssueMessage(label: string, code: FurnitureParameterIssue["code"]): string {
+  switch (code) {
+    case "PARAMETER_UNKNOWN":
+      return `El parámetro ${label} no está declarado en la definición.`;
+    case "PARAMETER_REQUIRED":
+      return `El parámetro ${label} es obligatorio.`;
+    case "PARAMETER_TYPE_INVALID":
+      return `El parámetro ${label} tiene un tipo de dato inválido.`;
+    case "PARAMETER_OUT_OF_RANGE":
+      return `El parámetro ${label} está fuera del rango permitido.`;
+    case "PARAMETER_STEP_INVALID":
+      return `El parámetro ${label} no respeta el incremento permitido.`;
+    case "PARAMETER_ENUM_INVALID":
+      return `El parámetro ${label} no contiene una opción permitida.`;
+  }
+}
 
 export interface InstantiationOptions {
   readonly projectId: string;
@@ -70,35 +151,23 @@ export function instantiateFurniture(
 ): InstantiationResult {
   const issues: ContractIssue[] = [];
 
-  // 1. Validate & evaluate parameters against definition contract
-  const evaluatedParams: Record<string, number | string | boolean> = {};
-  for (const param of definition.parameters) {
-    const hasValue = Object.hasOwn(rawParams, param.name);
-    const rawVal = hasValue ? rawParams[param.name] : param.defaultValue;
-    if (rawVal === undefined) {
-      if (param.required) {
-        issues.push({
-          code: "PARAMETER_REQUIRED",
-          message: `Parameter ${param.name} is required.`,
-          severity: "error",
-          entityId: definition.furnitureDefinitionId,
-          remediation: `Set ${param.name} before resolving the furniture.`,
-        });
-      }
-      continue;
-    }
-    const validated = validateParameter(param, rawVal);
-    if (!validated.valid) {
-      issues.push({
-        code: "PARAMETER_OUT_OF_RANGE",
-        message: `Parameter ${param.name} value ${String(rawVal)} is invalid: ${validated.error ?? "out of bounds"}`,
-        severity: "error",
-        entityId: definition.furnitureDefinitionId,
-        remediation: `Set ${param.name} within allowed range or options.`,
-      });
-      continue;
-    }
-    evaluatedParams[param.name] = validated.value!;
+  // 1. Validate & evaluate parameters against the canonical strict contract.
+  let evaluatedParams: Readonly<Record<string, number | string | boolean>> = {};
+  try {
+    const evaluation = evaluateFurnitureParameters(definition.parameters, rawParams);
+    evaluatedParams = evaluation.normalized;
+    issues.push(...evaluation.issues.map((issue) => parameterContractIssue(definition, issue)));
+  } catch (error) {
+    if (!(error instanceof FurnitureParameterDefinitionsError)) throw error;
+    issues.push(...error.issues.map((issue) => ({
+      code: "PARAMETER_DEFINITION_INVALID",
+      message: `Parameter definition ${issue.parameter || "catalog"} is invalid: ${issue.message}`,
+      severity: "error" as const,
+      entityId: definition.furnitureDefinitionId,
+      path: issue.parameter ? `parameters.${issue.parameter}.${issue.field}` : `parameters.${issue.field}`,
+      details: { parameterName: issue.parameter, field: issue.field },
+      remediation: "Correct and republish the furniture definition before resolving it.",
+    })));
   }
 
   if (issues.length > 0) {
@@ -260,39 +329,6 @@ export function instantiateFurniture(
   };
 }
 
-function validateParameter(
-  param: FurnitureParameter,
-  val: unknown,
-): { valid: boolean; value?: number | string | boolean; error?: string } {
-  if (param.type === "number") {
-    const num = Number(val);
-    if (isNaN(num)) return { valid: false, error: "not a number" };
-    if (param.min !== undefined && num < param.min) return { valid: false, error: `below min ${param.min}` };
-    if (param.max !== undefined && num > param.max) return { valid: false, error: `above max ${param.max}` };
-    return { valid: true, value: num };
-  }
-  if (param.type === "boolean") {
-    return { valid: true, value: Boolean(val) };
-  }
-  if (param.type === "enum" || param.type === "string") {
-    const str = String(val);
-    if (param.options !== undefined && !param.options.includes(str)) {
-      return { valid: false, error: `not in allowed options: ${param.options.join(", ")}` };
-    }
-    return { valid: true, value: str };
-  }
-  return { valid: true, value: String(val) };
-}
-
-import type {
-  FurnitureInstance,
-  ComponentInstance,
-  PartInstance,
-  InteractiveValidationResult,
-  InteractiveValidationIssue,
-  ResolvedFurnitureLayout
-} from "./smartFurnitureDomain";
-
 /**
  * Lightweight interactive preflight validation for UI forms.
  */
@@ -300,66 +336,7 @@ export function validateInteractiveParameters(
   definition: FurnitureDefinition,
   rawParameters: Record<string, string | number | boolean>
 ): InteractiveValidationResult {
-  const issues: InteractiveValidationIssue[] = [];
-
-  for (const param of definition.parameters) {
-    const val = Object.hasOwn(rawParameters, param.name) ? rawParameters[param.name] : param.defaultValue;
-    if (val === undefined) {
-      if (param.required) {
-        issues.push({
-          code: "PARAMETER_REQUIRED",
-          message: `El parámetro ${param.label} es obligatorio.`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-      continue;
-    }
-
-    if (param.type === "number") {
-      const num = Number(val);
-      if (Number.isNaN(num)) {
-        issues.push({
-          code: "INVALID_NUMBER",
-          message: `El parámetro ${param.label} debe ser un número válido.`,
-          severity: "error",
-          parameterName: param.name
-        });
-        continue;
-      }
-      if (param.min !== undefined && num < param.min) {
-        issues.push({
-          code: "BELOW_MINIMUM",
-          message: `${param.label} (${num} mm) es menor que el mínimo permitido (${param.min} mm).`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-      if (param.max !== undefined && num > param.max) {
-        issues.push({
-          code: "ABOVE_MAXIMUM",
-          message: `${param.label} (${num} mm) supera el máximo permitido (${param.max} mm).`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-    } else if (param.type === "enum" && param.options) {
-      const str = String(val);
-      if (!param.options.includes(str)) {
-        issues.push({
-          code: "INVALID_ENUM_OPTION",
-          message: `Opción inválida '${str}' para ${param.label}.`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-    }
-  }
-
-  return {
-    valid: issues.every((i) => i.severity !== "error"),
-    issues
-  };
+  return evaluateInteractive(definition, rawParameters).validation;
 }
 
 /**
@@ -374,15 +351,11 @@ export function resolveFurnitureLayout(
   hardwareCatalog: Record<string, HardwareDefinition> = {},
   options: InstantiationOptions = { projectId: "project-active" }
 ): ResolvedFurnitureLayout {
-  const validation = validateInteractiveParameters(definition, rawParameters);
+  const evaluation = evaluateInteractive(definition, rawParameters);
+  const { validation } = evaluation;
   const assemblyId = options.assemblyId ?? `assembly-${definition.furnitureDefinitionId}-1`;
   const furnitureInstanceId = `inst-${definition.furnitureDefinitionId}-1`;
-
-  const evaluated: Record<string, string | number | boolean> = {};
-  for (const param of definition.parameters) {
-    const value = Object.hasOwn(rawParameters, param.name) ? rawParameters[param.name] : param.defaultValue;
-    if (value !== undefined) evaluated[param.name] = value;
-  }
+  const evaluated = evaluation.normalized;
 
   const furnitureInstance: FurnitureInstance = {
     furnitureInstanceId,
@@ -405,6 +378,10 @@ export function resolveFurnitureLayout(
 
   const components: ComponentInstance[] = [];
   const parts: PartInstance[] = [];
+
+  if (!validation.valid) {
+    return { furnitureInstance, components, parts, validation };
+  }
 
   let partIdx = 1;
   const makePart = (role: string, name: string, x: number, y: number, z: number, dx: number, dy: number, dz: number) => {

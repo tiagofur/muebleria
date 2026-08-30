@@ -1,11 +1,13 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -14,6 +16,21 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
+
+func decodePersistedFurnitureParameterDefinitions(raw []byte, target *[]domain.FurnitureParameterDefinition) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return &domain.FurnitureParameterDefinitionsError{Issues: []domain.FurnitureParameterDefinitionIssue{{Field: "definitions", Message: "invalid JSON: " + err.Error()}}}
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return &domain.FurnitureParameterDefinitionsError{Issues: []domain.FurnitureParameterDefinitionIssue{{Field: "definitions", Message: "must contain exactly one JSON array"}}}
+	}
+	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(*target); len(issues) != 0 {
+		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
+	return nil
+}
 
 // loadModuleComponents returns the component instances placed directly on a
 // module (F054 / #102), beyond those inherited from its referenced structure.
@@ -244,8 +261,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		if len(agrsRaw) > 0 {
 			_ = json.Unmarshal(agrsRaw, &m.Agregados)
 		}
-		if err := json.Unmarshal(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
-			return cat, fmt.Errorf("decode module parameter definitions: %w", err)
+		if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
+			return cat, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)
 		}
 		if m.Agregados == nil {
 			m.Agregados = []domain.ModuleAgregadoInstance{}
@@ -1271,8 +1288,8 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		if m.Agregados == nil {
 			m.Agregados = []domain.ModuleAgregadoInstance{}
 		}
-		if err := json.Unmarshal(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
-			return nil, fmt.Errorf("decode module parameter definitions: %w", err)
+		if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
+			return nil, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)
 		}
 		modules = append(modules, m)
 	}
@@ -1442,8 +1459,8 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	if m.Agregados == nil {
 		m.Agregados = []domain.ModuleAgregadoInstance{}
 	}
-	if err := json.Unmarshal(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
-		return nil, fmt.Errorf("decode module parameter definitions: %w", err)
+	if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
+		return nil, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)
 	}
 
 	modComponents, err := s.loadModuleComponents(ctx, m.ID)
@@ -1513,7 +1530,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 }
 
 func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) error {
-	if issues := domain.ValidateFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
+	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
 		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
 	}
 	tx, err := s.beginTx(ctx)
@@ -1687,7 +1704,7 @@ func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, 
 }
 
 func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.Module) error {
-	if issues := domain.ValidateFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
+	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
 		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
 	}
 	tx, err := s.beginTx(ctx)

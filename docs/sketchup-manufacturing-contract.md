@@ -810,6 +810,28 @@ Arrays estrictos: `translationMm` (exactamente 3) y `offsetMm` (exactamente
 2) se decodifican como slices y validan longitud exacta — los arrays fijos
 de Go truncarían/extenderían en silencio.
 
+Contrato de definición tipada:
+
+- `widthMm`, `heightMm` y `depthMm` son nombres reservados y se proyectan
+  únicamente desde las columnas del módulo con binding `dimensionColumn`;
+  una definición persistida no puede duplicar ni contradecir esas fuentes;
+- `sortOrder` es orden declarativo de presentación; no sustituye el nombre ni
+  participa como dispatch imperativo;
+- todo parámetro no `metadata` declara un binding versionado con consumidor
+  autoritativo. `componentQuantity` modifica el número de ocurrencias y puede
+  materializar una relationship template por ocurrencia. El motor despacha por
+  `binding.kind`, nunca por un nombre como `shelfCount`;
+- `metadata` representa explícitamente un valor sin efecto físico y no admite
+  binding. Cualquier otro parámetro sin consumidor se rechaza;
+- catálogo, lectura de storage, publicación, TypeScript y Ruby validan la misma
+  forma y límites de manera fail-closed. JSON corrupto, duplicados, defaults o
+  enums inválidos, dimensiones reservadas incompatibles y exceso de definiciones
+  producen `PARAMETER_DEFINITION_INVALID`; nunca se publica una definición
+  parcial;
+- los issues de valor incluyen `expectedType`/`receivedType` y, cuando aplica,
+  `min`/`max`/`step`/`allowedOptions`. Un snapshot de ocurrencias incompatible
+  con el binding devuelve `PARAMETER_BINDING_CONFLICT` antes de mutar el host.
+
 Reglas de ocurrencias:
 
 - cada ocurrencia mapea por `componentDefinitionId` al template de la

@@ -104,11 +104,12 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 		ID: authoringFixtureModuleID, Code: "AUTH-600", Name: "Gabinete Authoring 600",
 		WidthMm: 600, HeightMm: 720, DepthMm: 560, StructureID: "st-authoring",
 		ParameterDefinitions: []domain.FurnitureParameterDefinition{
-			{Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(5), Step: authoringFloatPtr(1), Integer: true},
-			{Name: "softClose", Label: "Soft close", Type: domain.FurnitureParameterTypeBoolean, DefaultValue: false, Required: false, Category: domain.FurnitureParameterCategoryHardware},
-			{Name: "style", Label: "Style", Type: domain.FurnitureParameterTypeEnum, DefaultValue: "classic", Required: true, Category: domain.FurnitureParameterCategoryStyle, Options: []string{"classic", "minimal"}},
-			{Name: "label", Label: "Label", Type: domain.FurnitureParameterTypeString, DefaultValue: "standard", Required: false, Category: domain.FurnitureParameterCategoryStyle},
-			{Name: "tiltDeg", Label: "Tilt", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(0), Required: false, Unit: domain.FurnitureParameterUnitDeg, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(90), Step: authoringFloatPtr(0.25)},
+			{Name: "shelfCount", Label: "Shelf count", SortOrder: 40, Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(5), Step: authoringFloatPtr(1), Integer: true,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shelf", Relationship: &domain.FurnitureParameterRelationshipBinding{Kind: "shelf-support", SourceRole: "shelf-edge", Targets: []domain.FurnitureParameterRelationshipTarget{{ComponentID: "comp-side", Role: "inside-face"}, {ComponentID: "comp-side-r", Role: "inside-face"}}}}},
+			{Name: "softClose", Label: "Soft close", SortOrder: 50, Type: domain.FurnitureParameterTypeBoolean, DefaultValue: false, Required: false, Category: domain.FurnitureParameterCategoryMetadata},
+			{Name: "style", Label: "Style", SortOrder: 60, Type: domain.FurnitureParameterTypeEnum, DefaultValue: "classic", Required: true, Category: domain.FurnitureParameterCategoryMetadata, Options: []string{"classic", "minimal"}},
+			{Name: "label", Label: "Label", SortOrder: 70, Type: domain.FurnitureParameterTypeString, DefaultValue: "standard", Required: false, Category: domain.FurnitureParameterCategoryMetadata},
+			{Name: "tiltDeg", Label: "Tilt", SortOrder: 80, Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(0), Required: false, Unit: domain.FurnitureParameterUnitDeg, Category: domain.FurnitureParameterCategoryMetadata, Min: authoringFloatPtr(0), Max: authoringFloatPtr(90), Step: authoringFloatPtr(0.25)},
 		},
 		Components: []domain.ComponentInstance{
 			{ComponentID: "comp-shelf", Quantity: 1},
@@ -315,6 +316,7 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 
 		// 3. Add a second shelf sharing the reusable definition.
 		run("03-add-shelf-shared-definition", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"shelfCount": 2.0}
 			occ := append(defaultOccurrencesJSON(), occurrenceJSON("shelf-02", "mod-comp-shelf", []float64{18, 18, 560}))
 			f.Components = occ
 			f.Relationships = []engine.AuthoringRelationship{
@@ -325,6 +327,7 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 
 		// 4. Remove shelf → only its dependent machining disappears.
 		run("04-remove-shelf", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"shelfCount": 0.0}
 			occ := defaultOccurrencesJSON()[:5]
 			f.Components = append(occ, defaultOccurrencesJSON()[6])
 		})), http.StatusOK),
@@ -632,7 +635,8 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					} `json:"hardware"`
 				} `json:"layout"`
 				Machining struct {
-					ManufacturingFingerprint string `json:"manufacturingFingerprint"`
+					ManufacturingFingerprint string                              `json:"manufacturingFingerprint"`
+					Operations               []engine.ResolvedMachiningOperation `json:"operations"`
 				} `json:"machining"`
 				Preflight struct {
 					Scope             string `json:"scope"`
@@ -641,6 +645,8 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 				} `json:"preflight"`
 			} `json:"resolved"`
 			NormalizedSnapshot struct {
+				Components         []engine.NormalizedAuthoringComponent `json:"components"`
+				Relationships      []engine.AuthoringRelationship        `json:"relationships"`
 				HardwarePlacements []struct {
 					HardwarePlacementID string `json:"hardwarePlacementId"`
 				} `json:"hardwarePlacements"`
@@ -711,6 +717,17 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					if hw.PlacementID == "hp-cost-only-01" {
 						t.Fatal("cost-only manual hardware must not appear in visual layout projection")
 					}
+				}
+			}
+			if scenario.ID == "13-definition-driven-typed-parameters" {
+				shelves := 0
+				for _, component := range response.NormalizedSnapshot.Components {
+					if component.ComponentDefinitionID == "mod-comp-shelf" {
+						shelves++
+					}
+				}
+				if shelves != 3 || len(response.NormalizedSnapshot.Relationships) != 3 || len(response.Resolved.Machining.Operations) == 0 {
+					t.Fatalf("typed quantity did not change authoritative output: shelves=%d relationships=%d operations=%d", shelves, len(response.NormalizedSnapshot.Relationships), len(response.Resolved.Machining.Operations))
 				}
 			}
 		default:
@@ -979,6 +996,51 @@ func TestAuthoringResolveUsesDefinitionFromPinnedSnapshot(t *testing.T) {
 	}
 	if response.Resolved.Layout.DimensionsMm[0] != 600 {
 		t.Fatalf("resolved width = %v, want pinned-snapshot width 600 (stale GetModuleByID held 999)", response.Resolved.Layout.DimensionsMm[0])
+	}
+}
+
+func TestAuthoringResolveRejectsInvalidDefinitionFromCatalogRead(t *testing.T) {
+	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	store.catalogOverride.Modules[0].ParameterDefinitions = []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}}
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Issues []domain.ContractIssue `json:"issues"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Issues) != 1 || response.Issues[0].Code != "PARAMETER_DEFINITION_INVALID" || response.Issues[0].Details["issues"] == nil {
+		t.Fatalf("unexpected issues: %+v", response.Issues)
+	}
+}
+
+func TestAuthoringResolveRejectsDimensionTypeAndDecimalsWithDetails(t *testing.T) {
+	server, token := authoringStubServer(t)
+	revision := authoringCatalogRevision(t, server)
+	for _, tt := range []struct {
+		name     string
+		value    any
+		received string
+	}{{"string", "600", "string"}, {"decimal", 600.5, "number"}} {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID, Parameters: map[string]any{"widthMm": tt.value}}))
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var response struct {
+				Issues []domain.ContractIssue `json:"issues"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if len(response.Issues) != 1 || response.Issues[0].Code != "PARAMETER_TYPE_INVALID" || response.Issues[0].Details["expectedType"] != "number" || response.Issues[0].Details["receivedType"] != tt.received {
+				t.Fatalf("unexpected issue: %+v", response.Issues)
+			}
+		})
 	}
 }
 

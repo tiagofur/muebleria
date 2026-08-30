@@ -174,6 +174,21 @@ export interface ComponentDefinition {
 // 6. FurnitureDefinition: Versioned Parametric Furniture Template
 export type ParameterType = "number" | "string" | "boolean" | "enum";
 
+export interface FurnitureParameterBinding {
+  readonly version: number;
+  readonly kind: "componentQuantity" | "dimensionColumn";
+  readonly componentId?: string;
+  readonly dimension?: "widthMm" | "heightMm" | "depthMm";
+  readonly relationship?: {
+    readonly kind: string;
+    readonly sourceRole: string;
+    readonly targets: readonly {
+      readonly componentId: string;
+      readonly role: string;
+    }[];
+  };
+}
+
 export interface FurnitureParameter {
   readonly name: string;
   readonly label: string;
@@ -186,7 +201,9 @@ export interface FurnitureParameter {
   readonly step?: number;
   readonly options?: readonly string[];
   readonly integer?: boolean;
-  readonly category: "dimension" | "configuration" | "style" | "hardware";
+  readonly sortOrder?: number;
+  readonly binding?: FurnitureParameterBinding;
+  readonly category: "dimension" | "configuration" | "style" | "hardware" | "metadata";
 }
 
 export interface FurnitureComponentSlot {
@@ -283,6 +300,7 @@ export interface InteractiveValidationIssue {
   readonly message: string;
   readonly severity: "error" | "warning" | "info";
   readonly parameterName?: string;
+  readonly details?: Readonly<Record<string, unknown>>;
 }
 
 export interface InteractiveValidationResult {

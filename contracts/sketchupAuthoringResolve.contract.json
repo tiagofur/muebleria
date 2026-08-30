@@ -9,87 +9,9 @@
   "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
   "parameterDefinitions": [
     {
-      "name": "depthMm",
-      "label": "Fondo (mm)",
-      "type": "number",
-      "defaultValue": 560,
-      "required": true,
-      "unit": "mm",
-      "category": "dimension",
-      "min": 280,
-      "max": 1120,
-      "step": 10,
-      "integer": true
-    },
-    {
-      "name": "heightMm",
-      "label": "Alto (mm)",
-      "type": "number",
-      "defaultValue": 720,
-      "required": true,
-      "unit": "mm",
-      "category": "dimension",
-      "min": 360,
-      "max": 1440,
-      "step": 10,
-      "integer": true
-    },
-    {
-      "name": "label",
-      "label": "Label",
-      "type": "string",
-      "defaultValue": "standard",
-      "required": false,
-      "category": "style"
-    },
-    {
-      "name": "shelfCount",
-      "label": "Shelf count",
-      "type": "number",
-      "defaultValue": 1,
-      "required": true,
-      "unit": "count",
-      "category": "configuration",
-      "min": 0,
-      "max": 5,
-      "step": 1,
-      "integer": true
-    },
-    {
-      "name": "softClose",
-      "label": "Soft close",
-      "type": "boolean",
-      "defaultValue": false,
-      "required": false,
-      "category": "hardware"
-    },
-    {
-      "name": "style",
-      "label": "Style",
-      "type": "enum",
-      "defaultValue": "classic",
-      "required": true,
-      "category": "style",
-      "options": [
-        "classic",
-        "minimal"
-      ]
-    },
-    {
-      "name": "tiltDeg",
-      "label": "Tilt",
-      "type": "number",
-      "defaultValue": 0,
-      "required": false,
-      "unit": "deg",
-      "category": "configuration",
-      "min": 0,
-      "max": 90,
-      "step": 0.25
-    },
-    {
       "name": "widthMm",
       "label": "Ancho (mm)",
+      "sortOrder": 10,
       "type": "number",
       "defaultValue": 600,
       "required": true,
@@ -98,7 +20,127 @@
       "min": 300,
       "max": 1200,
       "step": 10,
-      "integer": true
+      "integer": true,
+      "binding": {
+        "version": 1,
+        "kind": "dimensionColumn",
+        "dimension": "widthMm"
+      }
+    },
+    {
+      "name": "heightMm",
+      "label": "Alto (mm)",
+      "sortOrder": 20,
+      "type": "number",
+      "defaultValue": 720,
+      "required": true,
+      "unit": "mm",
+      "category": "dimension",
+      "min": 360,
+      "max": 1440,
+      "step": 10,
+      "integer": true,
+      "binding": {
+        "version": 1,
+        "kind": "dimensionColumn",
+        "dimension": "heightMm"
+      }
+    },
+    {
+      "name": "depthMm",
+      "label": "Fondo (mm)",
+      "sortOrder": 30,
+      "type": "number",
+      "defaultValue": 560,
+      "required": true,
+      "unit": "mm",
+      "category": "dimension",
+      "min": 280,
+      "max": 1120,
+      "step": 10,
+      "integer": true,
+      "binding": {
+        "version": 1,
+        "kind": "dimensionColumn",
+        "dimension": "depthMm"
+      }
+    },
+    {
+      "name": "shelfCount",
+      "label": "Shelf count",
+      "sortOrder": 40,
+      "type": "number",
+      "defaultValue": 1,
+      "required": true,
+      "unit": "count",
+      "category": "configuration",
+      "min": 0,
+      "max": 5,
+      "step": 1,
+      "integer": true,
+      "binding": {
+        "version": 1,
+        "kind": "componentQuantity",
+        "componentId": "comp-shelf",
+        "relationship": {
+          "kind": "shelf-support",
+          "sourceRole": "shelf-edge",
+          "targets": [
+            {
+              "componentId": "comp-side",
+              "role": "inside-face"
+            },
+            {
+              "componentId": "comp-side-r",
+              "role": "inside-face"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "softClose",
+      "label": "Soft close",
+      "sortOrder": 50,
+      "type": "boolean",
+      "defaultValue": false,
+      "required": false,
+      "category": "metadata"
+    },
+    {
+      "name": "style",
+      "label": "Style",
+      "sortOrder": 60,
+      "type": "enum",
+      "defaultValue": "classic",
+      "required": true,
+      "category": "metadata",
+      "options": [
+        "classic",
+        "minimal"
+      ]
+    },
+    {
+      "name": "label",
+      "label": "Label",
+      "sortOrder": 70,
+      "type": "string",
+      "defaultValue": "standard",
+      "required": false,
+      "category": "metadata"
+    },
+    {
+      "name": "tiltDeg",
+      "label": "Tilt",
+      "sortOrder": 80,
+      "type": "number",
+      "defaultValue": 0,
+      "required": false,
+      "unit": "deg",
+      "category": "metadata",
+      "min": 0,
+      "max": 90,
+      "step": 0.25
     }
   ],
   "joinery": {
@@ -248,7 +290,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "materialChoices": {
             "FRENTE": "mat-oak18"
@@ -286,7 +328,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -346,7 +388,26 @@
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "mod-comp-shelf-copy-0",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "st-comp-side-copy-0",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "st-comp-side-r-copy-0",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "mod-comp-door-copy-0-hw-0",
@@ -792,6 +853,253 @@
           "machining": {
             "operations": [
               {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
                 "operationId": "mod-comp-door-copy-0-hw-0:op-1",
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "provenance": {
@@ -810,8 +1118,49 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-0b9c627acd9447a8f7507c42738a25541e93a16f198c6f04652fa5432163c26f"
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-mod-comp-shelf-copy-0",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-405d5d465cc913e0fec2b0adc3ea9fa09de97590b780325b670b5040aa9a993f"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -832,7 +1181,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -920,7 +1269,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -1768,7 +2117,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -1812,6 +2161,9 @@
             }
           ],
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "shelfCount": 2
+          },
           "relationships": [
             {
               "kind": "shelf-support",
@@ -1878,14 +2230,14 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
             "label": "standard",
-            "shelfCount": 1,
+            "shelfCount": 2,
             "softClose": false,
             "style": "classic",
             "tiltDeg": 0,
@@ -3086,7 +3438,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3113,7 +3465,10 @@
               "componentInstanceId": "door-01"
             }
           ],
-          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222"
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "parameters": {
+            "shelfCount": 0
+          }
         },
         "idempotencyKey": "fixture:authoring-resolve:0001",
         "messageId": "msg-fixture-0001",
@@ -3142,14 +3497,14 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
             "depthMm": 560,
             "heightMm": 720,
             "label": "standard",
-            "shelfCount": 1,
+            "shelfCount": 0,
             "softClose": false,
             "style": "classic",
             "tiltDeg": 0,
@@ -3186,12 +3541,6 @@
               "componentDefinitionId": "st-comp-back",
               "catalogComponentId": "comp-back",
               "role": "FONDO"
-            },
-            {
-              "componentInstanceId": "mod-comp-shelf-copy-0",
-              "componentDefinitionId": "mod-comp-shelf",
-              "catalogComponentId": "comp-shelf",
-              "role": "INTERIOR"
             },
             {
               "componentInstanceId": "door-01",
@@ -3481,55 +3830,6 @@
                 "materialColorHex": "#8b7355"
               },
               {
-                "componentInstanceId": "mod-comp-shelf-copy-0",
-                "componentDefinitionId": "mod-comp-shelf",
-                "slotId": "interno",
-                "role": "INTERIOR",
-                "name": "Entrepaño",
-                "kind": "board",
-                "transform": {
-                  "translationMm": [
-                    18,
-                    18,
-                    150
-                  ]
-                },
-                "dimensionsMm": [
-                  542,
-                  564,
-                  18
-                ],
-                "localTransform": {
-                  "translationMm": [
-                    560,
-                    18,
-                    150
-                  ],
-                  "basis": {
-                    "x": [
-                      -1,
-                      0,
-                      0
-                    ],
-                    "y": [
-                      0,
-                      0,
-                      1
-                    ],
-                    "z": [
-                      0,
-                      1,
-                      0
-                    ]
-                  }
-                },
-                "lengthMm": 564,
-                "widthMm": 542,
-                "thicknessMm": 18,
-                "optionRole": "INTERIOR",
-                "materialColorHex": "#d4c4a8"
-              },
-              {
                 "componentInstanceId": "door-01",
                 "componentDefinitionId": "mod-comp-door",
                 "slotId": "puerta",
@@ -3654,7 +3954,7 @@
               }
             ],
             "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-0542f0441e7424d99873ff2146ae10ea7198c8ee41e8a866e0bdf3d1566f302b"
+            "manufacturingFingerprint": "sha256-6fa3f6ee51b4a090334dbf99c25baa4ea83ed9610bca4e12114a7aa35a297e13"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -3675,7 +3975,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3777,7 +4077,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -4617,7 +4917,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -4689,7 +4989,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -4747,7 +5047,26 @@
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "hp-hinge-01",
@@ -5147,6 +5466,253 @@
           "machining": {
             "operations": [
               {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
                 "operationId": "hp-hinge-01:op-1",
                 "hostComponentInstanceId": "door-01",
                 "provenance": {
@@ -5165,8 +5731,49 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-02159df9e6354077f70e76dba72398e7be1dbe495ca005b3295d7038643ca13f"
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-d4c7b4e1c5124ec6d941c3dc3f3255869c4ff062d3d2fd3408d36ab156ce5815"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -5187,7 +5794,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5267,7 +5874,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -5290,7 +5897,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5370,7 +5977,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -5393,7 +6000,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -5426,7 +6033,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -5448,7 +6055,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -5556,7 +6163,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelf2Z": 520
@@ -5589,7 +6196,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -5611,7 +6218,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5675,7 +6282,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -5685,6 +6292,19 @@
             "entityId": "shelf-01",
             "path": "furniture.components[7].componentInstanceId",
             "remediation": "Every concrete occurrence needs its own componentInstanceId; a shared componentDefinitionId is the reusable part."
+          },
+          {
+            "code": "PARAMETER_BINDING_CONFLICT",
+            "message": "shelfCount requires 1 occurrences of mod-comp-shelf",
+            "severity": "error",
+            "path": "furniture.components",
+            "remediation": "Send a full occurrence snapshot consistent with the evaluated parameter value.",
+            "details": {
+              "componentDefinitionId": "mod-comp-shelf",
+              "expectedCount": 1,
+              "parameter": "shelfCount",
+              "receivedCount": 2
+            }
           }
         ]
       }
@@ -5698,7 +6318,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5765,7 +6385,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -5786,7 +6406,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5846,7 +6466,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -5904,7 +6524,26 @@
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "door-01-hw-0",
@@ -6339,6 +6978,253 @@
           "machining": {
             "operations": [
               {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
                 "operationId": "door-01-hw-0:op-1",
                 "hostComponentInstanceId": "door-01",
                 "provenance": {
@@ -6357,8 +7243,49 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-58a466a4318c45391728ab6ea4e4c94515889d752f5d10763bee31d2801f98bf"
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-06ce249722531765cab18d5e87f2b4032696d98822299e59e3c893890c00fb9e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -6379,7 +7306,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6447,7 +7374,7 @@
         "responseMessageId": "resolve-msg-fixture-unicode-step",
         "inReplyToMessageId": "msg-fixture-unicode-step",
         "idempotencyKey": "fixture:unicode-step:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -6513,7 +7440,26 @@
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "entrepaño-ñ-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "door-01-hw-0",
@@ -6948,6 +7894,253 @@
           "machining": {
             "operations": [
               {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 519.87,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 519.87,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 519.87,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 519.87,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 519.87,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "entrepaño-ñ-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
                 "operationId": "door-01-hw-0:op-1",
                 "hostComponentInstanceId": "door-01",
                 "provenance": {
@@ -6966,8 +8159,49 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-392ee7d4a00e776cd61518f4fc91f9545de360bfdb7289c5bdde534ce47967b4"
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-entrepaño-ñ-01",
+                "hostComponentInstanceId": "entrepaño-ñ-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-9a3090eb0ebb70c754d851924f8edd88948eecf0b40ec4245a3c06c661a1b110"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -6988,7 +8222,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -7051,7 +8285,7 @@
         "responseMessageId": "resolve-msg-fixture-material-pbr",
         "inReplyToMessageId": "msg-fixture-material-pbr",
         "idempotencyKey": "fixture:material-pbr:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -7111,7 +8345,26 @@
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "door-01-hw-0",
@@ -7557,6 +8810,253 @@
           "machining": {
             "operations": [
               {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
                 "operationId": "door-01-hw-0:op-1",
                 "hostComponentInstanceId": "door-01",
                 "provenance": {
@@ -7575,8 +9075,49 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-c5db36d972aff528e90eae447472cb037059390937a43eadee1b7e14808e8c08"
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-7e12e7cad26dd4fca2da214b238d85c8a873a80aa64caaa21284d5964e28bf2e"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -7597,7 +9138,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -7669,7 +9210,7 @@
         "responseMessageId": "resolve-msg-fixture-cost-only-hardware",
         "inReplyToMessageId": "msg-fixture-cost-only-hardware",
         "idempotencyKey": "fixture:cost-only-hardware:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -7727,7 +9268,26 @@
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "hp-cost-only-01",
@@ -8099,9 +9659,298 @@
             "hardware": []
           },
           "machining": {
-            "operations": [],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-f0450fcf33afd948e5c2b8f0b91995befa455d3fdcf605af1d2029d0f2b4ca7f"
+            "operations": [
+              {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-f4256fad39f679588547e8469de19f12816425b96fa39fe23ab70f01117fd2d2"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -8122,7 +9971,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "custom",
@@ -8160,7 +10009,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -8212,13 +10061,80 @@
               "role": "INTERIOR"
             },
             {
+              "componentInstanceId": "mod-comp-shelf-copy-1",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "mod-comp-shelf-copy-2",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
               "componentInstanceId": "mod-comp-door-copy-0",
               "componentDefinitionId": "mod-comp-door",
               "catalogComponentId": "comp-door",
               "role": "FRENTE"
             }
           ],
-          "relationships": [],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "mod-comp-shelf-copy-0",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "st-comp-side-copy-0",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "st-comp-side-r-copy-0",
+                  "role": "inside-face"
+                }
+              ]
+            },
+            {
+              "relationshipId": "parameter-shelfCount-2",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "mod-comp-shelf-copy-1",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "st-comp-side-copy-0",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "st-comp-side-r-copy-0",
+                  "role": "inside-face"
+                }
+              ]
+            },
+            {
+              "relationshipId": "parameter-shelfCount-3",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "mod-comp-shelf-copy-2",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "st-comp-side-copy-0",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "st-comp-side-r-copy-0",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
           "hardwarePlacements": [
             {
               "hardwarePlacementId": "mod-comp-door-copy-0-hw-0",
@@ -8548,6 +10464,104 @@
                 "materialColorHex": "#d4c4a8"
               },
               {
+                "componentInstanceId": "mod-comp-shelf-copy-1",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    350
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  614,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    350
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 614,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "mod-comp-shelf-copy-2",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    550
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  614,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    550
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 614,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
                 "componentInstanceId": "mod-comp-door-copy-0",
                 "componentDefinitionId": "mod-comp-door",
                 "slotId": "puerta",
@@ -8653,6 +10667,747 @@
           "machining": {
             "operations": [
               {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-2:op-1",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 350,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 350,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-2:op-2",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-2:op-3",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 350,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 350,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-2:op-4",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 350,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-2:op-5",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-1",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-3:op-1",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 550,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 550,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-3:op-2",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-3:op-3",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 550,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 550,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-3:op-4",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 550,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-3:op-5",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-2",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "left",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "left",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "right",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
                 "operationId": "mod-comp-door-copy-0-hw-0:op-1",
                 "hostComponentInstanceId": "mod-comp-door-copy-0",
                 "provenance": {
@@ -8671,8 +11426,129 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [],
-            "manufacturingFingerprint": "sha256-c2ac02df379c9a68309da790bcd32481431692029a9ae81fb0efcff0078acc08"
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-mod-comp-shelf-copy-0",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-2:dhp-side-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-2:dhp-dowel-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-2:dhp-side-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-2:dhp-dowel-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-2:dhp-shelf-mod-comp-shelf-copy-1",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-1",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-2"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-3:dhp-side-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-3:dhp-dowel-st-comp-side-copy-0",
+                "hostComponentInstanceId": "st-comp-side-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-3:dhp-side-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-3:dhp-dowel-st-comp-side-r-copy-0",
+                "hostComponentInstanceId": "st-comp-side-r-copy-0",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-3:dhp-shelf-mod-comp-shelf-copy-2",
+                "hostComponentInstanceId": "mod-comp-shelf-copy-2",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-3"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-752e1045151529a992af939d0da666703f5cecc24e171a3ed6544652275874f8"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
@@ -8693,7 +11569,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "softClose": "true"
@@ -8726,7 +11602,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -8734,7 +11610,11 @@
             "message": "parameter value has the wrong JSON type",
             "severity": "error",
             "path": "furniture.parameters.softClose",
-            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition.",
+            "details": {
+              "expectedType": "boolean",
+              "receivedType": "string"
+            }
           }
         ]
       }
@@ -8748,7 +11628,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelfCount": 6
@@ -8781,7 +11661,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -8789,7 +11669,14 @@
             "message": "numeric parameter is outside its allowed range",
             "severity": "error",
             "path": "furniture.parameters.shelfCount",
-            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition.",
+            "details": {
+              "expectedType": "number",
+              "max": 5,
+              "min": 0,
+              "receivedType": "number",
+              "step": 1
+            }
           }
         ]
       }
@@ -8803,7 +11690,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "tiltDeg": 12.1
@@ -8836,7 +11723,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -8844,7 +11731,14 @@
             "message": "numeric parameter does not align with its allowed step",
             "severity": "error",
             "path": "furniture.parameters.tiltDeg",
-            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition.",
+            "details": {
+              "expectedType": "number",
+              "max": 90,
+              "min": 0,
+              "receivedType": "number",
+              "step": 0.25
+            }
           }
         ]
       }
@@ -8858,7 +11752,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-7ba89f219c09",
+          "catalogRevision": "workshop-2f6b55ea6305",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "style": "ornate"
@@ -8891,7 +11785,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-7ba89f219c09",
+        "catalogRevision": "workshop-2f6b55ea6305",
         "status": "rejected",
         "issues": [
           {
@@ -8899,7 +11793,15 @@
             "message": "enum parameter is not one of its allowed options",
             "severity": "error",
             "path": "furniture.parameters.style",
-            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition."
+            "remediation": "Use the type, default and constraints declared by the pinned FurnitureDefinition.",
+            "details": {
+              "allowedOptions": [
+                "classic",
+                "minimal"
+              ],
+              "expectedType": "enum",
+              "receivedType": "string"
+            }
           }
         ]
       }

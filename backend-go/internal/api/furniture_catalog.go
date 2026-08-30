@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,6 +12,12 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
+
+func furnitureParameterDefinitionsError(err error) (*domain.FurnitureParameterDefinitionsError, bool) {
+	var definitionErr *domain.FurnitureParameterDefinitionsError
+	ok := errors.As(err, &definitionErr)
+	return definitionErr, ok
+}
 
 // Workshop furniture catalog projection for the SketchUp extension.
 //
@@ -136,16 +143,17 @@ type workshopFurnitureCatalog struct {
 type dimensionSpec struct {
 	name       string
 	label      string
+	sortOrder  int
 	fromModule func(m domain.Module) int
 	fromPreset func(p domain.DimensionPreset) int
 }
 
 var workshopDimensionSpecs = []dimensionSpec{
-	{"widthMm", "Ancho (mm)", func(m domain.Module) int { return m.WidthMm },
+	{"widthMm", "Ancho (mm)", 10, func(m domain.Module) int { return m.WidthMm },
 		func(p domain.DimensionPreset) int { return p.WidthMm }},
-	{"heightMm", "Alto (mm)", func(m domain.Module) int { return m.HeightMm },
+	{"heightMm", "Alto (mm)", 20, func(m domain.Module) int { return m.HeightMm },
 		func(p domain.DimensionPreset) int { return p.HeightMm }},
-	{"depthMm", "Fondo (mm)", func(m domain.Module) int { return m.DepthMm },
+	{"depthMm", "Fondo (mm)", 30, func(m domain.Module) int { return m.DepthMm },
 		func(p domain.DimensionPreset) int { return p.DepthMm }},
 }
 
@@ -163,6 +171,14 @@ var workshopDimensionSpecs = []dimensionSpec{
 //   - with presets: min/max span every preset value plus the module default;
 //   - without presets: an operational band around the default (half to double).
 func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.ModuleCategory, materialCategories []domain.MaterialCategory, composition domain.Catalog) workshopFurnitureCatalog {
+	catalog, err := buildWorkshopFurnitureCatalogValidated(modules, categories, materialCategories, composition)
+	if err != nil {
+		panic(err)
+	}
+	return catalog
+}
+
+func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories []domain.ModuleCategory, materialCategories []domain.MaterialCategory, composition domain.Catalog) (workshopFurnitureCatalog, error) {
 	catalog := workshopFurnitureCatalog{
 		SchemaID:           workshopFurnitureSchemaID,
 		Categories:         []workshopFurnitureCategory{},
@@ -184,6 +200,12 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 	}
 
 	for _, m := range modules {
+		if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) != 0 {
+			return workshopFurnitureCatalog{}, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+		}
+		if issues := domain.ValidateModuleFurnitureParameterConsumers(m, composition); len(issues) != 0 {
+			return workshopFurnitureCatalog{}, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+		}
 		path := categoryPathNames(m.CategoryID, byID)
 		category := strings.Join(path, " › ")
 		if category == "" {
@@ -204,23 +226,26 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 		}
 
 		definition.Parameters = append(definition.Parameters, m.ParameterDefinitions...)
-		declared := make(map[string]bool, len(definition.Parameters))
-		for _, parameter := range definition.Parameters {
-			declared[parameter.Name] = true
-		}
 		for _, spec := range workshopDimensionSpecs {
-			if declared[spec.name] {
-				continue
-			}
 			param, ok := buildDimensionParameter(spec, m)
 			if ok {
 				definition.Parameters = append(definition.Parameters, param)
 			}
 		}
-		sort.Slice(definition.Parameters, func(i, j int) bool {
+		sort.SliceStable(definition.Parameters, func(i, j int) bool {
+			if definition.Parameters[i].SortOrder != definition.Parameters[j].SortOrder {
+				return definition.Parameters[i].SortOrder < definition.Parameters[j].SortOrder
+			}
 			return definition.Parameters[i].Name < definition.Parameters[j].Name
 		})
-		definition.DefinitionHash, _ = domain.FurnitureParameterDefinitionHash(definition.Parameters)
+		if issues := domain.ValidatePublishedFurnitureParameterDefinitions(definition.Parameters); len(issues) != 0 {
+			return workshopFurnitureCatalog{}, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+		}
+		definitionHash, err := domain.FurnitureParameterDefinitionHash(definition.Parameters)
+		if err != nil {
+			return workshopFurnitureCatalog{}, err
+		}
+		definition.DefinitionHash = definitionHash
 
 		// Real composition sizes at default dimensions; a module whose
 		// composition cannot resolve here keeps zero counts (the layout
@@ -237,7 +262,7 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 			catalog.Presets = append(catalog.Presets, buildWorkshopPreset(m, p, category))
 		}
 	}
-	return catalog
+	return catalog, nil
 }
 
 // buildWorkshopMaterialCategories projects the workshop's board category tree.
@@ -353,19 +378,35 @@ func buildDimensionParameter(spec dimensionSpec, m domain.Module) (workshopFurni
 	if min == max {
 		min, max = operationalDimBand(defaultValue)
 	}
+	step := workshopDimParamStepMm
+	if (defaultValue-min)%step != 0 {
+		step = 1
+	}
+	for _, candidate := range candidates {
+		if (candidate-min)%step != 0 {
+			step = 1
+			break
+		}
+	}
 
 	return workshopFurnitureParameter{
 		Name:         spec.name,
 		Label:        spec.label,
+		SortOrder:    spec.sortOrder,
 		Type:         "number",
 		DefaultValue: float64(defaultValue),
 		Required:     true,
 		Unit:         domain.FurnitureParameterUnitMM,
 		Min:          float64Ptr(float64(min)),
 		Max:          float64Ptr(float64(max)),
-		Step:         float64Ptr(float64(workshopDimParamStepMm)),
+		Step:         float64Ptr(float64(step)),
 		Category:     domain.FurnitureParameterCategory(workshopDimensionParamKind),
 		Integer:      true,
+		Binding: &domain.FurnitureParameterBinding{
+			Version:   domain.FurnitureParameterBindingVersion,
+			Kind:      domain.FurnitureParameterBindingDimensionColumn,
+			Dimension: spec.name,
+		},
 	}, true
 }
 

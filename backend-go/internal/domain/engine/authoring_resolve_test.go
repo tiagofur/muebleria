@@ -197,6 +197,52 @@ func TestAuthoringResolveParityWithLayoutEndpointSemantics(t *testing.T) {
 	}
 }
 
+func TestAuthoringResolveComponentQuantityBindingChangesAuthoritativeOutput(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	min, max, step := 1.0, 5.0, 1.0
+	module.ParameterDefinitions = []domain.FurnitureParameterDefinition{{
+		Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
+		DefaultValue: float64(1), Required: true, Integer: true, Unit: domain.FurnitureParameterUnitCount,
+		Category: domain.FurnitureParameterCategoryConfiguration, Min: &min, Max: &max, Step: &step,
+		Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shelf",
+			Relationship: &domain.FurnitureParameterRelationshipBinding{Kind: "shelf-support", SourceRole: "shelf-edge", Targets: []domain.FurnitureParameterRelationshipTarget{
+				{ComponentID: "comp-side", Role: "inside-face"}, {ComponentID: "comp-side-r", Role: "inside-face"},
+			}}},
+	}}
+	resolve := func(count float64) *AuthoringResolveResult {
+		result, err := ResolveAuthoringLayout(AuthoringResolveInput{Module: module, Catalog: catalog, PrecisionMm: 0.01, EvaluatedParameters: map[string]any{"shelfCount": count}})
+		if err != nil {
+			t.Fatalf("resolve shelfCount=%v: %v", count, err)
+		}
+		if len(result.StructuralIssues) != 0 {
+			t.Fatalf("resolve shelfCount=%v rejected: %+v", count, result.StructuralIssues)
+		}
+		return result
+	}
+	one, three := resolve(1), resolve(3)
+	countShelves := func(result *AuthoringResolveResult) int {
+		count := 0
+		for _, component := range result.Layout.Components {
+			if component.ComponentDefinitionID == "mod-comp-shelf" {
+				count++
+			}
+		}
+		return count
+	}
+	if countShelves(one) != 1 || countShelves(three) != 3 {
+		t.Fatalf("bound occurrences did not follow quantity: one=%d three=%d", countShelves(one), countShelves(three))
+	}
+	if len(one.Normalized.Relationships) != 1 || len(three.Normalized.Relationships) != 3 {
+		t.Fatalf("bound relationships did not follow quantity: one=%d three=%d", len(one.Normalized.Relationships), len(three.Normalized.Relationships))
+	}
+	if len(three.Machining.Operations) <= len(one.Machining.Operations) {
+		t.Fatalf("machining did not expand: one=%d three=%d", len(one.Machining.Operations), len(three.Machining.Operations))
+	}
+	if one.Machining.ManufacturingFingerprint == three.Machining.ManufacturingFingerprint {
+		t.Fatal("quantity change must invalidate manufacturing fingerprint")
+	}
+}
+
 // Scenario 2: move shelf → the occurrence keeps its identity, the dependent
 // relationship machining follows the new height, and the fingerprint moves.
 func TestAuthoringResolveMoveShelf(t *testing.T) {

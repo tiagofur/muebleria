@@ -147,7 +147,8 @@ function snapshotFromScenario(scenario: FixtureCase): ReadonlyAuthoringSnapshot 
         scale: [1, 1, 1] as [number, number, number],
       },
     })),
-    relationships: (scenario.request.furniture.relationships ?? []) as PartRelationshipIntent[],
+    relationships:
+      scenario.response.normalizedSnapshot.relationships as PartRelationshipIntent[],
     hardwarePlacements:
       scenario.response.normalizedSnapshot.hardwarePlacements as HardwarePlacementIntent[],
   };

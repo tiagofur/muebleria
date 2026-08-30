@@ -2,9 +2,68 @@ package domain
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
+	"sort"
 	"testing"
 )
+
+func TestInvalidFurnitureParameterDefinitionCorpus(t *testing.T) {
+	raw, err := os.ReadFile("../../../contracts/furnitureParameterDefinitions.invalid.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var corpus struct {
+		SchemaVersion int `json:"schemaVersion"`
+		Cases         []struct {
+			ID             string                         `json:"id"`
+			Boundary       string                         `json:"boundary"`
+			RawJSON        string                         `json:"rawJson"`
+			Definitions    []FurnitureParameterDefinition `json:"definitions"`
+			ExpectedCode   string                         `json:"expectedCode"`
+			ExpectedFields []string                       `json:"expectedFields"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &corpus); err != nil {
+		t.Fatalf("decode corpus: %v", err)
+	}
+	if corpus.SchemaVersion != 1 {
+		t.Fatalf("schemaVersion=%d", corpus.SchemaVersion)
+	}
+	for _, testCase := range corpus.Cases {
+		t.Run(testCase.ID, func(t *testing.T) {
+			issues := []FurnitureParameterDefinitionIssue{}
+			if testCase.RawJSON != "" {
+				var definitions []FurnitureParameterDefinition
+				if err := json.Unmarshal([]byte(testCase.RawJSON), &definitions); err != nil {
+					issues = append(issues, FurnitureParameterDefinitionIssue{Field: "definitions", Message: err.Error()})
+				} else if testCase.Boundary == "published" {
+					issues = ValidatePublishedFurnitureParameterDefinitions(definitions)
+				} else {
+					issues = ValidatePersistedFurnitureParameterDefinitions(definitions)
+				}
+			} else if testCase.Boundary == "published" {
+				issues = ValidatePublishedFurnitureParameterDefinitions(testCase.Definitions)
+			} else {
+				issues = ValidatePersistedFurnitureParameterDefinitions(testCase.Definitions)
+			}
+			if len(issues) == 0 || testCase.ExpectedCode != "PARAMETER_DEFINITION_INVALID" {
+				t.Fatalf("expected typed invalid definition, issues=%+v code=%s", issues, testCase.ExpectedCode)
+			}
+			fields := make([]string, 0, len(issues))
+			for _, issue := range issues {
+				fields = append(fields, issue.Field)
+			}
+			sort.Strings(fields)
+			for _, expected := range testCase.ExpectedFields {
+				index := sort.SearchStrings(fields, expected)
+				if index == len(fields) || fields[index] != expected {
+					t.Fatalf("missing field %q in %+v", expected, issues)
+				}
+			}
+		})
+	}
+}
 
 func TestFurnitureParameterDefinitionJSONRoundTrip(t *testing.T) {
 	raw := []byte(`[

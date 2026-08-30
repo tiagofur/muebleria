@@ -2,6 +2,9 @@ package storage_test
 
 import (
 	"context"
+	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +30,9 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 		}
 		if defaultValue != "'[]'::jsonb" || nullable != "NO" {
 			t.Fatalf("column contract default=%q nullable=%q", defaultValue, nullable)
+		}
+		if _, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,'BAD-SHAPE','Bad shape','{}'::jsonb)`, multiOrgInitialOrgID); err == nil {
+			t.Fatal("database accepted a non-array parameter definition payload")
 		}
 	})
 
@@ -58,6 +64,85 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 	})
 }
 
+func TestModuleParameterDefinitionsMigrationDownRemovesColumn(t *testing.T) {
+	pool := multiOrgFreshDB(t)
+	identityApplyThrough(t, pool, 100)
+	downSQL, err := os.ReadFile("../../db/migration/000100_module_parameter_definitions.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), string(downSQL)); err != nil {
+		t.Fatalf("execute down migration: %v", err)
+	}
+	var exists bool
+	if err := pool.QueryRow(context.Background(), `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='modules' AND column_name='parameter_definitions')`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatal("down migration left parameter_definitions behind")
+	}
+}
+
+func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T) {
+	oversized := "[" + strings.TrimSuffix(strings.Repeat(`{"name":"metadata","label":"Metadata","type":"string","required":false,"category":"metadata"},`, domain.MaxFurnitureParameterDefinitions+1), ",") + "]"
+	tests := []struct{ name, raw string }{
+		{"duplicate", `[{"name":"x","label":"X","type":"string","required":false,"category":"metadata"},{"name":"x","label":"X","type":"string","required":false,"category":"metadata"}]`},
+		{"reserved dimension", `[{"name":"widthMm","label":"Width","type":"number","defaultValue":600,"required":true,"unit":"mm","category":"dimension","integer":true,"binding":{"version":1,"kind":"dimensionColumn","dimension":"widthMm"}}]`},
+		{"invalid type", `[{"name":"x","label":"X","type":"decimal","required":false,"category":"metadata"}]`},
+		{"invalid default", `[{"name":"enabled","label":"Enabled","type":"boolean","defaultValue":"false","required":false,"category":"metadata"}]`},
+		{"invalid enum", `[{"name":"style","label":"Style","type":"enum","defaultValue":"bad","required":true,"category":"metadata","options":["classic"]}]`},
+		{"definition limit", oversized},
+		{"unknown field", `[{"name":"note","label":"Note","type":"string","required":false,"category":"metadata","unexpected":true}]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := multiOrgFreshDB(t)
+			identityApplyThrough(t, pool, 100)
+			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
+			if err != nil {
+				t.Fatalf("seed direct SQL: %v", err)
+			}
+			store := &storage.PostgresStore{Pool: pool}
+			_, err = store.GetFullCatalog(storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID))
+			var definitionErr *domain.FurnitureParameterDefinitionsError
+			if !errors.As(err, &definitionErr) || len(definitionErr.Issues) == 0 {
+				t.Fatalf("expected typed definition error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
+	store, orgA, orgB := isolationSetup(t)
+	ctx := context.Background()
+	for _, row := range []struct{ org, id, code, defaultValue string }{{orgA, "f1970000-0000-0000-0000-00000000000a", "PARAM-A", "alpha"}, {orgB, "f1970000-0000-0000-0000-00000000000b", "PARAM-B", "beta"}} {
+		raw := `[{"name":"label","label":"Label","type":"string","defaultValue":"` + row.defaultValue + `","required":false,"category":"metadata"}]`
+		if _, err := store.Pool.Exec(ctx, `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES ($1,$2,$3,$3,$4::jsonb)`, row.id, row.org, row.code, raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct{ org, want, notWant string }{{orgA, "alpha", "beta"}, {orgB, "beta", "alpha"}} {
+		catalog, err := store.GetFullCatalog(storage.WithOrgCtx(ctx, tt.org))
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, module := range catalog.Modules {
+			for _, definition := range module.ParameterDefinitions {
+				if definition.DefaultValue == tt.notWant {
+					t.Fatalf("tenant %s saw %s", tt.org, tt.notWant)
+				}
+				if definition.DefaultValue == tt.want {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("tenant %s missing own definition", tt.org)
+		}
+	}
+}
+
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	pool := multiOrgFreshDB(t)
 	identityApplyThrough(t, pool, 100)
@@ -70,7 +155,7 @@ func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 		ParameterDefinitions: []domain.FurnitureParameterDefinition{{
 			Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
 			DefaultValue: float64(1), Required: true, Unit: domain.FurnitureParameterUnitCount,
-			Category: domain.FurnitureParameterCategoryConfiguration,
+			Category: domain.FurnitureParameterCategoryMetadata,
 			Min:      &min, Max: &max, Step: &step, Integer: true,
 		}},
 	}

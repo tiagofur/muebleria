@@ -16,6 +16,19 @@ require 'testup/testcase'
 module Granete
   module SketchUpExtension
     class TC_AuthoringResolveSmoke < TestUp::TestCase
+      class TransactionObserver < Sketchup::ModelObserver
+        attr_reader :starts
+
+        def initialize
+          super
+          @starts = 0
+        end
+
+        def onTransactionStart(_model)
+          @starts += 1
+        end
+      end
+
       EXPECTED_NAME = 'Granete for SketchUp'
       REPOSITORY_ROOT = File.expand_path('../../../..', __dir__)
       GOLDEN_PATH = File.join(REPOSITORY_ROOT, 'contracts', 'sketchupAuthoringResolve.contract.json').freeze
@@ -44,9 +57,12 @@ module Granete
           metadata_store: Granete::SketchUpExtension::Metadata::Store.new(model)
         )
         @apply_calls = 0
+        @transaction_observer = TransactionObserver.new
+        model.add_observer(@transaction_observer)
       end
 
       def teardown
+        model.remove_observer(@transaction_observer) if @transaction_observer
         cleanup_granete_entities
       end
 
@@ -69,9 +85,14 @@ module Granete
         outcome = apply(result)
         assert outcome['success'], "insert failed: #{outcome['error']}"
         assert_equal 1, @apply_calls
+        assert_equal 1, @transaction_observer.starts
 
         top = granete_furniture_instances.first
         refute_nil top
+        resolved_parameters = metadata_store.read(top).dig('intent', 'parameters')
+        assert_equal 1, resolved_parameters['shelfCount']
+        assert_equal false, resolved_parameters['softClose']
+        assert_equal 'classic', resolved_parameters['style']
         # Every board occurrence materialized with its exact Granete identity.
         result.layout.boards.each do |board|
           child = top.definition.entities.grep(Sketchup::ComponentInstance).find do |entity|
@@ -92,6 +113,53 @@ module Granete
                      'undo must remove exactly the one managed top-level instance'
         assert granete_definitions.empty?,
                'undo must remove every Granete definition the operation created'
+      end
+
+      def test_typed_shelf_quantity_and_defaults_drive_native_host_truth
+        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          scenario_response('13-definition-driven-typed-parameters'),
+          expected_request: scenario_request('13-definition-driven-typed-parameters')
+        )
+
+        assert result.accepted?
+        assert_equal 3, result.normalized_snapshot.dig('parameters', 'shelfCount')
+        shelves = result.layout.boards.select { |board| board.component_definition_id == 'mod-comp-shelf' }
+        assert_equal 3, shelves.length
+
+        outcome = apply(result)
+        assert outcome['success'], "insert failed: #{outcome['error']}"
+        assert_equal 1, @transaction_observer.starts
+        top = granete_furniture_instances.first
+        metadata = metadata_store.read(top)
+        assert_equal 3, metadata.dig('intent', 'parameters', 'shelfCount')
+        assert_equal true, metadata.dig('intent', 'parameters', 'softClose')
+
+        host_shelves = top.definition.entities.grep(Sketchup::ComponentInstance).select do |entity|
+          metadata_store.read(entity).dig('identity', 'componentDefinitionId') == 'mod-comp-shelf'
+        end
+        assert_equal 3, host_shelves.length
+        assert_equal shelves.map(&:component_instance_id).sort,
+                     host_shelves.map { |entity|
+                       metadata_store.read(entity).dig('identity', 'componentInstanceId')
+                     }.sort
+      end
+
+      def test_typed_parameter_rejections_start_no_transaction_or_host_mutation
+        {
+          'neg-parameter-wrong-type' => 'PARAMETER_TYPE_INVALID',
+          'neg-parameter-invalid-enum' => 'PARAMETER_ENUM_INVALID',
+          'neg-parameter-invalid-step' => 'PARAMETER_STEP_INVALID'
+        }.each do |scenario_id, expected_code|
+          before = snapshot_host_state
+          error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
+            apply_scenario(scenario_id)
+          end
+          assert_includes error.issues.map(&:code), expected_code
+          assert_equal 0, @transaction_observer.starts,
+                       "#{scenario_id} must fail before Model#start_operation"
+          assert_host_untouched(before)
+          assert_equal 0, @apply_calls
+        end
       end
 
       def test_rejected_orphan_anchor_never_mutates_the_host
@@ -184,9 +252,27 @@ module Granete
         apply(result)
       end
 
+      def apply_scenario(id)
+        scenario_entry = scenario(id)
+        result = Granete::SketchUpExtension::Library::AuthoringResolveTransport.interpret(
+          { 'status' => scenario_entry['expectedHttpStatus'], 'body' => scenario_entry['response'] },
+          expected_request: scenario_entry['request']
+        )
+        apply(result)
+      end
+
       def apply(result)
         @apply_calls += 1
-        @builder.insert_furniture(model, DEFINITION, {}, resolved_layout: result.layout)
+        parameters = result.normalized_snapshot.fetch('parameters')
+        @builder.insert_furniture(model, definition_for(result), parameters, resolved_layout: result.layout)
+      end
+
+      def definition_for(result)
+        DEFINITION.merge(
+          'furniture_definition_id' => result.layout.furniture_definition_id,
+          'name' => result.layout.definition_name,
+          'parameters' => fixture.fetch('parameterDefinitions')
+        )
       end
 
       def snapshot_host_state

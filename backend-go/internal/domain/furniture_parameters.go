@@ -34,11 +34,50 @@ const (
 	FurnitureParameterCategoryConfiguration FurnitureParameterCategory = "configuration"
 	FurnitureParameterCategoryStyle         FurnitureParameterCategory = "style"
 	FurnitureParameterCategoryHardware      FurnitureParameterCategory = "hardware"
+	FurnitureParameterCategoryMetadata      FurnitureParameterCategory = "metadata"
 )
+
+const (
+	MaxFurnitureParameterDefinitions  = 64
+	MaxFurnitureParameterNameLength   = 64
+	MaxFurnitureParameterLabelLength  = 160
+	MaxFurnitureParameterOptions      = 64
+	MaxFurnitureParameterOptionLength = 128
+)
+
+const (
+	FurnitureParameterBindingVersion           = 1
+	FurnitureParameterBindingComponentQuantity = "componentQuantity"
+	FurnitureParameterBindingDimensionColumn   = "dimensionColumn"
+)
+
+// FurnitureParameterBinding declares the authoritative consumer of a value.
+// Persisted parameters must either carry a versioned binding or explicitly be
+// metadata. Dimension-column bindings are projection-only and may never be
+// stored in modules.parameter_definitions.
+type FurnitureParameterBinding struct {
+	Version      int                                    `json:"version"`
+	Kind         string                                 `json:"kind"`
+	ComponentID  string                                 `json:"componentId,omitempty"`
+	Dimension    string                                 `json:"dimension,omitempty"`
+	Relationship *FurnitureParameterRelationshipBinding `json:"relationship,omitempty"`
+}
+
+type FurnitureParameterRelationshipBinding struct {
+	Kind       string                                 `json:"kind"`
+	SourceRole string                                 `json:"sourceRole"`
+	Targets    []FurnitureParameterRelationshipTarget `json:"targets"`
+}
+
+type FurnitureParameterRelationshipTarget struct {
+	ComponentID string `json:"componentId"`
+	Role        string `json:"role"`
+}
 
 type FurnitureParameterDefinition struct {
 	Name         string                     `json:"name"`
 	Label        string                     `json:"label"`
+	SortOrder    int                        `json:"sortOrder,omitempty"`
 	Type         FurnitureParameterType     `json:"type"`
 	DefaultValue any                        `json:"defaultValue,omitempty"`
 	Required     bool                       `json:"required"`
@@ -49,6 +88,7 @@ type FurnitureParameterDefinition struct {
 	Step         *float64                   `json:"step,omitempty"`
 	Options      []string                   `json:"options,omitempty"`
 	Integer      bool                       `json:"integer,omitempty"`
+	Binding      *FurnitureParameterBinding `json:"binding,omitempty"`
 }
 
 type FurnitureParameterDefinitionIssue struct {
@@ -87,11 +127,15 @@ type FurnitureParameterIssue struct {
 	Code      FurnitureParameterIssueCode `json:"code"`
 	Parameter string                      `json:"parameter"`
 	Message   string                      `json:"message"`
+	Details   map[string]any              `json:"details,omitempty"`
 }
 
 func ValidateFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinitionIssue {
 	issues := make([]FurnitureParameterDefinitionIssue, 0)
 	seen := make(map[string]struct{}, len(definitions))
+	if len(definitions) > MaxFurnitureParameterDefinitions {
+		issues = append(issues, FurnitureParameterDefinitionIssue{Field: "definitions", Message: fmt.Sprintf("must contain at most %d entries", MaxFurnitureParameterDefinitions)})
+	}
 
 	for _, definition := range definitions {
 		name := definition.Name
@@ -106,8 +150,17 @@ func ValidateFurnitureParameterDefinitions(definitions []FurnitureParameterDefin
 		} else {
 			seen[name] = struct{}{}
 		}
+		if len([]rune(name)) > MaxFurnitureParameterNameLength {
+			add("name", fmt.Sprintf("must contain at most %d characters", MaxFurnitureParameterNameLength))
+		}
 		if strings.TrimSpace(definition.Label) == "" {
 			add("label", "must be non-empty")
+		}
+		if len([]rune(definition.Label)) > MaxFurnitureParameterLabelLength {
+			add("label", fmt.Sprintf("must contain at most %d characters", MaxFurnitureParameterLabelLength))
+		}
+		if definition.SortOrder < 0 {
+			add("sortOrder", "must be greater than or equal to zero")
 		}
 		if !validFurnitureParameterType(definition.Type) {
 			add("type", "must be number, string, boolean, or enum")
@@ -138,9 +191,15 @@ func ValidateFurnitureParameterDefinitions(definitions []FurnitureParameterDefin
 				add("options", "enum requires at least one option")
 			}
 			optionSeen := make(map[string]struct{}, len(definition.Options))
+			if len(definition.Options) > MaxFurnitureParameterOptions {
+				add("options", fmt.Sprintf("must contain at most %d entries", MaxFurnitureParameterOptions))
+			}
 			for _, option := range definition.Options {
 				if option == "" {
 					add("options", "enum options must be non-empty")
+				}
+				if len([]rune(option)) > MaxFurnitureParameterOptionLength {
+					add("options", fmt.Sprintf("each option must contain at most %d characters", MaxFurnitureParameterOptionLength))
 				}
 				if _, ok := optionSeen[option]; ok {
 					add("options", "enum options must be unique")
@@ -181,7 +240,7 @@ func EvaluateFurnitureParameters(definitions []FurnitureParameterDefinition, pro
 	}
 	sort.Strings(unknown)
 	for _, name := range unknown {
-		issues = append(issues, furnitureParameterIssue(FurnitureParameterUnknown, name))
+		issues = append(issues, FurnitureParameterIssue{Code: FurnitureParameterUnknown, Parameter: name, Message: "parameter is not declared by the furniture definition"})
 	}
 
 	normalized := make(map[string]any, len(ordered))
@@ -191,13 +250,13 @@ func EvaluateFurnitureParameters(definitions []FurnitureParameterDefinition, pro
 			if definition.DefaultValue != nil {
 				normalized[definition.Name] = definition.DefaultValue
 			} else if definition.Required {
-				issues = append(issues, furnitureParameterIssue(FurnitureParameterRequired, definition.Name))
+				issues = append(issues, furnitureParameterIssue(FurnitureParameterRequired, definition, nil))
 			}
 			continue
 		}
 
 		if code := validateFurnitureParameterValue(definition, value); code != "" {
-			issues = append(issues, furnitureParameterIssue(code, definition.Name))
+			issues = append(issues, furnitureParameterIssue(code, definition, value))
 			continue
 		}
 		normalized[definition.Name] = value
@@ -295,7 +354,7 @@ func validateFurnitureParameterValue(definition FurnitureParameterDefinition, va
 	return ""
 }
 
-func furnitureParameterIssue(code FurnitureParameterIssueCode, name string) FurnitureParameterIssue {
+func furnitureParameterIssue(code FurnitureParameterIssueCode, definition FurnitureParameterDefinition, value any) FurnitureParameterIssue {
 	messages := map[FurnitureParameterIssueCode]string{
 		FurnitureParameterUnknown:     "parameter is not declared by the furniture definition",
 		FurnitureParameterRequired:    "required parameter is missing and has no default",
@@ -304,13 +363,187 @@ func furnitureParameterIssue(code FurnitureParameterIssueCode, name string) Furn
 		FurnitureParameterStepInvalid: "numeric parameter does not align with its allowed step",
 		FurnitureParameterEnumInvalid: "enum parameter is not one of its allowed options",
 	}
-	return FurnitureParameterIssue{Code: code, Parameter: name, Message: messages[code]}
+	details := map[string]any{"expectedType": string(definition.Type)}
+	if value != nil {
+		details["receivedType"] = furnitureParameterJSONType(value)
+	}
+	if definition.Min != nil {
+		details["min"] = *definition.Min
+	}
+	if definition.Max != nil {
+		details["max"] = *definition.Max
+	}
+	if definition.Step != nil {
+		details["step"] = *definition.Step
+	}
+	if len(definition.Options) > 0 {
+		details["allowedOptions"] = append([]string(nil), definition.Options...)
+	}
+	return FurnitureParameterIssue{Code: code, Parameter: definition.Name, Message: messages[code], Details: details}
+}
+
+func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, add func(string, string)) {
+	if definition.Category == FurnitureParameterCategoryMetadata {
+		if definition.Binding != nil {
+			add("binding", "metadata parameters must not declare an authoritative consumer")
+		}
+		return
+	}
+	if definition.Binding == nil {
+		add("binding", "non-metadata parameters require an authoritative consumer")
+		return
+	}
+	b := definition.Binding
+	if b.Version != FurnitureParameterBindingVersion {
+		add("binding.version", "must be 1")
+	}
+	switch b.Kind {
+	case FurnitureParameterBindingComponentQuantity:
+		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer {
+			add("binding.kind", "componentQuantity requires an integer number parameter")
+		}
+		if strings.TrimSpace(b.ComponentID) == "" {
+			add("binding.componentId", "is required for componentQuantity")
+		}
+		if b.Dimension != "" {
+			add("binding.dimension", "is not allowed for componentQuantity")
+		}
+		if b.Relationship != nil {
+			if strings.TrimSpace(b.Relationship.Kind) == "" {
+				add("binding.relationship.kind", "is required")
+			}
+			if strings.TrimSpace(b.Relationship.SourceRole) == "" {
+				add("binding.relationship.sourceRole", "is required")
+			}
+			if len(b.Relationship.Targets) == 0 {
+				add("binding.relationship.targets", "must contain at least one target")
+			}
+			for _, target := range b.Relationship.Targets {
+				if strings.TrimSpace(target.ComponentID) == "" || strings.TrimSpace(target.Role) == "" {
+					add("binding.relationship.targets", "componentId and role are required")
+				}
+			}
+		}
+	case FurnitureParameterBindingDimensionColumn:
+		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer || definition.Unit != FurnitureParameterUnitMM {
+			add("binding.kind", "dimensionColumn requires an integer millimeter number parameter")
+		}
+		if b.Dimension != definition.Name || !IsReservedFurnitureDimensionName(b.Dimension) {
+			add("binding.dimension", "must match widthMm, heightMm, or depthMm")
+		}
+		if b.ComponentID != "" || b.Relationship != nil {
+			add("binding", "dimensionColumn cannot target composition")
+		}
+	default:
+		add("binding.kind", "must be componentQuantity or dimensionColumn")
+	}
+}
+
+func IsReservedFurnitureDimensionName(name string) bool {
+	return name == "widthMm" || name == "heightMm" || name == "depthMm"
+}
+
+// ValidatePersistedFurnitureParameterDefinitions rejects projection-owned
+// dimensions so width/height/depth keep a single source of truth: module columns.
+func ValidatePersistedFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinitionIssue {
+	issues := ValidateFurnitureParameterDefinitions(definitions)
+	for _, definition := range definitions {
+		add := func(field, message string) {
+			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: field, Message: message})
+		}
+		validateFurnitureParameterBinding(definition, add)
+		if IsReservedFurnitureDimensionName(definition.Name) {
+			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "name", Message: "is reserved for the module dimension column projection"})
+		}
+		if definition.Binding != nil && definition.Binding.Kind == FurnitureParameterBindingDimensionColumn {
+			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.kind", Message: "dimensionColumn is projection-only"})
+		}
+	}
+	return issues
+}
+
+// ValidatePublishedFurnitureParameterDefinitions applies consumer validation
+// after projection has added its dimension-column definitions.
+func ValidatePublishedFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinitionIssue {
+	issues := ValidateFurnitureParameterDefinitions(definitions)
+	for _, definition := range definitions {
+		add := func(field, message string) {
+			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: field, Message: message})
+		}
+		validateFurnitureParameterBinding(definition, add)
+	}
+	return issues
+}
+
+func furnitureParameterJSONType(value any) string {
+	switch value.(type) {
+	case float64:
+		return "number"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case nil:
+		return "null"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	default:
+		return fmt.Sprintf("%T", value)
+	}
 }
 
 func sortedFurnitureParameterDefinitions(definitions []FurnitureParameterDefinition) []FurnitureParameterDefinition {
 	ordered := append([]FurnitureParameterDefinition(nil), definitions...)
-	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Name < ordered[j].Name })
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].SortOrder != ordered[j].SortOrder {
+			return ordered[i].SortOrder < ordered[j].SortOrder
+		}
+		return ordered[i].Name < ordered[j].Name
+	})
 	return ordered
+}
+
+// ValidateModuleFurnitureParameterConsumers proves every declared binding
+// points at composition that this module can actually resolve.
+func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) []FurnitureParameterDefinitionIssue {
+	issues := []FurnitureParameterDefinitionIssue{}
+	direct := map[string]bool{}
+	available := map[string]bool{}
+	for _, instance := range module.Components {
+		direct[instance.ComponentID] = true
+		available[instance.ComponentID] = true
+	}
+	if module.StructureID != "" {
+		for _, structure := range catalog.Structures {
+			if structure.ID != module.StructureID {
+				continue
+			}
+			for _, instance := range structure.Components {
+				available[instance.ComponentID] = true
+			}
+			break
+		}
+	}
+	for _, definition := range module.ParameterDefinitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != FurnitureParameterBindingComponentQuantity {
+			continue
+		}
+		if !direct[binding.ComponentID] {
+			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.componentId", Message: "must reference a component placed directly on the module"})
+		}
+		if binding.Relationship == nil {
+			continue
+		}
+		for _, target := range binding.Relationship.Targets {
+			if !available[target.ComponentID] {
+				issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "must reference components in the module composition"})
+			}
+		}
+	}
+	return issues
 }
 
 func validFurnitureParameterType(parameterType FurnitureParameterType) bool {
@@ -333,7 +566,7 @@ func validFurnitureParameterUnit(unit FurnitureParameterUnit) bool {
 
 func validFurnitureParameterCategory(category FurnitureParameterCategory) bool {
 	switch category {
-	case FurnitureParameterCategoryDimension, FurnitureParameterCategoryConfiguration, FurnitureParameterCategoryStyle, FurnitureParameterCategoryHardware:
+	case FurnitureParameterCategoryDimension, FurnitureParameterCategoryConfiguration, FurnitureParameterCategoryStyle, FurnitureParameterCategoryHardware, FurnitureParameterCategoryMetadata:
 		return true
 	default:
 		return false

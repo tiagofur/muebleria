@@ -166,7 +166,7 @@ func TestWorkshopCatalogRevisionCoversParameterRulesAndDefaults(t *testing.T) {
 		return domain.FurnitureParameterDefinition{
 			Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
 			DefaultValue: defaultValue, Required: true, Unit: domain.FurnitureParameterUnitCount,
-			Category: domain.FurnitureParameterCategoryConfiguration,
+			Category: domain.FurnitureParameterCategoryMetadata,
 			Min:      float64Ptr(0), Max: float64Ptr(max), Step: float64Ptr(1), Integer: true,
 		}
 	}
@@ -183,6 +183,34 @@ func TestWorkshopCatalogRevisionCoversParameterRulesAndDefaults(t *testing.T) {
 	definition := base.Definitions["m1"]
 	if definition.SchemaRevision != 1 || definition.DefinitionHash == "" {
 		t.Fatalf("definition is not versioned: %+v", definition)
+	}
+}
+
+func TestWorkshopCatalogRejectsParametersWithoutAuthoritativeConsumers(t *testing.T) {
+	module := domain.Module{ID: "m1", Code: "M1", Name: "Module", ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Integer: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration}}}
+	_, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if _, ok := furnitureParameterDefinitionsError(err); !ok {
+		t.Fatalf("expected typed definition error, got %v", err)
+	}
+	module.ParameterDefinitions[0].Binding = &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "missing"}
+	_, err = buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if definitionErr, ok := furnitureParameterDefinitionsError(err); !ok || len(definitionErr.Issues) == 0 || definitionErr.Issues[0].Field != "binding.componentId" {
+		t.Fatalf("expected missing consumer issue, got %v", err)
+	}
+}
+
+func TestWorkshopCatalogPreservesAuthoringSortOrder(t *testing.T) {
+	module := domain.Module{ID: "m1", Code: "M1", Name: "Module", ParameterDefinitions: []domain.FurnitureParameterDefinition{
+		{Name: "zeta", Label: "Zeta", SortOrder: 20, Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryMetadata},
+		{Name: "alpha", Label: "Alpha", SortOrder: 10, Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryMetadata},
+	}}
+	catalog, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameters := catalog.Definitions["m1"].Parameters
+	if len(parameters) != 2 || parameters[0].Name != "alpha" || parameters[1].Name != "zeta" {
+		t.Fatalf("sort order lost: %+v", parameters)
 	}
 }
 

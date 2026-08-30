@@ -352,6 +352,14 @@ module Granete
             return nil
           end
 
+          begin
+            CatalogParameterContract.validate_catalog!(body)
+          rescue CatalogParameterContract::ContractError => e
+            mark_unavailable(SOURCE_ERROR)
+            @logger&.info('catalog_parameter_definition_invalid', code: e.code, path: e.path, error: e.message)
+            return nil
+          end
+
           @last_source = SOURCE_REMOTE
           @last_license_blocked = false
           @cached_etag = etag
@@ -400,7 +408,7 @@ module Granete
               'name' => param['name'], 'label' => param['label'],
               'type' => param['type'], 'defaultValue' => param['defaultValue']
             }
-            %w[min max step unit options required integer category].each do |key|
+            %w[min max step unit options required integer category sortOrder binding].each do |key|
               translated[key] = param[key] unless param[key].nil?
             end
             translated

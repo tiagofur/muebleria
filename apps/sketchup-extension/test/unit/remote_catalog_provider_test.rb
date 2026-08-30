@@ -50,6 +50,18 @@ class RemoteCatalogProviderTest < Minitest::Test
     end
   end
 
+  class FakeLogger
+    attr_reader :entries
+
+    def initialize
+      @entries = []
+    end
+
+    def info(event, details = {})
+      @entries << [event, details]
+    end
+  end
+
   CONTRACT = {
     'schemaId' => 'granete.workshopFurnitureCatalog.v1',
     'definitions' => {
@@ -60,12 +72,13 @@ class RemoteCatalogProviderTest < Minitest::Test
         'category' => 'inferior',
         'version' => '1.0.0',
         'schemaRevision' => 1,
-        'definitionHash' => 'sha256-definition',
+        'definitionHash' => "sha256-#{'1' * 64}",
         'description' => 'Módulo inferior.',
         'parameters' => [
           { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number',
             'defaultValue' => 600, 'min' => 450, 'max' => 900, 'step' => 10, 'unit' => 'mm',
-            'category' => 'dimension', 'required' => true, 'integer' => true }
+            'category' => 'dimension', 'required' => true, 'integer' => true,
+            'binding' => { 'version' => 1, 'kind' => 'dimensionColumn', 'dimension' => 'widthMm' } }
         ]
       },
       '22222222-2222-2222-2222-222222222222' => {
@@ -74,6 +87,8 @@ class RemoteCatalogProviderTest < Minitest::Test
         'name' => 'Módulo Alto',
         'category' => 'superior',
         'version' => '1.0.0',
+        'schemaRevision' => 1,
+        'definitionHash' => "sha256-#{'2' * 64}",
         'parameters' => []
       }
     },
@@ -100,7 +115,7 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal 'Módulo Base', base['name']
     assert_equal 'inferior', base['category']
     assert_equal 1, base['schemaRevision']
-    assert_equal 'sha256-definition', base['definitionHash']
+    assert_equal "sha256-#{'1' * 64}", base['definitionHash']
     param = base['parameters'].first
     assert_equal 'widthMm', param['name']
     assert_equal 600, param['defaultValue']
@@ -109,6 +124,7 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal true, param['required']
     assert_equal true, param['integer']
     assert_equal 'dimension', param['category']
+    assert_equal 'dimensionColumn', param.dig('binding', 'kind')
     assert_equal '11111111-1111-1111-1111-111111111111',
                  provider.find_definition('11111111-1111-1111-1111-111111111111')['furniture_definition_id']
     assert_equal 1, provider.all_presets.length
@@ -134,6 +150,24 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal [], provider.all_definitions
     assert_equal [], provider.all_presets
     assert_equal 'remote', provider.last_source
+  end
+
+  def test_invalid_parameter_definition_retires_the_remote_catalog_with_structured_diagnostic
+    invalid = JSON.parse(JSON.generate(CONTRACT))
+    invalid['definitions'].values.first['definitionHash'] = ''
+    logger = FakeLogger.new
+    provider = Granete::SketchUpExtension::Library::RemoteCatalogProvider.new(
+      transport: FakeTransport.new({ 'status' => 200, 'body' => invalid }),
+      auth_provider: FakeAuth.new,
+      logger: logger
+    )
+
+    assert_equal [], provider.all_definitions
+    assert_equal 'error', provider.last_source
+    event, details = logger.entries.last
+    assert_equal 'catalog_parameter_definition_invalid', event
+    assert_equal 'PARAMETER_DEFINITION_INVALID', details[:code]
+    assert_match(/definitionHash\z/, details[:path])
   end
 
   def test_license_blocked_returns_empty_catalog_and_flags

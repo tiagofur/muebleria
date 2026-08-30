@@ -150,7 +150,20 @@ The v1 server projection resolves the persisted, versioned
 server-side defaults and strict required/type/range/step/options validation.
 Every rule and default participates in the definition hash and catalog pin;
 undeclared parameters fail closed. Legacy modules project their existing
-`widthMm`/`heightMm`/`depthMm` columns into the same contract.
+`widthMm`/`heightMm`/`depthMm` columns into the same contract. Those three
+names are reserved: persisted definitions cannot redefine them, and the
+published projection derives their type, default and range from the module
+columns. `sortOrder` controls authoring presentation without changing identity.
+
+A non-metadata parameter must declare a versioned authoritative consumer.
+The first supported binding, `componentQuantity`, changes composition count
+and can materialize relationship templates for every resulting occurrence;
+the resolver selects behavior from the binding, never from the parameter
+name. Parameters intentionally used only as authoring metadata must declare
+the `metadata` category and cannot carry a binding. Missing, incompatible or
+unresolvable consumers make the complete definition unavailable with
+`PARAMETER_DEFINITION_INVALID`; an occurrence snapshot that contradicts an
+evaluated binding fails with `PARAMETER_BINDING_CONFLICT`.
 
 ## 6. Furniture parameter/material update
 

@@ -194,6 +194,10 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		input.PrecisionMm = 0.01
 	}
 
+	// Apply declarative consumers before any authoritative expansion. Parameter
+	// names never select behavior here; only the versioned binding does.
+	input.Module = applyAuthoringParameterBindings(input.Module, input.EvaluatedParameters)
+
 	// 1. Dry-run the default expansion to collect the template index the
 	// snapshot must map onto (structure/module/agregado walk, same code path
 	// as the real resolve).
@@ -207,6 +211,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if input.Occurrences != nil {
 		plan.active = true
 		planOccurrences(plan, input.Occurrences, templateIndex, &structural)
+		validateBoundOccurrenceCounts(input.Module.ParameterDefinitions, input.EvaluatedParameters, input.Occurrences, &structural)
 	}
 
 	// 3. Resolve the layout with the plan (nil plan = default expansion).
@@ -231,7 +236,9 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	effectivePlacements, placementIssues := effectiveManualPlacements(boards, input.ManualPlacements, input.ManualPlacementsPresent, input.Catalog)
 	structural = append(structural, placementIssues...)
 
-	// 5. Relationship anchors must resolve inside the effective occurrence set.
+	// 5. Declarative relationship templates turn every bound quantity into
+	// manufacturing intent. Authored equivalents win by source+kind.
+	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, boards, input.Relationships)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
 
@@ -259,6 +266,97 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		ValidationStatus: validationStatusFor(manufacturing),
 		ValidationIssues: manufacturing,
 	}, nil
+}
+
+func applyAuthoringParameterBindings(module domain.Module, values map[string]any) domain.Module {
+	for _, definition := range module.ParameterDefinitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity {
+			continue
+		}
+		value, ok := values[definition.Name].(float64)
+		if !ok {
+			continue
+		}
+		quantity := int(value)
+		updated := make([]domain.ComponentInstance, 0, len(module.Components))
+		for _, instance := range module.Components {
+			if instance.ComponentID == binding.ComponentID {
+				if quantity == 0 {
+					continue
+				}
+				instance.Quantity = quantity
+			}
+			updated = append(updated, instance)
+		}
+		module.Components = updated
+	}
+	return module
+}
+
+func validateBoundOccurrenceCounts(definitions []domain.FurnitureParameterDefinition, values map[string]any, occurrences []AuthoringOccurrence, issues *[]domain.ContractIssue) {
+	counts := map[string]int{}
+	for _, occurrence := range occurrences {
+		counts[occurrence.ComponentDefinitionID]++
+	}
+	for _, definition := range definitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity {
+			continue
+		}
+		expected, ok := values[definition.Name].(float64)
+		if !ok {
+			continue
+		}
+		definitionID := "mod-" + binding.ComponentID
+		if counts[definitionID] != int(expected) {
+			*issues = append(*issues, domain.ContractIssue{
+				Code: "PARAMETER_BINDING_CONFLICT", Message: fmt.Sprintf("%s requires %d occurrences of %s", definition.Name, int(expected), definitionID),
+				Severity: domain.IssueSeverityError, Path: "furniture.components",
+				Remediation: "Send a full occurrence snapshot consistent with the evaluated parameter value.",
+				Details:     map[string]any{"parameter": definition.Name, "expectedCount": int(expected), "receivedCount": counts[definitionID], "componentDefinitionId": definitionID},
+			})
+		}
+	}
+}
+
+func materializeBoundRelationships(definitions []domain.FurnitureParameterDefinition, boards []layoutBoard, authored []AuthoringRelationship) []AuthoringRelationship {
+	result := append([]AuthoringRelationship(nil), authored...)
+	has := map[string]bool{}
+	for _, relationship := range result {
+		has[relationship.Kind+"\x00"+relationship.Source.ComponentInstanceID] = true
+	}
+	byComponent := map[string][]layoutBoard{}
+	for _, board := range boards {
+		byComponent[board.catalogComponentID] = append(byComponent[board.catalogComponentID], board)
+	}
+	for _, definition := range definitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity || binding.Relationship == nil {
+			continue
+		}
+		for index, source := range byComponent[binding.ComponentID] {
+			key := binding.Relationship.Kind + "\x00" + source.id
+			if has[key] {
+				continue
+			}
+			targets := make([]AuthoringRelationshipAnchor, 0, len(binding.Relationship.Targets))
+			for _, target := range binding.Relationship.Targets {
+				candidates := byComponent[target.ComponentID]
+				if len(candidates) == 0 {
+					continue
+				}
+				targets = append(targets, AuthoringRelationshipAnchor{ComponentInstanceID: candidates[0].id, Role: target.Role})
+			}
+			result = append(result, AuthoringRelationship{
+				RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1), Kind: binding.Relationship.Kind,
+				Source: AuthoringRelationshipAnchor{ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole}, Targets: targets,
+			})
+			has[key] = true
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool { return result[i].RelationshipID < result[j].RelationshipID })
+	return result
 }
 
 // planOccurrences validates the snapshot against the template index and

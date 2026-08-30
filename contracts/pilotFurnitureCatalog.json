@@ -447,7 +447,8 @@
           "min": 0,
           "max": 4,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "doorCount",
@@ -458,7 +459,8 @@
           "min": 1,
           "max": 2,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "doorSwing",
@@ -637,7 +639,8 @@
           "min": 2,
           "max": 4,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "drawerSlideId",
@@ -813,7 +816,8 @@
           "min": 0,
           "max": 5,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "doorCount",
@@ -824,7 +828,8 @@
           "min": 1,
           "max": 2,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "doorSwing",
@@ -1003,7 +1008,8 @@
           "min": 3,
           "max": 8,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "doorCount",
@@ -1014,7 +1020,8 @@
           "min": 2,
           "max": 2,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true
         },
         {
           "name": "doorComponentId",
