@@ -4957,5 +4957,49 @@
         "F194"
       ]
     }
+    ,
+    {
+      "id": "F197",
+      "title": "Lifecycle explícito y provisioning atómico de organizaciones (#452)",
+      "description": "Reemplaza organizations.active por un lifecycle canónico, unifica las altas de Platform, Factory y CLI en un servicio transaccional e idempotente, extiende entitlements, añade readiness, revocación organizacional y offboarding seguro.",
+      "tags": [
+        "organization-foundation",
+        "organization",
+        "security",
+        "backend-go",
+        "postgresql",
+        "openapi",
+        "web",
+        "p0"
+      ],
+      "created": "2026-08-30",
+      "acceptance": [
+        "Organization usa un status canónico con las seis fases aprobadas y active deja de ser autoridad runtime",
+        "Platform, Factory y CLI crean organizaciones únicamente mediante ProvisionOrganization con bootstrap admin explícito",
+        "Settings, entitlements, admin, catálogo, readiness, audit y receipt confirman o revierten en una sola transacción",
+        "Slug, retries y concurrencia producen resultados idempotentes o errores tipados sin duplicados",
+        "Suspensión y reactivación invalidan credenciales de la organización sin afectar otras memberships del User",
+        "Offboarding y termination usan preview versionado, blockers reales, preservan historia y nunca hard-deletean",
+        "organization_entitlements conserva maxActiveMembers y agrega la autoridad única para network, manufacturing, SketchUp y advanced audit",
+        "Generated OpenAPI, RLS directo, migrations fresh/upgrade/down, race, API, auth y UI mínima tienen pruebas ejecutables"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/452",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/verification.md",
+        "contracts/openapi/granete-api.v1.yaml"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F191",
+        "F192",
+        "F194",
+        "F196"
+      ]
+    }
   ]
 }
