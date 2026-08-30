@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"testing"
 	"math"
+	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -185,13 +185,13 @@ func TestCalcProjectBreakdown(t *testing.T) {
 				Name:          "Gabinete",
 				BaseLaborCost: 350.0,
 				BoardParts: []domain.BoardPart{
-						{
-							ID:          "part-1",
-							Description: "Techo",
-							Quantity:    1,
-							LengthMm:    800,
-							WidthMm:     600,
-							Edges: []domain.EdgeAssignment{
+					{
+						ID:          "part-1",
+						Description: "Techo",
+						Quantity:    1,
+						LengthMm:    800,
+						WidthMm:     600,
+						Edges: []domain.EdgeAssignment{
 							{Side: "L1", Enabled: false},
 							{Side: "L2", Enabled: false},
 							{Side: "W1", Enabled: false},

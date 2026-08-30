@@ -136,6 +136,22 @@ An unsupported action is absent/disabled with explanation; it is not guessed fro
 
 These belong to Granete authoritative resolve/preflight.
 
+The authoritative submission boundary for every authoring intent — parameter
+updates, move/add/remove occurrences, joinery intent, manual hardware edits
+and hardware substitution — is the versioned resolve contract
+`granete.sketchup-authoring-resolve.v1` (#477, see
+`docs/sketchup-manufacturing-contract.md` §16b): one POST endpoint carrying
+the complete authoring snapshot and returning the accepted/resolved result.
+No feature may express these intents as query parameters or a parallel
+payload shape.
+
+The v1 server projection resolves the parameter definitions it actually owns
+today (`widthMm`, `heightMm`, `depthMm`). It must reject, never echo as a
+no-op, any undeclared parameter. #483 adds the persisted/versioned typed
+`FurnitureDefinition.parameters` projection for future number/string/boolean/
+enum families; the occurrence and HardwarePlacement first slices of
+#467/#468 do not depend on it.
+
 ## 6. Furniture parameter/material update
 
 Current update contract remains valid conceptually:
@@ -143,7 +159,7 @@ Current update contract remains valid conceptually:
 ```text
 user changes parameter/material intent
 → collect complete accepted intent for the furniture
-→ authoritative full layout resolve
+→ authoritative full layout resolve (#477 resolve contract)
 → validate NativeLayout contract
 → atomic native rebuild
 → write metadata

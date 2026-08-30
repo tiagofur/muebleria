@@ -111,7 +111,7 @@ func TestCalcProjectBreakdownUsesCustomDims(t *testing.T) {
 		MarginFactor: 1.5, Status: domain.StatusDraft,
 		Items: []domain.ProjectItem{{
 			ID: "i1", ModuleID: "m1", Quantity: 1,
-			OptionChoices: map[string]string{"INTERIOR": "mat"},
+			OptionChoices:   map[string]string{"INTERIOR": "mat"},
 			MeasurePresetID: "p600",
 		}},
 	}
@@ -120,9 +120,9 @@ func TestCalcProjectBreakdownUsesCustomDims(t *testing.T) {
 	// Items y el override mutaría también la base.
 	custom.Items = []domain.ProjectItem{{
 		ID: "i1", ModuleID: "m1", Quantity: 1,
-		OptionChoices: map[string]string{"INTERIOR": "mat"},
+		OptionChoices:   map[string]string{"INTERIOR": "mat"},
 		MeasurePresetID: "p600",
-		CustomDims: &domain.ItemCustomDims{WidthMm: 900, HeightMm: 800, DepthMm: 500},
+		CustomDims:      &domain.ItemCustomDims{WidthMm: 900, HeightMm: 800, DepthMm: 500},
 	}}
 
 	baseBd, err := CalcProjectBreakdown(base, catalog)

@@ -186,6 +186,27 @@ type layoutBoard struct {
 	thicknessMm float64 // local Y
 	lengthMm    float64 // local Z
 	hardware    []domain.HardwarePlacement
+	// catalogComponentID is the catalog Component.ID behind the template
+	// (#477: occurrence↔template mapping and the normalized snapshot echo).
+	catalogComponentID string
+	// authoredTranslation overrides the resolved pose with authoring intent
+	// (#477); applied in furniture coordinates as the final expansion pass so
+	// agregado unit offsets cannot double-apply.
+	authoredTranslation *[3]float64
+}
+
+// resolveOptions carries the authoring resolve expansions (#477). The zero
+// value keeps the historical GET layout semantics byte-for-byte.
+type resolveOptions struct {
+	// plan replaces per-template copy counts/ids/poses with the validated
+	// authoring occurrence snapshot; nil = default definition expansion.
+	plan *authoringPlan
+	// manualPlacements replaces the definition's manual hardware placements
+	// with the authored complete set; nil = definition defaults.
+	manualPlacements *[]AuthoringManualPlacement
+	// templateCollector records the default expansion's template shape
+	// (dry-run support for snapshot validation).
+	templateCollector *authoringTemplateIndex
 }
 
 // ResolveFurnitureLayout resolves a module's full visual composition — every
@@ -198,8 +219,17 @@ type layoutBoard struct {
 // component. A provided choice pointing at an unknown or inactive material
 // fails loudly; a role without a choice keeps the role-palette fallback color.
 func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOverride *LayoutDims, optionChoices map[string]string) (FurnitureLayout, error) {
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dimsOverride, optionChoices, resolveOptions{})
+	return layout, err
+}
+
+// resolveFurnitureLayoutOpts is the shared resolution core: the historical
+// GET layout path (zero options) and the #477 authoring resolve (occurrence
+// plan + manual placement set). It also returns the resolved boards so the
+// authoring resolve can derive machining over server-authoritative geometry.
+func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, dimsOverride *LayoutDims, optionChoices map[string]string, opts resolveOptions) (FurnitureLayout, []layoutBoard, error) {
 	if err := ValidateModule(module); err != nil {
-		return FurnitureLayout{}, err
+		return FurnitureLayout{}, nil, err
 	}
 
 	dims := LayoutDims{WidthMm: module.WidthMm, HeightMm: module.HeightMm, DepthMm: module.DepthMm}
@@ -207,7 +237,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 		dims = *dimsOverride
 	}
 	if dims.WidthMm <= 0 || dims.HeightMm <= 0 || dims.DepthMm <= 0 {
-		return FurnitureLayout{}, fmt.Errorf(
+		return FurnitureLayout{}, nil, fmt.Errorf(
 			"el mueble %q (%s) no tiene medidas válidas para resolver el layout",
 			module.Name, module.Code,
 		)
@@ -222,9 +252,9 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 		Hardware:              []LayoutHardware{},
 	}
 
-	boards, err := resolveLayoutBoards(module, catalog, dims, optionChoices)
+	boards, err := resolveLayoutBoards(module, catalog, dims, optionChoices, opts)
 	if err != nil {
-		return FurnitureLayout{}, err
+		return FurnitureLayout{}, nil, err
 	}
 
 	for i := range boards {
@@ -235,7 +265,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 		// derived from it — local geometry + transform is the single source.
 		local, min, size, err := boardLocalPose(board)
 		if err != nil {
-			return FurnitureLayout{}, err
+			return FurnitureLayout{}, nil, err
 		}
 
 		component := LayoutComponent{
@@ -255,7 +285,7 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 			MaterialColorHex:      colorForOptionRole(board.optionRole),
 		}
 		if material, err := resolveSelectedBoard(board.optionRole, optionChoices, catalog.Materials); err != nil {
-			return FurnitureLayout{}, err
+			return FurnitureLayout{}, nil, err
 		} else if material != nil {
 			component.MaterialID = material.ID
 			component.MaterialCode = material.Code
@@ -274,6 +304,11 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 		}
 		layout.Components = append(layout.Components, component)
 
+		// #477: an authored manual placement set replaces the definition's
+		// placements; the default path keeps the historical emission.
+		if opts.manualPlacements != nil {
+			continue
+		}
 		for hi, hp := range board.hardware {
 			resolved, ok := resolveHardwareToWorld(board, hp, catalog, fmt.Sprintf("%s-hw-%d", board.id, hi))
 			if !ok {
@@ -282,14 +317,39 @@ func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOv
 			layout.Hardware = append(layout.Hardware, resolved)
 		}
 	}
-	return layout, nil
+
+	if opts.manualPlacements != nil {
+		for _, intent := range *opts.manualPlacements {
+			var host *layoutBoard
+			for i := range boards {
+				if boards[i].id == intent.HostComponentInstanceID {
+					host = &boards[i]
+					break
+				}
+			}
+			if host == nil {
+				continue // structural validation already rejected orphaned hosts
+			}
+			hp := domain.HardwarePlacement{
+				HardwareID:       intent.CatalogHardwareID,
+				AnchorFace:       intent.AnchorFace,
+				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
+			}
+			resolved, ok := resolveHardwareToWorld(host, hp, catalog, intent.HardwarePlacementID)
+			if !ok {
+				continue // cost-only hardware (no valid preview shape) renders nothing
+			}
+			layout.Hardware = append(layout.Hardware, resolved)
+		}
+	}
+	return layout, boards, nil
 }
 
 // resolveLayoutBoards walks structure + module + agregado component instances
 // (mirrors TS resolveComposedModule) and returns the resolved boards.
-func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims, optionChoices map[string]string) ([]layoutBoard, error) {
+func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims LayoutDims, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
 	if strings.TrimSpace(module.StructureID) == "" {
-		return legacyBoardStack(module, optionChoices, catalog.Materials)
+		return legacyBoardStack(module, optionChoices, catalog.Materials, opts)
 	}
 
 	structure, ok := findStructure(catalog, module.StructureID)
@@ -306,14 +366,14 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 	boards := []layoutBoard{}
 
 	structureInstances := filterInstancesForBaseMode(structure.Components, catalog, baseMode)
-	structureBoards, err := expandLayoutInstances(structureInstances, catalog, dims, "st-", b, optionChoices)
+	structureBoards, err := expandLayoutInstances(structureInstances, catalog, dims, "st-", b, optionChoices, opts)
 	if err != nil {
 		return nil, err
 	}
 	boards = append(boards, structureBoards...)
 
 	moduleInstances := filterInstancesForBaseMode(module.Components, catalog, baseMode)
-	moduleBoards, err := expandLayoutInstances(moduleInstances, catalog, dims, "mod-", b, optionChoices)
+	moduleBoards, err := expandLayoutInstances(moduleInstances, catalog, dims, "mod-", b, optionChoices, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -321,11 +381,20 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
 	for _, agrInst := range agregadoInstances {
-		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, optionChoices)
+		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, optionChoices, opts)
 		if err != nil {
 			return nil, err
 		}
 		boards = append(boards, agrBoards...)
+	}
+
+	// #477 final pass: authored translations are furniture-frame intent, so
+	// they override the resolved pose after every source of offset (agregado
+	// unit origins included) has been applied.
+	for i := range boards {
+		if t := boards[i].authoredTranslation; t != nil {
+			boards[i].x, boards[i].y, boards[i].z = t[0], t[1], t[2]
+		}
 	}
 	return boards, nil
 }
@@ -336,7 +405,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 // composed via structures. The 18 mm stacking thickness is the explicit legacy
 // fallback (contract §15) used ONLY when the part's role has no selected
 // material; a selected board drives the real effective thickness (#402).
-func legacyBoardStack(module domain.Module, optionChoices map[string]string, materials []domain.MaterialBoard) ([]layoutBoard, error) {
+func legacyBoardStack(module domain.Module, optionChoices map[string]string, materials []domain.MaterialBoard, opts resolveOptions) ([]layoutBoard, error) {
 	boards := []layoutBoard{}
 	for i, part := range module.BoardParts {
 		thicknessMm, err := effectiveThicknessMm(part.OptionRole, 18, optionChoices, materials)
@@ -362,6 +431,23 @@ func legacyBoardStack(module domain.Module, optionChoices map[string]string, mat
 			thicknessMm: thickness,
 			lengthMm:    float64(part.LengthMm),
 		})
+	}
+	if opts.plan != nil {
+		for i := range boards {
+			if copies, ok := opts.plan.templates[boards[i].defID]; ok && len(copies) == 1 {
+				boards[i].id = copies[0].instanceID
+				boards[i].catalogComponentID = ""
+				if copies[0].translation != nil {
+					t := *copies[0].translation
+					boards[i].authoredTranslation = &t
+				}
+			}
+		}
+		for i := range boards {
+			if t := boards[i].authoredTranslation; t != nil {
+				boards[i].x, boards[i].y, boards[i].z = t[0], t[1], t[2]
+			}
+		}
 	}
 	return boards, nil
 }
@@ -401,6 +487,7 @@ func expandLayoutInstances(
 	idPrefix string,
 	baseClearance int,
 	optionChoices map[string]string,
+	opts resolveOptions,
 ) ([]layoutBoard, error) {
 	boards := []layoutBoard{}
 	// #434: copy ids must be unique per component across the whole expansion —
@@ -493,7 +580,29 @@ func expandLayoutInstances(
 			placement = "custom"
 		}
 
-		for i := 0; i < inst.Quantity; i++ {
+		defID := fmt.Sprintf("%s%s", idPrefix, comp.ID)
+		if opts.templateCollector != nil {
+			opts.templateCollector.note(defID, comp.ID, placement, inst.Quantity, strings.HasPrefix(idPrefix, "agr-"))
+		}
+
+		// #477: the authoring plan replaces this entry's copy set. Templates
+		// are validated to be touched through a single definition entry, so
+		// the first entry of a planned template emits every copy and later
+		// entries of the same component are skipped defensively.
+		var planned []plannedCopy
+		copies := inst.Quantity
+		if opts.plan != nil {
+			if group, ok := opts.plan.templates[defID]; ok {
+				if opts.plan.emitted[defID] {
+					continue
+				}
+				opts.plan.emitted[defID] = true
+				planned = group
+				copies = len(group)
+			}
+		}
+
+		for i := 0; i < copies; i++ {
 			copyIndex := copyCounters[comp.ID]
 			copyCounters[comp.ID] = copyIndex + 1
 			// Spatial formulas: H = thickness (bom.ts), i = copy index.
@@ -503,7 +612,7 @@ func expandLayoutInstances(
 				PW: dims.WidthMm, PH: dims.HeightMm, PD: dims.DepthMm,
 				T: effectiveT, B: baseClearance, I: i,
 			}
-			pose := defaultPoseForPlacement(placement, float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm), t, i, inst.Quantity)
+			pose := defaultPoseForPlacement(placement, float64(dims.WidthMm), float64(dims.HeightMm), float64(dims.DepthMm), t, i, copies)
 
 			x, y, z := pose.x, pose.y, pose.z
 			if xFormula != "" {
@@ -533,23 +642,31 @@ func expandLayoutInstances(
 			rotZ := pickRotation(comp.RotateZ, inst, placement, pose.rotateZ, 2)
 
 			board := layoutBoard{
-				id:          fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, copyIndex),
-				defID:       fmt.Sprintf("%s%s", idPrefix, comp.ID),
-				name:        comp.Name,
-				placement:   placement,
-				optionRole:  optionRole,
-				x:           x,
-				y:           y,
-				z:           z,
-				rotX:        rotX,
-				rotY:        rotY,
-				rotZ:        rotZ,
-				widthMm:     widthMm,
-				thicknessMm: t,
-				lengthMm:    lengthMm,
+				id:                 fmt.Sprintf("%s%s-copy-%d", idPrefix, comp.ID, copyIndex),
+				defID:              defID,
+				name:               comp.Name,
+				placement:          placement,
+				optionRole:         optionRole,
+				x:                  x,
+				y:                  y,
+				z:                  z,
+				rotX:               rotX,
+				rotY:               rotY,
+				rotZ:               rotZ,
+				widthMm:            widthMm,
+				thicknessMm:        t,
+				lengthMm:           lengthMm,
+				catalogComponentID: comp.ID,
 			}
 			if inst.Overrides != nil {
 				board.hardware = inst.Overrides.HardwarePlacements
+			}
+			if planned != nil {
+				board.id = planned[i].instanceID
+				if planned[i].translation != nil {
+					translation := *planned[i].translation
+					board.authoredTranslation = &translation
+				}
 			}
 			boards = append(boards, board)
 		}
@@ -585,7 +702,7 @@ func pickRotation(compValue int, inst domain.ComponentInstance, placement string
 // each unit's dims and offset by the unit origin. Inner components resolve
 // their own material binding role — an agregado never leaks a hardcoded
 // thickness into its children (#402).
-func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string) ([]layoutBoard, error) {
+func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
 	agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 	if !ok {
 		return nil, fmt.Errorf("agregado not found: %s", agrInst.AgregadoID)
@@ -671,7 +788,7 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 			HeightMm: int(math.Round(unit.h)),
 			DepthMm:  int(math.Round(unit.d)),
 		}
-		unitBoards, err := expandLayoutInstances(agr.Components, catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance, optionChoices)
+		unitBoards, err := expandLayoutInstances(agr.Components, catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance, optionChoices, opts)
 		if err != nil {
 			return nil, err
 		}

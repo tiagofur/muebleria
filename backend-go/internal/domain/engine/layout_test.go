@@ -15,7 +15,7 @@ func oneDoorCabinetCatalog() (domain.Module, domain.Catalog) {
 	lateral := domain.Component{
 		ID: "comp-side", Code: "LAT", Name: "Lateral", Placement: domain.PlacementLateralIzquierdo,
 		GeometryKind: "rectangular_board", LengthMm: 0, WidthMm: 0, ThicknessMm: 18,
-		OptionRoles:  []string{"LATERAL"},
+		OptionRoles:   []string{"LATERAL"},
 		LengthFormula: "PH - 2*T", WidthFormula: "PD", Active: true,
 	}
 	right := lateral
@@ -27,7 +27,7 @@ func oneDoorCabinetCatalog() (domain.Module, domain.Catalog) {
 	floor := domain.Component{
 		ID: "comp-base", Code: "PISO", Name: "Piso", Placement: domain.PlacementBase,
 		GeometryKind: "rectangular_board", ThicknessMm: 18,
-		OptionRoles:  []string{"INTERIOR"},
+		OptionRoles:   []string{"INTERIOR"},
 		LengthFormula: "PW - 2*T", WidthFormula: "PD - T", Active: true,
 	}
 	top := floor
@@ -39,7 +39,7 @@ func oneDoorCabinetCatalog() (domain.Module, domain.Catalog) {
 	back := domain.Component{
 		ID: "comp-back", Code: "FONDO", Name: "Fondo", Placement: domain.PlacementTrasera,
 		GeometryKind: "rectangular_board", ThicknessMm: 15,
-		OptionRoles:  []string{"FONDO"},
+		OptionRoles:   []string{"FONDO"},
 		LengthFormula: "PW - 2*T", WidthFormula: "PH - 2*T", Active: true,
 	}
 
@@ -95,7 +95,7 @@ func oneDoorCabinetCatalog() (domain.Module, domain.Catalog) {
 	return module, catalog
 }
 
-func strPtr(s string) *string { return &s }
+func strPtr(s string) *string     { return &s }
 func floatPtr(f float64) *float64 { return &f }
 
 func findComponentByID(components []LayoutComponent, slot string) *LayoutComponent {
@@ -242,7 +242,7 @@ func TestResolveFurnitureLayoutAgregadoUnits(t *testing.T) {
 	drawerFront := domain.Component{
 		ID: "comp-dfront", Code: "FRENTE-CAJ", Name: "Frente Cajón", Placement: domain.PlacementFrenteCajon,
 		GeometryKind: "rectangular_board", ThicknessMm: 18,
-		OptionRoles:  []string{"FRENTE"},
+		OptionRoles:   []string{"FRENTE"},
 		LengthFormula: "PH - 4", WidthFormula: "PW - 4", Active: true,
 	}
 	agregado := domain.Agregado{

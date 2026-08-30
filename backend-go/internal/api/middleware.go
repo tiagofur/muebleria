@@ -242,12 +242,14 @@ func serveAuthenticatedRequest(
 		}
 	}
 
-	// Extension tokens are read-only: a long-lived SketchUp session token
-	// must not be able to mutate workshop data even if leaked. Refresh
-	// stays open so the extension can renew before expiry.
+	// Extension tokens are read-only by default: a long-lived SketchUp
+	// session token must not be able to mutate workshop data even if
+	// leaked. Each POST path below is an EXPLICIT capability decision with
+	// its owning issue — never "POST happens to be safe" reasoning (#477
+	// coordinates this capability model with #460 session hardening).
 	if claims.Client == auth.ExtensionClient &&
 		r.Method != http.MethodGet &&
-		!(r.Method == http.MethodPost && r.URL.Path == "/api/auth/refresh") {
+		!(r.Method == http.MethodPost && extensionTokenMayPost(r.URL.Path)) {
 		respondWithError(w, http.StatusForbidden, "el token de la extensión es de solo lectura")
 		return
 	}
@@ -406,4 +408,24 @@ func clientIP(r *http.Request) string {
 		return strings.TrimSpace(r.RemoteAddr)
 	}
 	return strings.TrimSpace(host)
+}
+
+// extensionTokenMayPost is the explicit POST capability allowlist for
+// long-lived SketchUp extension tokens. Adding an entry is a deliberate
+// capability grant that must cite its owning issue; everything else stays
+// read-only for those tokens.
+var extensionTokenMayPostPaths = map[string]struct{}{
+	// Renew the session before expiry (existing behavior).
+	"/api/auth/refresh": {},
+	// #477 rich authoring resolve: semantic authoring intent is a structured
+	// body, so it cannot ride the query string (the negative proof forbids
+	// ?shelf.../?hinge... keys). The resolve is stateless and creates no
+	// business records; it still passes the same auth/license gates as every
+	// furniture endpoint. Full session/capability hardening is #460's scope.
+	"/api/furniture/authoring/resolve": {},
+}
+
+func extensionTokenMayPost(path string) bool {
+	_, ok := extensionTokenMayPostPaths[path]
+	return ok
 }

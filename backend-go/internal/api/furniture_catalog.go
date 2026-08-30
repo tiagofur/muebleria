@@ -432,13 +432,18 @@ func categoryPathNames(categoryID string, byID map[string]domain.ModuleCategory)
 // projected categories, definitions and presets, used both as the contract
 // revisionId and as the HTTP ETag so clients cache per catalog content.
 func workshopCatalogRevisionID(c workshopFurnitureCatalog) string {
+	return workshopCatalogRevisionIDWithRules(c, engine.AuthoringIndustrialRulesRevision())
+}
+
+func workshopCatalogRevisionIDWithRules(c workshopFurnitureCatalog, industrialRulesRevision string) string {
 	payload := struct {
 		Categories         []workshopFurnitureCategory            `json:"categories"`
 		MaterialCategories []workshopMaterialCategory             `json:"materialCategories"`
 		Definitions        map[string]workshopFurnitureDefinition `json:"definitions"`
 		Presets            []workshopFurniturePreset              `json:"presets"`
 		Materials          []workshopMaterial                     `json:"materials"`
-	}{c.Categories, c.MaterialCategories, c.Definitions, c.Presets, c.Materials}
+		IndustrialRules    string                                 `json:"industrialRulesRevision"`
+	}{c.Categories, c.MaterialCategories, c.Definitions, c.Presets, c.Materials, industrialRulesRevision}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		// Marshal of these plain structs cannot fail in practice; fall back

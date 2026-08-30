@@ -433,6 +433,11 @@ Codes conceptuales mínimos:
 - `MACHINE_CAPABILITY_UNSUPPORTED`;
 - `IDEMPOTENCY_CONFLICT`.
 
+`Module` no publica hoy un lifecycle `active/inactive`: una definición es
+resoluble sólo si está presente en el catálogo pineado; si fue retirada o no
+está publicada, el resolve devuelve `CATALOG_REFERENCE_MISSING`. El contrato no
+expone un código `CATALOG_DEFINITION_INACTIVE` imposible de producir.
+
 También se requieren codes explícitos para `SOURCE_REVISION_CONFLICT`,
 `ENTITY_TOMBSTONE_INVALID`, `STABLE_ID_REUSE`, `SCHEMA_ID_MISMATCH` y
 `SCHEMA_MIGRATION_UNSAFE`.
@@ -757,6 +762,177 @@ ilustrativo y no congela el schema ejecutable final.
 - soportar todas las versions de SketchUp o machines;
 - sustituir `ProductionRelease`;
 - implementar producción como parte de este documento.
+
+## 16b. Authoring resolve transport v1 (#477)
+
+**Estado:** implementado (endpoint Go + contrato TS + transporte Ruby + fixture
+compartido `contracts/sketchupAuthoringResolve.contract.json`).
+**Schema:** `granete.sketchup-authoring-resolve.v1`
+**Endpoint:** `POST /api/furniture/authoring/resolve`
+
+Boundary stateless de transporte/resolve para intención semántica de autoría
+más allá de `widthMm/heightMm/depthMm` + materiales. Reusa la semántica del
+envelope #346 (triple de schema, `messageId`/`idempotencyKey`, units/frame,
+`PartRelationshipIntent`, `HardwarePlacementIntent`, `ContractIssue`) — no es
+un modelo paralelo SketchUp-only. Cuando #384 exista, este mismo contrato
+semántico se conecta detrás del comando de working-copy de Design.
+
+### Request
+
+```text
+schemaId / schemaName / schemaVersion      (triple exacta, mismatch falla cerrado)
+messageId, idempotencyKey, sentAt          (correlación determinista)
+source { client, clientVersion, host, hostVersion }
+units { length: mm, angle: deg, precisionMm ∈ (0,1] }
+coordinateSystem { handedness: right, upAxis: z, projectFrameId }
+furniture {
+  furnitureDefinitionId                    (definición autoritativa)
+  catalogRevision                          OBLIGATORIO (revisionId de GET /api/furniture/definitions;
+                                           mismatch → CATALOG_REVISION_STALE; nunca hay latest implícito)
+  parameters { widthMm, heightMm, depthMm } (proyección paramétrica autoritativa disponible en Go v1;
+                                           claves fuera de la definición proyectada → PARAMETER_INVALID;
+                                           el catálogo tipado universal se sigue en #483)
+  materialChoices { ROLE → materialId }
+  components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
+  relationships?                           (PartRelationshipIntent, incl. parameters)
+  hardwarePlacements?                      (set completo manual; ausente = defaults del definition; [] = ninguno;
+                                           SIN rotationDeg/handedness en v1 — un campo que no mueve la
+                                           resolución no viaja: #468 los agrega CON semántica de resolución)
+}
+```
+
+Reproducibilidad: el handler hace UNA sola lectura de catálogo que alimenta
+la selección de la definición, el check de revisión Y el resolve (una lectura
+separada de definición podría validar catálogo B y resolver definición A). El
+pin incluye también las tablas versionadas de joinery/machining que participan
+en el resultado; la respuesta echa `catalogRevision` (la revisión pineada usada).
+Arrays estrictos: `translationMm` (exactamente 3) y `offsetMm` (exactamente
+2) se decodifican como slices y validan longitud exacta — los arrays fijos
+de Go truncarían/extenderían en silencio.
+
+Reglas de ocurrencias:
+
+- cada ocurrencia mapea por `componentDefinitionId` al template de la
+  expansión del definition (`st-`/`mod-`/`agr-…`); el server valida
+  `catalogComponentId` cuando viene;
+- `componentInstanceId` es identidad de ocurrencia client-stable dentro del
+  resolve — dos entrepaños comparten `componentDefinitionId` y conservan
+  identidad/relationships/machining propios;
+- `transform` opcional es intención de autoría: sólo translación en frame
+  assembly; ausente = pose default resuelta por el server (la geometría no
+  movida siempre se re-resuelve, nunca se re-envía stale);
+- agregar/quitar ocurrencias v1 sólo para internos movibles (placement
+  `interno`, entrada única del definition); agregar comparte la definición
+  reutilizable y exige IDs nuevos; los templates estructurales/agregados
+  mantienen el count del definition (`OCCURRENCE_COUNT_UNSUPPORTED`/
+  `SNAPSHOT_INCOMPLETE` en caso contrario);
+- un template referenciado por MÚLTIPLES entradas del definition (que
+  podrían llevar fórmulas/overrides distintos por copia) se rechaza
+  siempre: agruparlo honraría sólo la primera entrada en silencio;
+- TODOS los anchors de una relationship deben resolver: aceptar porque al
+  menos un target existe dejaría caer el resto inválido en silencio
+  (`RELATIONSHIP_ORPHANED`);
+- el orden del array no decide nada: sin transform se asignan slots default
+  por ID ordenado (determinista e insensible al orden).
+
+### Response
+
+```text
+status accepted|rejected + correlation (responseMessageId = "resolve-" + messageId)
+resolveContract (capability marker: misma schemaId)
+normalizedSnapshot  (receipt stateless: estado authoring efectivo completo —
+                     parámetros resueltos, ocurrencias con identidad server,
+                     relationships, placements; es la única base del próximo request)
+resolved {
+  layout            (FurnitureLayout #415 completo con transformContract, identidad exacta de ocurrencias
+                     y proyección visual de materiales: image/texture/tile/PBR/grain cuando existen)
+  machining { operations (provenance + holes), derivedHardwarePlacements, manufacturingFingerprint }
+  preflight { status, issues, preflightContract → granete.manufacturing-preflight.v1 (#347) }
+}
+issues [] ContractIssue (códigos estables; nunca parsear mensajes)
+```
+
+- `machining` es el puerto Go del resolver #356 sobre la geometría resuelta
+  (server-authoritative): mover un entrepaño mueve sólo el machining
+  dependiente; mover una bisagra no toca el machining de entrepaños; el
+  pilot de herraje manual sigue el perfil técnico de la definición
+  seleccionada (reemplazo cambia diámetro/BOM);
+- `manufacturingFingerprint` (`sha256-` + 64 hex sobre UTF-8 del JSON canónico)
+  es un change/check fingerprint determinista —no una identidad de release— y cubre la identidad
+  manufacturera COMPLETA — tableros (identidad de ocurrencia + dimensiones +
+  material seleccionado), placements manuales, placements derivados y
+  operaciones — de modo que cambiar una manija, sustituir herrajes con el
+  mismo patrón de taladro o cambiar un material mueve el fingerprint. Es el
+  ancla de paridad TS↔Go: el test de contract TS lo recomputa desde el wire
+  (`authoringResolveFingerprint`) y debe ser igual al generado por Go;
+- `preflight` lleva `scope: authoring-resolve-subset` y estados
+  `clear|blocked`: es la validación del subset del resolve y NUNCA el
+  veredicto de fabricación del modelo #347 — ese modelo sólo se enlaza vía
+  `preflightContract` (link para obtener el resultado autoritativo);
+- `normalizedSnapshot.hardwarePlacements` es el set semántico/manual completo.
+  `layout.hardware` es sólo su proyección visual: un herraje activo sin asset o
+  preview válido permanece en snapshot, fingerprint y machining, pero puede
+  omitirse correctamente del layout sin invalidar el resolve;
+- HTTP: 200 accepted; 400 schema/malformed/query-params/oversized; 405 con
+  envelope `METHOD_NOT_ALLOWED`; 415 con `CONTENT_TYPE_UNSUPPORTED`; 422
+  rechazo semántico. Rejected nunca incluye `resolved` (sin resultado
+  parcial aceptado). Los rechazos 405/415 ocurren antes de leer el body, por
+  lo que su correlación queda vacía y el cliente conserva el código tipado.
+
+### Reglas de transporte
+
+- POST explícito: la intención de autoría es un body estructurado. **Cualquier
+  query parameter presente falla cerrado** (`QUERY_PARAMETERS_UNSUPPORTED`) —
+  la proliferación `?shelf2Z`/`?hinge1Offset` no puede volver a crecer;
+- límite explícito de payload (2 MiB), `Content-Type: application/json`,
+  `sentAt` RFC3339, límites de strings/colecciones y decodificación estricta
+  (campos desconocidos o JSON top-level adicional → `REQUEST_INVALID`), sin
+  guessing de schema;
+- auth: capability POST explícita para tokens de extensión (#460): allowlist
+  que nombra este endpoint; el resto sigue read-only. License y scope org
+  como el resto de la familia furniture;
+- stateless: retries idénticos → respuestas byte-idénticas; no crea registros
+  de negocio ni consume receipts de idempotencia; sin timestamps volátiles en
+  la respuesta (los campos revision/fingerprint que el contexto dueño —#384—
+  todavía no posee no se inventan);
+- logs sin payload de autoría ni credenciales.
+
+### Fixture compartido
+
+`contracts/sketchupAuthoringResolve.schema.json` es el schema JSON canónico y
+machine-readable de request, accepted/rejected response, issues y uniones
+discriminadas. `contracts/sketchupAuthoringResolve.contract.json` es el golden generado por el
+resolver Go (regenerar con `UPDATE_AUTHORING_RESOLVE_GOLDEN=1`) con los
+escenarios canónicos 1-8 de #477 + negative proofs (query param, revisión de
+catálogo ausente, parámetro ad-hoc en body, ocurrencia duplicada,
+translationMm de longitud incorrecta, target huérfano entre válidos) y la
+paridad adicional de UTF-8/precisión 0.25, NativeLayout con material
+image/texture/tile/PBR/grain y herraje manual semántico sin preview visual. La
+sección `joinery` con la geometría resuelta, los sistemas de unión y los
+`machiningProfiles` (tabla técnica versionada
+`granete.machining-profile.v1` por código de herraje — NUNCA deducida de
+campos visuales como PreviewShape/PreviewDiameter). TS, Go y Ruby lo consumen:
+las tablas compiladas de cada runtime se afirman iguales al fixture por sus
+tests de paridad, así que ningún payload ni regla paralela puede divergir.
+
+El parser Ruby es fail-closed sobre TODO lo que habilita host mutation: triple de schema
+exacta (id+name+version), correlación completa (sólo los rechazos
+transport-level explícitos que ocurren antes de leer el body admiten
+correlación vacía), `catalogRevision`
+no-vacía en accepted, códigos de issue del set cerrado, severidades
+conocidas, exclusividad real de provenance (una variante y sólo sus claves),
+formato exacto del fingerprint (`sha256-[0-9a-f]{64}`), preflight subset exacto,
+snapshot normalizado validado en profundidad (identidad, relationships,
+transforms de 3 finitos, offsets de 2 finitos, sin duplicados ni campos fuera
+del contrato v1) y coherencia snapshot↔layout. El transport pasa el request
+esperado al parser, que exige correlación exacta antes de devolver un layout.
+
+El v1 NO acepta parámetros arbitrarios que el modelo Go no pueda resolver:
+eso sería eco de intención sin efecto autoritativo. La proyección actual
+incluye dimensiones; #483 agrega el catálogo persistido/versionado de
+`FurnitureDefinition.parameters` para familias futuras number/string/boolean/enum.
+Los primeros slices de #467/#468 se expresan mediante occurrences,
+relationships y HardwarePlacement y no dependen de ese follow-up.
 
 ## References
 

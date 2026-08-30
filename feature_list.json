@@ -4956,6 +4956,57 @@
         "F192",
         "F194"
       ]
+    },
+    {
+      "id": "F195",
+      "title": "Contrato versionado de resolve de autoría rica para mutaciones semánticas SketchUp (#477)",
+      "description": "Boundary versionada y stateless de transporte/resolve para intención semántica de autoría más allá de widthMm/heightMm/depthMm + materiales: POST /api/furniture/authoring/resolve con schema granete.sketchup-authoring-resolve.v1 (reusa la semántica del envelope #346: triple de schema, messageId/idempotencyKey, units/frame, PartRelationshipIntent, HardwarePlacementIntent, ContractIssue). El request lleva snapshot completo de ocurrencias (por componentDefinitionId template), relationships y placements manuales; el server resuelve layout #415 con identidad exacta de ocurrencias, machining con provenance (puerto Go del resolver #356 con paridad de fingerprint), preflight estructurado (subset con link al modelo #347), snapshot normalizado como receipt stateless y códigos de error estables. Sin persistencia de negocio (nada antes de #384/Gate A), sin query params (negative proof), allowlist POST transitoria para tokens de extensión coordinada con #460 (no sustituye capability dentro del token), retries deterministas. Schema canónico contracts/sketchupAuthoringResolve.schema.json + fixture de escenarios contracts/sketchupAuthoringResolve.contract.json consumidos por TS/Go/Ruby con validación runtime fail-closed.",
+      "tags": [
+        "sketchup-extension",
+        "ruby",
+        "backend",
+        "domain",
+        "authoring",
+        "contract",
+        "p0"
+      ],
+      "created": "2026-08-29",
+      "acceptance": [
+        "#467/#468 pueden expresar sus primeros slices sin claves ad-hoc: mover/agregar/quitar entrepaño, mover/reemplazar bisagra viajan en components/relationships/hardwarePlacements del body versionado",
+        "El resolve con sólo parámetros/materiales es idéntico al endpoint GET de layout (paridad de contract a nivel API en Go + fixture escenario 01)",
+        "componentInstanceId/hardwarePlacementId del request sobreviven request→resolve→parseo Ruby (fixture + tests de identidad en las tres capas)",
+        "Ruby jamás es autoridad de joints/drilling: el boundary test prohíbe el vocabulario de resolución manufacturera en runtime y el parser sólo consume",
+        "La respuesta basta para rebuild nativo atómico sin inferencia de orientación/espesor (layout #415 con localTransform dentro del envelope)",
+        "Errores/códigos estables (SCHEMA_ID_MISMATCH, RELATIONSHIP_ORPHANED, QUERY_PARAMETERS_UNSUPPORTED, DRILLING_CONFLICT, …); el comportamiento nunca depende de substrings de mensajes localizados",
+        "Retries stateless son deterministas (byte-identidad probada) y no crean registros de negocio ni consumen receipts de idempotencia",
+        "Schema JSON canónico + fixture compartido consumidos por TS/Go/Ruby: TS valida el wire y recomputa deriveRelationshipMachining + manufacturingFingerprint SHA-256 sobre el mismo escenario que Go",
+        "Auth transitoria: allowlist POST por client/path nombra el endpoint para tokens de extensión; capability efectiva dentro del token y uso comercial permanecen bloqueados por #460",
+        "Mismatch de schema/versión falla antes de mutar host (400 con envelope y código estable)",
+        "Negative proofs: query params de autoría rechazados (QUERY_PARAMETERS_UNSUPPORTED), parámetros ad-hoc en body rechazados (PARAMETER_INVALID), ocurrencia duplicada rechazada, snapshot incompleto rechazado, catálogo stale rechazado sin latest implícito"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/477",
+        "docs/sketchup-manufacturing-contract.md",
+        "docs/architecture/sketchup-authoring-interaction-contract.md",
+        "docs/sketchup-excellence-execution-plan.md",
+        "contracts/sketchupAuthoringResolve.schema.json",
+        "contracts/sketchupAuthoringResolve.contract.json",
+        "progress/review_F195.md"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F161",
+        "F162",
+        "F163",
+        "F186"
+      ],
+      "review_notes": [
+        "PR #481 r1: la revision pidio correcciones (reproducibilidad del catalogo pineado, contratos paralelos TS/Go/Ruby, preflight subset sin claim del modelo #347, fingerprint de manufactura real, reglas tecnicas versionadas por codigo, aceptaciones parciales, rotation/handedness aparentes, parser Ruby fail-closed y TestUp real). Corregidas en r2 con evidencia de host.",
+        "PR #481 r2: la re-revision encontro TOCTOU definition/catalog, falta de schema ejecutable y response validator TS, parser Ruby aun fail-open, precision 0.25/UTF-8 divergentes, reglas industriales fuera del pin, claims demasiado amplios de parametros y gaps de transporte. Corregidos en r3: un snapshot autoritativo, schema JSON + validators estrictos, SHA-256, rule pin, TestUp corrupt-envelope y alcance parametrico honesto con follow-up #483. F195 permanece in_progress hasta aprobacion independiente.",
+        "PR #481 r5: revisión independiente APPROVED en aa812ca0 sobre 1d1c90cb; init completo, schema/fixture cross-runtime, router real, UTF-8 + precisionMm=0.25, Ruby fail-closed, TestUp 5/5/50, CI remota y readback verdes.",
+        "PR #481 head 7703f0e8: re-review encontró schema incompleto para campos material visual/PBR del NativeLayout, coherencia Ruby demasiado estricta para hardware manual semántico sin preview y pérdida de códigos tipados en 405/415. F195 vuelve a in_progress hasta corrección y nueva revisión independiente.",
+        "PR #481 r6: los gaps de la re-review de 7703f0e8 quedaron corregidos en 8433cbdf: NativeLayout visual/PBR alineado Go→Schema/Ajv→TS→Ruby, hardware manual sin preview preservado semánticamente como proyección visual subset y 405/415 tipados en Ruby. TestUp oficial 6/6/58, CI remota verde y nueva revisión independiente APPROVED en 21fb41a8 sobre 051512f3."
+      ]
     }
   ]
 }
