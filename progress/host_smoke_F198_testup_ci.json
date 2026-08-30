@@ -9,19 +9,19 @@
     "ruby_version": "3.2.2",
     "ruby_patchlevel": 53,
     "ruby_platform": "arm64-darwin",
-    "time": "2026-08-30T23:34:00Z",
+    "time": "2026-08-30T23:53:03Z",
     "options": {
       "io": "TestUp::Console",
       "filter": " /^(Granete::SketchUpExtension::TC_AuthoringResolveSmoke#.+)$/",
       "verbose": true,
       "seed": 483,
       "testup_ci": true,
-      "testup_ci_out": "/tmp/host_smoke_F198_final-1788132830.json",
-      "args": "\"-n /^(Granete::SketchUpExtension::TC_AuthoringResolveSmoke#.+)$/\" --verbose --seed 483 --testup_ci --testup_ci_out=/tmp/host_smoke_F198_final-1788132830.json"
+      "testup_ci_out": "/tmp/host_smoke_F198_final-1788133968.json",
+      "args": "\"-n /^(Granete::SketchUpExtension::TC_AuthoringResolveSmoke#.+)$/\" --verbose --seed 483 --testup_ci --testup_ci_out=/tmp/host_smoke_F198_final-1788133968.json"
     },
     "verification": {
       "sketchup_version": "26.2.242",
-      "source_commit": "2da1360f9526dac4eb82077051462aa207340859",
+      "source_commit": "b114d40b325a21be83f30dcde8ec87e4a321389c",
       "working_tree_dirty_before_evidence": false,
       "rbz_sha256": "b11e84dbffd57fac9ca47955e55bb559c04a919f8d81ad376aff11de11ce5bd8",
       "installed_tree_matches_source": true,
@@ -42,9 +42,9 @@
     "passes": 12
   },
   "timings": {
-    "total_seconds": 2.8133580000139773,
-    "runs_per_second": 4.265365445826795,
-    "assertions_per_second": 75.71023666342562
+    "total_seconds": 2.527957999962382,
+    "runs_per_second": 4.746914307982399,
+    "assertions_per_second": 84.25772896668758
   },
   "fails": [],
   "skips": [],
@@ -54,84 +54,84 @@
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_typed_shelf_quantity_and_defaults_drive_native_host_truth",
       "assertions": 9,
-      "time": 0.2532710000523366
+      "time": 0.2235490000457503
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_typed_parameter_rejections_start_no_transaction_or_host_mutation",
       "assertions": 45,
-      "time": 0.11997999995946884
+      "time": 0.10456299997167662
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_cost_only_manual_hardware_remains_semantic_and_allows_atomic_rebuild",
       "assertions": 8,
-      "time": 0.16505299997515976
+      "time": 0.14240900002187118
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_string_max_length_boundary_reaches_native_metadata_without_coercion",
       "assertions": 5,
-      "time": 0.18408400000771508
+      "time": 0.15528499998617917
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_component_condition_true_includes_back_panel_in_native_host_truth",
       "assertions": 10,
-      "time": 0.17736999999033287
+      "time": 0.16174700000556186
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_unknown_schema_version_never_mutates_the_host",
       "assertions": 8,
-      "time": 0.126135999977123
+      "time": 0.1152220000512898
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_invalid_definition_corpus_starts_no_transaction_or_host_mutation",
       "assertions": 72,
-      "time": 0.12369400000898167
+      "time": 0.10628000000724569
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_component_condition_false_excludes_back_panel_in_native_host_truth",
       "assertions": 10,
-      "time": 0.19082600000547245
+      "time": 0.1548019999754615
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_malformed_envelope_never_mutates_the_host",
       "assertions": 6,
-      "time": 0.12640800001099706
+      "time": 0.11230400000931695
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_rejected_orphan_anchor_never_mutates_the_host",
       "assertions": 8,
-      "time": 0.13449899997795
+      "time": 0.11871499998960644
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_accepted_response_parses_and_drives_one_atomic_native_operation",
       "assertions": 26,
-      "time": 0.1890830000047572
+      "time": 0.24204899999313056
     },
     {
       "type": "passed",
       "class": "Granete::SketchUpExtension::TC_AuthoringResolveSmoke",
       "name": "test_incoherent_snapshot_never_mutates_the_host",
       "assertions": 6,
-      "time": 0.1373429999803193
+      "time": 0.113599999982398
     }
   ]
 }
