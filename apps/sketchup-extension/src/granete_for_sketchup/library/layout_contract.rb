@@ -102,6 +102,18 @@ module Granete
           @material['materialTextureTileLengthMm']
         end
 
+        def material_roughness
+          @material['materialRoughness']
+        end
+
+        def material_metalness
+          @material['materialMetalness']
+        end
+
+        def material_clearcoat
+          @material['materialClearcoat']
+        end
+
         def material_grain
           @material['materialGrain']
         end
@@ -191,6 +203,16 @@ module Granete
           return nil if raw.nil?
 
           positive_number(raw, label)
+        end
+
+        def optional_finite_number(raw, label)
+          return nil if raw.nil?
+
+          unless raw.is_a?(Numeric) && Float(raw).finite?
+            raise LayoutContract::ContractError, "#{label} debe ser un número finito"
+          end
+
+          Float(raw)
         end
 
         def optional_boolean(raw, label)
@@ -426,6 +448,9 @@ module Granete
           material['materialTextureTileLengthMm'] = ContractCoercions.optional_positive_number(
             raw['materialTextureTileLengthMm'], "materialTextureTileLengthMm de #{id}"
           )
+          %w[materialRoughness materialMetalness materialClearcoat].each do |key|
+            material[key] = ContractCoercions.optional_finite_number(raw[key], "#{key} de #{id}")
+          end
           material['materialGrain'] = ContractCoercions.optional_boolean(raw['materialGrain'],
                                                                          "materialGrain de #{id}")
           material

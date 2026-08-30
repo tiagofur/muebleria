@@ -844,7 +844,8 @@ normalizedSnapshot  (receipt stateless: estado authoring efectivo completo —
                      parámetros resueltos, ocurrencias con identidad server,
                      relationships, placements; es la única base del próximo request)
 resolved {
-  layout            (FurnitureLayout #415 con transformContract; identidad exacta de ocurrencias)
+  layout            (FurnitureLayout #415 completo con transformContract, identidad exacta de ocurrencias
+                     y proyección visual de materiales: image/texture/tile/PBR/grain cuando existen)
   machining { operations (provenance + holes), derivedHardwarePlacements, manufacturingFingerprint }
   preflight { status, issues, preflightContract → granete.manufacturing-preflight.v1 (#347) }
 }
@@ -868,10 +869,15 @@ issues [] ContractIssue (códigos estables; nunca parsear mensajes)
   `clear|blocked`: es la validación del subset del resolve y NUNCA el
   veredicto de fabricación del modelo #347 — ese modelo sólo se enlaza vía
   `preflightContract` (link para obtener el resultado autoritativo);
+- `normalizedSnapshot.hardwarePlacements` es el set semántico/manual completo.
+  `layout.hardware` es sólo su proyección visual: un herraje activo sin asset o
+  preview válido permanece en snapshot, fingerprint y machining, pero puede
+  omitirse correctamente del layout sin invalidar el resolve;
 - HTTP: 200 accepted; 400 schema/malformed/query-params/oversized; 405 con
-  envelope `METHOD_NOT_ALLOWED`; 422
+  envelope `METHOD_NOT_ALLOWED`; 415 con `CONTENT_TYPE_UNSUPPORTED`; 422
   rechazo semántico. Rejected nunca incluye `resolved` (sin resultado
-  parcial aceptado).
+  parcial aceptado). Los rechazos 405/415 ocurren antes de leer el body, por
+  lo que su correlación queda vacía y el cliente conserva el código tipado.
 
 ### Reglas de transporte
 
@@ -900,6 +906,8 @@ resolver Go (regenerar con `UPDATE_AUTHORING_RESOLVE_GOLDEN=1`) con los
 escenarios canónicos 1-8 de #477 + negative proofs (query param, revisión de
 catálogo ausente, parámetro ad-hoc en body, ocurrencia duplicada,
 translationMm de longitud incorrecta, target huérfano entre válidos) y la
+paridad adicional de UTF-8/precisión 0.25, NativeLayout con material
+image/texture/tile/PBR/grain y herraje manual semántico sin preview visual. La
 sección `joinery` con la geometría resuelta, los sistemas de unión y los
 `machiningProfiles` (tabla técnica versionada
 `granete.machining-profile.v1` por código de herraje — NUNCA deducida de
@@ -908,8 +916,9 @@ las tablas compiladas de cada runtime se afirman iguales al fixture por sus
 tests de paridad, así que ningún payload ni regla paralela puede divergir.
 
 El parser Ruby es fail-closed sobre TODO lo que habilita host mutation: triple de schema
-exacta (id+name+version), correlación completa (el único caso sin correlación
-es el rechazo transport-level que nunca leyó el body), `catalogRevision`
+exacta (id+name+version), correlación completa (sólo los rechazos
+transport-level explícitos que ocurren antes de leer el body admiten
+correlación vacía), `catalogRevision`
 no-vacía en accepted, códigos de issue del set cerrado, severidades
 conocidas, exclusividad real de provenance (una variante y sólo sus claves),
 formato exacto del fingerprint (`sha256-[0-9a-f]{64}`), preflight subset exacto,

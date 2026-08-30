@@ -22,6 +22,7 @@ import {
   MANUFACTURING_PREFLIGHT_CONTRACT,
   SKETCHUP_AUTHORING_RESOLVE_SCHEMA_ID,
   authoringResolveFingerprint,
+  parseAuthoringResolveResponse,
   validateAuthoringResolveRequest,
 } from './sketchupAuthoringResolve';
 import type {
@@ -175,6 +176,8 @@ describe('#477 shared authoring resolve contract fixture', () => {
       '07-orphan-anchor-rejection',
       '08-unknown-schema-version',
       '10-unicode-quarter-step',
+      '11-material-pbr-roundtrip',
+      '12-cost-only-manual-hardware',
       'neg-query-parameter',
       'neg-adhoc-body-parameter',
       'neg-duplicate-occurrence-id',
@@ -203,6 +206,37 @@ describe('#477 shared authoring resolve contract fixture', () => {
       Math.round(shelf!.transform!.translationMm[2] / 0.25),
     );
     expect(scenario.response.resolved!.machining.manufacturingFingerprint).toMatch(/^sha256-[0-9a-f]{64}$/u);
+  });
+
+  test('full material projection and cost-only hardware survive the runtime contract', () => {
+    const material = fixture.scenarios.find((entry) => entry.id === '11-material-pbr-roundtrip')!;
+    const materialResponse = parseAuthoringResolveResponse(material.response, material.request);
+    expect(materialResponse.status).toBe('accepted');
+    if (materialResponse.status !== 'accepted') throw new Error('material scenario must be accepted');
+    const textured = materialResponse.resolved.layout.components.find(
+      (component) => component.materialTextureUrl === '/api/media/materials/roble-claro-texture.webp',
+    );
+    expect(textured).toMatchObject({
+      materialImageUrl: '/api/media/materials/roble-claro.webp',
+      materialTextureTileWidthMm: 600,
+      materialTextureTileLengthMm: 1200,
+      materialRoughness: 0.42,
+      materialMetalness: 0.08,
+      materialClearcoat: 0.15,
+      materialGrain: true,
+    });
+
+    const costOnly = fixture.scenarios.find((entry) => entry.id === '12-cost-only-manual-hardware')!;
+    const costOnlyResponse = parseAuthoringResolveResponse(costOnly.response, costOnly.request);
+    expect(costOnlyResponse.status).toBe('accepted');
+    if (costOnlyResponse.status !== 'accepted') throw new Error('cost-only scenario must be accepted');
+    expect(costOnlyResponse.normalizedSnapshot.hardwarePlacements).toContainEqual(
+      expect.objectContaining({ hardwarePlacementId: 'hp-cost-only-01', catalogHardwareId: 'hw-minifix' }),
+    );
+    expect(costOnlyResponse.resolved.layout.hardware).not.toContainEqual(
+      expect.objectContaining({ placementId: 'hp-cost-only-01' }),
+    );
+    expect(costOnlyResponse.resolved.machining.manufacturingFingerprint).toMatch(/^sha256-[0-9a-f]{64}$/u);
   });
 
   test('every response echoes the capability marker before any host mutation', () => {

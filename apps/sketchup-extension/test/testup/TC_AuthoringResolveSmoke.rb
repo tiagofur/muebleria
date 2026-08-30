@@ -106,6 +106,25 @@ module Granete
         assert_equal 0, @apply_calls
       end
 
+      def test_cost_only_manual_hardware_remains_semantic_and_allows_atomic_rebuild
+        result = Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          scenario_response('12-cost-only-manual-hardware'),
+          expected_request: scenario_request('12-cost-only-manual-hardware')
+        )
+
+        assert result.accepted?
+        semantic_ids = result.normalized_snapshot['hardwarePlacements'].map do |placement|
+          placement['hardwarePlacementId']
+        end
+        assert_equal ['hp-cost-only-01'], semantic_ids
+        refute_includes result.layout.hardware.map(&:placement_id), 'hp-cost-only-01'
+
+        outcome = apply(result)
+        assert outcome['success'], "insert failed: #{outcome['error']}"
+        assert_equal 1, @apply_calls
+        refute_empty granete_furniture_instances
+      end
+
       def test_malformed_envelope_never_mutates_the_host
         before = snapshot_host_state
         assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do

@@ -90,4 +90,33 @@ describe('sketchupAuthoringResolve.schema.json', () => {
     record(rejected).normalizedSnapshot = {};
     expect(rejectedValidator!(rejected)).toBe(false);
   });
+
+  test('pins accepted correlation, rejected issues, hole bounds, and full material projection', () => {
+    const scenarios = record(fixture).scenarios as unknown[];
+    const material = record(scenarios.find((value) => record(value).id === '11-material-pbr-roundtrip'));
+    const accepted = structuredClone(material.response);
+    expect(acceptedValidator!(accepted)).toBe(true);
+    for (const key of ['responseMessageId', 'inReplyToMessageId', 'idempotencyKey', 'catalogRevision']) {
+      const missingCorrelation = structuredClone(accepted);
+      record(missingCorrelation)[key] = '';
+      expect(acceptedValidator!(missingCorrelation), key).toBe(false);
+    }
+
+    const rejected = structuredClone(record(scenarios.find((value) => record(record(value).response).status === 'rejected')).response);
+    record(rejected).issues = [];
+    expect(rejectedValidator!(rejected)).toBe(false);
+
+    const machining = record(record(record(accepted).resolved).machining);
+    const operations = machining.operations as unknown[];
+    if (operations.length === 0) throw new Error('fixture must contain a machining operation');
+    const holes = record(operations[0]).holes as unknown[];
+    const invalidHole = structuredClone(accepted);
+    const invalidOperations = record(record(record(invalidHole).resolved).machining).operations as unknown[];
+    const invalidHoles = record(invalidOperations[0]).holes as unknown[];
+    record(invalidHoles[0]).face = 'diagonal';
+    record(invalidHoles[0]).xMm = -1;
+    expect(acceptedValidator!(invalidHole)).toBe(false);
+
+    expect(holes.length).toBeGreaterThan(0);
+  });
 });

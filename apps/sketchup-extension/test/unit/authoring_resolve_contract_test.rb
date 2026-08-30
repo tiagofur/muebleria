@@ -49,7 +49,8 @@ class AuthoringResolveContractTest < Minitest::Test
   end
 
   def accepted_scenario(id)
-    result = parse_response(scenario(id)['response'])
+    raw = scenario(id)
+    result = parse_response(raw['response'], expected_request: raw['request'])
     assert result.accepted?, "scenario #{id} must parse as accepted"
     result
   end
@@ -98,6 +99,29 @@ class AuthoringResolveContractTest < Minitest::Test
     side_holes.each { |hole| assert_equal 520, hole['yMm'] }
 
     assert_match(/\Asha256-[0-9a-f]{64}\z/, result.manufacturing_fingerprint)
+  end
+
+  def test_full_material_projection_and_cost_only_hardware_parse_fail_closed
+    material = accepted_scenario('11-material-pbr-roundtrip')
+    textured = material.layout.boards.find do |board|
+      board.material_texture_url == '/api/media/materials/roble-claro-texture.webp'
+    end
+    refute_nil textured
+    assert_equal '/api/media/materials/roble-claro.webp', textured.material_image_url
+    assert_equal 600.0, textured.material_texture_tile_width_mm
+    assert_equal 1200.0, textured.material_texture_tile_length_mm
+    assert_in_delta 0.42, textured.material_roughness, 1e-9
+    assert_in_delta 0.08, textured.material_metalness, 1e-9
+    assert_in_delta 0.15, textured.material_clearcoat, 1e-9
+    assert_equal true, textured.material_grain
+
+    cost_only = accepted_scenario('12-cost-only-manual-hardware')
+    semantic_ids = cost_only.normalized_snapshot['hardwarePlacements'].map do |placement|
+      placement['hardwarePlacementId']
+    end
+    assert_equal ['hp-cost-only-01'], semantic_ids
+    refute_includes cost_only.layout.hardware.map(&:placement_id), 'hp-cost-only-01'
+    assert_match(/\Asha256-[0-9a-f]{64}\z/, cost_only.manufacturing_fingerprint)
   end
 
   def test_rejected_resolve_carries_structured_codes_not_messages
@@ -434,6 +458,25 @@ class AuthoringResolveContractTest < Minitest::Test
     assert_equal 422, error.status
     assert_includes error.issues.map(&:code), 'RELATIONSHIP_ORPHANED'
     assert_match(/RELATIONSHIP_ORPHANED/, error.message)
+  end
+
+  def test_transport_preserves_uncorrelated_typed_405_and_415_rejections
+    { 405 => 'METHOD_NOT_ALLOWED', 415 => 'CONTENT_TYPE_UNSUPPORTED' }.each do |status, code|
+      body = deep_copy(scenario('07-orphan-anchor-rejection')['response'])
+      body['responseMessageId'] = ''
+      body['inReplyToMessageId'] = ''
+      body['idempotencyKey'] = ''
+      body['catalogRevision'] = ''
+      body['issues'] = [{ 'code' => code, 'message' => code, 'severity' => 'error' }]
+
+      error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
+        Granete::SketchUpExtension::Library::AuthoringResolveTransport.interpret(
+          { 'status' => status, 'body' => body }, expected_request: fixture_request
+        )
+      end
+      assert_equal status, error.status
+      assert_equal [code], error.issues.map(&:code)
+    end
   end
 
   def test_provider_maps_session_and_license_failures

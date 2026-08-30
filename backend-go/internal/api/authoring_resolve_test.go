@@ -27,7 +27,12 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	materials := []domain.MaterialBoard{
-		{ID: "mat-oak18", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
+		{ID: "mat-oak18", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18,
+			ImageURL: "/api/media/materials/roble-claro.webp", PreviewColor: "#c4a574",
+			PreviewTextureURL:         "/api/media/materials/roble-claro-texture.webp",
+			PreviewTextureTileWidthMm: 600, PreviewTextureTileLengthMm: 1200,
+			PreviewRoughness: authoringFloatPtr(0.42), PreviewMetalness: authoringFloatPtr(0.08),
+			PreviewClearcoat: authoringFloatPtr(0.15), GrainDefault: true, Active: true},
 		{ID: "mat-white18", Code: "MEL-BLANCO", Name: "Melamina Blanca", ThicknessMm: 18, PreviewColor: "#f5f5f0", Active: true},
 	}
 	fullCatalog := catalog
@@ -423,6 +428,34 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			request.Units.PrecisionMm = 0.25
 			return run("10-unicode-quarter-step", "", request, http.StatusOK)
 		}(),
+
+		// Full NativeLayout material representation: every optional visual/PBR
+		// field the Go engine can publish must cross Schema/Ajv, TS and Ruby.
+		func() authoringFixtureCase {
+			request := authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+				f.Components = defaultOccurrencesJSON()
+				f.MaterialChoices = map[string]string{"FRENTE": "mat-oak18"}
+			}))
+			request.MessageID = "msg-fixture-material-pbr"
+			request.IdempotencyKey = "fixture:material-pbr:0001"
+			return run("11-material-pbr-roundtrip", "", request, http.StatusOK)
+		}(),
+
+		// A semantic/manual hardware placement can intentionally have no 3D
+		// preview. It remains in the normalized snapshot/fingerprint (and may
+		// drive machining) while layout.hardware omits the visual projection.
+		func() authoringFixtureCase {
+			request := authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+				f.Components = defaultOccurrencesJSON()
+				f.HardwarePlacements = []authoringPlacementWire{
+					{HardwarePlacementID: "hp-cost-only-01", CatalogHardwareID: "hw-minifix",
+						HostComponentInstanceID: "door-01", AnchorFace: "front", OffsetMm: []float64{120, 240}},
+				}
+			}))
+			request.MessageID = "msg-fixture-cost-only-hardware"
+			request.IdempotencyKey = "fixture:cost-only-hardware:0001"
+			return run("12-cost-only-manual-hardware", "", request, http.StatusOK)
+		}(),
 	}
 }
 
@@ -548,7 +581,15 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 				Layout struct {
 					TransformContract string `json:"transformContract"`
 					Components        []struct {
-						ComponentInstanceID string `json:"componentInstanceId"`
+						ComponentInstanceID         string   `json:"componentInstanceId"`
+						MaterialImageURL            string   `json:"materialImageUrl"`
+						MaterialTextureURL          string   `json:"materialTextureUrl"`
+						MaterialTextureTileWidthMm  float64  `json:"materialTextureTileWidthMm"`
+						MaterialTextureTileLengthMm float64  `json:"materialTextureTileLengthMm"`
+						MaterialRoughness           *float64 `json:"materialRoughness"`
+						MaterialMetalness           *float64 `json:"materialMetalness"`
+						MaterialClearcoat           *float64 `json:"materialClearcoat"`
+						MaterialGrain               bool     `json:"materialGrain"`
 					} `json:"components"`
 					Hardware []struct {
 						PlacementID   string `json:"placementId"`
@@ -564,6 +605,11 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					PreflightContract string `json:"preflightContract"`
 				} `json:"preflight"`
 			} `json:"resolved"`
+			NormalizedSnapshot struct {
+				HardwarePlacements []struct {
+					HardwarePlacementID string `json:"hardwarePlacementId"`
+				} `json:"hardwarePlacements"`
+			} `json:"normalizedSnapshot"`
 			Issues []domain.ContractIssue `json:"issues"`
 		}
 		if err := json.Unmarshal(scenario.Response, &response); err != nil {
@@ -606,6 +652,30 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 			for _, hw := range response.Resolved.Layout.Hardware {
 				if hw.PlacementKind != engine.HardwarePlacementKindManual {
 					t.Fatalf("scenario %s: placement kind must stay explicit", scenario.ID)
+				}
+			}
+			if scenario.ID == "11-material-pbr-roundtrip" {
+				var pbrFound bool
+				for _, component := range response.Resolved.Layout.Components {
+					if component.MaterialTextureURL == "/api/media/materials/roble-claro-texture.webp" {
+						pbrFound = component.MaterialImageURL != "" && component.MaterialTextureTileWidthMm == 600 &&
+							component.MaterialTextureTileLengthMm == 1200 && component.MaterialRoughness != nil &&
+							component.MaterialMetalness != nil && component.MaterialClearcoat != nil && component.MaterialGrain
+					}
+				}
+				if !pbrFound {
+					t.Fatal("material PBR scenario did not publish the complete NativeLayout material projection")
+				}
+			}
+			if scenario.ID == "12-cost-only-manual-hardware" {
+				if len(response.NormalizedSnapshot.HardwarePlacements) != 1 ||
+					response.NormalizedSnapshot.HardwarePlacements[0].HardwarePlacementID != "hp-cost-only-01" {
+					t.Fatal("cost-only manual hardware must remain in normalized semantic snapshot")
+				}
+				for _, hw := range response.Resolved.Layout.Hardware {
+					if hw.PlacementID == "hp-cost-only-01" {
+						t.Fatal("cost-only manual hardware must not appear in visual layout projection")
+					}
 				}
 			}
 		default:

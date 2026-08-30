@@ -1,6 +1,11 @@
 # Review — feature F195
 
-**Veredicto:** APPROVED
+**Veredicto:** SUPERSEDED — CHANGES_REQUESTED en re-review de `7703f0e8`
+
+> Esta aprobación sólo cubría el implementation head `1d1c90cb`. La revisión posterior del
+> head de cierre `7703f0e8` encontró gaps reproducibles de schema NativeLayout, coherencia de
+> hardware semántico sin preview y transporte tipado 405/415. F195 volvió a `in_progress` y
+> requiere un nuevo artifact independiente antes de cerrarse otra vez.
 
 ## Checkpoints
 
@@ -36,4 +41,7 @@ No aplica: F195 no modifica pantallas, CSS ni interacción HtmlDialog; define el
 
 ## Cambios requeridos
 
-Ninguno.
+- Publicar en el schema todos los campos visuales/PBR que `engine.LayoutComponent` puede emitir y probarlos cross-runtime.
+- Permitir que placements manuales semánticos sin preview no aparezcan en la proyección visual `layout.hardware`.
+- Conservar `METHOD_NOT_ALLOWED` y `CONTENT_TYPE_UNSUPPORTED` al interpretar 405/415 en Ruby.
+- Regenerar golden, repetir TestUp real y someter el nuevo head a revisión independiente.

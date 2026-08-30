@@ -177,6 +177,17 @@ export type ResolvedLayoutWireV1 = {
     readonly widthMm: number;
     readonly thicknessMm: number;
     readonly materialId?: string;
+    readonly materialCode?: string;
+    readonly materialName?: string;
+    readonly materialColorHex?: string;
+    readonly materialImageUrl?: string;
+    readonly materialTextureUrl?: string;
+    readonly materialTextureTileWidthMm?: number;
+    readonly materialTextureTileLengthMm?: number;
+    readonly materialRoughness?: number;
+    readonly materialMetalness?: number;
+    readonly materialClearcoat?: number;
+    readonly materialGrain?: boolean;
     readonly transform: { readonly translationMm: readonly [number, number, number] };
   }[];
   readonly hardware: readonly {
@@ -547,6 +558,20 @@ const RESPONSE_KEYS = new Set([
   'resolved', 'issues',
 ]);
 const ISSUE_KEYS = new Set(['code', 'message', 'severity', 'entityId', 'path', 'remediation', 'details']);
+const RESOLVED_LAYOUT_COMPONENT_KEYS = new Set([
+  'componentInstanceId', 'componentDefinitionId', 'slotId', 'role', 'lengthMm', 'widthMm',
+  'thicknessMm', 'materialId', 'transform', 'name', 'kind', 'dimensionsMm', 'localTransform',
+  'optionRole', 'materialCode', 'materialName', 'materialColorHex', 'materialImageUrl',
+  'materialTextureUrl', 'materialTextureTileWidthMm', 'materialTextureTileLengthMm',
+  'materialRoughness', 'materialMetalness', 'materialClearcoat', 'materialGrain',
+]);
+const LAYOUT_MATERIAL_STRING_KEYS = [
+  'materialId', 'materialCode', 'materialName', 'materialColorHex',
+] as const;
+const LAYOUT_MATERIAL_URL_KEYS = ['materialImageUrl', 'materialTextureUrl'] as const;
+const LAYOUT_MATERIAL_PBR_KEYS = [
+  'materialRoughness', 'materialMetalness', 'materialClearcoat',
+] as const;
 
 /**
  * Validates a response received over the wire before any SketchUp host
@@ -728,6 +753,7 @@ function validateResolvedLayout(
     if (!component || !isBoundedString(component.componentInstanceId) || !isBoundedString(component.componentDefinitionId)) {
       problems.push(`${path} lacks occurrence identity`); continue;
     }
+    rejectUnknownRecordKeys(component, RESOLVED_LAYOUT_COMPONENT_KEYS, path, problems);
     if (layoutIds.has(component.componentInstanceId)) problems.push(`${path}.componentInstanceId is duplicated`);
     layoutIds.add(component.componentInstanceId);
     if (snapshotComponents.get(component.componentInstanceId) !== component.componentDefinitionId) {
@@ -735,6 +761,31 @@ function validateResolvedLayout(
     }
     if (![component.lengthMm, component.widthMm, component.thicknessMm].every(isFiniteNumber) || !isOccurrenceLayoutTransform(component.transform)) {
       problems.push(`${path} geometry is invalid`);
+    }
+    for (const key of LAYOUT_MATERIAL_STRING_KEYS) {
+      if (component[key] !== undefined && !isBoundedString(component[key])) {
+        problems.push(`${path}.${key} must be a bounded non-empty string`);
+      }
+    }
+    for (const key of LAYOUT_MATERIAL_URL_KEYS) {
+      if (component[key] !== undefined && !isNonEmptyString(component[key])) {
+        problems.push(`${path}.${key} must be a non-empty string`);
+      } else if (typeof component[key] === 'string' && component[key].length > 2048) {
+        problems.push(`${path}.${key} cannot exceed 2048 characters`);
+      }
+    }
+    for (const key of ['materialTextureTileWidthMm', 'materialTextureTileLengthMm'] as const) {
+      if (component[key] !== undefined && (!isFiniteNumber(component[key]) || component[key] <= 0)) {
+        problems.push(`${path}.${key} must be a positive finite number`);
+      }
+    }
+    for (const key of LAYOUT_MATERIAL_PBR_KEYS) {
+      if (component[key] !== undefined && !isFiniteNumber(component[key])) {
+        problems.push(`${path}.${key} must be a finite number`);
+      }
+    }
+    if (component.materialGrain !== undefined && typeof component.materialGrain !== 'boolean') {
+      problems.push(`${path}.materialGrain must be boolean`);
     }
   }
   for (const id of snapshotComponents.keys()) if (!layoutIds.has(id)) problems.push(`layout omits normalized component ${id}`);
@@ -763,6 +814,8 @@ function validateResolvedMachining(
       const hole = asRecord(holeValue);
       if (!hole || !isBoundedString(hole.face) || !isBoundedString(hole.type) ||
         ![hole.xMm, hole.yMm, hole.diameterMm, hole.depthMm].every(isFiniteNumber) ||
+        !HARDWARE_ANCHOR_FACES.has(String(hole.face)) ||
+        (hole.xMm as number) < 0 || (hole.yMm as number) < 0 ||
         (hole.diameterMm as number) <= 0 || (hole.depthMm as number) <= 0) {
         problems.push(`${path} contains an invalid hole`);
       }

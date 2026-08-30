@@ -483,12 +483,18 @@ module Granete
           end
           manual_layout = layout.hardware.select { |placement| placement.placement_kind == 'manual' }
                                 .to_h { |placement| [placement.placement_id, placement] }
-          unless manual_snapshot.keys.sort == manual_layout.keys.sort
-            raise AuthoringResolveContract::ContractError,
-                  'Placements manuales del layout no coinciden con el snapshot normalizado'
-          end
-          manual_snapshot.each do |id, placement|
-            resolved = manual_layout.fetch(id)
+          # layout.hardware is a VISUAL projection. Cost-only hardware with
+          # no valid preview remains semantic/manufacturing truth in the
+          # normalized snapshot and fingerprint but deliberately renders
+          # nothing. Every rendered manual placement must therefore be a
+          # coherent subset of the authoritative semantic placements; the
+          # reverse inclusion would reject valid cost-only hardware.
+          manual_layout.each do |id, resolved|
+            placement = manual_snapshot[id]
+            unless placement
+              raise AuthoringResolveContract::ContractError,
+                    "Placement manual visual #{id} no existe en el snapshot normalizado"
+            end
             next if resolved.hardware_id == placement['catalogHardwareId'] &&
                     resolved.host_component_instance_id == placement['hostComponentInstanceId']
 
@@ -525,6 +531,11 @@ module Granete
 
       module AuthoringResolveCorrelation
         KEYS = %w[responseMessageId inReplyToMessageId idempotencyKey].freeze
+        UNCORRELATED_REJECTION_CODES = %w[
+          QUERY_PARAMETERS_UNSUPPORTED
+          METHOD_NOT_ALLOWED
+          CONTENT_TYPE_UNSUPPORTED
+        ].freeze
 
         module_function
 
@@ -550,10 +561,12 @@ module Granete
         end
 
         def uncorrelated_rejection(body, issues)
-          return {} if body['status'] == 'rejected' && issues.map(&:code).include?('QUERY_PARAMETERS_UNSUPPORTED')
+          codes = issues.map(&:code)
+          return {} if body['status'] == 'rejected' &&
+                       codes.intersect?(UNCORRELATED_REJECTION_CODES)
 
           raise AuthoringResolveContract::ContractError,
-                'Correlación ausente fuera del rechazo de query parameters'
+                'Correlación ausente fuera de un rechazo de transporte previo al body'
         end
       end
 
@@ -729,7 +742,7 @@ module Granete
           case response['status']
           when 200
             AuthoringResolveContract.parse!(response['body'], expected_request: expected_request)
-          when 400, 404, 413, 422
+          when 400, 404, 405, 413, 415, 422
             result = AuthoringResolveContract.parse!(response['body'], expected_request: expected_request)
             first = result.issues.first
             raise AuthoringResolveError.new(

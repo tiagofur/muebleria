@@ -674,6 +674,36 @@
         },
         "materialColorHex": {
           "type": "string"
+        },
+        "materialImageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "materialTextureUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "materialTextureTileWidthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "materialTextureTileLengthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "materialRoughness": {
+          "type": "number"
+        },
+        "materialMetalness": {
+          "type": "number"
+        },
+        "materialClearcoat": {
+          "type": "number"
+        },
+        "materialGrain": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -829,15 +859,22 @@
       "type": "object",
       "properties": {
         "face": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
+          "enum": [
+            "front",
+            "back",
+            "left",
+            "right",
+            "top",
+            "bottom"
+          ]
         },
         "xMm": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "yMm": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0
         },
         "diameterMm": {
           "type": "number",
@@ -1020,18 +1057,22 @@
         },
         "responseMessageId": {
           "type": "string",
+          "minLength": 1,
           "maxLength": 136
         },
         "inReplyToMessageId": {
           "type": "string",
+          "minLength": 1,
           "maxLength": 128
         },
         "idempotencyKey": {
           "type": "string",
+          "minLength": 1,
           "maxLength": 128
         },
         "catalogRevision": {
           "type": "string",
+          "minLength": 1,
           "maxLength": 128
         },
         "issues": {
@@ -1103,6 +1144,7 @@
           "items": {
             "$ref": "#/$defs/issue"
           },
+          "minItems": 1,
           "maxItems": 10000
         },
         "status": {
