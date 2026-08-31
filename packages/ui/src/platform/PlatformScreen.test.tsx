@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { PlatformScreen } from './PlatformScreen';
 
 const organization = {
-  id: 'org-1',
+  id: '11111111-1111-4111-8111-111111111111',
   name: 'Taller Norte',
   slug: 'taller-norte',
   type: 'factory',
@@ -159,5 +159,152 @@ describe('PlatformScreen audit UX', () => {
       bootstrap_admin_user_id: bootstrapUser.id,
     }));
     expect(new Headers(request?.init?.headers).get('Idempotency-Key')).toMatch(/^web:/);
+  });
+
+  it('never presents failed authoritative readiness as active and labels lifecycle controls', async () => {
+    const jsonOk = (body: unknown) => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/platform/organizations')) return jsonOk([organization]);
+      if (url.endsWith(`/organizations/${organization.id}/readiness`)) return jsonOk({
+        organization_id: organization.id,
+        organization_version: 1,
+        ready: false,
+        checks: [{ code: 'bootstrap_admin', ready: false, blocking: true, message: 'Falta administrador inicial' }],
+        checked_at: '2026-08-30T01:00:00Z',
+      });
+      return jsonOk([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+
+    expect(await screen.findByText('No lista')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Entrar a Taller' }) as HTMLButtonElement).disabled).toBe(true);
+    await actor.click(await screen.findByRole('button', { name: 'Estado y ciclo de vida' }));
+
+    expect(await screen.findByRole('heading', { name: 'No lista para operar' })).toBeTruthy();
+    expect(screen.getByText(/todavía no está lista para operar/)).toBeTruthy();
+    expect(screen.queryByText('Organización habilitada para operar.')).toBeNull();
+    expect(screen.getByText(/Bloqueado:/)).toBeTruthy();
+    expect(screen.getByLabelText('Motivo (mínimo 4 caracteres) *')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cerrar' })).toBe(document.activeElement));
+  });
+
+  it('fails closed when readiness cannot be loaded', async () => {
+    const jsonOk = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/platform/organizations')) return jsonOk([organization]);
+      if (url.endsWith(`/organizations/${organization.id}/readiness`)) throw new TypeError('offline');
+      return jsonOk([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+
+    expect(await screen.findByText('Preparación sin verificar')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Entrar a Taller' }) as HTMLButtonElement).disabled).toBe(true);
+    await actor.click(screen.getByRole('button', { name: 'Estado y ciclo de vida' }));
+
+    expect(await screen.findByText(/No se puede confirmar que esté habilitada/)).toBeTruthy();
+    expect(screen.queryByText('Organización habilitada para operar.')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Lista para operar' })).toBeNull();
+  });
+
+  it('keeps committed lifecycle success when the follow-up readiness refresh fails', async () => {
+    let resolveSuspend!: (response: Response) => void;
+    let readinessAttempts = 0;
+    const suspendResponse = new Promise<Response>((resolve) => { resolveSuspend = resolve; });
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const readiness = {
+      organization_id: organization.id,
+      organization_version: 1,
+      ready: true,
+      checks: [],
+      checked_at: '2026-08-30T01:00:00Z',
+    };
+    const jsonOk = (body: unknown) => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/platform/organizations')) return jsonOk([organization]);
+      if (url.endsWith(`/organizations/${organization.id}/readiness`)) {
+        readinessAttempts += 1;
+        if (readinessAttempts > 1) throw new TypeError('refresh unavailable');
+        return jsonOk(readiness);
+      }
+      if (url.endsWith(`/organizations/${organization.id}:suspend`)) return suspendResponse;
+      return jsonOk([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+    await actor.click(await screen.findByRole('button', { name: 'Estado y ciclo de vida' }));
+    await screen.findByRole('heading', { name: 'Lista para operar' });
+    await actor.type(screen.getByLabelText('Motivo (mínimo 4 caracteres) *'), 'Riesgo operativo');
+    await actor.click(screen.getByRole('button', { name: 'Suspender' }));
+
+    expect(screen.getByText('Organización habilitada para operar.')).toBeTruthy();
+    resolveSuspend(jsonOk({ organization: { ...organization, status: 'suspended', version: 2 } }));
+
+    expect(await screen.findByText(/Acceso operativo suspendido/)).toBeTruthy();
+    expect(await screen.findByText(/Cambio guardado/)).toBeTruthy();
+    expect(screen.queryByText('No se pudo completar la acción.')).toBeNull();
+    const request = requests.find(({ url }) => url.endsWith(`/${organization.id}:suspend`));
+    expect(new Headers(request?.init?.headers).get('If-Match')).toBe('"v1"');
+    expect(JSON.parse(String(request?.init?.body))).toEqual({ reason: 'Riesgo operativo' });
+  });
+
+  it('refetches a stale impact preview before committing offboarding', async () => {
+    const bodies: unknown[] = [];
+    let listAttempts = 0;
+    let previewAttempts = 0;
+    let commitAttempts = 0;
+    const firstImpact = 'a'.repeat(64);
+    const refreshedImpact = 'b'.repeat(64);
+    const readiness = {
+      organization_id: organization.id, organization_version: 1, ready: true, checks: [], checked_at: '2026-08-30T01:00:00Z',
+    };
+    const json = (body: unknown) => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/platform/organizations')) {
+        listAttempts += 1;
+        return json([{ ...organization, version: listAttempts > 1 ? 2 : 1 }]);
+      }
+      if (url.endsWith(`/organizations/${organization.id}/readiness`)) return json(readiness);
+      if (url.endsWith(`/organizations/${organization.id}/offboarding-preview`)) {
+        previewAttempts += 1;
+        return json({ organization_id: organization.id, organization_version: previewAttempts, impact_version: previewAttempts > 1 ? refreshedImpact : firstImpact, blockers: [], warnings: [] });
+      }
+      if (url.endsWith(`/organizations/${organization.id}:begin-offboarding`)) {
+        commitAttempts += 1;
+        bodies.push(JSON.parse(String(init?.body)));
+        if (commitAttempts === 1) return new Response(JSON.stringify({ code: 'IMPACT_VERSION_CONFLICT', message: 'stale', fieldErrors: {}, requestId: 'req-1', retryable: false, details: {} }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+        return json({ organization: { ...organization, status: 'offboarding', version: 2 } });
+      }
+      return json([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+    await actor.click(await screen.findByRole('button', { name: 'Estado y ciclo de vida' }));
+    await actor.type(await screen.findByLabelText('Motivo (mínimo 4 caracteres) *'), 'Cierre solicitado');
+    await actor.click(screen.getByRole('button', { name: 'Revisar cierre' }));
+    await actor.click(await screen.findByRole('button', { name: 'Iniciar cierre' }));
+    await actor.click(await screen.findByRole('button', { name: 'Recargar estado' }));
+    await waitFor(() => expect(previewAttempts).toBe(2));
+    await actor.click(screen.getByRole('button', { name: 'Iniciar cierre' }));
+    expect(await screen.findByText(/Cierre en curso/)).toBeTruthy();
+    expect(bodies).toEqual([
+      { reason: 'Cierre solicitado', impact_version: firstImpact },
+      { reason: 'Cierre solicitado', impact_version: refreshedImpact },
+    ]);
   });
 });
