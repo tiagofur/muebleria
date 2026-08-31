@@ -24,11 +24,13 @@ import {
   GraneteApiClient,
   GraneteApiError,
   type PlatformOrganization,
+  type OrganizationReadiness,
   type OrganizationStatus,
   type PlatformUser,
   type SecurityAuditEvent,
 } from '@granete/storage';
 import './platform.css';
+import { OrganizationLifecyclePanel } from './OrganizationLifecyclePanel';
 
 export interface PlatformScreenProps {
   readonly baseUrl: string;
@@ -63,6 +65,7 @@ export function PlatformScreen({
 
   // Data
   const [organizations, setOrganizations] = useState<OrganizationRow[]>([]);
+  const [organizationReadiness, setOrganizationReadiness] = useState<Record<string, OrganizationReadiness | null>>({});
   const [users, setUsers] = useState<PlatformUserRow[]>([]);
   const [auditEvents, setAuditEvents] = useState<SecurityAuditEventRow[]>([]);
   const [selectedAuditOrgId, setSelectedAuditOrgId] = useState<string>('');
@@ -418,8 +421,10 @@ export function PlatformScreen({
                       <div className="platform-card__meta">
                         <div>
                           <strong>Estado:</strong>{' '}
-                          <span className={`platform-chip platform-chip--${org.status}`}>
-                            {ORGANIZATION_STATUS_LABELS[org.status]}
+                          <span className={`platform-chip platform-chip--${org.status === 'active' && organizationReadiness[org.id]?.ready !== true ? 'provisioning_failed' : org.status}`}>
+                            {org.status === 'active' && organizationReadiness[org.id]?.ready !== true
+                              ? organizationReadiness[org.id] ? 'No lista' : 'Preparación sin verificar'
+                              : ORGANIZATION_STATUS_LABELS[org.status]}
                           </span>
                         </div>
                         <div>
@@ -440,6 +445,14 @@ export function PlatformScreen({
                       </div>
 
                       <div className="platform-card__actions">
+                        <OrganizationLifecyclePanel
+                          api={api}
+                          token={token}
+                          organization={org}
+                          onUpdated={(updated) => setOrganizations((current) => current.map((item) => item.id === updated.id ? updated : item))}
+                          onReadiness={(readiness) => setOrganizationReadiness((current) => ({ ...current, [org.id]: readiness }))}
+                          onReload={loadOrganizations}
+                        />
                         <button
                           type="button"
                           className="btn btn--secondary btn--sm"
@@ -458,8 +471,8 @@ export function PlatformScreen({
                         <button
                           type="button"
                           className="btn btn--primary btn--sm"
-                          disabled={org.status !== 'active'}
-                          title={org.status === 'active' ? undefined : 'Sólo podés iniciar soporte en una organización activa'}
+                          disabled={org.status !== 'active' || organizationReadiness[org.id]?.ready !== true}
+                          title={org.status === 'active' && organizationReadiness[org.id]?.ready !== true ? 'La preparación debe estar verificada antes de iniciar soporte' : org.status === 'active' ? undefined : 'Sólo podés iniciar soporte en una organización activa'}
                           onClick={() => {
                             setModalError(null);
                             setSupportOrg(org);
