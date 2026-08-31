@@ -1,4 +1,4 @@
-import { GraneteApiError, parseApiError } from './apiErrors';
+import { GraneteApiError, GraneteNetworkError, parseApiError } from './apiErrors';
 import {
   parseGenerated,
   parseGeneratedArray,
@@ -52,12 +52,19 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
     if (options.ifMatch !== undefined) headers.set('If-Match', `"v${options.ifMatch}"`);
     if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey);
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      signal: options.signal,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        signal: options.signal,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      if (error instanceof TypeError) throw new GraneteNetworkError(error);
+      throw error;
+    }
     const value = response.status === 204 ? undefined : await readResponseJSON(response);
     if (!response.ok) {
       let payload;

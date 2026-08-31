@@ -1,41 +1,70 @@
 import { describe, expect, it } from 'vitest';
-import { GraneteApiError } from '@granete/storage';
+import { GraneteApiError, GraneteNetworkError } from '@granete/storage';
 import { createGraneteQueryClient, shouldRetryServerQuery } from './queryClient';
 import { normalizeQueryFilters, organizationKeys, platformKeys } from './queryKeys';
-import { sessionScopeKey, type SessionScope } from './sessionScope';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+  sessionScopeKey,
+} from './sessionScope';
 
-const scope: SessionScope = {
-  userId: 'user-1',
-  membershipId: 'membership-1',
-  organizationId: 'organization-1',
-  mode: 'auth',
-  supportSessionId: null,
-  recoverySessionId: null,
-  membershipCredentialVersion: 4,
-  organizationCredentialVersion: 7,
-  absoluteExpiresAt: '2026-08-31T00:00:00Z',
-};
+const sessionDto = {
+  user: {
+    id: '11111111-1111-4111-8111-111111111111',
+    email: 'owner@example.test',
+    normalized_email: 'owner@example.test',
+    name: 'Owner',
+    account_status: 'active',
+    email_verified_at: '2026-08-30T00:00:00Z',
+    last_login_at: '2026-08-30T01:00:00Z',
+    platform_admin: false,
+    created_at: '2026-08-29T00:00:00Z',
+    updated_at: '2026-08-30T01:00:00Z',
+  },
+  roles: ['admin'],
+  organization: {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Factory',
+    slug: 'factory',
+    type: 'factory',
+    status: 'active',
+    license: { plan: 'pro', status: 'active', expires_at: null },
+  },
+  transport: 'web',
+} as const;
 
 describe('tenant-safe query foundation (#458)', () => {
-  it('isolates cache keys by the complete authoritative session scope', () => {
-    const baseline = sessionScopeKey(scope);
-    const variants: SessionScope[] = [
-      { ...scope, userId: 'user-2' },
-      { ...scope, organizationId: 'organization-2' },
-      { ...scope, mode: 'support', supportSessionId: 'support-1' },
-      { ...scope, membershipCredentialVersion: 5 },
-      { ...scope, organizationCredentialVersion: 8 },
-      { ...scope, absoluteExpiresAt: '2026-08-31T01:00:00Z' },
-    ];
+  it('projects the query scope only from a generated runtime-validated session DTO', () => {
+    const generation = createSessionGeneration();
+    const scope = sessionScopeFromSession(sessionDto, generation);
 
-    for (const variant of variants) expect(sessionScopeKey(variant)).not.toEqual(baseline);
-    expect(organizationKeys.team(scope)).toContain('organization-1');
-    expect(platformKeys.users(scope)).toContain('user-1');
+    expect(sessionScopeKey(scope)).toEqual([
+      'session',
+      generation,
+      sessionDto.user.id,
+      sessionDto.organization.id,
+      'auth',
+      null,
+      'web',
+    ]);
+    expect(() => sessionScopeFromSession({ ...sessionDto, transport: 'browser' }, generation))
+      .toThrow('Invalid API response');
   });
 
-  it('normalizes filter order and omits undefined values', () => {
-    expect(normalizeQueryFilters({ status: ['suspended', 'active'], search: undefined, page: 1 }))
-      .toEqual(normalizeQueryFilters({ page: 1, status: ['active', 'suspended'] }));
+  it('isolates a new login with the same user and organization in a different root', () => {
+    const first = sessionScopeFromSession(sessionDto, createSessionGeneration());
+    const relogin = sessionScopeFromSession(sessionDto, createSessionGeneration());
+
+    expect(organizationKeys.all(relogin)).not.toEqual(organizationKeys.all(first));
+    expect(platformKeys.all(relogin)).not.toEqual(platformKeys.all(first));
+  });
+
+  it('preserves ordered arrays and normalizes only explicitly set-like fields', () => {
+    const setLike = new Set(['status']);
+    expect(normalizeQueryFilters({ status: ['suspended', 'active'], search: undefined, page: 1 }, setLike))
+      .toEqual(normalizeQueryFilters({ page: 1, status: ['active', 'suspended'] }, setLike));
+    expect(normalizeQueryFilters({ sort: ['priority:desc', 'createdAt:asc'] }))
+      .not.toEqual(normalizeQueryFilters({ sort: ['createdAt:asc', 'priority:desc'] }));
   });
 
   it('retries only one network or explicitly retryable server failure', () => {
@@ -43,9 +72,11 @@ describe('tenant-safe query foundation (#458)', () => {
       code: 'INTERNAL_ERROR', message: 'failed', fieldErrors: {}, requestId: 'request-1', retryable,
       details: {},
     });
+    const networkError = new GraneteNetworkError(new TypeError('Failed to fetch'));
 
-    expect(shouldRetryServerQuery(0, new TypeError('network'))).toBe(true);
-    expect(shouldRetryServerQuery(1, new TypeError('network'))).toBe(false);
+    expect(shouldRetryServerQuery(0, networkError)).toBe(true);
+    expect(shouldRetryServerQuery(1, networkError)).toBe(false);
+    expect(shouldRetryServerQuery(0, new TypeError('local query bug'))).toBe(false);
     expect(shouldRetryServerQuery(0, apiError(503, true))).toBe(true);
     expect(shouldRetryServerQuery(0, apiError(503, false))).toBe(false);
     expect(shouldRetryServerQuery(0, apiError(409, true))).toBe(false);

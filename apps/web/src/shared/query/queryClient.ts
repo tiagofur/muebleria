@@ -1,11 +1,11 @@
 import { QueryClient } from '@tanstack/react-query';
-import { GraneteApiError } from '@granete/storage';
+import { GraneteApiError, GraneteNetworkError } from '@granete/storage';
 
 export function shouldRetryServerQuery(failureCount: number, error: unknown): boolean {
   if (failureCount >= 1) return false;
   if (error instanceof DOMException && error.name === 'AbortError') return false;
   if (error instanceof GraneteApiError) return error.status >= 500 && error.retryable;
-  return error instanceof TypeError;
+  return error instanceof GraneteNetworkError;
 }
 
 export function createGraneteQueryClient(): QueryClient {
