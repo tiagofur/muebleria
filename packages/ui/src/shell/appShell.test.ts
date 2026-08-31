@@ -384,6 +384,19 @@ describe('AppShell session identity (issue #29)', () => {
     expect(screen.getByRole('alert').textContent).toContain('otra pestaña');
   });
 
+  it('offers an accessible authoritative organization refresh after revoked access', async () => {
+    const onRefresh = vi.fn();
+    render(createElement(AppShell, {
+      activeId: 'home', onNavigate: vi.fn(), children: createElement('main'),
+      sessionMode: 'auth', organizationSwitchError: 'Tu acceso fue revocado.',
+      onOrganizationChoicesRefresh: onRefresh,
+    }));
+
+    expect(screen.getByRole('alert').textContent).toContain('revocado');
+    await userEvent.click(screen.getByRole('button', { name: 'Actualizar talleres' }));
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
   it('presents guest mode without leaking organization identity or switching', () => {
     const organization = {
       id: 'org-1', name: 'Taller Norte', type: 'factory' as const, status: 'suspended' as const,

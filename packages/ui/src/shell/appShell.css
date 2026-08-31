@@ -381,6 +381,9 @@
 }
 
 .app-topbar__switch-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   max-width: var(--toolbar-search-min-width);
   color: var(--danger-700);
   font-size: var(--text-xs);

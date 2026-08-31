@@ -14,6 +14,7 @@ const (
 	ApiErrorCodeInternalError                  ApiErrorCode = "INTERNAL_ERROR"
 	ApiErrorCodePreconditionRequired           ApiErrorCode = "PRECONDITION_REQUIRED"
 	ApiErrorCodeMembershipNotFound             ApiErrorCode = "MEMBERSHIP_NOT_FOUND"
+	ApiErrorCodeMembershipNotSelectable        ApiErrorCode = "MEMBERSHIP_NOT_SELECTABLE"
 	ApiErrorCodeMembershipVersionConflict      ApiErrorCode = "MEMBERSHIP_VERSION_CONFLICT"
 	ApiErrorCodeRoleNotAllowed                 ApiErrorCode = "ROLE_NOT_ALLOWED"
 	ApiErrorCodeLastAdmin                      ApiErrorCode = "LAST_ADMIN"

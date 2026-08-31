@@ -129,6 +129,7 @@ export type AppShellProps = {
   readonly organizationChoices?: readonly AppShellOrganizationChoice[];
   readonly organizationSwitchLoading?: boolean;
   readonly organizationSwitchError?: string | null;
+  readonly onOrganizationChoicesRefresh?: () => Promise<void> | void;
   readonly onOrganizationChange?: (organizationId: string) => Promise<void> | void;
   /** Admin-only: show «Usuarios» under CONFIG (registration approval). */
   readonly showAdminUsers?: boolean;
@@ -480,6 +481,7 @@ export function AppShell({
   organizationChoices = [],
   organizationSwitchLoading = false,
   organizationSwitchError = null,
+  onOrganizationChoicesRefresh,
   onOrganizationChange,
   showAdminUsers = false,
   allowedNavIds,
@@ -781,7 +783,21 @@ export function AppShell({
                 {organizationSwitchLoading ? <span role="status">Cambiando…</span> : null}
               </div>
             ) : null}
-            {organizationSwitchError ? <span className="app-topbar__switch-error" role="alert">{organizationSwitchError}</span> : null}
+            {organizationSwitchError ? (
+              <span className="app-topbar__switch-error" role="alert">
+                {organizationSwitchError}
+                {onOrganizationChoicesRefresh ? (
+                  <button
+                    type="button"
+                    className="btn btn--small btn--ghost"
+                    disabled={organizationSwitchLoading}
+                    onClick={() => void onOrganizationChoicesRefresh()}
+                  >
+                    Actualizar talleres
+                  </button>
+                ) : null}
+              </span>
+            ) : null}
             <button
               type="button"
               className="app-topbar__search-trigger"

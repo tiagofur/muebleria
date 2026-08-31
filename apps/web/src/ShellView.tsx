@@ -331,6 +331,7 @@ export interface ShellViewCtx {
   readonly organizationChoices: readonly MembershipChoice[];
   readonly organizationSwitchLoading: boolean;
   readonly organizationSwitchError: string | null;
+  readonly refreshOrganizationChoices?: () => Promise<void>;
   readonly selectOrg: (organizationId: string) => Promise<void>;
   readonly addProjectItem: (projectId: string, input: { readonly moduleId: string; readonly quantity: number; readonly optionChoices: OptionChoices; readonly measurePresetId?: string | undefined; readonly baseMode?: ModuleBaseMode | undefined; }) => string | undefined;
   readonly agregados: readonly Agregado[];
@@ -619,6 +620,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     organizationChoices,
     organizationSwitchLoading,
     organizationSwitchError,
+    refreshOrganizationChoices,
     selectOrg,
     addProjectItem,
     agregados,
@@ -907,6 +909,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       organizationChoices={organizationChoices}
       organizationSwitchLoading={organizationSwitchLoading}
       organizationSwitchError={organizationSwitchError}
+      onOrganizationChoicesRefresh={refreshOrganizationChoices}
       onOrganizationChange={selectOrg}
       user={
         authUser
