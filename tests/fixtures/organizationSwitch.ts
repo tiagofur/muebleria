@@ -114,7 +114,6 @@ export async function installOrganizationApi(
   let markTeamAStarted = () => undefined;
   let selectionSnapshotExpected = false;
   let refreshWithoutB = false;
-  let workspaceWaiters: Array<() => void> = [];
   const teamAStarted = new Promise<void>((resolve) => { markTeamAStarted = resolve; });
   const teamAGate = new Promise<void>((resolve) => { releaseTeamA = resolve; });
   const fulfill = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -125,13 +124,9 @@ export async function installOrganizationApi(
     const authorization = request.headers().authorization ?? '';
     const tenant = authorization === `Bearer ${TOKEN_B}` ? 'B' : 'A';
     requests.push({ path, authorization });
-    // The production store loads its initial workspace and session snapshot in
-    // parallel. Let each page-load workspace commit before /auth/me changes
-    // the session root; select-org snapshots must pass to start the B load.
     if (path.endsWith('/auth/me')) {
       if (refreshWithoutB) return fulfill(route, me('A', rolesB, false));
       if (selectionSnapshotExpected) selectionSnapshotExpected = false;
-      else await new Promise<void>((resolve) => { workspaceWaiters.push(resolve); });
       return fulfill(route, me(tenant, rolesB, !refreshWithoutB));
     }
     if (path.endsWith('/auth/select-org')) {
@@ -161,12 +156,7 @@ export async function installOrganizationApi(
     }]);
     if (path.includes('/media/')) return route.fulfill({ status: 200, contentType: 'image/webp', body: '' });
     if (path.endsWith('/settings')) return fulfill(route, { workshop_name: `Taller ${tenant}` });
-    if (path.endsWith('/project-templates')) {
-      const response = fulfill(route, []);
-      workspaceWaiters.forEach((resolve) => resolve());
-      workspaceWaiters = [];
-      return response;
-    }
+    if (path.endsWith('/project-templates')) return fulfill(route, []);
     return fulfill(route, []);
   });
   return { requests, teamAStarted, releaseTeamA: () => releaseTeamA() };

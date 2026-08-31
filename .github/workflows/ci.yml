@@ -109,6 +109,9 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Run mocked organization switch gate
+        run: pnpm exec playwright test --config=playwright.config.ts tests/smoke/organization-switch.spec.ts --workers=1 --retries=0 --trace=off
+
       - name: Run real organization browser gate
         run: pnpm test:organization:browser
 
