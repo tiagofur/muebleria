@@ -21,7 +21,10 @@ import {
   type WorkspaceRepository,
 } from '@granete/storage';
 import { resolveWorkshopSettings } from '@granete/domain';
-import type { SessionScope } from '../shared/query/sessionScope';
+import {
+  sessionScopeKey,
+  type SessionScope,
+} from '../shared/query/sessionScope';
 import { tenantTransition } from '../shared/query/tenantTransition';
 import { notifySessionChanged } from '../sessionSync';
 
@@ -111,6 +114,7 @@ export interface WorkspaceState {
   /** True right after login when meaningful guest work exists locally. */
   readonly pendingGuestImport: boolean;
   readonly pendingOrgSelection: readonly MembershipChoice[] | null;
+  readonly organizationChoices: readonly MembershipChoice[];
   readonly orgSelectionLoading: boolean;
   readonly orgSelectionError: string | null;
   readonly activeOrg: OrgSummary | null;
@@ -213,6 +217,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         loginError: null,
         sessionEndReason: null,
         pendingOrgSelection: null,
+        organizationChoices: [],
         orgSelectionLoading: false,
         orgSelectionError: null,
         activeOrg: null,
@@ -250,6 +255,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             assignableOwners: [],
             pendingGuestImport: false,
           pendingOrgSelection: null,
+          organizationChoices: [],
           orgSelectionLoading: false,
           orgSelectionError: null,
           activeOrg: null,
@@ -276,6 +282,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 loginLoading: false,
                 loginError: null,
                 pendingOrgSelection: result.memberships,
+                organizationChoices: result.memberships,
               });
               notifySessionChanged();
               return;
@@ -286,6 +293,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               loginError: null,
               sessionEndReason: null,
               pendingOrgSelection: null,
+              organizationChoices: result.memberships ?? [],
               activeOrg: result.organization ?? null,
               sessionScope: null,
               // Reset workspace so AppContent reloads for the new session.
@@ -315,6 +323,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
             set({
               pendingOrgSelection: result.memberships,
+              organizationChoices: result.memberships,
             });
             notifySessionChanged();
             return;
@@ -324,6 +333,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             activeOrg: result.organization ?? null,
             sessionScope: null,
             pendingOrgSelection: null,
+            organizationChoices: result.memberships ?? [],
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
@@ -358,6 +368,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               orgSelectionLoading: false,
               orgSelectionError: null,
               pendingOrgSelection: null,
+              organizationChoices: result.memberships ?? [],
               activeOrg: result.organization ?? null,
               sessionScope: result.sessionScope ?? null,
               supportInfo: null,
@@ -392,6 +403,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             authUserSeq: get().authUserSeq + 1,
             activeOrg: sessionInfo.organization ?? null,
             supportInfo: sessionInfo.support ?? null,
+            organizationChoices: sessionInfo.organizationChoices,
             sessionScope: sessionInfo.sessionScope,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
@@ -423,6 +435,10 @@ export function createWorkspaceStore(options?: InternalOptions) {
         hydrateSessionInfo: async () => {
           const token = readAuthToken();
           if (!token) return;
+          const requestedSession = {
+            session: get().session,
+            sessionScope: get().sessionScope,
+          };
           try {
             const currentSessionGeneration = get().sessionScope?.sessionGeneration;
             const me = await meRequest(token, {
@@ -432,6 +448,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 ? { sessionGeneration: currentSessionGeneration }
                 : {}),
             });
+            if (
+              readAuthToken() !== token ||
+              !isSameWorkspaceSession(requestedSession, get())
+            ) {
+              return;
+            }
             if (me.user) {
               // /auth/me devuelve los roles de la membresía como clave
               // hermana `roles` (el DTO de usuario no los trae). Merge en el
@@ -455,6 +477,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               activeOrg: me.organization ?? null,
               supportInfo: me.support ?? null,
               sessionScope: me.sessionScope,
+              organizationChoices: me.organizationChoices,
             });
           } catch {
             // best-effort: la sesión se valida igual en cada request
@@ -470,6 +493,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             loginError: null,
             sessionEndReason: null,
             pendingOrgSelection: null,
+            organizationChoices: [],
             orgSelectionError: null,
             activeOrg: null,
             sessionScope: null,
@@ -492,21 +516,23 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
         // --- Actions: workspace lifecycle ---
         loadWorkspace: async () => {
-          const { session, getRepository } = get();
+          const { session, sessionScope, getRepository } = get();
           if (session === null) return;
+          const requestedSession = { session, sessionScope };
           const repository = getRepository();
           set({ workspaceLoading: true, workspaceLoadError: null });
           try {
             const ws = await repository.load();
             // F118 S2: the session may have ended while loading — a late
             // resolve must not repopulate the workspace after logout.
-            if (get().session !== session) return;
+            if (!isSameWorkspaceSession(requestedSession, get())) return;
             set({
               workspace: ws,
               workspaceLoading: false,
               workspaceSeq: get().workspaceSeq + 1,
             });
           } catch (err) {
+            if (!isSameWorkspaceSession(requestedSession, get())) return;
             // Do not silently seed — surface failure (#13).
             console.error('Failed to load workspace:', err);
             const message =
@@ -725,6 +751,22 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
 /** Default singleton — production wiring. */
 export const useWorkspaceStore = createWorkspaceStore();
+
+function isSameWorkspaceSession(
+  requested: {
+    readonly session: SessionMode | null;
+    readonly sessionScope: SessionScope | null;
+  },
+  current: Pick<WorkspaceState, 'session' | 'sessionScope'>,
+): boolean {
+  if (requested.session !== current.session) return false;
+  if (requested.sessionScope === null || current.sessionScope === null) {
+    return requested.sessionScope === current.sessionScope;
+  }
+  const requestedKey = sessionScopeKey(requested.sessionScope);
+  const currentKey = sessionScopeKey(current.sessionScope);
+  return requestedKey.every((value, index) => value === currentKey[index]);
+}
 
 /**
  * F118 S3: cheap probe for meaningful guest work. Reads the raw guest

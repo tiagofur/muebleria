@@ -261,6 +261,9 @@ func toOrgSummaryDTO(o domain.Organization) OrgSummaryDTO {
 func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
 	out := make([]MembershipDTO, 0, len(list))
 	for _, m := range list {
+		if m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive {
+			continue
+		}
 		roles := make([]string, len(m.Roles))
 		for i, role := range m.Roles {
 			roles[i] = string(role)
@@ -2162,6 +2165,11 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
+	memberships, err := s.Store.ListMembershipsByUser(r.Context(), claims.UserID)
+	if err != nil {
+		respondWithInternalError(w, err, "me: memberships")
+		return
+	}
 	transport := authTransportFromClaims(claims)
 	scope := openapi.SessionScope{
 		UserID:            claims.UserID,
@@ -2180,8 +2188,16 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 	if claims.OrganizationCredentialVersion > 0 {
 		scope.OrganizationCredentialVersion = &claims.OrganizationCredentialVersion
 	}
-	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Transport: transport, SessionScope: scope}
-	if claims.OrgID != "" {
+	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Memberships: toMembershipDTOs(memberships), Transport: transport, SessionScope: scope}
+	if claims.Support != nil {
+		org, err := s.Store.GetOrganizationByID(r.Context(), claims.Support.OrgID)
+		if err != nil || org == nil || claims.OrgID != claims.Support.OrgID || org.ID != claims.OrgID || org.Status != domain.OrganizationStatusActive {
+			respondWithError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		summary := toOpenAPIOrganization(*org)
+		resp.Organization = &summary
+	} else if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
 			org := toOpenAPIOrganization(m.Organization)
 			resp.Organization = &org

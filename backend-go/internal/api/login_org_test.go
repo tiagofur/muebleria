@@ -131,7 +131,10 @@ func TestLogin_NoMembershipNoPlatform(t *testing.T) {
 }
 
 func TestMe_EmitsAuthoritativeSessionScope(t *testing.T) {
-	server, _ := loginTestServer(t)
+	server, st := loginTestServer(t)
+	suspended := orgTestMembership("u1", "org-suspended", "suspended", []domain.UserRole{domain.RoleAdmin})
+	suspended.Status = domain.MembershipStatusSuspended
+	st.membershipsByUser["u1"] = append(st.membershipsByUser["u1"], suspended)
 	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
 		Roles: []string{"admin"}, OrgID: "org-2", MembershipID: "u1:org-2",
 		MembershipCredentialVersion: 4, OrganizationCredentialVersion: 7,
@@ -164,10 +167,24 @@ func TestMe_EmitsAuthoritativeSessionScope(t *testing.T) {
 		scope.AbsoluteExpiresAt == "" {
 		t.Fatalf("unexpected session scope: %+v", scope)
 	}
+	if len(response.Memberships) != 2 {
+		t.Fatalf("selectable memberships = %d, want only 2 active choices", len(response.Memberships))
+	}
+	for _, membership := range response.Memberships {
+		if membership.Status != openapi.MembershipStatusActive || membership.Organization.Status != openapi.OrganizationStatusActive {
+			t.Fatalf("non-selectable membership exposed: %+v", membership)
+		}
+	}
 }
 
 func TestMe_SeparatesSupportScopeFromMembershipScope(t *testing.T) {
-	server, _ := loginTestServer(t)
+	server, st := loginTestServer(t)
+	st.getUserByEmail.PlatformAdmin = true
+	st.membershipsByUser = nil
+	st.getOrgByID = &domain.Organization{
+		ID: "org-2", Name: "Support target", Slug: "support-target", Type: domain.OrganizationTypeFactory,
+		Status: domain.OrganizationStatusActive, CredentialVersion: 9,
+	}
 	token, err := auth.GenerateSupportToken("u1", "u@example.com", auth.SupportClaims{
 		OrgID: "org-2", SessionID: "support-1", OrganizationCredentialVersion: 9, Reason: "investigation",
 	}, server.JWTSecret)
@@ -193,6 +210,9 @@ func TestMe_SeparatesSupportScopeFromMembershipScope(t *testing.T) {
 		scope.MembershipCredentialVersion != nil || scope.OrganizationCredentialVersion == nil ||
 		*scope.OrganizationCredentialVersion != 9 {
 		t.Fatalf("unexpected support scope: status=%d scope=%+v", rec.Code, scope)
+	}
+	if response.Organization == nil || response.Organization.ID != "org-2" || len(response.Memberships) != 0 {
+		t.Fatalf("support target snapshot must not require actor membership: organization=%+v memberships=%+v", response.Organization, response.Memberships)
 	}
 }
 

@@ -15,6 +15,10 @@ import {
   USER_STORAGE_KEY,
 } from '../session';
 import * as sessionSync from '../sessionSync';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+} from '../shared/query/sessionScope';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +66,45 @@ const SESSION_SCOPE = {
   support_session_id: null, recovery_session_id: null, membership_credential_version: 2,
   organization_credential_version: 3, absolute_expires_at: '2026-08-31T00:00:00Z',
 } as const;
+
+const ACTIVE_MEMBERSHIP = {
+  id: 'membership-1', organization_id: 'org-1', user_id: 'user-1', status: 'active',
+  roles: ['admin'], joined_at: '2026-08-29T00:00:00Z', version: 1,
+  organization: {
+    id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active',
+    license: { plan: 'none', status: 'none' },
+  },
+} as const;
+
+function authScope(organizationId: string) {
+  const organization = {
+    ...ACTIVE_MEMBERSHIP.organization,
+    id: organizationId,
+    slug: organizationId,
+  };
+  return sessionScopeFromSession({
+    user: AUTH_USER,
+    roles: ['admin'],
+    memberships: [],
+    organization,
+    transport: 'web',
+    session_scope: {
+      ...SESSION_SCOPE,
+      membership_id: `membership-${organizationId}`,
+      organization_id: organizationId,
+    },
+  }, createSessionGeneration());
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 function jsonOk(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -200,7 +243,7 @@ describe('workspaceStore — login', () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        jsonOk({ token: 'jwt-1', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [], selection_required: false, transport: 'web' }),
+        jsonOk({ token: 'jwt-1', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [ACTIVE_MEMBERSHIP], selection_required: false, transport: 'web' }),
       );
     const store = createWorkspaceStore({
       deps: { baseUrl: 'http://test/api', fetchImpl },
@@ -219,6 +262,7 @@ describe('workspaceStore — login', () => {
       { id: AUTH_USER.id, roles: ['admin'] },
     );
     expect(store.getState().workspace).toBeNull(); // forces reload
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
     expect(notifySessionChanged).toHaveBeenCalledOnce();
   });
 
@@ -422,6 +466,52 @@ describe('workspaceStore — loadWorkspace', () => {
 
     // "backend down" string from Error.message wins; verify both branches:
     expect(store.getState().workspaceLoadError).toBeTruthy();
+  });
+
+  it('ignores a delayed organization A success after organization B commits', async () => {
+    const workspaceA = createSeedWorkspace();
+    const workspaceB = createSeedWorkspace();
+    const delayedA = deferred<Workspace>();
+    const repo = makeStubRepo(workspaceB);
+    vi.spyOn(repo, 'load')
+      .mockImplementationOnce(() => delayedA.promise)
+      .mockResolvedValueOnce(workspaceB);
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const loadA = store.getState().loadWorkspace();
+    store.setState({ sessionScope: authScope('org-b'), workspace: null });
+    await store.getState().loadWorkspace();
+    delayedA.resolve(workspaceA);
+    await loadA;
+
+    expect(store.getState().workspace).toBe(workspaceB);
+    expect(store.getState().workspaceLoadError).toBeNull();
+  });
+
+  it('ignores a delayed organization A error after organization B commits', async () => {
+    const workspaceB = createSeedWorkspace();
+    const delayedA = deferred<Workspace>();
+    const repo = makeStubRepo(workspaceB);
+    vi.spyOn(repo, 'load')
+      .mockImplementationOnce(() => delayedA.promise)
+      .mockResolvedValueOnce(workspaceB);
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const loadA = store.getState().loadWorkspace();
+    store.setState({ sessionScope: authScope('org-b'), workspace: null });
+    await store.getState().loadWorkspace();
+    delayedA.reject(new Error('API 401 Unauthorized'));
+    await loadA;
+
+    expect(store.getState().session).toBe('auth');
+    expect(store.getState().workspace).toBe(workspaceB);
+    expect(store.getState().workspaceLoadError).toBeNull();
   });
 });
 
@@ -863,6 +953,10 @@ describe('workspaceStore — hydrateSessionInfo', () => {
       jsonOk({
         user: AUTH_USER,
         roles: ['vendedor', 'ingeniero'],
+        memberships: [
+          ACTIVE_MEMBERSHIP,
+          { ...ACTIVE_MEMBERSHIP, id: 'membership-2', status: 'suspended' },
+        ],
         organization: {
           id: 'org-1',
           name: 'Taller 1',
@@ -886,6 +980,7 @@ describe('workspaceStore — hydrateSessionInfo', () => {
     );
     expect(stored.roles).toEqual(['vendedor', 'ingeniero']);
     expect(store.getState().sessionScope).toMatchObject({ organizationId: 'org-1', mode: 'auth' });
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
   });
 
   it('keeps the stored user unchanged when /auth/me reports no roles', async () => {
@@ -914,6 +1009,7 @@ describe('workspaceStore — hydrateSessionInfo', () => {
     const response = {
       user: AUTH_USER,
       roles: ['admin'],
+      memberships: [ACTIVE_MEMBERSHIP],
       organization: {
         id: 'org-1',
         name: 'Taller 1',
@@ -940,6 +1036,61 @@ describe('workspaceStore — hydrateSessionInfo', () => {
     expect(firstGeneration).toBeTruthy();
     expect(store.getState().sessionScope?.sessionGeneration).toBe(firstGeneration);
   });
+
+  it('ignores a delayed organization A hydration after organization B commits', async () => {
+    const delayedA = deferred<Response>();
+    const fetchImpl = vi.fn<typeof fetch>(() => delayedA.promise);
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-a');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const hydrateA = store.getState().hydrateSessionInfo();
+    const userB = { ...AUTH_USER, name: 'Organization B user' };
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-b');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userB));
+    const scopeB = authScope('org-b');
+    store.setState({ sessionScope: scopeB, activeOrg: { ...ACTIVE_MEMBERSHIP.organization, id: 'org-b' } });
+    delayedA.resolve(jsonOk({
+      user: AUTH_USER,
+      roles: ['admin'],
+      memberships: [ACTIVE_MEMBERSHIP],
+      organization: ACTIVE_MEMBERSHIP.organization,
+      transport: 'web',
+      session_scope: SESSION_SCOPE,
+    }));
+    await hydrateA;
+
+    expect(JSON.parse(globalThis.localStorage.getItem(USER_STORAGE_KEY)!)).toEqual(userB);
+    expect(store.getState().sessionScope).toBe(scopeB);
+    expect(store.getState().activeOrg?.id).toBe('org-b');
+    expect(store.getState().organizationChoices).toEqual([]);
+  });
+
+  it('keeps organization B intact when a delayed organization A hydration errors', async () => {
+    const delayedA = deferred<Response>();
+    const fetchImpl = vi.fn<typeof fetch>(() => delayedA.promise);
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-a');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const hydrateA = store.getState().hydrateSessionInfo();
+    const userB = { ...AUTH_USER, name: 'Organization B user' };
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-b');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userB));
+    const scopeB = authScope('org-b');
+    store.setState({ sessionScope: scopeB });
+    delayedA.reject(new Error('organization A unavailable'));
+    await hydrateA;
+
+    expect(JSON.parse(globalThis.localStorage.getItem(USER_STORAGE_KEY)!)).toEqual(userB);
+    expect(store.getState().sessionScope).toBe(scopeB);
+  });
 });
 
 describe('workspaceStore — atomic organization transition', () => {
@@ -956,6 +1107,7 @@ describe('workspaceStore — atomic organization transition', () => {
       .mockResolvedValueOnce(jsonOk(selected))
       .mockResolvedValueOnce(jsonOk({
         user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        memberships: [ACTIVE_MEMBERSHIP],
         transport: 'web', session_scope: SESSION_SCOPE,
       }));
     const store = createWorkspaceStore({
@@ -968,6 +1120,7 @@ describe('workspaceStore — atomic organization transition', () => {
     expect(transition.commit).toHaveBeenCalledOnce();
     expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-new');
     expect(store.getState().sessionScope?.organizationId).toBe('org-1');
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
   });
 
   it('keeps the prior token and cache when scope validation fails', async () => {
@@ -978,6 +1131,7 @@ describe('workspaceStore — atomic organization transition', () => {
       .mockResolvedValueOnce(jsonOk(selected))
       .mockResolvedValueOnce(jsonOk({
         user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        memberships: [],
         transport: 'web', session_scope: { ...SESSION_SCOPE, organization_id: 'org-other' },
       }));
     const store = createWorkspaceStore({

@@ -27,6 +27,20 @@ const sessionDto = {
     updated_at: '2026-08-30T01:00:00Z',
   },
   roles: ['admin'],
+  memberships: [{
+    id: '33333333-3333-4333-8333-333333333333',
+    organization_id: '22222222-2222-4222-8222-222222222222',
+    user_id: '11111111-1111-4111-8111-111111111111',
+    status: 'active',
+    roles: ['admin'],
+    joined_at: '2026-08-29T00:00:00Z',
+    version: 1,
+    organization: {
+      id: '22222222-2222-4222-8222-222222222222', name: 'Factory', slug: 'factory',
+      type: 'factory', status: 'active',
+      license: { plan: 'pro', status: 'active', expires_at: null },
+    },
+  }],
   organization: {
     id: '22222222-2222-4222-8222-222222222222',
     name: 'Factory',

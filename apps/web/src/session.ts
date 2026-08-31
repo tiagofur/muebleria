@@ -51,6 +51,7 @@ export type SessionSnapshot = {
   readonly user: AuthUser;
   readonly roles?: readonly string[];
   readonly organization?: OrgSummary;
+  readonly organizationChoices: readonly MembershipChoice[];
   readonly support?: SupportInfo;
   readonly sessionScope: SessionScope;
 };
@@ -303,6 +304,7 @@ export function validateOrganizationSessionTransition({
     user: sessionSnapshot.user,
     roles: sessionSnapshot.roles,
     organization: sessionSnapshot.organization,
+    memberships: sessionSnapshot.organizationChoices,
     sessionScope: scope,
   };
 }
@@ -325,6 +327,7 @@ export async function meRequest(
   return {
     user: toAuthUser(response.user, response.roles),
     roles: response.roles,
+    organizationChoices: activeOrganizationChoices(response.memberships),
     ...(response.organization ? { organization: response.organization } : {}),
     ...(response.support ? { support: response.support } : {}),
     sessionScope: sessionScopeFromSession(
@@ -352,15 +355,24 @@ export function parseAuthResponse(data: unknown): LoginSuccess {
   if (!d.token) throw new Error('Respuesta de autenticación inválida');
   const roles = d.roles;
   const org = d.organization;
-  const memberships = d.memberships;
+  const memberships = activeOrganizationChoices(d.memberships);
   return {
     token: d.token,
     user: toAuthUser(d.user, roles),
     ...(org ? { organization: org } : {}),
-    ...(memberships && memberships.length > 0 ? { memberships } : {}),
+    ...(memberships.length > 0 ? { memberships } : {}),
     ...(d.selection_required ? { selectionRequired: true } : {}),
     ...(d.support === true ? { support: true } : {}),
   };
+}
+
+function activeOrganizationChoices(
+  memberships: readonly MembershipChoice[],
+): readonly MembershipChoice[] {
+  return memberships.filter(
+    (membership) =>
+      membership.status === 'active' && membership.organization.status === 'active',
+  );
 }
 
 /**
