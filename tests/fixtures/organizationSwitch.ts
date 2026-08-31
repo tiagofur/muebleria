@@ -28,7 +28,7 @@ const user = () => ({
   created_at: NOW,
   updated_at: NOW,
 });
-const memberships = (rolesB: readonly string[]) => (['A', 'B'] as const).map((tenant) => ({
+const memberships = (rolesB: readonly string[], includeB = true) => (includeB ? ['A', 'B'] as const : ['A'] as const).map((tenant) => ({
   id: tenant === 'A' ? '51111111-1111-4111-8111-111111111111' : '52222222-2222-4222-8222-222222222222',
   organization_id: tenant === 'A' ? ORG_A : ORG_B,
   user_id: USER_ID,
@@ -39,10 +39,10 @@ const memberships = (rolesB: readonly string[]) => (['A', 'B'] as const).map((te
   organization: organization(tenant),
 }));
 
-function me(tenant: 'A' | 'B', rolesB: readonly string[]): MeResponse {
+function me(tenant: 'A' | 'B', rolesB: readonly string[], includeB = true): MeResponse {
   const roles = tenant === 'A' ? ['admin'] : rolesB;
   return {
-    user: user(), roles, memberships: memberships(rolesB),
+    user: user(), roles, memberships: memberships(rolesB, includeB),
     organization: organization(tenant), transport: 'web',
     session_scope: {
       user_id: USER_ID,
@@ -101,13 +101,19 @@ export type ApiRecorder = {
 
 export async function installOrganizationApi(
   page: Page,
-  options: { readonly rolesB?: readonly string[]; readonly delayTeamA?: boolean; readonly failTeam?: boolean } = {},
+  options: {
+    readonly rolesB?: readonly string[];
+    readonly delayTeamA?: boolean;
+    readonly failTeam?: boolean;
+    readonly selectFailure?: 'revoked' | 'forbidden' | 'network';
+  } = {},
 ): Promise<ApiRecorder> {
   const rolesB = options.rolesB ?? ['admin'];
   const requests: Array<{ path: string; authorization: string }> = [];
   let releaseTeamA = () => undefined;
   let markTeamAStarted = () => undefined;
   let selectionSnapshotExpected = false;
+  let refreshWithoutB = false;
   let workspaceWaiters: Array<() => void> = [];
   const teamAStarted = new Promise<void>((resolve) => { markTeamAStarted = resolve; });
   const teamAGate = new Promise<void>((resolve) => { releaseTeamA = resolve; });
@@ -123,11 +129,21 @@ export async function installOrganizationApi(
     // parallel. Let each page-load workspace commit before /auth/me changes
     // the session root; select-org snapshots must pass to start the B load.
     if (path.endsWith('/auth/me')) {
+      if (refreshWithoutB) return fulfill(route, me('A', rolesB, false));
       if (selectionSnapshotExpected) selectionSnapshotExpected = false;
       else await new Promise<void>((resolve) => { workspaceWaiters.push(resolve); });
-      return fulfill(route, me(tenant, rolesB));
+      return fulfill(route, me(tenant, rolesB, !refreshWithoutB));
     }
     if (path.endsWith('/auth/select-org')) {
+      if (options.selectFailure === 'network') return route.abort('connectionfailed');
+      if (options.selectFailure) {
+        refreshWithoutB = options.selectFailure === 'revoked';
+        return fulfill(route, {
+          code: options.selectFailure === 'revoked' ? 'MEMBERSHIP_NOT_SELECTABLE' : 'FORBIDDEN',
+          message: 'selection denied', fieldErrors: {}, requestId: 'browser-select-denied',
+          retryable: false, details: {},
+        }, 403);
+      }
       selectionSnapshotExpected = true;
       return fulfill(route, selection(rolesB));
     }
