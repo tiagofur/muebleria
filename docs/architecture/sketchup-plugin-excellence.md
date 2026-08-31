@@ -434,6 +434,10 @@ Pure host interaction, read-only visualization, docs and performance/compatibili
 ## 18. Legacy representation migration
 
 #416 owns Group → native ComponentInstance representation migration.
+Implemented (F201): `migration/scanner.rb` + `migration/migrator.rb` + the
+"Migrar modelos anteriores…" review dialog; policy: ONE undoable operation
+per batch, sources erased only after validated replacements, honest per-item
+reporting, provenance marker `legacy-group` in namespaced metadata.
 
 It must be product-quality:
 

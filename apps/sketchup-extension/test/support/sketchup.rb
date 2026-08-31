@@ -246,7 +246,9 @@ module SketchupStub
   class GroupStub < Sketchup::Group
     include AttributeContainer
 
-    attr_accessor :name, :material
+    # Host-faithful: a real Group exposes its placement transformation
+    # (#416 migration reads it to preserve the world placement).
+    attr_accessor :name, :material, :transformation
     attr_reader :entities
 
     def initialize(name = "")
@@ -254,6 +256,7 @@ module SketchupStub
       @name = name
       @material = nil
       @entities = EntitiesStub.new
+      @transformation = Geom::Transformation.new
     end
 
     # Host-faithful: a real SketchUp Group also wraps a ComponentDefinition,

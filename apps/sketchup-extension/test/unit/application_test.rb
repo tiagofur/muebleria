@@ -119,8 +119,8 @@ class ApplicationTest < Minitest::Test
     @application.start
     @application.start
 
-    assert_equal 1, SketchupStub.menus['Extensions'].items.length
-    assert_equal 'Abrir Granete', SketchupStub.menus['Extensions'].items.first.first
+    labels = SketchupStub.menus['Extensions'].items.map(&:first)
+    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
   end
 
   def test_dialog_close_and_reopen_recreates_callbacks_without_duplicates
@@ -175,7 +175,8 @@ class ApplicationTest < Minitest::Test
     @application.shutdown
     @application.start
 
-    assert_equal 1, SketchupStub.menus['Extensions'].items.length
+    labels = SketchupStub.menus['Extensions'].items.map(&:first)
+    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
     refute UI::HtmlDialog.instances.first.visible?
   end
 

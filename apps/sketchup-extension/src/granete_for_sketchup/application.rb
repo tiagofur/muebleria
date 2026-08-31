@@ -31,6 +31,7 @@ module Granete
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
           close_dialog: method(:close_dialog),
+          migrate_models: method(:open_migration_review),
           logger: logger
         )
       end
@@ -50,6 +51,11 @@ module Granete
 
       def open_dialog
         @dialog.show
+      end
+
+      # #416: menu entry for the legacy-model migration review.
+      def open_migration_review
+        @dialog.handle_migration_review
       end
 
       def close_dialog

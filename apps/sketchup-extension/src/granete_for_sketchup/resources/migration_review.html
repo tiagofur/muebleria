@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Migrar modelos anteriores — Granete</title>
+  <style>
+    /* Granete light theme — same token vocabulary as dialog.html so the
+       migration review reads as the same product as the main panel. */
+    :root {
+      color-scheme: light;
+      --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+      --brand-50: hsl(245 100% 97%);
+      --brand-500: hsl(245 58% 51%);
+      --brand-600: hsl(245 55% 43%);
+      --brand-800: hsl(245 48% 28%);
+
+      --ok-600: hsl(150 60% 32%);
+      --warn-600: hsl(35 80% 35%);
+
+      --surface-app: hsl(220 20% 97%);
+      --surface-card: hsl(0 0% 100%);
+      --surface-card-subtle: hsl(220 14% 96%);
+      --surface-hover: hsl(220 14% 94%);
+
+      --text-primary: hsl(230 18% 12%);
+      --text-secondary: hsl(230 14% 35%);
+      --text-muted: hsl(230 12% 40%);
+      --text-inverse: hsl(0 0% 100%);
+
+      --border-default: hsl(220 14% 84%);
+      --border-focus: var(--brand-500);
+
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.25rem;
+      --space-6: 1.5rem;
+
+      --radius-sm: 0.375rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.75rem;
+
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-focus: 0 0 0 3px hsl(245 58% 51% / 20%);
+
+      --text-xs: 0.75rem;
+      --text-sm: 0.8125rem;
+      --text-base: 0.875rem;
+      --text-lg: 1rem;
+
+      --weight-medium: 500;
+      --weight-semibold: 600;
+      --weight-bold: 700;
+
+      --duration-fast: 150ms;
+      --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--text-base);
+      color: var(--text-primary);
+      background: var(--surface-app);
+      padding: var(--space-5);
+      min-height: 100vh;
+    }
+
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      padding: var(--space-5);
+    }
+
+    .card + .card { margin-top: var(--space-4); }
+
+    h1 {
+      font-size: var(--text-lg);
+      font-weight: var(--weight-semibold);
+      margin-bottom: var(--space-1);
+    }
+
+    .subtitle { color: var(--text-secondary); font-size: var(--text-sm); }
+
+    .summary-line {
+      margin-top: var(--space-4);
+      font-size: var(--text-base);
+      line-height: 1.6;
+    }
+
+    .summary-line strong { font-weight: var(--weight-semibold); }
+
+    .count-ok { color: var(--ok-600); font-weight: var(--weight-semibold); }
+    .count-warn { color: var(--warn-600); font-weight: var(--weight-semibold); }
+
+    .items { margin-top: var(--space-4); display: grid; gap: var(--space-2); }
+
+    .item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-2) var(--space-3);
+      padding: var(--space-3);
+      background: var(--surface-card-subtle);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+    }
+
+    .item-name { font-weight: var(--weight-medium); }
+    .item-meta { color: var(--text-muted); font-size: var(--text-xs); margin-top: 2px; }
+
+    .badge {
+      justify-self: end;
+      align-self: start;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      padding: 2px var(--space-2);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .badge-ready { background: var(--brand-50); color: var(--brand-800); }
+    .badge-review { background: hsl(35 90% 92%); color: var(--warn-600); }
+    .badge-unsupported { background: hsl(0 60% 94%); color: hsl(0 55% 38%); }
+    .badge-migrated { background: hsl(150 70% 93%); color: var(--ok-600); }
+    .badge-aborted { background: hsl(0 60% 94%); color: hsl(0 55% 38%); }
+
+    .item-detail {
+      grid-column: 1 / -1;
+      color: var(--text-secondary);
+      font-size: var(--text-xs);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-3);
+      margin-top: var(--space-5);
+    }
+
+    button {
+      font-family: inherit;
+      font-size: var(--text-base);
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      padding: var(--space-2) var(--space-4);
+      cursor: pointer;
+      transition: background var(--duration-fast) var(--ease-out);
+    }
+    button:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+
+    button.primary {
+      background: var(--brand-600);
+      color: var(--text-inverse);
+      font-weight: var(--weight-medium);
+    }
+    button.primary:hover { background: var(--brand-500); }
+    button.primary:disabled { background: var(--border-default); color: var(--text-muted); cursor: default; }
+
+    button.secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border-color: var(--border-default);
+    }
+    button.secondary:hover { background: var(--surface-hover); }
+
+    .result-note {
+      margin-top: var(--space-4);
+      padding: var(--space-3);
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      line-height: 1.5;
+    }
+    .result-ok { background: hsl(150 70% 95%); color: var(--ok-600); }
+    .result-partial { background: hsl(35 90% 94%); color: var(--warn-600); }
+    .result-error { background: hsl(0 60% 95%); color: hsl(0 55% 38%); }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Migrar modelos anteriores</h1>
+    <p class="subtitle">Actualizá los muebles creados con una versión anterior de Granete a la representación nativa. La migración conserva posición, materiales e identidad de negocio; podés deshacerla con una sola acción de Undo.</p>
+    <p id="summary" class="summary-line hidden"></p>
+    <div id="items" class="items"></div>
+    <div class="actions">
+      <button id="later" class="secondary" type="button">Más tarde</button>
+      <button id="migrate" class="primary" type="button">Actualizar compatibles</button>
+    </div>
+    <div id="result-note" class="result-note hidden"></div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var stateLabels = {
+        ready: 'Listo',
+        requires_review: 'Requiere revisión',
+        unsupported: 'No compatible',
+        migrated: 'Migrado'
+      };
+      var reasonLabels = {
+        'missing-furniture-definition-id': 'Sin definición de catálogo en la metadata',
+        'definition-not-found': 'La definición ya no está en el catálogo',
+        'resolve-unavailable': 'No se pudo resolver el layout (sin conexión o catálogo local)',
+        'resolve-failed': 'Falló la resolución del layout',
+        'corrupt-metadata': 'Metadata ilegible',
+        'root-kind-not-furniture': 'Entidad suelta que no es un mueble'
+      };
+
+      function el(id) { return document.getElementById(id); }
+
+      function itemNode(item, overrideState) {
+        var node = document.createElement('div');
+        node.className = 'item';
+
+        var main = document.createElement('div');
+        var name = document.createElement('div');
+        name.className = 'item-name';
+        name.textContent = item.name || item.instanceRef || 'Mueble sin nombre';
+        var meta = document.createElement('div');
+        meta.className = 'item-meta';
+        meta.textContent = (item.instanceRef || 'sin ref') + (item.definitionId ? ' · ' + item.definitionId : '');
+        main.appendChild(name);
+        main.appendChild(meta);
+
+        var badgeState = overrideState || item.state;
+        var badge = document.createElement('span');
+        badge.className = 'badge badge-' + badgeState;
+        badge.textContent = stateLabels[badgeState] || badgeState;
+
+        node.appendChild(main);
+        node.appendChild(badge);
+
+        var detailText = item.detail || (item.reason ? reasonLabels[item.reason] || item.reason : null);
+        if (detailText) {
+          var detail = document.createElement('div');
+          detail.className = 'item-detail';
+          detail.textContent = detailText;
+          node.appendChild(detail);
+        }
+        return node;
+      }
+
+      function render(payload) {
+        var counts = payload.counts || {};
+        var summary = el('summary');
+        summary.classList.remove('hidden');
+        summary.innerHTML = '';
+        var line = document.createElement('span');
+        var detected = counts.detected || 0;
+        var ready = counts.ready || 0;
+        var review = counts.requiresReview || 0;
+        line.innerHTML =
+          '<strong>' + detected + '</strong> mueble' + (detected === 1 ? '' : 's') +
+          ' de una versión anterior detectado' + (detected === 1 ? '' : 's') + '<br>' +
+          '<span class="count-ok">' + ready + ' listo' + (ready === 1 ? '' : 's') + ' para actualizar</span> · ' +
+          '<span class="count-warn">' + review + ' requiere' + (review === 1 ? '' : 'n') + ' revisión</span>';
+        summary.appendChild(line);
+
+        var items = el('items');
+        items.innerHTML = '';
+        (payload.requiresReview || []).forEach(function (item) { items.appendChild(itemNode(item)); });
+        (payload.ready || []).forEach(function (item) { items.appendChild(itemNode(item)); });
+
+        var migrate = el('migrate');
+        migrate.disabled = ready === 0;
+        migrate.textContent = 'Actualizar compatibles (' + ready + ')';
+        migrate.classList.remove('hidden');
+
+        var note = el('result-note');
+        note.classList.add('hidden');
+      }
+
+      function renderResult(report) {
+        var note = el('result-note');
+        note.classList.remove('hidden');
+        note.innerHTML = '';
+
+        if (report.aborted) {
+          note.className = 'result-note result-error';
+          note.textContent = 'La migración se detuvo y no se cambió nada del modelo.' +
+            (report.error ? ' (' + report.error + ')' : '');
+          return;
+        }
+
+        var migratedCount = report.migratedCount || 0;
+        var remaining = report.remainingLegacyCount || 0;
+        var heading = document.createElement('strong');
+        var detail = document.createElement('span');
+
+        if (report.allMigrated) {
+          note.className = 'result-note result-ok';
+          heading.textContent = 'Migración completa: ' + migratedCount + ' mueble' + (migratedCount === 1 ? '' : 's') + ' actualizado' + (migratedCount === 1 ? '' : 's') + '. ';
+          detail.textContent = 'Guardá el modelo para conservar la nueva representación.';
+        } else if (migratedCount > 0) {
+          note.className = 'result-note result-partial';
+          heading.textContent = 'Migración parcial: ' + migratedCount + ' actualizado' + (migratedCount === 1 ? '' : 's') + '. ';
+          detail.textContent = remaining + ' mueble' + (remaining === 1 ? '' : 's') + ' quedó' + (remaining === 1 ? '' : 'ron') + ' sin migrar (revisá el detalle de cada uno).';
+        } else {
+          note.className = 'result-note result-error';
+          heading.textContent = 'No se migró ningún mueble. ';
+          detail.textContent = remaining + ' requiere' + (remaining === 1 ? '' : 'n') + ' revisión.';
+        }
+
+        note.appendChild(heading);
+        note.appendChild(detail);
+
+        var items = el('items');
+        items.innerHTML = '';
+        (report.requiresReview || []).forEach(function (item) { items.appendChild(itemNode(item, 'requires_review')); });
+        (report.migrated || []).forEach(function (item) {
+          var migratedItem = {
+            name: item.name,
+            instanceRef: item.instanceRef,
+            definitionId: item.definitionId
+          };
+          items.appendChild(itemNode(migratedItem, 'migrated'));
+        });
+
+        var migrate = el('migrate');
+        migrate.disabled = true;
+      }
+
+      window.initMigrationReview = function (payload) { render(payload || {}); };
+      window.migrationResult = function (report) { renderResult(report || {}); };
+
+      el('migrate').addEventListener('click', function () {
+        if (window.sketchup && window.sketchup.migrate_compatible) {
+          window.sketchup.migrate_compatible();
+        }
+      });
+      el('later').addEventListener('click', function () {
+        if (window.sketchup && window.sketchup.close_migration) {
+          window.sketchup.close_migration();
+        }
+      });
+
+      if (window.sketchup && window.sketchup.migration_ready) {
+        window.sketchup.migration_ready();
+      }
+    }());
+  </script>
+</body>
+</html>

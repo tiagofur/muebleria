@@ -3,9 +3,11 @@
 module Granete
   module SketchUpExtension
     class Lifecycle
-      def initialize(open_dialog:, close_dialog:, logger:)
+      def initialize(open_dialog:, close_dialog:, logger:, migrate_models: nil)
         @open_dialog = open_dialog
         @close_dialog = close_dialog
+        # #416: optional entry point for the legacy-model migration review.
+        @migrate_models = migrate_models
         @logger = logger
         @menu_registered = false
         @started = false
@@ -37,8 +39,17 @@ module Granete
 
       def register_menu
         ::UI.menu('Extensions').add_item('Abrir Granete') { @open_dialog.call }
+        register_migration_menu
         register_toolbar
         @menu_registered = true
+      end
+
+      # Legacy Group → native migration review (#416). The entry is always
+      # present; the review itself reports whatever the scan finds.
+      def register_migration_menu
+        return unless @migrate_models
+
+        ::UI.menu('Extensions').add_item('Migrar modelos anteriores…') { @migrate_models.call }
       end
 
       # A toolbar button keeps the panel one click away: the Extensions menu

@@ -21,8 +21,10 @@ class WiringTest < Minitest::Test
   end
 
   def test_support_entrypoint_boots_the_runtime
-    assert_equal 1, SketchupStub.menus['Extensions'].items.length
-    assert_equal 'Abrir Granete', SketchupStub.menus['Extensions'].items.first.first
+    # #416: the Extensions menu carries the main entry plus the legacy
+    # migration review entry.
+    labels = SketchupStub.menus['Extensions'].items.map(&:first)
+    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
     assert_equal 1, SketchupStub.observers.length
     assert Granete::SketchUpExtension::Runtime.application.started?
   end
@@ -44,7 +46,8 @@ class WiringTest < Minitest::Test
   def test_support_entrypoint_is_idempotent_per_session
     load File.join(SOURCE_DIR, 'granete_for_sketchup', 'main.rb')
 
-    assert_equal 1, SketchupStub.menus['Extensions'].items.length
+    labels = SketchupStub.menus['Extensions'].items.map(&:first)
+    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
     assert_equal 1, SketchupStub.observers.length
   end
 end

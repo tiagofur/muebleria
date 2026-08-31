@@ -24,6 +24,8 @@ module Granete
         assets/asset_loader
         assets/texture_cache
         model/furniture_builder
+        migration/scanner
+        migration/migrator
         selection/capabilities
         selection/capability_reasons
         selection/selection_context
@@ -31,6 +33,7 @@ module Granete
         selection/resolver
         observers/selection_observer
         ui/option_selector_controller
+        ui/migration_review_controller
         ui/dialog_controller
         lifecycle
         application
