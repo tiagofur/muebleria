@@ -8,8 +8,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FileText,
   Factory,
@@ -319,6 +320,92 @@ describe('AppShell session identity (issue #29)', () => {
     expect(css).toMatch(/\.app-topbar__identity/);
     expect(css).toMatch(/var\(--surface-card\)/);
     expect(css).toMatch(/var\(--text-secondary\)/);
+  });
+
+  it('presents authoritative organization identity and a controlled accessible switcher', async () => {
+    let releaseSwitch!: () => void;
+    const onOrganizationChange = vi.fn(() => new Promise<void>((resolve) => { releaseSwitch = resolve; }));
+    const first = {
+      id: 'org-1', name: 'Taller Norte', type: 'factory' as const, status: 'active' as const,
+      license: { plan: 'pro', status: 'expired' },
+    };
+    const second = {
+      id: 'org-2', name: 'Tienda Centro', type: 'store' as const, status: 'active' as const,
+      license: { plan: 'trial', status: 'active' },
+    };
+    const props = {
+      activeId: 'home' as const,
+      onNavigate: vi.fn(),
+      children: createElement('main'),
+      sessionMode: 'auth' as const,
+      user: { email: 'ana@example.com', roles: ['admin', 'vendedor'] },
+      organization: first,
+      organizationChoices: [
+        { status: 'active', organization: first },
+        { status: 'active', organization: second },
+      ],
+      onOrganizationChange,
+    };
+    const { rerender } = render(createElement(AppShell, props));
+    const actor = userEvent.setup();
+    const switcher = screen.getByRole('combobox', { name: 'Cambiar organización' });
+
+    expect(screen.getByLabelText('Organización activa').textContent).toContain('Taller Norte');
+    expect(screen.getByLabelText('Organización activa').textContent).toContain('Fábrica · Activa · Plan pro · Licencia vencida');
+    expect(screen.getByTestId('app-session-identity').textContent).toContain('Admin');
+    expect(screen.getByTestId('app-session-identity').textContent).toContain('Vendedor');
+    switcher.focus();
+    expect(document.activeElement).toBe(switcher);
+    await actor.selectOptions(switcher, 'org-2');
+
+    expect(onOrganizationChange).toHaveBeenCalledWith('org-2');
+    expect(screen.getByLabelText('Organización activa').textContent).toContain('Taller Norte');
+    rerender(createElement(AppShell, { ...props, organizationSwitchLoading: true }));
+    expect((screen.getByRole('combobox', { name: 'Cambiar organización' }) as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByRole('status').textContent).toContain('Cambiando');
+    releaseSwitch();
+  });
+
+  it('hides switching without two active choices and announces support/errors', () => {
+    const organization = {
+      id: 'org-1', name: 'Taller Norte', type: 'factory' as const, status: 'active' as const,
+      license: { plan: 'pro', status: 'active' },
+    };
+    render(createElement(AppShell, {
+      activeId: 'home', onNavigate: vi.fn(), children: createElement('main'),
+      sessionMode: 'support', user: { email: 'staff@example.com', roles: ['admin'] },
+      organization, organizationChoices: [{ status: 'active', organization }],
+      organizationSwitchError: 'La organización cambió en otra pestaña',
+      onOrganizationChange: vi.fn(),
+    }));
+
+    expect(screen.queryByRole('combobox', { name: 'Cambiar organización' })).toBeNull();
+    expect(screen.getByText('Soporte')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('otra pestaña');
+  });
+
+  it('presents guest mode without leaking organization identity or switching', () => {
+    const organization = {
+      id: 'org-1', name: 'Taller Norte', type: 'factory' as const, status: 'suspended' as const,
+      license: { plan: 'pro', status: 'expired' },
+    };
+    const { rerender } = render(createElement(AppShell, {
+      activeId: 'home', onNavigate: vi.fn(), children: createElement('main'),
+      sessionMode: 'guest', organization,
+      organizationChoices: [{ status: 'active', organization }],
+      onOrganizationChange: vi.fn(),
+    }));
+
+    expect(screen.getByTestId('app-session-identity').textContent).toContain('Invitado');
+    expect(screen.getByTestId('app-session-identity').textContent).toContain('Modo local');
+    expect(screen.queryByLabelText('Organización activa')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Cambiar organización' })).toBeNull();
+
+    rerender(createElement(AppShell, {
+      activeId: 'home', onNavigate: vi.fn(), children: createElement('main'), sessionMode: 'auth',
+      user: { email: 'ana@example.com', roles: ['admin'] }, organization,
+    }));
+    expect(screen.getByLabelText('Organización activa').textContent).toContain('Suspendida · Plan pro · Licencia vencida');
   });
 });
 
