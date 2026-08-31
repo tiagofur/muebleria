@@ -5104,6 +5104,54 @@
         "Fresh independent review APPROVED in 2693880d over integrated implementation head 40f01540 after all seven owner-review blockers, isolated full init, TestUp 12/12 (213 assertions), and remote CI run 33343698712 completed green."
       ],
       "completedAt": "2026-08-30"
+    },
+    {
+      "id": "F199",
+      "title": "Tenant-safe Team, Organization and Platform UX (#458)",
+      "description": "Migra sesión, cambio de organización, Team, Invitations y Platform a server state tipado con aislamiento completo por session scope, commands autoritativos y UX accesible sin fallbacks legacy.",
+      "tags": [
+        "organization-foundation",
+        "web",
+        "react",
+        "security",
+        "openapi",
+        "team",
+        "platform",
+        "p0"
+      ],
+      "created": "2026-08-30",
+      "acceptance": [
+        "Team, Organization, Platform y Auth migrados consumen únicamente el cliente OpenAPI generado mediante adapters tipados, sin fetch directo, casts ciegos ni fallback legacy",
+        "Toda query remota usa una key con session scope completo y el cambio de organización cancela requests, elimina cache/stores/media previos y nunca renderiza datos del tenant anterior",
+        "El shell muestra organización, lifecycle, licencia, roles/capabilities y mode efectivos; switch, logout y support siguen un protocolo autoritativo y multi-tab sin transmitir secretos",
+        "Team separa account y membership status, conserva suspended/left y representa roles, sectors, seats, revocación, transfer y offboarding con conflicts accionables",
+        "Invitations representa lifecycle real, preview/accept seguro, resend/revoke versionados y clipboard sin falso success",
+        "Platform representa provisioning, readiness, lifecycle, license, entitlements, users anidados y audit resumido sin JSON/UUID crudo",
+        "Loading, stale, partial, empty, no-results, forbidden, conflict, offline y error tienen estados distintos y accesibles en desktop/tablet/mobile",
+        "Tests unitarios, contract, cache isolation, multi-tab, behavior, axe y Playwright con Go/PostgreSQL real prueban los criterios sin skips ni Gate A falso"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/458",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/architecture/organization-foundation-v2.md",
+        "docs/adr/0005-multi-organization-tenancy.md",
+        "docs/adr/0006-membership-lifecycle-and-organization-relationships.md",
+        "docs/architecture.md",
+        "docs/design.md",
+        "docs/operational-ux.md",
+        "docs/verification.md",
+        "contracts/openapi/granete-api.v1.yaml"
+      ],
+      "status": "in_progress",
+      "depends_on": [
+        "F191",
+        "F192",
+        "F194",
+        "F196",
+        "F197",
+        "F198"
+      ]
     }
   ]
 }
