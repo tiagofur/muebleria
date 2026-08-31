@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { roleLabelEs } from '@granete/domain';
@@ -228,6 +228,14 @@ describe('UsersScreen (roles canónicos, contracts/roles.json)', () => {
     for (const rejected of contract.rejectedRoles) {
       expect(screen.queryByText(rejected, { exact: false })).toBeNull();
     }
+    const preview = screen.getByRole('region', { name: 'Vista previa de permisos' });
+    expect(within(preview).getByText('Permitido: Ver cotizaciones')).toBeTruthy();
+    expect(within(preview).getByText('No permitido: Modificar catálogos y muebles')).toBeTruthy();
+    expect(within(preview).getByText('No permitido: Ver costos internos')).toBeTruthy();
+    await user.click(screen.getByRole('checkbox', { name: roleLabelEs('ingeniero') }));
+    expect(within(preview).getByText('Permitido: Modificar catálogos y muebles')).toBeTruthy();
+    expect(within(preview).getByText('Permitido: Ver costos internos')).toBeTruthy();
+    expect(within(preview).getByRole('note').textContent).toContain('costos internos junto con cotizaciones');
   });
 
   it('renders friendly labels through the domain roleLabelEs (single source)', () => {
@@ -622,5 +630,111 @@ describe('UsersScreen (#458 tenant-safe query integrity)', () => {
     expect(await screen.findByText('Bruno')).toBeTruthy();
     expect(screen.queryByText(/secret-a/)).toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Invitar miembro al taller' })).toBeNull();
+  });
+});
+
+describe('UsersScreen (#458 last-admin transfer)', () => {
+  const source = {
+    membership_id: '11111111-1111-4111-8111-111111111111', user_id: '21111111-1111-4111-8111-111111111111', name: 'Ana Admin', email: 'ana@test.com', roles: ['admin'], account_status: 'active', membership_status: 'active', joined_at: '2026-08-28T00:00:00Z', version: 4, sectors: [], offboarding_blocking_count: 0, last_activity: null, credential_version: 1, sessions_revoked_at: null,
+  } as const;
+  const target = {
+    ...source, membership_id: '33333333-3333-4333-8333-333333333333', user_id: '43333333-3333-4333-8333-333333333333', name: 'Bruno Operador', email: 'bruno@test.com', roles: ['vendedor'], version: 7,
+  } as const;
+  const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const apiError = (code: string) => response({ code, message: code, fieldErrors: {}, requestId: 'request-1', retryable: false, details: {} }, 409);
+  const directory = (canTransfer: boolean) => ({
+    items: [source, target], summary: { active_members: 2, suspended_members: 0, left_members: 0, max_active_members: null, team_version: 1, entitlements_version: 1, capabilities: ['team:view', 'team:manage:all', 'team:assign:admin', ...(canTransfer ? ['team:transfer_admin'] : [])] },
+  });
+  const transferResult = { source: { membership_id: source.membership_id, user_id: source.user_id, status: 'active', roles: ['admin'], version: 5 }, target: { membership_id: target.membership_id, user_id: target.user_id, status: 'active', roles: ['vendedor', 'admin'], version: 8 } };
+
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  async function requestAdminRemoval(actor: ReturnType<typeof userEvent.setup>) {
+    await actor.click(await screen.findByRole('button', { name: 'Modificar roles de Ana Admin' }));
+    await actor.click(screen.getByRole('checkbox', { name: roleLabelEs('vendedor') }));
+    await actor.click(screen.getByRole('checkbox', { name: roleLabelEs('admin') }));
+    await actor.click(screen.getByRole('button', { name: 'Guardar roles' }));
+  }
+
+  function stubTransfer(canTransfer: boolean, transfer: () => Promise<Response> | Response) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/org/memberships')) return response(directory(canTransfer));
+      if (url.includes(':change-roles')) return apiError('LAST_ADMIN');
+      if (url.includes(':transfer-admin')) return transfer();
+      return response([]);
+    });
+  }
+
+  it('does not expose transfer without the authoritative capability', async () => {
+    vi.stubGlobal('fetch', stubTransfer(false, () => response(transferResult)));
+    const actor = userEvent.setup();
+    renderUsers();
+    await requestAdminRemoval(actor);
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('Transferí ese rol'));
+    expect(screen.queryByRole('dialog', { name: 'Transferir administración' })).toBeNull();
+  });
+
+  it('opens the accessible transfer flow and announces success only after the response', async () => {
+    let resolveTransfer!: (response: Response) => void;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = stubTransfer(true, () => new Promise<Response>((resolve) => { resolveTransfer = resolve; }));
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      return fetchMock(input, init);
+    }));
+    const actor = userEvent.setup();
+    renderUsers();
+    await requestAdminRemoval(actor);
+    const dialog = await screen.findByRole('dialog', { name: 'Transferir administración' });
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    await actor.selectOptions(within(dialog).getByLabelText('Nueva persona administradora *'), target.membership_id);
+    await actor.type(within(dialog).getByLabelText('Motivo *'), 'Cambio de responsable');
+    await actor.click(within(dialog).getByRole('button', { name: 'Transferir administración' }));
+    expect(screen.queryByText(/Administración transferida/)).toBeNull();
+    resolveTransfer(response(transferResult));
+    expect(await screen.findByText(/Administración transferida/)).toBeTruthy();
+    const request = requests.find(({ url }) => url.includes(':transfer-admin'))!;
+    expect(new Headers(request.init?.headers).get('If-Match')).toBe('"v4"');
+    expect(new Headers(request.init?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(JSON.parse(String(request.init?.body))).toMatchObject({ target_membership_id: target.membership_id, target_version: 7, demote_source: false, reason: 'Cambio de responsable' });
+  });
+
+  it('reloads stale source and target snapshots before retrying a transfer', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    let directoryRequests = 0;
+    let transferAttempts = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith('/org/memberships')) {
+        directoryRequests += 1;
+        if (directoryRequests === 2) return response({ message: 'down' }, 500);
+        const items = directoryRequests > 2 ? [{ ...source, version: 6 }, { ...target, version: 9 }] : [source, target];
+        return response({ ...directory(true), items });
+      }
+      if (url.includes(':change-roles')) return apiError('LAST_ADMIN');
+      if (url.includes(':transfer-admin')) return ++transferAttempts === 1 ? apiError('MEMBERSHIP_VERSION_CONFLICT') : response(transferResult);
+      return response([]);
+    }));
+    const actor = userEvent.setup();
+    renderUsers();
+    await requestAdminRemoval(actor);
+    const dialog = await screen.findByRole('dialog', { name: 'Transferir administración' });
+    await actor.selectOptions(within(dialog).getByLabelText('Nueva persona administradora *'), target.membership_id);
+    await actor.type(within(dialog).getByLabelText('Motivo *'), 'Cambio de responsable');
+    await actor.click(within(dialog).getByRole('button', { name: 'Transferir administración' }));
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('Actualizá la lista');
+    await actor.click(within(dialog).getByRole('button', { name: 'Actualizar equipo' }));
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('No se pudo actualizar');
+    expect(within(dialog).getByRole('button', { name: 'Transferir administración' })).toHaveProperty('disabled', true);
+    expect(transferAttempts).toBe(1);
+    await actor.click(within(dialog).getByRole('button', { name: 'Actualizar equipo' }));
+    await waitFor(() => expect(within(dialog).queryByRole('alert')).toBeNull());
+    await actor.click(within(dialog).getByRole('button', { name: 'Transferir administración' }));
+    expect(await screen.findByText(/Administración transferida/)).toBeTruthy();
+    const transfers = requests.filter(({ url }) => url.includes(':transfer-admin'));
+    expect(new Headers(transfers[1]!.init?.headers).get('If-Match')).toBe('"v6"');
+    expect(JSON.parse(String(transfers[1]!.init?.body)).target_version).toBe(9);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   anyRole,
+  effectivePermissionPreviewForRoles,
   navIdsForRoles,
   navIdsForRole,
   rolesAllScopedBySector,
@@ -131,5 +132,19 @@ describe('rolesCanViewCosts (union)', () => {
 
   it('empty set fails closed', () => {
     expect(rolesCanViewCosts([])).toBe(false);
+  });
+});
+
+describe('effectivePermissionPreviewForRoles', () => {
+  it('projects union permissions and sensitive combinations from canonical rules', () => {
+    const preview = effectivePermissionPreviewForRoles(['vendedor', 'ingeniero'], 'factory');
+    expect(preview.permissions).toMatchObject({ quotes: true, catalog_mutation: true, costs: true, assign_admin: false });
+    expect(preview.warnings).toEqual(['sales_cost_visibility']);
+  });
+
+  it('fails closed for a role set without the requested permissions', () => {
+    const preview = effectivePermissionPreviewForRoles(['user'], 'factory');
+    expect(preview.permissions).toMatchObject({ sales_team: false, catalog_mutation: false, costs: false, transfer_admin: false });
+    expect(preview.warnings).toEqual([]);
   });
 });
