@@ -136,6 +136,27 @@ class FurnitureBuilderTest < Minitest::Test
                  @model.operations
   end
 
+  def test_preserves_false_and_omits_missing_optional_parameters_in_authoritative_intent
+    definition = JSON.parse(JSON.generate(@provider.find_definition('kitchen-base-standard')))
+    definition['parameters'] << {
+      'name' => 'softClose', 'label' => 'Cierre suave', 'type' => 'boolean',
+      'defaultValue' => true, 'category' => 'metadata'
+    }
+    definition['parameters'] << {
+      'name' => 'note', 'label' => 'Nota', 'type' => 'string', 'category' => 'metadata'
+    }
+
+    result = @builder.insert_furniture(@model, definition, { 'softClose' => false },
+                                       resolved_layout: native_layout)
+
+    assert result['success']
+    assert_equal false, result['parameters']['softClose']
+    refute_includes result['parameters'], 'note'
+    metadata = @store.read(furniture_instance)
+    assert_equal false, metadata.dig('intent', 'parameters', 'softClose')
+    refute_includes metadata.dig('intent', 'parameters'), 'note'
+  end
+
   def test_updates_furniture_in_place_regenerating_components_and_preserving_identity
     definition = @provider.find_definition('kitchen-base-standard')
     insert_result = @builder.insert_furniture(@model, definition,

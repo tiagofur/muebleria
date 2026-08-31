@@ -1837,10 +1837,40 @@ Evidencia final: `./init.sh` completo sobre PostgreSQL 16 aislado, OpenAPI drift
 TypeScript, Go serializado, Ruby/RBZ, RLS SQL directo, rollback/replay/concurrencia,
 pilot gate fresh, UI y los seis checks CI remotos verdes; push y SHA remoto verificados.
 
-
 ## 2026-08-30 — F197 / #452 cerrado después del merge de PR #484
 
 - `main` incorporó el lifecycle explícito y provisioning atómico de organizaciones mediante PR #484.
 - La corrección final serializa support sessions con suspensión/offboarding y mantiene el credential epoch organizacional.
-- F197 pasa de `in_progress` a `done`; `progress/current.md` vuelve a no tener feature activa.
-- El PR #486 debe rebasarse sobre `main` y usar un feature ID/migrations disponibles antes de cualquier merge posterior.
+- F197 pasa de `in_progress` a `done`; `main` quedó sin feature activa antes de asignar el siguiente trabajo.
+- PR #486 integró este head reconciliado, reasignó #483 a F198 y movió su migration a `000103`.
+
+---
+
+## F198 — Parámetros tipados definition-driven para rich authoring resolve (#483) — 2026-08-30
+
+Cadena `feat/483-typed-parameters*`. El catálogo ahora persiste y publica definiciones
+versionadas `number|string|boolean|enum` con defaults, required, unidades,
+min/max/step, integer/count y options. El hash de definición y la revisión de
+catálogo cubren reglas y defaults; los módulos legacy conservan W/H/D mediante una
+proyección canónica compatible.
+
+`POST /api/furniture/authoring/resolve` evalúa exclusivamente contra la definición
+pineada, aplica defaults server-side, devuelve el snapshot normalizado completo y
+separa códigos estables para unknown, required, type, range, step y enum. El fixture
+generado por Go demuestra paridad de evaluación en TypeScript y preservación
+fail-closed en Ruby.
+
+Evidencia local: `go test -p 1 ./...` completo verde contra PostgreSQL 16 aislado;
+migración fresh/upgrade y roundtrip verdes; `pnpm typecheck` y `pnpm test` completos
+verdes; Ruby `rake verify` verde (241 unit + 3 boundary, RBZ determinista). El fallo
+`organizations.active` de la base compartida se reprodujo sin cambios sobre
+`origin/main` d85d6fd2. Review mode permaneció `disabled/unmanaged` y no se fabricó
+aprobación.
+
+### Cierre final de F198 — 2026-08-30
+
+Los siete blockers del owner re-review quedaron corregidos sobre la base reconciliada
+`main@f05bb0e9`. La revisión independiente aprobó el implementation head `40f01540`
+en `2693880d`, con `./init.sh` aislado verde, TestUp real 12/12 (213 assertions),
+CI remoto 6/6 y readback exacto. F198 pasa a `done`; PR #486 queda abierto para
+revisión humana y #483 permanece abierta hasta el merge mantenedor.

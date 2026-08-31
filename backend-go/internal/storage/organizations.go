@@ -1019,6 +1019,26 @@ func jsonbRemapKey(col, key, mapTable string) string {
 		FROM jsonb_array_elements(s.%[1]s) el), '[]'::jsonb) END`, col, key, mapTable)
 }
 
+func jsonbRemapParameterDefinitionComponents(col, mapTable string) string {
+	return fmt.Sprintf(`CASE WHEN s.%[1]s IS NULL THEN NULL ELSE COALESCE((
+		SELECT jsonb_agg(
+			CASE WHEN definition #> '{binding,componentId}' IS NULL THEN remapped_targets
+			ELSE jsonb_set(remapped_targets, '{binding,componentId}', to_jsonb(component_map.new_id::text)) END
+			ORDER BY definition_ordinality)
+		FROM jsonb_array_elements(s.%[1]s) WITH ORDINALITY AS definitions(definition, definition_ordinality)
+		LEFT JOIN %[2]s component_map ON component_map.old_id::text = definition #>> '{binding,componentId}'
+		CROSS JOIN LATERAL (
+			SELECT CASE WHEN jsonb_typeof(definition #> '{binding,relationship,targets}') = 'array'
+				THEN jsonb_set(definition, '{binding,relationship,targets}', COALESCE((
+					SELECT jsonb_agg(jsonb_set(target, '{componentId}', to_jsonb(target_map.new_id::text)) ORDER BY target_ordinality)
+					FROM jsonb_array_elements(definition #> '{binding,relationship,targets}') WITH ORDINALITY AS targets(target, target_ordinality)
+					JOIN %[2]s target_map ON target_map.old_id::text = target->>'componentId'
+				), '[]'::jsonb))
+				ELSE definition END AS remapped_targets
+		) remapped
+	), '[]'::jsonb) END`, col, mapTable)
+}
+
 // CloneCatalog copies an organization's entire catalog (categories, boards,
 // edges, hardwares, components, agregados, option groups, structures,
 // modules + children) into a destination organization with fresh UUIDs and
@@ -1088,6 +1108,39 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 		if _, err := tx.Exec(ctx, fmt.Sprintf(`CREATE UNIQUE INDEX ON %s(old_id)`, m.name)); err != nil {
 			return err
 		}
+	}
+
+	var unresolvedModuleID, unresolvedPath, unresolvedComponentID string
+	err = tx.QueryRow(ctx, `
+		SELECT module_id, path, component_id
+		FROM (
+			SELECT s.id::text AS module_id,
+				format('parameter_definitions[%s].binding.componentId', definition_ordinality - 1) AS path,
+				definition #>> '{binding,componentId}' AS component_id
+			FROM modules s
+			CROSS JOIN LATERAL jsonb_array_elements(s.parameter_definitions) WITH ORDINALITY AS definitions(definition, definition_ordinality)
+			WHERE s.organization_id = $1 AND definition #> '{binding,componentId}' IS NOT NULL
+			UNION ALL
+			SELECT s.id::text AS module_id,
+				format('parameter_definitions[%s].binding.relationship.targets[%s].componentId', definition_ordinality - 1, target_ordinality - 1) AS path,
+				target->>'componentId' AS component_id
+			FROM modules s
+			CROSS JOIN LATERAL jsonb_array_elements(s.parameter_definitions) WITH ORDINALITY AS definitions(definition, definition_ordinality)
+			CROSS JOIN LATERAL jsonb_array_elements(
+				CASE WHEN jsonb_typeof(definition #> '{binding,relationship,targets}') = 'array'
+					THEN definition #> '{binding,relationship,targets}' ELSE '[]'::jsonb END
+			) WITH ORDINALITY AS targets(target, target_ordinality)
+			WHERE s.organization_id = $1 AND target ? 'componentId'
+		) component_references
+		LEFT JOIN tmp_comp component_map ON component_map.old_id::text = component_references.component_id
+		WHERE component_map.old_id IS NULL
+		ORDER BY module_id, path
+		LIMIT 1`, srcOrg).Scan(&unresolvedModuleID, &unresolvedPath, &unresolvedComponentID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("validate module parameter definition component references: %w", err)
+	}
+	if err == nil {
+		return fmt.Errorf("module %s %s references component %q outside the source catalog", unresolvedModuleID, unresolvedPath, unresolvedComponentID)
 	}
 
 	steps := []struct {
@@ -1183,14 +1236,15 @@ func (s *PostgresStore) CloneCatalog(ctx context.Context, srcOrg, dstOrg string)
 			SELECT gen_random_uuid(), $2, sm.new_id, s.name, s.width_mm, s.height_mm, s.depth_mm
 			FROM structure_presets s JOIN tmp_struct sm ON sm.old_id = s.structure_id`},
 		{"modules", 1, fmt.Sprintf(`INSERT INTO modules (id, organization_id, code, name, base_labor_cost, width_mm, height_mm, depth_mm,
-				notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados)
+				notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions)
 			SELECT m.new_id, $2, s.code, s.name, s.base_labor_cost, s.width_mm, s.height_mm, s.depth_mm,
-				s.notes, cm.new_id, s.image_url, st.new_id, s.furniture_type, s.base_mode, s.base_clearance_mm, %s
+				s.notes, cm.new_id, s.image_url, st.new_id, s.furniture_type, s.base_mode, s.base_clearance_mm, %s, %s
 			FROM modules s
 			JOIN tmp_modules m ON m.old_id = s.id
 			LEFT JOIN tmp_modcat cm ON cm.old_id = s.category_id
 			LEFT JOIN tmp_struct st ON st.old_id = s.structure_id`,
-			jsonbRemapKey("agregados", "agregado_id", "tmp_agr"))},
+			jsonbRemapKey("agregados", "agregado_id", "tmp_agr"),
+			jsonbRemapParameterDefinitionComponents("parameter_definitions", "tmp_comp"))},
 		{"board_parts", 1, `INSERT INTO board_parts (id, organization_id, module_id, code, description, quantity, length_mm, width_mm, option_role,
 				edge_l1, edge_l2, edge_w1, edge_w2)
 			SELECT gen_random_uuid(), $2, mm.new_id, s.code, s.description, s.quantity, s.length_mm, s.width_mm, s.option_role,

@@ -352,6 +352,14 @@ module Granete
             return nil
           end
 
+          begin
+            CatalogParameterContract.validate_catalog!(body)
+          rescue CatalogParameterContract::ContractError => e
+            mark_unavailable(SOURCE_ERROR)
+            @logger&.info('catalog_parameter_definition_invalid', code: e.code, path: e.path, error: e.message)
+            return nil
+          end
+
           @last_source = SOURCE_REMOTE
           @last_license_blocked = false
           @cached_etag = etag
@@ -383,6 +391,8 @@ module Granete
               'description' => defn['description'],
               'parameters' => translate_parameters(defn['parameters'])
             }
+            item['schemaRevision'] = defn['schemaRevision'] unless defn['schemaRevision'].nil?
+            item['definitionHash'] = defn['definitionHash'] if defn['definitionHash']
             image_url = defn['imageUrl'] || defn['thumbnailUrl'] || defn['previewUrl']
             item['imageUrl'] = image_url if image_url
             item['categoryId'] = defn['categoryId'] if defn['categoryId']
@@ -398,7 +408,9 @@ module Granete
               'name' => param['name'], 'label' => param['label'],
               'type' => param['type'], 'defaultValue' => param['defaultValue']
             }
-            %w[min max step unit options].each { |k| translated[k] = param[k] unless param[k].nil? }
+            %w[min max step unit options required integer maxLength category sortOrder binding].each do |key|
+              translated[key] = param[key] unless param[key].nil?
+            end
             translated
           end
         end

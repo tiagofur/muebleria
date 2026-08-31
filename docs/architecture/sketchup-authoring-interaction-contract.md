@@ -145,12 +145,39 @@ the complete authoring snapshot and returning the accepted/resolved result.
 No feature may express these intents as query parameters or a parallel
 payload shape.
 
-The v1 server projection resolves the parameter definitions it actually owns
-today (`widthMm`, `heightMm`, `depthMm`). It must reject, never echo as a
-no-op, any undeclared parameter. #483 adds the persisted/versioned typed
-`FurnitureDefinition.parameters` projection for future number/string/boolean/
-enum families; the occurrence and HardwarePlacement first slices of
-#467/#468 do not depend on it.
+The v1 server projection resolves the persisted, versioned
+`FurnitureDefinition.parameters` contract (`number|string|boolean|enum`) with
+server-side defaults and strict required/type/range/step/options validation.
+Every rule and default participates in the definition hash and catalog pin;
+undeclared parameters fail closed. Legacy modules project their existing
+`widthMm`/`heightMm`/`depthMm` columns into the same contract. Those three
+names are reserved: persisted definitions cannot redefine them, and the
+published projection derives their type, default and range from the module
+columns. `sortOrder` controls authoring presentation without changing identity.
+
+A non-metadata parameter must declare a versioned authoritative consumer.
+`componentQuantity` changes composition count and can materialize relationship
+templates for every resulting occurrence. `componentCondition` accepts only a
+boolean and includes its one direct component when true or excludes it when
+false; exclusion also removes relationships, machining, manual placements and
+hardware that depend on that component. The resolver selects behavior from the
+binding, never from the parameter name. Because v1 domain instances do not
+retain the persisted module-component entry ID, a direct or relationship target
+that matches more than one component entry is ambiguous and fails closed rather
+than choosing the first match. Parameters intentionally used only as authoring
+metadata must declare the `metadata` category and cannot carry a binding.
+Missing, incompatible, ambiguous or unresolvable consumers make the complete
+definition unavailable with `PARAMETER_DEFINITION_INVALID`; an occurrence
+snapshot that contradicts an evaluated binding fails with
+`PARAMETER_BINDING_CONFLICT`.
+
+All definition, parameter, binding, relationship and relationship-target JSON
+objects are closed shapes. String parameters declare `maxLength` from 1 through
+512; the constraint participates in the definition hash and catalog pin. Error
+details expose integer intent and only a safe scalar `receivedValue`, truncated
+to 128 Unicode code points. The SketchUp inspector renders native accessible
+controls for booleans and strings and preserves explicit `false` and empty-string
+values instead of treating them as absent.
 
 ## 6. Furniture parameter/material update
 

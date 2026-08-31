@@ -1362,6 +1362,7 @@ export {
 
 // Smart Parametric Furniture Library (#349, #350, ADR-0002)
 export * from "./smartFurnitureDomain";
+export * from "./furnitureParameters";
 export {
   instantiateFurniture,
   validateInteractiveParameters,

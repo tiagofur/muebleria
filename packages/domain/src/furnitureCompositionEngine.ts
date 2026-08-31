@@ -20,12 +20,162 @@ import type {
 } from "./sketchupAuthoringSchema";
 import type {
   ComponentDefinition,
+  ComponentInstance,
   FurnitureDefinition,
-  FurnitureParameter,
+  FurnitureInstance,
   HardwareDefinition,
+  InteractiveValidationIssue,
+  InteractiveValidationResult,
   MaterialAssignment,
   MaterialDefinition,
+  PartInstance,
+  ResolvedFurnitureLayout,
 } from "./smartFurnitureDomain";
+import {
+  evaluateFurnitureParameters,
+  FurnitureParameterDefinitionsError,
+  type FurnitureParameterIssue,
+} from "./furnitureParameters";
+
+type InteractiveParameterEvaluation = {
+  readonly normalized: Readonly<Record<string, string | number | boolean>>;
+  readonly validation: InteractiveValidationResult;
+};
+
+const FURNITURE_DEFINITION_FIELDS = new Set([
+  "furnitureDefinitionId", "code", "name", "category", "version", "revisionId",
+  "schemaRevision", "definitionHash", "description", "assetId", "parameters",
+  "componentSlots", "relationshipTemplates", "defaultMaterialAssignments",
+]);
+
+function evaluateFurnitureDefinitionParameters(
+  definition: FurnitureDefinition,
+  rawParameters: Record<string, string | number | boolean>,
+) {
+  if (definition === null || typeof definition !== "object" || Array.isArray(definition)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: "",
+      field: "definition",
+      message: "must be an object",
+    }]);
+  }
+  const unknownFields = Object.keys(definition).filter((field) => !FURNITURE_DEFINITION_FIELDS.has(field));
+  if (unknownFields.length !== 0) {
+    throw new FurnitureParameterDefinitionsError(unknownFields.map((field) => ({
+      parameter: "",
+      field: `definition.${field}`,
+      message: "is not supported",
+    })));
+  }
+  if (!Array.isArray(definition.parameters)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: "",
+      field: "parameters",
+      message: "must be an array",
+    }]);
+  }
+  if (!Array.isArray(definition.componentSlots)) {
+    throw new FurnitureParameterDefinitionsError([{
+      parameter: "",
+      field: "componentSlots",
+      message: "must be an array",
+    }]);
+  }
+  const conditionIssues = definition.parameters.flatMap((parameter) => {
+    if (parameter?.binding?.kind !== "componentCondition") return [];
+    const directTargets = definition.componentSlots.filter(
+      (slot) => slot?.componentDefinitionId === parameter.binding!.componentId,
+    );
+    return directTargets.length === 1 ? [] : [{
+      parameter: parameter.name,
+      field: "binding.componentId",
+      message: "componentCondition must target exactly one direct component slot",
+    }];
+  });
+  if (conditionIssues.length !== 0) throw new FurnitureParameterDefinitionsError(conditionIssues);
+  return evaluateFurnitureParameters(definition.parameters, rawParameters);
+}
+
+function parameterContractIssue(
+  definition: FurnitureDefinition,
+  issue: FurnitureParameterIssue,
+): ContractIssue {
+  const parameter = definition.parameters.find((candidate) => candidate.name === issue.parameter);
+  return {
+    code: issue.code,
+    message: parameterIssueMessage(parameter?.label ?? issue.parameter, issue.code),
+    severity: "error",
+    entityId: definition.furnitureDefinitionId,
+    path: `parameters.${issue.parameter}`,
+    details: { parameterName: issue.parameter, ...issue.details },
+    remediation: `Correct ${parameter?.label ?? issue.parameter} before resolving the furniture.`,
+  };
+}
+
+function evaluateInteractive(
+  definition: FurnitureDefinition,
+  rawParameters: Record<string, string | number | boolean>,
+): InteractiveParameterEvaluation {
+  try {
+    const evaluation = evaluateFurnitureDefinitionParameters(definition, rawParameters);
+    const issues = evaluation.issues.map((issue): InteractiveValidationIssue => {
+      const parameter = definition.parameters.find((candidate) => candidate.name === issue.parameter);
+      return {
+        code: issue.code,
+        message: parameterIssueMessage(parameter?.label ?? issue.parameter, issue.code),
+        severity: "error",
+        parameterName: issue.parameter,
+        details: issue.details,
+      };
+    });
+    return {
+      normalized: evaluation.normalized,
+      validation: { valid: issues.length === 0, issues },
+    };
+  } catch (error) {
+    if (!(error instanceof FurnitureParameterDefinitionsError)) throw error;
+    const issues = error.issues.map((issue): InteractiveValidationIssue => ({
+      code: "PARAMETER_DEFINITION_INVALID",
+      message: `La definición de ${issue.parameter || "parámetros"} es inválida: ${issue.message}.`,
+      severity: "error",
+      parameterName: issue.parameter || undefined,
+      details: { field: issue.field },
+    }));
+    return { normalized: {}, validation: { valid: false, issues } };
+  }
+}
+
+function parameterIssueMessage(label: string, code: FurnitureParameterIssue["code"]): string {
+  switch (code) {
+    case "PARAMETER_UNKNOWN":
+      return `El parámetro ${label} no está declarado en la definición.`;
+    case "PARAMETER_REQUIRED":
+      return `El parámetro ${label} es obligatorio.`;
+    case "PARAMETER_TYPE_INVALID":
+      return `El parámetro ${label} tiene un tipo de dato inválido.`;
+    case "PARAMETER_OUT_OF_RANGE":
+      return `El parámetro ${label} está fuera del rango permitido.`;
+    case "PARAMETER_STEP_INVALID":
+      return `El parámetro ${label} no respeta el incremento permitido.`;
+    case "PARAMETER_ENUM_INVALID":
+      return `El parámetro ${label} no contiene una opción permitida.`;
+    case "PARAMETER_STRING_TOO_LONG":
+      return `El parámetro ${label} supera la longitud permitida.`;
+  }
+}
+
+function excludedComponentDefinitionIds(
+  definition: FurnitureDefinition,
+  parameters: Readonly<Record<string, string | number | boolean>>,
+): ReadonlySet<string> {
+  const excluded = new Set<string>();
+  for (const parameter of definition.parameters) {
+    if (parameter.binding?.kind === "componentCondition" && parameters[parameter.name] === false) {
+      excluded.add(parameter.binding.componentId!);
+    }
+  }
+  return excluded;
+}
 
 export interface InstantiationOptions {
   readonly projectId: string;
@@ -70,22 +220,23 @@ export function instantiateFurniture(
 ): InstantiationResult {
   const issues: ContractIssue[] = [];
 
-  // 1. Validate & evaluate parameters against definition contract
-  const evaluatedParams: Record<string, number | string | boolean> = {};
-  for (const param of definition.parameters) {
-    const rawVal = rawParams[param.name] ?? param.defaultValue;
-    const validated = validateParameter(param, rawVal);
-    if (!validated.valid) {
-      issues.push({
-        code: "PARAMETER_OUT_OF_RANGE",
-        message: `Parameter ${param.name} value ${String(rawVal)} is invalid: ${validated.error ?? "out of bounds"}`,
-        severity: "error",
-        entityId: definition.furnitureDefinitionId,
-        remediation: `Set ${param.name} within allowed range or options.`,
-      });
-      continue;
-    }
-    evaluatedParams[param.name] = validated.value!;
+  // 1. Validate & evaluate parameters against the canonical strict contract.
+  let evaluatedParams: Readonly<Record<string, number | string | boolean>> = {};
+  try {
+    const evaluation = evaluateFurnitureDefinitionParameters(definition, rawParams);
+    evaluatedParams = evaluation.normalized;
+    issues.push(...evaluation.issues.map((issue) => parameterContractIssue(definition, issue)));
+  } catch (error) {
+    if (!(error instanceof FurnitureParameterDefinitionsError)) throw error;
+    issues.push(...error.issues.map((issue) => ({
+      code: "PARAMETER_DEFINITION_INVALID",
+      message: `Parameter definition ${issue.parameter || "catalog"} is invalid: ${issue.message}`,
+      severity: "error" as const,
+      entityId: definition.furnitureDefinitionId,
+      path: issue.parameter ? `parameters.${issue.parameter}.${issue.field}` : `parameters.${issue.field}`,
+      details: { parameterName: issue.parameter, field: issue.field },
+      remediation: "Correct and republish the furniture definition before resolving it.",
+    })));
   }
 
   if (issues.length > 0) {
@@ -202,6 +353,31 @@ export function instantiateFurniture(
     });
   }
 
+  for (const parameter of definition.parameters) {
+    if (parameter.binding?.kind !== "componentCondition" || evaluatedParams[parameter.name] !== true) continue;
+    const slot = definition.componentSlots.find(
+      (candidate) => candidate.componentDefinitionId === parameter.binding!.componentId,
+    );
+    if (!slot || components.some((component) => component.componentDefinitionId === slot.componentDefinitionId)) continue;
+    components.push({
+      componentInstanceId: `condition-${slot.slotId}-01`,
+      componentDefinitionId: slot.componentDefinitionId,
+      role: slot.role,
+      transform: makeTransform("assembly"),
+    });
+  }
+
+  const excludedDefinitionIds = excludedComponentDefinitionIds(definition, evaluatedParams);
+  const activeComponents = components.filter((component) => !excludedDefinitionIds.has(component.componentDefinitionId));
+  const activeComponentIds = new Set(activeComponents.map((component) => component.componentInstanceId));
+  const activeRelationships = relationships.filter((relationship) =>
+    activeComponentIds.has(relationship.source.componentInstanceId) &&
+    relationship.targets.every((target) => activeComponentIds.has(target.componentInstanceId))
+  );
+  const activeHardwarePlacements = hardwarePlacements.filter((placement) =>
+    activeComponentIds.has(placement.hostComponentInstanceId)
+  );
+
   const assembly: DesignAssembly = {
     assemblyId,
     catalogItemId: "module-base-600",
@@ -209,9 +385,9 @@ export function instantiateFurniture(
     displayName: definition.name,
     transform: makeTransform("project", options.translationMm ?? [0, 0, 0], options.rotationQuaternion ?? [0, 0, 0, 1]),
     parameters: evaluatedParams,
-    components,
-    relationships,
-    hardwarePlacements,
+    components: activeComponents,
+    relationships: activeRelationships,
+    hardwarePlacements: activeHardwarePlacements,
   };
 
   const envelope: AuthoringEnvelopeV1 = {
@@ -247,39 +423,6 @@ export function instantiateFurniture(
   };
 }
 
-function validateParameter(
-  param: FurnitureParameter,
-  val: unknown,
-): { valid: boolean; value?: number | string | boolean; error?: string } {
-  if (param.type === "number") {
-    const num = Number(val);
-    if (isNaN(num)) return { valid: false, error: "not a number" };
-    if (param.min !== undefined && num < param.min) return { valid: false, error: `below min ${param.min}` };
-    if (param.max !== undefined && num > param.max) return { valid: false, error: `above max ${param.max}` };
-    return { valid: true, value: num };
-  }
-  if (param.type === "boolean") {
-    return { valid: true, value: Boolean(val) };
-  }
-  if (param.type === "enum" || param.type === "string") {
-    const str = String(val);
-    if (param.options !== undefined && !param.options.includes(str)) {
-      return { valid: false, error: `not in allowed options: ${param.options.join(", ")}` };
-    }
-    return { valid: true, value: str };
-  }
-  return { valid: true, value: String(val) };
-}
-
-import type {
-  FurnitureInstance,
-  ComponentInstance,
-  PartInstance,
-  InteractiveValidationResult,
-  InteractiveValidationIssue,
-  ResolvedFurnitureLayout
-} from "./smartFurnitureDomain";
-
 /**
  * Lightweight interactive preflight validation for UI forms.
  */
@@ -287,55 +430,7 @@ export function validateInteractiveParameters(
   definition: FurnitureDefinition,
   rawParameters: Record<string, string | number | boolean>
 ): InteractiveValidationResult {
-  const issues: InteractiveValidationIssue[] = [];
-
-  for (const param of definition.parameters) {
-    const val = rawParameters[param.name] ?? param.defaultValue;
-
-    if (param.type === "number") {
-      const num = Number(val);
-      if (Number.isNaN(num)) {
-        issues.push({
-          code: "INVALID_NUMBER",
-          message: `El parámetro ${param.label} debe ser un número válido.`,
-          severity: "error",
-          parameterName: param.name
-        });
-        continue;
-      }
-      if (param.min !== undefined && num < param.min) {
-        issues.push({
-          code: "BELOW_MINIMUM",
-          message: `${param.label} (${num} mm) es menor que el mínimo permitido (${param.min} mm).`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-      if (param.max !== undefined && num > param.max) {
-        issues.push({
-          code: "ABOVE_MAXIMUM",
-          message: `${param.label} (${num} mm) supera el máximo permitido (${param.max} mm).`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-    } else if (param.type === "enum" && param.options) {
-      const str = String(val);
-      if (!param.options.includes(str)) {
-        issues.push({
-          code: "INVALID_ENUM_OPTION",
-          message: `Opción inválida '${str}' para ${param.label}.`,
-          severity: "error",
-          parameterName: param.name
-        });
-      }
-    }
-  }
-
-  return {
-    valid: issues.every((i) => i.severity !== "error"),
-    issues
-  };
+  return evaluateInteractive(definition, rawParameters).validation;
 }
 
 /**
@@ -350,14 +445,11 @@ export function resolveFurnitureLayout(
   hardwareCatalog: Record<string, HardwareDefinition> = {},
   options: InstantiationOptions = { projectId: "project-active" }
 ): ResolvedFurnitureLayout {
-  const validation = validateInteractiveParameters(definition, rawParameters);
+  const evaluation = evaluateInteractive(definition, rawParameters);
+  const { validation } = evaluation;
   const assemblyId = options.assemblyId ?? `assembly-${definition.furnitureDefinitionId}-1`;
   const furnitureInstanceId = `inst-${definition.furnitureDefinitionId}-1`;
-
-  const evaluated: Record<string, string | number | boolean> = {};
-  for (const param of definition.parameters) {
-    evaluated[param.name] = rawParameters[param.name] ?? param.defaultValue;
-  }
+  const evaluated = evaluation.normalized;
 
   const furnitureInstance: FurnitureInstance = {
     furnitureInstanceId,
@@ -381,8 +473,22 @@ export function resolveFurnitureLayout(
   const components: ComponentInstance[] = [];
   const parts: PartInstance[] = [];
 
+  if (!validation.valid) {
+    return { furnitureInstance, components, parts, validation };
+  }
+
   let partIdx = 1;
-  const makePart = (role: string, name: string, x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+  const makePart = (
+    role: string,
+    name: string,
+    x: number,
+    y: number,
+    z: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    componentDefinitionId = `def-${role}`,
+  ) => {
     const compId = `comp-${furnitureInstanceId}-${partIdx}`;
     const partId = `part-${furnitureInstanceId}-${partIdx}`;
     partIdx++;
@@ -391,7 +497,7 @@ export function resolveFurnitureLayout(
       componentInstanceId: compId,
       furnitureInstanceId,
       slotId: role,
-      componentDefinitionId: `def-${role}`,
+      componentDefinitionId,
       role,
       transform: { translationMm: [x, y, z] },
       dimensionsMm: [dx, dy, dz]
@@ -423,7 +529,17 @@ export function resolveFurnitureLayout(
     if (shelfCount > 0) {
       const spacing = height / (shelfCount + 1);
       for (let i = 1; i <= shelfCount; i++) {
-        makePart("shelf", `Entrepaño ${i}`, thickness, 0, spacing * i, width - 2 * thickness, depth, thickness);
+        makePart(
+          "shelf",
+          `Entrepaño ${i}`,
+          thickness,
+          0,
+          spacing * i,
+          width - 2 * thickness,
+          depth,
+          thickness,
+          "definition-shelf",
+        );
       }
     }
 
@@ -440,10 +556,33 @@ export function resolveFurnitureLayout(
     makePart("leg_right", "Pata Derecha", width - thickness, 0, 0, thickness, depth, height - thickness);
   }
 
+  for (const parameter of definition.parameters) {
+    if (parameter.binding?.kind !== "componentCondition" || evaluated[parameter.name] !== true) continue;
+    const slot = definition.componentSlots.find(
+      (candidate) => candidate.componentDefinitionId === parameter.binding!.componentId,
+    );
+    if (!slot || components.some((component) => component.componentDefinitionId === slot.componentDefinitionId)) continue;
+    makePart(
+      slot.role,
+      slot.role,
+      0,
+      0,
+      0,
+      width,
+      thickness,
+      height,
+      slot.componentDefinitionId,
+    );
+  }
+
+  const excludedDefinitionIds = excludedComponentDefinitionIds(definition, evaluated);
+  const activeComponents = components.filter((component) => !excludedDefinitionIds.has(component.componentDefinitionId));
+  const activeComponentIds = new Set(activeComponents.map((component) => component.componentInstanceId));
+
   return {
     furnitureInstance,
-    components,
-    parts,
+    components: activeComponents,
+    parts: parts.filter((part) => activeComponentIds.has(part.componentInstanceId)),
     validation
   };
 }

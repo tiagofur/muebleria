@@ -1,10 +1,54 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
+
+func TestInvalidCatalogDefinitionCorpusRejectsUnknownFields(t *testing.T) {
+	raw, err := os.ReadFile("../../../contracts/furnitureParameterDefinitions.invalid.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var corpus struct {
+		Cases []struct {
+			ID                string `json:"id"`
+			RawDefinitionJSON string `json:"rawDefinitionJson"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &corpus); err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, testCase := range corpus.Cases {
+		if testCase.RawDefinitionJSON == "" {
+			continue
+		}
+		found++
+		t.Run(testCase.ID, func(t *testing.T) {
+			decoder := json.NewDecoder(bytes.NewReader([]byte(testCase.RawDefinitionJSON)))
+			decoder.DisallowUnknownFields()
+			var definition workshopFurnitureDefinition
+			if err := decoder.Decode(&definition); err == nil {
+				t.Fatal("unknown catalog definition field was accepted")
+			}
+		})
+	}
+	if found == 0 {
+		t.Fatal("invalid corpus carries no catalog definition cases")
+	}
+}
+
+func numberPtrValue(value *float64) float64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
 
 func TestBuildWorkshopCatalogPreservesModuleIdentity(t *testing.T) {
 	module := domain.Module{
@@ -41,11 +85,11 @@ func TestBuildWorkshopCatalogDerivesRangesFromPresets(t *testing.T) {
 	def := catalog.Definitions["m1"]
 
 	width := parameterByName(def.Parameters, "widthMm")
-	if width == nil || width.DefaultValue != 600 || width.Min != 450 || width.Max != 900 {
+	if width == nil || width.DefaultValue != float64(600) || numberPtrValue(width.Min) != 450 || numberPtrValue(width.Max) != 900 {
 		t.Fatalf("widthMm must span presets + module default: %+v", width)
 	}
 	depth := parameterByName(def.Parameters, "depthMm")
-	if depth == nil || depth.DefaultValue != 500 || depth.Min != 350 || depth.Max != 500 {
+	if depth == nil || depth.DefaultValue != float64(500) || numberPtrValue(depth.Min) != 350 || numberPtrValue(depth.Max) != 500 {
 		t.Fatalf("depthMm must span preset values: %+v", depth)
 	}
 }
@@ -61,14 +105,15 @@ func TestBuildWorkshopCatalogBandWithoutPresets(t *testing.T) {
 		if p == nil {
 			t.Fatalf("missing parameter %s", name)
 		}
-		if p.Min > p.DefaultValue || p.Max < p.DefaultValue {
-			t.Fatalf("%s default %d outside editable range [%d, %d]", name, p.DefaultValue, p.Min, p.Max)
+		defaultValue, ok := p.DefaultValue.(float64)
+		if !ok || numberPtrValue(p.Min) > defaultValue || numberPtrValue(p.Max) < defaultValue {
+			t.Fatalf("%s default %v outside editable range [%v, %v]", name, p.DefaultValue, p.Min, p.Max)
 		}
 	}
 	// Small dimensions must not get a floor above their own default.
 	depth := parameterByName(def.Parameters, "depthMm")
-	if depth.Min != 50 || depth.Max != 120 {
-		t.Fatalf("depthMm band for 60mm default = [%d, %d], want [50, 120]", depth.Min, depth.Max)
+	if numberPtrValue(depth.Min) != 50 || numberPtrValue(depth.Max) != 120 {
+		t.Fatalf("depthMm band for 60mm default = [%v, %v], want [50, 120]", depth.Min, depth.Max)
 	}
 }
 
@@ -97,7 +142,7 @@ func TestBuildWorkshopCatalogDefaultsFromPresetsWhenModuleHasNoDims(t *testing.T
 
 	catalog := buildWorkshopFurnitureCatalog([]domain.Module{module}, nil, nil, domain.Catalog{})
 	width := parameterByName(catalog.Definitions["m1"].Parameters, "widthMm")
-	if width == nil || width.DefaultValue != 400 || width.Min != 400 || width.Max != 800 {
+	if width == nil || width.DefaultValue != float64(400) || numberPtrValue(width.Min) != 400 || numberPtrValue(width.Max) != 800 {
 		t.Fatalf("widthMm must default to smallest preset: %+v", width)
 	}
 }
@@ -152,6 +197,97 @@ func TestWorkshopCatalogRevisionIsContentAddressed(t *testing.T) {
 		t.Fatal("revision must change when materialCategories change")
 	}
 }
+
+func TestWorkshopCatalogRevisionCoversParameterRulesAndDefaults(t *testing.T) {
+	parameter := func(max, defaultValue float64) domain.FurnitureParameterDefinition {
+		return domain.FurnitureParameterDefinition{
+			Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
+			DefaultValue: defaultValue, Required: true, Unit: domain.FurnitureParameterUnitCount,
+			Category: domain.FurnitureParameterCategoryMetadata,
+			Min:      float64Ptr(0), Max: float64Ptr(max), Step: float64Ptr(1), Integer: true,
+		}
+	}
+	module := func(rule domain.FurnitureParameterDefinition) domain.Module {
+		return domain.Module{ID: "m1", Code: "M1", Name: "Module", WidthMm: 600, HeightMm: 720, DepthMm: 500, ParameterDefinitions: []domain.FurnitureParameterDefinition{rule}}
+	}
+	base := buildWorkshopFurnitureCatalog([]domain.Module{module(parameter(5, 1))}, nil, nil, domain.Catalog{})
+	maxChanged := buildWorkshopFurnitureCatalog([]domain.Module{module(parameter(6, 1))}, nil, nil, domain.Catalog{})
+	defaultChanged := buildWorkshopFurnitureCatalog([]domain.Module{module(parameter(5, 2))}, nil, nil, domain.Catalog{})
+
+	if workshopCatalogRevisionID(base) == workshopCatalogRevisionID(maxChanged) || workshopCatalogRevisionID(base) == workshopCatalogRevisionID(defaultChanged) {
+		t.Fatal("changing only a parameter rule/default must invalidate the catalog pin")
+	}
+	definition := base.Definitions["m1"]
+	if definition.SchemaRevision != 1 || definition.DefinitionHash == "" {
+		t.Fatalf("definition is not versioned: %+v", definition)
+	}
+}
+
+func TestWorkshopCatalogRevisionCoversConditionBinding(t *testing.T) {
+	module := func(target string) domain.Module {
+		return domain.Module{ID: "m1", Code: "M1", Name: "Module", Components: []domain.ComponentInstance{{ComponentID: "comp-a", Quantity: 1}, {ComponentID: "comp-b", Quantity: 1}}, ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "visible", Label: "Visible", Type: domain.FurnitureParameterTypeBoolean, DefaultValue: true, Required: true, Category: domain.FurnitureParameterCategoryConfiguration, Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentCondition, ComponentID: target}}}}
+	}
+	composition := domain.Catalog{Components: []domain.Component{{ID: "comp-a", Code: "A", Name: "A", Active: true}, {ID: "comp-b", Code: "B", Name: "B", Active: true}}}
+	a, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module("comp-a")}, nil, nil, composition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module("comp-b")}, nil, nil, composition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Definitions["m1"].DefinitionHash == b.Definitions["m1"].DefinitionHash || workshopCatalogRevisionID(a) == workshopCatalogRevisionID(b) {
+		t.Fatal("condition binding target must invalidate definition hash and catalog revision")
+	}
+}
+
+func TestWorkshopCatalogRejectsParametersWithoutAuthoritativeConsumers(t *testing.T) {
+	module := domain.Module{ID: "m1", Code: "M1", Name: "Module", ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Integer: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration}}}
+	_, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if _, ok := furnitureParameterDefinitionsError(err); !ok {
+		t.Fatalf("expected typed definition error, got %v", err)
+	}
+	module.ParameterDefinitions[0].Binding = &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "missing"}
+	_, err = buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if definitionErr, ok := furnitureParameterDefinitionsError(err); !ok || len(definitionErr.Issues) == 0 || definitionErr.Issues[0].Field != "binding.componentId" {
+		t.Fatalf("expected missing consumer issue, got %v", err)
+	}
+}
+
+func TestWorkshopCatalogRejectsAmbiguousBindingTargets(t *testing.T) {
+	parameter := domain.FurnitureParameterDefinition{Name: "count", Label: "Count", Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Integer: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration, Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shared"}}
+	module := domain.Module{ID: "m1", Code: "M1", Name: "Module", ParameterDefinitions: []domain.FurnitureParameterDefinition{parameter}, Components: []domain.ComponentInstance{{ComponentID: "comp-shared", Quantity: 1}, {ComponentID: "comp-shared", Quantity: 1}}}
+	_, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if definitionErr, ok := furnitureParameterDefinitionsError(err); !ok || len(definitionErr.Issues) == 0 || definitionErr.Issues[0].Field != "binding.componentId" {
+		t.Fatalf("duplicate direct target accepted: %v", err)
+	}
+	parameter.Binding.Relationship = &domain.FurnitureParameterRelationshipBinding{Kind: "shelf-support", SourceRole: "shelf-edge", Targets: []domain.FurnitureParameterRelationshipTarget{{ComponentID: "comp-side", Role: "inside-face"}}}
+	module.ParameterDefinitions = []domain.FurnitureParameterDefinition{parameter}
+	module.Components = []domain.ComponentInstance{{ComponentID: "comp-shared", Quantity: 1}}
+	module.StructureID = "st"
+	composition := domain.Catalog{Structures: []domain.Structure{{ID: "st", Components: []domain.ComponentInstance{{ComponentID: "comp-side", Quantity: 2}}}}}
+	_, err = buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, composition)
+	if definitionErr, ok := furnitureParameterDefinitionsError(err); !ok || len(definitionErr.Issues) == 0 || definitionErr.Issues[0].Field != "binding.relationship.targets" {
+		t.Fatalf("ambiguous relationship target accepted: %v", err)
+	}
+}
+
+func TestWorkshopCatalogPreservesAuthoringSortOrder(t *testing.T) {
+	module := domain.Module{ID: "m1", Code: "M1", Name: "Module", ParameterDefinitions: []domain.FurnitureParameterDefinition{
+		{Name: "zeta", Label: "Zeta", SortOrder: 20, Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryMetadata, MaxLength: catalogIntPtr(80)},
+		{Name: "alpha", Label: "Alpha", SortOrder: 10, Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryMetadata, MaxLength: catalogIntPtr(80)},
+	}}
+	catalog, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, domain.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameters := catalog.Definitions["m1"].Parameters
+	if len(parameters) != 2 || parameters[0].Name != "alpha" || parameters[1].Name != "zeta" {
+		t.Fatalf("sort order lost: %+v", parameters)
+	}
+}
+
+func catalogIntPtr(value int) *int { return &value }
 
 func TestBuildWorkshopCatalogCategoriesAreHierarchical(t *testing.T) {
 	categories := []domain.ModuleCategory{

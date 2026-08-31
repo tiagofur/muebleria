@@ -58,9 +58,13 @@ class RemoteCatalogProviderContractTest < Minitest::Test
         'name' => 'Módulo Base',
         'category' => 'inferior',
         'version' => '1.0.0',
+        'schemaRevision' => 1,
+        'definitionHash' => "sha256-#{'1' * 64}",
         'parameters' => [
           { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number',
-            'defaultValue' => 600, 'min' => 450, 'max' => 900, 'step' => 10, 'unit' => 'mm' }
+            'defaultValue' => 600, 'min' => 450, 'max' => 900, 'step' => 10, 'unit' => 'mm',
+            'category' => 'dimension', 'required' => true, 'integer' => true,
+            'binding' => { 'version' => 1, 'kind' => 'dimensionColumn', 'dimension' => 'widthMm' } }
         ]
       }
     },

@@ -487,6 +487,28 @@
         font-variant-numeric: tabular-nums;
       }
 
+      .param-text-input { width: 100%; }
+
+      .param-boolean-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 2.75rem;
+      }
+
+      .param-checkbox {
+        width: 1.25rem;
+        height: 1.25rem;
+        accent-color: var(--brand-600);
+      }
+
+      .param-hint {
+        display: block;
+        margin-top: var(--space-1);
+        color: var(--text-muted);
+        font-size: var(--text-xs);
+      }
+
       .dim-unit {
         font-size: var(--text-sm);
         color: var(--text-muted);
@@ -3338,7 +3360,7 @@
               showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail +
                 ". Quedó seleccionado: movelo a su lugar (tecla M).");
             } else {
-              showToast("error", "Error: " + ((result && result.error) || "Fallo en la inserción"));
+              showToast("error", "Error: " + parameterIssueMessage(result, "Fallo en la inserción"));
             }
           },
 
@@ -3356,7 +3378,7 @@
                 selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
               }
             } else {
-              showToast("error", "Error: " + ((result && result.error) || "Fallo al actualizar"));
+              showToast("error", "Error: " + parameterIssueMessage(result, "Fallo al actualizar"));
               // Rollback in-memory inspector state to last confirmed values from selectedContext
               if (selectedContext && inspectorDef) {
                 inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
@@ -3581,6 +3603,8 @@
             var label = document.createElement("label");
             label.className = "param-label";
             label.textContent = p.label;
+            var controlId = "param-" + String(p.name).replace(/[^a-zA-Z0-9_-]/g, "-") + "-" + container.id;
+            label.setAttribute("for", controlId);
             labelRow.appendChild(label);
 
             var badge = document.createElement("span");
@@ -3597,6 +3621,7 @@
               dimRow.className = "dim-input-row";
 
               var dimInput = document.createElement("input");
+              dimInput.id = controlId;
               dimInput.type = "number";
               dimInput.className = "dim-input";
               dimInput.inputMode = "numeric";
@@ -3667,6 +3692,8 @@
               group.appendChild(stepper);
             } else if (p.type === "enum" && p.options) {
               var select = document.createElement("select");
+              select.id = controlId;
+              select.setAttribute("aria-required", p.required ? "true" : "false");
               p.options.forEach(function (optVal) {
                 var opt = document.createElement("option");
                 opt.value = optVal;
@@ -3679,10 +3706,67 @@
                 onChange(p.name, select.value);
               });
               group.appendChild(select);
+            } else if (p.type === "boolean") {
+              var booleanRow = document.createElement("div");
+              booleanRow.className = "param-boolean-row";
+              var checkbox = document.createElement("input");
+              checkbox.id = controlId;
+              checkbox.type = "checkbox";
+              checkbox.className = "param-checkbox";
+              checkbox.checked = val === true;
+              checkbox.setAttribute("aria-label", p.label);
+              checkbox.addEventListener("change", function () {
+                var nextValue = checkbox.checked === true;
+                badge.textContent = nextValue ? "Sí" : "No";
+                onChange(p.name, nextValue);
+              });
+              badge.textContent = checkbox.checked ? "Sí" : "No";
+              booleanRow.appendChild(checkbox);
+              group.appendChild(booleanRow);
+            } else if (p.type === "string") {
+              var textInput = document.createElement("input");
+              textInput.id = controlId;
+              textInput.type = "text";
+              textInput.className = "param-text-input";
+              textInput.value = val === undefined || val === null ? "" : String(val);
+              textInput.required = p.required === true;
+              if (p.maxLength !== undefined) textInput.maxLength = p.maxLength;
+              textInput.setAttribute("aria-required", p.required ? "true" : "false");
+              textInput.addEventListener("change", function () {
+                badge.textContent = textInput.value === "" ? "Vacío" : textInput.value;
+                onChange(p.name, textInput.value);
+              });
+              badge.textContent = textInput.value === "" ? "Vacío" : textInput.value;
+              group.appendChild(textInput);
+              if (p.maxLength !== undefined) {
+                var stringHint = document.createElement("small");
+                stringHint.className = "param-hint";
+                stringHint.textContent = "Máximo " + p.maxLength + " caracteres" + (p.required ? " · obligatorio" : "");
+                group.appendChild(stringHint);
+              }
             }
 
             container.appendChild(group);
           });
+        }
+
+        function parameterIssueMessage(result, fallback) {
+          var issue = result && result.issues && result.issues[0];
+          if (!issue || !issue.code) return (result && result.error) || fallback;
+          var parameter = issue.parameter || (issue.details && issue.details.parameter);
+          var labels = {
+            PARAMETER_REQUIRED: "Completá el parámetro requerido",
+            PARAMETER_TYPE_INVALID: "El parámetro tiene un tipo de valor incorrecto",
+            PARAMETER_OUT_OF_RANGE: "El parámetro está fuera del rango permitido",
+            PARAMETER_STEP_INVALID: "El parámetro no coincide con el incremento permitido",
+            PARAMETER_ENUM_INVALID: "Elegí una opción permitida",
+            PARAMETER_STRING_TOO_LONG: "El texto supera la longitud permitida",
+            PARAMETER_UNKNOWN: "La definición no reconoce el parámetro",
+            PARAMETER_DEFINITION_INVALID: "La definición paramétrica es inválida",
+            PARAMETER_BINDING_CONFLICT: "La definición tiene consumidores paramétricos en conflicto"
+          };
+          var message = labels[issue.code] || issue.message || fallback;
+          return parameter ? message + ": " + parameter : message;
         }
 
         // Estimated piece count of a definition. Server-resolved catalogs carry

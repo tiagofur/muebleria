@@ -164,6 +164,15 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	// GetModuleByID read outside the snapshot being pinned.
 	snapshot, err := s.loadWorkshopCatalogOnce(r)
 	if err != nil {
+		if definitionErr, ok := furnitureParameterDefinitionsError(err); ok {
+			s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+				Code: "PARAMETER_DEFINITION_INVALID", Message: "the pinned furniture parameter definition is invalid",
+				Severity: domain.IssueSeverityError, Path: "furniture.parameters",
+				Remediation: "Correct and republish the furniture definition before resolving it.",
+				Details:     map[string]any{"issues": definitionErr.Issues},
+			}})
+			return
+		}
 		respondWithInternalError(w, err, "load resolution catalog")
 		return
 	}
@@ -213,7 +222,11 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	}
 
 	definition := snapshot.Projection.Definitions[module.ID]
-	dims, issues := authoringDimsFromParameters(req.Furniture.Parameters, module, definition)
+	dims, normalizedParameters, issues, err := authoringParametersFromDefinition(req.Furniture.Parameters, module, definition)
+	if err != nil {
+		respondWithInternalError(w, err, "evaluate furniture parameter definition")
+		return
+	}
 	if len(issues) > 0 {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, issues)
 		return
@@ -233,6 +246,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		Relationships:           req.Furniture.Relationships,
 		ManualPlacements:        placements,
 		ManualPlacementsPresent: req.Furniture.HardwarePlacements != nil,
+		EvaluatedParameters:     normalizedParameters,
 	})
 	if err != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
@@ -511,50 +525,38 @@ func validateAuthoringResolveEnvelopeFields(req authoringResolveRequest) []domai
 	return issues
 }
 
-// authoringDimsFromParameters validates against the selected definition's
-// parameter declarations rather than a handler-owned allowlist. Today's
-// Module projection declares numeric width/height/depth parameters; future
-// parameter kinds must first exist in the authoritative FurnitureDefinition
-// domain contract and resolver before this transport can accept them.
-func authoringDimsFromParameters(parameters map[string]any, module *domain.Module, definition workshopFurnitureDefinition) (*engine.LayoutDims, []domain.ContractIssue) {
-	if parameters == nil {
-		return nil, nil
+// authoringParametersFromDefinition validates and evaluates against the
+// selected definition rather than a handler-owned allowlist. Defaults and
+// every type/range/step/enum decision remain server-authoritative.
+func authoringParametersFromDefinition(parameters map[string]any, module *domain.Module, definition workshopFurnitureDefinition) (*engine.LayoutDims, map[string]any, []domain.ContractIssue, error) {
+	normalized, parameterIssues, err := domain.EvaluateFurnitureParameters(definition.Parameters, parameters)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if len(parameterIssues) > 0 {
+		issues := make([]domain.ContractIssue, 0, len(parameterIssues))
+		for _, issue := range parameterIssues {
+			issues = append(issues, domain.ContractIssue{
+				Code: string(issue.Code), Message: issue.Message,
+				Severity: domain.IssueSeverityError, Path: "furniture.parameters." + issue.Parameter,
+				Remediation: "Use the type, default and constraints declared by the pinned FurnitureDefinition.",
+				Details:     issue.Details,
+			})
+		}
+		return nil, normalized, issues, nil
 	}
 	dims := &engine.LayoutDims{
 		WidthMm:  module.WidthMm,
 		HeightMm: module.HeightMm,
 		DepthMm:  module.DepthMm,
 	}
-	declared := make(map[string]workshopFurnitureParameter, len(definition.Parameters))
+	seenDimension := false
 	for _, parameter := range definition.Parameters {
-		declared[parameter.Name] = parameter
-	}
-	keys := make([]string, 0, len(parameters))
-	for key := range parameters {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	seen := false
-	for _, key := range keys {
-		raw := parameters[key]
-		parameter, ok := declared[key]
-		if !ok {
-			return nil, []domain.ContractIssue{{
-				Code: "PARAMETER_INVALID", Message: "parámetro desconocido " + key,
-				Severity: domain.IssueSeverityError, Path: "furniture.parameters." + key,
-				Remediation: "Use a parameter declared by the pinned FurnitureDefinition.",
-			}}
+		if parameter.Binding == nil || parameter.Binding.Kind != domain.FurnitureParameterBindingDimensionColumn {
+			continue
 		}
-		value, ok := raw.(float64)
-		if parameter.Type != "number" || !ok || value != math.Trunc(value) || value < float64(parameter.Min) || value > float64(parameter.Max) ||
-			(parameter.Step > 0 && int(value-float64(parameter.Min))%parameter.Step != 0) {
-			return nil, []domain.ContractIssue{{
-				Code: "PARAMETER_INVALID", Message: fmt.Sprintf("%s debe cumplir el contrato number [%d,%d] step %d de la definición", key, parameter.Min, parameter.Max, parameter.Step),
-				Severity: domain.IssueSeverityError, Path: "furniture.parameters." + key,
-			}}
-		}
-		seen = true
-		switch key {
+		value := normalized[parameter.Name].(float64) // published validation guarantees integer number
+		switch parameter.Binding.Dimension {
 		case "widthMm":
 			dims.WidthMm = int(value)
 		case "heightMm":
@@ -562,11 +564,12 @@ func authoringDimsFromParameters(parameters map[string]any, module *domain.Modul
 		case "depthMm":
 			dims.DepthMm = int(value)
 		}
+		seenDimension = true
 	}
-	if !seen {
-		return nil, nil
+	if !seenDimension {
+		dims = nil
 	}
-	return dims, nil
+	return dims, normalized, nil, nil
 }
 
 // validateMaterialChoices rejects unknown/inactive board choices up front so
@@ -629,7 +632,10 @@ func (s *Server) loadWorkshopCatalogOnce(r *http.Request) (authoringCatalogSnaps
 	if err != nil {
 		return authoringCatalogSnapshot{}, err
 	}
-	projection := buildWorkshopFurnitureCatalog(composition.Modules, composition.Categories, materialCategories, composition)
+	projection, err := buildWorkshopFurnitureCatalogValidated(composition.Modules, composition.Categories, materialCategories, composition)
+	if err != nil {
+		return authoringCatalogSnapshot{}, err
+	}
 	revision := workshopCatalogRevisionID(projection)
 	projection.RevisionID = revision
 	return authoringCatalogSnapshot{

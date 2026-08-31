@@ -789,9 +789,9 @@ furniture {
   furnitureDefinitionId                    (definición autoritativa)
   catalogRevision                          OBLIGATORIO (revisionId de GET /api/furniture/definitions;
                                            mismatch → CATALOG_REVISION_STALE; nunca hay latest implícito)
-  parameters { widthMm, heightMm, depthMm } (proyección paramétrica autoritativa disponible en Go v1;
-                                           claves fuera de la definición proyectada → PARAMETER_INVALID;
-                                           el catálogo tipado universal se sigue en #483)
+  parameters { name → scalar }             (proyección tipada autoritativa de la definición: number/string/
+                                           boolean/enum, defaults/required/min/max/step/options/integer/maxLength;
+                                           claves o valores inválidos → códigos PARAMETER_* estables)
   materialChoices { ROLE → materialId }
   components?                              (snapshot completo de ocurrencias; ausente = set default del definition)
   relationships?                           (PartRelationshipIntent, incl. parameters)
@@ -809,6 +809,42 @@ en el resultado; la respuesta echa `catalogRevision` (la revisión pineada usada
 Arrays estrictos: `translationMm` (exactamente 3) y `offsetMm` (exactamente
 2) se decodifican como slices y validan longitud exacta — los arrays fijos
 de Go truncarían/extenderían en silencio.
+
+Contrato de definición tipada:
+
+- `widthMm`, `heightMm` y `depthMm` son nombres reservados y se proyectan
+  únicamente desde las columnas del módulo con binding `dimensionColumn`;
+  una definición persistida no puede duplicar ni contradecir esas fuentes;
+- `sortOrder` es orden declarativo de presentación; no sustituye el nombre ni
+  participa como dispatch imperativo;
+- todo parámetro no `metadata` declara un binding versionado con consumidor
+  autoritativo. `componentQuantity` modifica el número de ocurrencias y puede
+  materializar una relationship template por ocurrencia. El motor despacha por
+  `binding.kind`, nunca por un nombre como `shelfCount`;
+- `componentCondition` es boolean-only: `true` incluye su único componente
+  directo y `false` lo excluye junto con relationships, machining, manual
+  placements y hardware dependientes; el resultado es determinista y participa
+  en hashes/pins;
+- como v1 no conserva la identidad persistida de la entrada de componente en el
+  dominio, cualquier target directo o de relationship que coincida con más de
+  una entrada se rechaza como ambiguo; nunca se elige el primer match;
+- `metadata` representa explícitamente un valor sin efecto físico y no admite
+  binding. Cualquier otro parámetro sin consumidor se rechaza;
+- catálogo, lectura de storage, publicación, TypeScript y Ruby validan la misma
+  forma cerrada y límites de manera fail-closed. JSON corrupto, campos desconocidos,
+  duplicados, defaults o enums inválidos, dimensiones reservadas incompatibles y exceso de definiciones
+  producen `PARAMETER_DEFINITION_INVALID`; nunca se publica una definición
+  parcial;
+- los issues de valor incluyen `expectedType`/`receivedType` y, cuando aplica,
+  `integer`/`min`/`max`/`step`/`allowedOptions`/`maxLength`. Strings requieren
+  `maxLength` entre 1 y 512 y `receivedValue` sólo expone escalares seguros,
+  truncados a 128 code points Unicode. Un snapshot de ocurrencias incompatible
+  con el binding devuelve `PARAMETER_BINDING_CONFLICT` antes de mutar el host.
+- el inspector SketchUp usa controles accesibles reales para boolean y string,
+  preservando `false` y `""` como valores explícitos;
+- al clonar catálogo, todos los `componentId` dentro de bindings y relationship
+  targets se remapean transaccionalmente a los componentes destino; una referencia
+  irresoluble aborta el clone completo.
 
 Reglas de ocurrencias:
 
@@ -927,10 +963,11 @@ transforms de 3 finitos, offsets de 2 finitos, sin duplicados ni campos fuera
 del contrato v1) y coherencia snapshot↔layout. El transport pasa el request
 esperado al parser, que exige correlación exacta antes de devolver un layout.
 
-El v1 NO acepta parámetros arbitrarios que el modelo Go no pueda resolver:
-eso sería eco de intención sin efecto autoritativo. La proyección actual
-incluye dimensiones; #483 agrega el catálogo persistido/versionado de
-`FurnitureDefinition.parameters` para familias futuras number/string/boolean/enum.
+El v1 NO acepta parámetros arbitrarios: sólo evalúa los declarados por la
+`FurnitureDefinition` persistida y pineada. El servidor aplica defaults y
+restricciones, devuelve el set evaluado completo y el hash/revision del
+catálogo cambia si cambia una regla o default. Los módulos legacy sin contrato
+explícito proyectan width/height/depth con la misma semántica anterior.
 Los primeros slices de #467/#468 se expresan mediante occurrences,
 relationships y HardwarePlacement y no dependen de ese follow-up.
 

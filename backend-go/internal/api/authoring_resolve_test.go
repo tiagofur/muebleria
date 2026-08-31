@@ -18,6 +18,7 @@ const authoringFixtureModuleID = "22222222-2222-2222-2222-222222222222"
 
 func authoringStrPtr(s string) *string     { return &s }
 func authoringFloatPtr(f float64) *float64 { return &f }
+func authoringIntPtr(v int) *int           { return &v }
 
 // authoringStubServer builds the #477 fixture cabinet behind the API stub
 // store (same shape as the engine's authoringCabinetCatalog).
@@ -98,13 +99,23 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 			{ComponentID: "comp-side-r", Quantity: 1},
 			{ComponentID: "comp-base", Quantity: 1},
 			{ComponentID: "comp-top", Quantity: 1},
-			{ComponentID: "comp-back", Quantity: 1},
 		},
 	}
 	module := domain.Module{
 		ID: authoringFixtureModuleID, Code: "AUTH-600", Name: "Gabinete Authoring 600",
 		WidthMm: 600, HeightMm: 720, DepthMm: 560, StructureID: "st-authoring",
+		ParameterDefinitions: []domain.FurnitureParameterDefinition{
+			{Name: "shelfCount", Label: "Shelf count", SortOrder: 40, Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(1), Required: true, Unit: domain.FurnitureParameterUnitCount, Category: domain.FurnitureParameterCategoryConfiguration, Min: authoringFloatPtr(0), Max: authoringFloatPtr(5), Step: authoringFloatPtr(1), Integer: true,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shelf", Relationship: &domain.FurnitureParameterRelationshipBinding{Kind: "shelf-support", SourceRole: "shelf-edge", Targets: []domain.FurnitureParameterRelationshipTarget{{ComponentID: "comp-side", Role: "inside-face"}, {ComponentID: "comp-side-r", Role: "inside-face"}}}}},
+			{Name: "hasBackPanel", Label: "Has back panel", SortOrder: 50, Type: domain.FurnitureParameterTypeBoolean, DefaultValue: true, Required: true, Category: domain.FurnitureParameterCategoryConfiguration,
+				Binding: &domain.FurnitureParameterBinding{Version: 1, Kind: domain.FurnitureParameterBindingComponentCondition, ComponentID: "comp-back"}},
+			{Name: "softClose", Label: "Soft close", SortOrder: 50, Type: domain.FurnitureParameterTypeBoolean, DefaultValue: false, Required: false, Category: domain.FurnitureParameterCategoryMetadata},
+			{Name: "style", Label: "Style", SortOrder: 60, Type: domain.FurnitureParameterTypeEnum, DefaultValue: "classic", Required: true, Category: domain.FurnitureParameterCategoryMetadata, Options: []string{"classic", "minimal"}},
+			{Name: "label", Label: "Label", SortOrder: 70, Type: domain.FurnitureParameterTypeString, DefaultValue: "standard", Required: false, Category: domain.FurnitureParameterCategoryMetadata, MaxLength: authoringIntPtr(80)},
+			{Name: "tiltDeg", Label: "Tilt", SortOrder: 80, Type: domain.FurnitureParameterTypeNumber, DefaultValue: float64(0), Required: false, Unit: domain.FurnitureParameterUnitDeg, Category: domain.FurnitureParameterCategoryMetadata, Min: authoringFloatPtr(0), Max: authoringFloatPtr(90), Step: authoringFloatPtr(0.25)},
+		},
 		Components: []domain.ComponentInstance{
+			{ComponentID: "comp-back", Quantity: 1},
 			{ComponentID: "comp-shelf", Quantity: 1},
 			{
 				ComponentID: "comp-door", Quantity: 1,
@@ -178,7 +189,7 @@ func defaultOccurrencesJSON() []authoringOccurrenceWire {
 		occurrenceJSON("side-right-01", "st-comp-side-r", nil),
 		occurrenceJSON("floor-01", "st-comp-base", nil),
 		occurrenceJSON("top-01", "st-comp-top", nil),
-		occurrenceJSON("back-01", "st-comp-back", nil),
+		occurrenceJSON("back-01", "mod-comp-back", nil),
 		occurrenceJSON("shelf-01", "mod-comp-shelf", nil),
 		occurrenceJSON("door-01", "mod-comp-door", nil),
 	}
@@ -210,12 +221,13 @@ func postAuthoringResolve(server *Server, token, query string, body any) *httpte
 // --- shared contract fixture -------------------------------------------------
 
 type authoringFixtureFile struct {
-	SchemaVersion         int                     `json:"schemaVersion"`
-	Comment               string                  `json:"comment"`
-	Schema                authoringFixtureSchema  `json:"schema"`
-	FurnitureDefinitionID string                  `json:"furnitureDefinitionId"`
-	Joinery               authoringFixtureJoinery `json:"joinery"`
-	Scenarios             []authoringFixtureCase  `json:"scenarios"`
+	SchemaVersion         int                                   `json:"schemaVersion"`
+	Comment               string                                `json:"comment"`
+	Schema                authoringFixtureSchema                `json:"schema"`
+	FurnitureDefinitionID string                                `json:"furnitureDefinitionId"`
+	ParameterDefinitions  []domain.FurnitureParameterDefinition `json:"parameterDefinitions"`
+	Joinery               authoringFixtureJoinery               `json:"joinery"`
+	Scenarios             []authoringFixtureCase                `json:"scenarios"`
 }
 
 type authoringFixtureSchema struct {
@@ -308,6 +320,7 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 
 		// 3. Add a second shelf sharing the reusable definition.
 		run("03-add-shelf-shared-definition", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"shelfCount": 2.0}
 			occ := append(defaultOccurrencesJSON(), occurrenceJSON("shelf-02", "mod-comp-shelf", []float64{18, 18, 560}))
 			f.Components = occ
 			f.Relationships = []engine.AuthoringRelationship{
@@ -318,6 +331,7 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 
 		// 4. Remove shelf → only its dependent machining disappears.
 		run("04-remove-shelf", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"shelfCount": 0.0}
 			occ := defaultOccurrencesJSON()[:5]
 			f.Components = append(occ, defaultOccurrencesJSON()[6])
 		})), http.StatusOK),
@@ -457,6 +471,41 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			request.IdempotencyKey = "fixture:cost-only-hardware:0001"
 			return run("12-cost-only-manual-hardware", "", request, http.StatusOK)
 		}(),
+
+		// Definition-driven scalar families: no handler allowlist changes are
+		// needed when a valid definition owns the parameter.
+		run("13-definition-driven-typed-parameters", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{
+				"widthMm": 650.0, "shelfCount": 3.0, "softClose": true,
+				"style": "minimal", "label": "custom", "tiltDeg": 12.25,
+			}
+		})), http.StatusOK),
+
+		run("14-component-condition-true", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"hasBackPanel": true}
+		})), http.StatusOK),
+		run("15-component-condition-false", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"hasBackPanel": false}
+		})), http.StatusOK),
+		run("16-string-max-length-boundary", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"label": strings.Repeat("x", 80)}
+		})), http.StatusOK),
+
+		run("neg-parameter-wrong-type", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"softClose": "true"}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-out-of-range", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"shelfCount": 6.0}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-invalid-step", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"tiltDeg": 12.1}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-invalid-enum", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"style": "ornate"}
+		})), http.StatusUnprocessableEntity),
+		run("neg-parameter-string-too-long", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Parameters = map[string]any{"label": strings.Repeat("x", 200)}
+		})), http.StatusUnprocessableEntity),
 	}
 }
 
@@ -528,6 +577,10 @@ const authoringFixturePath = "../../../contracts/sketchupAuthoringResolve.contra
 func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 	server, token := authoringStubServer(t)
 	_, catalog := authoringAPICabinetFixture()
+	snapshot, err := server.loadWorkshopCatalogOnce(httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil))
+	if err != nil {
+		t.Fatalf("load parameter definitions: %v", err)
+	}
 
 	scenarios := authoringFixtureScenarios(t, server, token)
 	fixture := authoringFixtureFile{
@@ -543,6 +596,7 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 			SchemaVersion: engine.AuthoringResolveSchemaVersion,
 		},
 		FurnitureDefinitionID: authoringFixtureModuleID,
+		ParameterDefinitions:  snapshot.Projection.Definitions[authoringFixtureModuleID].Parameters,
 		Joinery:               buildAuthoringFixtureJoinery(t, scenarios, catalog),
 		Scenarios:             scenarios,
 	}
@@ -572,6 +626,7 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		t.Fatalf("decode golden: %v", err)
 	}
+	conditionFingerprints := map[string]string{}
 	for _, scenario := range probe.Scenarios {
 		var response struct {
 			SchemaID        string `json:"schemaId"`
@@ -598,7 +653,8 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					} `json:"hardware"`
 				} `json:"layout"`
 				Machining struct {
-					ManufacturingFingerprint string `json:"manufacturingFingerprint"`
+					ManufacturingFingerprint string                              `json:"manufacturingFingerprint"`
+					Operations               []engine.ResolvedMachiningOperation `json:"operations"`
 				} `json:"machining"`
 				Preflight struct {
 					Scope             string `json:"scope"`
@@ -607,6 +663,8 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 				} `json:"preflight"`
 			} `json:"resolved"`
 			NormalizedSnapshot struct {
+				Components         []engine.NormalizedAuthoringComponent `json:"components"`
+				Relationships      []engine.AuthoringRelationship        `json:"relationships"`
 				HardwarePlacements []struct {
 					HardwarePlacementID string `json:"hardwarePlacementId"`
 				} `json:"hardwarePlacements"`
@@ -679,6 +737,30 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 					}
 				}
 			}
+			if scenario.ID == "13-definition-driven-typed-parameters" {
+				shelves := 0
+				for _, component := range response.NormalizedSnapshot.Components {
+					if component.ComponentDefinitionID == "mod-comp-shelf" {
+						shelves++
+					}
+				}
+				if shelves != 3 || len(response.NormalizedSnapshot.Relationships) != 3 || len(response.Resolved.Machining.Operations) == 0 {
+					t.Fatalf("typed quantity did not change authoritative output: shelves=%d relationships=%d operations=%d", shelves, len(response.NormalizedSnapshot.Relationships), len(response.Resolved.Machining.Operations))
+				}
+			}
+			if scenario.ID == "14-component-condition-true" || scenario.ID == "15-component-condition-false" {
+				hasBack := false
+				for _, component := range response.NormalizedSnapshot.Components {
+					if component.ComponentDefinitionID == "mod-comp-back" {
+						hasBack = true
+					}
+				}
+				wantBack := scenario.ID == "14-component-condition-true"
+				if hasBack != wantBack {
+					t.Fatalf("scenario %s back presence=%v want=%v", scenario.ID, hasBack, wantBack)
+				}
+				conditionFingerprints[scenario.ID] = response.Resolved.Machining.ManufacturingFingerprint
+			}
 		default:
 			if response.Status != "rejected" || response.Resolved != nil {
 				t.Fatalf("scenario %s: expected rejected without resolved payload", scenario.ID)
@@ -692,6 +774,9 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 				}
 			}
 		}
+	}
+	if conditionFingerprints["14-component-condition-true"] == conditionFingerprints["15-component-condition-false"] {
+		t.Fatal("componentCondition true/false must change manufacturing fingerprint")
 	}
 }
 
@@ -947,6 +1032,51 @@ func TestAuthoringResolveUsesDefinitionFromPinnedSnapshot(t *testing.T) {
 	}
 	if response.Resolved.Layout.DimensionsMm[0] != 600 {
 		t.Fatalf("resolved width = %v, want pinned-snapshot width 600 (stale GetModuleByID held 999)", response.Resolved.Layout.DimensionsMm[0])
+	}
+}
+
+func TestAuthoringResolveRejectsInvalidDefinitionFromCatalogRead(t *testing.T) {
+	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	store.catalogOverride.Modules[0].ParameterDefinitions = []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}}
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Issues []domain.ContractIssue `json:"issues"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Issues) != 1 || response.Issues[0].Code != "PARAMETER_DEFINITION_INVALID" || response.Issues[0].Details["issues"] == nil {
+		t.Fatalf("unexpected issues: %+v", response.Issues)
+	}
+}
+
+func TestAuthoringResolveRejectsDimensionTypeAndDecimalsWithDetails(t *testing.T) {
+	server, token := authoringStubServer(t)
+	revision := authoringCatalogRevision(t, server)
+	for _, tt := range []struct {
+		name     string
+		value    any
+		received string
+	}{{"string", "600", "string"}, {"decimal", 600.5, "number"}} {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID, Parameters: map[string]any{"widthMm": tt.value}}))
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var response struct {
+				Issues []domain.ContractIssue `json:"issues"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if len(response.Issues) != 1 || response.Issues[0].Code != "PARAMETER_TYPE_INVALID" || response.Issues[0].Details["expectedType"] != "number" || response.Issues[0].Details["receivedType"] != tt.received || response.Issues[0].Details["integer"] != true || response.Issues[0].Details["receivedValue"] == nil {
+				t.Fatalf("unexpected issue: %+v", response.Issues)
+			}
+		})
 	}
 }
 

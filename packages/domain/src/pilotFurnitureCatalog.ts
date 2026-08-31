@@ -378,9 +378,9 @@ const carcassAssignments = [
 ] as const;
 
 const dimensionParameters = (width: number, height: number, depth: number) => [
-  { name: "widthMm", label: "Ancho", type: "number" as const, defaultValue: width, unit: "mm" as const, min: 300, max: 1200, step: 50, category: "dimension" as const },
-  { name: "heightMm", label: "Alto", type: "number" as const, defaultValue: height, unit: "mm" as const, min: 600, max: 2400, step: 10, category: "dimension" as const },
-  { name: "depthMm", label: "Fondo", type: "number" as const, defaultValue: depth, unit: "mm" as const, min: 280, max: 650, step: 10, category: "dimension" as const },
+  { name: "widthMm", label: "Ancho", type: "number" as const, defaultValue: width, unit: "mm" as const, integer: true, min: 300, max: 1200, step: 50, category: "dimension" as const, binding: { version: 1, kind: "dimensionColumn" as const, dimension: "widthMm" as const } },
+  { name: "heightMm", label: "Alto", type: "number" as const, defaultValue: height, unit: "mm" as const, integer: true, min: 600, max: 2400, step: 10, category: "dimension" as const, binding: { version: 1, kind: "dimensionColumn" as const, dimension: "heightMm" as const } },
+  { name: "depthMm", label: "Fondo", type: "number" as const, defaultValue: depth, unit: "mm" as const, integer: true, min: 280, max: 650, step: 10, category: "dimension" as const, binding: { version: 1, kind: "dimensionColumn" as const, dimension: "depthMm" as const } },
 ];
 
 export const pilotFurnitureDefinitions: Readonly<Record<string, FurnitureDefinition>> = {
@@ -393,11 +393,11 @@ export const pilotFurnitureDefinitions: Readonly<Record<string, FurnitureDefinit
     revisionId: "pilot-rev-1",
     parameters: [
       ...dimensionParameters(450, 720, 560),
-      { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 1, unit: "count", min: 0, max: 4, step: 1, category: "configuration" },
-      { name: "doorCount", label: "Puertas", type: "number", defaultValue: 1, unit: "count", min: 1, max: 2, step: 1, category: "configuration" },
-      { name: "doorSwing", label: "Apertura", type: "enum", defaultValue: "left", options: ["left", "right", "pair"], category: "configuration" },
-      { name: "doorComponentId", label: "Modelo de Puerta", type: "enum", defaultValue: "component-door-flat", options: ["component-door-flat", "component-door-shaker"], category: "style" },
-      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "hardware" },
+      { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 1, unit: "count", integer: true, min: 0, max: 4, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-shelf" } },
+      { name: "doorCount", label: "Puertas", type: "number", defaultValue: 1, unit: "count", integer: true, min: 1, max: 2, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-door-flat" } },
+      { name: "doorSwing", label: "Apertura", type: "enum", defaultValue: "left", options: ["left", "right", "pair"], category: "metadata" },
+      { name: "doorComponentId", label: "Modelo de Puerta", type: "enum", defaultValue: "component-door-flat", options: ["component-door-flat", "component-door-shaker"], category: "metadata" },
+      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "metadata" },
     ],
     componentSlots: [
       { slotId: "left-side", role: "left_side", componentDefinitionId: "component-side-panel", defaultMaterialRole: "carcass" },
@@ -422,10 +422,10 @@ export const pilotFurnitureDefinitions: Readonly<Record<string, FurnitureDefinit
     revisionId: "pilot-rev-1",
     parameters: [
       ...dimensionParameters(600, 720, 560),
-      { name: "drawerCount", label: "Cajones", type: "number", defaultValue: 3, unit: "count", min: 2, max: 4, step: 1, category: "configuration" },
-      { name: "drawerSlideId", label: "Corredera", type: "enum", defaultValue: "slide-generic-500", options: ["slide-generic-500"], category: "hardware" },
-      { name: "handleComponentId", label: "Jaladera", type: "enum", defaultValue: "handle-straight-128", options: ["handle-straight-128"], category: "style" },
-      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "hardware" },
+      { name: "drawerCount", label: "Cajones", type: "number", defaultValue: 3, unit: "count", integer: true, min: 2, max: 4, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-drawer-front" } },
+      { name: "drawerSlideId", label: "Corredera", type: "enum", defaultValue: "slide-generic-500", options: ["slide-generic-500"], category: "metadata" },
+      { name: "handleComponentId", label: "Jaladera", type: "enum", defaultValue: "handle-straight-128", options: ["handle-straight-128"], category: "metadata" },
+      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "metadata" },
     ],
     componentSlots: [
       { slotId: "left-side", role: "left_side", componentDefinitionId: "component-side-panel", defaultMaterialRole: "carcass" },
@@ -450,11 +450,11 @@ export const pilotFurnitureDefinitions: Readonly<Record<string, FurnitureDefinit
     revisionId: "pilot-rev-1",
     parameters: [
       ...dimensionParameters(450, 720, 330),
-      { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 2, unit: "count", min: 0, max: 5, step: 1, category: "configuration" },
-      { name: "doorCount", label: "Puertas", type: "number", defaultValue: 1, unit: "count", min: 1, max: 2, step: 1, category: "configuration" },
-      { name: "doorSwing", label: "Apertura", type: "enum", defaultValue: "left", options: ["left", "right", "pair"], category: "configuration" },
-      { name: "doorComponentId", label: "Modelo de Puerta", type: "enum", defaultValue: "component-door-flat", options: ["component-door-flat", "component-door-shaker"], category: "style" },
-      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "hardware" },
+      { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 2, unit: "count", integer: true, min: 0, max: 5, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-shelf" } },
+      { name: "doorCount", label: "Puertas", type: "number", defaultValue: 1, unit: "count", integer: true, min: 1, max: 2, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-door-flat" } },
+      { name: "doorSwing", label: "Apertura", type: "enum", defaultValue: "left", options: ["left", "right", "pair"], category: "metadata" },
+      { name: "doorComponentId", label: "Modelo de Puerta", type: "enum", defaultValue: "component-door-flat", options: ["component-door-flat", "component-door-shaker"], category: "metadata" },
+      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "metadata" },
     ],
     componentSlots: [
       { slotId: "left-side", role: "left_side", componentDefinitionId: "component-side-panel", defaultMaterialRole: "carcass" },
@@ -479,10 +479,10 @@ export const pilotFurnitureDefinitions: Readonly<Record<string, FurnitureDefinit
     revisionId: "pilot-rev-1",
     parameters: [
       ...dimensionParameters(600, 2100, 560),
-      { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 5, unit: "count", min: 3, max: 8, step: 1, category: "configuration" },
-      { name: "doorCount", label: "Puertas", type: "number", defaultValue: 2, unit: "count", min: 2, max: 2, step: 1, category: "configuration" },
-      { name: "doorComponentId", label: "Modelo de Puerta", type: "enum", defaultValue: "component-door-flat", options: ["component-door-flat", "component-door-shaker"], category: "style" },
-      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "hardware" },
+      { name: "shelfCount", label: "Entrepaños", type: "number", defaultValue: 5, unit: "count", integer: true, min: 3, max: 8, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-shelf" } },
+      { name: "doorCount", label: "Puertas", type: "number", defaultValue: 2, unit: "count", integer: true, min: 2, max: 2, step: 1, category: "configuration", binding: { version: 1, kind: "componentQuantity", componentId: "component-door-flat" } },
+      { name: "doorComponentId", label: "Modelo de Puerta", type: "enum", defaultValue: "component-door-flat", options: ["component-door-flat", "component-door-shaker"], category: "metadata" },
+      { name: "joinerySystemId", label: "Sistema de Unión", type: "enum", defaultValue: "minifix-dowel", options: ["minifix-dowel", "dowel-only"], category: "metadata" },
     ],
     componentSlots: [
       { slotId: "left-side", role: "left_side", componentDefinitionId: "component-side-panel", defaultMaterialRole: "carcass" },

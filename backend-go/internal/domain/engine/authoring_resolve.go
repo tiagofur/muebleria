@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -122,6 +123,7 @@ type AuthoringResolveInput struct {
 	Relationships           []AuthoringRelationship
 	ManualPlacements        []AuthoringManualPlacement
 	ManualPlacementsPresent bool
+	EvaluatedParameters     map[string]any
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -188,10 +190,21 @@ func (idx *authoringTemplateIndex) note(defID, catalogComponentID, placement str
 func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResult, error) {
 	structural := []domain.ContractIssue{}
 	manufacturing := []domain.ContractIssue{}
+	if issues := domain.ValidateModuleFurnitureParameterConsumers(input.Module, input.Catalog); len(issues) != 0 {
+		return nil, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
 
 	if input.PrecisionMm <= 0 || math.IsNaN(input.PrecisionMm) || math.IsInf(input.PrecisionMm, 0) {
 		input.PrecisionMm = 0.01
 	}
+
+	// Condition bindings own their entry and its authored dependents. Dropping
+	// an entry removes only relationships/hardware anchored to that entry.
+	filterDisabledConditionDependents(&input)
+
+	// Apply declarative consumers before any authoritative expansion. Parameter
+	// names never select behavior here; only the versioned binding does.
+	input.Module = applyAuthoringParameterBindings(input.Module, input.EvaluatedParameters)
 
 	// 1. Dry-run the default expansion to collect the template index the
 	// snapshot must map onto (structure/module/agregado walk, same code path
@@ -206,6 +219,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if input.Occurrences != nil {
 		plan.active = true
 		planOccurrences(plan, input.Occurrences, templateIndex, &structural)
+		validateBoundOccurrenceCounts(input.Module, input.EvaluatedParameters, input.Occurrences, &structural)
 	}
 
 	// 3. Resolve the layout with the plan (nil plan = default expansion).
@@ -230,7 +244,9 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	effectivePlacements, placementIssues := effectiveManualPlacements(boards, input.ManualPlacements, input.ManualPlacementsPresent, input.Catalog)
 	structural = append(structural, placementIssues...)
 
-	// 5. Relationship anchors must resolve inside the effective occurrence set.
+	// 5. Declarative relationship templates turn every bound quantity into
+	// manufacturing intent. Authored equivalents win by source+kind.
+	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, boards, input.Relationships)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
 
@@ -258,6 +274,172 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		ValidationStatus: validationStatusFor(manufacturing),
 		ValidationIssues: manufacturing,
 	}, nil
+}
+
+func applyAuthoringParameterBindings(module domain.Module, values map[string]any) domain.Module {
+	for _, definition := range module.ParameterDefinitions {
+		binding := definition.Binding
+		if binding == nil || (binding.Kind != domain.FurnitureParameterBindingComponentQuantity && binding.Kind != domain.FurnitureParameterBindingComponentCondition) {
+			continue
+		}
+		quantity := -1
+		if binding.Kind == domain.FurnitureParameterBindingComponentQuantity {
+			value, ok := values[definition.Name].(float64)
+			if !ok {
+				continue
+			}
+			quantity = int(value)
+		} else {
+			value, ok := values[definition.Name].(bool)
+			if !ok {
+				continue
+			}
+			if !value {
+				quantity = 0
+			}
+		}
+		updated := make([]domain.ComponentInstance, 0, len(module.Components))
+		for _, instance := range module.Components {
+			if instance.ComponentID == binding.ComponentID {
+				if quantity == 0 {
+					continue
+				}
+				if quantity > 0 {
+					instance.Quantity = quantity
+				}
+			}
+			updated = append(updated, instance)
+		}
+		module.Components = updated
+	}
+	return module
+}
+
+func filterDisabledConditionDependents(input *AuthoringResolveInput) {
+	disabledDefinitions := map[string]bool{}
+	for _, definition := range input.Module.ParameterDefinitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentCondition {
+			continue
+		}
+		if enabled, ok := input.EvaluatedParameters[definition.Name].(bool); ok && !enabled {
+			disabledDefinitions["mod-"+binding.ComponentID] = true
+		}
+	}
+	if len(disabledDefinitions) == 0 {
+		return
+	}
+	removedInstances := map[string]bool{}
+	if input.Occurrences != nil {
+		kept := make([]AuthoringOccurrence, 0, len(input.Occurrences))
+		for _, occurrence := range input.Occurrences {
+			if disabledDefinitions[occurrence.ComponentDefinitionID] {
+				removedInstances[occurrence.ComponentInstanceID] = true
+				continue
+			}
+			kept = append(kept, occurrence)
+		}
+		input.Occurrences = kept
+	}
+	isDisabledInstance := func(instanceID string) bool {
+		if removedInstances[instanceID] {
+			return true
+		}
+		for definitionID := range disabledDefinitions {
+			if strings.HasPrefix(instanceID, definitionID+"-copy-") {
+				return true
+			}
+		}
+		return false
+	}
+	relationships := make([]AuthoringRelationship, 0, len(input.Relationships))
+	for _, relationship := range input.Relationships {
+		dependent := isDisabledInstance(relationship.Source.ComponentInstanceID)
+		for _, target := range relationship.Targets {
+			dependent = dependent || isDisabledInstance(target.ComponentInstanceID)
+		}
+		if !dependent {
+			relationships = append(relationships, relationship)
+		}
+	}
+	input.Relationships = relationships
+	placements := make([]AuthoringManualPlacement, 0, len(input.ManualPlacements))
+	for _, placement := range input.ManualPlacements {
+		if !isDisabledInstance(placement.HostComponentInstanceID) {
+			placements = append(placements, placement)
+		}
+	}
+	input.ManualPlacements = placements
+}
+
+func validateBoundOccurrenceCounts(module domain.Module, values map[string]any, occurrences []AuthoringOccurrence, issues *[]domain.ContractIssue) {
+	counts := map[string]int{}
+	for _, occurrence := range occurrences {
+		counts[occurrence.ComponentDefinitionID]++
+	}
+	for _, definition := range module.ParameterDefinitions {
+		binding := definition.Binding
+		if binding == nil || (binding.Kind != domain.FurnitureParameterBindingComponentQuantity && binding.Kind != domain.FurnitureParameterBindingComponentCondition) {
+			continue
+		}
+		if _, present := values[definition.Name]; !present {
+			continue
+		}
+		expectedCount := 0
+		for _, instance := range module.Components {
+			if instance.ComponentID == binding.ComponentID {
+				expectedCount += instance.Quantity
+			}
+		}
+		definitionID := "mod-" + binding.ComponentID
+		if counts[definitionID] != expectedCount {
+			*issues = append(*issues, domain.ContractIssue{
+				Code: "PARAMETER_BINDING_CONFLICT", Message: fmt.Sprintf("%s requires %d occurrences of %s", definition.Name, expectedCount, definitionID),
+				Severity: domain.IssueSeverityError, Path: "furniture.components",
+				Remediation: "Send a full occurrence snapshot consistent with the evaluated parameter value.",
+				Details:     map[string]any{"parameter": definition.Name, "expectedCount": expectedCount, "receivedCount": counts[definitionID], "componentDefinitionId": definitionID},
+			})
+		}
+	}
+}
+
+func materializeBoundRelationships(definitions []domain.FurnitureParameterDefinition, boards []layoutBoard, authored []AuthoringRelationship) []AuthoringRelationship {
+	result := append([]AuthoringRelationship(nil), authored...)
+	has := map[string]bool{}
+	for _, relationship := range result {
+		has[relationship.Kind+"\x00"+relationship.Source.ComponentInstanceID] = true
+	}
+	byComponent := map[string][]layoutBoard{}
+	for _, board := range boards {
+		byComponent[board.catalogComponentID] = append(byComponent[board.catalogComponentID], board)
+	}
+	for _, definition := range definitions {
+		binding := definition.Binding
+		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity || binding.Relationship == nil {
+			continue
+		}
+		for index, source := range byComponent[binding.ComponentID] {
+			key := binding.Relationship.Kind + "\x00" + source.id
+			if has[key] {
+				continue
+			}
+			targets := make([]AuthoringRelationshipAnchor, 0, len(binding.Relationship.Targets))
+			for _, target := range binding.Relationship.Targets {
+				candidates := byComponent[target.ComponentID]
+				if len(candidates) == 0 {
+					continue
+				}
+				targets = append(targets, AuthoringRelationshipAnchor{ComponentInstanceID: candidates[0].id, Role: target.Role})
+			}
+			result = append(result, AuthoringRelationship{
+				RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1), Kind: binding.Relationship.Kind,
+				Source: AuthoringRelationshipAnchor{ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole}, Targets: targets,
+			})
+			has[key] = true
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool { return result[i].RelationshipID < result[j].RelationshipID })
+	return result
 }
 
 // planOccurrences validates the snapshot against the template index and
@@ -628,10 +810,14 @@ func resolveFacePlaneOffsets(board *layoutBoard, hp domain.HardwarePlacement) [2
 // buildNormalizedIntent echoes the complete effective authoring state with
 // server-filled identity fields and transport-rounded millimeters.
 func buildNormalizedIntent(input AuthoringResolveInput, layout FurnitureLayout, boards []layoutBoard, placements []effectiveManualPlacement) NormalizedAuthoringIntent {
-	parameters := map[string]any{
-		"widthMm":  layout.DimensionsMm[0],
-		"heightMm": layout.DimensionsMm[1],
-		"depthMm":  layout.DimensionsMm[2],
+	parameters := make(map[string]any, len(input.EvaluatedParameters))
+	for name, value := range input.EvaluatedParameters {
+		parameters[name] = value
+	}
+	for index, name := range []string{"widthMm", "heightMm", "depthMm"} {
+		if _, declared := parameters[name]; declared {
+			parameters[name] = layout.DimensionsMm[index]
+		}
 	}
 	choices := map[string]string{}
 	for role, material := range input.OptionChoices {

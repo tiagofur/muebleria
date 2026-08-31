@@ -1,0 +1,64 @@
+objc[80107]: Class SKTextPath is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/SketchUpAPI.framework/Versions/A/SketchUpAPI (0x10bb2c390) and /Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp (0x10503f830). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-08-30 17:52:52.024 SketchUp[80107:5647890] BugSplat start...
+2026-08-30 17:52:52.024 SketchUp[80107:5647890] BugSplat BugSplatDatabase set as [SU26Mac]
+2026-08-30 17:52:52.024 SketchUp[80107:5647890] BugSplat setServerURL: [https://SU26Mac.bugsplat.com/]
+objc[80107]: Class SkpTimerCaller is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp (0x10503f7b8) and /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/LayOutAPI.framework/Versions/A/Libraries/libSketchUpViewerAPI.dylib (0x13de48ea0). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[80107]: Class SKTextPath is implemented in both /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/SketchUpAPI.framework/Versions/A/SketchUpAPI (0x10bb2c390) and /Applications/SketchUp 2026/SketchUp.app/Contents/Frameworks/LayOutAPI.framework/Versions/A/Libraries/libSketchUpViewerAPI.dylib (0x13de48f18). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-08-30 17:52:52.873 SketchUp[80107:5647890] INFO: Start CrashManager processing
+2026-08-30 17:52:53.374 SketchUp[80107:5647890] [HockeySDK] -[BITCrashManager invokeDelayedProcessing]/900 [HockeySDK] WARNING: Another exception handler was added. If this invokes any kind exit() after processing the exception, which causes any subsequent error handler not to be invoked, these crashes will NOT be reported to HockeyApp!
+Device Manufacturer: Apple Inc.
+       Device Model: Mac17,9
+         OS Version: 26.6
+WGLUtils::UtilsState::ctor: Max GPU perf is 0
+Renderer information:
+  Graphics Engine Name: New Graphics Engine
+  Graphics API: Metal
+  GPU Name: Apple M5 Pro
+ValidateGraphicsPreferences: Starting up.
+SaveUserRendererSettingsToPreferences: Saving graphics preferences: MSAA: 4 FF: 1
+ValidateGraphicsPreferences: All done.
+2026-08-30 17:52:55.518 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:52:55.774 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:00.588 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:00.629 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:00.830 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:00.867 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:00.995 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.038 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.201 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.238 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.425 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.465 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.589 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.633 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.833 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:01.877 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.019 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.059 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.255 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.304 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.450 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.499 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.654 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.700 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.905 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:02.947 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+Cleanup document:
+2026-08-30 17:53:03.117 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:03.137 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+Application terminating
+2026-08-30 17:53:05.507 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.521 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.534 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.548 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.559 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.569 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.581 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.589 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.597 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.608 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.614 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+2026-08-30 17:53:05.624 SketchUp[80107:5647890] BugSplat [setValue:off forKey:rtv]
+Closing application
+Application requests completed
+Exit notification

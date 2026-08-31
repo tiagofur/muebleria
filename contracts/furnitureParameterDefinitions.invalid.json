@@ -1,0 +1,945 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "malformed-json",
+      "rawJson": "[{\"name\":",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "boundary": "both"
+    },
+    {
+      "id": "duplicate-name",
+      "definitions": [
+        {
+          "name": "duplicate",
+          "label": "duplicate",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "duplicate",
+          "label": "duplicate",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "name"
+      ],
+      "boundary": "both"
+    },
+    {
+      "id": "unbound-non-metadata",
+      "boundary": "published",
+      "definitions": [
+        {
+          "name": "shelfCount",
+          "label": "Shelf count",
+          "type": "number",
+          "defaultValue": 1,
+          "required": true,
+          "unit": "count",
+          "category": "configuration",
+          "integer": true
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding"
+      ]
+    },
+    {
+      "id": "reserved-dimension",
+      "definitions": [
+        {
+          "name": "widthMm",
+          "label": "Width",
+          "type": "number",
+          "defaultValue": 600,
+          "required": true,
+          "unit": "mm",
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "widthMm"
+          }
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.kind",
+        "name"
+      ],
+      "boundary": "persisted"
+    },
+    {
+      "id": "reserved-dimension-incompatible",
+      "boundary": "published",
+      "definitions": [
+        {
+          "name": "widthMm",
+          "label": "Width",
+          "type": "string",
+          "defaultValue": "600",
+          "required": true,
+          "category": "dimension",
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "heightMm"
+          },
+          "maxLength": 80
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.dimension",
+        "binding.kind"
+      ]
+    },
+    {
+      "id": "invalid-type",
+      "definitions": [
+        {
+          "name": "badType",
+          "label": "Bad type",
+          "type": "decimal",
+          "required": false,
+          "category": "metadata"
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "type"
+      ],
+      "boundary": "both"
+    },
+    {
+      "id": "invalid-default",
+      "definitions": [
+        {
+          "name": "enabled",
+          "label": "Enabled",
+          "type": "boolean",
+          "defaultValue": "false",
+          "required": false,
+          "category": "metadata"
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "defaultValue"
+      ],
+      "boundary": "both"
+    },
+    {
+      "id": "invalid-enum",
+      "definitions": [
+        {
+          "name": "style",
+          "label": "Style",
+          "type": "enum",
+          "defaultValue": "ornate",
+          "required": true,
+          "category": "metadata",
+          "options": [
+            "classic",
+            "minimal"
+          ]
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "defaultValue"
+      ],
+      "boundary": "both"
+    },
+    {
+      "id": "definition-limit",
+      "definitions": [
+        {
+          "name": "metadata00",
+          "label": "metadata00",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata01",
+          "label": "metadata01",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata02",
+          "label": "metadata02",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata03",
+          "label": "metadata03",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata04",
+          "label": "metadata04",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata05",
+          "label": "metadata05",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata06",
+          "label": "metadata06",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata07",
+          "label": "metadata07",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata08",
+          "label": "metadata08",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata09",
+          "label": "metadata09",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata10",
+          "label": "metadata10",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata11",
+          "label": "metadata11",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata12",
+          "label": "metadata12",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata13",
+          "label": "metadata13",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata14",
+          "label": "metadata14",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata15",
+          "label": "metadata15",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata16",
+          "label": "metadata16",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata17",
+          "label": "metadata17",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata18",
+          "label": "metadata18",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata19",
+          "label": "metadata19",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata20",
+          "label": "metadata20",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata21",
+          "label": "metadata21",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata22",
+          "label": "metadata22",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata23",
+          "label": "metadata23",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata24",
+          "label": "metadata24",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata25",
+          "label": "metadata25",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata26",
+          "label": "metadata26",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata27",
+          "label": "metadata27",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata28",
+          "label": "metadata28",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata29",
+          "label": "metadata29",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata30",
+          "label": "metadata30",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata31",
+          "label": "metadata31",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata32",
+          "label": "metadata32",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata33",
+          "label": "metadata33",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata34",
+          "label": "metadata34",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata35",
+          "label": "metadata35",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata36",
+          "label": "metadata36",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata37",
+          "label": "metadata37",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata38",
+          "label": "metadata38",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata39",
+          "label": "metadata39",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata40",
+          "label": "metadata40",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata41",
+          "label": "metadata41",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata42",
+          "label": "metadata42",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata43",
+          "label": "metadata43",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata44",
+          "label": "metadata44",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata45",
+          "label": "metadata45",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata46",
+          "label": "metadata46",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata47",
+          "label": "metadata47",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata48",
+          "label": "metadata48",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata49",
+          "label": "metadata49",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata50",
+          "label": "metadata50",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata51",
+          "label": "metadata51",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata52",
+          "label": "metadata52",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata53",
+          "label": "metadata53",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata54",
+          "label": "metadata54",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata55",
+          "label": "metadata55",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata56",
+          "label": "metadata56",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata57",
+          "label": "metadata57",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata58",
+          "label": "metadata58",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata59",
+          "label": "metadata59",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata60",
+          "label": "metadata60",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata61",
+          "label": "metadata61",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata62",
+          "label": "metadata62",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata63",
+          "label": "metadata63",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        },
+        {
+          "name": "metadata64",
+          "label": "metadata64",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "sortOrder": 0,
+          "maxLength": 80
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "boundary": "both"
+    },
+    {
+      "id": "nested-binding-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":[]}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding"
+      ]
+    },
+    {
+      "id": "nested-relationship-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":[]}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship"
+      ]
+    },
+    {
+      "id": "nested-targets-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf\",\"targets\":{}}}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.targets"
+      ]
+    },
+    {
+      "id": "nested-target-entry-shape",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf\",\"targets\":[null,{\"componentId\":1,\"role\":false}]}}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.targets"
+      ]
+    },
+    {
+      "id": "nested-binding-fields",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":\"1\",\"kind\":7,\"componentId\":false,\"dimension\":3}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.version",
+        "binding.kind",
+        "binding.componentId",
+        "binding.dimension"
+      ]
+    },
+    {
+      "id": "nested-relationship-fields",
+      "boundary": "published",
+      "rawJson": "[{\"name\":\"shelfCount\",\"label\":\"Shelf count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"shelf\",\"relationship\":{\"kind\":7,\"sourceRole\":false,\"targets\":[]}}}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.kind",
+        "binding.relationship.sourceRole"
+      ]
+    },
+    {
+      "id": "unknown-definition-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawDefinitionJson": "{\"furnitureDefinitionId\":\"m1\",\"code\":\"M1\",\"name\":\"Module\",\"category\":\"Test\",\"version\":\"1.0.0\",\"schemaRevision\":1,\"definitionHash\":\"sha256-test\",\"parameters\":[],\"unknownDefinition\":true}"
+    },
+    {
+      "id": "unknown-parameter-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"flag\",\"label\":\"Flag\",\"type\":\"boolean\",\"defaultValue\":true,\"required\":true,\"category\":\"configuration\",\"binding\":{\"version\":1,\"kind\":\"componentCondition\",\"componentId\":\"comp-back\"},\"unknownParameter\":true}]"
+    },
+    {
+      "id": "unknown-binding-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"flag\",\"label\":\"Flag\",\"type\":\"boolean\",\"defaultValue\":true,\"required\":true,\"category\":\"configuration\",\"binding\":{\"version\":1,\"kind\":\"componentCondition\",\"componentId\":\"comp-back\",\"unknownBinding\":true}}]"
+    },
+    {
+      "id": "unknown-relationship-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"count\",\"label\":\"Count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf-edge\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"inside-face\"}],\"unknownRelationship\":true}}}]"
+    },
+    {
+      "id": "unknown-relationship-target-field",
+      "boundary": "both",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "definitions"
+      ],
+      "rawJson": "[{\"name\":\"count\",\"label\":\"Count\",\"type\":\"number\",\"defaultValue\":1,\"required\":true,\"unit\":\"count\",\"category\":\"configuration\",\"integer\":true,\"binding\":{\"version\":1,\"kind\":\"componentQuantity\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"shelf-support\",\"sourceRole\":\"shelf-edge\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"inside-face\",\"unknownTarget\":true}]}}}]"
+    },
+    {
+      "id": "component-condition-wrong-type",
+      "boundary": "both",
+      "definitions": [
+        {
+          "name": "hasBackPanel",
+          "label": "Has back panel",
+          "type": "string",
+          "defaultValue": "true",
+          "required": true,
+          "category": "configuration",
+          "maxLength": 8,
+          "binding": {
+            "version": 1,
+            "kind": "componentCondition",
+            "componentId": "comp-back"
+          }
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.kind"
+      ]
+    },
+    {
+      "id": "string-max-length-missing",
+      "boundary": "both",
+      "definitions": [
+        {
+          "name": "label",
+          "label": "Label",
+          "type": "string",
+          "required": false,
+          "category": "metadata"
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "maxLength"
+      ]
+    },
+    {
+      "id": "string-max-length-limit",
+      "boundary": "both",
+      "definitions": [
+        {
+          "name": "label",
+          "label": "Label",
+          "type": "string",
+          "required": false,
+          "category": "metadata",
+          "maxLength": 513
+        }
+      ],
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "maxLength"
+      ]
+    }
+  ]
+}

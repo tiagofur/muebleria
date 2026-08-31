@@ -198,7 +198,11 @@ module Granete
         def normalize_parameters(definition, raw_parameters)
           (definition['parameters'] || []).each_with_object({}) do |parameter, params|
             name = parameter['name']
-            params[name] = raw_parameters[name] || parameter['defaultValue']
+            if raw_parameters.key?(name)
+              params[name] = raw_parameters[name]
+            elsif parameter.key?('defaultValue')
+              params[name] = parameter['defaultValue']
+            end
           end
         end
 

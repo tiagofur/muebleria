@@ -39,6 +39,8 @@ import type {
   SketchUpJoineryCatalog,
 } from './sketchupJoineryCatalog';
 import type { Hardware } from './types';
+import type { FurnitureParameter } from './smartFurnitureDomain';
+import { evaluateFurnitureParameters } from './furnitureParameters';
 
 const FIXTURE_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -59,6 +61,7 @@ interface FixtureFile {
   readonly schemaVersion: number;
   readonly schema: { readonly schemaId: string; readonly schemaName: string; readonly schemaVersion: string };
   readonly furnitureDefinitionId: string;
+  readonly parameterDefinitions: readonly FurnitureParameter[];
   readonly joinery: {
     readonly componentGeometry: Readonly<Record<string, Omit<SketchUpComponentGeometry, 'componentDefinitionId'>>>;
     readonly joinerySystems: Readonly<Record<string, ShelfSupportRule>>;
@@ -144,7 +147,8 @@ function snapshotFromScenario(scenario: FixtureCase): ReadonlyAuthoringSnapshot 
         scale: [1, 1, 1] as [number, number, number],
       },
     })),
-    relationships: (scenario.request.furniture.relationships ?? []) as PartRelationshipIntent[],
+    relationships:
+      scenario.response.normalizedSnapshot.relationships as PartRelationshipIntent[],
     hardwarePlacements:
       scenario.response.normalizedSnapshot.hardwarePlacements as HardwarePlacementIntent[],
   };
@@ -259,7 +263,11 @@ describe('#477 shared authoring resolve contract fixture', () => {
   test('TS client-side validation agrees with the Go gateway on every scenario', () => {
     for (const scenario of fixture.scenarios) {
       const tsIssues = validateAuthoringResolveRequest(scenario.request);
-      const tsCodes = new Set(tsIssues.map((issue) => issue.code));
+      const parameterIssues = evaluateFurnitureParameters(
+        fixture.parameterDefinitions,
+        scenario.request.furniture.parameters ?? {},
+      ).issues;
+      const tsCodes = new Set([...tsIssues.map((issue) => issue.code), ...parameterIssues.map((issue) => issue.code)]);
       const goCodes = (scenario.response.issues ?? []).map((issue) => issue.code);
 
       if (scenario.response.status === 'accepted') {
@@ -267,6 +275,7 @@ describe('#477 shared authoring resolve contract fixture', () => {
         // valid); everything else accepted must pass TS validation clean.
         if (!scenario.query) {
           expect(tsIssues, scenario.id).toHaveLength(0);
+          expect(parameterIssues, scenario.id).toHaveLength(0);
         }
         expect(scenario.expectedHttpStatus, scenario.id).toBe(200);
       } else {
@@ -274,10 +283,8 @@ describe('#477 shared authoring resolve contract fixture', () => {
         // The Go rejection code must be one the TS validator also knows how
         // to produce from the same request (schema/field/content rules).
         if (!scenario.query) {
-          // Definition membership/range is authoritative in Go because the
-          // transport-only TS validator has no catalog definition. It accepts
-          // finite scalar parameter shapes and deliberately does not hardcode
-          // a catalog's parameter names.
+          // The transport validator checks scalar shape; the shared typed
+          // definition evaluator checks membership/defaults/rules.
           if (!goCodes.every((code) => code === 'PARAMETER_INVALID')) {
             expect(goCodes.some((code) => tsCodes.has(code)), `${scenario.id}: go=${goCodes} ts=${[...tsCodes]}`).toBe(true);
           }

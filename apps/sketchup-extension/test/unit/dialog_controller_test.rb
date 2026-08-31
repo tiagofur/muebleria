@@ -241,6 +241,43 @@ class DialogControllerTest < Minitest::Test
     end
   end
 
+  class StructuredIssueError < StandardError
+    attr_reader :issues
+
+    def initialize
+      super('authoring rejected')
+      issue = Struct.new(:code, :message, :severity, :path, :details).new(
+        'PARAMETER_STRING_TOO_LONG', 'too long', 'error', 'furniture.parameters.customerNote',
+        { 'maxLength' => 80, 'receivedType' => 'string' }
+      )
+      @issues = [issue]
+    end
+  end
+
+  class StructuredFailingCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
+    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
+      raise StructuredIssueError
+    end
+  end
+
+  def test_insert_preserves_structured_parameter_issues_for_the_html_dialog
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new,
+      catalog_provider: StructuredFailingCatalog.new, furniture_builder: BuilderSpy.new,
+      metadata_store: @store
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('insert_furniture').call(
+      nil, 'definitionId' => 'kitchen-base-standard', 'parameters' => { 'customerNote' => 'too long' }
+    )
+
+    script = dialog.executed_scripts.find { |entry| entry.include?('onInsertionResult') }
+    assert_includes script, '"code":"PARAMETER_STRING_TOO_LONG"'
+    assert_includes script, '"maxLength":80'
+    assert_includes script, '"receivedType":"string"'
+  end
+
   def test_update_fails_closed_when_layout_resolution_errors
     catalog = FailingLayoutCatalog.new
     builder = BuilderSpy.new

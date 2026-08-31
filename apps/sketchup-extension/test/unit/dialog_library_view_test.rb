@@ -132,10 +132,14 @@ class DialogLibraryViewTest < Minitest::Test
           'category' => 'Cocinas › Inferiores › Puertas',
           'categoryId' => 'cat-3',
           'version' => '1.0.0',
+          'schemaRevision' => 1,
+          'definitionHash' => "sha256-#{'1' * 64}",
           'description' => 'Módulo inferior',
           'imageUrl' => 'https://cdn.granete.com/previews/base-450.png',
           'parameters' => [
-            { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number', 'defaultValue' => 450 }
+            { 'name' => 'widthMm', 'label' => 'Ancho (mm)', 'type' => 'number', 'defaultValue' => 450,
+              'required' => true, 'unit' => 'mm', 'category' => 'dimension', 'integer' => true,
+              'binding' => { 'version' => 1, 'kind' => 'dimensionColumn', 'dimension' => 'widthMm' } }
           ]
         },
         'def-2' => {
@@ -144,6 +148,8 @@ class DialogLibraryViewTest < Minitest::Test
           'name' => 'Alacena 1 Puerta',
           'category' => 'Sin categoría',
           'version' => '1.0.0',
+          'schemaRevision' => 1,
+          'definitionHash' => "sha256-#{'2' * 64}",
           'thumbnailUrl' => 'https://cdn.granete.com/previews/wall-450.png',
           'parameters' => []
         }

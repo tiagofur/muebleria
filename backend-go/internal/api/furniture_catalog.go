@@ -4,12 +4,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
+
+func furnitureParameterDefinitionsError(err error) (*domain.FurnitureParameterDefinitionsError, bool) {
+	var definitionErr *domain.FurnitureParameterDefinitionsError
+	ok := errors.As(err, &definitionErr)
+	return definitionErr, ok
+}
 
 // Workshop furniture catalog projection for the SketchUp extension.
 //
@@ -30,17 +38,7 @@ const (
 	workshopDimensionParamKind = "dimension"
 )
 
-type workshopFurnitureParameter struct {
-	Name         string `json:"name"`
-	Label        string `json:"label"`
-	Type         string `json:"type"`
-	DefaultValue int    `json:"defaultValue"`
-	Unit         string `json:"unit"`
-	Min          int    `json:"min"`
-	Max          int    `json:"max"`
-	Step         int    `json:"step"`
-	Category     string `json:"category"`
-}
+type workshopFurnitureParameter = domain.FurnitureParameterDefinition
 
 type workshopFurnitureDefinition struct {
 	FurnitureDefinitionID string `json:"furnitureDefinitionId"`
@@ -48,10 +46,12 @@ type workshopFurnitureDefinition struct {
 	Name                  string `json:"name"`
 	// Category is the module's full catalog path (root › … › leaf) for
 	// display and search; CategoryID anchors subtree filtering.
-	Category    string `json:"category"`
-	CategoryID  string `json:"categoryId,omitempty"`
-	Version     string `json:"version"`
-	Description string `json:"description,omitempty"`
+	Category       string `json:"category"`
+	CategoryID     string `json:"categoryId,omitempty"`
+	Version        string `json:"version"`
+	SchemaRevision int    `json:"schemaRevision"`
+	DefinitionHash string `json:"definitionHash"`
+	Description    string `json:"description,omitempty"`
 	// ImageURL is the module's stored media path (server-relative, e.g.
 	// /api/media/<hash>.png). Clients resolve it against the workshop origin
 	// and append their media token (GET /api/media/{name} is auth-protected).
@@ -143,16 +143,17 @@ type workshopFurnitureCatalog struct {
 type dimensionSpec struct {
 	name       string
 	label      string
+	sortOrder  int
 	fromModule func(m domain.Module) int
 	fromPreset func(p domain.DimensionPreset) int
 }
 
 var workshopDimensionSpecs = []dimensionSpec{
-	{"widthMm", "Ancho (mm)", func(m domain.Module) int { return m.WidthMm },
+	{"widthMm", "Ancho (mm)", 10, func(m domain.Module) int { return m.WidthMm },
 		func(p domain.DimensionPreset) int { return p.WidthMm }},
-	{"heightMm", "Alto (mm)", func(m domain.Module) int { return m.HeightMm },
+	{"heightMm", "Alto (mm)", 20, func(m domain.Module) int { return m.HeightMm },
 		func(p domain.DimensionPreset) int { return p.HeightMm }},
-	{"depthMm", "Fondo (mm)", func(m domain.Module) int { return m.DepthMm },
+	{"depthMm", "Fondo (mm)", 30, func(m domain.Module) int { return m.DepthMm },
 		func(p domain.DimensionPreset) int { return p.DepthMm }},
 }
 
@@ -170,6 +171,14 @@ var workshopDimensionSpecs = []dimensionSpec{
 //   - with presets: min/max span every preset value plus the module default;
 //   - without presets: an operational band around the default (half to double).
 func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.ModuleCategory, materialCategories []domain.MaterialCategory, composition domain.Catalog) workshopFurnitureCatalog {
+	catalog, err := buildWorkshopFurnitureCatalogValidated(modules, categories, materialCategories, composition)
+	if err != nil {
+		panic(err)
+	}
+	return catalog
+}
+
+func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories []domain.ModuleCategory, materialCategories []domain.MaterialCategory, composition domain.Catalog) (workshopFurnitureCatalog, error) {
 	catalog := workshopFurnitureCatalog{
 		SchemaID:           workshopFurnitureSchemaID,
 		Categories:         []workshopFurnitureCategory{},
@@ -191,6 +200,12 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 	}
 
 	for _, m := range modules {
+		if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) != 0 {
+			return workshopFurnitureCatalog{}, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+		}
+		if issues := domain.ValidateModuleFurnitureParameterConsumers(m, composition); len(issues) != 0 {
+			return workshopFurnitureCatalog{}, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+		}
 		path := categoryPathNames(m.CategoryID, byID)
 		category := strings.Join(path, " › ")
 		if category == "" {
@@ -204,17 +219,33 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 			Category:              category,
 			CategoryID:            m.CategoryID,
 			Version:               workshopFurnitureVersion,
+			SchemaRevision:        1,
 			Description:           m.Notes,
 			ImageURL:              m.ImageURL,
 			Parameters:            []workshopFurnitureParameter{},
 		}
 
+		definition.Parameters = append(definition.Parameters, m.ParameterDefinitions...)
 		for _, spec := range workshopDimensionSpecs {
 			param, ok := buildDimensionParameter(spec, m)
 			if ok {
 				definition.Parameters = append(definition.Parameters, param)
 			}
 		}
+		sort.SliceStable(definition.Parameters, func(i, j int) bool {
+			if definition.Parameters[i].SortOrder != definition.Parameters[j].SortOrder {
+				return definition.Parameters[i].SortOrder < definition.Parameters[j].SortOrder
+			}
+			return definition.Parameters[i].Name < definition.Parameters[j].Name
+		})
+		if issues := domain.ValidatePublishedFurnitureParameterDefinitions(definition.Parameters); len(issues) != 0 {
+			return workshopFurnitureCatalog{}, &domain.FurnitureParameterDefinitionsError{Issues: issues}
+		}
+		definitionHash, err := domain.FurnitureParameterDefinitionHash(definition.Parameters)
+		if err != nil {
+			return workshopFurnitureCatalog{}, err
+		}
+		definition.DefinitionHash = definitionHash
 
 		// Real composition sizes at default dimensions; a module whose
 		// composition cannot resolve here keeps zero counts (the layout
@@ -231,7 +262,7 @@ func buildWorkshopFurnitureCatalog(modules []domain.Module, categories []domain.
 			catalog.Presets = append(catalog.Presets, buildWorkshopPreset(m, p, category))
 		}
 	}
-	return catalog
+	return catalog, nil
 }
 
 // buildWorkshopMaterialCategories projects the workshop's board category tree.
@@ -347,19 +378,39 @@ func buildDimensionParameter(spec dimensionSpec, m domain.Module) (workshopFurni
 	if min == max {
 		min, max = operationalDimBand(defaultValue)
 	}
+	step := workshopDimParamStepMm
+	if (defaultValue-min)%step != 0 {
+		step = 1
+	}
+	for _, candidate := range candidates {
+		if (candidate-min)%step != 0 {
+			step = 1
+			break
+		}
+	}
 
 	return workshopFurnitureParameter{
 		Name:         spec.name,
 		Label:        spec.label,
+		SortOrder:    spec.sortOrder,
 		Type:         "number",
-		DefaultValue: defaultValue,
-		Unit:         "mm",
-		Min:          min,
-		Max:          max,
-		Step:         workshopDimParamStepMm,
-		Category:     workshopDimensionParamKind,
+		DefaultValue: float64(defaultValue),
+		Required:     true,
+		Unit:         domain.FurnitureParameterUnitMM,
+		Min:          float64Ptr(float64(min)),
+		Max:          float64Ptr(float64(max)),
+		Step:         float64Ptr(float64(step)),
+		Category:     domain.FurnitureParameterCategory(workshopDimensionParamKind),
+		Integer:      true,
+		Binding: &domain.FurnitureParameterBinding{
+			Version:   domain.FurnitureParameterBindingVersion,
+			Kind:      domain.FurnitureParameterBindingDimensionColumn,
+			Dimension: spec.name,
+		},
 	}, true
 }
+
+func float64Ptr(value float64) *float64 { return &value }
 
 // operationalDimBand widens a single known dimension into an editable range
 // when the workshop defined no presets around it.

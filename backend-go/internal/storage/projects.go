@@ -15,6 +15,15 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
+func decodePersistedFurnitureParameterDefinitions(raw []byte, target *[]domain.FurnitureParameterDefinition) error {
+	definitions, err := domain.DecodeFurnitureParameterDefinitions(raw, domain.FurnitureParameterDefinitionBoundaryPersisted)
+	if err != nil {
+		return err
+	}
+	*target = definitions
+	return nil
+}
+
 // loadModuleComponents returns the component instances placed directly on a
 // module (F054 / #102), beyond those inherited from its referenced structure.
 func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID string) ([]domain.ComponentInstance, error) {
@@ -188,7 +197,7 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 	cat.Agregados = agrs
 
 	// Cargar módulos y su despiece
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados FROM modules WHERE organization_id = $1 ORDER BY name ASC`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions FROM modules WHERE organization_id = $1 ORDER BY name ASC`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {
 		return cat, fmt.Errorf("error query modules: %w", err)
@@ -206,7 +215,8 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		var baseMode *string
 		var baseClearanceMm *int
 		var agrsRaw []byte
-		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw)
+		var parameterDefinitionsRaw []byte
+		err := rows.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw)
 		if err != nil {
 			return cat, err
 		}
@@ -242,6 +252,9 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		}
 		if len(agrsRaw) > 0 {
 			_ = json.Unmarshal(agrsRaw, &m.Agregados)
+		}
+		if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
+			return cat, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)
 		}
 		if m.Agregados == nil {
 			m.Agregados = []domain.ModuleAgregadoInstance{}
@@ -1202,7 +1215,7 @@ func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
 func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, category_id,
-		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados
+		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados, parameter_definitions
 		FROM modules
 		WHERE organization_id = $1
 		ORDER BY name ASC;
@@ -1225,8 +1238,9 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		var imageURL *string
 		var structureID *string
 		var agrsRaw []byte
+		var parameterDefinitionsRaw []byte
 		err := rows.Scan(&m.ID, &m.Code, &m.Name, &w, &h, &d, &notes, &categoryID,
-			&furnitureType, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw)
+			&furnitureType, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw, &parameterDefinitionsRaw)
 		if err != nil {
 			return nil, err
 		}
@@ -1265,6 +1279,9 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		}
 		if m.Agregados == nil {
 			m.Agregados = []domain.ModuleAgregadoInstance{}
+		}
+		if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
+			return nil, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)
 		}
 		modules = append(modules, m)
 	}
@@ -1381,7 +1398,7 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, created_at, updated_at FROM modules WHERE id = $1 AND organization_id = $2`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, created_at, updated_at FROM modules WHERE id = $1 AND organization_id = $2`
 	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var m domain.Module
 	var w, h, d *int
@@ -1393,7 +1410,8 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	var baseMode *string
 	var baseClearanceMm *int
 	var agrsRaw []byte
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &m.CreatedAt, &m.UpdatedAt)
+	var parameterDefinitionsRaw []byte
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1432,6 +1450,9 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	}
 	if m.Agregados == nil {
 		m.Agregados = []domain.ModuleAgregadoInstance{}
+	}
+	if err := decodePersistedFurnitureParameterDefinitions(parameterDefinitionsRaw, &m.ParameterDefinitions); err != nil {
+		return nil, fmt.Errorf("module %s parameter definitions: %w", m.ID, err)
 	}
 
 	modComponents, err := s.loadModuleComponents(ctx, m.ID)
@@ -1501,6 +1522,9 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 }
 
 func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) error {
+	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
+		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
 	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
@@ -1533,23 +1557,30 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 	if m.Agregados == nil {
 		agrsJSON = []byte("[]")
 	}
+	parameterDefinitionsJSON, err := json.Marshal(m.ParameterDefinitions)
+	if err != nil {
+		return fmt.Errorf("encode module parameter definitions: %w", err)
+	}
+	if m.ParameterDefinitions == nil {
+		parameterDefinitionsJSON = []byte("[]")
+	}
 
 	if idToInsert != "" {
 		queryInsert = `
-			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 			RETURNING created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, OrgFromCtx(ctx)).
+		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
 			Scan(&m.CreatedAt, &m.UpdatedAt)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
-			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 			RETURNING id, created_at, updated_at;
 		`
-		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, OrgFromCtx(ctx)).
+		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
 			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	}
 
@@ -1665,6 +1696,9 @@ func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, 
 }
 
 func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.Module) error {
+	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
+		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
 	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
@@ -1687,14 +1721,21 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 	if m.Agregados == nil {
 		agrsJSON = []byte("[]")
 	}
+	parameterDefinitionsJSON, err := json.Marshal(m.ParameterDefinitions)
+	if err != nil {
+		return fmt.Errorf("encode module parameter definitions: %w", err)
+	}
+	if m.ParameterDefinitions == nil {
+		parameterDefinitionsJSON = []byte("[]")
+	}
 
 	query := `
 		UPDATE modules
-		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $15 AND organization_id = $16
+		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, parameter_definitions = $15, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $16 AND organization_id = $17
 		RETURNING updated_at;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, id, OrgFromCtx(ctx)).Scan(&m.UpdatedAt)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, id, OrgFromCtx(ctx)).Scan(&m.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("module not found")

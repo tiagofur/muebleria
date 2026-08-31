@@ -62,7 +62,7 @@ module Granete
       # Insert/update callback handlers, extracted to keep DialogController
       # within the class-length budget. Both resolve the furniture's real
       # composition server-side before touching the model.
-      module FurnitureBridge
+      module FurnitureBridge # rubocop:disable Metrics/ModuleLength
         def handle_insert(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
           definition = @catalog_provider.find_definition(payload['definitionId'])
@@ -84,7 +84,8 @@ module Granete
           log_operation_result('furniture_inserted', payload['definitionId'], result)
         rescue StandardError => e
           @logger.error('furniture_insert_failed', error: e)
-          execute_bridge(dialog, 'onInsertionResult', { 'success' => false, 'error' => e.message })
+          payload = e.respond_to?(:issues) ? authoring_error_payload(e) : { 'success' => false, 'error' => e.message }
+          execute_bridge(dialog, 'onInsertionResult', payload)
         end
 
         def handle_update(dialog, payload_json)
@@ -99,7 +100,8 @@ module Granete
           log_operation_result('furniture_updated', definition_id, result)
         rescue StandardError => e
           @logger.error('furniture_update_failed', error: e)
-          execute_bridge(dialog, 'onUpdateResult', { 'success' => false, 'error' => e.message })
+          payload = e.respond_to?(:issues) ? authoring_error_payload(e) : { 'success' => false, 'error' => e.message }
+          execute_bridge(dialog, 'onUpdateResult', payload)
         end
 
         def execute_furniture_update(definition, target_entity, payload)
@@ -187,7 +189,20 @@ module Granete
           { 'success' => true, 'instance_id' => instance_id, 'name' => name,
             'parameters' => params }
         end
-      end
+
+        def authoring_error_payload(error)
+          issues = error.issues.map do |issue|
+            {
+              'code' => issue.code,
+              'message' => issue.message,
+              'severity' => issue.severity,
+              'path' => issue.path,
+              'details' => issue.details
+            }.compact
+          end
+          { 'success' => false, 'error' => error.message, 'issues' => issues }
+        end
+      end # rubocop:enable Metrics/ModuleLength
 
       # Material finish picker bridge for opening the dedicated floating dialog.
       module OptionSelectorBridge

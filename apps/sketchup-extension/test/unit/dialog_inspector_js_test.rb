@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'json'
 require_relative '../test_helper'
 
 # Runs the real-JavaScript harness for the #476 contextual inspector
@@ -19,7 +20,7 @@ class DialogInspectorJsTest < Minitest::Test
 
     result = JSON.parse(stdout)
     assert_equal true, result['success']
-    assert_operator result['testsPassed'], :>=, 30,
+    assert_operator result['testsPassed'], :>=, 50,
                     'inspector harness must keep covering gating, breadcrumb, ' \
                     'provenance, unmanaged and multi-selection'
   end

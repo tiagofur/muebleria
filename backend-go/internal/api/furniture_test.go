@@ -140,7 +140,7 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 		t.Fatalf("expected width/height/depth parameters, got %d", len(base.Parameters))
 	}
 	width := parameterByName(base.Parameters, "widthMm")
-	if width == nil || width.DefaultValue != 600 || width.Min != 600 || width.Max != 900 || width.Unit != "mm" {
+	if width == nil || width.DefaultValue != float64(600) || numberPtrValue(width.Min) != 600 || numberPtrValue(width.Max) != 900 || width.Unit != "mm" {
 		t.Fatalf("widthMm parameter not derived from module + presets: %+v", width)
 	}
 	// Modules without a catalog category fall into an explicit bucket.
@@ -159,6 +159,37 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 
 	if etag := rec.Header().Get("ETag"); etag == "" || etag == `"pilot-rev-1"` {
 		t.Fatalf("etag must be content-derived, got %q", etag)
+	}
+}
+
+func TestFurnitureDefinitionsFailsClosedOnInvalidPublishedParameter(t *testing.T) {
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
+	server := licenseTestServer(t, u, nil)
+	server.Store = &stubStore{
+		getUserByEmail: u,
+		getOrgByID:     &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial, Status: domain.OrganizationStatusActive, CredentialVersion: 1},
+		listModules: []domain.Module{{
+			ID: "m1", Code: "M1", Name: "Invalid",
+			ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}},
+		}},
+	}
+	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Code   string                                     `json:"code"`
+		Issues []domain.FurnitureParameterDefinitionIssue `json:"issues"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != "PARAMETER_DEFINITION_INVALID" || len(response.Issues) == 0 {
+		t.Fatalf("unexpected response: %+v", response)
 	}
 }
 

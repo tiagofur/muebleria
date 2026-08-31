@@ -414,7 +414,13 @@
           "min": 300,
           "max": 1200,
           "step": 50,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "widthMm"
+          }
         },
         {
           "name": "heightMm",
@@ -425,7 +431,13 @@
           "min": 600,
           "max": 2400,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "heightMm"
+          }
         },
         {
           "name": "depthMm",
@@ -436,7 +448,13 @@
           "min": 280,
           "max": 650,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "depthMm"
+          }
         },
         {
           "name": "shelfCount",
@@ -447,7 +465,13 @@
           "min": 0,
           "max": 4,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-shelf"
+          }
         },
         {
           "name": "doorCount",
@@ -458,7 +482,13 @@
           "min": 1,
           "max": 2,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-door-flat"
+          }
         },
         {
           "name": "doorSwing",
@@ -470,7 +500,7 @@
             "right",
             "pair"
           ],
-          "category": "configuration"
+          "category": "metadata"
         },
         {
           "name": "doorComponentId",
@@ -481,7 +511,7 @@
             "component-door-flat",
             "component-door-shaker"
           ],
-          "category": "style"
+          "category": "metadata"
         },
         {
           "name": "joinerySystemId",
@@ -492,7 +522,7 @@
             "minifix-dowel",
             "dowel-only"
           ],
-          "category": "hardware"
+          "category": "metadata"
         }
       ],
       "componentSlots": [
@@ -604,7 +634,13 @@
           "min": 300,
           "max": 1200,
           "step": 50,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "widthMm"
+          }
         },
         {
           "name": "heightMm",
@@ -615,7 +651,13 @@
           "min": 600,
           "max": 2400,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "heightMm"
+          }
         },
         {
           "name": "depthMm",
@@ -626,7 +668,13 @@
           "min": 280,
           "max": 650,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "depthMm"
+          }
         },
         {
           "name": "drawerCount",
@@ -637,7 +685,13 @@
           "min": 2,
           "max": 4,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-drawer-front"
+          }
         },
         {
           "name": "drawerSlideId",
@@ -647,7 +701,7 @@
           "options": [
             "slide-generic-500"
           ],
-          "category": "hardware"
+          "category": "metadata"
         },
         {
           "name": "handleComponentId",
@@ -657,7 +711,7 @@
           "options": [
             "handle-straight-128"
           ],
-          "category": "style"
+          "category": "metadata"
         },
         {
           "name": "joinerySystemId",
@@ -668,7 +722,7 @@
             "minifix-dowel",
             "dowel-only"
           ],
-          "category": "hardware"
+          "category": "metadata"
         }
       ],
       "componentSlots": [
@@ -780,7 +834,13 @@
           "min": 300,
           "max": 1200,
           "step": 50,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "widthMm"
+          }
         },
         {
           "name": "heightMm",
@@ -791,7 +851,13 @@
           "min": 600,
           "max": 2400,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "heightMm"
+          }
         },
         {
           "name": "depthMm",
@@ -802,7 +868,13 @@
           "min": 280,
           "max": 650,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "depthMm"
+          }
         },
         {
           "name": "shelfCount",
@@ -813,7 +885,13 @@
           "min": 0,
           "max": 5,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-shelf"
+          }
         },
         {
           "name": "doorCount",
@@ -824,7 +902,13 @@
           "min": 1,
           "max": 2,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-door-flat"
+          }
         },
         {
           "name": "doorSwing",
@@ -836,7 +920,7 @@
             "right",
             "pair"
           ],
-          "category": "configuration"
+          "category": "metadata"
         },
         {
           "name": "doorComponentId",
@@ -847,7 +931,7 @@
             "component-door-flat",
             "component-door-shaker"
           ],
-          "category": "style"
+          "category": "metadata"
         },
         {
           "name": "joinerySystemId",
@@ -858,7 +942,7 @@
             "minifix-dowel",
             "dowel-only"
           ],
-          "category": "hardware"
+          "category": "metadata"
         }
       ],
       "componentSlots": [
@@ -970,7 +1054,13 @@
           "min": 300,
           "max": 1200,
           "step": 50,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "widthMm"
+          }
         },
         {
           "name": "heightMm",
@@ -981,7 +1071,13 @@
           "min": 600,
           "max": 2400,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "heightMm"
+          }
         },
         {
           "name": "depthMm",
@@ -992,7 +1088,13 @@
           "min": 280,
           "max": 650,
           "step": 10,
-          "category": "dimension"
+          "category": "dimension",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "dimensionColumn",
+            "dimension": "depthMm"
+          }
         },
         {
           "name": "shelfCount",
@@ -1003,7 +1105,13 @@
           "min": 3,
           "max": 8,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-shelf"
+          }
         },
         {
           "name": "doorCount",
@@ -1014,7 +1122,13 @@
           "min": 2,
           "max": 2,
           "step": 1,
-          "category": "configuration"
+          "category": "configuration",
+          "integer": true,
+          "binding": {
+            "version": 1,
+            "kind": "componentQuantity",
+            "componentId": "component-door-flat"
+          }
         },
         {
           "name": "doorComponentId",
@@ -1025,7 +1139,7 @@
             "component-door-flat",
             "component-door-shaker"
           ],
-          "category": "style"
+          "category": "metadata"
         },
         {
           "name": "joinerySystemId",
@@ -1036,7 +1150,7 @@
             "minifix-dowel",
             "dowel-only"
           ],
-          "category": "hardware"
+          "category": "metadata"
         }
       ],
       "componentSlots": [
