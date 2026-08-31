@@ -5089,7 +5089,7 @@
         "progress/review_F198.md",
         "progress/host_smoke_F198_testup_ci.json"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F195"
       ],
@@ -5100,8 +5100,10 @@
         "PR #486 corrections: versioned authoritative bindings now drive component quantity and relationships; W/H/D are reserved column projections; Go, TypeScript and Ruby reject corrupt, unbound or divergent definitions fail-closed.",
         "Independent review first requested changes at 876c9d3f for a TypeScript publication-validation bypass, nested binding TypeError paths and missing Create/Update negatives; all three were corrected in fec1c4e7 with cross-runtime corpus and atomic storage proofs.",
         "Final independent review APPROVED in 35978fed over implementation head fec1c4e7 after full init, isolated PostgreSQL, 6/6 remote CI checks and TestUp 8/8 / 98 assertions on SketchUp 26.2.242 with installed RBZ SHA ad149f46bb500a564505ce8a1a02efa7d6d4fb24eb683f816fa2e78a6ee48f45.",
-        "PR #486 owner re-review at 8556de52 found missing componentCondition semantics, clone binding ID remap, ambiguous reusable-component targets, boolean/string HtmlDialog controls, unknown-field parity, string bounds/issue details and stale host evidence; F198 reopened until correction and fresh independent approval."
-      ]
+        "PR #486 owner re-review at 8556de52 found missing componentCondition semantics, clone binding ID remap, ambiguous reusable-component targets, boolean/string HtmlDialog controls, unknown-field parity, string bounds/issue details and stale host evidence; F198 reopened until correction and fresh independent approval.",
+        "Fresh independent review APPROVED in 2693880d over integrated implementation head 40f01540 after all seven owner-review blockers, isolated full init, TestUp 12/12 (213 assertions), and remote CI run 33343698712 completed green."
+      ],
+      "completedAt": "2026-08-30"
     }
   ]
 }

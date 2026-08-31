@@ -1866,3 +1866,11 @@ verdes; Ruby `rake verify` verde (241 unit + 3 boundary, RBZ determinista). El f
 `organizations.active` de la base compartida se reprodujo sin cambios sobre
 `origin/main` d85d6fd2. Review mode permaneció `disabled/unmanaged` y no se fabricó
 aprobación.
+
+### Cierre final de F198 — 2026-08-30
+
+Los siete blockers del owner re-review quedaron corregidos sobre la base reconciliada
+`main@f05bb0e9`. La revisión independiente aprobó el implementation head `40f01540`
+en `2693880d`, con `./init.sh` aislado verde, TestUp real 12/12 (213 assertions),
+CI remoto 6/6 y readback exacto. F198 pasa a `done`; PR #486 queda abierto para
+revisión humana y #483 permanece abierta hasta el merge mantenedor.
