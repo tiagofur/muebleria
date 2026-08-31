@@ -17,6 +17,11 @@ module Granete
                              partInstance].freeze
         ENTITY_CLASSES = %w[part hardware aggregate].freeze
         PLACEMENT_KINDS = %w[manual derived].freeze
+        # #416 representation-migration provenance (marker only, never
+        # identity): documents which legacy representation an entity was
+        # rebuilt from.
+        PROVENANCE_MIGRATION_SOURCES = %w[legacy-group].freeze
+        PROVENANCE_MIGRATION_MARKER_VERSION = 1
 
         def initialize(model)
           @model = model
@@ -67,6 +72,7 @@ module Granete
           validate_envelope(normalized)
           validate_identity(normalized['identity']) if normalized.key?('identity')
           validate_intent(normalized['intent']) if normalized.key?('intent')
+          validate_provenance(normalized['provenance']) if normalized.key?('provenance')
           normalized
         rescue JSON::GeneratorError, TypeError => e
           raise InvalidMetadataError, "Metadata is not JSON-safe: #{e.message}"
@@ -138,6 +144,29 @@ module Granete
 
           raise InvalidMetadataError,
                 "intent.placementKind must be one of: #{PLACEMENT_KINDS.join(', ')}"
+        end
+
+        # #416 representation-migration provenance: strict on the known
+        # marker, opaque on anything else inside `provenance` (forward
+        # compatibility for future marker kinds).
+        def validate_provenance(provenance)
+          raise InvalidMetadataError, 'provenance must be an object' unless provenance.is_a?(Hash)
+
+          migration = provenance['representationMigration']
+          return if migration.nil?
+          unless migration.is_a?(Hash)
+            raise InvalidMetadataError,
+                  'provenance.representationMigration must be an object'
+          end
+
+          unless PROVENANCE_MIGRATION_SOURCES.include?(migration['from'])
+            raise InvalidMetadataError,
+                  "provenance.representationMigration.from must be one of: #{PROVENANCE_MIGRATION_SOURCES.join(', ')}"
+          end
+          return if migration['markerVersion'] == PROVENANCE_MIGRATION_MARKER_VERSION
+
+          raise InvalidMetadataError,
+                "provenance.representationMigration.markerVersion must equal #{PROVENANCE_MIGRATION_MARKER_VERSION}"
         end
 
         def assert_equal(value, expected, path)

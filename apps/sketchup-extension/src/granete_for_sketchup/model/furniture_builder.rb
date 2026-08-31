@@ -221,6 +221,70 @@ module Granete
         end
       end
 
+      # Legacy Group → native migration build (#416 / SU-ENT-3). Extracted
+      # from FurnitureBuilder to keep the class within its length budget;
+      # it shares the builder's private helpers and metadata writer.
+      module LegacyMigrationBuild
+        # Builds the native ComponentInstance replacement for a legacy Group
+        # furniture (#416 / SU-ENT-3) INSIDE the caller's undoable operation.
+        # The migration migrator owns the single SketchUp operation: this
+        # method must never start/commit its own (nested operations invalidate
+        # Ruby entity references on the real host — Metadata::Store rule).
+        #
+        # Identity is preserved verbatim through existing_metadata (same
+        # instanceRef/projectRef — a representation change NEVER allocates new
+        # business identity); the world transform comes from the legacy Group;
+        # the layout must be an authoritative NativeLayout, never a local
+        # guess. The legacy source is NOT erased here — the migrator erases it
+        # only after the replacement validates.
+        def build_migrated_furniture(model, legacy_group, definition, parameters, resolved_layout,
+                                     existing_metadata, material_choices: nil)
+          instance_id = existing_metadata&.dig('identity', 'instanceRef')
+          unless instance_id.is_a?(String) && !instance_id.strip.empty?
+            raise ArgumentError, 'el mueble anterior no tiene instanceRef preservable'
+          end
+          unless resolved_layout.is_a?(Library::NativeLayout)
+            raise ArgumentError, 'la migración requiere un layout resuelto autoritativo (NativeLayout)'
+          end
+
+          furniture_definition = create_furniture_definition(model, definition, instance_id)
+          furniture = model.active_entities.add_instance(furniture_definition, legacy_group.transformation)
+          furniture.name = "#{definition['name']} (#{instance_id})"
+          counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
+                                 resolved_layout)
+          purge_orphan_generated_definitions(model)
+          MetadataWriter.write_furniture(
+            @metadata_store, furniture, instance_id, definition, parameters,
+            material_choices: material_choices, existing_metadata: existing_metadata,
+            migrated_from: MetadataWriter::PROVENANCE_FROM_LEGACY_GROUP
+          )
+          validate_migrated_replacement(furniture, instance_id, counts)
+          furniture
+        end
+
+        # Post-build validation gate (#416 step 5): the migrator may only
+        # erase the legacy source after this passes. Raises on any mismatch so
+        # the caller aborts the operation and the legacy Group survives.
+        def validate_migrated_replacement(furniture, instance_id, counts)
+          unless furniture.is_a?(::Sketchup::ComponentInstance)
+            raise 'migración: el reemplazo no es una ComponentInstance nativa'
+          end
+          raise 'migración: el layout resuelto no produjo componentes' if counts['total'].to_i <= 0
+
+          replaced_metadata = @metadata_store&.read(furniture)
+          unless replaced_metadata&.dig('identity', 'instanceRef') == instance_id
+            raise 'migración: la identidad preservada no sobrevivió al reemplazo'
+          end
+
+          provenance = replaced_metadata&.dig('provenance', 'representationMigration')
+          unless provenance&.dig('from') == MetadataWriter::PROVENANCE_FROM_LEGACY_GROUP
+            raise 'migración: falta el marcador de provenance de representación'
+          end
+
+          nil
+        end
+      end
+
       # Native SketchUp renderer (#415 / ADR-0004). Every managed furniture is
       # a top-level Sketchup::ComponentInstance with an isolated generated
       # ComponentDefinition; every managed board/hardware is a nested
@@ -235,6 +299,7 @@ module Granete
       class FurnitureBuilder
         include GenericAuthoringRenderer
         include FurnitureIntent
+        include LegacyMigrationBuild
 
         MM_TO_INCHES = 1.0 / 25.4
         DEFAULT_HARDWARE_DIMS_MM = [96.0, 32.0, 25.0].freeze
@@ -244,8 +309,8 @@ module Granete
         HARDWARE_DEFINITION_PREFIX = 'Granete · Herraje · '
         LEGACY_REPRESENTATION_ERROR =
           'El mueble usa una representación anterior del plugin (Group) que aún no fue ' \
-          'migrada a ComponentInstance nativo. Reinsertá el mueble desde la biblioteca ' \
-          'para editarlo.'
+          'migrada a ComponentInstance nativo. Usá Granete → Migrar modelos ' \
+          'anteriores para actualizarlo.'
         MATERIAL_RESOLUTION_REQUIRED_ERROR =
           'El cambio de material requiere una composición nativa resuelta por Granete; ' \
           'el mueble anterior no fue modificado.'
@@ -291,7 +356,8 @@ module Granete
                              material_choices: nil)
           # Host-accurate native check: in SketchUp a Group ALSO responds to
           # #definition, so entity type — not duck typing — is the only safe
-          # discriminator. Legacy Group representations fail closed (#416).
+          # discriminator. Legacy Group representations fail closed: use the
+          # migration workflow (Granete → Migrar modelos anteriores).
           unless furniture.is_a?(::Sketchup::ComponentInstance)
             return { 'success' => false, 'error' => LEGACY_REPRESENTATION_ERROR }
           end
@@ -502,8 +568,13 @@ module Granete
       module MetadataWriter
         module_function
 
+        # #416 representation-migration provenance source: the entity was
+        # rebuilt from the legacy Group model into the native one. Marker
+        # only — never identity.
+        PROVENANCE_FROM_LEGACY_GROUP = 'legacy-group'
+
         def write_furniture(store, furniture, instance_id, definition, parameters, material_choices: nil,
-                            existing_metadata: nil)
+                            existing_metadata: nil, migrated_from: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -512,7 +583,16 @@ module Granete
           write_envelope(metadata_payload)
           metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref, rev_ref)
           metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
+          metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
           store.write(furniture, metadata_payload)
+        end
+
+        # Provenance marker retained after a successful migration (#416 step
+        # 6): documents WHERE the representation came from. It is historical
+        # fact, so later edits keep it (write_furniture's existing_metadata
+        # copy preserves the key); only the migration itself sets it.
+        def representation_migration(from)
+          { 'representationMigration' => { 'from' => from, 'markerVersion' => 1 } }
         end
 
         def json_copy(value)

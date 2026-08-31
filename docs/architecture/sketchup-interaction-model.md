@@ -431,7 +431,7 @@ Cerrados con evidencia (no reabrir como deuda):
 
 Programas aún abiertos:
 
-- #416: legacy Groups tienen migration path;
+- #416: legacy Groups tienen migration path — implemented (F201): scanner/migrator + review UI, una operación undoable por lote, marker de provenance;
 - #388/#389/#390/#391: Project-owned identity sustituye legacy local identity donde corresponda.
 
 No documentar estos targets como “implemented” antes de evidencia/tests.
