@@ -47,6 +47,14 @@ export type OrgSummary = OrganizationSummary;
 export type MembershipChoice = Membership;
 export type SupportInfo = GeneratedSupportInfo;
 
+export type SessionSnapshot = {
+  readonly user: AuthUser;
+  readonly roles?: readonly string[];
+  readonly organization?: OrgSummary;
+  readonly support?: SupportInfo;
+  readonly sessionScope: SessionScope;
+};
+
 export type LoginSuccess = {
   readonly token: string;
   readonly user: AuthUser;
@@ -253,7 +261,50 @@ export async function selectOrgRequest(
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const result = parseAuthResponse(await new GraneteApiClient(baseUrl, doFetch).selectOrganization(token, { organization_id: organizationId }));
   const session = await meRequest(result.token, { baseUrl, fetchImpl: doFetch });
-  return { ...result, sessionScope: session.sessionScope };
+  return validateOrganizationSessionTransition({
+    requestedOrganizationId: organizationId,
+    selectionResponse: result,
+    sessionSnapshot: session,
+  });
+}
+
+export function validateOrganizationSessionTransition({
+  requestedOrganizationId,
+  selectionResponse,
+  sessionSnapshot,
+}: {
+  readonly requestedOrganizationId: string;
+  readonly selectionResponse: LoginSuccess;
+  readonly sessionSnapshot: SessionSnapshot;
+}): LoginSuccess {
+  const selectedOrganizationId = selectionResponse.organization?.id;
+  const snapshotOrganizationId = sessionSnapshot.organization?.id;
+  const scope = sessionSnapshot.sessionScope;
+  if (
+    requestedOrganizationId === '' ||
+    selectedOrganizationId !== requestedOrganizationId ||
+    !sessionSnapshot.organization ||
+    snapshotOrganizationId !== requestedOrganizationId ||
+    scope.organizationId !== requestedOrganizationId ||
+    scope.membershipId === null ||
+    scope.membershipCredentialVersion === null ||
+    scope.organizationCredentialVersion === null ||
+    scope.supportSessionId !== null ||
+    scope.recoverySessionId !== null ||
+    selectionResponse.user.id !== sessionSnapshot.user.id ||
+    scope.userId !== sessionSnapshot.user.id ||
+    scope.mode !== 'auth'
+  ) {
+    throw new Error('La sesión seleccionada no coincide con el taller solicitado');
+  }
+
+  return {
+    ...selectionResponse,
+    user: sessionSnapshot.user,
+    roles: sessionSnapshot.roles,
+    organization: sessionSnapshot.organization,
+    sessionScope: scope,
+  };
 }
 
 /**
@@ -263,17 +314,11 @@ export async function selectOrgRequest(
 export async function meRequest(
   token: string,
   options: {
-    baseUrl?: string;
-    fetchImpl?: typeof fetch;
-    sessionGeneration?: SessionGeneration;
+    readonly baseUrl?: string;
+    readonly fetchImpl?: typeof fetch;
+    readonly sessionGeneration?: SessionGeneration;
   } = {},
-): Promise<{
-  user: AuthUser;
-  roles?: readonly string[];
-  organization?: OrgSummary;
-  support?: SupportInfo;
-  sessionScope: SessionScope;
-}> {
+): Promise<SessionSnapshot> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const response: MeResponse = await new GraneteApiClient(baseUrl, doFetch).getSession(token);

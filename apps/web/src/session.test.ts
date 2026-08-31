@@ -6,12 +6,21 @@ import {
   clearSession,
   isAdminRole,
   loginRequest,
+  meRequest,
+  parseAuthResponse,
   readAuthUser,
   readSessionMode,
   storeAuthToken,
   storeAuthUser,
+  type SessionSnapshot,
+  validateOrganizationSessionTransition,
   writeSessionMode,
 } from './session';
+import { organizationKeys } from './shared/query/queryKeys';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+} from './shared/query/sessionScope';
 
 const SESSION_SCOPE = {
   user_id: '1', membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
@@ -241,6 +250,81 @@ describe('selectOrgRequest', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
     expect(init?.body).toBe(JSON.stringify({ organization_id: 'org-1' }));
   });
+
+  type TransitionMismatch = {
+    readonly selectedOrganizationId?: string;
+    readonly snapshotOrganizationId?: string;
+    readonly snapshotUserId?: string;
+    readonly scopeUserId?: string;
+    readonly scopeOrganizationId?: string;
+    readonly scopeMembershipId?: string | null;
+    readonly scopeMembershipCredentialVersion?: number | null;
+    readonly scopeOrganizationCredentialVersion?: number | null;
+    readonly scopeMode?: 'auth' | 'support';
+    readonly scopeSupportSessionId?: string | null;
+  };
+
+  it.each<readonly [string, TransitionMismatch]>([
+    ['selected organization', { selectedOrganizationId: 'org-2' }],
+    ['snapshot organization', { snapshotOrganizationId: 'org-2' }],
+    ['snapshot user', { snapshotUserId: '2' }],
+    ['scope user', { scopeUserId: '2' }],
+    ['scope organization', { scopeOrganizationId: 'org-2' }],
+    ['missing membership', { scopeMembershipId: null }],
+    ['missing membership credential version', { scopeMembershipCredentialVersion: null }],
+    ['missing organization credential version', { scopeOrganizationCredentialVersion: null }],
+    ['support scope', { scopeMode: 'support', scopeSupportSessionId: 'support-1' }],
+  ])('rejects a mismatched %s', (_label, mismatch) => {
+    const selectionResponse = parseAuthResponse({
+      token: 'jwt-new',
+      user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
+      license: { plan: 'none', status: 'none' },
+      organization: { id: mismatch.selectedOrganizationId ?? 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
+      roles: ['admin'], memberships: [], selection_required: false, transport: 'web',
+    });
+    const validatedScope = sessionScopeFromSession({
+      user: {
+        id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana',
+        account_status: 'active', email_verified_at: null, last_login_at: null,
+        platform_admin: false, created_at: '2026-08-29T00:00:00Z',
+        updated_at: '2026-08-29T00:00:00Z',
+      },
+      roles: ['admin'],
+      organization: {
+        id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory',
+        status: 'active', license: { plan: 'none', status: 'none' },
+      },
+      transport: 'web',
+      session_scope: SESSION_SCOPE,
+    }, createSessionGeneration());
+    const sessionSnapshot: SessionSnapshot = {
+      user: { id: mismatch.snapshotUserId ?? '1', email: 'a@b.com', name: 'Ana', account_status: 'active', roles: ['admin'] },
+      roles: ['admin'],
+      organization: { id: mismatch.snapshotOrganizationId ?? 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
+      sessionScope: {
+        ...validatedScope,
+        userId: mismatch.scopeUserId ?? validatedScope.userId,
+        membershipId: mismatch.scopeMembershipId === undefined
+            ? validatedScope.membershipId
+          : mismatch.scopeMembershipId,
+        organizationId: mismatch.scopeOrganizationId ?? validatedScope.organizationId,
+        mode: mismatch.scopeMode ?? validatedScope.mode,
+        supportSessionId: mismatch.scopeSupportSessionId ?? validatedScope.supportSessionId,
+        membershipCredentialVersion:
+          mismatch.scopeMembershipCredentialVersion === undefined
+            ? validatedScope.membershipCredentialVersion
+            : mismatch.scopeMembershipCredentialVersion,
+        organizationCredentialVersion:
+          mismatch.scopeOrganizationCredentialVersion === undefined
+            ? validatedScope.organizationCredentialVersion
+            : mismatch.scopeOrganizationCredentialVersion,
+      },
+    };
+
+    expect(() => validateOrganizationSessionTransition({
+      requestedOrganizationId: 'org-1', selectionResponse, sessionSnapshot,
+    })).toThrow('La sesión seleccionada no coincide con el taller solicitado');
+  });
 });
 
 describe('meRequest', () => {
@@ -268,9 +352,29 @@ describe('meRequest', () => {
     expect(result.sessionScope).toMatchObject({
       userId: '1', organizationId: 'org-1', mode: 'auth', absoluteExpiresAt: '2026-08-31T00:00:00Z',
     });
+    expect(result.sessionScope.sessionGeneration).not.toBe('token-123');
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe('http://localhost:8080/api/auth/me');
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
+  });
+
+  it('creates a different non-secret query root for repeated logins with the same server scope', async () => {
+    const responseBody = {
+      user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
+      roles: ['admin'],
+      organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
+      transport: 'web', session_scope: SESSION_SCOPE,
+    };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseBody), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(responseBody), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const first = await meRequest('same-token-shape', { fetchImpl });
+    const second = await meRequest('same-token-shape', { fetchImpl });
+
+    expect(first.sessionScope.sessionGeneration).not.toBe(second.sessionScope.sessionGeneration);
+    expect(organizationKeys.all(first.sessionScope)).not.toEqual(organizationKeys.all(second.sessionScope));
+    expect(organizationKeys.all(first.sessionScope)).not.toContain('same-token-shape');
   });
 });
 
