@@ -5143,7 +5143,7 @@
         "docs/verification.md",
         "contracts/openapi/granete-api.v1.yaml"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F191",
         "F192",
@@ -5151,7 +5151,13 @@
         "F196",
         "F197",
         "F198"
-      ]
+      ],
+      "review_notes": [
+        "Tracker PR #493 integró la cadena #494, #495, #507, #509–#513, #515–#524 sobre client OpenAPI generado con transport abortable y session scope completo.",
+        "Revisión independiente final APPROVED exact-SHA sobre el head del tracker d0b60c43c33df957d1a897ca061d52559865ec9f tras Pilot Readiness con PostgreSQL 16 fresco (RLS direct-SQL y lifecycle HTTP) y gates permanentes Organization Browser y OpenAPI drift.",
+        "CI remota final 33444928121 SUCCESS sobre el SHA exacto del tracker; merge a main como 35bbfc07544b458485518a0a99dc0fd74d04d1e8 el 2026-08-31."
+      ],
+      "completedAt": "2026-08-31"
     },
     {
       "id": "F200",

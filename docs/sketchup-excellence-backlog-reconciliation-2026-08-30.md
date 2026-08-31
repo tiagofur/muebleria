@@ -174,7 +174,7 @@ The PR changes documentation/routing only and does not modify the runtime ledger
 
 ## 6. Current execution priority
 
-The repository records F199/#458 as the active feature. Preserve the single-active-feature policy unless coordination is explicitly documented.
+Snapshot 2026-08-30: F199/#458 was the active feature then; it closed on 2026-08-31 via PR #493 (`35bbfc07`). Preserve the single-active-feature policy unless coordination is explicitly documented.
 
 ### Current active chain
 

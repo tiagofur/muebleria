@@ -43,11 +43,11 @@ Historical closure of #349/#350 proves domain/contract capability, not the compl
 
 ## 3. Current repository execution policy
 
-As of this reconciliation, **F199/#458** is the active runtime feature through tracker PR #493 and child PR #494.
+F199/#458 closed on 2026-08-31: tracker PR #493 merged as `35bbfc07` after exact-SHA review and green CI. No runtime feature is currently active.
 
 Repository rule:
 
-- do not mark #496–#504 or another runtime feature `in_progress` while F199 is active unless the program explicitly authorizes coordinated parallel delivery;
+- do not mark #496–#504 or another runtime feature `in_progress` without following the single-active-feature policy and program coordination;
 - documentation, review, contract design, fixtures and dependency preparation may proceed;
 - no new persistent business family starts before Gate A #462.
 
