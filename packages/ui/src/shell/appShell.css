@@ -320,6 +320,84 @@
   gap: var(--space-2);
 }
 
+.app-topbar__organization {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 0 1 auto;
+  color: var(--text-secondary);
+}
+
+.app-topbar__organization-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  max-width: var(--toolbar-search-min-width);
+}
+
+.app-topbar__organization-text strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-topbar__organization select {
+  min-height: var(--control-size-compact);
+  max-width: var(--toolbar-search-min-width);
+  padding: var(--density-control-pad-y) var(--density-control-pad-x);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.app-topbar__organization select:hover:not(:disabled) {
+  border-color: var(--border-brand);
+  background: var(--surface-hover);
+}
+
+.app-topbar__organization select:active:not(:disabled) {
+  background: var(--surface-selected);
+}
+
+.app-topbar__organization select:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.app-topbar__organization select:disabled {
+  border-color: var(--border-subtle);
+  background: var(--surface-disabled);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.app-topbar__switch-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: var(--toolbar-search-min-width);
+  color: var(--danger-700);
+  font-size: var(--text-xs);
+}
+
+.app-topbar__mode {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
 /* Command palette / quick search trigger in topbar */
 .app-topbar__search-trigger {
   display: inline-flex;
@@ -520,6 +598,17 @@
   .app-topbar__identity {
     max-width: none;
     padding: var(--space-2);
+  }
+
+  .app-topbar__organization-text span,
+  .app-topbar__mode,
+  .app-topbar__switch-error {
+    display: none;
+  }
+
+  .app-topbar__organization select {
+    max-width: var(--control-size-touch);
+    min-height: var(--control-size-touch);
   }
 }
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace, WorkshopSettings } from '@granete/domain';
 import type { WorkspaceRepository } from '@granete/storage';
 import { createSeedWorkspace } from '@granete/storage';
+import { clearRegisteredDraftSessions, draftSessionKey, registerDraftSessionBaseline } from '@granete/ui';
 
 import {
   type RepositoryFactory,
@@ -14,6 +15,11 @@ import {
   TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from '../session';
+import * as sessionSync from '../sessionSync';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+} from '../shared/query/sessionScope';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,6 +62,51 @@ const AUTH_USER = {
   updated_at: '2026-08-29T00:00:00Z',
 } as const;
 
+const SESSION_SCOPE = {
+  user_id: 'user-1', membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
+  support_session_id: null, recovery_session_id: null, membership_credential_version: 2,
+  organization_credential_version: 3, absolute_expires_at: '2026-08-31T00:00:00Z',
+} as const;
+
+const ACTIVE_MEMBERSHIP = {
+  id: 'membership-1', organization_id: 'org-1', user_id: 'user-1', status: 'active',
+  roles: ['admin'], joined_at: '2026-08-29T00:00:00Z', version: 1,
+  organization: {
+    id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active',
+    license: { plan: 'none', status: 'none' },
+  },
+} as const;
+
+function authScope(organizationId: string) {
+  const organization = {
+    ...ACTIVE_MEMBERSHIP.organization,
+    id: organizationId,
+    slug: organizationId,
+  };
+  return sessionScopeFromSession({
+    user: AUTH_USER,
+    roles: ['admin'],
+    memberships: [],
+    organization,
+    transport: 'web',
+    session_scope: {
+      ...SESSION_SCOPE,
+      membership_id: `membership-${organizationId}`,
+      organization_id: organizationId,
+    },
+  }, createSessionGeneration());
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function jsonOk(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -64,12 +115,12 @@ function jsonOk(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function jsonError(status: number, body: unknown): Response {
+function jsonError(status: number, body: unknown, code?: string): Response {
   const message = typeof body === 'object' && body !== null && 'error' in body
     ? String((body as { error: unknown }).error)
     : `HTTP ${status}`;
   return new Response(JSON.stringify({
-    code: status === 401 ? 'UNAUTHORIZED' : 'INTERNAL_ERROR',
+    code: code ?? (status === 401 ? 'UNAUTHORIZED' : 'INTERNAL_ERROR'),
     message,
     fieldErrors: {},
     requestId: `request-${status}`,
@@ -187,10 +238,13 @@ describe('workspaceStore — enterAsGuest', () => {
 
 describe('workspaceStore — login', () => {
   it('on success: sets session to auth, persists token+user, resets workspace', async () => {
+    const notifySessionChanged = vi
+      .spyOn(sessionSync, 'notifySessionChanged')
+      .mockImplementation(() => undefined);
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        jsonOk({ token: 'jwt-1', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [], selection_required: false, transport: 'web' }),
+        jsonOk({ token: 'jwt-1', user: AUTH_USER, license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [ACTIVE_MEMBERSHIP], selection_required: false, transport: 'web' }),
       );
     const store = createWorkspaceStore({
       deps: { baseUrl: 'http://test/api', fetchImpl },
@@ -209,6 +263,28 @@ describe('workspaceStore — login', () => {
       { id: AUTH_USER.id, roles: ['admin'] },
     );
     expect(store.getState().workspace).toBeNull(); // forces reload
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
+    expect(notifySessionChanged).toHaveBeenCalledOnce();
+  });
+
+  it('notifies other tabs after consuming an external authentication payload', () => {
+    const notifySessionChanged = vi
+      .spyOn(sessionSync, 'notifySessionChanged')
+      .mockImplementation(() => undefined);
+    const store = createWorkspaceStore();
+
+    store.getState().loginWithAuthPayload({
+      token: 'jwt-external',
+      user: AUTH_USER,
+      license: { plan: 'none', status: 'none' },
+      roles: ['admin'],
+      memberships: [],
+      selection_required: false,
+      transport: 'web',
+    });
+
+    expect(notifySessionChanged).toHaveBeenCalledOnce();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-external');
   });
 
   it('calls POST {baseUrl}/auth/login with JSON body', async () => {
@@ -391,6 +467,52 @@ describe('workspaceStore — loadWorkspace', () => {
 
     // "backend down" string from Error.message wins; verify both branches:
     expect(store.getState().workspaceLoadError).toBeTruthy();
+  });
+
+  it('ignores a delayed organization A success after organization B commits', async () => {
+    const workspaceA = createSeedWorkspace();
+    const workspaceB = createSeedWorkspace();
+    const delayedA = deferred<Workspace>();
+    const repo = makeStubRepo(workspaceB);
+    vi.spyOn(repo, 'load')
+      .mockImplementationOnce(() => delayedA.promise)
+      .mockResolvedValueOnce(workspaceB);
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const loadA = store.getState().loadWorkspace();
+    store.setState({ sessionScope: authScope('org-b'), workspace: null });
+    await store.getState().loadWorkspace();
+    delayedA.resolve(workspaceA);
+    await loadA;
+
+    expect(store.getState().workspace).toBe(workspaceB);
+    expect(store.getState().workspaceLoadError).toBeNull();
+  });
+
+  it('ignores a delayed organization A error after organization B commits', async () => {
+    const workspaceB = createSeedWorkspace();
+    const delayedA = deferred<Workspace>();
+    const repo = makeStubRepo(workspaceB);
+    vi.spyOn(repo, 'load')
+      .mockImplementationOnce(() => delayedA.promise)
+      .mockResolvedValueOnce(workspaceB);
+    const store = createWorkspaceStore({
+      deps: { repositoryFactory: stubFactory(repo) },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const loadA = store.getState().loadWorkspace();
+    store.setState({ sessionScope: authScope('org-b'), workspace: null });
+    await store.getState().loadWorkspace();
+    delayedA.reject(new Error('API 401 Unauthorized'));
+    await loadA;
+
+    expect(store.getState().session).toBe('auth');
+    expect(store.getState().workspace).toBe(workspaceB);
+    expect(store.getState().workspaceLoadError).toBeNull();
   });
 });
 
@@ -832,7 +954,20 @@ describe('workspaceStore — hydrateSessionInfo', () => {
       jsonOk({
         user: AUTH_USER,
         roles: ['vendedor', 'ingeniero'],
+        memberships: [
+          ACTIVE_MEMBERSHIP,
+          { ...ACTIVE_MEMBERSHIP, id: 'membership-2', status: 'suspended' },
+        ],
+        organization: {
+          id: 'org-1',
+          name: 'Taller 1',
+          slug: 'taller-1',
+          type: 'factory',
+          status: 'active',
+          license: { plan: 'none', status: 'none' },
+        },
         transport: 'web',
+        session_scope: SESSION_SCOPE,
       }),
     );
     const store = createWorkspaceStore({
@@ -845,6 +980,8 @@ describe('workspaceStore — hydrateSessionInfo', () => {
       globalThis.localStorage.getItem(USER_STORAGE_KEY)!,
     );
     expect(stored.roles).toEqual(['vendedor', 'ingeniero']);
+    expect(store.getState().sessionScope).toMatchObject({ organizationId: 'org-1', mode: 'auth' });
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
   });
 
   it('keeps the stored user unchanged when /auth/me reports no roles', async () => {
@@ -866,5 +1003,262 @@ describe('workspaceStore — hydrateSessionInfo', () => {
       globalThis.localStorage.getItem(USER_STORAGE_KEY)!,
     );
     expect(stored.roles).toEqual(['admin']);
+  });
+
+  it('keeps one generation while revalidating the same active session', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-h3');
+    const response = {
+      user: AUTH_USER,
+      roles: ['admin'],
+      memberships: [ACTIVE_MEMBERSHIP],
+      organization: {
+        id: 'org-1',
+        name: 'Taller 1',
+        slug: 'taller-1',
+        type: 'factory',
+        status: 'active',
+        license: { plan: 'none', status: 'none' },
+      },
+      transport: 'web',
+      session_scope: SESSION_SCOPE,
+    };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(response))
+      .mockResolvedValueOnce(jsonOk(response));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+
+    await store.getState().hydrateSessionInfo();
+    const firstGeneration = store.getState().sessionScope?.sessionGeneration;
+    await store.getState().hydrateSessionInfo();
+
+    expect(firstGeneration).toBeTruthy();
+    expect(store.getState().sessionScope?.sessionGeneration).toBe(firstGeneration);
+  });
+
+  it('ignores a delayed organization A hydration after organization B commits', async () => {
+    const delayedA = deferred<Response>();
+    const fetchImpl = vi.fn<typeof fetch>(() => delayedA.promise);
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-a');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const hydrateA = store.getState().hydrateSessionInfo();
+    const userB = { ...AUTH_USER, name: 'Organization B user' };
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-b');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userB));
+    const scopeB = authScope('org-b');
+    store.setState({ sessionScope: scopeB, activeOrg: { ...ACTIVE_MEMBERSHIP.organization, id: 'org-b' } });
+    delayedA.resolve(jsonOk({
+      user: AUTH_USER,
+      roles: ['admin'],
+      memberships: [ACTIVE_MEMBERSHIP],
+      organization: ACTIVE_MEMBERSHIP.organization,
+      transport: 'web',
+      session_scope: SESSION_SCOPE,
+    }));
+    await hydrateA;
+
+    expect(JSON.parse(globalThis.localStorage.getItem(USER_STORAGE_KEY)!)).toEqual(userB);
+    expect(store.getState().sessionScope).toBe(scopeB);
+    expect(store.getState().activeOrg?.id).toBe('org-b');
+    expect(store.getState().organizationChoices).toEqual([]);
+  });
+
+  it('keeps organization B intact when a delayed organization A hydration errors', async () => {
+    const delayedA = deferred<Response>();
+    const fetchImpl = vi.fn<typeof fetch>(() => delayedA.promise);
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-a');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl },
+    });
+    store.setState({ session: 'auth', sessionScope: authScope('org-a') });
+
+    const hydrateA = store.getState().hydrateSessionInfo();
+    const userB = { ...AUTH_USER, name: 'Organization B user' };
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-b');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userB));
+    const scopeB = authScope('org-b');
+    store.setState({ sessionScope: scopeB });
+    delayedA.reject(new Error('organization A unavailable'));
+    await hydrateA;
+
+    expect(JSON.parse(globalThis.localStorage.getItem(USER_STORAGE_KEY)!)).toEqual(userB);
+    expect(store.getState().sessionScope).toBe(scopeB);
+  });
+});
+
+describe('workspaceStore — atomic organization transition', () => {
+  const storeTenantADraft = () => {
+    const key = draftSessionKey('module', 'tenant-a');
+    registerDraftSessionBaseline(key, { name: 'baseline' });
+    globalThis.sessionStorage.setItem(key, '{"name":"tenant A draft"}');
+    return key;
+  };
+  const selected = {
+    token: 'jwt-new', user: AUTH_USER, license: { plan: 'none', status: 'none' },
+    roles: ['admin'], memberships: [], selection_required: false, transport: 'web',
+    organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
+  };
+
+  it('commits the new token only after its authoritative scope validates', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
+    const draftKey = storeTenantADraft();
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn(clearRegisteredDraftSessions) };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(selected))
+      .mockResolvedValueOnce(jsonOk({
+        user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        memberships: [ACTIVE_MEMBERSHIP],
+        transport: 'web', session_scope: SESSION_SCOPE,
+      }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl, tenantTransition: transition },
+    });
+
+    await store.getState().selectOrg('org-1');
+
+    expect(transition.prepare.mock.invocationCallOrder[0]).toBeGreaterThan(
+      fetchImpl.mock.invocationCallOrder[1]!,
+    );
+    expect(transition.commit).toHaveBeenCalledOnce();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-new');
+    expect(store.getState().sessionScope?.organizationId).toBe('org-1');
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
+    expect(globalThis.sessionStorage.getItem(draftKey)).toBeNull();
+  });
+
+  it('leaves active-session workspace loading to the shell owner', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
+    const workspaceB = createSeedWorkspace();
+    const repo = makeStubRepo(workspaceB);
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(selected))
+      .mockResolvedValueOnce(jsonOk({
+        user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        memberships: [ACTIVE_MEMBERSHIP],
+        transport: 'web', session_scope: SESSION_SCOPE,
+      }));
+    const store = createWorkspaceStore({
+      deps: {
+        baseUrl: 'http://test/api', fetchImpl,
+        repositoryFactory: stubFactory(repo),
+      },
+    });
+    store.setState({ session: 'auth', workspace: createSeedWorkspace() });
+
+    await store.getState().selectOrg('org-1');
+
+    expect(store.getState().workspace).toBeNull();
+    expect(store.getState().workspaceLoading).toBe(false);
+    expect(repo.saved).toHaveLength(0);
+  });
+
+  it('keeps the prior token and cache when scope validation fails', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
+    const draftKey = storeTenantADraft();
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn(clearRegisteredDraftSessions) };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(selected))
+      .mockResolvedValueOnce(jsonOk({
+        user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        memberships: [],
+        transport: 'web', session_scope: { ...SESSION_SCOPE, organization_id: 'org-other' },
+      }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl, tenantTransition: transition },
+    });
+    const priorWorkspace = createSeedWorkspace();
+    store.setState({ workspace: priorWorkspace });
+
+    await store.getState().selectOrg('org-1');
+
+    expect(transition.prepare).not.toHaveBeenCalled();
+    expect(transition.commit).not.toHaveBeenCalled();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-old');
+    expect(JSON.parse(globalThis.localStorage.getItem(USER_STORAGE_KEY)!)).toEqual(AUTH_USER);
+    expect(store.getState().workspace).toBe(priorWorkspace);
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().orgSelectionError).toBeTruthy();
+    expect(globalThis.sessionStorage.getItem(draftKey)).toContain('tenant A draft');
+  });
+
+  it('preserves organization A and authoritatively removes a revoked B choice', async () => {
+    const orgB = { ...ACTIVE_MEMBERSHIP.organization, id: 'org-b', slug: 'org-b', name: 'Taller B' };
+    const membershipB = { ...ACTIVE_MEMBERSHIP, id: 'membership-b', organization_id: 'org-b', organization: orgB };
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-a');
+    globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn() };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonError(403, { error: 'hidden backend copy' }, 'MEMBERSHIP_NOT_SELECTABLE'))
+      .mockResolvedValueOnce(jsonOk({
+        user: AUTH_USER, roles: ['admin'], organization: ACTIVE_MEMBERSHIP.organization,
+        memberships: [ACTIVE_MEMBERSHIP], transport: 'web', session_scope: SESSION_SCOPE,
+      }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl, tenantTransition: transition },
+    });
+    const priorWorkspace = createSeedWorkspace();
+    const scopeA = authScope('org-1');
+    store.setState({
+      session: 'auth', activeOrg: ACTIVE_MEMBERSHIP.organization,
+      organizationChoices: [ACTIVE_MEMBERSHIP, membershipB], sessionScope: scopeA,
+      workspace: priorWorkspace,
+    });
+
+    await store.getState().selectOrg('org-b');
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]![0])).toBe('http://test/api/auth/select-org');
+    expect(fetchImpl.mock.calls[0]![1]).toMatchObject({
+      method: 'POST', body: JSON.stringify({ organization_id: 'org-b' }),
+    });
+    expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).get('Authorization')).toBe('Bearer jwt-a');
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-a');
+    expect(store.getState()).toMatchObject({ activeOrg: ACTIVE_MEMBERSHIP.organization, sessionScope: scopeA, workspace: priorWorkspace });
+    expect(store.getState().orgSelectionError).toContain('revocado');
+    expect(store.getState().orgSelectionRecoveryAvailable).toBe(true);
+    expect(transition.prepare).not.toHaveBeenCalled();
+
+    await store.getState().refreshOrganizationChoices();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(String(fetchImpl.mock.calls[1]![0])).toBe('http://test/api/auth/me');
+    expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get('Authorization')).toBe('Bearer jwt-a');
+    expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
+    expect(store.getState().activeOrg?.id).toBe('org-1');
+    expect(store.getState().sessionScope?.organizationId).toBe('org-1');
+    expect(store.getState().workspace).toBe(priorWorkspace);
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-a');
+  });
+
+  it('does not mislabel an unknown forbidden response as revoked', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-a');
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonError(403, { error: 'membresía revocada' }, 'FORBIDDEN'))
+      .mockRejectedValueOnce(new TypeError('offline'));
+    const store = createWorkspaceStore({ deps: { baseUrl: 'http://test/api', fetchImpl } });
+    store.setState({ session: 'auth', activeOrg: ACTIVE_MEMBERSHIP.organization, sessionScope: authScope('org-1') });
+
+    await store.getState().selectOrg('org-b');
+
+    expect(store.getState().orgSelectionError).not.toContain('revocado');
+    expect(store.getState().orgSelectionRecoveryAvailable).toBe(false);
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-a');
+
+    await store.getState().selectOrg('org-b');
+    expect(store.getState().orgSelectionError).toContain('conectar');
+    expect(store.getState().orgSelectionError).not.toContain('revocado');
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([
+      'http://test/api/auth/select-org',
+      'http://test/api/auth/select-org',
+    ]);
   });
 });

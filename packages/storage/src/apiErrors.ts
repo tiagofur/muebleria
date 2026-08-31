@@ -13,6 +13,13 @@ export class GraneteApiError extends Error {
   get retryable(): boolean { return this.payload.retryable; }
 }
 
+export class GraneteNetworkError extends Error {
+  constructor(override readonly cause: TypeError) {
+    super('Network request failed', { cause });
+    this.name = 'GraneteNetworkError';
+  }
+}
+
 export function parseApiError(value: unknown): ApiError {
   return parseGenerated<ApiError>('ApiError', value);
 }

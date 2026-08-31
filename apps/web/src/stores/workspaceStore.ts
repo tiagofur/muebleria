@@ -15,12 +15,20 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Workspace, WorkshopSettings } from '@granete/domain';
 import {
   APIWorkspaceRepository,
+  GraneteApiError,
+  GraneteNetworkError,
   LocalStorageWorkspaceRepository,
   GUEST_WORKSPACE_STORAGE_KEY,
   createSeedWorkspace,
   type WorkspaceRepository,
 } from '@granete/storage';
 import { resolveWorkshopSettings } from '@granete/domain';
+import {
+  sessionScopeKey,
+  type SessionScope,
+} from '../shared/query/sessionScope';
+import { tenantTransition } from '../shared/query/tenantTransition';
+import { notifySessionChanged } from '../sessionSync';
 
 import {
   type AuthUser,
@@ -64,6 +72,7 @@ export interface WorkspaceStoreDeps {
   readonly fetchImpl?: typeof fetch;
   /** Factory that returns the repository for a given session mode. */
   readonly repositoryFactory?: RepositoryFactory;
+  readonly tenantTransition?: typeof tenantTransition;
 }
 
 export type RepositoryFactory = (
@@ -107,9 +116,12 @@ export interface WorkspaceState {
   /** True right after login when meaningful guest work exists locally. */
   readonly pendingGuestImport: boolean;
   readonly pendingOrgSelection: readonly MembershipChoice[] | null;
+  readonly organizationChoices: readonly MembershipChoice[];
   readonly orgSelectionLoading: boolean;
   readonly orgSelectionError: string | null;
+  readonly orgSelectionRecoveryAvailable: boolean;
   readonly activeOrg: OrgSummary | null;
+  readonly sessionScope: SessionScope | null;
   readonly supportInfo: SupportInfo | null;
   readonly supportExiting: boolean;
   readonly authUserSeq: number;
@@ -125,6 +137,7 @@ export interface WorkspaceState {
   readonly login: (email: string, password: string) => Promise<void>;
   readonly loginWithAuthPayload: (payload: unknown) => void;
   readonly selectOrg: (organizationId: string) => Promise<void>;
+  readonly refreshOrganizationChoices: () => Promise<void>;
   readonly hydrateSessionInfo: () => Promise<void>;
   readonly enterSupportSession: (token: string, orgId: string) => Promise<void>;
   readonly exitSupport: () => Promise<void>;
@@ -181,6 +194,7 @@ interface ResolvedDeps {
     mode: SessionMode,
     deps: { readonly baseUrl: string },
   ) => WorkspaceRepository;
+  readonly tenantTransition: typeof tenantTransition;
 }
 
 export function createWorkspaceStore(options?: InternalOptions) {
@@ -195,6 +209,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
     baseUrl: options?.deps?.baseUrl ?? DEFAULT_API_BASE,
     fetchImpl: safeFetch,
     repositoryFactory: options?.deps?.repositoryFactory ?? defaultRepositoryFactory,
+    tenantTransition: options?.deps?.tenantTransition ?? tenantTransition,
   };
 
   return create<WorkspaceState>()(
@@ -206,9 +221,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
         loginError: null,
         sessionEndReason: null,
         pendingOrgSelection: null,
+        organizationChoices: [],
         orgSelectionLoading: false,
         orgSelectionError: null,
+        orgSelectionRecoveryAvailable: false,
         activeOrg: null,
+        sessionScope: null,
         supportInfo: null,
         supportExiting: false,
         authUserSeq: 0,
@@ -242,9 +260,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
             assignableOwners: [],
             pendingGuestImport: false,
           pendingOrgSelection: null,
+          organizationChoices: [],
           orgSelectionLoading: false,
           orgSelectionError: null,
+          orgSelectionRecoveryAvailable: false,
           activeOrg: null,
+          sessionScope: null,
           supportInfo: null,
             guestImportLoading: false,
             guestImportError: null,
@@ -267,7 +288,9 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 loginLoading: false,
                 loginError: null,
                 pendingOrgSelection: result.memberships,
+                organizationChoices: result.memberships,
               });
+              notifySessionChanged();
               return;
             }
             set({
@@ -276,7 +299,9 @@ export function createWorkspaceStore(options?: InternalOptions) {
               loginError: null,
               sessionEndReason: null,
               pendingOrgSelection: null,
+              organizationChoices: result.memberships ?? [],
               activeOrg: result.organization ?? null,
+              sessionScope: null,
               // Reset workspace so AppContent reloads for the new session.
               workspace: null,
               workspaceSeq: get().workspaceSeq + 1,
@@ -288,6 +313,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             if (guestWorkspaceHasProjects()) {
               set({ pendingGuestImport: true });
             }
+            notifySessionChanged();
           } catch (err) {
             const message =
               err instanceof Error ? err.message : 'No se pudo iniciar sesión';
@@ -303,18 +329,23 @@ export function createWorkspaceStore(options?: InternalOptions) {
           if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
             set({
               pendingOrgSelection: result.memberships,
+              organizationChoices: result.memberships,
             });
+            notifySessionChanged();
             return;
           }
           set({
             session: 'auth',
             activeOrg: result.organization ?? null,
+            sessionScope: null,
             pendingOrgSelection: null,
+            organizationChoices: result.memberships ?? [],
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
             assignableOwners: [],
           });
+          notifySessionChanged();
         },
 
         selectOrg: async (organizationId: string) => {
@@ -323,14 +354,17 @@ export function createWorkspaceStore(options?: InternalOptions) {
             set({ pendingOrgSelection: null, orgSelectionLoading: false });
             return;
           }
-          set({ orgSelectionLoading: true, orgSelectionError: null });
+          set({ orgSelectionLoading: true, orgSelectionError: null, orgSelectionRecoveryAvailable: false });
           try {
             const result = await selectOrgRequest(token, organizationId, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
+            await deps.tenantTransition.prepare();
             storeAuthToken(result.token);
             storeAuthUser(result.user);
+            deps.tenantTransition.commit();
+            notifySessionChanged();
             set({
               session: 'auth',
               // authUserSeq re-keys the authUser/authToken memos in the
@@ -339,8 +373,11 @@ export function createWorkspaceStore(options?: InternalOptions) {
               authUserSeq: get().authUserSeq + 1,
               orgSelectionLoading: false,
               orgSelectionError: null,
+              orgSelectionRecoveryAvailable: false,
               pendingOrgSelection: null,
+              organizationChoices: result.memberships ?? [],
               activeOrg: result.organization ?? null,
+              sessionScope: result.sessionScope ?? null,
               supportInfo: null,
               sessionEndReason: null,
               workspace: null,
@@ -349,26 +386,88 @@ export function createWorkspaceStore(options?: InternalOptions) {
               assignableOwners: [],
             });
           } catch (err) {
+            const membershipUnavailable =
+              err instanceof GraneteApiError &&
+              err.status === 403 &&
+              err.code === 'MEMBERSHIP_NOT_SELECTABLE';
             set({
               orgSelectionLoading: false,
-              orgSelectionError:
-                err instanceof Error ? err.message : 'No se pudo entrar al taller',
+              orgSelectionRecoveryAvailable: membershipUnavailable,
+              orgSelectionError: membershipUnavailable
+                ? 'Tu acceso a este taller fue revocado o ya no está disponible. Actualizá tus talleres para continuar.'
+                : err instanceof GraneteNetworkError
+                  ? 'No se pudo conectar para cambiar de taller. Revisá tu conexión e intentá de nuevo.'
+                  : 'No se pudo cambiar de taller. Verificá tus permisos e intentá de nuevo.',
+            });
+          }
+        },
+
+        refreshOrganizationChoices: async () => {
+          const token = readAuthToken();
+          if (!token) return;
+          const requestedSession = { session: get().session, sessionScope: get().sessionScope };
+          set({ orgSelectionLoading: true });
+          try {
+            const me = await meRequest(token, {
+              baseUrl: deps.baseUrl,
+              fetchImpl: deps.fetchImpl,
+              ...(requestedSession.sessionScope
+                ? { sessionGeneration: requestedSession.sessionScope.sessionGeneration }
+                : {}),
+            });
+            if (readAuthToken() !== token || !isSameWorkspaceSession(requestedSession, get())) return;
+            if (
+              requestedSession.sessionScope &&
+              (me.sessionScope.userId !== requestedSession.sessionScope.userId ||
+                me.sessionScope.organizationId !== requestedSession.sessionScope.organizationId ||
+                me.sessionScope.mode !== requestedSession.sessionScope.mode)
+            ) {
+              throw new Error('Authoritative session identity changed');
+            }
+            storeAuthUser(me.user);
+            set({
+              authUserSeq: get().authUserSeq + 1,
+              activeOrg: me.organization ?? null,
+              organizationChoices: me.organizationChoices,
+              sessionScope: me.sessionScope,
+              supportInfo: me.support ?? null,
+              orgSelectionLoading: false,
+              orgSelectionError: null,
+              orgSelectionRecoveryAvailable: false,
+            });
+          } catch {
+            if (readAuthToken() !== token || !isSameWorkspaceSession(requestedSession, get())) return;
+            set({
+              orgSelectionLoading: false,
+              orgSelectionRecoveryAvailable: true,
+              orgSelectionError: 'No pudimos actualizar tus talleres. Revisá tu conexión y volvé a intentar.',
             });
           }
         },
 
         enterSupportSession: async (token: string) => {
+          await deps.tenantTransition.prepare();
+          const sessionInfo = await meRequest(token, {
+            baseUrl: deps.baseUrl,
+            fetchImpl: deps.fetchImpl,
+          });
           storeAuthToken(token);
+          storeAuthUser(sessionInfo.user);
+          deps.tenantTransition.commit();
+          notifySessionChanged();
           writeSessionMode('auth');
           set({
             session: 'auth',
             authUserSeq: get().authUserSeq + 1,
+            activeOrg: sessionInfo.organization ?? null,
+            supportInfo: sessionInfo.support ?? null,
+            organizationChoices: sessionInfo.organizationChoices,
+            sessionScope: sessionInfo.sessionScope,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
             assignableOwners: [],
           });
-          await get().hydrateSessionInfo();
         },
 
         exitSupport: async () => {
@@ -394,11 +493,25 @@ export function createWorkspaceStore(options?: InternalOptions) {
         hydrateSessionInfo: async () => {
           const token = readAuthToken();
           if (!token) return;
+          const requestedSession = {
+            session: get().session,
+            sessionScope: get().sessionScope,
+          };
           try {
+            const currentSessionGeneration = get().sessionScope?.sessionGeneration;
             const me = await meRequest(token, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
+              ...(currentSessionGeneration
+                ? { sessionGeneration: currentSessionGeneration }
+                : {}),
             });
+            if (
+              readAuthToken() !== token ||
+              !isSameWorkspaceSession(requestedSession, get())
+            ) {
+              return;
+            }
             if (me.user) {
               // /auth/me devuelve los roles de la membresía como clave
               // hermana `roles` (el DTO de usuario no los trae). Merge en el
@@ -418,7 +531,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
               );
               set({ authUserSeq: get().authUserSeq + 1 });
             }
-            set({ activeOrg: me.organization ?? null, supportInfo: me.support ?? null });
+            set({
+              activeOrg: me.organization ?? null,
+              supportInfo: me.support ?? null,
+              sessionScope: me.sessionScope,
+              organizationChoices: me.organizationChoices,
+            });
           } catch {
             // best-effort: la sesión se valida igual en cada request
           }
@@ -426,13 +544,18 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
         logout: () => {
           clearSession();
+          deps.tenantTransition.commit();
+          notifySessionChanged();
           set({
             session: null,
             loginError: null,
             sessionEndReason: null,
             pendingOrgSelection: null,
+            organizationChoices: [],
             orgSelectionError: null,
+            orgSelectionRecoveryAvailable: false,
             activeOrg: null,
+            sessionScope: null,
             supportInfo: null,
             loginLoading: false,
             workspace: null,
@@ -452,21 +575,23 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
         // --- Actions: workspace lifecycle ---
         loadWorkspace: async () => {
-          const { session, getRepository } = get();
+          const { session, sessionScope, getRepository } = get();
           if (session === null) return;
+          const requestedSession = { session, sessionScope };
           const repository = getRepository();
           set({ workspaceLoading: true, workspaceLoadError: null });
           try {
             const ws = await repository.load();
             // F118 S2: the session may have ended while loading — a late
             // resolve must not repopulate the workspace after logout.
-            if (get().session !== session) return;
+            if (!isSameWorkspaceSession(requestedSession, get())) return;
             set({
               workspace: ws,
               workspaceLoading: false,
               workspaceSeq: get().workspaceSeq + 1,
             });
           } catch (err) {
+            if (!isSameWorkspaceSession(requestedSession, get())) return;
             // Do not silently seed — surface failure (#13).
             console.error('Failed to load workspace:', err);
             const message =
@@ -685,6 +810,22 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
 /** Default singleton — production wiring. */
 export const useWorkspaceStore = createWorkspaceStore();
+
+function isSameWorkspaceSession(
+  requested: {
+    readonly session: SessionMode | null;
+    readonly sessionScope: SessionScope | null;
+  },
+  current: Pick<WorkspaceState, 'session' | 'sessionScope'>,
+): boolean {
+  if (requested.session !== current.session) return false;
+  if (requested.sessionScope === null || current.sessionScope === null) {
+    return requested.sessionScope === current.sessionScope;
+  }
+  const requestedKey = sessionScopeKey(requested.sessionScope);
+  const currentKey = sessionScopeKey(current.sessionScope);
+  return requestedKey.every((value, index) => value === currentKey[index]);
+}
 
 /**
  * F118 S3: cheap probe for meaningful guest work. Reads the raw guest

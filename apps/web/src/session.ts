@@ -3,6 +3,12 @@ import {
   type LoginResponse, type MeResponse, type User, type OrganizationSummary,
   type Membership, type SupportInfo as GeneratedSupportInfo,
 } from '@granete/storage';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+  type SessionGeneration,
+  type SessionScope,
+} from './shared/query/sessionScope';
 
 /**
  * Session gate helpers for the web shell login and invitation-first onboarding.
@@ -41,6 +47,15 @@ export type OrgSummary = OrganizationSummary;
 export type MembershipChoice = Membership;
 export type SupportInfo = GeneratedSupportInfo;
 
+export type SessionSnapshot = {
+  readonly user: AuthUser;
+  readonly roles?: readonly string[];
+  readonly organization?: OrgSummary;
+  readonly organizationChoices: readonly MembershipChoice[];
+  readonly support?: SupportInfo;
+  readonly sessionScope: SessionScope;
+};
+
 export type LoginSuccess = {
   readonly token: string;
   readonly user: AuthUser;
@@ -49,6 +64,7 @@ export type LoginSuccess = {
   readonly memberships?: readonly MembershipChoice[];
   readonly selectionRequired?: boolean;
   readonly support?: boolean;
+  readonly sessionScope?: SessionScope;
 };
 
 /**
@@ -244,7 +260,53 @@ export async function selectOrgRequest(
 ): Promise<LoginSuccess> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
-  return parseAuthResponse(await new GraneteApiClient(baseUrl, doFetch).selectOrganization(token, { organization_id: organizationId }));
+  const result = parseAuthResponse(await new GraneteApiClient(baseUrl, doFetch).selectOrganization(token, { organization_id: organizationId }));
+  const session = await meRequest(result.token, { baseUrl, fetchImpl: doFetch });
+  return validateOrganizationSessionTransition({
+    requestedOrganizationId: organizationId,
+    selectionResponse: result,
+    sessionSnapshot: session,
+  });
+}
+
+export function validateOrganizationSessionTransition({
+  requestedOrganizationId,
+  selectionResponse,
+  sessionSnapshot,
+}: {
+  readonly requestedOrganizationId: string;
+  readonly selectionResponse: LoginSuccess;
+  readonly sessionSnapshot: SessionSnapshot;
+}): LoginSuccess {
+  const selectedOrganizationId = selectionResponse.organization?.id;
+  const snapshotOrganizationId = sessionSnapshot.organization?.id;
+  const scope = sessionSnapshot.sessionScope;
+  if (
+    requestedOrganizationId === '' ||
+    selectedOrganizationId !== requestedOrganizationId ||
+    !sessionSnapshot.organization ||
+    snapshotOrganizationId !== requestedOrganizationId ||
+    scope.organizationId !== requestedOrganizationId ||
+    scope.membershipId === null ||
+    scope.membershipCredentialVersion === null ||
+    scope.organizationCredentialVersion === null ||
+    scope.supportSessionId !== null ||
+    scope.recoverySessionId !== null ||
+    selectionResponse.user.id !== sessionSnapshot.user.id ||
+    scope.userId !== sessionSnapshot.user.id ||
+    scope.mode !== 'auth'
+  ) {
+    throw new Error('La sesión seleccionada no coincide con el taller solicitado');
+  }
+
+  return {
+    ...selectionResponse,
+    user: sessionSnapshot.user,
+    roles: sessionSnapshot.roles,
+    organization: sessionSnapshot.organization,
+    memberships: sessionSnapshot.organizationChoices,
+    sessionScope: scope,
+  };
 }
 
 /**
@@ -253,21 +315,25 @@ export async function selectOrgRequest(
  */
 export async function meRequest(
   token: string,
-  options: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
-): Promise<{
-  user: AuthUser;
-  roles?: readonly string[];
-  organization?: OrgSummary;
-  support?: SupportInfo;
-}> {
+  options: {
+    readonly baseUrl?: string;
+    readonly fetchImpl?: typeof fetch;
+    readonly sessionGeneration?: SessionGeneration;
+  } = {},
+): Promise<SessionSnapshot> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
   const response: MeResponse = await new GraneteApiClient(baseUrl, doFetch).getSession(token);
   return {
     user: toAuthUser(response.user, response.roles),
     roles: response.roles,
+    organizationChoices: activeOrganizationChoices(response.memberships),
     ...(response.organization ? { organization: response.organization } : {}),
     ...(response.support ? { support: response.support } : {}),
+    sessionScope: sessionScopeFromSession(
+      response,
+      options.sessionGeneration ?? createSessionGeneration(),
+    ),
   };
 }
 
@@ -289,15 +355,24 @@ export function parseAuthResponse(data: unknown): LoginSuccess {
   if (!d.token) throw new Error('Respuesta de autenticación inválida');
   const roles = d.roles;
   const org = d.organization;
-  const memberships = d.memberships;
+  const memberships = activeOrganizationChoices(d.memberships);
   return {
     token: d.token,
     user: toAuthUser(d.user, roles),
     ...(org ? { organization: org } : {}),
-    ...(memberships && memberships.length > 0 ? { memberships } : {}),
+    ...(memberships.length > 0 ? { memberships } : {}),
     ...(d.selection_required ? { selectionRequired: true } : {}),
     ...(d.support === true ? { support: true } : {}),
   };
+}
+
+function activeOrganizationChoices(
+  memberships: readonly MembershipChoice[],
+): readonly MembershipChoice[] {
+  return memberships.filter(
+    (membership) =>
+      membership.status === 'active' && membership.organization.status === 'active',
+  );
 }
 
 /**

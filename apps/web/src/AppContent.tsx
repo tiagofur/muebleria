@@ -54,6 +54,7 @@ import type {
   PurchaseOrder,
   Supplier,
 } from '@granete/domain';
+import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
@@ -621,6 +622,13 @@ export function AppContent({
   const supportExiting = useWorkspaceStore((st) => st.supportExiting);
   const exitSupport = useWorkspaceStore((st) => st.exitSupport);
   const activeOrg = useWorkspaceStore((st) => st.activeOrg);
+  const organizationChoices = useWorkspaceStore((st) => st.organizationChoices);
+  const organizationSwitchLoading = useWorkspaceStore((st) => st.orgSelectionLoading);
+  const organizationSwitchError = useWorkspaceStore((st) => st.orgSelectionError);
+  const organizationSwitchRecoveryAvailable = useWorkspaceStore((st) => st.orgSelectionRecoveryAvailable);
+  const selectOrg = useWorkspaceStore((st) => st.selectOrg);
+  const refreshOrganizationChoices = useWorkspaceStore((st) => st.refreshOrganizationChoices);
+  const sessionScope = useWorkspaceStore((st) => st.sessionScope);
   const hydrateSessionInfo = useWorkspaceStore((st) => st.hydrateSessionInfo);
   useEffect(() => {
     if (session === 'auth') void hydrateSessionInfo();
@@ -802,16 +810,20 @@ export function AppContent({
     return map;
   }, [assignableOwners, authUser]);
 
-  // Load workspace from repository on session change.
+  // Load workspace from repository on semantic session-scope changes.
   // Note: catalog/projects mutations still go through local `workspace` state
   // below (until F062/F063 move them to their own stores). We sync via
   // setWorkspace from the store after load.
-  useEffect(() => {
-    if (session === null) return;
+  const resetWorkspaceForLoad = useCallback(() => {
     setWorkspace(null);
     setWorkspaceLoadError(null);
-    void loadWorkspace();
-  }, [session, loadWorkspace, setWorkspace, setWorkspaceLoadError]);
+  }, [setWorkspace, setWorkspaceLoadError]);
+  useWorkspaceLoad({
+    session,
+    sessionScope,
+    loadWorkspace,
+    resetWorkspace: resetWorkspaceForLoad,
+  });
   const loadDemoWorkspace = useWorkspaceStore((s) => s.loadDemoWorkspace);
   const pendingGuestImport = useWorkspaceStore((s) => s.pendingGuestImport);
   const guestImportLoading = useWorkspaceStore((s) => s.guestImportLoading);
@@ -2698,7 +2710,6 @@ export function AppContent({
 
   // #326: enter a connected sales org — switch the org scope, then land on
   // the team screen to invite the store team.
-  const selectOrg = useWorkspaceStore((s) => s.selectOrg);
   const onEnterConnectedOrg = useCallback(
     async (orgId: string, orgName: string) => {
       await selectOrg(orgId);
@@ -2789,6 +2800,14 @@ export function AppContent({
     authUser,
     onEnterConnectedOrg,
     actorRoles,
+    activeOrg,
+    organizationChoices,
+    organizationSwitchLoading,
+    organizationSwitchError,
+    refreshOrganizationChoices: organizationSwitchRecoveryAvailable
+      ? refreshOrganizationChoices
+      : undefined,
+    selectOrg,
     orgType: activeOrg?.type ?? null,
     backendBreakdown,
     boardOverrides,
@@ -2989,6 +3008,7 @@ export function AppContent({
     selectedProjectCutRows,
     selectedProjectId,
     session,
+    sessionScope,
     setAmbientMaterialActive,
     setAnalyticsPeriod,
     setCustomerActive,

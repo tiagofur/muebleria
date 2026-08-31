@@ -1674,6 +1674,7 @@
           "INTERNAL_ERROR",
           "PRECONDITION_REQUIRED",
           "MEMBERSHIP_NOT_FOUND",
+          "MEMBERSHIP_NOT_SELECTABLE",
           "MEMBERSHIP_VERSION_CONFLICT",
           "ROLE_NOT_ALLOWED",
           "LAST_ADMIN",
@@ -2041,13 +2042,41 @@
           }
         }
       },
+      "SessionScope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "membership_id",
+          "organization_id",
+          "mode",
+          "support_session_id",
+          "recovery_session_id",
+          "membership_credential_version",
+          "organization_credential_version",
+          "absolute_expires_at"
+        ],
+        "properties": {
+          "user_id": { "type": "string" },
+          "membership_id": { "type": ["string", "null"] },
+          "organization_id": { "type": ["string", "null"] },
+          "mode": { "type": "string", "enum": ["auth", "support", "recovery"] },
+          "support_session_id": { "type": ["string", "null"] },
+          "recovery_session_id": { "type": ["string", "null"] },
+          "membership_credential_version": { "type": ["integer", "null"], "minimum": 1 },
+          "organization_credential_version": { "type": ["integer", "null"], "minimum": 1 },
+          "absolute_expires_at": { "type": "string", "format": "date-time" }
+        }
+      },
       "MeResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "user",
           "roles",
-          "transport"
+          "memberships",
+          "transport",
+          "session_scope"
         ],
         "properties": {
           "user": {
@@ -2059,6 +2088,12 @@
               "type": "string"
             }
           },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Membership"
+            }
+          },
           "organization": {
             "$ref": "#/components/schemas/OrganizationSummary"
           },
@@ -2067,6 +2102,9 @@
           },
           "transport": {
             "$ref": "#/components/schemas/AuthTransport"
+          },
+          "session_scope": {
+            "$ref": "#/components/schemas/SessionScope"
           }
         }
       },

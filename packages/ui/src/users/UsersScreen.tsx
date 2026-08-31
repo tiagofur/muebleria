@@ -7,6 +7,12 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
+import {
   CheckCircle2,
   MinusCircle,
   RefreshCw,
@@ -19,16 +25,28 @@ import {
   XCircle,
 } from 'lucide-react';
 import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
+import { MODAL_CLOSE_MS } from '../common/Modal';
+import { AdminTransferModal, RolePermissionPreview } from './TeamLifecyclePanels';
+import { TeamOffboardingModal } from './TeamOffboardingModal';
 import '../catalogs/catalogs.css';
 import './users.css';
 import {
   allowedRolesForOrgType,
   ASSIGNABLE_ROLES,
+  isValidUserRole,
   roleLabelEs,
   type ProductRole,
-  type TeamCapability,
 } from '@granete/domain';
-import { GraneteApiClient, GraneteApiError, type TeamMember, type Invitation, type TeamSummary } from '@granete/storage';
+import {
+  GraneteApiClient,
+  GraneteApiError,
+  type TeamCapability,
+  type TeamDirectory,
+  type TeamMember,
+  type MembershipOffboardingPreview,
+  type MembershipReassignmentPlan,
+  type Invitation,
+} from '@granete/storage';
 
 export type UserRow = TeamMember;
 export type OrgInvitationRow = Invitation;
@@ -38,6 +56,11 @@ export type UserFilter = 'all' | 'active' | 'suspended' | 'left' | 'invitations'
 export interface UsersScreenProps {
   readonly baseUrl: string;
   readonly token: string;
+  readonly queryKeys: {
+    readonly root: QueryKey;
+    readonly team: QueryKey;
+    readonly invitations: QueryKey;
+  };
   /**
    * Active organization type (factory/store/dealer). Store/dealer show only
    * the roles their org type may assign (#326) — mirrors the server-side
@@ -67,13 +90,14 @@ function canManageRoleSet(
   capabilities: readonly TeamCapability[],
   roles: readonly string[],
 ): boolean {
-  if (roles.length === 0) return false;
+  const normalizedRoles = roles.filter(isValidUserRole);
+  if (normalizedRoles.length === 0 || normalizedRoles.length !== roles.length) return false;
   if (hasCapability(capabilities, 'team:manage:all')) return true;
 
-  return roles.every((role) =>
-    (SALES_TEAM_ROLES.includes(role as ProductRole)
+  return normalizedRoles.every((role) =>
+    (SALES_TEAM_ROLES.includes(role)
       && hasCapability(capabilities, 'team:manage:sales'))
-    || (PRODUCTION_TEAM_ROLES.includes(role as ProductRole)
+    || (PRODUCTION_TEAM_ROLES.includes(role)
       && hasCapability(capabilities, 'team:manage:production')),
   );
 }
@@ -95,20 +119,21 @@ function canInviteRoleSet(
     || hasCapability(capabilities, 'team:invite:production');
 
   return roles.every((role) => {
+    if (!isValidUserRole(role)) return false;
     if (role === 'admin') {
       return canInviteAny
         && hasCapability(capabilities, 'team:manage:all')
         && hasCapability(capabilities, 'team:assign:admin');
     }
-    if (SALES_INVITATION_ROLES.includes(role as ProductRole)) {
+    if (SALES_INVITATION_ROLES.includes(role)) {
       return hasCapability(capabilities, 'team:invite:sales')
         && (hasCapability(capabilities, 'team:manage:all')
-          || SALES_TEAM_ROLES.includes(role as ProductRole));
+          || SALES_TEAM_ROLES.includes(role));
     }
-    if (PRODUCTION_INVITATION_ROLES.includes(role as ProductRole)) {
+    if (PRODUCTION_INVITATION_ROLES.includes(role)) {
       return hasCapability(capabilities, 'team:invite:production')
         && (hasCapability(capabilities, 'team:manage:all')
-          || PRODUCTION_TEAM_ROLES.includes(role as ProductRole));
+          || PRODUCTION_TEAM_ROLES.includes(role));
     }
     return false;
   });
@@ -119,16 +144,10 @@ function canInviteRoleSet(
 // name for the same canonical role. The assignable list itself is also the
 // domain's canonical ASSIGNABLE_ROLES (contract-pinned), filtered per org
 // type — this screen keeps no local copy to drift out of sync.
-export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): ReactNode {
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
-  const [summary, setSummary] = useState<TeamSummary | null>(null);
+export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenProps): ReactNode {
   const [filter, setFilter] = useState<UserFilter>('active');
-  const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [invitationLoadError, setInvitationLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Multi-role edit modal
@@ -149,6 +168,17 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const [suspendReason, setSuspendReason] = useState('');
   const [revokeSessionsMember, setRevokeSessionsMember] = useState<UserRow | null>(null);
   const [revokeSessionsReason, setRevokeSessionsReason] = useState('');
+  const [transferSource, setTransferSource] = useState<UserRow | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferNeedsReload, setTransferNeedsReload] = useState(false);
+  const [offboardMember, setOffboardMember] = useState<UserRow | null>(null);
+  const [offboardPreview, setOffboardPreview] = useState<MembershipOffboardingPreview | null>(null);
+  const [offboardPlan, setOffboardPlan] = useState<MembershipReassignmentPlan>({});
+  const [offboardReason, setOffboardReason] = useState('');
+  const [offboardError, setOffboardError] = useState<string | null>(null);
+  const [offboardLoading, setOffboardLoading] = useState(false);
 
   /** Roles this organization type may assign (#326): factories use the full
    * canonical set; store/dealer are commercial-only (server re-validates). */
@@ -161,53 +191,46 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   );
 
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
-  const capabilities = (summary?.capabilities ?? []) as readonly TeamCapability[];
+  const queryClient = useQueryClient();
+  const teamQuery = useQuery({
+    queryKey: queryKeys.team,
+    queryFn: ({ signal }) => api.listMemberships(token, signal),
+  });
+  const users = teamQuery.data?.items ?? [];
+  const summary = teamQuery.data?.summary ?? null;
+  const capabilities: readonly TeamCapability[] = summary?.capabilities ?? [];
   const invitationRoles = assignableRoles.filter((role) =>
     role !== 'user' && canInviteRoleSet(capabilities, [role]),
   );
   const canInvite = invitationRoles.length > 0;
   const canRevokeSessions = hasCapability(capabilities, 'team:revoke_sessions');
+  const canTransferAdmin = hasCapability(capabilities, 'team:transfer_admin');
+  const invitationsQuery = useQuery({
+    queryKey: queryKeys.invitations,
+    queryFn: ({ signal }) => api.listInvitations(token, signal),
+    enabled: canInvite,
+  });
+  const invitations = invitationsQuery.data ?? [];
+  const mutation = useMutation({
+    mutationFn: (operation: () => Promise<void>) => operation(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.root }),
+  });
+  const loading = teamQuery.isPending;
+  const loadError = teamQuery.isError
+    ? 'No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.'
+    : null;
+  const invitationLoadError = invitationsQuery.isError
+    ? 'No se pudieron cargar las invitaciones. El directorio del equipo sigue disponible.'
+    : null;
+
+  useEffect(() => {
+    if (!canInvite) setFilter((current) => current === 'invitations' ? 'active' : current);
+  }, [canInvite]);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
   };
-
-  const load = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const team = await api.listMemberships(token);
-      setUsers([...team.items]);
-      setSummary(team.summary);
-      const grantedCapabilities = team.summary.capabilities as readonly TeamCapability[];
-      const mayInvite = ASSIGNABLE_ROLES.some((role) =>
-        role !== 'user' && canInviteRoleSet(grantedCapabilities, [role]),
-      );
-      if (mayInvite) {
-        setInvitationLoadError(null);
-        try {
-          const pendingInvitations = await api.listInvitations(token);
-          setInvitations([...pendingInvitations]);
-        } catch {
-          setInvitations([]);
-          setInvitationLoadError('No se pudieron cargar las invitaciones. El directorio del equipo sigue disponible.');
-        }
-      } else {
-        setInvitations([]);
-        setInvitationLoadError(null);
-        setFilter((current) => current === 'invitations' ? 'active' : current);
-      }
-    } catch {
-      setLoadError('No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [baseUrl, token]);
 
   const filtered = useMemo(() => {
     if (filter === 'suspended') return users.filter((u) => u.membership_status === 'suspended');
@@ -219,28 +242,52 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const activeCount = summary?.active_members ?? users.filter((u) => u.membership_status === 'active').length;
   const suspendedCount = summary?.suspended_members ?? users.filter((u) => u.membership_status === 'suspended').length;
   const leftCount = summary?.left_members ?? users.filter((u) => u.membership_status === 'left').length;
+  const transferCandidates = users.filter((member) =>
+    member.membership_id !== transferSource?.membership_id
+    && member.membership_status === 'active'
+    && member.account_status === 'active',
+  );
 
   const mutationError = (error: unknown, fallback: string) => {
     if (!(error instanceof GraneteApiError)) return fallback;
     if (error.code === 'LAST_ADMIN') return 'No se puede dejar al taller sin administrador. Transferí ese rol antes de continuar.';
     if (error.code === 'SEAT_LIMIT_REACHED') return 'No hay lugares disponibles para reactivar esta membresía. Liberá un lugar o revisá el límite del taller.';
     if (error.code === 'MEMBERSHIP_VERSION_CONFLICT') return 'Esta membresía cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
+    if (error.code === 'ADMIN_TRANSFER_INVALID') return 'La transferencia ya no es válida. Actualizá el equipo y elegí nuevamente.';
+    if (error.code === 'IMPACT_VERSION_CONFLICT') return 'Las responsabilidades cambiaron. Actualizá el impacto antes de intentar nuevamente.';
+    if (error.code === 'REASSIGNMENT_REQUIRED') return 'La reasignación está incompleta o dejó de ser válida. Actualizá el impacto y elegí nuevamente.';
+    if (error.code === 'OFFBOARDING_BLOCKED') return 'La membresía conserva trabajo activo que bloquea la finalización. Resolvelo y actualizá el impacto.';
+    if (error.code === 'VERSION_CONFLICT' || error.code === 'INVITATION_TOKEN_ROTATED') return 'Esta invitación cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
+    if (error.code === 'INVITATION_ALREADY_USED' || error.code === 'INVITATION_REVOKED') return 'La invitación ya no está disponible. Actualizá la lista para ver su estado actual.';
     if (error.code === 'FORBIDDEN') return 'No tenés permiso para realizar esta acción en este miembro.';
     return fallback;
   };
 
+  const openTransferForLastAdmin = (error: unknown, source: UserRow): boolean => {
+    if (!(error instanceof GraneteApiError) || error.code !== 'LAST_ADMIN' || !canTransferAdmin) return false;
+    setTransferTargetId('');
+    setTransferReason('');
+    setTransferError(null);
+    setTransferNeedsReload(false);
+    setRoleEditUser(null);
+    setSuspendMember(null);
+    window.setTimeout(() => setTransferSource(source), MODAL_CLOSE_MS);
+    return true;
+  };
+
   const saveMultiRoles = async (membershipId: string, roles: ProductRole[]) => {
+    const member = users.find((candidate) => candidate.membership_id === membershipId);
+    if (!member) return;
     setActionId(membershipId);
     setActionError(null);
     try {
-      const member = users.find((candidate) => candidate.membership_id === membershipId);
-      if (!member) throw new Error('Miembro no encontrado');
-      await api.changeMembershipRoles(token, membershipId, member.version, { roles });
+      await mutation.mutateAsync(async () => {
+        await api.changeMembershipRoles(token, membershipId, member.version, { roles });
+      });
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
-      await load();
     } catch (error) {
-      setActionError(mutationError(error, 'No se pudieron guardar los roles. Revisá tu conexión e intentá de nuevo.'));
+      if (!openTransferForLastAdmin(error, member)) setActionError(mutationError(error, 'No se pudieron guardar los roles. Revisá tu conexión e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
@@ -250,9 +297,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setActionId(member.membership_id);
     setActionError(null);
     try {
-      await api.reactivateMembership(token, member.membership_id, member.version);
+      await mutation.mutateAsync(async () => {
+        await api.reactivateMembership(token, member.membership_id, member.version);
+      });
       showToast('Membresía reactivada');
-      await load();
     } catch (error) {
       setActionError(mutationError(error, 'No se pudo reactivar la membresía. Revisá tu conexión e intentá de nuevo.'));
     } finally {
@@ -265,15 +313,98 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setActionId(suspendMember.membership_id);
     setActionError(null);
     try {
-      await api.suspendMembership(token, suspendMember.membership_id, suspendMember.version, { reason: suspendReason.trim() });
+      await mutation.mutateAsync(async () => {
+        await api.suspendMembership(token, suspendMember.membership_id, suspendMember.version, { reason: suspendReason.trim() });
+      });
       showToast('Membresía suspendida');
       setSuspendMember(null);
-      await load();
     } catch (error) {
-      setActionError(mutationError(error, 'No se pudo suspender la membresía. Revisá tu conexión e intentá de nuevo.'));
+      if (!openTransferForLastAdmin(error, suspendMember)) setActionError(mutationError(error, 'No se pudo suspender la membresía. Revisá tu conexión e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
+  };
+
+  const confirmAdminTransfer = async () => {
+    const source = transferSource;
+    const target = users.find((member) => member.membership_id === transferTargetId);
+    if (!source || !target || !transferReason.trim()) return;
+    setActionId(source.membership_id);
+    setTransferError(null);
+    try {
+      await mutation.mutateAsync(async () => {
+        await api.transferOrganizationAdmin(token, source.membership_id, source.version, {
+          target_membership_id: target.membership_id,
+          target_version: target.version,
+          demote_source: false,
+          reason: transferReason.trim(),
+        });
+      });
+      setTransferSource(null);
+      showToast('Administración transferida. Volvé a intentar el cambio original.');
+    } catch (error) {
+      setTransferError(mutationError(error, 'No se pudo transferir la administración. Actualizá el equipo e intentá de nuevo.'));
+      if (error instanceof GraneteApiError && (error.code === 'MEMBERSHIP_VERSION_CONFLICT' || error.code === 'ADMIN_TRANSFER_INVALID')) setTransferNeedsReload(true);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const reloadAdminTransfer = async () => {
+    const sourceId = transferSource?.membership_id;
+    try {
+      const latest = await queryClient.fetchQuery<TeamDirectory>({ queryKey: queryKeys.team, queryFn: ({ signal }) => api.listMemberships(token, signal), staleTime: 0, retry: false });
+      const source = latest.items.find((member) => member.membership_id === sourceId);
+      const target = latest.items.find((member) => member.membership_id === transferTargetId);
+      if (!source) { setTransferSource(null); return; }
+      setTransferSource(source);
+      if (!target || target.membership_status !== 'active' || target.account_status !== 'active') setTransferTargetId('');
+      setTransferNeedsReload(false);
+      setTransferError(null);
+    } catch {
+      setTransferNeedsReload(true);
+      setTransferError('No se pudo actualizar el equipo. Revisá tu conexión y volvé a intentar antes de transferir.');
+    }
+  };
+
+  const loadOffboardingPreview = async (member: UserRow) => {
+    setOffboardLoading(true); setOffboardPreview(null); setOffboardPlan({}); setOffboardError(null);
+    try { setOffboardPreview(await api.previewMembershipOffboarding(token, member.membership_id, member.version)); }
+    catch (error) { setOffboardError(mutationError(error, 'No se pudo verificar el impacto. Revisá tu conexión y volvé a intentar.')); }
+    finally { setOffboardLoading(false); }
+  };
+
+  const recoverOffboardingPreview = async () => {
+    const membershipId = offboardMember?.membership_id;
+    if (!membershipId) return;
+    setOffboardLoading(true); setOffboardPreview(null); setOffboardPlan({}); setOffboardError(null);
+    try {
+      const latest = await queryClient.fetchQuery<TeamDirectory>({ queryKey: queryKeys.team, queryFn: ({ signal }) => api.listMemberships(token, signal), staleTime: 0, retry: false });
+      const source = latest.items.find((member) => member.membership_id === membershipId);
+      if (!source || source.membership_status !== 'active') { setOffboardError('La membresía ya no está activa. Cerrá este flujo y revisá el equipo actualizado.'); return; }
+      setOffboardMember(source);
+      setOffboardPreview(await api.previewMembershipOffboarding(token, source.membership_id, source.version));
+    } catch (error) {
+      setOffboardError(mutationError(error, 'No se pudo actualizar el equipo y su impacto. Revisá tu conexión y volvé a intentar.'));
+    } finally { setOffboardLoading(false); }
+  };
+
+  const confirmOffboarding = async () => {
+    if (!offboardMember || !offboardPreview || !offboardReason.trim()) return;
+    setOffboardLoading(true); setOffboardError(null);
+    try {
+      await mutation.mutateAsync(async () => {
+        const result = await api.offboardMembership(token, offboardMember.membership_id, offboardPreview.membership_version, { impact_version: offboardPreview.impact_version, reason: offboardReason.trim(), reassignment: offboardPlan });
+        queryClient.setQueryData<TeamDirectory>(queryKeys.team, (current) => current ? {
+          items: current.items.map((member) => member.membership_id === result.member.membership_id ? { ...member, membership_status: result.member.status, roles: result.member.roles, version: result.member.version } : member),
+          summary: { ...current.summary, active_members: current.summary.active_members - 1, left_members: current.summary.left_members + 1 },
+        } : current);
+      });
+      setOffboardMember(null); setFilter('left'); showToast('Membresía finalizada');
+    } catch (error) {
+      setOffboardPreview(null); setOffboardPlan({});
+      setOffboardError(mutationError(error, 'No se pudo finalizar la membresía. Actualizá el impacto e intentá de nuevo.'));
+    } finally { setOffboardLoading(false); }
   };
 
   const confirmSessionRevocation = async () => {
@@ -281,10 +412,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setActionId(revokeSessionsMember.membership_id);
     setActionError(null);
     try {
-      await api.revokeMembershipSessions(token, revokeSessionsMember.membership_id, revokeSessionsMember.version, { reason: revokeSessionsReason.trim() });
+      await mutation.mutateAsync(async () => {
+        await api.revokeMembershipSessions(token, revokeSessionsMember.membership_id, revokeSessionsMember.version, { reason: revokeSessionsReason.trim() });
+      });
       showToast('Sesiones revocadas');
       setRevokeSessionsMember(null);
-      await load();
     } catch (error) {
       setActionError(mutationError(error, 'No se pudieron revocar las sesiones. Revisá tu conexión e intentá de nuevo.'));
     } finally {
@@ -301,14 +433,14 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setInviteLoading(true);
     setInviteError(null);
     try {
-      const data = await api.createInvitation(token, {
+      await mutation.mutateAsync(async () => {
+        const data = await api.createInvitation(token, {
           email: inviteEmail.trim(),
           roles: inviteRoles,
+        });
+        setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
       });
-      const fullUrl = `${window.location.origin}${data.accept_url}`;
-      setCreatedInviteLink(fullUrl);
       showToast('✓ Invitación creada');
-      await load();
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : 'Error al crear invitación');
     } finally {
@@ -319,12 +451,16 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const handleRevokeInvitation = async (invitation: Invitation) => {
     if (!revokeReason.trim()) return;
     setActionId(invitation.id);
+    setActionError(null);
     try {
-      await api.revokeInvitation(token, invitation.id, invitation.version, { reason: revokeReason.trim() });
+      await mutation.mutateAsync(async () => {
+        await api.revokeInvitation(token, invitation.id, invitation.version, { reason: revokeReason.trim() });
+      });
       showToast('✓ Invitación revocada');
       setRevokeInvitation(null);
       setRevokeReason('');
-      await load();
+    } catch (error) {
+      setActionError(mutationError(error, 'No se pudo revocar la invitación. Actualizá la lista e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
@@ -332,25 +468,33 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
 
   const handleResendInvitation = async (invitation: Invitation) => {
     setActionId(invitation.id);
+    setActionError(null);
     try {
-      const data = await api.resendInvitation(token, invitation.id, invitation.version);
-      setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+      await mutation.mutateAsync(async () => {
+        const data = await api.resendInvitation(token, invitation.id, invitation.version);
+        setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+      });
       setShowInviteModal(true);
       showToast('✓ Enlace rotado. El enlace anterior ya no sirve.');
-      await load();
-    } catch {
-      showToast('No se pudo reenviar la invitación');
+    } catch (error) {
+      setActionError(mutationError(error, 'No se pudo reenviar la invitación. Actualizá la lista e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
   };
 
-  const handleCopyInviteLink = () => {
+  const handleCopyInviteLink = async () => {
     if (!createdInviteLink) return;
-    void navigator.clipboard.writeText(createdInviteLink);
-    setCopiedLink(true);
-    showToast('✓ Enlace copiado al portapapeles');
-    setTimeout(() => setCopiedLink(false), 3000);
+    setActionError(null);
+    try {
+      await navigator.clipboard.writeText(createdInviteLink);
+      setCopiedLink(true);
+      showToast('✓ Enlace copiado al portapapeles');
+      setTimeout(() => setCopiedLink(false), 3000);
+    } catch {
+      setCopiedLink(false);
+      setActionError('No se pudo copiar el enlace. Seleccionalo y copialo manualmente.');
+    }
   };
 
   const roleChips = (u: UserRow) => {
@@ -394,8 +538,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             type="button"
             className="btn btn--secondary btn--small"
             aria-label="Recargar usuarios"
-            onClick={() => void load()}
-            disabled={loading}
+            onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.root })}
+            disabled={teamQuery.isFetching || invitationsQuery.isFetching}
           >
             <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" /> Actualizar
           </button>
@@ -448,7 +592,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           title="No se pudo cargar el equipo"
           description={loadError}
           actionLabel="Reintentar"
-          onAction={() => void load()}
+          onAction={() => void queryClient.invalidateQueries({ queryKey: queryKeys.root })}
         />
       ) : filter === 'invitations' ? (
         /* INVITATIONS VIEW */
@@ -457,7 +601,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             title="No se pudieron cargar las invitaciones"
             description={invitationLoadError}
             actionLabel="Reintentar"
-            onAction={() => void load()}
+            onAction={() => void queryClient.invalidateQueries({ queryKey: queryKeys.root })}
           />
         ) : invitations.length === 0 ? (
           <EmptyState
@@ -575,9 +719,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                           className="btn btn--ghost btn--small"
                           onClick={() => {
                             setRoleEditUser(u);
-                            const initialRoles = u.roles.length > 0
-                              ? (u.roles as ProductRole[])
-                              : ['user' as ProductRole];
+                            const normalizedRoles = u.roles.filter(isValidUserRole);
+                            const initialRoles: ProductRole[] = normalizedRoles.length > 0
+                              ? normalizedRoles
+                              : ['user'];
                             setSelectedRoles(initialRoles);
                           }}
                           disabled={isWorking}
@@ -622,6 +767,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
                             <MinusCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Suspender membresía
                           </button>
                         ) : null}
+                        {u.membership_status === 'active' && canManageMember ? <button type="button" className="btn btn--ghost btn--small" disabled={isWorking} onClick={() => { setOffboardMember(u); setOffboardReason(''); void loadOffboardingPreview(u); }} aria-label={`Finalizar acceso de ${u.name || u.email}`}>Finalizar acceso</button> : null}
                         {canRevokeSessions ? <button
                           type="button"
                           className="btn btn--ghost btn--small"
@@ -684,6 +830,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
               );
             })}
           </div>
+
+          <RolePermissionPreview roles={selectedRoles} organizationType={orgType} />
 
           <div className="users-modal-actions">
             <button type="button" className="btn btn--secondary" onClick={() => setRoleEditUser(null)}>
@@ -878,6 +1026,27 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           </div>
         </div>
       </Modal>
+
+      <AdminTransferModal
+        source={transferSource}
+        candidates={transferCandidates}
+        targetId={transferTargetId}
+        reason={transferReason}
+        error={transferError}
+        busy={actionId === transferSource?.membership_id || transferNeedsReload}
+        onTargetChange={setTransferTargetId}
+        onReasonChange={setTransferReason}
+        onClose={() => setTransferSource(null)}
+        onReload={() => void reloadAdminTransfer()}
+        onConfirm={() => void confirmAdminTransfer()}
+      />
+
+      <TeamOffboardingModal
+        member={offboardMember} preview={offboardPreview} candidates={users.filter((member) => member.membership_id !== offboardMember?.membership_id && member.membership_status === 'active' && member.account_status === 'active')}
+        reason={offboardReason} plan={offboardPlan} error={offboardError} loading={offboardLoading}
+        onReasonChange={setOffboardReason} onPlanChange={(field, membershipId) => setOffboardPlan((current) => ({ ...current, [field]: membershipId }))}
+        onReload={() => void recoverOffboardingPreview()} onClose={() => setOffboardMember(null)} onConfirm={() => void confirmOffboarding()}
+      />
 
     </div>
   );

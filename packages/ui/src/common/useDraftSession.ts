@@ -17,8 +17,8 @@
  *   write sessionStorage. Use on close/reset so an empty draft never sticks
  *   under the entity key after clearDraft (JD R4-C1 race).
  *
- * The hook is intentionally simple — it does NOT parse JSON shape; the caller
- * passes the same T both ways. sessionStorage values are JSON.stringify'd.
+ * Persisted JSON is validated structurally against the editor baseline before
+ * it can enter React state. Editors may provide a stricter typed validator.
  *
  * Keys should be namespaced per entity, e.g.:
  *   'module-draft:new'           for /modules/new/edit
@@ -31,11 +31,78 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
-function readSession<T>(key: string): T | null {
+export type DraftSessionValidator<T> = (value: unknown) => value is T;
+export type DraftEntityKind = 'module' | 'structure' | 'component' | 'agregado';
+
+export const DRAFT_SESSION_REGISTRY_KEY = 'granete:entity-drafts:v1';
+type DraftRegistryEntry = { readonly key: string; readonly baseline: unknown };
+type UntypedDraftValidator = (value: unknown) => boolean;
+const draftValidators = new Map<string, UntypedDraftValidator>();
+let resolveDraftScope = () => 'unscoped';
+export const registerDraftSessionScope = (resolve: () => string): void => { resolveDraftScope = resolve; };
+export const draftSessionKey = (kind: DraftEntityKind, id: string): string =>
+  `draft:${resolveDraftScope()}:${kind}:${id}`;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+function structurallyMatches<T>(value: unknown, baseline: T): value is T {
+  if (Array.isArray(baseline)) return Array.isArray(value) && (baseline.length === 0
+    ? value.length === 0 : value.every((item) => structurallyMatches(item, baseline[0])));
+  if (isRecord(baseline)) return isRecord(value) && Object.entries(baseline).every(
+    ([key, expected]) => expected === undefined ? !(key in value)
+      : key in value && structurallyMatches(value[key], expected));
+  return baseline === null ? value === null : typeof value === typeof baseline;
+}
+
+function readRegistry(): DraftRegistryEntry[] {
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(DRAFT_SESSION_REGISTRY_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.flatMap((entry): DraftRegistryEntry[] =>
+      isRecord(entry) && typeof entry.key === 'string' && 'baseline' in entry
+        ? [{ key: entry.key, baseline: entry.baseline }] : []) : [];
+  } catch { return []; }
+}
+function writeRegistry(entries: readonly DraftRegistryEntry[]): void {
+  try { sessionStorage.setItem(DRAFT_SESSION_REGISTRY_KEY, JSON.stringify(entries)); } catch { /* unavailable */ }
+}
+export function registerDraftSessionBaseline(key: string, baseline: unknown, validator?: UntypedDraftValidator): void {
+  if (validator) draftValidators.set(key, validator);
+  writeRegistry([...readRegistry().filter((entry) => entry.key !== key), { key, baseline }]);
+}
+function unregisterDraftSession(key: string): void {
+  draftValidators.delete(key);
+  writeRegistry(readRegistry().filter((entry) => entry.key !== key));
+}
+export function hasDirtyDraftSessions(): boolean {
+  return readRegistry().some(({ key, baseline }) => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return false;
+      const value: unknown = JSON.parse(raw);
+      const validator = draftValidators.get(key);
+      return (validator ? validator(value) : structurallyMatches(value, baseline))
+        && JSON.stringify(value) !== JSON.stringify(baseline);
+    } catch { return false; }
+  });
+}
+export function clearRegisteredDraftSessions(): void {
+  try {
+    for (const { key } of readRegistry()) sessionStorage.removeItem(key);
+    sessionStorage.removeItem(DRAFT_SESSION_REGISTRY_KEY);
+    draftValidators.clear();
+  } catch { /* unavailable */ }
+}
+
+function readSession<T>(
+  key: string,
+  baseline: T,
+  validator?: DraftSessionValidator<T>,
+): T | null {
   try {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw) as T;
+    const parsed: unknown = JSON.parse(raw);
+    if (validator) return validator(parsed) ? parsed : null;
+    return structurallyMatches(parsed, baseline) ? parsed : null;
   } catch {
     return null;
   }
@@ -46,8 +113,12 @@ function readSession<T>(key: string): T | null {
  * Used by editor seed effects so F5/remount restore is not wiped by
  * entity→draft reseeding (JD R3-C1).
  */
-export function readDraftSession<T>(key: string): T | null {
-  return readSession<T>(key);
+export function readDraftSession<T>(
+  key: string,
+  baseline: T,
+  validator?: DraftSessionValidator<T>,
+): T | null {
+  return readSession(key, baseline, validator);
 }
 
 /**
@@ -60,9 +131,11 @@ export function seedEditorDraftFromBaseline<T>(
   baseline: T,
   setDraft: (next: T) => void,
   setInitialDraft: (next: T) => void,
+  validator?: DraftSessionValidator<T>,
 ): void {
+  registerDraftSessionBaseline(draftKey, baseline);
   setInitialDraft(baseline);
-  if (readSession(draftKey) === null) {
+  if (readSession(draftKey, baseline, validator) === null) {
     setDraft(baseline);
   }
 }
@@ -78,6 +151,7 @@ function writeSession<T>(key: string, value: T): void {
 function removeSession(key: string): void {
   try {
     sessionStorage.removeItem(key);
+    unregisterDraftSession(key);
   } catch {
     // ignore
   }
@@ -86,14 +160,16 @@ function removeSession(key: string): void {
 export function useDraftSession<T>(
   key: string,
   initialDraft: T,
+  validator?: DraftSessionValidator<T>,
 ): readonly [
   T,
   Dispatch<SetStateAction<T>>,
   () => void,
   Dispatch<SetStateAction<T>>,
 ] {
+  if (validator) draftValidators.set(key, validator);
   const [state, setState] = useState<T>(() => {
-    const persisted = readSession<T>(key);
+    const persisted = readSession(key, initialDraft, validator);
     if (persisted !== null) return persisted;
     return initialDraft;
   });
@@ -104,21 +180,22 @@ export function useDraftSession<T>(
   // detect a real change).
   const keyRef = useRef(key);
 
+  useEffect(() => {
+    registerDraftSessionBaseline(key, initialDraft, validator);
+  }, [key]);
+
   // When the key changes (e.g. navigating from /new/edit to /:id/edit), reload
   // from sessionStorage. This lets the same hook instance back multiple editor
   // entries without forcing a component remount.
   useEffect(() => {
     if (keyRef.current === key) return; // first mount or no change
     keyRef.current = key;
-    const persisted = readSession<T>(key);
+    const persisted = readSession(key, initialDraft, validator);
     if (persisted !== null) {
       setState(persisted);
     } else {
       setState(initialDraft);
     }
-    // We intentionally only depend on `key`. initialDraft is captured at the
-    // moment the key changes; that's what callers expect (e.g. fresh empty
-    // draft for 'new', or moduleToDraft(item) for an existing entity).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

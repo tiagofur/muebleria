@@ -41,6 +41,7 @@ import {
   Users,
   Palette,
   BarChart3,
+  Building2,
   ClipboardList,
   TrendingUp,
   Warehouse,
@@ -48,6 +49,8 @@ import {
 } from 'lucide-react';
 import { roleLabelEs } from '@granete/domain';
 import { BrandMark } from '../common/BrandMark';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import { hasDirtyDraftSessions } from '../common/useDraftSession';
 import {
   CommandPalette,
   useCommandPaletteHotkey,
@@ -89,6 +92,20 @@ export type AppShellSessionUser = {
   readonly email: string;
   /** Optional since users.role was dropped (000090); the label falls back. */
   readonly role?: string;
+  readonly roles?: readonly string[];
+};
+
+export type AppShellOrganization = {
+  readonly id: string;
+  readonly name: string;
+  readonly type: 'factory' | 'store' | 'dealer';
+  readonly status: 'provisioning' | 'active' | 'suspended' | 'offboarding' | 'terminated' | 'provisioning_failed';
+  readonly license: { readonly plan: string; readonly status: string };
+};
+
+export type AppShellOrganizationChoice = {
+  readonly status: string;
+  readonly organization: AppShellOrganization;
 };
 
 export type AppShellProps = {
@@ -107,7 +124,13 @@ export type AppShellProps = {
   /** Auth user for topbar identity (email + role). Guest leaves this unset. */
   readonly user?: AppShellSessionUser | null;
   /** Session mode for badge: auth vs guest (invitado). */
-  readonly sessionMode?: 'auth' | 'guest';
+  readonly sessionMode?: 'auth' | 'support' | 'guest';
+  readonly organization?: AppShellOrganization | null;
+  readonly organizationChoices?: readonly AppShellOrganizationChoice[];
+  readonly organizationSwitchLoading?: boolean;
+  readonly organizationSwitchError?: string | null;
+  readonly onOrganizationChoicesRefresh?: () => Promise<void> | void;
+  readonly onOrganizationChange?: (organizationId: string) => Promise<void> | void;
   /** Admin-only: show «Usuarios» under CONFIG (registration approval). */
   readonly showAdminUsers?: boolean;
   /** Role-filtered nav ids (F035). When set, filters APP_NAV_SECTIONS. */
@@ -454,6 +477,12 @@ export function AppShell({
   onLogout,
   user = null,
   sessionMode,
+  organization = null,
+  organizationChoices = [],
+  organizationSwitchLoading = false,
+  organizationSwitchError = null,
+  onOrganizationChoicesRefresh,
+  onOrganizationChange,
   showAdminUsers = false,
   allowedNavIds,
   navMode,
@@ -470,6 +499,38 @@ export function AppShell({
     allowedNavIds,
     navMode,
   });
+  const activeOrganizationChoices = organizationChoices.filter(
+    (choice) => choice.status === 'active' && choice.organization.status === 'active',
+  );
+  const roleLabels = [...new Set(user?.roles ?? (user?.role ? [user.role] : []))].map(roleLabelEs);
+  const [pendingOrganizationId, setPendingOrganizationId] = useState<string | null>(null);
+
+  const requestOrganizationChange = useCallback((organizationId: string) => {
+    if (!onOrganizationChange || organizationId === organization?.id) return;
+    if (hasDirtyDraftSessions()) {
+      setPendingOrganizationId(organizationId);
+      return;
+    }
+    void onOrganizationChange(organizationId);
+  }, [onOrganizationChange, organization?.id]);
+
+  const confirmOrganizationChange = useCallback(() => {
+    if (pendingOrganizationId && onOrganizationChange) {
+      void onOrganizationChange(pendingOrganizationId);
+    }
+    setPendingOrganizationId(null);
+  }, [onOrganizationChange, pendingOrganizationId]);
+
+  const organizationTypeLabel = organization?.type === 'factory' ? 'Fábrica'
+    : organization?.type === 'store' ? 'Tienda' : 'Distribuidor';
+  const organizationStatusLabel = organization ? ({
+    provisioning: 'Aprovisionando', active: 'Activa', suspended: 'Suspendida',
+    offboarding: 'En cierre', terminated: 'Terminada', provisioning_failed: 'Aprovisionamiento fallido',
+  } as const)[organization.status] : '';
+  const licenseStatusLabel = organization?.license.status === 'active' ? 'Licencia activa'
+    : organization?.license.status === 'expired' ? 'Licencia vencida'
+      : organization?.license.status === 'none' ? 'Sin licencia'
+        : `Licencia ${organization?.license.status ?? 'sin verificar'}`;
 
   // Persist sidebar scroll position across navigations: save on unmount,
   // restore on re-mount so the user never loses their scroll place.
@@ -700,6 +761,43 @@ export function AppShell({
           <p className="app-topbar__area" data-area={areaId ?? undefined}>{areaLabel}</p>
           {meta ? <p className="app-topbar__meta">{meta}</p> : null}
           <div className="app-topbar__actions">
+            {sessionMode !== 'guest' && organization ? (
+              <div className="app-topbar__organization" aria-label="Organización activa">
+                <Building2 size={16} strokeWidth={1.5} aria-hidden />
+                <span className="app-topbar__organization-text">
+                  <strong>{organization.name}</strong>
+                  <span>{organizationTypeLabel} · {organizationStatusLabel} · Plan {organization.license.plan} · {licenseStatusLabel}</span>
+                </span>
+                {sessionMode === 'auth' && activeOrganizationChoices.length > 1 && onOrganizationChange ? (
+                  <select
+                    aria-label="Cambiar organización"
+                    value={organization.id}
+                    disabled={organizationSwitchLoading}
+                    onChange={(event) => requestOrganizationChange(event.target.value)}
+                  >
+                    {activeOrganizationChoices.map((choice) => (
+                      <option key={choice.organization.id} value={choice.organization.id}>{choice.organization.name}</option>
+                    ))}
+                  </select>
+                ) : null}
+                {organizationSwitchLoading ? <span role="status">Cambiando…</span> : null}
+              </div>
+            ) : null}
+            {organizationSwitchError ? (
+              <span className="app-topbar__switch-error" role="alert">
+                {organizationSwitchError}
+                {onOrganizationChoicesRefresh ? (
+                  <button
+                    type="button"
+                    className="btn btn--small btn--ghost"
+                    disabled={organizationSwitchLoading}
+                    onClick={() => void onOrganizationChoicesRefresh()}
+                  >
+                    Actualizar talleres
+                  </button>
+                ) : null}
+              </span>
+            ) : null}
             <button
               type="button"
               className="app-topbar__search-trigger"
@@ -726,7 +824,7 @@ export function AppShell({
                 </span>
               </div>
             ) : null}
-            {sessionMode === 'auth' && user ? (
+            {(sessionMode === 'auth' || sessionMode === 'support') && user ? (
               <div
                 className="app-topbar__identity"
                 data-testid="app-session-identity"
@@ -736,9 +834,10 @@ export function AppShell({
                 <span className="app-topbar__identity-text">
                   <span className="app-topbar__identity-name">{user.email}</span>
                   <span className="app-topbar__identity-role">
-                    {user.role ? roleLabelEs(user.role) : 'Miembro'}
+                    {roleLabels.length > 0 ? roleLabels.join(' · ') : 'Miembro'}
                   </span>
                 </span>
+                <span className="app-topbar__mode">{sessionMode === 'support' ? 'Soporte' : 'Sesión normal'}</span>
               </div>
             ) : null}
             {onLogout ? (
@@ -757,6 +856,15 @@ export function AppShell({
 
         <main className="app-content">{children}</main>
       </div>
+
+      <ConfirmDialog
+        open={pendingOrganizationId !== null}
+        onClose={() => setPendingOrganizationId(null)}
+        title="Cambiar de organización"
+        message="Tenés cambios sin guardar. Si cambiás de organización, esos borradores se descartarán después de confirmar el cambio."
+        confirmLabel="Descartar y cambiar"
+        onConfirm={confirmOrganizationChange}
+      />
 
       <CommandPalette
         open={paletteOpen}

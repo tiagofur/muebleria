@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -78,6 +79,41 @@ jobs:
 
       - name: Run Tests
         run: pnpm test
+
+  organization-browser:
+    name: Organization Browser Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: backend-go/go.sum
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run mocked organization switch gate
+        run: pnpm exec playwright test --config=playwright.config.ts tests/smoke/organization-switch.spec.ts --workers=1 --retries=0 --trace=off
+
+      - name: Run real organization browser gate
+        run: pnpm test:organization:browser
 
   sketchup-extension:
     name: SketchUp Extension (Ruby, ${{ matrix.os }})

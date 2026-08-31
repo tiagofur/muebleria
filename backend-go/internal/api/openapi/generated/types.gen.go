@@ -14,6 +14,7 @@ const (
 	ApiErrorCodeInternalError                  ApiErrorCode = "INTERNAL_ERROR"
 	ApiErrorCodePreconditionRequired           ApiErrorCode = "PRECONDITION_REQUIRED"
 	ApiErrorCodeMembershipNotFound             ApiErrorCode = "MEMBERSHIP_NOT_FOUND"
+	ApiErrorCodeMembershipNotSelectable        ApiErrorCode = "MEMBERSHIP_NOT_SELECTABLE"
 	ApiErrorCodeMembershipVersionConflict      ApiErrorCode = "MEMBERSHIP_VERSION_CONFLICT"
 	ApiErrorCodeRoleNotAllowed                 ApiErrorCode = "ROLE_NOT_ALLOWED"
 	ApiErrorCodeLastAdmin                      ApiErrorCode = "LAST_ADMIN"
@@ -135,12 +136,26 @@ type SupportInfo struct {
 	Reason         string `json:"reason"`
 }
 
+type SessionScope struct {
+	UserID                        string  `json:"user_id"`
+	MembershipID                  *string `json:"membership_id"`
+	OrganizationID                *string `json:"organization_id"`
+	Mode                          string  `json:"mode"`
+	SupportSessionID              *string `json:"support_session_id"`
+	RecoverySessionID             *string `json:"recovery_session_id"`
+	MembershipCredentialVersion   *int64  `json:"membership_credential_version"`
+	OrganizationCredentialVersion *int64  `json:"organization_credential_version"`
+	AbsoluteExpiresAt             string  `json:"absolute_expires_at"`
+}
+
 type MeResponse struct {
 	User         User                 `json:"user"`
 	Roles        []string             `json:"roles"`
+	Memberships  []Membership         `json:"memberships"`
 	Organization *OrganizationSummary `json:"organization,omitempty"`
 	Support      *SupportInfo         `json:"support,omitempty"`
 	Transport    AuthTransport        `json:"transport"`
+	SessionScope SessionScope         `json:"session_scope"`
 }
 
 type TeamMember struct {

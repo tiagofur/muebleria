@@ -2,14 +2,18 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // F170 / #325: login with organization context — membership resolution,
@@ -46,6 +50,16 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 		},
 	}
 	return &Server{Store: st, JWTSecret: "unit-test-secret-0123456789abcdef"}, st
+}
+
+type selectOrgTenantActorStore struct {
+	*stubStore
+	actor storage.TenantActor
+}
+
+func (s *selectOrgTenantActorStore) SetTenantActor(ctx context.Context, actor storage.TenantActor) (context.Context, error) {
+	s.actor = actor
+	return ctx, nil
 }
 
 func doLogin(t *testing.T, s *Server, payload map[string]string) *httptest.ResponseRecorder {
@@ -128,6 +142,92 @@ func TestLogin_NoMembershipNoPlatform(t *testing.T) {
 	}
 }
 
+func TestMe_EmitsAuthoritativeSessionScope(t *testing.T) {
+	server, st := loginTestServer(t)
+	suspended := orgTestMembership("u1", "org-suspended", "suspended", []domain.UserRole{domain.RoleAdmin})
+	suspended.Status = domain.MembershipStatusSuspended
+	st.membershipsByUser["u1"] = append(st.membershipsByUser["u1"], suspended)
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-2", MembershipID: "u1:org-2",
+		MembershipCredentialVersion: 4, OrganizationCredentialVersion: 7,
+	}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
+	rec := httptest.NewRecorder()
+
+	server.HandleMe(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response openapi.MeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	scope := response.SessionScope
+	if scope.UserID != "u1" || scope.MembershipID == nil || *scope.MembershipID != "u1:org-2" ||
+		scope.OrganizationID == nil || *scope.OrganizationID != "org-2" || scope.Mode != "auth" ||
+		scope.MembershipCredentialVersion == nil || *scope.MembershipCredentialVersion != 4 ||
+		scope.OrganizationCredentialVersion == nil || *scope.OrganizationCredentialVersion != 7 ||
+		scope.AbsoluteExpiresAt == "" {
+		t.Fatalf("unexpected session scope: %+v", scope)
+	}
+	if len(response.Memberships) != 2 {
+		t.Fatalf("selectable memberships = %d, want only 2 active choices", len(response.Memberships))
+	}
+	for _, membership := range response.Memberships {
+		if membership.Status != openapi.MembershipStatusActive || membership.Organization.Status != openapi.OrganizationStatusActive {
+			t.Fatalf("non-selectable membership exposed: %+v", membership)
+		}
+	}
+}
+
+func TestMe_SeparatesSupportScopeFromMembershipScope(t *testing.T) {
+	server, st := loginTestServer(t)
+	st.getUserByEmail.PlatformAdmin = true
+	st.membershipsByUser = nil
+	st.getOrgByID = &domain.Organization{
+		ID: "org-2", Name: "Support target", Slug: "support-target", Type: domain.OrganizationTypeFactory,
+		Status: domain.OrganizationStatusActive, CredentialVersion: 9,
+	}
+	token, err := auth.GenerateSupportToken("u1", "u@example.com", auth.SupportClaims{
+		OrgID: "org-2", SessionID: "support-1", OrganizationCredentialVersion: 9, Reason: "investigation",
+	}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
+	rec := httptest.NewRecorder()
+	server.HandleMe(rec, req)
+
+	var response openapi.MeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	scope := response.SessionScope
+	if rec.Code != http.StatusOK || scope.Mode != "support" || scope.SupportSessionID == nil ||
+		*scope.SupportSessionID != "support-1" || scope.MembershipID != nil ||
+		scope.MembershipCredentialVersion != nil || scope.OrganizationCredentialVersion == nil ||
+		*scope.OrganizationCredentialVersion != 9 {
+		t.Fatalf("unexpected support scope: status=%d scope=%+v", rec.Code, scope)
+	}
+	if response.Organization == nil || response.Organization.ID != "org-2" || len(response.Memberships) != 0 {
+		t.Fatalf("support target snapshot must not require actor membership: organization=%+v memberships=%+v", response.Organization, response.Memberships)
+	}
+}
+
 func TestSelectOrg_IssuesScopedToken(t *testing.T) {
 	server, _ := loginTestServer(t)
 
@@ -158,6 +258,25 @@ func TestSelectOrg_IssuesScopedToken(t *testing.T) {
 	}
 }
 
+func TestSelectOrg_ScopesValidatedSelectionBeforeAudit(t *testing.T) {
+	server, stub := loginTestServer(t)
+	store := &selectOrgTenantActorStore{stubStore: stub}
+	server.Store = store
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || store.actor.OrganizationID != "org-1" || store.actor.UserID != "u1" {
+		t.Fatalf("status=%d actor=%+v", rec.Code, store.actor)
+	}
+}
+
 func TestSelectOrg_RejectsForeignOrganization(t *testing.T) {
 	server, _ := loginTestServer(t)
 	token, _ := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
@@ -169,6 +288,45 @@ func TestSelectOrg_RejectsForeignOrganization(t *testing.T) {
 	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("foreign org: expected 403, got %d", rec.Code)
+	}
+	var apiError openapi.ApiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &apiError); err != nil {
+		t.Fatal(err)
+	}
+	if apiError.Code != openapi.ApiErrorCodeMembershipNotSelectable {
+		t.Fatalf("foreign org code = %s, want MEMBERSHIP_NOT_SELECTABLE", apiError.Code)
+	}
+}
+
+func TestSelectOrg_InternalMembershipFailureIsNotRevoked(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		configure func(*stubStore)
+	}{
+		{name: "store error", configure: func(store *stubStore) { store.getActiveMembershipErr = errors.New("membership scan failed") }},
+		{name: "empty store result", configure: func(store *stubStore) { store.getActiveMembershipEmpty = true }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, store := loginTestServer(t)
+			test.configure(store)
+			token, _ := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+			body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusInternalServerError {
+				t.Fatalf("internal membership failure: expected 500, got %d", rec.Code)
+			}
+			var apiError openapi.ApiError
+			if err := json.Unmarshal(rec.Body.Bytes(), &apiError); err != nil {
+				t.Fatal(err)
+			}
+			if apiError.Code != openapi.ApiErrorCodeInternalError || bytes.Contains(rec.Body.Bytes(), []byte(`"token"`)) || bytes.Contains(rec.Body.Bytes(), []byte(`"selection_required"`)) {
+				t.Fatalf("internal membership failure returned code %s or selection token", apiError.Code)
+			}
+		})
 	}
 }
 

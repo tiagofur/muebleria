@@ -4,6 +4,8 @@
 
 import type { DimensionPreset, ModuleAgregadoInstance, Structure } from '@granete/domain';
 import type { ComponentInstanceDraft } from '../modules';
+import { arrayRule, booleanRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
+import { agregadoInstanceDraftRule, componentInstanceDraftRule } from '../modules/helpers/moduleDraftTransforms';
 
 /**
  * Tab order: General → Componentes → Agregados → Presets.
@@ -53,6 +55,13 @@ export function emptyStructureDraft(): StructureDraft {
   };
 }
 
+const structureDraftRule = objectRule({
+  ...stringFields('code', 'name', 'notes'), widthMm: numberRule, heightMm: numberRule, depthMm: numberRule,
+  presets: arrayRule(objectRule({ id: stringRule, name: optionalRule(stringRule), width: numberRule, height: numberRule, depth: numberRule })),
+  components: arrayRule(componentInstanceDraftRule), agregados: arrayRule(agregadoInstanceDraftRule), active: booleanRule,
+});
+export function isStructureDraft(value: unknown): value is StructureDraft { return structureDraftRule(value); }
+
 export function structureToDraft(item: Structure): StructureDraft {
   return {
     code: item.code,
@@ -67,7 +76,7 @@ export function structureToDraft(item: Structure): StructureDraft {
       ? item.components.map((c) => ({
           componentId: c.componentId,
           quantity: c.quantity,
-          placementOverride: c.placementOverride ?? '',
+          placementOverride: c.placementOverride,
           overrides: c.overrides,
         }))
       : [],

@@ -23,6 +23,7 @@ import type {
 } from '@granete/domain';
 import {
   EntityEditorLayout,
+  draftSessionKey,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
@@ -33,6 +34,7 @@ import {
   createEmptyAgregadoDraft,
   agregadoToDraft,
   draftToAgregado,
+  isAgregadoDraft,
   type AgregadoDraft,
 } from './agregadoDraft';
 import { AgregadoListView } from './editor/AgregadoListView';
@@ -87,7 +89,7 @@ export function AgregadosScreen({
     knownIds: agregadoIds,
   });
 
-  const draftKey = 'agregado-draft:editor';
+  const draftKey = draftSessionKey('agregado', expandedId ?? 'new');
   const {
     modalOpen,
     setModalOpen,
@@ -108,6 +110,7 @@ export function AgregadosScreen({
   } = useEntityEditorState<AgregadoDraft, AgregadoEditorTab>({
     draftKey,
     emptyDraft: createEmptyAgregadoDraft,
+    draftValidator: isAgregadoDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
       onSelectionChange?.(restoreId);
@@ -151,7 +154,7 @@ export function AgregadosScreen({
 
   const handleCreateNew = () => {
     const fresh = createEmptyAgregadoDraft();
-    seedEditorDraftFromBaseline(draftKey, fresh, setDraft, setInitialDraft);
+    seedEditorDraftFromBaseline(draftKey, fresh, setDraft, setInitialDraft, isAgregadoDraft);
     setEditingId(null);
     setEditorTab('general');
     setError(null);
@@ -161,7 +164,7 @@ export function AgregadosScreen({
 
   const handleEdit = (item: Agregado) => {
     const fresh = agregadoToDraft(item);
-    seedEditorDraftFromBaseline(draftKey, fresh, setDraft, setInitialDraft);
+    seedEditorDraftFromBaseline(draftKey, fresh, setDraft, setInitialDraft, isAgregadoDraft);
     setEditingId(item.id);
     setEditorTab('general');
     setError(null);

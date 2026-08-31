@@ -261,6 +261,8 @@ import {
   structureEditIdFromPath,
   type EntitySection,
 } from './routes';
+import { organizationKeys } from './shared/query/queryKeys';
+import type { SessionScope } from './shared/query/sessionScope';
 import {
   clearSession,
   DEFAULT_API_BASE,
@@ -313,7 +315,7 @@ import type {
 import type { AmbientMaterialDraft } from '@granete/ui';
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
-import type { AuthUser } from './session';
+import type { AuthUser, MembershipChoice, OrgSummary } from './session';
 import type { AssignableOwner } from './stores/workspaceStore';
 import type { StockCatalogView } from './derivations/stockCatalog';
 import type { ProjectState } from './stores/projectStore';
@@ -325,6 +327,12 @@ export interface ShellViewCtx {
   readonly actorRole: string | null | undefined;
   /** Multi-role union (ADR-0005) — gates must use this, not actorRole. */
   readonly actorRoles: readonly string[];
+  readonly activeOrg: OrgSummary | null;
+  readonly organizationChoices: readonly MembershipChoice[];
+  readonly organizationSwitchLoading: boolean;
+  readonly organizationSwitchError: string | null;
+  readonly refreshOrganizationChoices?: () => Promise<void>;
+  readonly selectOrg: (organizationId: string) => Promise<void>;
   readonly addProjectItem: (projectId: string, input: { readonly moduleId: string; readonly quantity: number; readonly optionChoices: OptionChoices; readonly measurePresetId?: string | undefined; readonly baseMode?: ModuleBaseMode | undefined; }) => string | undefined;
   readonly agregados: readonly Agregado[];
   readonly allowedNavIds: ReadonlySet<string>;
@@ -336,6 +344,7 @@ export interface ShellViewCtx {
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly assignableOwners: readonly AssignableOwner[];
   readonly authToken: string | null;
+  readonly sessionScope: SessionScope | null;
   /** Active organization type (factory/store/dealer) — org-type role gates. */
   readonly orgType: string | null | undefined;
   readonly authUser: AuthUser | null;
@@ -607,6 +616,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     acquirePlanEditSession,
     actorRole,
     actorRoles,
+    activeOrg,
+    organizationChoices,
+    organizationSwitchLoading,
+    organizationSwitchError,
+    refreshOrganizationChoices,
+    selectOrg,
     addProjectItem,
     agregados,
     allowedNavIds,
@@ -617,6 +632,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     applyScenarioB,
     assignableOwners,
     authToken,
+    sessionScope,
     authUser,
     orgType,
     backendBreakdown,
@@ -888,7 +904,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       onNavigate={onNavigate}
       hrefForNav={pathForNav}
       onLogout={onLogout}
-      sessionMode={session}
+      sessionMode={sessionScope?.mode === 'support' ? 'support' : session}
+      organization={activeOrg}
+      organizationChoices={organizationChoices}
+      organizationSwitchLoading={organizationSwitchLoading}
+      organizationSwitchError={organizationSwitchError}
+      onOrganizationChoicesRefresh={refreshOrganizationChoices}
+      onOrganizationChange={selectOrg}
       user={
         authUser
           ? {
@@ -896,6 +918,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               // N9: user.role is gone (000090) — label the union's first role
               // with the legacy single role as fallback for stale sessions.
               role: actorRoles[0] ?? authUser.role,
+              roles: actorRoles,
             }
           : null
       }
@@ -1652,12 +1675,20 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         />
       ) : null}
 
-      {navId === 'users' && showAdminUsers && authToken ? (
+      {navId === 'users' && showAdminUsers && authToken && sessionScope ? (
         <UsersScreen
+          key={JSON.stringify(organizationKeys.all(sessionScope))}
           baseUrl={DEFAULT_API_BASE}
           token={authToken}
           orgType={orgType}
+          queryKeys={{
+            root: organizationKeys.all(sessionScope),
+            team: organizationKeys.team(sessionScope),
+            invitations: organizationKeys.invitations(sessionScope),
+          }}
         />
+      ) : navId === 'users' && showAdminUsers && authToken ? (
+        <PageLoading label="Validando sesión del taller…" />
       ) : null}
       {navId === 'platform' && isPlatformAdmin && authToken ? (
         <PlatformScreen

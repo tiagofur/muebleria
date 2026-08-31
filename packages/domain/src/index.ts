@@ -138,7 +138,7 @@ export {
 } from './organization';
 export type { OrganizationType } from './organization';
 
-export type { ProductRole, TeamCapability } from './rbac';
+export type { EffectivePermissionCategory, EffectivePermissionWarning, MembershipReassignmentField, ProductRole, TeamCapability } from './rbac';
 export {
   ASSIGNABLE_ROLES,
   PRODUCT_ROLES,
@@ -197,6 +197,8 @@ export {
   navIdsForRoles,
   rolesCanAccessNav,
   rolesCanViewCosts,
+  effectivePermissionPreviewForRoles,
+  rolesCanReceiveMembershipReassignment,
   rolesAllScopedBySector,
   rolesOfUser,
 } from './rbac';

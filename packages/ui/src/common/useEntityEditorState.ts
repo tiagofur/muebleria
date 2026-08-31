@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { useDraftSession } from './useDraftSession';
+import { useDraftSession, type DraftSessionValidator } from './useDraftSession';
 
 export interface EntityEditorState<Draft, Tab extends string> {
   // --- State ---
@@ -54,6 +54,7 @@ export interface UseEntityEditorStateOptions<
 > {
   readonly draftKey: string;
   readonly emptyDraft: () => Draft;
+  readonly draftValidator: DraftSessionValidator<Draft>;
   readonly defaultTab: Tab;
   /**
    * Called when the editor closes and needs to sync the URL selection.
@@ -69,11 +70,12 @@ export interface UseEntityEditorStateOptions<
 export function useEntityEditorState<Draft, Tab extends string>(
   options: UseEntityEditorStateOptions<Draft, Tab>,
 ): EntityEditorState<Draft, Tab> {
-  const { draftKey, emptyDraft, defaultTab, onEditorClose, currentSelectionId } = options;
+  const { draftKey, emptyDraft, draftValidator, defaultTab, onEditorClose, currentSelectionId } = options;
 
   const [draft, setDraft, clearDraft, setDraftLocal] = useDraftSession<Draft>(
     draftKey,
     emptyDraft(),
+    draftValidator,
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -261,6 +261,9 @@ func toOrgSummaryDTO(o domain.Organization) OrgSummaryDTO {
 func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
 	out := make([]MembershipDTO, 0, len(list))
 	for _, m := range list {
+		if m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive {
+			continue
+		}
 		roles := make([]string, len(m.Roles))
 		for i, role := range m.Roles {
 			roles[i] = string(role)
@@ -477,9 +480,32 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, body.OrganizationID)
-	if err != nil || m == nil || m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive || len(m.Roles) == 0 {
-		respondWithError(w, http.StatusForbidden, "no tenés membresía activa en ese taller")
+	if err != nil {
+		if !errors.Is(err, storage.ErrMembershipNotFound) {
+			respondWithInternalError(w, err, "select organization membership")
+			return
+		}
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeMembershipNotSelectable, "no tenés membresía activa en ese taller", nil)
 		return
+	}
+	if m == nil {
+		respondWithInternalError(w, errors.New("active membership lookup returned no result"), "select organization membership")
+		return
+	}
+	if m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive || len(m.Roles) == 0 {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeMembershipNotSelectable, "no tenés membresía activa en ese taller", nil)
+		return
+	}
+	if setter, ok := s.Store.(tenantActorSetter); ok {
+		ctx, err := setter.SetTenantActor(r.Context(), storage.TenantActor{
+			OrganizationID: m.OrganizationID,
+			UserID:         claims.UserID,
+		})
+		if err != nil {
+			respondWithInternalError(w, err, "select-org: set tenant actor")
+			return
+		}
+		r = r.WithContext(ctx)
 	}
 
 	roles := make([]string, len(m.Roles))
@@ -2158,15 +2184,53 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
+	if claims.ExpiresAt == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	memberships, err := s.Store.ListMembershipsByUser(r.Context(), claims.UserID)
+	if err != nil {
+		respondWithInternalError(w, err, "me: memberships")
+		return
+	}
 	transport := authTransportFromClaims(claims)
-	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Transport: transport}
+	scope := openapi.SessionScope{
+		UserID:            claims.UserID,
+		Mode:              "auth",
+		AbsoluteExpiresAt: claims.ExpiresAt.Time.UTC().Format(time.RFC3339Nano),
+	}
+	if claims.MembershipID != "" {
+		scope.MembershipID = &claims.MembershipID
+	}
 	if claims.OrgID != "" {
+		scope.OrganizationID = &claims.OrgID
+	}
+	if claims.MembershipCredentialVersion > 0 {
+		scope.MembershipCredentialVersion = &claims.MembershipCredentialVersion
+	}
+	if claims.OrganizationCredentialVersion > 0 {
+		scope.OrganizationCredentialVersion = &claims.OrganizationCredentialVersion
+	}
+	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Memberships: toMembershipDTOs(memberships), Transport: transport, SessionScope: scope}
+	if claims.Support != nil {
+		org, err := s.Store.GetOrganizationByID(r.Context(), claims.Support.OrgID)
+		if err != nil || org == nil || claims.OrgID != claims.Support.OrgID || org.ID != claims.OrgID || org.Status != domain.OrganizationStatusActive {
+			respondWithError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		summary := toOpenAPIOrganization(*org)
+		resp.Organization = &summary
+	} else if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
 			org := toOpenAPIOrganization(m.Organization)
 			resp.Organization = &org
 		}
 	}
 	if claims.Support != nil {
+		scope.Mode = "support"
+		scope.SupportSessionID = &claims.Support.SessionID
+		scope.OrganizationCredentialVersion = &claims.Support.OrganizationCredentialVersion
+		resp.SessionScope = scope
 		resp.Support = &openapi.SupportInfo{OrganizationID: claims.Support.OrgID, SessionID: claims.Support.SessionID, Reason: claims.Support.Reason}
 	}
 	respondWithJSON(w, http.StatusOK, resp)

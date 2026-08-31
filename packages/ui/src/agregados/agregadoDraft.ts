@@ -7,6 +7,8 @@ import type {
   HardwareLine,
   ModuleComponentInstance,
 } from '@granete/domain';
+import { arrayRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
+import { componentInstanceDraftRule } from '../modules/helpers/moduleDraftTransforms';
 
 export interface AgregadoDraft {
   code: string;
@@ -33,6 +35,14 @@ export function createEmptyAgregadoDraft(): AgregadoDraft {
     hardwareLines: [],
   };
 }
+
+const agregadoDraftRule = objectRule({
+  ...stringFields('code', 'name', 'description', 'notes'), widthMm: numberRule, heightMm: numberRule, depthMm: numberRule,
+  components: arrayRule(componentInstanceDraftRule), hardwareLines: arrayRule(objectRule({
+    ...stringFields('id', 'optionRole'), quantity: numberRule, descriptionOverride: optionalRule(stringRule), hardwareId: optionalRule(stringRule),
+  })),
+});
+export function isAgregadoDraft(value: unknown): value is AgregadoDraft { return agregadoDraftRule(value); }
 
 export function agregadoToDraft(a: Agregado): AgregadoDraft {
   const dims = a.externalDims ?? { width: 0, height: 0, depth: 0 };

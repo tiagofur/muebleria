@@ -15,8 +15,11 @@ import '@granete/ui/common/tabs.css';
 import '@granete/ui/common/entityCard.css';
 import '@granete/ui/common/engineeringDetail.css';
 import { App } from './App';
+import { ServerStateProvider } from './app/providers/ServerStateProvider';
 import { installAuth401Interceptor } from './auth401';
 import { installCrossTabRefresh } from './crossTabSync';
+import { installSessionSync } from './sessionSync';
+import { tenantTransition } from './shared/query/tenantTransition';
 import { useWorkspaceStore } from './stores/workspaceStore';
 import './app.css';
 
@@ -26,6 +29,11 @@ migrateLegacyStorageKeys();
 // P0-1 (pre-demo audit): 401 en endpoints de negocio ⇒ logout con el mensaje
 // de sesión expirada, nunca el toast engañoso "Error de conexión".
 installAuth401Interceptor(() => useWorkspaceStore.getState().markSessionExpired());
+
+installSessionSync(() => {
+  tenantTransition.commit();
+  window.location.reload();
+});
 
 // P0-3 (mitigación): otra pestaña mutó el catálogo ⇒ esta pestaña refresca
 // del server al volver a ella, en vez de pisar cambios con su copia vieja.
@@ -46,10 +54,12 @@ if (!rootEl) {
 
 createRoot(rootEl).render(
   <StrictMode>
-    <BrowserRouter>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </BrowserRouter>
+    <ServerStateProvider>
+      <BrowserRouter>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </BrowserRouter>
+    </ServerStateProvider>
   </StrictMode>,
 );
