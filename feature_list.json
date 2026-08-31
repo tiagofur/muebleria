@@ -5043,7 +5043,7 @@
         "docs/verification.md",
         "contracts/openapi/granete-api.v1.yaml"
       ],
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F191",
         "F192",
@@ -5053,8 +5053,10 @@
       "review_notes": [
         "PR #484: implementation head bedfad356d3e0dd859f08238492e61a058537a84 passed the full isolated harness, fresh pilot gate, direct runtime-role RLS proofs, rollback/replay/concurrency coverage and all six remote CI checks.",
         "Independent review APPROVED in e91b1d24e503b296e87536ec09657da0c6f6deca after closing Factory scope, inherited-runtime command authority and exact-target Platform readiness/entitlement reads.",
-        "PR #484 correction round: reopened after the delivered head exposed a StartSupportSession versus SuspendOrganization race, missing support-session organization epoch binding, incomplete live support-token validation, and support logout/offboarding audit/constraint gaps. A new independent review is required after correction."
-      ]
+        "PR #484 correction round: reopened after the delivered head exposed a StartSupportSession versus SuspendOrganization race, missing support-session organization epoch binding, incomplete live support-token validation, and support logout/offboarding audit/constraint gaps. A new independent review is required after correction.",
+        "PR #484 merged as 5f4eb3112e7cc967425fef413e6c543e82ebcd15 after the corrected support-session/lifecycle head completed independent review and CI; F197 is closed before starting #458."
+      ],
+      "completedAt": "2026-08-30"
     }
   ]
 }
