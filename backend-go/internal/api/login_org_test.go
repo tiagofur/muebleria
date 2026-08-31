@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -257,6 +258,45 @@ func TestSelectOrg_RejectsForeignOrganization(t *testing.T) {
 	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("foreign org: expected 403, got %d", rec.Code)
+	}
+	var apiError openapi.ApiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &apiError); err != nil {
+		t.Fatal(err)
+	}
+	if apiError.Code != openapi.ApiErrorCodeMembershipNotSelectable {
+		t.Fatalf("foreign org code = %s, want MEMBERSHIP_NOT_SELECTABLE", apiError.Code)
+	}
+}
+
+func TestSelectOrg_InternalMembershipFailureIsNotRevoked(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		configure func(*stubStore)
+	}{
+		{name: "store error", configure: func(store *stubStore) { store.getActiveMembershipErr = errors.New("membership scan failed") }},
+		{name: "empty store result", configure: func(store *stubStore) { store.getActiveMembershipEmpty = true }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, store := loginTestServer(t)
+			test.configure(store)
+			token, _ := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+			body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusInternalServerError {
+				t.Fatalf("internal membership failure: expected 500, got %d", rec.Code)
+			}
+			var apiError openapi.ApiError
+			if err := json.Unmarshal(rec.Body.Bytes(), &apiError); err != nil {
+				t.Fatal(err)
+			}
+			if apiError.Code != openapi.ApiErrorCodeInternalError || bytes.Contains(rec.Body.Bytes(), []byte(`"token"`)) || bytes.Contains(rec.Body.Bytes(), []byte(`"selection_required"`)) {
+				t.Fatalf("internal membership failure returned code %s or selection token", apiError.Code)
+			}
+		})
 	}
 }
 

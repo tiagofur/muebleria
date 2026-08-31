@@ -178,7 +178,7 @@ func scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {
 		&m.Organization.ParentOrganizationID, &m.Organization.CreatedAt, &m.Organization.UpdatedAt, &m.Organization.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("membership not found")
+			return nil, ErrMembershipNotFound
 		}
 		return nil, err
 	}

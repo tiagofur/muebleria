@@ -73,15 +73,17 @@ type stubStore struct {
 	createUserErr     error
 	listUsers         []domain.User
 	// Multi-org memberships by user (ADR-0004) for login/select-org tests.
-	membershipsByUser   map[string][]domain.MembershipWithOrg
-	listConnectedOrgs   []domain.Organization
-	getOrgByID          *domain.Organization
-	orgLicensePlan      domain.LicensePlan
-	orgLicenseExpiresAt *time.Time
-	createdOrgs         []*domain.Organization
-	auditEvents         []storage.SecurityAuditEvent
-	createMaterialOK    bool
-	deleteProjectCalled bool
+	membershipsByUser        map[string][]domain.MembershipWithOrg
+	getActiveMembershipErr   error
+	getActiveMembershipEmpty bool
+	listConnectedOrgs        []domain.Organization
+	getOrgByID               *domain.Organization
+	orgLicensePlan           domain.LicensePlan
+	orgLicenseExpiresAt      *time.Time
+	createdOrgs              []*domain.Organization
+	auditEvents              []storage.SecurityAuditEvent
+	createMaterialOK         bool
+	deleteProjectCalled      bool
 	// F044 workshop settings (nil → defaults, flag false)
 	workshopSettings *domain.WorkshopSettings
 	// #108: optional catalog returned by GetFullCatalog. nil → empty catalog.
@@ -322,13 +324,19 @@ func (s *stubStore) ListMembershipsByUser(_ context.Context, userID string) ([]d
 }
 
 func (s *stubStore) GetActiveMembership(_ context.Context, userID, organizationID string) (*domain.MembershipWithOrg, error) {
+	if s.getActiveMembershipErr != nil {
+		return nil, s.getActiveMembershipErr
+	}
+	if s.getActiveMembershipEmpty {
+		return nil, nil
+	}
 	if s.membershipsByUser != nil {
 		for _, m := range s.membershipsByUser[userID] {
 			if m.OrganizationID == organizationID {
 				return &m, nil
 			}
 		}
-		return nil, errors.New("membership not found")
+		return nil, storage.ErrMembershipNotFound
 	}
 	// Default single-organization world: every stub user is an active admin
 	// of whatever organization the token names, unless the test simulates

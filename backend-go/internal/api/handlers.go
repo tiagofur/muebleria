@@ -480,8 +480,20 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, body.OrganizationID)
-	if err != nil || m == nil || m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive || len(m.Roles) == 0 {
-		respondWithError(w, http.StatusForbidden, "no tenés membresía activa en ese taller")
+	if err != nil {
+		if !errors.Is(err, storage.ErrMembershipNotFound) {
+			respondWithInternalError(w, err, "select organization membership")
+			return
+		}
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeMembershipNotSelectable, "no tenés membresía activa en ese taller", nil)
+		return
+	}
+	if m == nil {
+		respondWithInternalError(w, errors.New("active membership lookup returned no result"), "select organization membership")
+		return
+	}
+	if m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive || len(m.Roles) == 0 {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeMembershipNotSelectable, "no tenés membresía activa en ese taller", nil)
 		return
 	}
 

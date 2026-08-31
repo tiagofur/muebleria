@@ -624,7 +624,9 @@ export function AppContent({
   const organizationChoices = useWorkspaceStore((st) => st.organizationChoices);
   const organizationSwitchLoading = useWorkspaceStore((st) => st.orgSelectionLoading);
   const organizationSwitchError = useWorkspaceStore((st) => st.orgSelectionError);
+  const organizationSwitchRecoveryAvailable = useWorkspaceStore((st) => st.orgSelectionRecoveryAvailable);
   const selectOrg = useWorkspaceStore((st) => st.selectOrg);
+  const refreshOrganizationChoices = useWorkspaceStore((st) => st.refreshOrganizationChoices);
   const sessionScope = useWorkspaceStore((st) => st.sessionScope);
   const hydrateSessionInfo = useWorkspaceStore((st) => st.hydrateSessionInfo);
   useEffect(() => {
@@ -2797,6 +2799,9 @@ export function AppContent({
     organizationChoices,
     organizationSwitchLoading,
     organizationSwitchError,
+    refreshOrganizationChoices: organizationSwitchRecoveryAvailable
+      ? refreshOrganizationChoices
+      : undefined,
     selectOrg,
     orgType: activeOrg?.type ?? null,
     backendBreakdown,

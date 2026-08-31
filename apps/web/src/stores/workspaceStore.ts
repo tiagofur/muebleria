@@ -15,6 +15,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Workspace, WorkshopSettings } from '@granete/domain';
 import {
   APIWorkspaceRepository,
+  GraneteApiError,
+  GraneteNetworkError,
   LocalStorageWorkspaceRepository,
   GUEST_WORKSPACE_STORAGE_KEY,
   createSeedWorkspace,
@@ -117,6 +119,7 @@ export interface WorkspaceState {
   readonly organizationChoices: readonly MembershipChoice[];
   readonly orgSelectionLoading: boolean;
   readonly orgSelectionError: string | null;
+  readonly orgSelectionRecoveryAvailable: boolean;
   readonly activeOrg: OrgSummary | null;
   readonly sessionScope: SessionScope | null;
   readonly supportInfo: SupportInfo | null;
@@ -134,6 +137,7 @@ export interface WorkspaceState {
   readonly login: (email: string, password: string) => Promise<void>;
   readonly loginWithAuthPayload: (payload: unknown) => void;
   readonly selectOrg: (organizationId: string) => Promise<void>;
+  readonly refreshOrganizationChoices: () => Promise<void>;
   readonly hydrateSessionInfo: () => Promise<void>;
   readonly enterSupportSession: (token: string, orgId: string) => Promise<void>;
   readonly exitSupport: () => Promise<void>;
@@ -220,6 +224,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         organizationChoices: [],
         orgSelectionLoading: false,
         orgSelectionError: null,
+        orgSelectionRecoveryAvailable: false,
         activeOrg: null,
         sessionScope: null,
         supportInfo: null,
@@ -258,6 +263,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           organizationChoices: [],
           orgSelectionLoading: false,
           orgSelectionError: null,
+          orgSelectionRecoveryAvailable: false,
           activeOrg: null,
           sessionScope: null,
           supportInfo: null,
@@ -348,13 +354,13 @@ export function createWorkspaceStore(options?: InternalOptions) {
             set({ pendingOrgSelection: null, orgSelectionLoading: false });
             return;
           }
-          set({ orgSelectionLoading: true, orgSelectionError: null });
+          set({ orgSelectionLoading: true, orgSelectionError: null, orgSelectionRecoveryAvailable: false });
           try {
-            await deps.tenantTransition.prepare();
             const result = await selectOrgRequest(token, organizationId, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
+            await deps.tenantTransition.prepare();
             storeAuthToken(result.token);
             storeAuthUser(result.user);
             deps.tenantTransition.commit();
@@ -367,6 +373,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               authUserSeq: get().authUserSeq + 1,
               orgSelectionLoading: false,
               orgSelectionError: null,
+              orgSelectionRecoveryAvailable: false,
               pendingOrgSelection: null,
               organizationChoices: result.memberships ?? [],
               activeOrg: result.organization ?? null,
@@ -379,10 +386,61 @@ export function createWorkspaceStore(options?: InternalOptions) {
               assignableOwners: [],
             });
           } catch (err) {
+            const membershipUnavailable =
+              err instanceof GraneteApiError &&
+              err.status === 403 &&
+              err.code === 'MEMBERSHIP_NOT_SELECTABLE';
             set({
               orgSelectionLoading: false,
-              orgSelectionError:
-                err instanceof Error ? err.message : 'No se pudo entrar al taller',
+              orgSelectionRecoveryAvailable: membershipUnavailable,
+              orgSelectionError: membershipUnavailable
+                ? 'Tu acceso a este taller fue revocado o ya no está disponible. Actualizá tus talleres para continuar.'
+                : err instanceof GraneteNetworkError
+                  ? 'No se pudo conectar para cambiar de taller. Revisá tu conexión e intentá de nuevo.'
+                  : 'No se pudo cambiar de taller. Verificá tus permisos e intentá de nuevo.',
+            });
+          }
+        },
+
+        refreshOrganizationChoices: async () => {
+          const token = readAuthToken();
+          if (!token) return;
+          const requestedSession = { session: get().session, sessionScope: get().sessionScope };
+          set({ orgSelectionLoading: true });
+          try {
+            const me = await meRequest(token, {
+              baseUrl: deps.baseUrl,
+              fetchImpl: deps.fetchImpl,
+              ...(requestedSession.sessionScope
+                ? { sessionGeneration: requestedSession.sessionScope.sessionGeneration }
+                : {}),
+            });
+            if (readAuthToken() !== token || !isSameWorkspaceSession(requestedSession, get())) return;
+            if (
+              requestedSession.sessionScope &&
+              (me.sessionScope.userId !== requestedSession.sessionScope.userId ||
+                me.sessionScope.organizationId !== requestedSession.sessionScope.organizationId ||
+                me.sessionScope.mode !== requestedSession.sessionScope.mode)
+            ) {
+              throw new Error('Authoritative session identity changed');
+            }
+            storeAuthUser(me.user);
+            set({
+              authUserSeq: get().authUserSeq + 1,
+              activeOrg: me.organization ?? null,
+              organizationChoices: me.organizationChoices,
+              sessionScope: me.sessionScope,
+              supportInfo: me.support ?? null,
+              orgSelectionLoading: false,
+              orgSelectionError: null,
+              orgSelectionRecoveryAvailable: false,
+            });
+          } catch {
+            if (readAuthToken() !== token || !isSameWorkspaceSession(requestedSession, get())) return;
+            set({
+              orgSelectionLoading: false,
+              orgSelectionRecoveryAvailable: true,
+              orgSelectionError: 'No pudimos actualizar tus talleres. Revisá tu conexión y volvé a intentar.',
             });
           }
         },
@@ -495,6 +553,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             pendingOrgSelection: null,
             organizationChoices: [],
             orgSelectionError: null,
+            orgSelectionRecoveryAvailable: false,
             activeOrg: null,
             sessionScope: null,
             supportInfo: null,
