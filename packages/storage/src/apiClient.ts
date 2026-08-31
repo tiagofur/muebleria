@@ -20,6 +20,22 @@ export function newIdempotencyKey(): string {
   return `web:${requestId()}`;
 }
 
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && error.name === 'AbortError';
+}
+
+async function readResponseJSON(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    return undefined;
+  }
+}
+
 export class GraneteApiClient extends GeneratedGraneteApiClient {
   constructor(
     readonly baseUrl: string,
@@ -42,7 +58,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       signal: options.signal,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    const value: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
+    const value = response.status === 204 ? undefined : await readResponseJSON(response);
     if (!response.ok) {
       let payload;
       try { payload = parseApiError(value); }

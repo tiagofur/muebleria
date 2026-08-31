@@ -279,4 +279,16 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       name: 'AbortError',
     });
   });
+
+  it('preserves AbortError when cancellation happens while reading the response body', async () => {
+    const abortError = new DOMException('Cancelled while reading', 'AbortError');
+    const response = json({});
+    vi.spyOn(response, 'json').mockRejectedValue(abortError);
+    const client = new GraneteApiClient(
+      'http://api.test',
+      vi.fn<typeof fetch>().mockResolvedValue(response),
+    );
+
+    await expect(client.getSession('token')).rejects.toBe(abortError);
+  });
 });
