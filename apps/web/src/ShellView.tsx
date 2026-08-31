@@ -315,7 +315,7 @@ import type {
 import type { AmbientMaterialDraft } from '@granete/ui';
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
-import type { AuthUser } from './session';
+import type { AuthUser, MembershipChoice, OrgSummary } from './session';
 import type { AssignableOwner } from './stores/workspaceStore';
 import type { StockCatalogView } from './derivations/stockCatalog';
 import type { ProjectState } from './stores/projectStore';
@@ -327,6 +327,11 @@ export interface ShellViewCtx {
   readonly actorRole: string | null | undefined;
   /** Multi-role union (ADR-0005) — gates must use this, not actorRole. */
   readonly actorRoles: readonly string[];
+  readonly activeOrg: OrgSummary | null;
+  readonly organizationChoices: readonly MembershipChoice[];
+  readonly organizationSwitchLoading: boolean;
+  readonly organizationSwitchError: string | null;
+  readonly selectOrg: (organizationId: string) => Promise<void>;
   readonly addProjectItem: (projectId: string, input: { readonly moduleId: string; readonly quantity: number; readonly optionChoices: OptionChoices; readonly measurePresetId?: string | undefined; readonly baseMode?: ModuleBaseMode | undefined; }) => string | undefined;
   readonly agregados: readonly Agregado[];
   readonly allowedNavIds: ReadonlySet<string>;
@@ -610,6 +615,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     acquirePlanEditSession,
     actorRole,
     actorRoles,
+    activeOrg,
+    organizationChoices,
+    organizationSwitchLoading,
+    organizationSwitchError,
+    selectOrg,
     addProjectItem,
     agregados,
     allowedNavIds,
@@ -892,7 +902,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       onNavigate={onNavigate}
       hrefForNav={pathForNav}
       onLogout={onLogout}
-      sessionMode={session}
+      sessionMode={sessionScope?.mode === 'support' ? 'support' : session}
+      organization={activeOrg}
+      organizationChoices={organizationChoices}
+      organizationSwitchLoading={organizationSwitchLoading}
+      organizationSwitchError={organizationSwitchError}
+      onOrganizationChange={selectOrg}
       user={
         authUser
           ? {
@@ -900,6 +915,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               // N9: user.role is gone (000090) — label the union's first role
               // with the legacy single role as fallback for stale sessions.
               role: actorRoles[0] ?? authUser.role,
+              roles: actorRoles,
             }
           : null
       }

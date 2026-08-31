@@ -621,6 +621,10 @@ export function AppContent({
   const supportExiting = useWorkspaceStore((st) => st.supportExiting);
   const exitSupport = useWorkspaceStore((st) => st.exitSupport);
   const activeOrg = useWorkspaceStore((st) => st.activeOrg);
+  const organizationChoices = useWorkspaceStore((st) => st.organizationChoices);
+  const organizationSwitchLoading = useWorkspaceStore((st) => st.orgSelectionLoading);
+  const organizationSwitchError = useWorkspaceStore((st) => st.orgSelectionError);
+  const selectOrg = useWorkspaceStore((st) => st.selectOrg);
   const sessionScope = useWorkspaceStore((st) => st.sessionScope);
   const hydrateSessionInfo = useWorkspaceStore((st) => st.hydrateSessionInfo);
   useEffect(() => {
@@ -2699,7 +2703,6 @@ export function AppContent({
 
   // #326: enter a connected sales org — switch the org scope, then land on
   // the team screen to invite the store team.
-  const selectOrg = useWorkspaceStore((s) => s.selectOrg);
   const onEnterConnectedOrg = useCallback(
     async (orgId: string, orgName: string) => {
       await selectOrg(orgId);
@@ -2790,6 +2793,11 @@ export function AppContent({
     authUser,
     onEnterConnectedOrg,
     actorRoles,
+    activeOrg,
+    organizationChoices,
+    organizationSwitchLoading,
+    organizationSwitchError,
+    selectOrg,
     orgType: activeOrg?.type ?? null,
     backendBreakdown,
     boardOverrides,

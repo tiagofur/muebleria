@@ -10,6 +10,8 @@ export {
   type AppNavId,
   type AppShellProps,
   type AppShellSessionUser,
+  type AppShellOrganization,
+  type AppShellOrganizationChoice,
 } from './AppShell';
 
 export {
