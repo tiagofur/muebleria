@@ -7,11 +7,6 @@ CONTAINER=""
 BACKEND_PID=""
 
 cleanup() {
-  local status=$?
-  if [ "${status}" -ne 0 ] && [ -f "${TMP_ROOT}/backend.log" ]; then
-    printf '[organization-gate] backend tail after failure:\n' >&2
-    tail -80 "${TMP_ROOT}/backend.log" >&2
-  fi
   if [ -n "${BACKEND_PID}" ]; then
     kill "${BACKEND_PID}" >/dev/null 2>&1 || true
     wait "${BACKEND_PID}" >/dev/null 2>&1 || true
@@ -66,11 +61,12 @@ docker run -d --rm --name "${CONTAINER}" \
   -p 127.0.0.1::5432 postgres:16-alpine >/dev/null
 
 for _ in $(seq 1 60); do
-  docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1 && break
+  docker logs "${CONTAINER}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' && docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1 && break
   sleep 1
 done
-docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1 \
-  || fail "PostgreSQL did not become ready"
+if ! docker logs "${CONTAINER}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' || ! docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1; then
+  fail "PostgreSQL did not become ready"
+fi
 
 POSTGRES_PORT="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "${CONTAINER}")"
 MIGRATION_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_gate?sslmode=disable"
@@ -90,7 +86,6 @@ BACKEND_PID=$!
 for _ in $(seq 1 120); do
   curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null 2>&1 && break
   kill -0 "${BACKEND_PID}" >/dev/null 2>&1 || {
-    tail -40 "${TMP_ROOT}/backend.log" >&2
     fail "backend exited before health readiness"
   }
   sleep 1

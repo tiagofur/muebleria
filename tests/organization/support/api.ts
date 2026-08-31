@@ -2,6 +2,17 @@ import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 
 export const GATE_MODULE_A_ID = 'a1111111-1111-4111-8111-111111111111';
 export const GATE_MODULE_B_ID = 'b2222222-2222-4222-8222-222222222222';
+export const LIFECYCLE_SUBJECT_EMAIL = 'browser-gate-lifecycle@example.com';
+
+export interface LifecycleSubject {
+  readonly email: string;
+  readonly organizationAId: string;
+  readonly organizationBId: string;
+  readonly membershipAId: string;
+  readonly membershipBId: string;
+  readonly membershipBVersion: number;
+  readonly bOwnerToken: string;
+}
 
 export function required(name: string): string {
   const value = process.env[name];
@@ -81,4 +92,47 @@ export async function assertAuthoritativeSession(): Promise<void> {
   if (!a.organization || snapshot.session_scope.organization_id !== a.organization.id) {
     throw new Error('authoritative /auth/me snapshot does not match organization A');
   }
+}
+
+export async function prepareLifecycleSubject(): Promise<LifecycleSubject> {
+  const password = required('ORGANIZATION_GATE_PASSWORD');
+  const client = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
+  const aOwner = await login(required('ORGANIZATION_GATE_A_OWNER_EMAIL'), required('ORGANIZATION_GATE_ORG_A_SLUG'));
+  const bOwner = await login(required('ORGANIZATION_GATE_B_OWNER_EMAIL'), required('ORGANIZATION_GATE_ORG_B_SLUG'));
+  const invitationA = await client.createInvitation(aOwner.token, {
+    email: LIFECYCLE_SUBJECT_EMAIL, roles: ['admin'],
+  }, 'browser-gate-lifecycle-a-invite');
+  await client.acceptInvitation({
+    token: invitationA.invitation_token, password, name: 'Browser Gate Lifecycle',
+  }, 'browser-gate-lifecycle-a-accept');
+  const invitationB = await client.createInvitation(bOwner.token, {
+    email: LIFECYCLE_SUBJECT_EMAIL, roles: ['vendedor'],
+  }, 'browser-gate-lifecycle-b-invite');
+  await client.acceptInvitation({
+    token: invitationB.invitation_token, password,
+  }, 'browser-gate-lifecycle-b-accept');
+
+  const [a, b, teamA, teamB] = await Promise.all([
+    login(LIFECYCLE_SUBJECT_EMAIL, required('ORGANIZATION_GATE_ORG_A_SLUG')),
+    login(LIFECYCLE_SUBJECT_EMAIL, required('ORGANIZATION_GATE_ORG_B_SLUG')),
+    client.listMemberships(aOwner.token),
+    client.listMemberships(bOwner.token),
+  ]);
+  const memberA = teamA.items.find(({ email }) => email === LIFECYCLE_SUBJECT_EMAIL);
+  const memberB = teamB.items.find(({ email }) => email === LIFECYCLE_SUBJECT_EMAIL);
+  if (
+    !a.organization || !b.organization || !memberA || !memberB
+    || memberA.membership_status !== 'active' || memberA.roles.join(',') !== 'admin'
+    || memberB.membership_status !== 'active' || memberB.roles.join(',') !== 'vendedor'
+    || a.memberships.map(({ organization }) => organization.slug).sort().join(',') !== 'browser-gate-a,browser-gate-b'
+  ) throw new Error('lifecycle subject is not authoritative A admin / B vendedor');
+  return {
+    email: LIFECYCLE_SUBJECT_EMAIL,
+    organizationAId: a.organization.id,
+    organizationBId: b.organization.id,
+    membershipAId: memberA.membership_id,
+    membershipBId: memberB.membership_id,
+    membershipBVersion: memberB.version,
+    bOwnerToken: bOwner.token,
+  };
 }

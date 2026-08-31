@@ -54,6 +54,7 @@ import type {
   PurchaseOrder,
   Supplier,
 } from '@granete/domain';
+import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
@@ -809,16 +810,20 @@ export function AppContent({
     return map;
   }, [assignableOwners, authUser]);
 
-  // Load workspace from repository on session change.
+  // Load workspace from repository on semantic session-scope changes.
   // Note: catalog/projects mutations still go through local `workspace` state
   // below (until F062/F063 move them to their own stores). We sync via
   // setWorkspace from the store after load.
-  useEffect(() => {
-    if (session === null) return;
+  const resetWorkspaceForLoad = useCallback(() => {
     setWorkspace(null);
     setWorkspaceLoadError(null);
-    void loadWorkspace();
-  }, [session, loadWorkspace, setWorkspace, setWorkspaceLoadError]);
+  }, [setWorkspace, setWorkspaceLoadError]);
+  useWorkspaceLoad({
+    session,
+    sessionScope,
+    loadWorkspace,
+    resetWorkspace: resetWorkspaceForLoad,
+  });
   const loadDemoWorkspace = useWorkspaceStore((s) => s.loadDemoWorkspace);
   const pendingGuestImport = useWorkspaceStore((s) => s.pendingGuestImport);
   const guestImportLoading = useWorkspaceStore((s) => s.guestImportLoading);
