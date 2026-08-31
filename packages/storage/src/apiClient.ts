@@ -39,6 +39,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers,
+      signal: options.signal,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const value: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);

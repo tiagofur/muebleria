@@ -265,4 +265,18 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
     await expect(clientFor({ ...current, ip: undefined, details: undefined, ip_address: '127.0.0.1', metadata: {} })
       .listSecurityAudit('token', 'org1')).rejects.toThrow('Invalid API response');
   });
+
+  it('forwards AbortSignal through generated operations', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation((_input, init) => {
+      expect(init?.signal).toBe(controller.signal);
+      return Promise.reject(new DOMException('Cancelled', 'AbortError'));
+    });
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+
+    controller.abort();
+    await expect(client.getSession('token', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
 });

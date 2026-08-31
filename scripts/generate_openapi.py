@@ -195,6 +195,7 @@ def generate_ts_client(spec):
                 args.append(f"body: {request_type}"); options.append("body")
             if any(p.get("name")=="Idempotency-Key" for p in parameters):
                 args.append("key = this.createIdempotencyKey()"); options.append("idempotencyKey: key")
+            args.append("signal?: AbortSignal"); options.append("signal")
             return_type=(f"ReadonlyArray<{response_name}>" if response_option=="arrayOf" else response_name)
             request_options=[f"{response_option}: {json.dumps(response_name)}",*options]
             operations.append(
@@ -208,7 +209,8 @@ def generate_ts_client(spec):
         "import type {",f"  {imports_block},","} from './types';","",
         "export interface GeneratedRequestOptions {",
         "  readonly schema?: string;","  readonly arrayOf?: string;","  readonly token?: string;",
-        "  readonly ifMatch?: number;","  readonly idempotencyKey?: string;","  readonly bodySchema?: string;","  readonly body?: unknown;","}","",
+        "  readonly ifMatch?: number;","  readonly idempotencyKey?: string;","  readonly bodySchema?: string;","  readonly body?: unknown;",
+        "  readonly signal?: AbortSignal;","}","",
         "export abstract class GeneratedGraneteApiClient {",
         "  protected abstract request<T>(method: string, path: string, options?: GeneratedRequestOptions): Promise<T>;",
         "  protected abstract createIdempotencyKey(): string;","",*operations,"}",
