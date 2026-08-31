@@ -1874,3 +1874,21 @@ Los siete blockers del owner re-review quedaron corregidos sobre la base reconci
 en `2693880d`, con `./init.sh` aislado verde, TestUp real 12/12 (213 assertions),
 CI remoto 6/6 y readback exacto. F198 pasa a `done`; PR #486 queda abierto para
 revisión humana y #483 permanece abierta hasta el merge mantenedor.
+
+### F200 — paridad Go del tratamiento de base (#442) — 2026-08-30
+
+Implementado en `feat/442-go-bom-base-parity` (PR #508, worktree aislada): el motor
+Go espeja `plinth.ts` — modo/B efectivos, filtrado ZOCLO (estructura, módulo y
+agregados), síntesis `ZOCLO-AUTO` + vueltas F088, herraje ml fraccional con techo a
+barras, `quantity` float64 con migration 000104. Paridad congelada por
+`contracts/plinthBaseParity.contract.json` (`granete.plinthBaseParity.v1`),
+consumido por TS y Go.
+
+La revisión independiente (protocolo reviewer) devolvió CHANGES_REQUESTED con un
+bloqueante real: TS filtra componentes ZOCLO de agregados por modo efectivo
+(`bom.ts` `filterComponentInstancesForBaseMode`) y Go no lo hacía. Corregido en
+`resolve.go` (vía BOM) y `layout.go` (coherencia visual), más dos alineaciones
+menores (truthiness del guard PATAS, muro length 0) y dos escenarios nuevos de
+agregado en el contract (15 totales, verdes en ambos motores). Pendiente:
+re-review y merge mantenedor. Fallo local pre-existente de 00102 (sesiones #458)
+no reproduce en CI del PR.

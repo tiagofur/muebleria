@@ -205,6 +205,14 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 		modulesMap[m.ID] = m
 	}
 
+	// #442: the kitchen plan is parsed once per project — every item then gets
+	// its effective base context (item baseMode override + plan B + F088 side
+	// exposure), mirroring TS calcProjectBreakdown → baseContextForItem.
+	layoutBase, err := parseKitchenLayoutBase(project.KitchenLayout)
+	if err != nil {
+		return domain.QuoteBreakdown{}, err
+	}
+
 	for _, item := range project.Items {
 		// Mirrors TS calcLiveProjectBreakdown: reject non-positive item qty.
 		if item.Quantity <= 0 {
@@ -218,14 +226,17 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 			return domain.QuoteBreakdown{}, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		// Composed modules (structure + components) expand via ResolveBomWithPin —
-		// NEVER iterate module.BoardParts alone (empty after F053 composition).
-		// Mirrors packages/domain calcLiveProjectBreakdown → resolveBom.
+		// Composed modules (structure + components) expand via the canonical
+		// context-aware resolver — NEVER iterate module.BoardParts alone (empty
+		// after F053 composition). Mirrors packages/domain
+		// calcLiveProjectBreakdown → resolveBom(..., baseContextForItem(...)).
 		choices := choicesForItem(project, item)
-		bom, err := ResolveBomWithDims(
+		baseContext := resolveBaseContextForItem(layoutBase, project, item, &catalog)
+		bom, err := ResolveBomWithContext(
 			module,
 			choices,
 			catalog,
+			baseContext,
 			item.MeasurePresetID,
 			item.StructureRevisionPin,
 			item.CustomDims,

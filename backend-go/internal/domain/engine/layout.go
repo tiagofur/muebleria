@@ -381,7 +381,7 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 
 	agregadoInstances := append(append([]domain.ModuleAgregadoInstance{}, structure.Agregados...), module.Agregados...)
 	for _, agrInst := range agregadoInstances {
-		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, optionChoices, opts)
+		agrBoards, err := expandLayoutAgregado(agrInst, catalog, dims, b, baseMode, optionChoices, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -455,13 +455,13 @@ func legacyBoardStack(module domain.Module, optionChoices map[string]string, mat
 // baseClearanceForLayout mirrors TS resolveBaseClearanceWithContext without a
 // quote-line context: none → 0; module value; else the 100 mm default.
 func baseClearanceForLayout(module domain.Module, baseMode string) int {
-	if baseMode == "none" {
+	if baseMode == baseModeNone {
 		return 0
 	}
 	if module.BaseClearanceMm != nil && *module.BaseClearanceMm > 0 {
 		return *module.BaseClearanceMm
 	}
-	return 100
+	return defaultBaseClearanceMm
 }
 
 // filterInstancesForBaseMode mirrors TS filterComponentInstancesForBaseMode:
@@ -470,7 +470,7 @@ func filterInstancesForBaseMode(instances []domain.ComponentInstance, catalog do
 	filtered := make([]domain.ComponentInstance, 0, len(instances))
 	for _, inst := range instances {
 		comp, ok := findComponent(catalog, inst.ComponentID)
-		if ok && len(comp.OptionRoles) > 0 && strings.TrimSpace(comp.OptionRoles[0]) == "ZOCLO" && baseMode != "plinth_board" {
+		if ok && len(comp.OptionRoles) > 0 && strings.TrimSpace(comp.OptionRoles[0]) == zocloBoardRole && baseMode != baseModePlinthBoard {
 			continue
 		}
 		filtered = append(filtered, inst)
@@ -702,7 +702,7 @@ func pickRotation(compValue int, inst domain.ComponentInstance, placement string
 // each unit's dims and offset by the unit origin. Inner components resolve
 // their own material binding role — an agregado never leaks a hardcoded
 // thickness into its children (#402).
-func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
+func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.Catalog, dims LayoutDims, baseClearance int, baseMode string, optionChoices map[string]string, opts resolveOptions) ([]layoutBoard, error) {
 	agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 	if !ok {
 		return nil, fmt.Errorf("agregado not found: %s", agrInst.AgregadoID)
@@ -788,7 +788,12 @@ func expandLayoutAgregado(agrInst domain.ModuleAgregadoInstance, catalog domain.
 			HeightMm: int(math.Round(unit.h)),
 			DepthMm:  int(math.Round(unit.d)),
 		}
-		unitBoards, err := expandLayoutInstances(agr.Components, catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance, optionChoices, opts)
+		// #442: agregado components follow the same effective-base-mode
+		// filtering as the BOM so the visual cannot show a zoclo part the
+		// quote excludes.
+		unitBoards, err := expandLayoutInstances(
+			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
+			catalog, unitDims, fmt.Sprintf("agr-%s-u%d-", agrInst.AgregadoID, unit.index), baseClearance, optionChoices, opts)
 		if err != nil {
 			return nil, err
 		}
