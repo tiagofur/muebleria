@@ -84,9 +84,11 @@ func plinthSidesForPlacement(
 		return PlinthSides{Left: true, Right: true, Back: true}
 	}
 
+	// TS parity: `wall?.lengthMm ?? Infinity` — a wall present with length 0
+	// yields 0 (right side never exposed); only a missing wall is unbounded.
 	wallLength := math.MaxInt64
 	for _, w := range layout.Walls {
-		if w.ID == placement.WallID && w.LengthMm > 0 {
+		if w.ID == placement.WallID {
 			wallLength = w.LengthMm
 			break
 		}

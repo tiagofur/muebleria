@@ -328,7 +328,9 @@ func applyBaseTreatment(
 	// Adjustable legs support floor cabinets in every mode except none. The
 	// plinth/strip just covers them. Guard: only synthesize when a PATAS
 	// choice exists (projects without PATAS configured are unaffected).
-	patasChoice := strings.TrimSpace(optionChoices[patasRole])
+	// TS truthiness: any non-empty string counts (no trim — plinth.ts
+	// `optionChoices?.[PATAS_ROLE]`).
+	patasChoice := optionChoices[patasRole]
 	hasPatasLine := false
 	for _, l := range hardwareOut {
 		if isPatasRole(l.OptionRole) {

@@ -175,6 +175,43 @@ func TestRoundHardwarePurchaseQuantity(t *testing.T) {
 	}
 }
 
+// TS truthiness for the PATAS guard: any non-empty choice string counts
+// — plinth.ts `optionChoices?.[PATAS_ROLE]` (no trim).
+func TestApplyBaseTreatment_PatasGuardMirrorsTSTruthiness(t *testing.T) {
+	choicesWithPatas := map[string]string{"PATAS": " "}
+	_, hw := applyBaseTreatment("BA-SYN", nil, nil, baseModeLegs, 100, 600, 560, nil, choicesWithPatas)
+	if len(hw) != 1 || hw[0].OptionRole != "PATAS" || hw[0].Quantity != 4 {
+		t.Fatalf("choice no-vacía (aunque con espacios) debe sintetizar patas: %+v", hw)
+	}
+	_, hw = applyBaseTreatment("BA-SYN", nil, nil, baseModeLegs, 100, 600, 560, nil, map[string]string{})
+	if len(hw) != 0 {
+		t.Fatalf("sin elección PATAS no se sintetiza nada: %+v", hw)
+	}
+}
+
+// TS parity `wall?.lengthMm ?? Infinity`: a wall present with length 0 pins
+// both sides (nothing can be exposed past the wall end); only a MISSING wall
+// is unbounded.
+func TestPlinthSidesForPlacement_WallLengthZeroPinsSides(t *testing.T) {
+	layout := &kitchenLayoutBaseInfo{
+		Walls: []kitchenWallInfo{{ID: "w-1", LengthMm: 0}},
+		Placements: []kitchenPlacementInfo{
+			{ItemID: "item-1", WallID: "w-1", OffsetMm: 0, Elevation: "floor"},
+		},
+	}
+	widthOf := func(string) (int, bool) { return 600, true }
+	sides := plinthSidesForPlacement(layout, layout.Placements[0], widthOf)
+	if sides.Left || sides.Right || sides.Back {
+		t.Fatalf("muro de longitud 0 no expone lados: %+v", sides)
+	}
+
+	layout.Walls = nil // missing wall → unbounded, offset 0 keeps left pinned
+	sides = plinthSidesForPlacement(layout, layout.Placements[0], widthOf)
+	if !sides.Right || sides.Left || sides.Back {
+		t.Fatalf("muro ausente es no-acotado: right debe exponerse: %+v", sides)
+	}
+}
+
 // GenerateHardwareList must price purchased bars, not consumed ml (TS
 // generateHardwareList parity — the 4 m bar test).
 func TestGenerateHardwareList_CeilProfileToPackageBars(t *testing.T) {

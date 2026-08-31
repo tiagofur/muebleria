@@ -103,6 +103,20 @@ type pbHardwareLine struct {
 	OptionRole string  `json:"optionRole"`
 }
 
+type pbAgregadoInstance struct {
+	AgregadoID string `json:"agregadoId"`
+	Quantity   int    `json:"quantity"`
+}
+
+type pbAgregado struct {
+	ID           string           `json:"id"`
+	Code         string           `json:"code"`
+	Name         string           `json:"name"`
+	Components   []pbInstance     `json:"components"`
+	HardwareLines []pbHardwareLine `json:"hardwareLines"`
+	Active       bool             `json:"active"`
+}
+
 type pbStructure struct {
 	ID           string       `json:"id"`
 	Code         string       `json:"code"`
@@ -113,17 +127,18 @@ type pbStructure struct {
 }
 
 type pbModule struct {
-	ID              string           `json:"id"`
-	Code            string           `json:"code"`
-	Name            string           `json:"name"`
-	StructureID     string           `json:"structureId"`
-	BaseMode        string           `json:"baseMode"`
-	BaseClearanceMm *int             `json:"baseClearanceMm"`
-	ExternalDims    pbDims           `json:"externalDims"`
-	Presets         []pbPreset       `json:"presets"`
-	Components      []pbInstance     `json:"components"`
-	HardwareLines   []pbHardwareLine `json:"hardwareLines"`
-	Active          bool             `json:"active"`
+	ID              string                `json:"id"`
+	Code            string                `json:"code"`
+	Name            string                `json:"name"`
+	StructureID     string                `json:"structureId"`
+	BaseMode        string                `json:"baseMode"`
+	BaseClearanceMm *int                  `json:"baseClearanceMm"`
+	ExternalDims    pbDims                `json:"externalDims"`
+	Presets         []pbPreset            `json:"presets"`
+	Components      []pbInstance          `json:"components"`
+	Agregados       []pbAgregadoInstance  `json:"agregados"`
+	HardwareLines   []pbHardwareLine      `json:"hardwareLines"`
+	Active          bool                  `json:"active"`
 }
 
 type pbPreset struct {
@@ -141,6 +156,7 @@ type pbCatalog struct {
 	OptionGroups []pbOptionGroup `json:"optionGroups"`
 	Structures   []pbStructure   `json:"structures"`
 	Components   []pbComponent   `json:"components"`
+	Agregados    []pbAgregado    `json:"agregados"`
 	Modules      []pbModule      `json:"modules"`
 }
 
@@ -257,6 +273,13 @@ func (f *plinthFixture) toDomainCatalog() domain.Catalog {
 			WidthFormula:  comp.Geometry.WidthFormula,
 		})
 	}
+	for _, a := range f.Catalog.Agregados {
+		c.Agregados = append(c.Agregados, domain.Agregado{
+			ID: a.ID, Code: a.Code, Name: a.Name, Active: a.Active,
+			Components:    pbToInstances(a.Components),
+			HardwareLines: pbToHardwareLines(a.HardwareLines),
+		})
+	}
 	for _, m := range f.Catalog.Modules {
 		mod := domain.Module{
 			ID: m.ID, Code: m.Code, Name: m.Name,
@@ -266,6 +289,11 @@ func (f *plinthFixture) toDomainCatalog() domain.Catalog {
 			WidthMm:         m.ExternalDims.Width, HeightMm: m.ExternalDims.Height, DepthMm: m.ExternalDims.Depth,
 			Components:    pbToInstances(m.Components),
 			HardwareLines: pbToHardwareLines(m.HardwareLines),
+		}
+		for _, ai := range m.Agregados {
+			mod.Agregados = append(mod.Agregados, domain.ModuleAgregadoInstance{
+				AgregadoID: ai.AgregadoID, Quantity: ai.Quantity,
+			})
 		}
 		for _, p := range m.Presets {
 			mod.Presets = append(mod.Presets, domain.DimensionPreset{
@@ -287,7 +315,7 @@ func loadPlinthFixture(t *testing.T) *plinthFixture {
 	if err := json.Unmarshal(raw, &fx); err != nil {
 		t.Fatalf("parsing plinthBaseParity contract: %v", err)
 	}
-	if len(fx.Scenarios) < 13 {
+	if len(fx.Scenarios) < 15 {
 		t.Fatalf("plinthBaseParity contract must carry its scenarios (got %d)", len(fx.Scenarios))
 	}
 	return &fx

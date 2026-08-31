@@ -315,13 +315,17 @@ func expandComposedModulePartsWithDims(
 	}
 	parts = append(parts, structureParts...)
 
-	// Expand Agregados from Structure
+	// Expand Agregados from Structure. #442: agregado components are filtered
+	// by the effective base mode too (TS resolveComposedModule filters every
+	// agregado unit's components — bom.ts filterComponentInstancesForBaseMode).
 	for _, agrInst := range structure.Agregados {
 		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-", optionChoices, baseClearance)
+		agrParts, err := expandComponentInstances(
+			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
+			catalog, dims, "st-agr-", optionChoices, baseClearance)
 		if err != nil {
 			return nil, formulaDims{}, err
 		}
@@ -343,13 +347,15 @@ func expandComposedModulePartsWithDims(
 	}
 	parts = append(parts, moduleParts...)
 
-	// Expand Agregados from Module
+	// Expand Agregados from Module (same effective-mode filtering as above).
 	for _, agrInst := range module.Agregados {
 		agr, ok := findAgregado(catalog, agrInst.AgregadoID)
 		if !ok {
 			continue
 		}
-		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-", optionChoices, baseClearance)
+		agrParts, err := expandComponentInstances(
+			filterInstancesForBaseMode(agr.Components, catalog, baseMode),
+			catalog, dims, "mod-agr-", optionChoices, baseClearance)
 		if err != nil {
 			return nil, formulaDims{}, err
 		}
