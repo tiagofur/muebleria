@@ -14,6 +14,7 @@ import {
   TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from '../session';
+import * as sessionSync from '../sessionSync';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -193,6 +194,9 @@ describe('workspaceStore — enterAsGuest', () => {
 
 describe('workspaceStore — login', () => {
   it('on success: sets session to auth, persists token+user, resets workspace', async () => {
+    const notifySessionChanged = vi
+      .spyOn(sessionSync, 'notifySessionChanged')
+      .mockImplementation(() => undefined);
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -215,6 +219,27 @@ describe('workspaceStore — login', () => {
       { id: AUTH_USER.id, roles: ['admin'] },
     );
     expect(store.getState().workspace).toBeNull(); // forces reload
+    expect(notifySessionChanged).toHaveBeenCalledOnce();
+  });
+
+  it('notifies other tabs after consuming an external authentication payload', () => {
+    const notifySessionChanged = vi
+      .spyOn(sessionSync, 'notifySessionChanged')
+      .mockImplementation(() => undefined);
+    const store = createWorkspaceStore();
+
+    store.getState().loginWithAuthPayload({
+      token: 'jwt-external',
+      user: AUTH_USER,
+      license: { plan: 'none', status: 'none' },
+      roles: ['admin'],
+      memberships: [],
+      selection_required: false,
+      transport: 'web',
+    });
+
+    expect(notifySessionChanged).toHaveBeenCalledOnce();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-external');
   });
 
   it('calls POST {baseUrl}/auth/login with JSON body', async () => {

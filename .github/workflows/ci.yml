@@ -9,6 +9,10 @@ on:
     branches:
       - main
       - master
+      # Temporary integration targets for the draft #458 feature chain.
+      # Remove these entries before merging tracker PR #493 to main.
+      - feat/458-tenant-safe-organization-ux
+      - feat/458-02a-session-transitions
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
