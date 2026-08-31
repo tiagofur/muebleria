@@ -5142,6 +5142,49 @@
         "progress/review_F200.md"
       ],
       "evidence": "go test ./internal/domain/... verde (contract 13/13 + unitarios #442); go test ./internal/storage/ -run TestHardwareLineQuantityDoublePrecision verde sobre Postgres 15 fresco (migration 000104 aplicada, round-trip 0.6 ml); go test ./... verde salvo fallo PRE-EXISTENTE de 00102_support_session_credential_epoch reproducido en main limpio (programa sesiones #458, no tocado por F200); pnpm test verde (3354 tests: domain 1235, ui 1458, web 326, storage 176, excel 93, mobile 49, desktop 17); pnpm typecheck exit 0."
+    },
+    {
+      "id": "F201",
+      "title": "Migración segura de entidades legacy Group a ComponentInstance nativo (#416 / SU-ENT-3)",
+      "description": "Camino de compatibilidad para .skp de versiones anteriores: el scanner clasifica entidades top-level en native_component_model/legacy_group_model/unsupported_or_corrupt/unmanaged_geometry por metadata namespaced (nunca por nombre), el migrator reconstruye cada mueble legacy como jerarquía nativa re-resuelta autoritativamente preservando world transform e instanceRef verbatim (sin inventar identidad de Project), borra la fuente sólo tras validar el reemplazo y en UNA operación undoable por lote, con abort total en fallo in-op y reporte honesto por ítem. Workflow de producto: diálogo de revisión 'Migrar modelos anteriores…' (conteos/estados/actualizar compatibles/más tarde), auto-oferta al abrir modelos con legacy, marcador de provenance legacy-group en el envelope (validado por el Store) y copy del inspector apuntando al flujo. Reutiliza find_definition + resolved_native_layout tal cual; sin cambios de backend/TS.",
+      "tags": [
+        "sketchup-extension",
+        "ruby",
+        "migration",
+        "ui",
+        "host-evidence"
+      ],
+      "created": "2026-08-31",
+      "acceptance": [
+        "Detección determinística por metadata namespaced, no por display name (test de rename)",
+        "Review clasifica native/legacy/unsupported/unmanaged antes de convertir",
+        "Posición/rotación mundial y parámetros/elecciones de material preservados",
+        "instanceRef sobrevive sin cambios; furnitureInstanceId nunca se inventa",
+        "Identidad faltante queda expuesta para #397, no adivinada",
+        "Fallo de resolve/reconstrucción deja el Group legacy intacto (abort total del lote)",
+        "La jerarquía resultante es exactamente la de #415 (definiciones aisladas, transforms #414)",
+        "Save/reopen no re-pregunta tras migración exitosa (scan limpio)",
+        "UNA operación coherente de Undo revierte el lote completo (política documentada)",
+        "El resumen batch jamás reporta éxito total con ítems restantes",
+        "TestUp en host real: migración exitosa + fallo-preserva-fuente + save/reopen"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F186"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/416",
+        "apps/sketchup-extension/src/granete_for_sketchup/migration/scanner.rb",
+        "apps/sketchup-extension/src/granete_for_sketchup/migration/migrator.rb",
+        "apps/sketchup-extension/src/granete_for_sketchup/ui/migration_review_controller.rb",
+        "apps/sketchup-extension/src/granete_for_sketchup/resources/migration_review.html",
+        "apps/sketchup-extension/test/testup/TC_MigrationSmoke.rb",
+        "docs/architecture/sketchup-native-entity-model.md",
+        "docs/adr/0004-sketchup-native-component-entity-model.md",
+        "progress/review_F201.md",
+        "progress/host_smoke_F201_testup_ci.json"
+      ],
+      "evidence": "bundle exec rake verify verde (syntax+lint+unit 280 tests+boundary+RBZ sha 960f8ac85b5db13dedbe6479ebc4ffaa7be1c2470d412692195123ef6177c6d2); TestUp 2.5.4 en SketchUp 2026.2 macOS real contra ese RBZ: 52 tests / 1308 assertions / 0 failures con TC_MigrationSmoke 4/4 (migración exitosa, undo único del lote, fallo-preserva-fuente, save/reopen). Evidencia con sha registrado en progress/host_smoke_F201_testup_ci.json (metadata.rbz_sha256)."
     }
   ]
 }

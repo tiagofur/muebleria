@@ -880,7 +880,7 @@ This architecture does not:
 | material thickness geometry | TS/Go/Ruby parity | #402/#405 |
 | material rebuild native hierarchy | Ruby host/round-trip | #404/#405 |
 | copy creates new business identity | Ruby+backend | #391/#398 |
-| legacy Group migration | Ruby migration fixtures | #416 |
+| legacy Group migration | Ruby migration fixtures + real-host TestUp | #416 implemented (F201) |
 | adoption mixed managed/unmanaged | Ruby+backend workflow | #397 |
 | OpenCutList visibility/dimensions | real host compatibility smoke | #417 |
 | manufacturing output unaffected by host representation | golden/E2E | #354 |

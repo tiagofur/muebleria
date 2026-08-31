@@ -135,6 +135,22 @@ identity, that no native GUID appears as business identity, and that a
 mirrored basis (or an aborted operation) leaves no partial hierarchy. The
 suite self-cleans its entities and generated definitions on teardown.
 
+### Migration suite (#416)
+
+`TC_MigrationSmoke` builds a legacy scene **in-code** with the historical
+metadata shape (top-level `Group` carrying `kind='furnitureInstance'` plus
+nested component Groups without `componentInstanceId`) and runs the
+**installed** scanner/migrator with the fixture layout injected through a
+duck-typed provider. It asserts in the real host: a successful batch
+replaces the Group with the native hierarchy while preserving the world
+transform and `instanceRef` verbatim (never inventing Project identity) and
+recording the `legacy-group` provenance marker; **one** `editUndo:` reverts
+the whole migration and restores the legacy source with its identity
+untouched; a failed resolution leaves the source intact with an honest
+`resolve-unavailable` report; and save/reopen of a migrated model reports
+nothing legacy (no re-prompt). Batch policy: one SketchUp operation per
+batch — documented in #416.
+
 ### Validation + OpenCutList suites (#417)
 
 `TC_NativeValidationSmoke` renders the canonical carpentry cabinet
