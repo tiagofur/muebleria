@@ -420,9 +420,13 @@ export function createWorkspaceStore(options?: InternalOptions) {
           const token = readAuthToken();
           if (!token) return;
           try {
+            const currentSessionGeneration = get().sessionScope?.sessionGeneration;
             const me = await meRequest(token, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
+              ...(currentSessionGeneration
+                ? { sessionGeneration: currentSessionGeneration }
+                : {}),
             });
             if (me.user) {
               // /auth/me devuelve los roles de la membresía como clave

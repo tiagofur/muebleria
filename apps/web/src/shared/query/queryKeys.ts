@@ -13,8 +13,10 @@ export function normalizeQueryFilters(
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, value]) => [
         key,
-        Array.isArray(value) && setLikeFields.has(key)
-          ? [...value].sort((left, right) => String(left).localeCompare(String(right)))
+        Array.isArray(value)
+          ? setLikeFields.has(key)
+            ? [...value].sort((left, right) => String(left).localeCompare(String(right)))
+            : [...value]
           : value,
       ]),
   );

@@ -57,18 +57,23 @@ describe('tenant-safe query foundation (#458)', () => {
     expect(sessionScopeKey(scope)).toEqual([
       'session',
       generation,
-      sessionDto.session_scope.user_id,
+      sessionDto.user.id,
       sessionDto.session_scope.membership_id,
-      sessionDto.session_scope.organization_id,
+      sessionDto.organization.id,
       'auth',
       null,
       null,
       4,
       7,
       '2026-08-31T00:00:00Z',
+      'web',
     ]);
     expect(() => sessionScopeFromSession({ ...sessionDto, transport: 'browser' }, generation))
       .toThrow('Invalid API response');
+    expect(() => sessionScopeFromSession({
+      ...sessionDto,
+      session_scope: { ...sessionDto.session_scope, organization_id: '44444444-4444-4444-8444-444444444444' },
+    }, generation)).toThrow('inconsistent session scope');
   });
 
   it('isolates a new login with the same user, membership, and organization in a different root', () => {
@@ -85,6 +90,11 @@ describe('tenant-safe query foundation (#458)', () => {
       .toEqual(normalizeQueryFilters({ page: 1, status: ['active', 'suspended'] }, setLike));
     expect(normalizeQueryFilters({ sort: ['priority:desc', 'createdAt:asc'] }))
       .not.toEqual(normalizeQueryFilters({ sort: ['createdAt:asc', 'priority:desc'] }));
+
+    const sourceOrder = ['priority:desc', 'createdAt:asc'];
+    const normalized = normalizeQueryFilters({ sort: sourceOrder });
+    sourceOrder.reverse();
+    expect(normalized).toEqual({ sort: ['priority:desc', 'createdAt:asc'] });
   });
 
   it('retries only one network or explicitly retryable server failure', () => {
