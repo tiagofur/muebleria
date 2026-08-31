@@ -40,7 +40,11 @@ module Granete
         # signal and is false whenever anything stayed legacy.
         def migrate(model, scan_result)
           plan, demoted = build_plan(scan_result.ready)
-          requires_review = scan_result.requires_review + demoted
+          # Report entries are ALWAYS plain hashes: the report crosses the
+          # HtmlDialog JSON bridge, and a ScannedEntity struct serializes as
+          # an opaque "#<struct …>" string (losing reason/instanceRef in the
+          # UI). Scanner leftovers keep their own reason.
+          requires_review = scan_result.requires_review.map { |item| review_item(item) } + demoted
 
           if plan.empty?
             return report(committed: false, aborted: false, plan: [],
@@ -128,12 +132,12 @@ module Granete
           }
         end
 
-        def review_item(item, reason, detail)
+        def review_item(item, reason = nil, detail = nil)
           {
             'instanceRef' => item.instance_ref,
             'name' => item.entity.respond_to?(:name) ? item.entity.name : nil,
             'definitionId' => item.furniture_definition_id,
-            'reason' => reason,
+            'reason' => reason || item.reason || 'requires-review',
             'detail' => detail
           }
         end

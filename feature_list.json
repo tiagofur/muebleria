@@ -5184,7 +5184,7 @@
         "progress/review_F201.md",
         "progress/host_smoke_F201_testup_ci.json"
       ],
-      "evidence": "bundle exec rake verify verde (syntax+lint+unit 273 tests+boundary+RBZ sha 91e96d59e2468bb839daef48abad8e8543772332f9993f724143e6099d478cdf); TestUp 2.5.4 en SketchUp 2026.2 macOS real: 52 tests / 1305+ assertions con TC_MigrationSmoke verde (migración exitosa, undo único, fallo-preserva-fuente, save/reopen). Ver evidencia en progress/host_smoke_F201_testup_ci.json."
+      "evidence": "bundle exec rake verify verde (syntax+lint+unit 280 tests+boundary+RBZ sha 960f8ac85b5db13dedbe6479ebc4ffaa7be1c2470d412692195123ef6177c6d2); TestUp 2.5.4 en SketchUp 2026.2 macOS real contra ese RBZ: 52 tests / 1308 assertions / 0 failures con TC_MigrationSmoke 4/4 (migración exitosa, undo único del lote, fallo-preserva-fuente, save/reopen). Evidencia con sha registrado en progress/host_smoke_F201_testup_ci.json (metadata.rbz_sha256)."
     }
   ]
 }

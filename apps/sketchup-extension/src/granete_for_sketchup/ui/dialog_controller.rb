@@ -417,10 +417,6 @@ module Granete
       # flow reuses the same catalog provider, metadata store factory and
       # furniture builder as insertion/edition — never a parallel resolution
       # path.
-      # Migration review wiring (#416): bridges the scanner/migrator with the
-      # review HtmlDialog. Included by DialogController so the migration flow
-      # reuses the same catalog provider, metadata store factory and furniture
-      # builder as insertion/edition — never a parallel resolution path.
       module MigrationBridge
         # Menu entry (Granete → Migrar modelos anteriores): always opens the
         # review so the user sees the current classification — even a clean
@@ -489,7 +485,8 @@ module Granete
         attr_reader :selection_observer
 
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
-                       metadata_store: nil, metadata_store_factory: nil, session: nil)
+                       metadata_store: nil, metadata_store_factory: nil, session: nil,
+                       migration_review_controller: nil)
           @logger = logger
           @status_provider = status_provider
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
@@ -502,6 +499,8 @@ module Granete
           @dialog = nil
           @observed_model = nil
           @app_observer = nil
+          # #416: injectable for tests; production builds it lazily.
+          @migration_review_controller = migration_review_controller
 
           @selection_observer = Observers::SelectionObserver.new(
             metadata_store: metadata_store || ActiveModelMetadataStore.new(@metadata_store_factory),
