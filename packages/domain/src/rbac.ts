@@ -856,3 +856,22 @@ export function effectivePermissionPreviewForRoles(
   if (permissions.assign_admin || permissions.transfer_admin || permissions.revoke_sessions) warnings.push('organization_administration');
   return { permissions, warnings };
 }
+
+export type MembershipReassignmentField =
+  | 'customer_owner_membership_id' | 'sales_project_owner_membership_id'
+  | 'engineer_membership_id' | 'warranty_technician_membership_id';
+
+const MEMBERSHIP_REASSIGNMENT_ROLES: Readonly<Record<MembershipReassignmentField, readonly ProductRole[]>> = {
+  customer_owner_membership_id: ['admin', 'gerente_ventas', 'vendedor'],
+  sales_project_owner_membership_id: ['admin', 'gerente_ventas', 'vendedor'],
+  engineer_membership_id: ['admin', 'ingeniero'],
+  warranty_technician_membership_id: ['admin', 'gerente_produccion', 'produccion'],
+};
+
+/** UI projection of the backend's canonical offboarding target role policy. */
+export function rolesCanReceiveMembershipReassignment(
+  roles: readonly (string | null | undefined)[],
+  field: MembershipReassignmentField,
+): boolean {
+  return roles.some((role) => isValidUserRole(role) && MEMBERSHIP_REASSIGNMENT_ROLES[field].includes(role));
+}

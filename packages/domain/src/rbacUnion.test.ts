@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   anyRole,
   effectivePermissionPreviewForRoles,
+  rolesCanReceiveMembershipReassignment,
   navIdsForRoles,
   navIdsForRole,
   rolesAllScopedBySector,
@@ -146,5 +147,16 @@ describe('effectivePermissionPreviewForRoles', () => {
     const preview = effectivePermissionPreviewForRoles(['user'], 'factory');
     expect(preview.permissions).toMatchObject({ sales_team: false, catalog_mutation: false, costs: false, transfer_admin: false });
     expect(preview.warnings).toEqual([]);
+  });
+});
+
+describe('rolesCanReceiveMembershipReassignment', () => {
+  it('matches each backend offboarding responsibility role policy', () => {
+    expect(rolesCanReceiveMembershipReassignment(['vendedor'], 'customer_owner_membership_id')).toBe(true);
+    expect(rolesCanReceiveMembershipReassignment(['ingeniero'], 'customer_owner_membership_id')).toBe(false);
+    expect(rolesCanReceiveMembershipReassignment(['ingeniero'], 'engineer_membership_id')).toBe(true);
+    expect(rolesCanReceiveMembershipReassignment(['vendedor'], 'engineer_membership_id')).toBe(false);
+    expect(rolesCanReceiveMembershipReassignment(['produccion'], 'warranty_technician_membership_id')).toBe(true);
+    expect(rolesCanReceiveMembershipReassignment(['ingeniero'], 'warranty_technician_membership_id')).toBe(false);
   });
 });

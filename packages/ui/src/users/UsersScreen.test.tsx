@@ -738,3 +738,116 @@ describe('UsersScreen (#458 last-admin transfer)', () => {
     expect(JSON.parse(String(transfers[1]!.init?.body)).target_version).toBe(9);
   });
 });
+
+describe('UsersScreen (#458 authoritative offboarding)', () => {
+  const source = {
+    membership_id: '11111111-1111-4111-8111-111111111111', user_id: '21111111-1111-4111-8111-111111111111', name: 'Ana Ventas', email: 'ana@test.com', roles: ['vendedor'], account_status: 'active', membership_status: 'active', joined_at: '2026-08-28T00:00:00Z', version: 4, sectors: [], offboarding_blocking_count: 0, last_activity: null, credential_version: 1, sessions_revoked_at: null,
+  } as const;
+  const target = { ...source, membership_id: '33333333-3333-4333-8333-333333333333', user_id: '43333333-3333-4333-8333-333333333333', name: 'Bruno Admin', email: 'bruno@test.com', roles: ['admin'], version: 7 } as const;
+  const ineligible = { ...source, membership_id: '55555555-5555-4555-8555-555555555555', user_id: '65555555-5555-4555-8555-555555555555', name: 'Caro Sin puesto', email: 'caro@test.com', roles: ['user'], version: 2 } as const;
+  const inventory = { customer_ownership_count: 1, sales_project_ownership_count: 2, engineer_assignment_count: 3, open_warranty_assignment_count: 4, active_production_claim_count: 0, transfer_required_count: 10, blocking_count: 0 };
+  const preview = { membership_id: source.membership_id, membership_version: 4, impact_version: 'a'.repeat(64), inventory };
+  const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const directory = (capabilities: string[], left = false) => ({ items: [{ ...source, membership_status: left ? 'left' : 'active', version: left ? 5 : 4 }, target, ineligible], summary: { active_members: left ? 2 : 3, suspended_members: 0, left_members: left ? 1 : 0, max_active_members: null, team_version: 1, entitlements_version: 1, capabilities } });
+  const apiError = (code: string) => response({ code, message: code, fieldErrors: {}, requestId: 'request-1', retryable: false, details: {} }, 409);
+
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it('does not expose offboarding without an authoritative management capability', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(directory(['team:view']))));
+    renderUsers();
+    await screen.findByText('Ana Ventas');
+    expect(screen.queryByRole('button', { name: 'Finalizar acceso de Ana Ventas' })).toBeNull();
+  });
+
+  it('requires every authoritative reassignment and announces success only after commit', async () => {
+    let left = false;
+    let resolveOffboard!: (value: Response) => void;
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input); requests.push({ url, init });
+      if (url.endsWith('/org/memberships')) return response(directory(['team:view', 'team:manage:all'], left));
+      if (url.includes(':offboarding-preview')) return response(preview);
+      if (url.includes(':offboard')) return new Promise<Response>((resolve) => { resolveOffboard = (value) => { left = true; resolve(value); }; });
+      return response([]);
+    }));
+    const actor = userEvent.setup(); renderUsers();
+    await actor.click(await screen.findByRole('button', { name: 'Finalizar acceso de Ana Ventas' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Finalizar acceso al taller' });
+    expect(within(dialog).getByRole('region', { name: 'Impacto de la finalización' }).textContent).toContain('a'.repeat(64));
+    const confirm = within(dialog).getByRole('button', { name: 'Finalizar acceso' });
+    expect(confirm).toHaveProperty('disabled', true);
+    for (const select of within(dialog).getAllByRole('combobox')) {
+      expect(within(select).queryByRole('option', { name: 'Caro Sin puesto' })).toBeNull();
+      await actor.selectOptions(select, target.membership_id);
+    }
+    await actor.type(within(dialog).getByLabelText('Motivo *'), 'Terminó la relación laboral');
+    await actor.click(confirm);
+    expect(screen.queryByText('Membresía finalizada', { selector: '.users-toast' })).toBeNull();
+    resolveOffboard(response({ member: { membership_id: source.membership_id, user_id: source.user_id, status: 'left', roles: ['vendedor'], version: 5 }, inventory }));
+    expect(await screen.findByText('Membresía finalizada', { selector: '.users-toast' })).toBeTruthy();
+    expect(within((await screen.findByText('Ana Ventas')).closest('tr')!).getByText('Membresía finalizada')).toBeTruthy();
+    const previewRequest = requests.find(({ url }) => url.includes(':offboarding-preview'))!;
+    expect(new Headers(previewRequest.init?.headers).get('If-Match')).toBe('"v4"');
+    expect(new Headers(previewRequest.init?.headers).get('Idempotency-Key')).toBeTruthy();
+    const request = requests.find(({ url }) => url.endsWith(':offboard'))!;
+    expect(new Headers(request.init?.headers).get('If-Match')).toBe('"v4"');
+    expect(new Headers(request.init?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(JSON.parse(String(request.init?.body))).toMatchObject({ impact_version: 'a'.repeat(64), reason: 'Terminó la relación laboral', reassignment: { customer_owner_membership_id: target.membership_id, sales_project_owner_membership_id: target.membership_id, engineer_membership_id: target.membership_id, warranty_technician_membership_id: target.membership_id } });
+  });
+
+  it.each(['IMPACT_VERSION_CONFLICT', 'REASSIGNMENT_REQUIRED', 'OFFBOARDING_BLOCKED'])('clears stale preview and makes %s refetch actionable', async (code) => {
+    let previews = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/org/memberships')) return response(directory(['team:view', 'team:manage:all']));
+      if (url.includes(':offboarding-preview')) { previews += 1; return response({ ...preview, inventory: { ...inventory, customer_ownership_count: 0, sales_project_ownership_count: 0, engineer_assignment_count: 0, open_warranty_assignment_count: 0, transfer_required_count: 0, blocking_count: code === 'OFFBOARDING_BLOCKED' && previews > 1 ? 1 : 0 } }); }
+      if (url.includes(':offboard')) return apiError(code);
+      return response([]);
+    }));
+    const actor = userEvent.setup(); renderUsers();
+    await actor.click(await screen.findByRole('button', { name: 'Finalizar acceso de Ana Ventas' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Finalizar acceso al taller' });
+    await actor.type(await within(dialog).findByLabelText('Motivo *'), 'Cambio confirmado');
+    await actor.click(within(dialog).getByRole('button', { name: 'Finalizar acceso' }));
+    expect(await within(dialog).findByRole('alert')).toBeTruthy();
+    expect(within(dialog).queryByRole('region', { name: 'Impacto de la finalización' })).toBeNull();
+    expect(screen.queryByText('Membresía finalizada', { selector: '.users-toast' })).toBeNull();
+    await actor.click(within(dialog).getByRole('button', { name: 'Actualizar impacto' }));
+    expect(await within(dialog).findByRole('region', { name: 'Impacto de la finalización' })).toBeTruthy();
+    expect(previews).toBe(2);
+  });
+
+  it('keeps recovery fail-closed, then rebinds versions and drops an ineligible target', async () => {
+    let directoryRequests = 0; let offboardRequests = 0;
+    const previewRequests: RequestInit[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/org/memberships')) {
+        directoryRequests += 1;
+        if (directoryRequests === 2) return response({ message: 'down' }, 500);
+        const data = directory(['team:view', 'team:manage:all']);
+        return response(directoryRequests > 2 ? { ...data, items: [{ ...source, version: 6 }, { ...target, roles: ['user'], version: 9 }, ineligible] } : data);
+      }
+      if (url.includes(':offboarding-preview')) { previewRequests.push(init ?? {}); return response({ ...preview, membership_version: directoryRequests > 2 ? 6 : 4, inventory: { ...inventory, sales_project_ownership_count: 0, engineer_assignment_count: 0, open_warranty_assignment_count: 0, transfer_required_count: 1 } }); }
+      if (url.endsWith(':offboard')) { offboardRequests += 1; return apiError('MEMBERSHIP_VERSION_CONFLICT'); }
+      return response([]);
+    }));
+    const actor = userEvent.setup(); renderUsers();
+    await actor.click(await screen.findByRole('button', { name: 'Finalizar acceso de Ana Ventas' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Finalizar acceso al taller' });
+    await actor.selectOptions(await within(dialog).findByRole('combobox'), target.membership_id);
+    await actor.type(within(dialog).getByLabelText('Motivo *'), 'Cambio confirmado');
+    await actor.click(within(dialog).getByRole('button', { name: 'Finalizar acceso' }));
+    await actor.click(await within(dialog).findByRole('button', { name: 'Actualizar impacto' }));
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('No se pudo actualizar');
+    expect(within(dialog).getByRole('button', { name: 'Finalizar acceso' })).toHaveProperty('disabled', true);
+    expect(offboardRequests).toBe(1);
+    await actor.click(within(dialog).getByRole('button', { name: 'Actualizar impacto' }));
+    const select = await within(dialog).findByRole('combobox');
+    expect(within(select).queryByRole('option', { name: 'Bruno Admin' })).toBeNull();
+    expect(new Headers(previewRequests[1]?.headers).get('If-Match')).toBe('"v6"');
+    expect(within(dialog).getByRole('button', { name: 'Finalizar acceso' })).toHaveProperty('disabled', true);
+    expect(offboardRequests).toBe(1);
+  });
+});
