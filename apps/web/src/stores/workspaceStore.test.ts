@@ -1134,6 +1134,32 @@ describe('workspaceStore — atomic organization transition', () => {
     expect(globalThis.sessionStorage.getItem(draftKey)).toBeNull();
   });
 
+  it('loads the selected organization workspace for an active session', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
+    const workspaceB = createSeedWorkspace();
+    const repo = makeStubRepo(workspaceB);
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(selected))
+      .mockResolvedValueOnce(jsonOk({
+        user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        memberships: [ACTIVE_MEMBERSHIP],
+        transport: 'web', session_scope: SESSION_SCOPE,
+      }));
+    const store = createWorkspaceStore({
+      deps: {
+        baseUrl: 'http://test/api', fetchImpl,
+        repositoryFactory: stubFactory(repo),
+      },
+    });
+    store.setState({ session: 'auth', workspace: createSeedWorkspace() });
+
+    await store.getState().selectOrg('org-1');
+
+    expect(store.getState().workspace).toBe(workspaceB);
+    expect(store.getState().workspaceLoading).toBe(false);
+    expect(repo.saved).toHaveLength(0);
+  });
+
   it('keeps the prior token and cache when scope validation fails', async () => {
     globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
     globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
