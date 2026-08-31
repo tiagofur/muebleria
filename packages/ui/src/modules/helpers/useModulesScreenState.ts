@@ -34,6 +34,7 @@ import {
 } from '@granete/domain';
 import { validateNonNegativeNumber, validateRequiredName } from '../../catalogs/catalogHelpers';
 import {
+  draftSessionKey,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
@@ -45,6 +46,7 @@ import {
   emptyCategoryDraft,
   emptyHardwareLineDraft,
   emptyModuleDraft,
+  isModuleDraft,
   filterModulesByQuery,
   flattenCategoriesForSelect,
   mergeBoardOverridesIntoDraft,
@@ -134,7 +136,7 @@ export function useModulesScreenState({
     knownIds: moduleIds,
   });
 
-  const draftKey = `module-draft:${openModuleEditId ?? 'idle'}`;
+  const draftKey = draftSessionKey('module', openModuleEditId ?? 'idle');
 
   const {
     modalOpen,
@@ -158,6 +160,7 @@ export function useModulesScreenState({
   } = useEntityEditorState<ModuleDraft, ModuleEditorTab>({
     draftKey,
     emptyDraft: emptyModuleDraft,
+    draftValidator: isModuleDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
       if (restoreId && restoreId !== 'new') {
@@ -332,6 +335,7 @@ export function useModulesScreenState({
         emptyModuleDraft(),
         setDraft,
         setInitialDraft,
+        isModuleDraft,
       );
       setEditingId(null);
       setEditorTab('general');
@@ -348,6 +352,7 @@ export function useModulesScreenState({
       moduleToDraft(module),
       setDraft,
       setInitialDraft,
+      isModuleDraft,
     );
     setEditingId(module.id);
     setEditorTab('general');

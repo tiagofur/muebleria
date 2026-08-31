@@ -5,14 +5,12 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import {
-  readDraftSession,
-  seedEditorDraftFromBaseline,
-  useDraftSession,
-} from './useDraftSession';
+import { clearRegisteredDraftSessions, draftSessionKey, hasDirtyDraftSessions, readDraftSession,
+  registerDraftSessionScope, seedEditorDraftFromBaseline, useDraftSession } from './useDraftSession';
 
 afterEach(() => {
   sessionStorage.clear();
+  registerDraftSessionScope(() => 'unscoped');
 });
 
 describe('useDraftSession', () => {
@@ -120,6 +118,31 @@ describe('useDraftSession', () => {
     expect(result.current[0]).toEqual({ name: 'fallback' });
   });
 
+  it.each(['{"name":42}', '[]', 'null'])('rejects incompatible persisted JSON', (stored) => {
+    sessionStorage.setItem('invalid-shape', stored);
+    expect(renderHook(() => useDraftSession('invalid-shape', { name: 'safe' })).result.current[0]).toEqual({ name: 'safe' });
+  });
+
+  it('registers only actual changes as dirty and clears every registered draft', () => {
+    const key = draftSessionKey('module', 'module-a');
+    const baseline = { name: 'Baseline', dimensions: { width: 600 } };
+    const { result, unmount } = renderHook(() => useDraftSession(key, baseline));
+    act(() => result.current[1](baseline)); act(() => result.current[1]({ ...baseline, name: 'Tenant A edit' }));
+    expect(hasDirtyDraftSessions()).toBe(true);
+    clearRegisteredDraftSessions(); expect(sessionStorage.getItem(key)).toBeNull();
+    unmount();
+    expect(renderHook(() => useDraftSession(key, baseline)).result.current[0]).toEqual(baseline);
+  });
+
+  it('isolates the same editor and entity identity by tenant session scope', () => {
+    let scope = 'session-a:org-a'; registerDraftSessionScope(() => scope);
+    const tenantAKey = draftSessionKey('module', 'same-entity');
+    sessionStorage.setItem(tenantAKey, '{"name":"Tenant A"}');
+    scope = 'session-b:org-b';
+    const tenantBKey = draftSessionKey('module', 'same-entity');
+    expect([tenantAKey === tenantBKey, readDraftSession(tenantBKey, { name: '' })]).toEqual([false, null]);
+  });
+
   it('survives sessionStorage being unavailable (private mode)', () => {
     // Temporarily make sessionStorage throw.
     const original = window.sessionStorage;
@@ -204,7 +227,7 @@ describe('seedEditorDraftFromBaseline (R3-C1)', () => {
     );
     expect(drafts).toEqual([]);
     expect(initials).toEqual([baseline]);
-    expect(readDraftSession('component-draft:c1')).toEqual({
+    expect(readDraftSession('component-draft:c1', baseline)).toEqual({
       name: 'session-restored',
     });
   });

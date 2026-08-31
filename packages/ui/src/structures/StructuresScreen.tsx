@@ -23,6 +23,7 @@ import type {
 } from '@granete/domain';
 import {
   EntityEditorLayout,
+  draftSessionKey,
   Modal,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
@@ -41,6 +42,7 @@ import { StructureEditorForm } from './components/StructureEditorForm';
 import { StructureListView } from './components/StructureListView';
 import {
   emptyStructureDraft,
+  isStructureDraft,
   structureToDraft,
   type StructureDraft,
   type StructureEditorTab,
@@ -115,7 +117,7 @@ export function StructuresScreen({
     knownIds: structureIds,
   });
 
-  const draftKey = `structure-draft:${openStructureEditId ?? 'idle'}`;
+  const draftKey = draftSessionKey('structure', openStructureEditId ?? 'idle');
   // F059: shared entity editor state extracted to useEntityEditorState.
   const {
     modalOpen,
@@ -139,6 +141,7 @@ export function StructuresScreen({
   } = useEntityEditorState<StructureDraft, StructureEditorTab>({
     draftKey,
     emptyDraft: emptyStructureDraft,
+    draftValidator: isStructureDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
       if (restoreId && restoreId !== 'new') {
@@ -233,6 +236,7 @@ export function StructuresScreen({
         emptyStructureDraft(),
         setDraft,
         setInitialDraft,
+        isStructureDraft,
       );
       setEditingId(null);
       setEditorTab('general');
@@ -249,6 +253,7 @@ export function StructuresScreen({
       structureToDraft(structure),
       setDraft,
       setInitialDraft,
+      isStructureDraft,
     );
     setEditingId(structure.id);
     setEditorTab('general');

@@ -49,6 +49,8 @@ import {
 } from 'lucide-react';
 import { roleLabelEs } from '@granete/domain';
 import { BrandMark } from '../common/BrandMark';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import { hasDirtyDraftSessions } from '../common/useDraftSession';
 import {
   CommandPalette,
   useCommandPaletteHotkey,
@@ -499,6 +501,23 @@ export function AppShell({
     (choice) => choice.status === 'active' && choice.organization.status === 'active',
   );
   const roleLabels = [...new Set(user?.roles ?? (user?.role ? [user.role] : []))].map(roleLabelEs);
+  const [pendingOrganizationId, setPendingOrganizationId] = useState<string | null>(null);
+
+  const requestOrganizationChange = useCallback((organizationId: string) => {
+    if (!onOrganizationChange || organizationId === organization?.id) return;
+    if (hasDirtyDraftSessions()) {
+      setPendingOrganizationId(organizationId);
+      return;
+    }
+    void onOrganizationChange(organizationId);
+  }, [onOrganizationChange, organization?.id]);
+
+  const confirmOrganizationChange = useCallback(() => {
+    if (pendingOrganizationId && onOrganizationChange) {
+      void onOrganizationChange(pendingOrganizationId);
+    }
+    setPendingOrganizationId(null);
+  }, [onOrganizationChange, pendingOrganizationId]);
 
   const organizationTypeLabel = organization?.type === 'factory' ? 'Fábrica'
     : organization?.type === 'store' ? 'Tienda' : 'Distribuidor';
@@ -752,7 +771,7 @@ export function AppShell({
                     aria-label="Cambiar organización"
                     value={organization.id}
                     disabled={organizationSwitchLoading}
-                    onChange={(event) => void onOrganizationChange(event.target.value)}
+                    onChange={(event) => requestOrganizationChange(event.target.value)}
                   >
                     {activeOrganizationChoices.map((choice) => (
                       <option key={choice.organization.id} value={choice.organization.id}>{choice.organization.name}</option>
@@ -821,6 +840,15 @@ export function AppShell({
 
         <main className="app-content">{children}</main>
       </div>
+
+      <ConfirmDialog
+        open={pendingOrganizationId !== null}
+        onClose={() => setPendingOrganizationId(null)}
+        title="Cambiar de organización"
+        message="Tenés cambios sin guardar. Si cambiás de organización, esos borradores se descartarán después de confirmar el cambio."
+        confirmLabel="Descartar y cambiar"
+        onConfirm={confirmOrganizationChange}
+      />
 
       <CommandPalette
         open={paletteOpen}

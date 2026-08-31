@@ -18,6 +18,10 @@ import {
   isModuleBaseMode,
 } from '@granete/domain';
 import { parseOptionalNumber } from './moduleValidation';
+import {
+  arrayRule, booleanRule, enumRule, numberRule, objectRule, optionalRule,
+  recordValuesRule, stringFields, stringRule, type DraftRule,
+} from '../../common/draftValidation';
 
 export type BoardPartDraft = {
   id: string;
@@ -105,6 +109,42 @@ export type ModuleDraft = {
   /** Commercial measure options for sales (H09 / #104). */
   presets: MeasurePresetDraft[];
 };
+
+const placementRule = enumRule('base', 'superior', 'lateral_izquierdo', 'lateral_derecho',
+  'frontal', 'trasera', 'interno', 'puerta', 'frente_cajon', 'custom');
+const machiningOperationRule = objectRule({
+  ...stringFields('id', 'label'), kind: enumRule('blind_hole', 'through_hole', 'counterbore', 'screw_pilot'),
+  diameterMm: numberRule, depthMm: optionalRule(numberRule), innerDiameterMm: optionalRule(numberRule),
+  xMm: numberRule, yMm: numberRule, face: enumRule('anchor', 'opposite'), label: optionalRule(stringRule) });
+const hardwarePlacementRule = objectRule({
+  ...stringFields('hardwareId'), anchorFace: enumRule('front', 'back', 'left', 'right', 'top', 'bottom'),
+  relativePosition: objectRule({ xMm: numberRule, yMm: numberRule, xFormula: optionalRule(stringRule), yFormula: optionalRule(stringRule) }),
+  rotationDeg: optionalRule(objectRule({ x: optionalRule(numberRule), y: optionalRule(numberRule), z: optionalRule(numberRule) })),
+  scale: optionalRule(numberRule), partRole: optionalRule(stringRule),
+  derivedMachining: optionalRule(objectRule({ parts: arrayRule(objectRule({ ...stringFields('id', 'role'),
+    operations: arrayRule(machiningOperationRule) })) })) });
+export const componentInstanceDraftRule: DraftRule = objectRule({
+  ...stringFields('componentId'), quantity: numberRule, placementOverride: optionalRule(placementRule),
+  overrides: optionalRule(objectRule({ ...Object.fromEntries(
+    ['lengthFormula', 'widthFormula', 'xFormula', 'yFormula', 'zFormula'].map((key) => [key, optionalRule(stringRule)])),
+    edges: optionalRule(arrayRule(objectRule({ side: enumRule('L1', 'L2', 'W1', 'W2'), enabled: booleanRule }))), notes: optionalRule(stringRule),
+    rotateX: optionalRule(numberRule), rotateY: optionalRule(numberRule), rotateZ: optionalRule(numberRule),
+    hardwarePlacements: optionalRule(arrayRule(hardwarePlacementRule)) })) });
+export const agregadoInstanceDraftRule: DraftRule = objectRule({
+  id: optionalRule(stringRule), ...stringFields('agregadoId'), name: optionalRule(stringRule),
+  position: optionalRule(objectRule({ xFormula: optionalRule(stringRule), yFormula: optionalRule(stringRule), zFormula: optionalRule(stringRule) })),
+  dimensions: optionalRule(objectRule({ widthFormula: optionalRule(stringRule), heightFormula: optionalRule(stringRule), depthFormula: optionalRule(stringRule) })),
+  quantity: numberRule, layoutDirection: optionalRule(enumRule('vertical', 'horizontal', 'none')),
+  gapMm: optionalRule(numberRule), mirrored: optionalRule(booleanRule), optionOverrides: optionalRule(recordValuesRule(stringRule)) });
+const presetRule = objectRule({ ...stringFields('id', 'name'), width: numberRule, height: numberRule, depth: numberRule });
+const hardwareLineDraftRule = objectRule({ ...stringFields('id', 'descriptionOverride', 'optionRole', 'hardwareId'),
+  quantity: numberRule, mode: enumRule('role', 'fixed') });
+const moduleDraftRule = objectRule({
+  ...stringFields('code', 'name', 'notes', 'categoryId', 'baseClearanceMm', 'externalWidth', 'externalHeight', 'externalDepth', 'baseLaborCost', 'imageUrl', 'structureId'),
+  furnitureType: enumRule('inferior', 'superior', 'alto'), baseMode: enumRule('', 'none', 'plinth_board', 'plinth_strip', 'legs'),
+  hardwareLines: arrayRule(hardwareLineDraftRule), components: arrayRule(componentInstanceDraftRule),
+  agregados: arrayRule(agregadoInstanceDraftRule), presets: arrayRule(presetRule) });
+export function isModuleDraft(value: unknown): value is ModuleDraft { return moduleDraftRule(value); }
 
 const EDGE_SIDES: readonly EdgeSide[] = ['L1', 'L2', 'W1', 'W2'];
 

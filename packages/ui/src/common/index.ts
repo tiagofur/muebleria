@@ -54,6 +54,14 @@ export {
   useDraftSession,
   readDraftSession,
   seedEditorDraftFromBaseline,
+  draftSessionKey,
+  registerDraftSessionBaseline,
+  registerDraftSessionScope,
+  hasDirtyDraftSessions,
+  clearRegisteredDraftSessions,
+  DRAFT_SESSION_REGISTRY_KEY,
+  type DraftSessionValidator,
+  type DraftEntityKind,
 } from './useDraftSession';
 export {
   useEntityEditorState,
