@@ -1,136 +1,129 @@
 # Review — feature F201 (#416: migración legacy Group → ComponentInstance nativo)
 
-**Veredicto:** CHANGES_REQUESTED
+# Round 2 — veredicto final
 
-Rama `feat/416-legacy-group-migration` (1 commit `ee5bb63d` sobre `origin/main` @ `dc37bbd3`),
-todo pushed, working tree limpio, sin mezcla de trabajo ajeno (los cambios backend/contracts del
-diff contra `main` local provienen de `origin/main`; la base real del PR es `dc37bbd3`).
+**Veredicto:** APPROVED
 
-La arquitectura general es correcta y adhiere a `sketchup-native-entity-model.md` §19 (pipeline,
-5 prohibiciones) y §5 (identidad), y a `sketchup-plugin-excellence.md` §18: scanner por metadata
-namespaced, pre-flight autoritativo fuera de operación, una operación por lote, borrado sólo tras
-validación, abort total, provenance validado fail-closed. Los defectos encontrados están en el
-puente UI y en la integridad de la evidencia, no en el pipeline de migración.
+Head revisado: `0d807369` (rama `feat/416-legacy-group-migration`, 1 commit sobre el round 1
+`ee5bb63d`), todo pushed, working tree limpio. El diff del fix toca sólo lo pedido:
+`migration/migrator.rb`, `ui/dialog_controller.rb`, tests nuevos del bridge/JS, evidencia host,
+ledger y este archivo.
 
-## Checkpoints
+## Resolución de los cambios requeridos del round 1
 
-- C1: [x] Archivos base y docs/skills presentes (el gate aplicable de la extensión es
-  `bundle exec rake verify`, ejecutado verde por el revisor).
-- C2: [x] F201 `done` en `feature_list.json` con tests que pasan; ninguna feature `in_progress`;
-  `progress/current.md` en plantilla limpia ("Sin feature activa").
-- C3: [x] Feature 100% en `apps/sketchup-extension`; sin cambios de dominio/TS/Go; boundary test
-  verde; sin vocabulario de manufactura en src nuevo (grep + `test/boundary/ownership_test.rb`).
-- C4: [ ] `bundle exec rake verify` verde (273 + 3 runs, 0 fallos) PERO la evidencia TestUp del
-  ledger cita un RBZ sha que no es reproducible desde el src committeado (ver cambio requerido 3).
-- C5: [x] Tree limpio, todo pushed, `progress/history.md` con entrada de la sesión, ledger
-  actualizado.
+1. **Structs en `requiresReview` — RESUELTO.**
+   `Migrator#migrate` ahora normaliza TODAS las entradas:
+   `scan_result.requires_review.map { |item| review_item(item) } + demoted`, y `review_item`
+   ganó defaults (`reason || item.reason || 'requires-review'`). El reporte cruza el puente JSON
+   sólo con hashes planos. Regression test doble:
+   `MigrationBridgeTest#test_migrate_callback_returns_json_safe_report_with_reasons` (viaja por
+   `DialogController` → callback → `JSON.generate` sin `#<struct` ni `Sketchup::Group`, con
+   `reason`/`instanceRef`) y la cobertura JS del render del resultado.
+2. **Tests del bridge + JS — RESUELTO.**
+   `test/unit/migration_bridge_test.rb` (6 tests): auto-oferta sólo con legacy, quiet sin legacy,
+   no re-oferta con review abierto, menú siempre abre, reporte JSON-safe, quiet tras migración
+   exitosa (provider resolvable + scan fresco — AC8 a nivel bridge). `MigrationReviewJsTest` +
+   `test/js/migration_review_test.js`: harness real (Node `vm` + mock DOM ejecutando el script
+   actual de `migration_review.html`) con conteos, badges con motivo humano, botón deshabilitado
+   sin ready, parcial/abort jamás vestidos de éxito, éxito total correcto y botones llegando al
+   bridge Ruby. `DialogController` acepta `migration_review_controller:` inyectable (producción lo
+   construye lazy igual que antes). El wrapper replica el patrón fail-closed de
+   `DialogInspectorJsTest` (Open3 + node, sin skip silencioso).
+3. **Evidencia ↔ artefacto final — RESUELTO.**
+   Rebuild determinista desde el src final verificado por el revisor:
+   sha256 `960f8ac85b5db13dedbe6479ebc4ffaa7be1c2470d412692195123ef6177c6d2`, idéntico al
+   registrado DENTRO de la evidencia (`progress/host_smoke_F201_testup_ci.json` →
+   `metadata.rbz_sha256`) y en el ledger F201. La suite TestUp completa fue re-correrida contra
+   ese RBZ exacto: statistics `{total:52, assertions:1308, failures:0, errors:0, passes:52}`,
+   4/4 `TC_MigrationSmoke#*` en `passes`. Timestamps coherentes (evidencia 18:28:49Z ≈ 42s antes
+   del commit 12:29:31 −0600). Se cumple "record RBZ SHA/version with host evidence".
+4. **Comentario duplicado — RESUELTO** (eliminado el segundo bloque en `dialog_controller.rb`).
+5. **Aritmética del ledger — RESUELTO** (280 runs / 2547 assertions, coincide exactamente con el
+   verify del revisor).
 
-## Siete puntos de sospecha (verificados en código)
+## Checkpoints (round 2)
 
-1. **¿La fuente legacy se borra siempre tras validar el reemplazo y en la misma operación?** SÍ.
-   `migrator.rb`: `build_migrated_furniture` (que termina en `validate_migrated_replacement`,
-   que raisea si el reemplazo no es ComponentInstance / sin componentes / identidad no sobrevivió /
-   sin marker) y recién después `erase_entities`, ambos dentro de la única operación abierta.
-   Pinned por `test_source_is_never_erased_before_its_replacement_validates` y
-   `test_in_operation_failure_aborts_the_whole_batch_leaving_sources_intact` (unit, journal del
-   stub) y por `test_successful_migration…` + `test_single_undo_reverts…` (host real).
-2. **¿Ningún camino inventa identidad ni matchea por nombre/geometría?** SÍ, limpio. `instanceRef`
-   se lee exclusivamente de `existing_metadata['identity']` (`build_migrated_furniture` raisea
-   `ArgumentError` si falta); el scanner clasifica sólo por diccionario namespaced + clase de
-   entidad; `furnitureInstanceId` no se escribe en ningún path (host smoke lo aserta
-   `assert_nil`). Negative proofs: `test_rename_does_not_change_classification` y
-   `test_identity_does_not_follow_the_legacy_display_name`.
-3. **¿El abort in-op revierte todo y el reporte nunca dice éxito total con restantes?** SÍ en
-   sustancia. Stub: `abort_undo_frame` revierte el journal (tests restauran los 2 Groups); host:
-   un `editUndo:` restaura el Group con identidad intacta. `allMigrated = committed &&
-   requires_review.empty?` y `migratedCount = 0` en abort. **PERO** el payload del reporte está
-   roto para ítems requires_review detectados por el scanner (ver cambio requerido 1): el
-   resultado llega degradado al diálogo.
-4. **¿Metadata::Store valida provenance fail-closed y el marker sobrevive ediciones?** SÍ.
-   `validate_provenance` raisea sobre fuente desconocida o `markerVersion != 1`; metadata ilegible
-   → taxonomía `corrupt-metadata`/unsupported (nunca entra al batch). El marker sobrevive ediciones
-   posteriores porque `write_furniture` parte de `json_copy(existing_metadata)` y sólo la migración
-   setea `provenance` (pinned por `test_provenance_survives_a_later_native_edit`).
-5. **¿La auto-oferta no spamea ni se abre tras migración exitosa (AC8)?** SÍ, aceptable.
-   `offer_migration_if_legacy` (en `rebind_model`, app observer adjunto sólo tras abrir el panel
-   principal): abre sólo si el scan encuentra legacy, no reabre si el review ya está abierto
-   (`migration_review_controller.open?`), fall-silent con log. Tras migración exitosa no quedan
-   Groups → save/reopen quiet (probado en host: `test_save_and_reopen_does_not_re_prompt`).
-   Nota menor no bloqueante: no hay supresión persistente tras "Más tarde" — re-ofrece al
-   re-activar un modelo aún legacy; conviene documentarlo como comportamiento intencional.
-6. **¿Palabras prohibidas del boundary ausentes en src?** SÍ. Grep de
-   bom/nesting/kerf/productionrelease/readiness/reconcil/postprocessor en `migration/`,
-   `migration_review_controller.rb` y `migration_review.html`: cero hits; `rake verify` corre el
-   boundary test verde. Reutiliza `find_definition` + `resolved_native_layout` sin resolución
-   paralela.
-7. **¿El checklist 11 puntos coincide con el código?** SÍ, ítems 1–7 y 10–11 verificados contra
-   archivos concretos. Dos deslices de documentación: el ítem 8/9 dice "16 tests nuevos" pero son
-   20 (scanner 7 + migrator 9 + provenance 4), y el comentario del módulo `MigrationBridge` está
-   duplicado (ver cambios requeridos 4 y 5).
+- C1: [x] Harness completo; `bundle exec rake verify` verde (gate aplicable de la extensión).
+- C2: [x] F201 `done` con tests que pasan; sin features `in_progress`; `progress/current.md` limpio.
+- C3: [x] Feature 100% en `apps/sketchup-extension`; boundary test verde; sin vocabulario de
+  manufactura en src nuevo; sin resolución paralela (reutiliza `find_definition` +
+  `resolved_native_layout`).
+- C4: [x] `rake verify` verde (280 unit runs / 2547 assertions + boundary 3 runs / 1181 assertions,
+  0 failures/errors/skips) Y evidencia host pinned al artefacto final por sha.
+- C5: [x] Tree limpio, todo pushed, `progress/history.md` y ledger actualizados.
 
-## Cambios requeridos
+Los 7 puntos de sospecha del round 1 permanecen verificados (ver historial); el único hallazgo
+sustancial (punto 3 del round 1) quedó cerrado con el regression test correspondiente.
 
-1. **`Migration::Migrator` serializa `ScannedEntity` (Struct) en el reporte** —
-   `src/granete_for_sketchup/migration/migrator.rb`: `requires_review =
-   scan_result.requires_review + demoted` mezcla Structs (ítems requires_review detectados por el
-   scanner, p.ej. `missing-furniture-definition-id`) con hashes (demoted).
-   `MigrationReviewController#handle_migrate` → `execute_bridge` → `JSON.generate` convierte cada
-   Struct en el string `"#<struct ScannedEntity entity=#<Sketchup::Group:0x…>, …>"`. Consecuencias:
-   (a) el payload del diálogo arrastra referencias del host; (b) en `renderResult` esos ítems
-   renderizan como "Mueble sin nombre / sin ref" **sin motivo**, degradando exactamente el AC
-   "identidad faltante queda expuesta para #397" y el reporte honesto por ítem. Repro: modelo con
-   1 ready + 1 legacy sin `furnitureDefinitionId` → Actualizar compatibles. Fix: mapear
-   `scan_result.requires_review` con `review_item` (u otro mapper a hash) antes de armar el
-   report, y agregar un test de regresión que haga `JSON.generate(report)` y verifique que cada
-   entrada de `requiresReview` es un hash con `reason`/`instanceRef`.
-2. **Sin tests del bridge ni del JS de migración** — `MigrationBridge` (auto-oferta en
-   `rebind_model`, `handle_migration_review`, `run_legacy_migration` con re-scan fresco al click)
-   no tiene cobertura en `test/unit/dialog_controller_test.rb` (que sí cubre los demás bridges),
-   y `resources/migration_review.html` no tiene test en el Node harness (`test/js/` cubre
-   inspector y material-selector). `apps/sketchup-extension/AGENTS.md` (HtmlDialog architecture)
-   exige callbacks testeables vía Node harness donde sean host-independent. Pedir: test de
-   auto-oferta (abre sólo con legacy; no reabre si ya abierto; quiet tras migración exitosa) y un
-   test JS mínimo de `initMigrationReview`/`migrationResult` (parcial nunca se viste de éxito;
-   abort no cambia nada). Este es el test que habría atrapado el defecto 1.
-3. **La evidencia host no corresponde al artefacto final** — el ledger (`feature_list.json`, F201)
-   declara "RBZ sha 91e96d59e2468bb8…" junto al TestUp 52/52, pero el build determinista del src
-   committeado produce `6a48095e6efaf9cd94dac74bdbe74124ec445cee4180a21495fd8a01b85a4875`
-   (verificado dos veces por el revisor, con y sin `SOURCE_DATE_EPOCH`), y
-   `progress/host_smoke_F201_testup_ci.*` no registra el sha del RBZ efectivamente probado. El
-   stdout muestra el run host a las 07:47 y el commit a las 07:48: algo de `src/` cambió después
-   de generar el RBZ probado (p.ej. el comentario duplicado del punto 4). Regla del AGENTS de la
-   extensión: "record RBZ SHA/version with host evidence". Pedir: reinstalar el RBZ construido
-   desde el src final, re-correr `TC_MigrationSmoke`, actualizar la evidencia y el sha del ledger
-   (o adjuntar el sha real de la evidencia).
-4. **Comentario duplicado** — `src/granete_for_sketchup/ui/dialog_controller.rb:415-421`: el
-   bloque "Migration review wiring (#416)…" aparece dos veces con redacción distinta. Eliminar uno.
-5. **Aritmética del checklist** — `progress/review_F201.md` ítem 8/9: "16 tests nuevos
-   (scanner 7, migrator 9, provenance 4)" son 20. Corregir al actualizar el archivo.
-
-## Diseño UI/UX (no aplica gate React/design.md §8 — es HtmlDialog de la extensión)
-
-- Tokens propios consistentes con `dialog.html` (mismo vocabulario de color/spacing/radius),
-  una primary action por contexto, `textContent` para todo dato dinámico (sin innerHTML con
-  input), `:focus-visible` en botones, copy español rioplatense. Aceptable para el estándar de
-  la extensión, sujeto al test JS del punto 2.
-
-## Verificación ejecutada por el revisor
+## Verificación ejecutada por el revisor (round 2)
 
 ```bash
-git -C /Users/tiagofur/dev/carpinteria/muebles-416 diff origin/main...HEAD --stat   # base real dc37bbd3
-git -C /Users/tiagofur/dev/carpinteria/muebles-416 log origin/main..HEAD --oneline # 1 commit, pushed
+git -C /Users/tiagofur/dev/carpinteria/muebles-416 log ee5bb63d..HEAD --oneline   # sólo el fix 0d807369
+git -C /Users/tiagofur/dev/carpinteria/muebles-416 status --short                # limpio
+git -C /Users/tiagofur/dev/carpinteria/muebles-416 log origin/feat/416-legacy-group-migration..HEAD # vacío (pushed)
+git -C /Users/tiagofur/dev/carpinteria/muebles-416 diff ee5bb63d..HEAD -- apps/sketchup-extension/src # migrator + dialog_controller
 cd /Users/tiagofur/dev/carpinteria/muebles-416/apps/sketchup-extension && eval "$(rbenv init - bash)"
 bundle exec rake verify
-# → 273 runs, 2520 assertions, 0 failures, 0 errors, 0 skips + boundary 3 runs, 1181 assertions
-#   + RBZ verificado (sha256 6a48095e6efaf9cd94dac74bdbe74124ec445cee4180a21495fd8a01b85a4875)
-SOURCE_DATE_EPOCH=<commit-ts> bundle exec rake package && shasum -a 256 dist/granete_for_sketchup.rbz
-# → 6a48095e… (determinista; ≠ 91e96d59… declarado en el ledger)
+# → 280 runs, 2547 assertions, 0 failures, 0 errors, 0 skips + boundary 3/1181/0
+#   + RBZ verificado (sha256 960f8ac85b5db13dedbe6479ebc4ffaa7be1c2470d412692195123ef6177c6d2)
 python3 - … progress/host_smoke_F201_testup_ci.json
-# → JSON válido; statistics {total:52, failures:0, errors:0, passes:52};
-#   4/4 TC_MigrationSmoke#* en passes (migración exitosa, undo único, fallo-preserva-fuente, save/reopen)
-ruby -rjson … # prueba de serialización: Struct ScannedEntity en el report → string basura en JSON
-grep -rniE '\b(bom|nesting|kerf|productionrelease|readiness|reconcil|postprocessor)\b' src nuevo → 0 hits
+# → statistics {total:52, failures:0, errors:0, passes:52}; 4/4 TC_MigrationSmoke en passes;
+#   metadata.rbz_sha256 == 960f8ac8… == sha del rebuild local del src final
 ```
 
-No se relanzó SketchUp ni el smoke de host (regla de esta revisión); la evidencia existente fue
-validada estructuralmente, con la salvedad del punto 3.
+No se relanzó SketchUp (regla de esta revisión); la evidencia TestUp fue validada estructuralmente
+y su sha es reproducible byte a byte desde el src committeado.
+
+---
+
+# Round 1 — historial (superseded por el round 2)
+
+**Veredicto round 1:** CHANGES_REQUESTED (head `ee5bb63d`, base `origin/main` @ `dc37bbd3`).
+
+La arquitectura era correcta y adhiere a `sketchup-native-entity-model.md` §19 (pipeline +
+5 prohibiciones) y §5 (identidad), y a `sketchup-plugin-excellence.md` §18: scanner por metadata
+namespaced, pre-flight autoritativo fuera de operación, una operación por lote, borrado sólo tras
+validación, abort total, provenance fail-closed.
+
+## Siete puntos de sospecha (round 1)
+
+1. **¿Fuente legacy borrada tras validar y en la misma operación?** SÍ. `build_migrated_furniture`
+   (termina en `validate_migrated_replacement`) → `erase_entities`, dentro de la única operación.
+   Pinned por unit (journal del stub) y host (undo único restaura el Group con identidad).
+2. **¿Ningún camino inventa identidad ni matchea por nombre/geometría?** SÍ. `instanceRef` sólo
+   desde `existing_metadata` (raise si falta); scanner por diccionario namespaced + clase;
+   `furnitureInstanceId` nunca se escribe. Negative tests de rename y nombre-distinto.
+3. **¿Abort revierte todo y el reporte nunca dice éxito total con restantes?** SÍ en sustancia
+   (`allMigrated = committed && requires_review.empty?`; stub journal rollback; host `editUndo:`),
+   con el defecto de payload corregido en round 2.
+4. **¿Store valida provenance fail-closed y el marker sobrevive?** SÍ. `validate_provenance`
+   estricto; metadata ilegible → corrupt/unsupported; marker sobrevive por `json_copy(existing_metadata)`.
+5. **¿Auto-oferta sin spam ni re-apertura post-migración (AC8)?** SÍ. Abre sólo con legacy, no
+   reabre si ya está abierto, quiet tras migración exitosa (probado en host y ahora a nivel
+   bridge). Nota menor no bloqueante: sin supresión persistente tras "Más tarde".
+6. **¿Palabras prohibidas del boundary ausentes?** SÍ (grep + boundary test).
+7. **¿Checklist 11 puntos coincide con el código?** SÍ, con dos deslices de documentación
+   corregidos en round 2.
+
+## Cambios requeridos (round 1) — todos resueltos en round 2
+
+1. `Migrator` serializaba `ScannedEntity` (Struct) en `requiresReview` → string `#<struct …>` al
+   cruzar el puente JSON, degradando el reporte por ítem. **Resuelto** (normalización +
+   regression tests).
+2. Sin tests de `MigrationBridge` ni del JS de `migration_review.html`. **Resuelto** (bridge 6
+   tests + harness JS real).
+3. RBZ sha del ledger (91e96d59…) no reproducible desde el src committeado (6a48095e…) y sin sha
+   dentro de la evidencia. **Resuelto** (sha 960f8ac8… dentro de `metadata.rbz_sha256`, TestUp
+   re-correrido contra ese RBZ).
+4. Comentario duplicado en `dialog_controller.rb:415-421`. **Resuelto**.
+5. Aritmética "16 tests" (eran 20). **Resuelto**.
+
+## Verificación ejecutada por el revisor (round 1)
+
+```bash
+git diff origin/main...HEAD --stat / -- apps/sketchup-extension/src / test / docs
+bundle exec rake verify          # 273+3 runs verde; RBZ 6a48095e… (determinista, ≠ 91e96d59… del ledger)
+python3 - … host_smoke_F201_testup_ci.json   # 52/52 válido, 4/4 TC_MigrationSmoke
+ruby -rjson …                    # Struct en el reporte → string basura en JSON (defecto 1)
+grep -rniE boundary words src     # 0 hits
+```
