@@ -6,6 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProductionManagerDashboard } from './ProductionManagerDashboard';
 import { FabricScreen } from './FabricScreen';
 import { EmbarquesScreen } from './EmbarquesScreen';
@@ -103,7 +104,16 @@ describe('F106 page chrome — Producción, Almacén y Config', () => {
       'fetch',
       vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })),
     );
-    render(<UsersScreen baseUrl="http://test/api" token="t" />);
+    const root = ['organization', 'session', 'page-chrome'] as const;
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <UsersScreen
+          baseUrl="http://test/api"
+          token="t"
+          queryKeys={{ root, team: [...root, 'team'], invitations: [...root, 'invitations'] }}
+        />
+      </QueryClientProvider>,
+    );
     expectSharedHeader('Usuarios');
     expect(
       screen.getByRole('button', { name: 'Recargar usuarios' }),

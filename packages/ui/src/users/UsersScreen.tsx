@@ -7,6 +7,12 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
+import {
   CheckCircle2,
   MinusCircle,
   RefreshCw,
@@ -26,9 +32,14 @@ import {
   ASSIGNABLE_ROLES,
   roleLabelEs,
   type ProductRole,
-  type TeamCapability,
 } from '@granete/domain';
-import { GraneteApiClient, GraneteApiError, type TeamMember, type Invitation, type TeamSummary } from '@granete/storage';
+import {
+  GraneteApiClient,
+  GraneteApiError,
+  type TeamCapability,
+  type TeamMember,
+  type Invitation,
+} from '@granete/storage';
 
 export type UserRow = TeamMember;
 export type OrgInvitationRow = Invitation;
@@ -38,6 +49,11 @@ export type UserFilter = 'all' | 'active' | 'suspended' | 'left' | 'invitations'
 export interface UsersScreenProps {
   readonly baseUrl: string;
   readonly token: string;
+  readonly queryKeys: {
+    readonly root: QueryKey;
+    readonly team: QueryKey;
+    readonly invitations: QueryKey;
+  };
   /**
    * Active organization type (factory/store/dealer). Store/dealer show only
    * the roles their org type may assign (#326) — mirrors the server-side
@@ -119,16 +135,10 @@ function canInviteRoleSet(
 // name for the same canonical role. The assignable list itself is also the
 // domain's canonical ASSIGNABLE_ROLES (contract-pinned), filtered per org
 // type — this screen keeps no local copy to drift out of sync.
-export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): ReactNode {
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [invitations, setInvitations] = useState<OrgInvitationRow[]>([]);
-  const [summary, setSummary] = useState<TeamSummary | null>(null);
+export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenProps): ReactNode {
   const [filter, setFilter] = useState<UserFilter>('active');
-  const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [invitationLoadError, setInvitationLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Multi-role edit modal
@@ -161,53 +171,45 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   );
 
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
-  const capabilities = (summary?.capabilities ?? []) as readonly TeamCapability[];
+  const queryClient = useQueryClient();
+  const teamQuery = useQuery({
+    queryKey: queryKeys.team,
+    queryFn: ({ signal }) => api.listMemberships(token, signal),
+  });
+  const users = teamQuery.data?.items ?? [];
+  const summary = teamQuery.data?.summary ?? null;
+  const capabilities: readonly TeamCapability[] = summary?.capabilities ?? [];
   const invitationRoles = assignableRoles.filter((role) =>
     role !== 'user' && canInviteRoleSet(capabilities, [role]),
   );
   const canInvite = invitationRoles.length > 0;
   const canRevokeSessions = hasCapability(capabilities, 'team:revoke_sessions');
+  const invitationsQuery = useQuery({
+    queryKey: queryKeys.invitations,
+    queryFn: ({ signal }) => api.listInvitations(token, signal),
+    enabled: canInvite,
+  });
+  const invitations = invitationsQuery.data ?? [];
+  const mutation = useMutation({
+    mutationFn: (operation: () => Promise<void>) => operation(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.root }),
+  });
+  const loading = teamQuery.isPending;
+  const loadError = teamQuery.isError
+    ? 'No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.'
+    : null;
+  const invitationLoadError = invitationsQuery.isError
+    ? 'No se pudieron cargar las invitaciones. El directorio del equipo sigue disponible.'
+    : null;
+
+  useEffect(() => {
+    if (!canInvite) setFilter((current) => current === 'invitations' ? 'active' : current);
+  }, [canInvite]);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
   };
-
-  const load = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const team = await api.listMemberships(token);
-      setUsers([...team.items]);
-      setSummary(team.summary);
-      const grantedCapabilities = team.summary.capabilities as readonly TeamCapability[];
-      const mayInvite = ASSIGNABLE_ROLES.some((role) =>
-        role !== 'user' && canInviteRoleSet(grantedCapabilities, [role]),
-      );
-      if (mayInvite) {
-        setInvitationLoadError(null);
-        try {
-          const pendingInvitations = await api.listInvitations(token);
-          setInvitations([...pendingInvitations]);
-        } catch {
-          setInvitations([]);
-          setInvitationLoadError('No se pudieron cargar las invitaciones. El directorio del equipo sigue disponible.');
-        }
-      } else {
-        setInvitations([]);
-        setInvitationLoadError(null);
-        setFilter((current) => current === 'invitations' ? 'active' : current);
-      }
-    } catch {
-      setLoadError('No se pudo cargar el equipo. Revisá tu conexión y volvé a intentar.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [baseUrl, token]);
 
   const filtered = useMemo(() => {
     if (filter === 'suspended') return users.filter((u) => u.membership_status === 'suspended');
@@ -225,6 +227,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     if (error.code === 'LAST_ADMIN') return 'No se puede dejar al taller sin administrador. Transferí ese rol antes de continuar.';
     if (error.code === 'SEAT_LIMIT_REACHED') return 'No hay lugares disponibles para reactivar esta membresía. Liberá un lugar o revisá el límite del taller.';
     if (error.code === 'MEMBERSHIP_VERSION_CONFLICT') return 'Esta membresía cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
+    if (error.code === 'VERSION_CONFLICT' || error.code === 'INVITATION_TOKEN_ROTATED') return 'Esta invitación cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
+    if (error.code === 'INVITATION_ALREADY_USED' || error.code === 'INVITATION_REVOKED') return 'La invitación ya no está disponible. Actualizá la lista para ver su estado actual.';
     if (error.code === 'FORBIDDEN') return 'No tenés permiso para realizar esta acción en este miembro.';
     return fallback;
   };
@@ -235,10 +239,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     try {
       const member = users.find((candidate) => candidate.membership_id === membershipId);
       if (!member) throw new Error('Miembro no encontrado');
-      await api.changeMembershipRoles(token, membershipId, member.version, { roles });
+      await mutation.mutateAsync(async () => {
+        await api.changeMembershipRoles(token, membershipId, member.version, { roles });
+      });
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
-      await load();
     } catch (error) {
       setActionError(mutationError(error, 'No se pudieron guardar los roles. Revisá tu conexión e intentá de nuevo.'));
     } finally {
@@ -250,9 +255,10 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setActionId(member.membership_id);
     setActionError(null);
     try {
-      await api.reactivateMembership(token, member.membership_id, member.version);
+      await mutation.mutateAsync(async () => {
+        await api.reactivateMembership(token, member.membership_id, member.version);
+      });
       showToast('Membresía reactivada');
-      await load();
     } catch (error) {
       setActionError(mutationError(error, 'No se pudo reactivar la membresía. Revisá tu conexión e intentá de nuevo.'));
     } finally {
@@ -265,10 +271,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setActionId(suspendMember.membership_id);
     setActionError(null);
     try {
-      await api.suspendMembership(token, suspendMember.membership_id, suspendMember.version, { reason: suspendReason.trim() });
+      await mutation.mutateAsync(async () => {
+        await api.suspendMembership(token, suspendMember.membership_id, suspendMember.version, { reason: suspendReason.trim() });
+      });
       showToast('Membresía suspendida');
       setSuspendMember(null);
-      await load();
     } catch (error) {
       setActionError(mutationError(error, 'No se pudo suspender la membresía. Revisá tu conexión e intentá de nuevo.'));
     } finally {
@@ -281,10 +288,11 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setActionId(revokeSessionsMember.membership_id);
     setActionError(null);
     try {
-      await api.revokeMembershipSessions(token, revokeSessionsMember.membership_id, revokeSessionsMember.version, { reason: revokeSessionsReason.trim() });
+      await mutation.mutateAsync(async () => {
+        await api.revokeMembershipSessions(token, revokeSessionsMember.membership_id, revokeSessionsMember.version, { reason: revokeSessionsReason.trim() });
+      });
       showToast('Sesiones revocadas');
       setRevokeSessionsMember(null);
-      await load();
     } catch (error) {
       setActionError(mutationError(error, 'No se pudieron revocar las sesiones. Revisá tu conexión e intentá de nuevo.'));
     } finally {
@@ -301,14 +309,14 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
     setInviteLoading(true);
     setInviteError(null);
     try {
-      const data = await api.createInvitation(token, {
+      await mutation.mutateAsync(async () => {
+        const data = await api.createInvitation(token, {
           email: inviteEmail.trim(),
           roles: inviteRoles,
+        });
+        setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
       });
-      const fullUrl = `${window.location.origin}${data.accept_url}`;
-      setCreatedInviteLink(fullUrl);
       showToast('✓ Invitación creada');
-      await load();
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : 'Error al crear invitación');
     } finally {
@@ -319,12 +327,16 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
   const handleRevokeInvitation = async (invitation: Invitation) => {
     if (!revokeReason.trim()) return;
     setActionId(invitation.id);
+    setActionError(null);
     try {
-      await api.revokeInvitation(token, invitation.id, invitation.version, { reason: revokeReason.trim() });
+      await mutation.mutateAsync(async () => {
+        await api.revokeInvitation(token, invitation.id, invitation.version, { reason: revokeReason.trim() });
+      });
       showToast('✓ Invitación revocada');
       setRevokeInvitation(null);
       setRevokeReason('');
-      await load();
+    } catch (error) {
+      setActionError(mutationError(error, 'No se pudo revocar la invitación. Actualizá la lista e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
@@ -332,25 +344,33 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
 
   const handleResendInvitation = async (invitation: Invitation) => {
     setActionId(invitation.id);
+    setActionError(null);
     try {
-      const data = await api.resendInvitation(token, invitation.id, invitation.version);
-      setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+      await mutation.mutateAsync(async () => {
+        const data = await api.resendInvitation(token, invitation.id, invitation.version);
+        setCreatedInviteLink(`${window.location.origin}${data.accept_url}`);
+      });
       setShowInviteModal(true);
       showToast('✓ Enlace rotado. El enlace anterior ya no sirve.');
-      await load();
-    } catch {
-      showToast('No se pudo reenviar la invitación');
+    } catch (error) {
+      setActionError(mutationError(error, 'No se pudo reenviar la invitación. Actualizá la lista e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
   };
 
-  const handleCopyInviteLink = () => {
+  const handleCopyInviteLink = async () => {
     if (!createdInviteLink) return;
-    void navigator.clipboard.writeText(createdInviteLink);
-    setCopiedLink(true);
-    showToast('✓ Enlace copiado al portapapeles');
-    setTimeout(() => setCopiedLink(false), 3000);
+    setActionError(null);
+    try {
+      await navigator.clipboard.writeText(createdInviteLink);
+      setCopiedLink(true);
+      showToast('✓ Enlace copiado al portapapeles');
+      setTimeout(() => setCopiedLink(false), 3000);
+    } catch {
+      setCopiedLink(false);
+      setActionError('No se pudo copiar el enlace. Seleccionalo y copialo manualmente.');
+    }
   };
 
   const roleChips = (u: UserRow) => {
@@ -394,8 +414,8 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             type="button"
             className="btn btn--secondary btn--small"
             aria-label="Recargar usuarios"
-            onClick={() => void load()}
-            disabled={loading}
+            onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.root })}
+            disabled={teamQuery.isFetching || invitationsQuery.isFetching}
           >
             <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" /> Actualizar
           </button>
@@ -448,7 +468,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
           title="No se pudo cargar el equipo"
           description={loadError}
           actionLabel="Reintentar"
-          onAction={() => void load()}
+          onAction={() => void queryClient.invalidateQueries({ queryKey: queryKeys.root })}
         />
       ) : filter === 'invitations' ? (
         /* INVITATIONS VIEW */
@@ -457,7 +477,7 @@ export function UsersScreen({ baseUrl, token, orgType }: UsersScreenProps): Reac
             title="No se pudieron cargar las invitaciones"
             description={invitationLoadError}
             actionLabel="Reintentar"
-            onAction={() => void load()}
+            onAction={() => void queryClient.invalidateQueries({ queryKey: queryKeys.root })}
           />
         ) : invitations.length === 0 ? (
           <EmptyState

@@ -261,6 +261,8 @@ import {
   structureEditIdFromPath,
   type EntitySection,
 } from './routes';
+import { organizationKeys } from './shared/query/queryKeys';
+import type { SessionScope } from './shared/query/sessionScope';
 import {
   clearSession,
   DEFAULT_API_BASE,
@@ -336,6 +338,7 @@ export interface ShellViewCtx {
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly assignableOwners: readonly AssignableOwner[];
   readonly authToken: string | null;
+  readonly sessionScope: SessionScope | null;
   /** Active organization type (factory/store/dealer) — org-type role gates. */
   readonly orgType: string | null | undefined;
   readonly authUser: AuthUser | null;
@@ -617,6 +620,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     applyScenarioB,
     assignableOwners,
     authToken,
+    sessionScope,
     authUser,
     orgType,
     backendBreakdown,
@@ -1652,12 +1656,19 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         />
       ) : null}
 
-      {navId === 'users' && showAdminUsers && authToken ? (
+      {navId === 'users' && showAdminUsers && authToken && sessionScope ? (
         <UsersScreen
           baseUrl={DEFAULT_API_BASE}
           token={authToken}
           orgType={orgType}
+          queryKeys={{
+            root: organizationKeys.all(sessionScope),
+            team: organizationKeys.team(sessionScope),
+            invitations: organizationKeys.invitations(sessionScope),
+          }}
         />
+      ) : navId === 'users' && showAdminUsers && authToken ? (
+        <PageLoading label="Validando sesión del taller…" />
       ) : null}
       {navId === 'platform' && isPlatformAdmin && authToken ? (
         <PlatformScreen
