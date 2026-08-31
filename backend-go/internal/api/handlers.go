@@ -2158,8 +2158,29 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
+	if claims.ExpiresAt == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
 	transport := authTransportFromClaims(claims)
-	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Transport: transport}
+	scope := openapi.SessionScope{
+		UserID:            claims.UserID,
+		Mode:              "auth",
+		AbsoluteExpiresAt: claims.ExpiresAt.Time.UTC().Format(time.RFC3339Nano),
+	}
+	if claims.MembershipID != "" {
+		scope.MembershipID = &claims.MembershipID
+	}
+	if claims.OrgID != "" {
+		scope.OrganizationID = &claims.OrgID
+	}
+	if claims.MembershipCredentialVersion > 0 {
+		scope.MembershipCredentialVersion = &claims.MembershipCredentialVersion
+	}
+	if claims.OrganizationCredentialVersion > 0 {
+		scope.OrganizationCredentialVersion = &claims.OrganizationCredentialVersion
+	}
+	resp := openapi.MeResponse{User: toOpenAPIUser(u), Roles: claims.Roles, Transport: transport, SessionScope: scope}
 	if claims.OrgID != "" {
 		if m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID); err == nil && m != nil {
 			org := toOpenAPIOrganization(m.Organization)
@@ -2167,6 +2188,10 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if claims.Support != nil {
+		scope.Mode = "support"
+		scope.SupportSessionID = &claims.Support.SessionID
+		scope.OrganizationCredentialVersion = &claims.Support.OrganizationCredentialVersion
+		resp.SessionScope = scope
 		resp.Support = &openapi.SupportInfo{OrganizationID: claims.Support.OrgID, SessionID: claims.Support.SessionID, Reason: claims.Support.Reason}
 	}
 	respondWithJSON(w, http.StatusOK, resp)

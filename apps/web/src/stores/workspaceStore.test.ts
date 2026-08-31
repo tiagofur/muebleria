@@ -833,6 +833,12 @@ describe('workspaceStore — hydrateSessionInfo', () => {
         user: AUTH_USER,
         roles: ['vendedor', 'ingeniero'],
         transport: 'web',
+        session_scope: {
+          user_id: AUTH_USER.id, membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
+          support_session_id: null, recovery_session_id: null,
+          membership_credential_version: 1, organization_credential_version: 1,
+          absolute_expires_at: '2026-08-31T00:00:00Z',
+        },
       }),
     );
     const store = createWorkspaceStore({

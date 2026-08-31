@@ -135,12 +135,25 @@ type SupportInfo struct {
 	Reason         string `json:"reason"`
 }
 
+type SessionScope struct {
+	UserID                        string  `json:"user_id"`
+	MembershipID                  *string `json:"membership_id"`
+	OrganizationID                *string `json:"organization_id"`
+	Mode                          string  `json:"mode"`
+	SupportSessionID              *string `json:"support_session_id"`
+	RecoverySessionID             *string `json:"recovery_session_id"`
+	MembershipCredentialVersion   *int64  `json:"membership_credential_version"`
+	OrganizationCredentialVersion *int64  `json:"organization_credential_version"`
+	AbsoluteExpiresAt             string  `json:"absolute_expires_at"`
+}
+
 type MeResponse struct {
 	User         User                 `json:"user"`
 	Roles        []string             `json:"roles"`
 	Organization *OrganizationSummary `json:"organization,omitempty"`
 	Support      *SupportInfo         `json:"support,omitempty"`
 	Transport    AuthTransport        `json:"transport"`
+	SessionScope SessionScope         `json:"session_scope"`
 }
 
 type TeamMember struct {

@@ -31,6 +31,17 @@ const sessionDto = {
     license: { plan: 'pro', status: 'active', expires_at: null },
   },
   transport: 'web',
+  session_scope: {
+    user_id: '11111111-1111-4111-8111-111111111111',
+    membership_id: '33333333-3333-4333-8333-333333333333',
+    organization_id: '22222222-2222-4222-8222-222222222222',
+    mode: 'auth',
+    support_session_id: null,
+    recovery_session_id: null,
+    membership_credential_version: 4,
+    organization_credential_version: 7,
+    absolute_expires_at: '2026-08-31T00:00:00Z',
+  },
 } as const;
 
 describe('tenant-safe query foundation (#458)', () => {
@@ -41,17 +52,21 @@ describe('tenant-safe query foundation (#458)', () => {
     expect(sessionScopeKey(scope)).toEqual([
       'session',
       generation,
-      sessionDto.user.id,
-      sessionDto.organization.id,
+      sessionDto.session_scope.user_id,
+      sessionDto.session_scope.membership_id,
+      sessionDto.session_scope.organization_id,
       'auth',
       null,
-      'web',
+      null,
+      4,
+      7,
+      '2026-08-31T00:00:00Z',
     ]);
     expect(() => sessionScopeFromSession({ ...sessionDto, transport: 'browser' }, generation))
       .toThrow('Invalid API response');
   });
 
-  it('isolates a new login with the same user and organization in a different root', () => {
+  it('isolates a new login with the same user, membership, and organization in a different root', () => {
     const first = sessionScopeFromSession(sessionDto, createSessionGeneration());
     const relogin = sessionScopeFromSession(sessionDto, createSessionGeneration());
 

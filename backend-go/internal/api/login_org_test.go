@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -125,6 +127,72 @@ func TestLogin_NoMembershipNoPlatform(t *testing.T) {
 	rec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "secret123"})
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMe_EmitsAuthoritativeSessionScope(t *testing.T) {
+	server, _ := loginTestServer(t)
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-2", MembershipID: "u1:org-2",
+		MembershipCredentialVersion: 4, OrganizationCredentialVersion: 7,
+	}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
+	rec := httptest.NewRecorder()
+
+	server.HandleMe(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response openapi.MeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	scope := response.SessionScope
+	if scope.UserID != "u1" || scope.MembershipID == nil || *scope.MembershipID != "u1:org-2" ||
+		scope.OrganizationID == nil || *scope.OrganizationID != "org-2" || scope.Mode != "auth" ||
+		scope.MembershipCredentialVersion == nil || *scope.MembershipCredentialVersion != 4 ||
+		scope.OrganizationCredentialVersion == nil || *scope.OrganizationCredentialVersion != 7 ||
+		scope.AbsoluteExpiresAt == "" {
+		t.Fatalf("unexpected session scope: %+v", scope)
+	}
+}
+
+func TestMe_SeparatesSupportScopeFromMembershipScope(t *testing.T) {
+	server, _ := loginTestServer(t)
+	token, err := auth.GenerateSupportToken("u1", "u@example.com", auth.SupportClaims{
+		OrgID: "org-2", SessionID: "support-1", OrganizationCredentialVersion: 9, Reason: "investigation",
+	}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := auth.ValidateToken(token, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req = req.WithContext(context.WithValue(req.Context(), UserContextKey, claims))
+	rec := httptest.NewRecorder()
+	server.HandleMe(rec, req)
+
+	var response openapi.MeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	scope := response.SessionScope
+	if rec.Code != http.StatusOK || scope.Mode != "support" || scope.SupportSessionID == nil ||
+		*scope.SupportSessionID != "support-1" || scope.MembershipID != nil ||
+		scope.MembershipCredentialVersion != nil || scope.OrganizationCredentialVersion == nil ||
+		*scope.OrganizationCredentialVersion != 9 {
+		t.Fatalf("unexpected support scope: status=%d scope=%+v", rec.Code, scope)
 	}
 }
 

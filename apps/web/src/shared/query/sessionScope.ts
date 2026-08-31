@@ -1,4 +1,8 @@
-import { parseGenerated, type MeResponse } from '@granete/storage';
+import {
+  parseGenerated,
+  type MeResponse,
+  type SessionScope as GeneratedSessionScope,
+} from '@granete/storage';
 
 declare const sessionGenerationBrand: unique symbol;
 const sessionScopeBrand: unique symbol = Symbol('SessionScope');
@@ -11,10 +15,14 @@ export type SessionScope = {
   readonly [sessionScopeBrand]: true;
   readonly sessionGeneration: SessionGeneration;
   readonly userId: string;
+  readonly membershipId: string | null;
   readonly organizationId: string | null;
-  readonly mode: 'auth' | 'support';
+  readonly mode: GeneratedSessionScope['mode'];
   readonly supportSessionId: string | null;
-  readonly transport: MeResponse['transport'];
+  readonly recoverySessionId: string | null;
+  readonly membershipCredentialVersion: number | null;
+  readonly organizationCredentialVersion: number | null;
+  readonly absoluteExpiresAt: string;
 };
 
 export function createSessionGeneration(): SessionGeneration {
@@ -32,14 +40,19 @@ export function sessionScopeFromSession(
   sessionGeneration: SessionGeneration,
 ): SessionScope {
   const validated = parseGenerated<MeResponse>('MeResponse', session);
+  const scope = validated.session_scope;
   return {
     [sessionScopeBrand]: true,
     sessionGeneration,
-    userId: validated.user.id,
-    organizationId: validated.organization?.id ?? null,
-    mode: validated.support ? 'support' : 'auth',
-    supportSessionId: validated.support?.session_id ?? null,
-    transport: validated.transport,
+    userId: scope.user_id,
+    membershipId: scope.membership_id,
+    organizationId: scope.organization_id,
+    mode: scope.mode,
+    supportSessionId: scope.support_session_id,
+    recoverySessionId: scope.recovery_session_id,
+    membershipCredentialVersion: scope.membership_credential_version,
+    organizationCredentialVersion: scope.organization_credential_version,
+    absoluteExpiresAt: scope.absolute_expires_at,
   };
 }
 
@@ -48,9 +61,13 @@ export function sessionScopeKey(scope: SessionScope) {
     'session',
     scope.sessionGeneration,
     scope.userId,
+    scope.membershipId,
     scope.organizationId,
     scope.mode,
     scope.supportSessionId,
-    scope.transport,
+    scope.recoverySessionId,
+    scope.membershipCredentialVersion,
+    scope.organizationCredentialVersion,
+    scope.absoluteExpiresAt,
   ] as const;
 }
