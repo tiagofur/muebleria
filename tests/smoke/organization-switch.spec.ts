@@ -9,6 +9,79 @@ import {
 } from '../fixtures/organizationSwitch';
 
 test.describe('F199 mocked browser switch gates', () => {
+  test('requires confirmation for a real dirty editor and purges A only after commit', async ({ page }) => {
+    await seedBrowserSession(page);
+    const api = await installOrganizationApi(page);
+    await page.goto('/modules/module-a/edit');
+    const name = page.getByLabel('Nombre');
+    await expect(name).toHaveValue('Mueble A');
+    await name.fill('Tenant A unsaved');
+    const urlA = page.url();
+
+    await page.getByLabel('Cambiar organización').selectOption(ORG_B);
+    const confirmation = page.getByRole('dialog', { name: 'Cambiar de organización' });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(page).toHaveURL(urlA);
+    await expect(name).toHaveValue('Tenant A unsaved');
+    expect(api.requests.some(({ path }) => path.endsWith('/auth/select-org'))).toBe(false);
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_A);
+
+    await page.getByLabel('Cambiar organización').selectOption(ORG_B);
+    await confirmation.getByRole('button', { name: 'Descartar y cambiar' }).click();
+    await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Taller B');
+    await expect(page.getByTestId('module-card-module-b')).toBeVisible();
+    expect(await page.evaluate(() => [...Array(sessionStorage.length)].map((_, index) =>
+      sessionStorage.getItem(sessionStorage.key(index) ?? '')).join(' '))).not.toContain('Tenant A unsaved');
+
+    await page.reload();
+    await expect(page.getByTestId('module-card-module-b')).toBeVisible();
+    expect(await page.locator('input').evaluateAll((inputs) => inputs.every((input) =>
+      !(input instanceof HTMLInputElement) || input.value !== 'Tenant A unsaved'))).toBe(true);
+  });
+
+  test('recovers a stale revoked choice without leaving tenant A', async ({ page }) => {
+    await seedBrowserSession(page);
+    const api = await installOrganizationApi(page, { selectFailure: 'revoked' });
+    await page.goto('/users');
+    await expect(page.getByText('Ana A')).toBeVisible();
+    const routeA = page.url();
+
+    await page.getByLabel('Cambiar organización').selectOption(ORG_B);
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('acceso a este taller fue revocado');
+    await expect(alert.getByRole('button', { name: 'Actualizar talleres' })).toBeVisible();
+    await expect(page).toHaveURL(routeA);
+    await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Taller A');
+    await expect(page.getByText('Ana A')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_A);
+
+    await alert.getByRole('button', { name: 'Actualizar talleres' }).click();
+    await expect(page.getByLabel('Cambiar organización')).toHaveCount(0);
+    await expect(alert).toHaveCount(0);
+    await expect(page.getByText('Ana A')).toBeVisible();
+    expect(api.requests.filter(({ path }) => path.endsWith('/auth/select-org'))).toHaveLength(1);
+  });
+
+  for (const [failure, message] of [
+    ['forbidden', 'No se pudo cambiar de taller. Verificá tus permisos'],
+    ['network', 'No se pudo conectar para cambiar de taller'],
+  ] as const) {
+    test(`keeps unknown ${failure} distinct from revoked membership`, async ({ page }) => {
+      await seedBrowserSession(page);
+      await installOrganizationApi(page, { selectFailure: failure });
+      await page.goto('/users');
+
+      await page.getByLabel('Cambiar organización').selectOption(ORG_B);
+      const alert = page.getByRole('alert');
+      await expect(alert).toContainText(message);
+      await expect(alert).not.toContainText('revocado');
+      await expect(alert.getByRole('button', { name: 'Actualizar talleres' })).toHaveCount(0);
+      await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Taller A');
+      expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_A);
+    });
+  }
+
   test('late tenant A data cannot replace tenant B shell, actions, token, or media', async ({ page }) => {
     await seedBrowserSession(page);
     const api = await installOrganizationApi(page, { delayTeamA: true });
