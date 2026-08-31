@@ -621,6 +621,7 @@ export function AppContent({
   const supportExiting = useWorkspaceStore((st) => st.supportExiting);
   const exitSupport = useWorkspaceStore((st) => st.exitSupport);
   const activeOrg = useWorkspaceStore((st) => st.activeOrg);
+  const sessionScope = useWorkspaceStore((st) => st.sessionScope);
   const hydrateSessionInfo = useWorkspaceStore((st) => st.hydrateSessionInfo);
   useEffect(() => {
     if (session === 'auth') void hydrateSessionInfo();
@@ -2989,6 +2990,7 @@ export function AppContent({
     selectedProjectCutRows,
     selectedProjectId,
     session,
+    sessionScope,
     setAmbientMaterialActive,
     setAnalyticsPeriod,
     setCustomerActive,

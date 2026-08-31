@@ -226,6 +226,9 @@ importers:
       '@react-three/fiber':
         specifier: ^9.6.1
         version: 9.6.1(c63a8c96fe33fd020fec37062e61e303)
+      '@tanstack/react-query':
+        specifier: 5.102.8
+        version: 5.102.8(react@19.2.7)
       jsqr:
         specifier: ^1.4.0
         version: 1.4.0
