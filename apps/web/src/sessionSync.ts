@@ -20,21 +20,21 @@ export function notifySessionChanged(): void {
 export function installSessionSync(onChanged: () => void): void {
   if (installed || typeof window === 'undefined') return;
   installed = true;
+  storageListener = (event) => {
+    if (event.key === TOKEN_STORAGE_KEY) onChanged();
+  };
+  window.addEventListener('storage', storageListener);
+
   if (typeof BroadcastChannel !== 'undefined') {
     try {
       if (!channel) channel = new BroadcastChannel(CHANNEL_NAME);
       channel.onmessage = (event: MessageEvent) => {
         if (event.data === SESSION_CHANGED) onChanged();
       };
-      return;
     } catch {
-      // Fall through to the storage event.
+      // The storage listener remains active when BroadcastChannel fails.
     }
   }
-  storageListener = (event) => {
-    if (event.key === TOKEN_STORAGE_KEY) onChanged();
-  };
-  window.addEventListener('storage', storageListener);
 }
 
 export function __resetSessionSyncForTests(): void {

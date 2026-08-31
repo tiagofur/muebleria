@@ -5,6 +5,7 @@ import {
   installSessionSync,
   notifySessionChanged,
 } from './sessionSync';
+import { TOKEN_STORAGE_KEY } from './session';
 
 class FakeChannel {
   static instances: FakeChannel[] = [];
@@ -46,5 +47,29 @@ describe('session multi-tab policy (#458)', () => {
     notifySessionChanged();
 
     expect(received).toHaveBeenCalledWith({ data: 'session-changed' });
+  });
+
+  it('keeps the storage-event fallback active when BroadcastChannel is available', () => {
+    vi.stubGlobal('BroadcastChannel', FakeChannel as unknown as typeof BroadcastChannel);
+    const changed = vi.fn();
+    installSessionSync(changed);
+
+    window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY }));
+
+    expect(changed).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the storage-event fallback active when broadcast publishing fails', () => {
+    class FailingChannel extends FakeChannel {
+      override postMessage(): void { throw new Error('channel unavailable'); }
+    }
+    vi.stubGlobal('BroadcastChannel', FailingChannel as unknown as typeof BroadcastChannel);
+    const changed = vi.fn();
+    installSessionSync(changed);
+
+    notifySessionChanged();
+    window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY }));
+
+    expect(changed).toHaveBeenCalledOnce();
   });
 });

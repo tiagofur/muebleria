@@ -277,6 +277,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 loginError: null,
                 pendingOrgSelection: result.memberships,
               });
+              notifySessionChanged();
               return;
             }
             set({
@@ -298,6 +299,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             if (guestWorkspaceHasProjects()) {
               set({ pendingGuestImport: true });
             }
+            notifySessionChanged();
           } catch (err) {
             const message =
               err instanceof Error ? err.message : 'No se pudo iniciar sesión';
@@ -314,6 +316,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             set({
               pendingOrgSelection: result.memberships,
             });
+            notifySessionChanged();
             return;
           }
           set({
@@ -326,6 +329,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             workspaceLoadError: null,
             assignableOwners: [],
           });
+          notifySessionChanged();
         },
 
         selectOrg: async (organizationId: string) => {
