@@ -14,6 +14,7 @@ import {
   TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY,
 } from '../session';
+import * as sessionSync from '../sessionSync';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +55,12 @@ const AUTH_USER = {
   platform_admin: false,
   created_at: '2026-08-29T00:00:00Z',
   updated_at: '2026-08-29T00:00:00Z',
+} as const;
+
+const SESSION_SCOPE = {
+  user_id: 'user-1', membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
+  support_session_id: null, recovery_session_id: null, membership_credential_version: 2,
+  organization_credential_version: 3, absolute_expires_at: '2026-08-31T00:00:00Z',
 } as const;
 
 function jsonOk(body: unknown, init: ResponseInit = {}): Response {
@@ -187,6 +194,9 @@ describe('workspaceStore — enterAsGuest', () => {
 
 describe('workspaceStore — login', () => {
   it('on success: sets session to auth, persists token+user, resets workspace', async () => {
+    const notifySessionChanged = vi
+      .spyOn(sessionSync, 'notifySessionChanged')
+      .mockImplementation(() => undefined);
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -209,6 +219,27 @@ describe('workspaceStore — login', () => {
       { id: AUTH_USER.id, roles: ['admin'] },
     );
     expect(store.getState().workspace).toBeNull(); // forces reload
+    expect(notifySessionChanged).toHaveBeenCalledOnce();
+  });
+
+  it('notifies other tabs after consuming an external authentication payload', () => {
+    const notifySessionChanged = vi
+      .spyOn(sessionSync, 'notifySessionChanged')
+      .mockImplementation(() => undefined);
+    const store = createWorkspaceStore();
+
+    store.getState().loginWithAuthPayload({
+      token: 'jwt-external',
+      user: AUTH_USER,
+      license: { plan: 'none', status: 'none' },
+      roles: ['admin'],
+      memberships: [],
+      selection_required: false,
+      transport: 'web',
+    });
+
+    expect(notifySessionChanged).toHaveBeenCalledOnce();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-external');
   });
 
   it('calls POST {baseUrl}/auth/login with JSON body', async () => {
@@ -833,12 +864,7 @@ describe('workspaceStore — hydrateSessionInfo', () => {
         user: AUTH_USER,
         roles: ['vendedor', 'ingeniero'],
         transport: 'web',
-        session_scope: {
-          user_id: AUTH_USER.id, membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
-          support_session_id: null, recovery_session_id: null,
-          membership_credential_version: 1, organization_credential_version: 1,
-          absolute_expires_at: '2026-08-31T00:00:00Z',
-        },
+        session_scope: SESSION_SCOPE,
       }),
     );
     const store = createWorkspaceStore({
@@ -851,6 +877,7 @@ describe('workspaceStore — hydrateSessionInfo', () => {
       globalThis.localStorage.getItem(USER_STORAGE_KEY)!,
     );
     expect(stored.roles).toEqual(['vendedor', 'ingeniero']);
+    expect(store.getState().sessionScope).toMatchObject({ organizationId: 'org-1', mode: 'auth' });
   });
 
   it('keeps the stored user unchanged when /auth/me reports no roles', async () => {
@@ -872,5 +899,52 @@ describe('workspaceStore — hydrateSessionInfo', () => {
       globalThis.localStorage.getItem(USER_STORAGE_KEY)!,
     );
     expect(stored.roles).toEqual(['admin']);
+  });
+});
+
+describe('workspaceStore — atomic organization transition', () => {
+  const selected = {
+    token: 'jwt-new', user: AUTH_USER, license: { plan: 'none', status: 'none' },
+    roles: ['admin'], memberships: [], selection_required: false, transport: 'web',
+    organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
+  };
+
+  it('commits the new token only after its authoritative scope validates', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn() };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(selected))
+      .mockResolvedValueOnce(jsonOk({
+        user: AUTH_USER, roles: ['admin'], organization: selected.organization,
+        transport: 'web', session_scope: SESSION_SCOPE,
+      }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl, tenantTransition: transition },
+    });
+
+    await store.getState().selectOrg('org-1');
+
+    expect(transition.prepare).toHaveBeenCalledBefore(fetchImpl);
+    expect(transition.commit).toHaveBeenCalledOnce();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-new');
+    expect(store.getState().sessionScope?.organizationId).toBe('org-1');
+  });
+
+  it('keeps the prior token and cache when scope validation fails', async () => {
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn() };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonOk(selected))
+      .mockResolvedValueOnce(jsonOk({ user: AUTH_USER, roles: ['admin'], transport: 'web' }));
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl, tenantTransition: transition },
+    });
+
+    await store.getState().selectOrg('org-1');
+
+    expect(transition.commit).not.toHaveBeenCalled();
+    expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-old');
+    expect(store.getState().session).toBeNull();
+    expect(store.getState().orgSelectionError).toBeTruthy();
   });
 });

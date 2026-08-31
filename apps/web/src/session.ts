@@ -3,6 +3,12 @@ import {
   type LoginResponse, type MeResponse, type User, type OrganizationSummary,
   type Membership, type SupportInfo as GeneratedSupportInfo,
 } from '@granete/storage';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+  type SessionGeneration,
+  type SessionScope,
+} from './shared/query/sessionScope';
 
 /**
  * Session gate helpers for the web shell login and invitation-first onboarding.
@@ -49,6 +55,7 @@ export type LoginSuccess = {
   readonly memberships?: readonly MembershipChoice[];
   readonly selectionRequired?: boolean;
   readonly support?: boolean;
+  readonly sessionScope?: SessionScope;
 };
 
 /**
@@ -244,7 +251,9 @@ export async function selectOrgRequest(
 ): Promise<LoginSuccess> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
-  return parseAuthResponse(await new GraneteApiClient(baseUrl, doFetch).selectOrganization(token, { organization_id: organizationId }));
+  const result = parseAuthResponse(await new GraneteApiClient(baseUrl, doFetch).selectOrganization(token, { organization_id: organizationId }));
+  const session = await meRequest(result.token, { baseUrl, fetchImpl: doFetch });
+  return { ...result, sessionScope: session.sessionScope };
 }
 
 /**
@@ -253,12 +262,17 @@ export async function selectOrgRequest(
  */
 export async function meRequest(
   token: string,
-  options: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+  options: {
+    baseUrl?: string;
+    fetchImpl?: typeof fetch;
+    sessionGeneration?: SessionGeneration;
+  } = {},
 ): Promise<{
   user: AuthUser;
   roles?: readonly string[];
   organization?: OrgSummary;
   support?: SupportInfo;
+  sessionScope: SessionScope;
 }> {
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
@@ -268,6 +282,10 @@ export async function meRequest(
     roles: response.roles,
     ...(response.organization ? { organization: response.organization } : {}),
     ...(response.support ? { support: response.support } : {}),
+    sessionScope: sessionScopeFromSession(
+      response,
+      options.sessionGeneration ?? createSessionGeneration(),
+    ),
   };
 }
 

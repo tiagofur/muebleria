@@ -13,6 +13,12 @@ import {
   writeSessionMode,
 } from './session';
 
+const SESSION_SCOPE = {
+  user_id: '1', membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
+  support_session_id: null, recovery_session_id: null, membership_credential_version: 2,
+  organization_credential_version: 3, absolute_expires_at: '2026-08-31T00:00:00Z',
+} as const;
+
 function memoryStorage(initial: Record<string, string> = {}): Storage {
   const map = new Map<string, string>(Object.entries(initial));
   return {
@@ -198,8 +204,8 @@ describe('loginRequest', () => {
 
 describe('selectOrgRequest', () => {
   it('POSTs organization_id to /auth/select-org with Bearer token', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      new Response(
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
         JSON.stringify({
           token: 'jwt-org-scoped',
           user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
@@ -211,8 +217,14 @@ describe('selectOrgRequest', () => {
           transport: 'web',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
+        roles: ['admin'],
+        organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
+        transport: 'web',
+        session_scope: SESSION_SCOPE,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 
     const result = await (await import('./session')).selectOrgRequest('token-123', 'org-1', {
       baseUrl: 'http://localhost:8080/api',
@@ -221,6 +233,8 @@ describe('selectOrgRequest', () => {
 
     expect(result.token).toBe('jwt-org-scoped');
     expect(result.organization?.id).toBe('org-1');
+    expect(result.sessionScope?.membershipCredentialVersion).toBe(2);
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe('http://localhost:8080/api/auth/me');
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe('http://localhost:8080/api/auth/select-org');
     expect(init?.method).toBe('POST');
@@ -238,12 +252,7 @@ describe('meRequest', () => {
           roles: ['admin'],
           organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
           transport: 'web',
-          session_scope: {
-            user_id: '1', membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
-            support_session_id: null, recovery_session_id: null,
-            membership_credential_version: 1, organization_credential_version: 1,
-            absolute_expires_at: '2026-08-31T00:00:00Z',
-          },
+          session_scope: SESSION_SCOPE,
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -256,6 +265,9 @@ describe('meRequest', () => {
 
     expect(result.user.id).toBe('1');
     expect(result.organization?.id).toBe('org-1');
+    expect(result.sessionScope).toMatchObject({
+      userId: '1', organizationId: 'org-1', mode: 'auth', absoluteExpiresAt: '2026-08-31T00:00:00Z',
+    });
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe('http://localhost:8080/api/auth/me');
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
