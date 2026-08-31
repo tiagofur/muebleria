@@ -1,5 +1,5 @@
-import { assertAuthoritativeSession } from './api';
+import { prepareAuthoritativeOrganizations } from './api';
 
 export default async function globalSetup(): Promise<void> {
-  await assertAuthoritativeSession();
+  await prepareAuthoritativeOrganizations();
 }

@@ -7,6 +7,11 @@ CONTAINER=""
 BACKEND_PID=""
 
 cleanup() {
+  local status=$?
+  if [ "${status}" -ne 0 ] && [ -f "${TMP_ROOT}/backend.log" ]; then
+    printf '[organization-gate] backend tail after failure:\n' >&2
+    tail -80 "${TMP_ROOT}/backend.log" >&2
+  fi
   if [ -n "${BACKEND_PID}" ]; then
     kill "${BACKEND_PID}" >/dev/null 2>&1 || true
     wait "${BACKEND_PID}" >/dev/null 2>&1 || true
@@ -47,6 +52,8 @@ while [ "${ORGANIZATION_WEB_PORT}" = "${BACKEND_PORT}" ]; do
   ORGANIZATION_WEB_PORT="$(free_port)"
 done
 ORGANIZATION_GATE_EMAIL="browser-gate@example.com"
+ORGANIZATION_GATE_A_OWNER_EMAIL="browser-gate-a-owner@example.com"
+ORGANIZATION_GATE_B_OWNER_EMAIL="browser-gate-b-owner@example.com"
 MEDIA_DIR="${TMP_ROOT}/media"
 mkdir -p "${MEDIA_DIR}"
 
@@ -92,14 +99,31 @@ curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null \
   || fail "backend health endpoint did not become ready"
 
 (cd "${ROOT}/backend-go" && go run ./cmd/admin create \
-  --email "${ORGANIZATION_GATE_EMAIL}" --name "Browser Gate Admin") >/dev/null
+  --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}" --name "Browser Gate A Owner") >/dev/null
+(cd "${ROOT}/backend-go" && go run ./cmd/admin create \
+  --email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" --name "Browser Gate B Owner") >/dev/null
+(cd "${ROOT}/backend-go" && go run ./cmd/admin create-platform-admin \
+  --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}") >/dev/null
 (cd "${ROOT}/backend-go" && go run ./cmd/admin create-org \
-  --name "Browser Gate Workshop" --slug browser-gate --type factory \
-  --admin-email "${ORGANIZATION_GATE_EMAIL}" \
-  --idempotency-key browser-gate-bootstrap --license trial) >/dev/null
+  --name "Browser Gate A" --slug browser-gate-a --type factory \
+  --admin-email "${ORGANIZATION_GATE_A_OWNER_EMAIL}" \
+  --idempotency-key browser-gate-a-bootstrap --license trial) >/dev/null
+(cd "${ROOT}/backend-go" && go run ./cmd/admin create-org \
+  --name "Browser Gate B" --slug browser-gate-b --type factory \
+  --admin-email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" \
+  --idempotency-key browser-gate-b-bootstrap --license pro) >/dev/null
+python3 - "${MEDIA_DIR}" <<'PY'
+import base64, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+root.joinpath('browser-gate-a.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))
+root.joinpath('browser-gate-b.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8zwAAAgEBAScY42YAAAAASUVORK5CYII='))
+PY
 
 export ORGANIZATION_WEB_PORT ORGANIZATION_GATE_EMAIL
-export ORGANIZATION_GATE_ORG_SLUG=browser-gate
+export ORGANIZATION_GATE_A_OWNER_EMAIL ORGANIZATION_GATE_B_OWNER_EMAIL
+export ORGANIZATION_GATE_ORG_A_SLUG=browser-gate-a
+export ORGANIZATION_GATE_ORG_B_SLUG=browser-gate-b
+export ORGANIZATION_GATE_ORG_SLUG=browser-gate-a
 export ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
 export ORGANIZATION_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
 export VITE_API_BASE="${ORGANIZATION_API_BASE}"

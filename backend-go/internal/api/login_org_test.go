@@ -13,6 +13,7 @@ import (
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // F170 / #325: login with organization context — membership resolution,
@@ -49,6 +50,16 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 		},
 	}
 	return &Server{Store: st, JWTSecret: "unit-test-secret-0123456789abcdef"}, st
+}
+
+type selectOrgTenantActorStore struct {
+	*stubStore
+	actor storage.TenantActor
+}
+
+func (s *selectOrgTenantActorStore) SetTenantActor(ctx context.Context, actor storage.TenantActor) (context.Context, error) {
+	s.actor = actor
+	return ctx, nil
 }
 
 func doLogin(t *testing.T, s *Server, payload map[string]string) *httptest.ResponseRecorder {
@@ -244,6 +255,25 @@ func TestSelectOrg_IssuesScopedToken(t *testing.T) {
 	}
 	if claims.OrgID != "org-1" || claims.Role != string(domain.RoleVendedor) {
 		t.Fatalf("claims = org %s role %s, want org-1/vendedor", claims.OrgID, claims.Role)
+	}
+}
+
+func TestSelectOrg_ScopesValidatedSelectionBeforeAudit(t *testing.T) {
+	server, stub := loginTestServer(t)
+	store := &selectOrgTenantActorStore{stubStore: stub}
+	server.Store = store
+	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || store.actor.OrganizationID != "org-1" || store.actor.UserID != "u1" {
+		t.Fatalf("status=%d actor=%+v", rec.Code, store.actor)
 	}
 }
 

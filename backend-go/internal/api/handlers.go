@@ -496,6 +496,17 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeMembershipNotSelectable, "no tenés membresía activa en ese taller", nil)
 		return
 	}
+	if setter, ok := s.Store.(tenantActorSetter); ok {
+		ctx, err := setter.SetTenantActor(r.Context(), storage.TenantActor{
+			OrganizationID: m.OrganizationID,
+			UserID:         claims.UserID,
+		})
+		if err != nil {
+			respondWithInternalError(w, err, "select-org: set tenant actor")
+			return
+		}
+		r = r.WithContext(ctx)
+	}
 
 	roles := make([]string, len(m.Roles))
 	for i, rl := range m.Roles {
