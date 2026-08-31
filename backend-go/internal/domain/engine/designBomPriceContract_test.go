@@ -179,7 +179,7 @@ type fxExpectedPart struct {
 
 type fxExpected struct {
 	Parts          []fxExpectedPart `json:"parts"`
-	HardwareTotals map[string]int   `json:"hardwareTotals"`
+	HardwareTotals map[string]float64 `json:"hardwareTotals"`
 	MaterialsCost  float64          `json:"materialsCost"`
 	HardwareTotal  float64          `json:"hardwareTotal"`
 	DirectCost     float64          `json:"directCost"`
@@ -228,7 +228,7 @@ func toInstances(in []fxInstance) []domain.ComponentInstance {
 func toHardwareLines(in []fxHardwareLine) []domain.HardwareLine {
 	out := make([]domain.HardwareLine, 0, len(in))
 	for _, l := range in {
-		out = append(out, domain.HardwareLine{ID: l.ID, Quantity: l.Quantity, OptionRole: l.OptionRole})
+		out = append(out, domain.HardwareLine{ID: l.ID, Quantity: float64(l.Quantity), OptionRole: l.OptionRole})
 	}
 	return out
 }
@@ -413,8 +413,10 @@ func TestDesignBomPriceContract(t *testing.T) {
 				}
 			}
 
-			// 2) Hardware: agregado por hardwareId resuelto.
-			hwTotals := map[string]int{}
+			// 2) Hardware: agregado por hardwareId resuelto (#442: cantidades
+			// float64 — ml fraccional del perfil; comparación por igualdad
+			// exacta igual que TS).
+			hwTotals := map[string]float64{}
 			for _, line := range bom.HardwareLines {
 				hwTotals[line.HardwareID] += line.Quantity
 			}
@@ -423,7 +425,7 @@ func TestDesignBomPriceContract(t *testing.T) {
 			}
 			for id, n := range sc.Expected.HardwareTotals {
 				if hwTotals[id] != n {
-					t.Errorf("hardware %q: got %d, want %d (got all: %v)", id, hwTotals[id], n, hwTotals)
+					t.Errorf("hardware %q: got %v, want %v (got all: %v)", id, hwTotals[id], n, hwTotals)
 				}
 			}
 

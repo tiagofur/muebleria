@@ -373,7 +373,7 @@ func TestResolveBom_ComposedModuleWithAgregados(t *testing.T) {
 		t.Fatalf("expected 1 resolved hardware line, got %d", len(bom.HardwareLines))
 	}
 	if bom.HardwareLines[0].Quantity != 2 {
-		t.Errorf("expected hardware line quantity 2, got %d", bom.HardwareLines[0].Quantity)
+		t.Errorf("expected hardware line quantity 2, got %v", bom.HardwareLines[0].Quantity)
 	}
 }
 

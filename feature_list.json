@@ -5152,6 +5152,44 @@
         "F197",
         "F198"
       ]
+    },
+    {
+      "id": "F200",
+      "title": "Paridad Go del tratamiento de base: ZOCLO-AUTO y effective base context (#442)",
+      "description": "El motor Go alcanza la paridad TS del tratamiento de base (zócalo/patas): resuelve el modo efectivo (override de ítem > default de módulo > none) y la altura B (plano > módulo > 100), filtra componentes ZOCLO por modo efectivo en la vía BOM, sintetiza ZOCLO-AUTO con identidad estable (+ vueltas laterales F088 por exposición del placement), convierte herraje (perfil → ml fraccional, patas → cantidad sugerida) y replica el techo a barras de compra en la lista de herraje. El contexto viaja por CalcProjectBreakdown, GenerateCutRows, GenerateHardwareList y collectUsedUnitPrices (con customDims, que el cut list hoy ignoraba). HardwareLine/ResolvedHardwareLine pasan a quantity float64 con migration de hardware_lines.quantity a DOUBLE PRECISION. Paridad congelada por contract fixture compartido granete.plinthBaseParity.v1.",
+      "tags": [
+        "backend-go",
+        "domain",
+        "parity",
+        "contracts",
+        "migration"
+      ],
+      "created": "2026-08-30",
+      "acceptance": [
+        "TS y Go resuelven el mismo BOM normalizado para none/legs/plinth_board/plinth_strip (contract fixture compartido, 13 escenarios)",
+        "ZOCLO-AUTO explícito y testeado en Go: id {moduleCode}-zoclo-auto, L=ancho, W=B, canto L1, material por rol ZOCLO con alias FRENTE",
+        "El override de ítem/layout gana al default de módulo en ambos motores (B del plano pisa B del módulo; wall elevation → B=0)",
+        "Negativos anti-phantom: componente ZOCLO propio no duplica; legs sin elección PATAS no sintetiza; none no sintetiza nada",
+        "La regresión de auditoría plinth-b (B=100, designBomPrice.json) sigue verde",
+        "hardware_lines.quantity DOUBLE PRECISION con round-trip fraccional (0.6 ml) probado bajo rol app en DB fresca"
+      ],
+      "status": "done",
+      "depends_on": [
+        "F198"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/442",
+        "contracts/plinthBaseParity.contract.json",
+        "packages/domain/src/plinthBaseParity.contract.test.ts",
+        "backend-go/internal/domain/engine/plinthBaseParityContract_test.go",
+        "backend-go/internal/domain/engine/base_treatment.go",
+        "backend-go/internal/domain/engine/kitchen_layout_base.go",
+        "backend-go/db/migration/000104_hardware_line_quantity_double.up.sql",
+        "docs/architecture/material-aware-furniture-resolution.md",
+        "docs/verification.md",
+        "progress/review_F200.md"
+      ],
+      "evidence": "go test ./internal/domain/... verde (contract 13/13 + unitarios #442); go test ./internal/storage/ -run TestHardwareLineQuantityDoublePrecision verde sobre Postgres 15 fresco (migration 000104 aplicada, round-trip 0.6 ml); go test ./... verde salvo fallo PRE-EXISTENTE de 00102_support_session_credential_epoch reproducido en main limpio (programa sesiones #458, no tocado por F200); pnpm test verde (3354 tests: domain 1235, ui 1458, web 326, storage 176, excel 93, mobile 49, desktop 17); pnpm typecheck exit 0."
     }
   ]
 }

@@ -661,6 +661,15 @@ El contrato de binding único está implementado y enforceado en las dos pilas:
   textualmente, cubriendo además los negativos: sin inferencia por
   nombre/placement, puerta normal y frentes de agregado siguiendo el mismo
   `FRONT`, y rechazo de segundo `optionRoles[]`.
+- **Tratamiento de base (#442 / F200)**: la pieza `ZOCLO-AUTO` sintetizada
+  por el motor usa `optionRole: ZOCLO` con alias `FRENTE`, y Go ya esparja la
+  misma síntesis/filtrado que TS: modo efectivo (override de ítem → default de
+  módulo), B efectivo (plano → módulo → 100), vueltas laterales F088 y herraje
+  (perfil ml fraccional / patas). El contract compartido
+  `contracts/plinthBaseParity.contract.json` (`granete.plinthBaseParity.v1`)
+  congela la paridad con los negativos anti-phantom; lo consumen
+  `packages/domain/src/plinthBaseParity.contract.test.ts` y
+  `backend-go/internal/domain/engine/plinthBaseParityContract_test.go`.
 - **Labels**: la UI prefiere `OptionGroup.name` (`optionRoleLabel` en
   packages/ui) para roles; el código crudo es fallback sólo cuando no existe
   grupo. La proyección SketchUp (`materialRoles[].label`) ya usaba el nombre

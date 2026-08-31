@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -40,6 +41,11 @@ func FormatOptimizerPartDescription(moduleCode, partName, partCode string) strin
 func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.ProductionCutRow, error) {
 	var sortable []sortableCutRow
 
+	layoutBase, err := parseKitchenLayoutBase(project.KitchenLayout)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, item := range project.Items {
 		if item.Quantity <= 0 {
 			return nil, fmt.Errorf("project item quantity must be > 0 (got %d)", item.Quantity)
@@ -49,7 +55,17 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 			return nil, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		bom, err := ResolveBomWithPin(module, choicesForItem(project, item), catalog, item.MeasurePresetID, item.StructureRevisionPin)
+		// #442: cut rows must come from the same base-treated BOM as the quote
+		// (TS cut.ts parity — base context + customDims both honored).
+		bom, err := ResolveBomWithContext(
+			module,
+			choicesForItem(project, item),
+			catalog,
+			resolveBaseContextForItem(layoutBase, project, item, &catalog),
+			item.MeasurePresetID,
+			item.StructureRevisionPin,
+			item.CustomDims,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -116,13 +132,21 @@ func GenerateCutRows(project domain.Project, catalog domain.Catalog) ([]domain.P
 }
 
 // GenerateHardwareList aggregates project hardware into a purchase list (EXP-08).
-// Quantity = line.quantity × item.quantity, summed by hardwareId. Sorted by code.
+// Quantity = line.quantity × item.quantity (consumed, fractional ml included),
+// summed by hardwareId and sorted by code. Purchase rounding mirrors TS
+// roundHardwarePurchaseQuantity: ceil to packageSize bars, lineCost prices
+// what is actually bought (labels.ts parity, #442).
 func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]domain.HardwarePurchaseRow, error) {
 	type agg struct {
-		quantity int
+		quantity float64
 		hardware domain.Hardware
 	}
 	totals := make(map[string]*agg)
+
+	layoutBase, err := parseKitchenLayoutBase(project.KitchenLayout)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, item := range project.Items {
 		if item.Quantity <= 0 {
@@ -133,7 +157,15 @@ func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]dom
 			return nil, fmt.Errorf("module not found for project item: %s", item.ModuleID)
 		}
 
-		bom, err := ResolveBomWithPin(module, choicesForItem(project, item), catalog, item.MeasurePresetID, item.StructureRevisionPin)
+		bom, err := ResolveBomWithContext(
+			module,
+			choicesForItem(project, item),
+			catalog,
+			resolveBaseContextForItem(layoutBase, project, item, &catalog),
+			item.MeasurePresetID,
+			item.StructureRevisionPin,
+			item.CustomDims,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +178,7 @@ func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]dom
 			if !hw.Active {
 				return nil, fmt.Errorf("inactive hardware cannot be used: %s", hw.Code)
 			}
-			qty := line.Quantity * item.Quantity
+			qty := line.Quantity * float64(item.Quantity)
 			if existing, ok := totals[hw.ID]; ok {
 				existing.quantity += qty
 			} else {
@@ -161,14 +193,18 @@ func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]dom
 
 	rows := make([]domain.HardwarePurchaseRow, 0, len(totals))
 	for _, a := range totals {
+		purchaseQuantity, purchasePackages, packageSize := roundHardwarePurchaseQuantity(a.quantity, a.hardware.PackageSize)
 		rows = append(rows, domain.HardwarePurchaseRow{
-			HardwareID:  a.hardware.ID,
-			Code:        a.hardware.Code,
-			Description: a.hardware.Name,
-			Unit:        a.hardware.Unit,
-			Quantity:    a.quantity,
-			CostPerUnit: a.hardware.CostPerUnit,
-			LineCost:    float64(a.quantity) * a.hardware.CostPerUnit,
+			HardwareID:       a.hardware.ID,
+			Code:             a.hardware.Code,
+			Description:      a.hardware.Name,
+			Unit:             a.hardware.Unit,
+			Quantity:         a.quantity,
+			PurchaseQuantity: purchaseQuantity,
+			PurchasePackages: purchasePackages,
+			PackageSize:      packageSize,
+			CostPerUnit:      a.hardware.CostPerUnit,
+			LineCost:         purchaseQuantity * a.hardware.CostPerUnit,
 		})
 	}
 
@@ -179,6 +215,21 @@ func GenerateHardwareList(project domain.Project, catalog domain.Catalog) ([]dom
 		return rows[i].Description < rows[j].Description
 	})
 	return rows, nil
+}
+
+// roundHardwarePurchaseQuantity mirrors TS roundHardwarePurchaseQuantity
+// (labels.ts): ceil consumption to whole packages (min 1) with a small
+// epsilon so exact multiples don't buy an extra bar.
+func roundHardwarePurchaseQuantity(quantity float64, packageSize *float64) (purchaseQuantity float64, purchasePackages *int, echoedPackageSize *float64) {
+	if !(quantity > 0) || math.IsInf(quantity, 0) || math.IsNaN(quantity) {
+		return 0, nil, nil
+	}
+	if packageSize == nil || *packageSize <= 0 {
+		return quantity, nil, nil
+	}
+	pkg := *packageSize
+	packages := int(math.Max(1, math.Ceil(quantity/pkg-1e-12)))
+	return float64(packages) * pkg, &packages, packageSize
 }
 
 // collectUsedUnitPrices gathers unit prices for materials/edges/hardware in the BOM.
@@ -192,12 +243,25 @@ func collectUsedUnitPrices(project domain.Project, catalog domain.Catalog) (
 	edgeCostPerMl = make(map[string]float64)
 	hardwareCostPerUnit = make(map[string]float64)
 
+	layoutBase, err := parseKitchenLayoutBase(project.KitchenLayout)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	for _, item := range project.Items {
 		module, ok := findModule(catalog, item.ModuleID)
 		if !ok {
 			continue
 		}
-		bom, resolveErr := ResolveBomWithPin(module, choicesForItem(project, item), catalog, item.MeasurePresetID, item.StructureRevisionPin)
+		bom, resolveErr := ResolveBomWithContext(
+			module,
+			choicesForItem(project, item),
+			catalog,
+			resolveBaseContextForItem(layoutBase, project, item, &catalog),
+			item.MeasurePresetID,
+			item.StructureRevisionPin,
+			item.CustomDims,
+		)
 		if resolveErr != nil {
 			return nil, nil, nil, resolveErr
 		}

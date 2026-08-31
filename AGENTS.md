@@ -28,6 +28,16 @@ Usuarios, Multi-Taller, RLS, Organization lifecycle y Team mediante **Gate A** d
 Discovery/documentación de otros programas puede continuar. No crear schema/API de una
 nueva familia persistente antes de Gate A, incluyendo DT-1 #385.
 
+### SketchUp como producto integrado
+
+> **Granete for SketchUp no es un plugin aislado ni un motor industrial paralelo.**
+> SketchUp posee autoría e interacción; Granete posee identidad, catálogo,
+> manufacturing truth, revisiones, release y outputs; React posee administración,
+> visibilidad y workflows empresariales explícitos.
+
+Antes de tocar una integración SketchUp↔Go↔React lee
+`docs/architecture/sketchup-backend-web-integration-excellence.md` y #465.
+
 ### Posicionamiento de Proyectar
 
 > **Granete no es “Promob barato”.** Proyectar debe ser una experiencia 3D de nivel
@@ -64,6 +74,10 @@ No profundices features de producción sin leer `docs/production-flow-v2.md`.
 | Lifecycle/eventos | `docs/project-lifecycle.md` |
 | Arquitectura/boundaries | `docs/architecture.md` |
 | Digital Thread Project Furniture/Design | `docs/architecture/project-design-digital-thread.md` + ADR-0003 |
+| SketchUp Excellence | `docs/architecture/sketchup-plugin-excellence.md` + `docs/sketchup-excellence-execution-plan.md` |
+| SketchUp ↔ Backend ↔ React | `docs/architecture/sketchup-backend-web-integration-excellence.md` |
+| Interacciones de autoría SketchUp | `docs/architecture/sketchup-authoring-interaction-contract.md` |
+| Contrato SketchUp/manufactura | `docs/sketchup-manufacturing-contract.md` + ADR-0001 |
 | Biblioteca Paramétrica Universal | `docs/architecture/parametric-furniture-library.md` |
 | ADR Biblioteca Paramétrica | `docs/adr/0002-parametric-furniture-library-architecture.md` |
 | Motor de muebles inteligentes | `docs/architecture/smart-furniture-engine.md` |
@@ -105,6 +119,15 @@ Para Organization Foundation:
   relationships, publicación, orders y sesiones endurecidas;
 - #446 define el orden y #462 los gates ejecutables.
 
+Para SketchUp/integración:
+
+- #465 y `sketchup-backend-web-integration-excellence.md` definen el programa actual;
+- #384 conserva ownership de FurnitureInstance/DesignRevision/Release;
+- #496 define la API generada; no crear DTOs paralelos;
+- #498 define el runtime host compartido; no crear coordinadores por feature;
+- #396 es el tracker React con #500–#502 y #499;
+- #290 conserva contexto/historia, no un dependency graph competidor.
+
 Para Proyectar, el North Star define intención futura y código/tests lo implementado.
 
 ---
@@ -120,9 +143,10 @@ Luego:
 1. lee `progress/current.md`;
 2. identifica la feature activa;
 3. lee docs canónicos del área;
-4. revisa la GitHub issue y sus hard prerequisites;
+4. revisa la GitHub issue, comentarios y hard prerequisites;
 5. confirma que la base/branch de la issue no pisa un programa P0;
-6. no tomes automáticamente el `pending` de menor id si contradice prioridad vigente.
+6. no tomes automáticamente el `pending` de menor ID si contradice prioridad vigente;
+7. no marques otra feature `in_progress` mientras F199/#458 siga activa salvo coordinación explícita.
 
 ### Si la issue toca Users, Memberships, Organizations, Auth o Sales Network
 
@@ -136,15 +160,32 @@ Lee obligatoriamente:
 
 No empieces una child issue antes de su hard prerequisite salvo discovery puro.
 
+### Si toca SketchUp, catálogo de muebles, Design o integración React
+
+Lee obligatoriamente:
+
+1. `docs/architecture/sketchup-backend-web-integration-excellence.md`;
+2. #465 y la issue exacta;
+3. #496 para API/schema generada;
+4. #498 para host interaction/mutation si toca el plugin;
+5. #384 + ADR-0003 si toca Project/FurnitureInstance/Design/revisiones/release;
+6. #396/#499–#503 si toca la superficie React correspondiente;
+7. `apps/sketchup-extension/AGENTS.md` si modifica la extensión.
+
+Antes de Gate A sólo se permite persistencia existente o trabajo que no cree una
+nueva familia de negocio. No inventes `SketchUpProject`, IDs locales productivos ni
+un shadow Design store.
+
 ### Si crea una tabla persistente
 
 Antes de migration:
 
+- confirma que Gate A permite iniciar esa familia;
 - clasifica `tenant-owned | explicitly shared | platform-global | ledger`;
 - registra RLS policy e índices desde la primera migration;
 - añade fresh + upgrade fixture;
 - añade direct-SQL test bajo runtime app role;
-- usa generated API contract y durable audit cuando corresponda.
+- usa generated API contract, idempotency/concurrency y durable audit.
 
 ---
 
@@ -152,18 +193,20 @@ Antes de migration:
 
 ```text
 apps/
-  web/          shell React/Vite
-  desktop/      Electron
-  mobile/       React Native/Expo
+  web/                 shell React/Vite
+  sketchup-extension/  extensión Ruby + HtmlDialog + TestUp
+  desktop/             Electron
+  mobile/              React Native/Expo
 packages/
-  domain/       lógica pura, BOM, optimizer, workflows puros
-  ui/           React compartido
-  excel/        XLSX/PDF/DXF/labels
-  storage/      repositories/mappers/generated API client
-backend-go/     API + application services + Postgres + auth + enforcement
-docs/           contratos de producto/arquitectura/UX
-progress/       sesión/evidencia histórica
-feature_list.json  ledger de implementación
+  domain/              lógica pura, BOM, optimizer, workflows puros
+  ui/                  React compartido
+  excel/               XLSX/PDF/DXF/labels
+  storage/             repositories/mappers/generated API client
+backend-go/            API + application services + Postgres + auth + enforcement
+contracts/             OpenAPI, JSON Schemas y fixtures compartidos
+docs/                  contratos de producto/arquitectura/UX
+progress/              sesión/evidencia histórica
+feature_list.json      ledger de implementación
 ```
 
 ### Bounded contexts conceptuales
@@ -200,12 +243,24 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 - **No mezclar account, membership, organization, commercial, project, design,
   order y execution state.**
 - **No producción física contra revisión stale** sin override auditado.
-- **UI no calcula dominio.**
+- **UI no calcula dominio.** React no recrea resolve, reconciliation, preflight ni machine compatibility.
 - **Server authority** para seguridad, sessions, concurrencia, tenant scope, stock,
   lifecycle, provisioning, relationships, orders y workflow persistente.
 - **Si una regla vive en TS y Go**, usar contract fixture de paridad.
-- **API Organization Foundation generada:** no crear DTO manual paralelo ni decidir
+- **API generada:** Organization Foundation y furniture/authoring/Design consumen
+  OpenAPI/JSON Schema generado (#448/#496); no DTO manual paralelo ni comportamiento
   por substring de mensaje.
+- **Web y SketchUp comparten contratos, no credenciales.**
+- **Pairing #499:** grant one-time/short-lived/exact-scope; nunca web JWT en custom URI/query.
+- **Host runtime #498:** #466–#471 reutilizan un coordinador de mutation/rollback/undo;
+  no transport/store/error/degraded model por feature.
+- **Resolve antes de mutar:** no borrar geometría válida ni escribir metadata antes
+  de resultado autoritativo compatible.
+- **Late response no aplica** sobre una selección/comando más nuevo.
+- **Identity exacta:** FurnitureInstance, component occurrence, hardware placement,
+  DesignRevision y Release nunca derivan de nombre/GUID/geometry/array index.
+- **Revision exacta:** approval/release/artifacts nunca usan `latest` implícito.
+- **Browser no parsea `.skp`** como fuente semántica de DesignRevision.
 - **Tenant ID no autoriza:** middleware + capability + ownership/relationship +
   repository + RLS + tests.
 - **Runtime DB role sin `BYPASSRLS`** y sin ownership de tablas protegidas.
@@ -219,8 +274,9 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 - **SalesQuote, ManufacturingOrder e Installation assignment con ownership
   explícito:** generic Project PUT no es handoff.
 - **Audit crítico durable:** business mutation + audit/outbox en la misma transaction.
-- **Idempotency/If-Match** en commands sensibles.
-- **React server state tenant-keyed:** no mostrar datos A tras switch a B.
+- **Idempotency/If-Match/baseRevision** en commands sensibles.
+- **React server state session/tenant-keyed:** no mostrar datos A tras switch a B;
+  una nueva sesión genera una raíz de caché distinta sin incluir secretos.
 - **No fallback silencioso** de API nueva a legacy.
 - **Session absoluta 18h:** refresh técnico no la extiende.
 - **Material antes que geometría:** resolver `MaterialBoard` y espesor efectivo
@@ -228,6 +284,10 @@ Lee `docs/architecture.md` antes de inventar ownership nuevo.
 - **SketchUp host nativo:** managed furniture/parts son
   `Sketchup::ComponentInstance`; business IDs nunca derivan de GUID,
   `persistent_id`, nombre o geometría.
+- **Machine evidence exacta:** marca/modelo no implica compatibilidad; profile,
+  adapter, software version, readback y evidence pack deben coincidir.
+- **Diagnóstico #504 privacy-first:** sin token, cookies, pairing code, paths privados,
+  datos de cliente, geometría, BOM ni machining por default; no upload automático.
 - **Código/identificadores en inglés; copy UI en español.**
 - **pnpm only** para monorepo JS.
 - **No `.env` en git.**
@@ -246,13 +306,15 @@ Antes de tocar UI:
 1. lee `docs/design.md`;
 2. si es screen operativa, lee `docs/operational-ux.md`;
 3. si toca Proyectar, lee el North Star;
-4. si toca Team/Platform/Network, lee Organization Foundation v2;
-5. identifica la unidad correcta: identity, membership, organization,
-   relationship, quote, order, pieza, mueble, bulto o visita;
-6. usa tokens, no hex/spacing/patterns inventados;
-7. una primary action por contexto;
-8. blockers explican cómo resolverse;
-9. acciones sensibles dejan feedback persistente/auditable.
+4. si toca SketchUp/Digital Thread, lee el contrato de integración cross-surface;
+5. si toca Team/Platform/Network, lee Organization Foundation v2;
+6. identifica la unidad correcta: identity, membership, organization,
+   relationship, quote, physical furniture, design revision, pieza, mueble,
+   bulto o visita;
+7. usa tokens, no hex/spacing/patterns inventados;
+8. una primary action por contexto;
+9. blockers explican cómo resolverse;
+10. acciones sensibles dejan feedback persistente/auditable.
 
 ### Team y organizaciones
 
@@ -263,7 +325,21 @@ Antes de tocar UI:
 - invitation muestra estado/expiry/resend/revoke honestos;
 - provisioning/sync/conflict/error no se presentan como empty;
 - success sólo tras commit autoritativo;
-- switch organization invalida todo server state del tenant previo.
+- switch organization invalida todo server state del tenant/session previo.
+
+### SketchUp y Digital Thread Web
+
+- SketchUp: selección semántica, viewport, precise input, snap, overlay y undo;
+- React: catálogo, physical units, revisiones, reconciliation, approval/release,
+  machine/evidence/artifacts;
+- Go/domain: identidad, resolve, preflight, revisions, reconciliation y output;
+- loading, stale, offline, incompatible, blocked y success son estados distintos;
+- Project Furniture qty > 1 muestra unidades físicas distintas;
+- vistas históricas permanecen pinneadas a la revisión seleccionada;
+- `Abrir en SketchUp` usa #499 y distingue initiated de confirmed;
+- React no intenta navegación de viewport: ofrece handoff exacto al plugin;
+- SketchUp no administra MachineProfiles/postprocessors;
+- published DesignRevision/accepted QuoteRevision no se editan in-place.
 
 ### Red de Ventas
 
@@ -271,7 +347,7 @@ Antes de tocar UI:
 - catálogo muestra publication/version/diff;
 - precio distingue FactoryCost, wholesale y retail;
 - seller elige sólo factories autorizadas;
-- Store ve commercial status, no floor/BOM/cost internals;
+- Store ve commercial status, no floor/BOM/cost/CNC internals;
 - installation reutiliza #303 y respeta assigned organization;
 - KPI aplica Data Truth Contract.
 
@@ -316,32 +392,51 @@ Meta: #308.
 - detalle operativo: `docs/operational-core-v1.md`;
 - Organization Foundation P0: #446;
 - Gates ejecutables: #462;
+- SketchUp Excellence/integración: #465;
 - Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
-- Digital Thread: #384;
+- Digital Thread: #384 y Web tracker #396;
 - trabajo futuro: GitHub issues;
 - ledger: `feature_list.json`.
 
-### Prioridad actual
+### Prioridad actual verificada
 
-1. #447 documentación/ADR;
-2. #448 generated API contract;
-3. #449 RLS + #450 lifecycle + foundation #461;
-4. #451 team safety;
-5. #452 organization provisioning;
-6. #458 Web Organization;
-7. critical #460/#461;
-8. #462 Gate A;
-9. #453–#459 Sales Network;
-10. #462 Gate B.
+1. **F199/#458** — tracker #493 y slices como #494;
+2. completar Web Organization/session-scope y cerrar #458;
+3. critical portions de #460/#461;
+4. ejecutar **Gate A #462**;
+5. después de Gate A, #453–#459/Gate B y #385+ Digital Thread avanzan por sus
+   dependency graphs, sin absorber ownership entre programas.
 
-#443 puede avanzar después de #448 coordinado con #449 porque es catalog-local.
-Digital Thread discovery puede continuar; schema/API #385 espera Gate A.
+Cuando la política de una sola feature activa permita iniciar otro runtime slice:
 
-### Después de Foundation Gate A
+```text
+#496 generated furniture API
++ #498 shared SketchUp host runtime
+→ #466/#467/#468 professional authoring loop
+→ #497 React typed parameter/binding editor
+```
 
-Operational Core y Digital Thread pueden continuar sobre una base tenant probada.
-Proyectar puede avanzar por slices de alto impacto cuando no rompe los cimientos.
-No saltar prerequisites para “avanzar más rápido”: eso crea una segunda migración.
+Después de Gate A:
+
+```text
+#385 → #386/#387
+→ #500 Project Furniture Web
+→ #388/#499/#389
+→ #390/#391/#392
+→ #501 revisions/artifacts Web
+→ #393/#394/#395
+→ #502 reconciliation/release Web
+→ #397/#398
+```
+
+Machine/commercial path:
+
+```text
+#348 → #351 → #352/#353 → #503 → #354 → #355
+```
+
+Discovery/documentación puede continuar sin marcar una segunda feature activa. No saltes
+prerequisites para “avanzar más rápido”: eso crea contratos, migrations y UX paralelos.
 
 ---
 
@@ -362,6 +457,9 @@ Ejemplos:
 ADR-0005 no es histórico descartado: sigue siendo baseline y está extendida por
 ADR-0006. Lee ambas.
 
+#290 conserva contexto e historia del programa SketchUp, pero #465/#384/#446/#354/#355
+definen la ejecución actual.
+
 ---
 
 ## 8. Verificación mínima
@@ -369,17 +467,24 @@ ADR-0006. Lee ambas.
 Según feature:
 
 ```bash
+pnpm openapi:check
 pnpm test
 pnpm typecheck
-# + go test si backend
+# + go test ./... si backend/domain
+# + scripts/pilot-gate.sh cuando aplique
 # + smoke/golden específico
+# + TestUp real cuando dependa del host
+# + browser E2E con Go/PostgreSQL real cuando aplique
+# + machine/software import-readback para claims físicos
 ```
 
-Para exports físicos: golden/fixture.  
+Para exports físicos: golden/fixture + evidencia exacta cuando sea claim real.  
 Para workflow: transición permitida + rechazada + auth + audit.  
 Para dashboards: semántica de verdad de datos.  
 Para UI: comportamiento y a11y, no sólo source grep.  
-Para Proyectar: WebGL/drag real y profiling cuando toca hot path.
+Para Proyectar: WebGL/drag real y profiling cuando toca hot path.  
+Para SketchUp: HtmlDialog/viewport, rollback/undo/save-reopen y TestUp real.  
+Para integración: generated contract + backend + React/Ruby consumidor, no mocks aislados.
 
 ### Organization Foundation
 
@@ -402,6 +507,27 @@ Gate A y Gate B de #462 son obligatorios. En gate mode:
 - no `t.Skip` por dependencia ausente;
 - falta de infraestructura hace fallar, nunca verde falso;
 - artifacts diagnósticos no contienen secrets/PII.
+
+### SketchUp / Digital Thread / machine output
+
+Cada issue declara las capas aplicables:
+
+```text
+[ ] domain
+[ ] Go API/storage/RLS
+[ ] generated OpenAPI/JSON Schema
+[ ] React UI/server state
+[ ] Ruby adapter/host
+[ ] HtmlDialog/interaction
+[ ] shared parity/golden
+[ ] real-host TestUp
+[ ] browser + real PostgreSQL E2E
+[ ] real machine/software readback
+[ ] docs/ledger/readback
+```
+
+Una capa requerida no puede quedar `skipped` y contarse como green. Un helper de dominio no
+prueba una interacción real de SketchUp y un componente React con mocks no prueba integración.
 
 ---
 
