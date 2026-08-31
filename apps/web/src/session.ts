@@ -2,9 +2,13 @@ import {
   GraneteApiClient, GraneteApiError, parseGenerated,
   type LoginResponse, type MeResponse, type User, type OrganizationSummary,
   type Membership, type SupportInfo as GeneratedSupportInfo,
-  type SessionScope as GeneratedSessionScope,
 } from '@granete/storage';
-import type { SessionScope } from './shared/query/sessionScope';
+import {
+  createSessionGeneration,
+  sessionScopeFromSession,
+  type SessionGeneration,
+  type SessionScope,
+} from './shared/query/sessionScope';
 
 /**
  * Session gate helpers for the web shell login and invitation-first onboarding.
@@ -258,7 +262,11 @@ export async function selectOrgRequest(
  */
 export async function meRequest(
   token: string,
-  options: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+  options: {
+    baseUrl?: string;
+    fetchImpl?: typeof fetch;
+    sessionGeneration?: SessionGeneration;
+  } = {},
 ): Promise<{
   user: AuthUser;
   roles?: readonly string[];
@@ -274,21 +282,10 @@ export async function meRequest(
     roles: response.roles,
     ...(response.organization ? { organization: response.organization } : {}),
     ...(response.support ? { support: response.support } : {}),
-    sessionScope: toSessionScope(response.session_scope),
-  };
-}
-
-function toSessionScope(scope: GeneratedSessionScope): SessionScope {
-  return {
-    userId: scope.user_id,
-    membershipId: scope.membership_id,
-    organizationId: scope.organization_id,
-    mode: scope.mode,
-    supportSessionId: scope.support_session_id,
-    recoverySessionId: scope.recovery_session_id,
-    membershipCredentialVersion: scope.membership_credential_version,
-    organizationCredentialVersion: scope.organization_credential_version,
-    absoluteExpiresAt: scope.absolute_expires_at,
+    sessionScope: sessionScopeFromSession(
+      response,
+      options.sessionGeneration ?? createSessionGeneration(),
+    ),
   };
 }
 
