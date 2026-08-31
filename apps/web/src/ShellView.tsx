@@ -1658,6 +1658,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
 
       {navId === 'users' && showAdminUsers && authToken && sessionScope ? (
         <UsersScreen
+          key={JSON.stringify(organizationKeys.all(sessionScope))}
           baseUrl={DEFAULT_API_BASE}
           token={authToken}
           orgType={orgType}

@@ -597,4 +597,30 @@ describe('UsersScreen (#458 tenant-safe query integrity)', () => {
     resolveA(response(directory('Ana')));
     await waitFor(() => expect(screen.queryByText('Ana')).toBeNull());
   });
+
+  it('remounts tenant-local invitation state when the organization scope changes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const tenantA = new Headers(init?.headers).get('Authorization') === 'Bearer token-a';
+      if (url.endsWith('/org/memberships')) return response(directory(tenantA ? 'Ana' : 'Bruno', tenantA ? ['team:view', 'team:invite:sales', 'team:manage:sales'] : ['team:view']));
+      if (url.endsWith(`/${invitation.id}:resend`)) return response({ invitation: { ...invitation, status: 'pending', version: 5 }, invitation_token: 'secret-a', accept_url: '/accept-invitation?token=secret-a' });
+      if (url.endsWith('/org/invitations')) return response(tenantA ? [invitation] : []);
+      return response([]);
+    }));
+    const actor = userEvent.setup();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (scope: string, token: string) => {
+      const root = ['organization', 'session', scope] as const;
+      return <QueryClientProvider client={client}><UsersScreen key={JSON.stringify(root)} baseUrl="http://api.test" token={token} queryKeys={{ root, team: [...root, 'team'], invitations: [...root, 'invitations'] }} /></QueryClientProvider>;
+    };
+    const rendered = render(view('a', 'token-a'));
+    await actor.click(await screen.findByRole('button', { name: 'Invitaciones (1)' }));
+    await actor.click(screen.getByRole('button', { name: 'Reenviar' }));
+    expect(await screen.findByText(/token=secret-a/)).toBeTruthy();
+
+    rendered.rerender(view('b', 'token-b'));
+    expect(await screen.findByText('Bruno')).toBeTruthy();
+    expect(screen.queryByText(/secret-a/)).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Invitar miembro al taller' })).toBeNull();
+  });
 });
