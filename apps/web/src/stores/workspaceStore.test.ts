@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace, WorkshopSettings } from '@granete/domain';
 import type { WorkspaceRepository } from '@granete/storage';
 import { createSeedWorkspace } from '@granete/storage';
+import { clearRegisteredDraftSessions, draftSessionKey, registerDraftSessionBaseline } from '@granete/ui';
 
 import {
   type RepositoryFactory,
@@ -1094,6 +1095,12 @@ describe('workspaceStore — hydrateSessionInfo', () => {
 });
 
 describe('workspaceStore — atomic organization transition', () => {
+  const storeTenantADraft = () => {
+    const key = draftSessionKey('module', 'tenant-a');
+    registerDraftSessionBaseline(key, { name: 'baseline' });
+    globalThis.sessionStorage.setItem(key, '{"name":"tenant A draft"}');
+    return key;
+  };
   const selected = {
     token: 'jwt-new', user: AUTH_USER, license: { plan: 'none', status: 'none' },
     roles: ['admin'], memberships: [], selection_required: false, transport: 'web',
@@ -1102,7 +1109,8 @@ describe('workspaceStore — atomic organization transition', () => {
 
   it('commits the new token only after its authoritative scope validates', async () => {
     globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
-    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn() };
+    const draftKey = storeTenantADraft();
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn(clearRegisteredDraftSessions) };
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonOk(selected))
       .mockResolvedValueOnce(jsonOk({
@@ -1121,12 +1129,14 @@ describe('workspaceStore — atomic organization transition', () => {
     expect(globalThis.localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-new');
     expect(store.getState().sessionScope?.organizationId).toBe('org-1');
     expect(store.getState().organizationChoices).toEqual([ACTIVE_MEMBERSHIP]);
+    expect(globalThis.sessionStorage.getItem(draftKey)).toBeNull();
   });
 
   it('keeps the prior token and cache when scope validation fails', async () => {
     globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
     globalThis.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(AUTH_USER));
-    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn() };
+    const draftKey = storeTenantADraft();
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn(clearRegisteredDraftSessions) };
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonOk(selected))
       .mockResolvedValueOnce(jsonOk({
@@ -1148,5 +1158,6 @@ describe('workspaceStore — atomic organization transition', () => {
     expect(store.getState().workspace).toBe(priorWorkspace);
     expect(store.getState().session).toBeNull();
     expect(store.getState().orgSelectionError).toBeTruthy();
+    expect(globalThis.sessionStorage.getItem(draftKey)).toContain('tenant A draft');
   });
 });

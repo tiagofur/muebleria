@@ -19,6 +19,7 @@ import {
 } from '@granete/domain';
 import {
   EntityEditorLayout,
+  draftSessionKey,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
   useEntityEditorState,
@@ -32,6 +33,7 @@ import {
 import {
   componentToDraft,
   emptyComponentDraft,
+  isComponentDraft,
   placementLabel,
   type ComponentDraft,
   type ComponentEditorTab,
@@ -101,7 +103,7 @@ export function ComponentsScreen({
       knownIds: componentIds,
     });
 
-  const draftKey = `component-draft:${openComponentEditId ?? 'idle'}`;
+  const draftKey = draftSessionKey('component', openComponentEditId ?? 'idle');
   const {
     modalOpen,
     setModalOpen,
@@ -124,6 +126,7 @@ export function ComponentsScreen({
   } = useEntityEditorState<ComponentDraft, ComponentEditorTab>({
     draftKey,
     emptyDraft: emptyComponentDraft,
+    draftValidator: isComponentDraft,
     defaultTab: 'general',
     onEditorClose: (restoreId) => {
       if (restoreId && restoreId !== 'new') {
@@ -246,6 +249,7 @@ export function ComponentsScreen({
         emptyComponentDraft(),
         setDraft,
         setInitialDraft,
+        isComponentDraft,
       );
       setEditingId(null);
       setEditorTab('general');
@@ -263,6 +267,7 @@ export function ComponentsScreen({
       componentToDraft(component),
       setDraft,
       setInitialDraft,
+      isComponentDraft,
     );
     setEditingId(component.id);
     setEditorTab('general');

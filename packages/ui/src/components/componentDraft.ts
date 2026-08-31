@@ -3,6 +3,7 @@
  */
 
 import type { Component, Perforation } from '@granete/domain';
+import { arrayRule, booleanRule, enumRule, nullableRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
 
 /** Shared placement options for components and structure/module instances. */
 export const COMPONENT_PLACEMENTS: {
@@ -195,6 +196,19 @@ export function emptyComponentDraft(): ComponentDraft {
     active: true,
   };
 }
+
+const componentDraftRule = objectRule({
+  ...stringFields('code', 'name', 'lengthFormula', 'widthFormula', 'xFormula', 'yFormula', 'zFormula', 'optionRoles', 'notes'),
+  placement: enumRule(...COMPONENT_PLACEMENTS.map(({ value }) => value)),
+  lengthMm: numberRule, widthMm: numberRule, thicknessMm: numberRule,
+  rotateX: nullableRule(numberRule), rotateY: nullableRule(numberRule), rotateZ: nullableRule(numberRule),
+  edgeL1: booleanRule, edgeL2: booleanRule, edgeW1: booleanRule, edgeW2: booleanRule, active: booleanRule,
+  perforations: optionalRule(arrayRule(objectRule({
+    id: stringRule, relativePosition: objectRule({ xPercent: numberRule, yPercent: numberRule }), diameterMm: numberRule,
+    depthMm: numberRule, type: enumRule('through', 'blind', 'dowel', 'shelf_pin', 'hinge_cup'),
+  }))),
+});
+export function isComponentDraft(value: unknown): value is ComponentDraft { return componentDraftRule(value); }
 
 export function componentToDraft(item: Component): ComponentDraft {
   const edges = new Map(item.defaultEdges.map((e) => [e.side, e.enabled]));

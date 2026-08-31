@@ -8,6 +8,7 @@ import {
   sessionScopeKey,
 } from './sessionScope';
 import {
+  registerTenantCommitCleanup,
   registerTenantMemoryReset,
   registerTenantQueryClient,
   tenantTransition,
@@ -144,17 +145,22 @@ describe('tenant-safe query foundation (#458)', () => {
     const cancel = vi.spyOn(queryClient, 'cancelQueries');
     const clear = vi.spyOn(queryClient, 'clear');
     const reset = vi.fn();
+    const cleanup = vi.fn();
     const unregister = registerTenantQueryClient(queryClient);
+    const unregisterCleanup = registerTenantCommitCleanup(cleanup);
     registerTenantMemoryReset(reset);
 
     await tenantTransition.prepare();
     expect(cancel).toHaveBeenCalledOnce();
     expect(clear).not.toHaveBeenCalled();
+    expect(cleanup).not.toHaveBeenCalled();
 
     tenantTransition.commit();
     expect(clear).toHaveBeenCalledOnce();
     expect(reset).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledOnce();
     unregister();
+    unregisterCleanup();
     registerTenantMemoryReset(() => undefined);
   });
 });

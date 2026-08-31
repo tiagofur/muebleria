@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { clearRegisteredDraftSessions, registerDraftSessionScope } from '@granete/ui';
 
 import { SessionGate } from './SessionGate';
 import { ToastViewport } from './components/ToastViewport';
@@ -15,12 +16,22 @@ import {
   resetProjectStore,
   resetPurchasingStore,
 } from './stores';
-import { registerTenantMemoryReset } from './shared/query/tenantTransition';
+import {
+  registerTenantCommitCleanup,
+  registerTenantMemoryReset,
+} from './shared/query/tenantTransition';
 
 registerTenantMemoryReset(() => {
   resetCatalogStore();
   resetProjectStore();
   resetPurchasingStore();
+});
+registerTenantCommitCleanup(clearRegisteredDraftSessions);
+registerDraftSessionScope(() => {
+  const state = useWorkspaceStore.getState();
+  return state.sessionScope
+    ? `${state.sessionScope.sessionGeneration}:${state.sessionScope.organizationId ?? 'platform'}`
+    : state.session ?? 'anonymous';
 });
 
 export function App(): ReactNode {

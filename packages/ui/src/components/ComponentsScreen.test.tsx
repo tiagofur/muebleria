@@ -767,7 +767,7 @@ describe('ComponentsScreen', () => {
       (screen.getByTestId('input-name') as HTMLInputElement).value,
     ).toBe('Borrador de sesión');
     // Session must hold the in-progress name before remount.
-    expect(sessionStorage.getItem('component-draft:c1')).toContain(
+    expect(sessionStorage.getItem('draft:unscoped:component:c1')).toContain(
       'Borrador de sesión',
     );
     unmount();
@@ -798,14 +798,14 @@ describe('ComponentsScreen', () => {
     fireEvent.change(screen.getByTestId('input-name'), {
       target: { value: 'WIP sticky empty bug' },
     });
-    expect(sessionStorage.getItem('component-draft:c1')).toContain(
+    expect(sessionStorage.getItem('draft:unscoped:component:c1')).toContain(
       'WIP sticky empty bug',
     );
 
     // Save triggers forceCloseEditor (clearDraft + setDraftLocal).
     fireEvent.click(screen.getByTestId('save-btn'));
     expect(onUpdate).toHaveBeenCalled();
-    expect(sessionStorage.getItem('component-draft:c1')).toBeNull();
+    expect(sessionStorage.getItem('draft:unscoped:component:c1')).toBeNull();
 
     // Parent clears edit route; leave editor.
     rerender(
@@ -839,7 +839,7 @@ describe('ComponentsScreen', () => {
       (screen.getByTestId('input-name') as HTMLInputElement).value,
     ).toBe('Puerta');
     // Session must be absent OR equal entity baseline — never sticky empty/WIP.
-    const reopened = sessionStorage.getItem('component-draft:c1');
+    const reopened = sessionStorage.getItem('draft:unscoped:component:c1');
     if (reopened !== null) {
       expect(JSON.parse(reopened).name).toBe('Puerta');
     }
