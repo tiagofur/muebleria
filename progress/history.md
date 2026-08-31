@@ -1837,6 +1837,13 @@ Evidencia final: `./init.sh` completo sobre PostgreSQL 16 aislado, OpenAPI drift
 TypeScript, Go serializado, Ruby/RBZ, RLS SQL directo, rollback/replay/concurrencia,
 pilot gate fresh, UI y los seis checks CI remotos verdes; push y SHA remoto verificados.
 
+## 2026-08-30 — F197 / #452 cerrado después del merge de PR #484
+
+- `main` incorporó el lifecycle explícito y provisioning atómico de organizaciones mediante PR #484.
+- La corrección final serializa support sessions con suspensión/offboarding y mantiene el credential epoch organizacional.
+- F197 pasa de `in_progress` a `done`; `main` quedó sin feature activa antes de asignar el siguiente trabajo.
+- PR #486 integró este head reconciliado, reasignó #483 a F198 y movió su migration a `000103`.
+
 ---
 
 ## F198 — Parámetros tipados definition-driven para rich authoring resolve (#483) — 2026-08-30
