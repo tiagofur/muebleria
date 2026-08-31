@@ -33,6 +33,7 @@ import './users.css';
 import {
   allowedRolesForOrgType,
   ASSIGNABLE_ROLES,
+  isValidUserRole,
   roleLabelEs,
   type ProductRole,
 } from '@granete/domain';
@@ -89,13 +90,14 @@ function canManageRoleSet(
   capabilities: readonly TeamCapability[],
   roles: readonly string[],
 ): boolean {
-  if (roles.length === 0) return false;
+  const normalizedRoles = roles.filter(isValidUserRole);
+  if (normalizedRoles.length === 0 || normalizedRoles.length !== roles.length) return false;
   if (hasCapability(capabilities, 'team:manage:all')) return true;
 
-  return roles.every((role) =>
-    (SALES_TEAM_ROLES.includes(role as ProductRole)
+  return normalizedRoles.every((role) =>
+    (SALES_TEAM_ROLES.includes(role)
       && hasCapability(capabilities, 'team:manage:sales'))
-    || (PRODUCTION_TEAM_ROLES.includes(role as ProductRole)
+    || (PRODUCTION_TEAM_ROLES.includes(role)
       && hasCapability(capabilities, 'team:manage:production')),
   );
 }
@@ -117,20 +119,21 @@ function canInviteRoleSet(
     || hasCapability(capabilities, 'team:invite:production');
 
   return roles.every((role) => {
+    if (!isValidUserRole(role)) return false;
     if (role === 'admin') {
       return canInviteAny
         && hasCapability(capabilities, 'team:manage:all')
         && hasCapability(capabilities, 'team:assign:admin');
     }
-    if (SALES_INVITATION_ROLES.includes(role as ProductRole)) {
+    if (SALES_INVITATION_ROLES.includes(role)) {
       return hasCapability(capabilities, 'team:invite:sales')
         && (hasCapability(capabilities, 'team:manage:all')
-          || SALES_TEAM_ROLES.includes(role as ProductRole));
+          || SALES_TEAM_ROLES.includes(role));
     }
-    if (PRODUCTION_INVITATION_ROLES.includes(role as ProductRole)) {
+    if (PRODUCTION_INVITATION_ROLES.includes(role)) {
       return hasCapability(capabilities, 'team:invite:production')
         && (hasCapability(capabilities, 'team:manage:all')
-          || PRODUCTION_TEAM_ROLES.includes(role as ProductRole));
+          || PRODUCTION_TEAM_ROLES.includes(role));
     }
     return false;
   });
@@ -716,9 +719,10 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
                           className="btn btn--ghost btn--small"
                           onClick={() => {
                             setRoleEditUser(u);
-                            const initialRoles = u.roles.length > 0
-                              ? (u.roles as ProductRole[])
-                              : ['user' as ProductRole];
+                            const normalizedRoles = u.roles.filter(isValidUserRole);
+                            const initialRoles: ProductRole[] = normalizedRoles.length > 0
+                              ? normalizedRoles
+                              : ['user'];
                             setSelectedRoles(initialRoles);
                           }}
                           disabled={isWorking}

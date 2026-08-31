@@ -425,6 +425,26 @@ describe('UsersScreen (#451 safe team boundary)', () => {
     expect(requests.some((url) => url.endsWith('/org/invitations'))).toBe(false);
   });
 
+  it('fails closed before editing or sending a non-canonical Team role', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const invalidMember = { ...member, roles: ['vendedor', 'unknown_role'] };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      return url.endsWith('/org/memberships')
+        ? new Response(JSON.stringify({
+          ...directory(['team:view', 'team:manage:all'], 5), items: [invalidMember],
+        }), { status: 200 })
+        : new Response(JSON.stringify([]), { status: 200 });
+    }));
+
+    renderUsers('factory');
+    await screen.findByText('Ana Pérez');
+
+    expect(screen.queryByRole('button', { name: /Modificar roles/i })).toBeNull();
+    expect(requests.some(({ url }) => url.includes(':change-roles'))).toBe(false);
+  });
+
   it('keeps the Team directory available when invitations return forbidden', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
