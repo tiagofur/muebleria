@@ -354,7 +354,6 @@ export function createWorkspaceStore(options?: InternalOptions) {
             set({ pendingOrgSelection: null, orgSelectionLoading: false });
             return;
           }
-          const switchingActiveSession = get().session === 'auth';
           set({ orgSelectionLoading: true, orgSelectionError: null, orgSelectionRecoveryAvailable: false });
           try {
             const result = await selectOrgRequest(token, organizationId, {
@@ -386,7 +385,6 @@ export function createWorkspaceStore(options?: InternalOptions) {
               workspaceLoadError: null,
               assignableOwners: [],
             });
-            if (switchingActiveSession) await get().loadWorkspace();
           } catch (err) {
             const membershipUnavailable =
               err instanceof GraneteApiError &&

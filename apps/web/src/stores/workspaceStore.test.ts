@@ -1134,7 +1134,7 @@ describe('workspaceStore — atomic organization transition', () => {
     expect(globalThis.sessionStorage.getItem(draftKey)).toBeNull();
   });
 
-  it('loads the selected organization workspace for an active session', async () => {
+  it('leaves active-session workspace loading to the shell owner', async () => {
     globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-old');
     const workspaceB = createSeedWorkspace();
     const repo = makeStubRepo(workspaceB);
@@ -1155,7 +1155,7 @@ describe('workspaceStore — atomic organization transition', () => {
 
     await store.getState().selectOrg('org-1');
 
-    expect(store.getState().workspace).toBe(workspaceB);
+    expect(store.getState().workspace).toBeNull();
     expect(store.getState().workspaceLoading).toBe(false);
     expect(repo.saved).toHaveLength(0);
   });
