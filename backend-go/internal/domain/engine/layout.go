@@ -455,13 +455,13 @@ func legacyBoardStack(module domain.Module, optionChoices map[string]string, mat
 // baseClearanceForLayout mirrors TS resolveBaseClearanceWithContext without a
 // quote-line context: none → 0; module value; else the 100 mm default.
 func baseClearanceForLayout(module domain.Module, baseMode string) int {
-	if baseMode == "none" {
+	if baseMode == baseModeNone {
 		return 0
 	}
 	if module.BaseClearanceMm != nil && *module.BaseClearanceMm > 0 {
 		return *module.BaseClearanceMm
 	}
-	return 100
+	return defaultBaseClearanceMm
 }
 
 // filterInstancesForBaseMode mirrors TS filterComponentInstancesForBaseMode:

@@ -30,24 +30,28 @@ func ResolveBom(
 	catalog domain.Catalog,
 	measurePresetID ...string,
 ) (domain.ResolvedBom, error) {
-	if err := ValidateModule(module); err != nil {
-		return domain.ResolvedBom{}, err
-	}
-
 	presetID := ""
 	if len(measurePresetID) > 0 {
 		presetID = measurePresetID[0]
 	}
+	return resolveBomCommon(module, optionChoices, catalog, presetID, nil, nil, nil)
+}
 
-	rawParts := module.BoardParts
-	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModuleParts(module, catalog, presetID, nil, optionChoices)
-		if err != nil {
-			return domain.ResolvedBom{}, err
-		}
-		rawParts = composed
-	}
-	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
+// ResolveBomWithContext is the #442-aware canonical variant: it carries the
+// quote-line base treatment context (item baseMode override + plan plinth
+// height B + F088 side exposure). Mirrors TS resolveBom(..., baseContext).
+// A nil context resolves with the module catalog defaults (still filtering
+// ZOCLO components by the module's own base mode — TS parity).
+func ResolveBomWithContext(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	baseContext *BaseResolutionContext,
+	measurePresetID string,
+	structureRevisionPin *int,
+	customDims *domain.ItemCustomDims,
+) (domain.ResolvedBom, error) {
+	return resolveBomCommon(module, optionChoices, catalog, measurePresetID, structureRevisionPin, customDims, baseContext)
 }
 
 // ResolveBomWithDims is the F144-aware variant (#310 / P3D-7): customDims
@@ -64,25 +68,7 @@ func ResolveBomWithDims(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 ) (domain.ResolvedBom, error) {
-	if err := ValidateModule(module); err != nil {
-		return domain.ResolvedBom{}, err
-	}
-	if customDims != nil && strings.TrimSpace(module.StructureID) == "" {
-		return domain.ResolvedBom{}, fmt.Errorf(
-			"el mueble %q (%s) no es paramétrico; no admite medidas a medida",
-			module.Name, module.Code,
-		)
-	}
-
-	rawParts := module.BoardParts
-	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, customDims, optionChoices)
-		if err != nil {
-			return domain.ResolvedBom{}, err
-		}
-		rawParts = composed
-	}
-	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
+	return resolveBomCommon(module, optionChoices, catalog, measurePresetID, structureRevisionPin, customDims, nil)
 }
 
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an
@@ -100,29 +86,84 @@ func ResolveBomWithPin(
 	measurePresetID string,
 	pin *int,
 ) (domain.ResolvedBom, error) {
+	return resolveBomCommon(module, optionChoices, catalog, measurePresetID, pin, nil, nil)
+}
+
+// resolveBomCommon is the single BOM path (#442): every exported variant
+// delegates here so filtering, synthesis and base context cannot drift
+// between entry points. Mirrors TS resolveBom: effective base mode/B →
+// filter ZOCLO instances → expand → applyBaseTreatment → resolve ids.
+func resolveBomCommon(
+	module domain.Module,
+	optionChoices map[string]string,
+	catalog domain.Catalog,
+	measurePresetID string,
+	structureRevisionPin *int,
+	customDims *domain.ItemCustomDims,
+	baseContext *BaseResolutionContext,
+) (domain.ResolvedBom, error) {
 	if err := ValidateModule(module); err != nil {
 		return domain.ResolvedBom{}, err
 	}
+	if customDims != nil && strings.TrimSpace(module.StructureID) == "" {
+		return domain.ResolvedBom{}, fmt.Errorf(
+			"el mueble %q (%s) no es paramétrico; no admite medidas a medida",
+			module.Name, module.Code,
+		)
+	}
 
-	rawParts := module.BoardParts
+	baseMode := ResolveBaseModeWithContext(module, baseContext)
+	baseClearance := ResolveBaseClearanceWithContext(module, baseContext)
+
+	var rawParts []domain.BoardPart
+	widthMm, depthMm := 600, 560
 	if strings.TrimSpace(module.StructureID) != "" {
-		composed, err := expandComposedModuleParts(module, catalog, measurePresetID, pin, optionChoices)
+		composed, dims, err := expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, customDims, optionChoices, baseMode, baseClearance)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
 		rawParts = composed
+		widthMm, depthMm = dims.W, dims.D
+	} else {
+		rawParts = module.BoardParts
+		// TS parity (resolveBom non-composed dimsFallback): external dims if
+		// present, else 600×720×560.
+		if module.WidthMm > 0 {
+			widthMm = module.WidthMm
+		}
+		if module.DepthMm > 0 {
+			depthMm = module.DepthMm
+		}
 	}
-	return resolveBomFromParts(module, optionChoices, catalog, rawParts)
+
+	hardware := collectAllHardwareLines(module, catalog)
+	var sides *PlinthSides
+	if baseContext != nil {
+		sides = baseContext.PlinthSides
+	}
+	treatedParts, treatedHardware := applyBaseTreatment(
+		module.Code,
+		rawParts,
+		hardware,
+		baseMode,
+		baseClearance,
+		widthMm,
+		depthMm,
+		sides,
+		optionChoices,
+	)
+	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware)
 }
 
 // resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
-// board parts and the module's hardware lines. Shared by ResolveBom and
-// ResolveBomWithPin so the two paths cannot drift.
+// board parts and the (base-treated) hardware lines. Shared by every
+// ResolveBom* variant so the paths cannot drift.
 func resolveBomFromParts(
 	module domain.Module,
 	optionChoices map[string]string,
 	catalog domain.Catalog,
 	rawParts []domain.BoardPart,
+	hardwareLines []domain.HardwareLine,
 ) (domain.ResolvedBom, error) {
 	boardParts := make([]domain.ResolvedBoardPart, 0, len(rawParts))
 	for _, part := range rawParts {
@@ -161,14 +202,13 @@ func resolveBomFromParts(
 		})
 	}
 
-	allHardware := collectAllHardwareLines(module, catalog)
-	hardwareLines := make([]domain.ResolvedHardwareLine, 0, len(allHardware))
-	for _, line := range allHardware {
+	hardwareResolved := make([]domain.ResolvedHardwareLine, 0, len(hardwareLines))
+	for _, line := range hardwareLines {
 		hw, err := ResolveHardware(line, optionChoices, catalog.Hardware)
 		if err != nil {
 			return domain.ResolvedBom{}, err
 		}
-		hardwareLines = append(hardwareLines, domain.ResolvedHardwareLine{
+		hardwareResolved = append(hardwareResolved, domain.ResolvedHardwareLine{
 			ID:                  line.ID,
 			Quantity:            line.Quantity,
 			DescriptionOverride: line.DescriptionOverride,
@@ -179,7 +219,7 @@ func resolveBomFromParts(
 
 	return domain.ResolvedBom{
 		BoardParts:    boardParts,
-		HardwareLines: hardwareLines,
+		HardwareLines: hardwareResolved,
 	}, nil
 }
 
@@ -198,7 +238,7 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 					}
 					for _, hl := range agr.HardwareLines {
 						copyHl := hl
-						copyHl.Quantity = hl.Quantity * qty
+						copyHl.Quantity = hl.Quantity * float64(qty)
 						lines = append(lines, copyHl)
 					}
 				}
@@ -215,7 +255,7 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 			}
 			for _, hl := range agr.HardwareLines {
 				copyHl := hl
-				copyHl.Quantity = hl.Quantity * qty
+				copyHl.Quantity = hl.Quantity * float64(qty)
 				lines = append(lines, copyHl)
 			}
 		}
@@ -224,16 +264,12 @@ func collectAllHardwareLines(module domain.Module, catalog domain.Catalog) []dom
 	return lines
 }
 
-func expandComposedModuleParts(
-	module domain.Module,
-	catalog domain.Catalog,
-	measurePresetID string,
-	structureRevisionPin *int,
-	optionChoices map[string]string,
-) ([]domain.BoardPart, error) {
-	return expandComposedModulePartsWithDims(module, catalog, measurePresetID, structureRevisionPin, nil, optionChoices)
-}
-
+// expandComposedModulePartsWithDims expands structure + module components and
+// agregados into board parts. #442: it now filters ZOCLO component instances
+// by the EFFECTIVE base mode (item override included — TS
+// filterComponentInstancesForBaseMode applied to structure AND module
+// instances) and returns the resolved dims so the caller can run base
+// treatment synthesis with the same W/D the formulas saw.
 func expandComposedModulePartsWithDims(
 	module domain.Module,
 	catalog domain.Catalog,
@@ -241,10 +277,12 @@ func expandComposedModulePartsWithDims(
 	structureRevisionPin *int,
 	customDims *domain.ItemCustomDims,
 	optionChoices map[string]string,
-) ([]domain.BoardPart, error) {
+	baseMode string,
+	baseClearance int,
+) ([]domain.BoardPart, formulaDims, error) {
 	found, ok := findStructure(catalog, module.StructureID)
 	if !ok {
-		return nil, fmt.Errorf("structure not found: %s", module.StructureID)
+		return nil, formulaDims{}, fmt.Errorf("structure not found: %s", module.StructureID)
 	}
 	// #108 (Slice 2): honor a pinned revision. When pin is nil or matches the
 	// current revision the live structure is used; when pin points to a
@@ -252,35 +290,28 @@ func expandComposedModulePartsWithDims(
 	// is unknown we fail loudly with context (mirrors TS resolveStructureForPin).
 	structure, err := ResolveStructureForPin(found, structureRevisionPin)
 	if err != nil {
-		return nil, err
+		return nil, formulaDims{}, err
 	}
 	// resolveModuleDims keeps validating the preset id (stale ids fail loudly,
 	// TS parity); the custom override then replaces the resolved dims.
 	dims, err := resolveModuleDims(module, measurePresetID)
 	if err != nil {
-		return nil, err
+		return nil, formulaDims{}, err
 	}
 	if customDims != nil {
 		dims = formulaDims{W: customDims.WidthMm, H: customDims.HeightMm, D: customDims.DepthMm}
 	}
 	if err := validateStructureDims(structure, dims); err != nil {
-		return nil, err
+		return nil, formulaDims{}, err
 	}
-
-	// Plinth/toe-kick height B must reach part formulas (TS parity: TS
-	// resolveComposedModule passes B into expandComponentInstances —
-	// bom.ts geomDims). Without it every formula using B resolves to 0 and
-	// CalcBoardLineCost rejects the part.
-	baseMode := module.BaseMode
-	if baseMode == "" {
-		baseMode = "none"
-	}
-	baseClearance := baseClearanceForLayout(module, baseMode)
 
 	parts := make([]domain.BoardPart, 0)
-	structureParts, err := expandComponentInstances(structure.Components, catalog, dims, "st-", optionChoices, baseClearance)
+	structureParts, err := expandComponentInstances(
+		filterInstancesForBaseMode(structure.Components, catalog, baseMode),
+		catalog, dims, "st-", optionChoices, baseClearance,
+	)
 	if err != nil {
-		return nil, err
+		return nil, formulaDims{}, err
 	}
 	parts = append(parts, structureParts...)
 
@@ -292,7 +323,7 @@ func expandComposedModulePartsWithDims(
 		}
 		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "st-agr-", optionChoices, baseClearance)
 		if err != nil {
-			return nil, err
+			return nil, formulaDims{}, err
 		}
 		qty := agrInst.Quantity
 		if qty <= 0 {
@@ -303,9 +334,12 @@ func expandComposedModulePartsWithDims(
 		}
 	}
 
-	moduleParts, err := expandComponentInstances(module.Components, catalog, dims, "mod-", optionChoices, baseClearance)
+	moduleParts, err := expandComponentInstances(
+		filterInstancesForBaseMode(module.Components, catalog, baseMode),
+		catalog, dims, "mod-", optionChoices, baseClearance,
+	)
 	if err != nil {
-		return nil, err
+		return nil, formulaDims{}, err
 	}
 	parts = append(parts, moduleParts...)
 
@@ -317,7 +351,7 @@ func expandComposedModulePartsWithDims(
 		}
 		agrParts, err := expandComponentInstances(agr.Components, catalog, dims, "mod-agr-", optionChoices, baseClearance)
 		if err != nil {
-			return nil, err
+			return nil, formulaDims{}, err
 		}
 		qty := agrInst.Quantity
 		if qty <= 0 {
@@ -328,7 +362,7 @@ func expandComposedModulePartsWithDims(
 		}
 	}
 
-	return parts, nil
+	return parts, dims, nil
 }
 
 // resolveModuleDims picks commercial preset dims or falls back to module base size.
@@ -729,8 +763,8 @@ func CalcHardwareLineCost(
 	catalog domain.Catalog,
 	qtyMultiplier int,
 ) (HardwareLineCost, error) {
-	if line.Quantity <= 0 {
-		return HardwareLineCost{}, fmt.Errorf("hardware line quantity must be > 0 (got %d)", line.Quantity)
+	if !(line.Quantity > 0) {
+		return HardwareLineCost{}, fmt.Errorf("hardware line quantity must be > 0 (got %v)", line.Quantity)
 	}
 	hw, ok := findHardware(catalog, line.HardwareID)
 	if !ok {
@@ -739,7 +773,10 @@ func CalcHardwareLineCost(
 	if !hw.Active {
 		return HardwareLineCost{}, fmt.Errorf("inactive hardware cannot be used: %s", hw.Code)
 	}
+	// #442: quantity is float64 (ml consumption for strip profiles) — quote
+	// cost prices what is consumed; purchase-bar rounding is export-only
+	// (TS calcHardwareLineCost parity).
 	return HardwareLineCost{
-		HardwareCost: float64(line.Quantity*qtyMultiplier) * hw.CostPerUnit,
+		HardwareCost: line.Quantity * float64(qtyMultiplier) * hw.CostPerUnit,
 	}, nil
 }

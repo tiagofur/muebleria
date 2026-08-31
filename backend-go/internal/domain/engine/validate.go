@@ -56,7 +56,7 @@ func ValidateBoardPart(part domain.BoardPart, moduleCode string) error {
 // ValidateHardwareLine enforces VAL-03 (mirrors packages/domain validateHardwareLine).
 func ValidateHardwareLine(line domain.HardwareLine, moduleCode string) error {
 	if line.Quantity <= 0 {
-		return fmt.Errorf("hardware line quantity must be > 0 (got %d)", line.Quantity)
+		return fmt.Errorf("hardware line quantity must be > 0 (got %v)", line.Quantity)
 	}
 	return nil
 }

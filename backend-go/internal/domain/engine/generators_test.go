@@ -252,10 +252,10 @@ func TestGenerateHardwareList_AggregateMultiplySort(t *testing.T) {
 		t.Errorf("sort: %s, %s", rows[0].Code, rows[1].Code)
 	}
 	if rows[0].Quantity != 2 || rows[0].LineCost != 20 {
-		t.Errorf("bisagra: qty=%d line=%v", rows[0].Quantity, rows[0].LineCost)
+		t.Errorf("bisagra: qty=%v line=%v", rows[0].Quantity, rows[0].LineCost)
 	}
 	if rows[1].Quantity != 1 || rows[1].LineCost != 20 {
-		t.Errorf("jaladera: qty=%d line=%v", rows[1].Quantity, rows[1].LineCost)
+		t.Errorf("jaladera: qty=%v line=%v", rows[1].Quantity, rows[1].LineCost)
 	}
 
 	// item qty ×3
@@ -265,7 +265,7 @@ func TestGenerateHardwareList_AggregateMultiplySort(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rows[0].Quantity != 6 || rows[0].LineCost != 60 {
-		t.Errorf("bisagra×3: qty=%d line=%v", rows[0].Quantity, rows[0].LineCost)
+		t.Errorf("bisagra×3: qty=%v line=%v", rows[0].Quantity, rows[0].LineCost)
 	}
 }
 

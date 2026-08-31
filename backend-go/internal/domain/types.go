@@ -296,11 +296,14 @@ type BoardPart struct {
 }
 
 type HardwareLine struct {
-	ID                  string `json:"id"`
-	Quantity            int    `json:"quantity"`
-	DescriptionOverride string `json:"description_override,omitempty"`
-	OptionRole          string `json:"option_role"`
-	HardwareID          string `json:"hardware_id,omitempty"`
+	ID string `json:"id"`
+	// Quantity is float64 (#442): the zoclo strip profile is consumed in
+	// fractional meters (e.g. 0.6 ml for a 600 mm front) — pieces stay
+	// integral. Mirrors TS HardwareLine.quantity: number.
+	Quantity            float64 `json:"quantity"`
+	DescriptionOverride string  `json:"description_override,omitempty"`
+	OptionRole          string  `json:"option_role"`
+	HardwareID          string  `json:"hardware_id,omitempty"`
 }
 
 // ModuleCategory is a node in a user-defined tree (max depth 3).
@@ -812,11 +815,13 @@ type ResolvedBoardPart struct {
 
 // ResolvedHardwareLine is a hardware line with concrete hardware id.
 type ResolvedHardwareLine struct {
-	ID                  string `json:"id"`
-	Quantity            int    `json:"quantity"`
-	DescriptionOverride string `json:"description_override,omitempty"`
-	OptionRole          string `json:"option_role"`
-	HardwareID          string `json:"hardware_id"`
+	ID string `json:"id"`
+	// Quantity is float64 (#442): fractional meters for ZOCLO_PERFIL lines
+	// (TS parity — consumed ml, purchase-bar rounding happens at export).
+	Quantity            float64 `json:"quantity"`
+	DescriptionOverride string  `json:"description_override,omitempty"`
+	OptionRole          string  `json:"option_role"`
+	HardwareID          string  `json:"hardware_id"`
 }
 
 // ResolvedBom is the fully resolved module BOM.
@@ -845,14 +850,21 @@ type ProductionCutRow struct {
 }
 
 // HardwarePurchaseRow is an aggregated hardware purchase line (EXP-08).
+// Mirrors TS HardwarePurchaseRow (#442): quantity is net consumption
+// (fractional meters for strip profiles); purchaseQuantity applies package
+// rounding and lineCost prices what is actually bought.
 type HardwarePurchaseRow struct {
-	HardwareID  string       `json:"hardware_id"`
-	Code        string       `json:"code"`
-	Description string       `json:"description"`
-	Unit        HardwareUnit `json:"unit"`
-	Quantity    int          `json:"quantity"`
-	CostPerUnit float64      `json:"cost_per_unit"`
-	LineCost    float64      `json:"line_cost"`
+	HardwareID       string       `json:"hardware_id"`
+	Code             string       `json:"code"`
+	Description      string       `json:"description"`
+	Unit             HardwareUnit `json:"unit"`
+	Quantity         float64      `json:"quantity"`
+	PurchaseQuantity float64      `json:"purchase_quantity"`
+	// PurchasePackages is set only when the hardware defines a package size.
+	PurchasePackages *int     `json:"purchase_packages,omitempty"`
+	PackageSize      *float64 `json:"package_size,omitempty"`
+	CostPerUnit      float64  `json:"cost_per_unit"`
+	LineCost         float64  `json:"line_cost"`
 }
 
 // ProjectPhotoStage represents the lifecycle stage of a project photo.

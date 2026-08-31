@@ -1,0 +1,468 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "granete.plinthBaseParity.v1",
+  "comment": [
+    "#442 — Contrato de paridad TS/Go del tratamiento de base (zócalo/patas).",
+    "TS: packages/domain/src/plinthBaseParity.contract.test.ts (resolveBom + baseContextForItem).",
+    "Go: backend-go/internal/domain/engine/plinthBaseParityContract_test.go (ResolveBomWithContext + ResolveBaseContextForItem).",
+    "Regla: expected congelados; si un motor diverge, se alinea el motor — nunca el expected.",
+    "Cubre: modos none|legs|plinth_board|plinth_strip, default de módulo vs override de ítem,",
+    "B del plano (layout) pisando B del módulo, filtrado de componentes ZOCLO por modo efectivo,",
+    "síntesis ZOCLO-AUTO con identidad estable, vueltas laterales F088 y herraje (perfil ml / patas).",
+    "Fuera de alcance aquí: F089 merge de runs por muro (ningún caller de producción TS pasa",
+    "plinthRunMap; paridad = mismo comportamiento). Los costos están en designBomPrice.json."
+  ],
+  "catalog": {
+    "materials": [
+      {
+        "id": "mat-front",
+        "code": "MEL-F",
+        "name": "Melamina Frente",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 18,
+        "grainDefault": false,
+        "boardPrice": 100,
+        "wastePercent": 0,
+        "costPerM2": 100,
+        "defaultEdgeBandId": "edge-pvc",
+        "active": true
+      },
+      {
+        "id": "mat-body",
+        "code": "MEL-C",
+        "name": "Melamina Carcasa",
+        "widthMm": 1000,
+        "lengthMm": 1000,
+        "thicknessMm": 18,
+        "grainDefault": false,
+        "boardPrice": 80,
+        "wastePercent": 0,
+        "costPerM2": 80,
+        "defaultEdgeBandId": "edge-pvc",
+        "active": true
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-pvc",
+        "code": "PVC-08",
+        "name": "Canto PVC 0.8",
+        "costPerMl": 2,
+        "thicknessMm": 0.8,
+        "active": true
+      }
+    ],
+    "hardware": [
+      {
+        "id": "hw-perfil",
+        "code": "HER-ZOC-ALU",
+        "name": "Perfil zócalo aluminio",
+        "unit": "meter",
+        "costPerUnit": 18,
+        "packageSize": 4,
+        "active": true
+      },
+      {
+        "id": "hw-patas",
+        "code": "PAT-REG",
+        "name": "Pata regulable",
+        "unit": "piece",
+        "costPerUnit": 5,
+        "active": true
+      }
+    ],
+    "optionGroups": [
+      {
+        "id": "og-frente",
+        "code": "FRENTE",
+        "name": "Frente",
+        "kind": "board",
+        "required": false,
+        "optionIds": ["mat-front", "mat-body"]
+      },
+      {
+        "id": "og-interior",
+        "code": "INTERIOR",
+        "name": "Interior",
+        "kind": "board",
+        "required": true,
+        "optionIds": ["mat-front", "mat-body"]
+      },
+      {
+        "id": "og-zoclo",
+        "code": "ZOCLO",
+        "name": "Zócalo",
+        "kind": "board",
+        "required": false,
+        "optionIds": ["mat-front", "mat-body"]
+      },
+      {
+        "id": "og-perfil",
+        "code": "ZOCLO_PERFIL",
+        "name": "Perfil zócalo",
+        "kind": "hardware",
+        "required": false,
+        "optionIds": ["hw-perfil"]
+      },
+      {
+        "id": "og-patas",
+        "code": "PATAS",
+        "name": "Patas",
+        "kind": "hardware",
+        "required": false,
+        "optionIds": ["hw-patas"]
+      }
+    ],
+    "structures": [
+      {
+        "id": "st-carcase",
+        "code": "EST-CAR",
+        "name": "Carcasa paramétrica",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "components": [
+          { "componentId": "comp-lateral", "quantity": 2 }
+        ],
+        "active": true
+      }
+    ],
+    "components": [
+      {
+        "id": "comp-lateral",
+        "code": "LATERAL",
+        "name": "Lateral",
+        "placement": "lateral_izquierdo",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 720,
+          "widthMm": 560,
+          "thicknessMm": 18,
+          "lengthFormula": "H",
+          "widthFormula": "D"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": false },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["INTERIOR"],
+        "active": true
+      },
+      {
+        "id": "comp-zoclo",
+        "code": "ZOCLO",
+        "name": "Zoclo frontal",
+        "placement": "frontal",
+        "geometry": {
+          "kind": "rectangular_board",
+          "lengthMm": 600,
+          "widthMm": 100,
+          "thicknessMm": 18,
+          "lengthFormula": "W",
+          "widthFormula": "B"
+        },
+        "defaultEdges": [
+          { "side": "L1", "enabled": true },
+          { "side": "L2", "enabled": false },
+          { "side": "W1", "enabled": false },
+          { "side": "W2", "enabled": false }
+        ],
+        "optionRoles": ["ZOCLO"],
+        "active": true
+      }
+    ],
+    "agregados": [],
+    "modules": [
+      {
+        "id": "m-bajo",
+        "code": "BA-SYN",
+        "name": "Bajo con zócalo sintetizado",
+        "structureId": "st-carcase",
+        "baseMode": "plinth_board",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-bajo-zoclo",
+        "code": "BA-ZOC",
+        "name": "Bajo con zócalo de catálogo",
+        "structureId": "st-carcase",
+        "baseMode": "plinth_board",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [
+          { "componentId": "comp-zoclo", "quantity": 1 }
+        ],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-bajo-none",
+        "code": "BA-NON",
+        "name": "Bajo sin base",
+        "structureId": "st-carcase",
+        "baseMode": "none",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [
+          { "componentId": "comp-zoclo", "quantity": 1 }
+        ],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-bajo-perfil",
+        "code": "BA-PERF",
+        "name": "Bajo con perfil",
+        "structureId": "st-carcase",
+        "baseMode": "plinth_strip",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-bajo-patas",
+        "code": "BA-PAT",
+        "name": "Bajo sobre patas",
+        "structureId": "st-carcase",
+        "baseMode": "legs",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-bajo-unset",
+        "code": "BA-UNS",
+        "name": "Bajo sin modo declarado",
+        "structureId": "st-carcase",
+        "externalDims": { "width": 600, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      },
+      {
+        "id": "m-bajo-800",
+        "code": "BA-800",
+        "name": "Bajo 800 con zócalo sintetizado",
+        "structureId": "st-carcase",
+        "baseMode": "plinth_board",
+        "externalDims": { "width": 800, "height": 720, "depth": 560 },
+        "presets": [],
+        "components": [],
+        "hardwareLines": [],
+        "active": true
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "synth-front-default-b",
+      "description": "plinth_board sin componente ZOCLO: el motor sintetiza ZOCLO-AUTO (600×100, canto L1) y hereda material FRENTE por alias.",
+      "moduleId": "m-bajo",
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-SYN-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 600, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "synth-zoclo-explicit-choice",
+      "description": "La elección ZOCLO explícita gana al alias FRENTE para la pieza sintetizada.",
+      "moduleId": "m-bajo",
+      "optionChoicesOverride": { "ZOCLO": "mat-body" },
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-SYN-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 600, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-body" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "own-zoclo-no-phantom",
+      "description": "Negativo anti-phantom: el módulo YA tiene componente ZOCLO propio → no se sintetiza ZOCLO-AUTO.",
+      "moduleId": "m-bajo-zoclo",
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "description": "Zoclo frontal", "lengthMm": 600, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "item-none-filters-zoclo-component",
+      "description": "Override de ítem none sobre módulo plinth_board: el componente ZOCLO se filtra y no queda base.",
+      "moduleId": "m-bajo-zoclo",
+      "itemBaseMode": "none",
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "item-legs-suggests-4",
+      "description": "Override de ítem legs: sin pieza de zócalo; con elección PATAS se sintetizan 4 patas (ancho ≤ 600).",
+      "moduleId": "m-bajo",
+      "itemBaseMode": "legs",
+      "optionChoicesOverride": { "PATAS": "hw-patas" },
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" }
+        ],
+        "hardware": [
+          { "id": "BA-SYN-patas-auto", "optionRole": "PATAS", "quantity": 4, "hardwareId": "hw-patas" }
+        ]
+      }
+    },
+    {
+      "id": "legs-guard-no-choice",
+      "description": "Negativo guard: legs sin elección PATAS en el catálogo del proyecto → no se sintetiza herraje (compatibilidad).",
+      "moduleId": "m-bajo-patas",
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "strip-ml",
+      "description": "plinth_strip: el perfil se sintetiza y la cantidad se convierte a ml (600 mm → 0.6).",
+      "moduleId": "m-bajo-perfil",
+      "optionChoicesOverride": { "ZOCLO_PERFIL": "hw-perfil" },
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" }
+        ],
+        "hardware": [
+          { "id": "BA-PERF-zoclo-perfil-auto", "optionRole": "ZOCLO_PERFIL", "quantity": 0.6, "hardwareId": "hw-perfil", "descriptionOverride": "Zoclo perfil (ml)" }
+        ]
+      }
+    },
+    {
+      "id": "layout-b-overrides-module",
+      "description": "El B del plano (120) pisa el default del módulo → zócalo sintetizado 600×120.",
+      "moduleId": "m-bajo",
+      "layout": {
+        "baseClearanceMm": 120,
+        "walls": [],
+        "placements": []
+      },
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-SYN-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 600, "widthMm": 120, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "item-mode-honors-default-height",
+      "description": "Módulo sin baseMode propio + override de ítem plinth_board: se honra la altura default 100.",
+      "moduleId": "m-bajo-unset",
+      "itemBaseMode": "plinth_board",
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-UNS-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 600, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "wall-exposed-right-return",
+      "description": "F088: placement pegado al inicio del muro (offset 0, muro 3000) → sólo el lado derecho queda expuesto → una vuelta 510×100.",
+      "moduleId": "m-bajo",
+      "layout": {
+        "walls": [ { "id": "w-1", "lengthMm": 3000 } ],
+        "placements": [
+          { "itemId": "item-1", "instanceIndex": 0, "wallId": "w-1", "offsetMm": 0, "elevation": "floor" }
+        ]
+      },
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-SYN-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 600, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" },
+          { "id": "BA-SYN-zoclo-auto-lado-right", "code": "ZOCLO-LADO-AUTO", "description": "Zócalo lateral (vuelta)", "lengthMm": 510, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "island-three-returns",
+      "description": "F088: isla (free placement) expone left/right/back → tres vueltas 510×100 más el frontal.",
+      "moduleId": "m-bajo",
+      "layout": {
+        "walls": [],
+        "placements": [
+          { "itemId": "item-1", "instanceIndex": 0, "wallId": "", "offsetMm": 0, "elevation": "floor", "mode": "free", "freeXMm": 1000, "freeYMm": 800 }
+        ]
+      },
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-SYN-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 600, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" },
+          { "id": "BA-SYN-zoclo-auto-lado-left", "code": "ZOCLO-LADO-AUTO", "description": "Zócalo lateral (vuelta)", "lengthMm": 510, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" },
+          { "id": "BA-SYN-zoclo-auto-lado-right", "code": "ZOCLO-LADO-AUTO", "description": "Zócalo lateral (vuelta)", "lengthMm": 510, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" },
+          { "id": "BA-SYN-zoclo-auto-lado-back", "code": "ZOCLO-LADO-AUTO", "description": "Zócalo lateral (vuelta)", "lengthMm": 510, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": []
+      }
+    },
+    {
+      "id": "wide-plinth-six-legs",
+      "description": "Ancho 800 con elección PATAS: 6 patas (>sugerido 600) y zócalo sintetizado 800×100.",
+      "moduleId": "m-bajo-800",
+      "optionChoicesOverride": { "PATAS": "hw-patas" },
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" },
+          { "id": "BA-800-zoclo-auto", "code": "ZOCLO-AUTO", "description": "Zócalo (melamina)", "lengthMm": 800, "widthMm": 100, "quantity": 1, "optionRole": "ZOCLO", "edges": ["L1"], "materialId": "mat-front" }
+        ],
+        "hardware": [
+          { "id": "BA-800-patas-auto", "optionRole": "PATAS", "quantity": 6, "hardwareId": "hw-patas" }
+        ]
+      }
+    },
+    {
+      "id": "wall-elevation-zero-b",
+      "description": "Negativo: elevation wall en el plano → B=0 → no se sintetiza zócalo ni vueltas pese al modo plinth_board.",
+      "moduleId": "m-bajo",
+      "layout": {
+        "walls": [ { "id": "w-1", "lengthMm": 3000 } ],
+        "placements": [
+          { "itemId": "item-1", "instanceIndex": 0, "wallId": "w-1", "offsetMm": 0, "elevation": "wall" }
+        ]
+      },
+      "optionChoicesOverride": {},
+      "expected": {
+        "parts": [
+          { "description": "Lateral", "lengthMm": 720, "widthMm": 560, "quantity": 2, "optionRole": "INTERIOR", "edges": [], "materialId": "mat-body" }
+        ],
+        "hardware": []
+      }
+    }
+  ]
+}
