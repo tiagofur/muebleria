@@ -2073,6 +2073,7 @@
         "required": [
           "user",
           "roles",
+          "memberships",
           "transport",
           "session_scope"
         ],
@@ -2084,6 +2085,12 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Membership"
             }
           },
           "organization": {

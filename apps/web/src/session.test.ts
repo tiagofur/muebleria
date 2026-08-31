@@ -230,6 +230,7 @@ describe('selectOrgRequest', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
         roles: ['admin'],
+        memberships: [],
         organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
         transport: 'web',
         session_scope: SESSION_SCOPE,
@@ -290,6 +291,7 @@ describe('selectOrgRequest', () => {
         updated_at: '2026-08-29T00:00:00Z',
       },
       roles: ['admin'],
+      memberships: [],
       organization: {
         id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory',
         status: 'active', license: { plan: 'none', status: 'none' },
@@ -300,6 +302,7 @@ describe('selectOrgRequest', () => {
     const sessionSnapshot: SessionSnapshot = {
       user: { id: mismatch.snapshotUserId ?? '1', email: 'a@b.com', name: 'Ana', account_status: 'active', roles: ['admin'] },
       roles: ['admin'],
+      organizationChoices: [],
       organization: { id: mismatch.snapshotOrganizationId ?? 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
       sessionScope: {
         ...validatedScope,
@@ -334,6 +337,7 @@ describe('meRequest', () => {
         JSON.stringify({
           user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
           roles: ['admin'],
+          memberships: [],
           organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
           transport: 'web',
           session_scope: SESSION_SCOPE,
@@ -358,10 +362,41 @@ describe('meRequest', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-123');
   });
 
+  it('accepts a support target organization without an actor membership', async () => {
+    const organization = {
+      id: 'org-2', name: 'Support target', slug: 'support-target', type: 'factory',
+      status: 'active', license: { plan: 'none', status: 'none' },
+    } as const;
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: true, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
+      roles: ['admin'],
+      memberships: [],
+      organization,
+      support: { organization_id: 'org-2', session_id: 'support-1', reason: 'investigation' },
+      transport: 'support',
+      session_scope: {
+        ...SESSION_SCOPE,
+        membership_id: null,
+        organization_id: 'org-2',
+        mode: 'support',
+        support_session_id: 'support-1',
+        membership_credential_version: null,
+        organization_credential_version: 9,
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const result = await meRequest('support-token', { fetchImpl });
+
+    expect(result.organization).toEqual(organization);
+    expect(result.organizationChoices).toEqual([]);
+    expect(result.sessionScope).toMatchObject({ mode: 'support', organizationId: 'org-2' });
+  });
+
   it('creates a different non-secret query root for repeated logins with the same server scope', async () => {
     const responseBody = {
       user: { id: '1', email: 'a@b.com', normalized_email: 'a@b.com', name: 'Ana', account_status: 'active', email_verified_at: null, last_login_at: null, platform_admin: false, created_at: '2026-08-29T00:00:00Z', updated_at: '2026-08-29T00:00:00Z' },
       roles: ['admin'],
+      memberships: [],
       organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
       transport: 'web', session_scope: SESSION_SCOPE,
     };

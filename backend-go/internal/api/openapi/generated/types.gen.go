@@ -150,6 +150,7 @@ type SessionScope struct {
 type MeResponse struct {
 	User         User                 `json:"user"`
 	Roles        []string             `json:"roles"`
+	Memberships  []Membership         `json:"memberships"`
 	Organization *OrganizationSummary `json:"organization,omitempty"`
 	Support      *SupportInfo         `json:"support,omitempty"`
 	Transport    AuthTransport        `json:"transport"`
