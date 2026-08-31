@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GraneteApiClient } from './apiClient';
-import { GraneteApiError } from './apiErrors';
+import { GraneteApiError, GraneteNetworkError } from './apiErrors';
 
 const json = (value: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -264,5 +264,43 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
     expect(events[0]?.details.request_id).toBe('request-448-audit');
     await expect(clientFor({ ...current, ip: undefined, details: undefined, ip_address: '127.0.0.1', metadata: {} })
       .listSecurityAudit('token', 'org1')).rejects.toThrow('Invalid API response');
+  });
+
+  it('forwards AbortSignal through generated operations', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation((_input, init) => {
+      expect(init?.signal).toBe(controller.signal);
+      return Promise.reject(new DOMException('Cancelled', 'AbortError'));
+    });
+    const client = new GraneteApiClient('http://api.test', fetchImpl);
+
+    controller.abort();
+    await expect(client.getSession('token', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('classifies only fetch TypeErrors as network failures', async () => {
+    const cause = new TypeError('Failed to fetch');
+    const client = new GraneteApiClient(
+      'http://api.test',
+      vi.fn<typeof fetch>().mockRejectedValue(cause),
+    );
+
+    const error = await client.getSession('token').catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(GraneteNetworkError);
+    expect((error as GraneteNetworkError).cause).toBe(cause);
+  });
+
+  it('preserves AbortError when cancellation happens while reading the response body', async () => {
+    const abortError = new DOMException('Cancelled while reading', 'AbortError');
+    const response = json({});
+    vi.spyOn(response, 'json').mockRejectedValue(abortError);
+    const client = new GraneteApiClient(
+      'http://api.test',
+      vi.fn<typeof fetch>().mockResolvedValue(response),
+    );
+
+    await expect(client.getSession('token')).rejects.toBe(abortError);
   });
 });

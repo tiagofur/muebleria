@@ -15,6 +15,7 @@
     "@granete/excel": "workspace:*",
     "@granete/storage": "workspace:*",
     "@granete/ui": "workspace:*",
+    "@tanstack/react-query": "5.102.8",
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",

@@ -15,6 +15,7 @@ import '@granete/ui/common/tabs.css';
 import '@granete/ui/common/entityCard.css';
 import '@granete/ui/common/engineeringDetail.css';
 import { App } from './App';
+import { ServerStateProvider } from './app/providers/ServerStateProvider';
 import { installAuth401Interceptor } from './auth401';
 import { installCrossTabRefresh } from './crossTabSync';
 import { useWorkspaceStore } from './stores/workspaceStore';
@@ -46,10 +47,12 @@ if (!rootEl) {
 
 createRoot(rootEl).render(
   <StrictMode>
-    <BrowserRouter>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </BrowserRouter>
+    <ServerStateProvider>
+      <BrowserRouter>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </BrowserRouter>
+    </ServerStateProvider>
   </StrictMode>,
 );

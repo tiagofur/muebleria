@@ -238,6 +238,12 @@ describe('meRequest', () => {
           roles: ['admin'],
           organization: { id: 'org-1', name: 'Taller 1', slug: 'taller-1', type: 'factory', status: 'active', license: { plan: 'none', status: 'none' } },
           transport: 'web',
+          session_scope: {
+            user_id: '1', membership_id: 'membership-1', organization_id: 'org-1', mode: 'auth',
+            support_session_id: null, recovery_session_id: null,
+            membership_credential_version: 1, organization_credential_version: 1,
+            absolute_expires_at: '2026-08-31T00:00:00Z',
+          },
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
