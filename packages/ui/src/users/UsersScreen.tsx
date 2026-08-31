@@ -25,6 +25,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
+import { MODAL_CLOSE_MS } from '../common/Modal';
+import { AdminTransferModal, RolePermissionPreview } from './TeamLifecyclePanels';
 import '../catalogs/catalogs.css';
 import './users.css';
 import {
@@ -37,6 +39,7 @@ import {
   GraneteApiClient,
   GraneteApiError,
   type TeamCapability,
+  type TeamDirectory,
   type TeamMember,
   type Invitation,
 } from '@granete/storage';
@@ -159,6 +162,11 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   const [suspendReason, setSuspendReason] = useState('');
   const [revokeSessionsMember, setRevokeSessionsMember] = useState<UserRow | null>(null);
   const [revokeSessionsReason, setRevokeSessionsReason] = useState('');
+  const [transferSource, setTransferSource] = useState<UserRow | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferNeedsReload, setTransferNeedsReload] = useState(false);
 
   /** Roles this organization type may assign (#326): factories use the full
    * canonical set; store/dealer are commercial-only (server re-validates). */
@@ -184,6 +192,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   );
   const canInvite = invitationRoles.length > 0;
   const canRevokeSessions = hasCapability(capabilities, 'team:revoke_sessions');
+  const canTransferAdmin = hasCapability(capabilities, 'team:transfer_admin');
   const invitationsQuery = useQuery({
     queryKey: queryKeys.invitations,
     queryFn: ({ signal }) => api.listInvitations(token, signal),
@@ -221,31 +230,49 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   const activeCount = summary?.active_members ?? users.filter((u) => u.membership_status === 'active').length;
   const suspendedCount = summary?.suspended_members ?? users.filter((u) => u.membership_status === 'suspended').length;
   const leftCount = summary?.left_members ?? users.filter((u) => u.membership_status === 'left').length;
+  const transferCandidates = users.filter((member) =>
+    member.membership_id !== transferSource?.membership_id
+    && member.membership_status === 'active'
+    && member.account_status === 'active',
+  );
 
   const mutationError = (error: unknown, fallback: string) => {
     if (!(error instanceof GraneteApiError)) return fallback;
     if (error.code === 'LAST_ADMIN') return 'No se puede dejar al taller sin administrador. Transferí ese rol antes de continuar.';
     if (error.code === 'SEAT_LIMIT_REACHED') return 'No hay lugares disponibles para reactivar esta membresía. Liberá un lugar o revisá el límite del taller.';
     if (error.code === 'MEMBERSHIP_VERSION_CONFLICT') return 'Esta membresía cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
+    if (error.code === 'ADMIN_TRANSFER_INVALID') return 'La transferencia ya no es válida. Actualizá el equipo y elegí nuevamente.';
     if (error.code === 'VERSION_CONFLICT' || error.code === 'INVITATION_TOKEN_ROTATED') return 'Esta invitación cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
     if (error.code === 'INVITATION_ALREADY_USED' || error.code === 'INVITATION_REVOKED') return 'La invitación ya no está disponible. Actualizá la lista para ver su estado actual.';
     if (error.code === 'FORBIDDEN') return 'No tenés permiso para realizar esta acción en este miembro.';
     return fallback;
   };
 
+  const openTransferForLastAdmin = (error: unknown, source: UserRow): boolean => {
+    if (!(error instanceof GraneteApiError) || error.code !== 'LAST_ADMIN' || !canTransferAdmin) return false;
+    setTransferTargetId('');
+    setTransferReason('');
+    setTransferError(null);
+    setTransferNeedsReload(false);
+    setRoleEditUser(null);
+    setSuspendMember(null);
+    window.setTimeout(() => setTransferSource(source), MODAL_CLOSE_MS);
+    return true;
+  };
+
   const saveMultiRoles = async (membershipId: string, roles: ProductRole[]) => {
+    const member = users.find((candidate) => candidate.membership_id === membershipId);
+    if (!member) return;
     setActionId(membershipId);
     setActionError(null);
     try {
-      const member = users.find((candidate) => candidate.membership_id === membershipId);
-      if (!member) throw new Error('Miembro no encontrado');
       await mutation.mutateAsync(async () => {
         await api.changeMembershipRoles(token, membershipId, member.version, { roles });
       });
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
     } catch (error) {
-      setActionError(mutationError(error, 'No se pudieron guardar los roles. Revisá tu conexión e intentá de nuevo.'));
+      if (!openTransferForLastAdmin(error, member)) setActionError(mutationError(error, 'No se pudieron guardar los roles. Revisá tu conexión e intentá de nuevo.'));
     } finally {
       setActionId(null);
     }
@@ -277,9 +304,51 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
       showToast('Membresía suspendida');
       setSuspendMember(null);
     } catch (error) {
-      setActionError(mutationError(error, 'No se pudo suspender la membresía. Revisá tu conexión e intentá de nuevo.'));
+      if (!openTransferForLastAdmin(error, suspendMember)) setActionError(mutationError(error, 'No se pudo suspender la membresía. Revisá tu conexión e intentá de nuevo.'));
     } finally {
       setActionId(null);
+    }
+  };
+
+  const confirmAdminTransfer = async () => {
+    const source = transferSource;
+    const target = users.find((member) => member.membership_id === transferTargetId);
+    if (!source || !target || !transferReason.trim()) return;
+    setActionId(source.membership_id);
+    setTransferError(null);
+    try {
+      await mutation.mutateAsync(async () => {
+        await api.transferOrganizationAdmin(token, source.membership_id, source.version, {
+          target_membership_id: target.membership_id,
+          target_version: target.version,
+          demote_source: false,
+          reason: transferReason.trim(),
+        });
+      });
+      setTransferSource(null);
+      showToast('Administración transferida. Volvé a intentar el cambio original.');
+    } catch (error) {
+      setTransferError(mutationError(error, 'No se pudo transferir la administración. Actualizá el equipo e intentá de nuevo.'));
+      if (error instanceof GraneteApiError && (error.code === 'MEMBERSHIP_VERSION_CONFLICT' || error.code === 'ADMIN_TRANSFER_INVALID')) setTransferNeedsReload(true);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const reloadAdminTransfer = async () => {
+    const sourceId = transferSource?.membership_id;
+    try {
+      const latest = await queryClient.fetchQuery<TeamDirectory>({ queryKey: queryKeys.team, queryFn: ({ signal }) => api.listMemberships(token, signal), staleTime: 0, retry: false });
+      const source = latest.items.find((member) => member.membership_id === sourceId);
+      const target = latest.items.find((member) => member.membership_id === transferTargetId);
+      if (!source) { setTransferSource(null); return; }
+      setTransferSource(source);
+      if (!target || target.membership_status !== 'active' || target.account_status !== 'active') setTransferTargetId('');
+      setTransferNeedsReload(false);
+      setTransferError(null);
+    } catch {
+      setTransferNeedsReload(true);
+      setTransferError('No se pudo actualizar el equipo. Revisá tu conexión y volvé a intentar antes de transferir.');
     }
   };
 
@@ -705,6 +774,8 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
             })}
           </div>
 
+          <RolePermissionPreview roles={selectedRoles} organizationType={orgType} />
+
           <div className="users-modal-actions">
             <button type="button" className="btn btn--secondary" onClick={() => setRoleEditUser(null)}>
               Cancelar
@@ -898,6 +969,20 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
           </div>
         </div>
       </Modal>
+
+      <AdminTransferModal
+        source={transferSource}
+        candidates={transferCandidates}
+        targetId={transferTargetId}
+        reason={transferReason}
+        error={transferError}
+        busy={actionId === transferSource?.membership_id || transferNeedsReload}
+        onTargetChange={setTransferTargetId}
+        onReasonChange={setTransferReason}
+        onClose={() => setTransferSource(null)}
+        onReload={() => void reloadAdminTransfer()}
+        onConfirm={() => void confirmAdminTransfer()}
+      />
 
     </div>
   );

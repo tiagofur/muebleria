@@ -829,3 +829,30 @@ export function rolesCanViewCosts(
 ): boolean {
   return anyRole(roles, (r) => roleCanViewCosts(r, opts));
 }
+
+export type EffectivePermissionCategory =
+  | 'quotes' | 'sales_team' | 'catalog_mutation' | 'production' | 'costs'
+  | 'assign_admin' | 'transfer_admin' | 'revoke_sessions';
+export type EffectivePermissionWarning = 'sales_cost_visibility' | 'organization_administration';
+
+/** Review-facing projection of canonical RBAC union rules; never an authorization gate. */
+export function effectivePermissionPreviewForRoles(
+  roles: readonly (string | null | undefined)[],
+  organizationType: string | null | undefined,
+): { readonly permissions: Readonly<Record<EffectivePermissionCategory, boolean>>; readonly warnings: readonly EffectivePermissionWarning[] } {
+  const team = teamCapabilitiesForRoles(roles, organizationType);
+  const permissions = {
+    quotes: anyRole(roles, roleCanAccessProjects),
+    sales_team: team.includes('team:manage:sales') || team.includes('team:manage:all'),
+    catalog_mutation: anyRole(roles, roleCanMutateCatalog),
+    production: roles.length > 0 && rolesCanAccessNav(roles, 'production'),
+    costs: rolesCanViewCosts(roles),
+    assign_admin: team.includes('team:assign:admin'),
+    transfer_admin: team.includes('team:transfer_admin'),
+    revoke_sessions: team.includes('team:revoke_sessions'),
+  } satisfies Record<EffectivePermissionCategory, boolean>;
+  const warnings: EffectivePermissionWarning[] = [];
+  if (permissions.quotes && permissions.costs) warnings.push('sales_cost_visibility');
+  if (permissions.assign_admin || permissions.transfer_admin || permissions.revoke_sessions) warnings.push('organization_administration');
+  return { permissions, warnings };
+}
