@@ -21,6 +21,9 @@ import {
   type WorkspaceRepository,
 } from '@granete/storage';
 import { resolveWorkshopSettings } from '@granete/domain';
+import type { SessionScope } from '../shared/query/sessionScope';
+import { tenantTransition } from '../shared/query/tenantTransition';
+import { notifySessionChanged } from '../sessionSync';
 
 import {
   type AuthUser,
@@ -64,6 +67,7 @@ export interface WorkspaceStoreDeps {
   readonly fetchImpl?: typeof fetch;
   /** Factory that returns the repository for a given session mode. */
   readonly repositoryFactory?: RepositoryFactory;
+  readonly tenantTransition?: typeof tenantTransition;
 }
 
 export type RepositoryFactory = (
@@ -110,6 +114,7 @@ export interface WorkspaceState {
   readonly orgSelectionLoading: boolean;
   readonly orgSelectionError: string | null;
   readonly activeOrg: OrgSummary | null;
+  readonly sessionScope: SessionScope | null;
   readonly supportInfo: SupportInfo | null;
   readonly supportExiting: boolean;
   readonly authUserSeq: number;
@@ -181,6 +186,7 @@ interface ResolvedDeps {
     mode: SessionMode,
     deps: { readonly baseUrl: string },
   ) => WorkspaceRepository;
+  readonly tenantTransition: typeof tenantTransition;
 }
 
 export function createWorkspaceStore(options?: InternalOptions) {
@@ -195,6 +201,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
     baseUrl: options?.deps?.baseUrl ?? DEFAULT_API_BASE,
     fetchImpl: safeFetch,
     repositoryFactory: options?.deps?.repositoryFactory ?? defaultRepositoryFactory,
+    tenantTransition: options?.deps?.tenantTransition ?? tenantTransition,
   };
 
   return create<WorkspaceState>()(
@@ -209,6 +216,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         orgSelectionLoading: false,
         orgSelectionError: null,
         activeOrg: null,
+        sessionScope: null,
         supportInfo: null,
         supportExiting: false,
         authUserSeq: 0,
@@ -245,6 +253,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           orgSelectionLoading: false,
           orgSelectionError: null,
           activeOrg: null,
+          sessionScope: null,
           supportInfo: null,
             guestImportLoading: false,
             guestImportError: null,
@@ -277,6 +286,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               sessionEndReason: null,
               pendingOrgSelection: null,
               activeOrg: result.organization ?? null,
+              sessionScope: null,
               // Reset workspace so AppContent reloads for the new session.
               workspace: null,
               workspaceSeq: get().workspaceSeq + 1,
@@ -309,6 +319,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           set({
             session: 'auth',
             activeOrg: result.organization ?? null,
+            sessionScope: null,
             pendingOrgSelection: null,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
@@ -325,12 +336,15 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
           set({ orgSelectionLoading: true, orgSelectionError: null });
           try {
+            await deps.tenantTransition.prepare();
             const result = await selectOrgRequest(token, organizationId, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
             storeAuthToken(result.token);
             storeAuthUser(result.user);
+            deps.tenantTransition.commit();
+            notifySessionChanged();
             set({
               session: 'auth',
               // authUserSeq re-keys the authUser/authToken memos in the
@@ -341,6 +355,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               orgSelectionError: null,
               pendingOrgSelection: null,
               activeOrg: result.organization ?? null,
+              sessionScope: result.sessionScope ?? null,
               supportInfo: null,
               sessionEndReason: null,
               workspace: null,
@@ -358,17 +373,27 @@ export function createWorkspaceStore(options?: InternalOptions) {
         },
 
         enterSupportSession: async (token: string) => {
+          await deps.tenantTransition.prepare();
+          const sessionInfo = await meRequest(token, {
+            baseUrl: deps.baseUrl,
+            fetchImpl: deps.fetchImpl,
+          });
           storeAuthToken(token);
+          storeAuthUser(sessionInfo.user);
+          deps.tenantTransition.commit();
+          notifySessionChanged();
           writeSessionMode('auth');
           set({
             session: 'auth',
             authUserSeq: get().authUserSeq + 1,
+            activeOrg: sessionInfo.organization ?? null,
+            supportInfo: sessionInfo.support ?? null,
+            sessionScope: sessionInfo.sessionScope,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
             workspaceLoadError: null,
             assignableOwners: [],
           });
-          await get().hydrateSessionInfo();
         },
 
         exitSupport: async () => {
@@ -418,7 +443,11 @@ export function createWorkspaceStore(options?: InternalOptions) {
               );
               set({ authUserSeq: get().authUserSeq + 1 });
             }
-            set({ activeOrg: me.organization ?? null, supportInfo: me.support ?? null });
+            set({
+              activeOrg: me.organization ?? null,
+              supportInfo: me.support ?? null,
+              sessionScope: me.sessionScope,
+            });
           } catch {
             // best-effort: la sesión se valida igual en cada request
           }
@@ -426,6 +455,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
         logout: () => {
           clearSession();
+          deps.tenantTransition.commit();
+          notifySessionChanged();
           set({
             session: null,
             loginError: null,
@@ -433,6 +464,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             pendingOrgSelection: null,
             orgSelectionError: null,
             activeOrg: null,
+            sessionScope: null,
             supportInfo: null,
             loginLoading: false,
             workspace: null,

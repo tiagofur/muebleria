@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GraneteApiError, GraneteNetworkError } from '@granete/storage';
 import { createGraneteQueryClient, shouldRetryServerQuery } from './queryClient';
 import { normalizeQueryFilters, organizationKeys, platformKeys } from './queryKeys';
@@ -7,6 +7,11 @@ import {
   sessionScopeFromSession,
   sessionScopeKey,
 } from './sessionScope';
+import {
+  registerTenantMemoryReset,
+  registerTenantQueryClient,
+  tenantTransition,
+} from './tenantTransition';
 
 const sessionDto = {
   user: {
@@ -108,5 +113,24 @@ describe('tenant-safe query foundation (#458)', () => {
       refetchOnWindowFocus: true,
     });
     expect(first.getDefaultOptions().mutations?.retry).toBe(false);
+  });
+
+  it('cancels work before a transition and purges all tenant memory on commit', async () => {
+    const queryClient = createGraneteQueryClient();
+    const cancel = vi.spyOn(queryClient, 'cancelQueries');
+    const clear = vi.spyOn(queryClient, 'clear');
+    const reset = vi.fn();
+    const unregister = registerTenantQueryClient(queryClient);
+    registerTenantMemoryReset(reset);
+
+    await tenantTransition.prepare();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
+
+    tenantTransition.commit();
+    expect(clear).toHaveBeenCalledOnce();
+    expect(reset).toHaveBeenCalledOnce();
+    unregister();
+    registerTenantMemoryReset(() => undefined);
   });
 });
