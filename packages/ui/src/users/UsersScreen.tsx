@@ -27,6 +27,7 @@ import {
 import { EmptyState, Modal, PageHeader, PageLoading, StatusChips } from '../common';
 import { MODAL_CLOSE_MS } from '../common/Modal';
 import { AdminTransferModal, RolePermissionPreview } from './TeamLifecyclePanels';
+import { TeamOffboardingModal } from './TeamOffboardingModal';
 import '../catalogs/catalogs.css';
 import './users.css';
 import {
@@ -41,6 +42,8 @@ import {
   type TeamCapability,
   type TeamDirectory,
   type TeamMember,
+  type MembershipOffboardingPreview,
+  type MembershipReassignmentPlan,
   type Invitation,
 } from '@granete/storage';
 
@@ -167,6 +170,12 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   const [transferReason, setTransferReason] = useState('');
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferNeedsReload, setTransferNeedsReload] = useState(false);
+  const [offboardMember, setOffboardMember] = useState<UserRow | null>(null);
+  const [offboardPreview, setOffboardPreview] = useState<MembershipOffboardingPreview | null>(null);
+  const [offboardPlan, setOffboardPlan] = useState<MembershipReassignmentPlan>({});
+  const [offboardReason, setOffboardReason] = useState('');
+  const [offboardError, setOffboardError] = useState<string | null>(null);
+  const [offboardLoading, setOffboardLoading] = useState(false);
 
   /** Roles this organization type may assign (#326): factories use the full
    * canonical set; store/dealer are commercial-only (server re-validates). */
@@ -242,6 +251,9 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
     if (error.code === 'SEAT_LIMIT_REACHED') return 'No hay lugares disponibles para reactivar esta membresía. Liberá un lugar o revisá el límite del taller.';
     if (error.code === 'MEMBERSHIP_VERSION_CONFLICT') return 'Esta membresía cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
     if (error.code === 'ADMIN_TRANSFER_INVALID') return 'La transferencia ya no es válida. Actualizá el equipo y elegí nuevamente.';
+    if (error.code === 'IMPACT_VERSION_CONFLICT') return 'Las responsabilidades cambiaron. Actualizá el impacto antes de intentar nuevamente.';
+    if (error.code === 'REASSIGNMENT_REQUIRED') return 'La reasignación está incompleta o dejó de ser válida. Actualizá el impacto y elegí nuevamente.';
+    if (error.code === 'OFFBOARDING_BLOCKED') return 'La membresía conserva trabajo activo que bloquea la finalización. Resolvelo y actualizá el impacto.';
     if (error.code === 'VERSION_CONFLICT' || error.code === 'INVITATION_TOKEN_ROTATED') return 'Esta invitación cambió en otra sesión. Actualizá la lista e intentá de nuevo.';
     if (error.code === 'INVITATION_ALREADY_USED' || error.code === 'INVITATION_REVOKED') return 'La invitación ya no está disponible. Actualizá la lista para ver su estado actual.';
     if (error.code === 'FORBIDDEN') return 'No tenés permiso para realizar esta acción en este miembro.';
@@ -350,6 +362,46 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
       setTransferNeedsReload(true);
       setTransferError('No se pudo actualizar el equipo. Revisá tu conexión y volvé a intentar antes de transferir.');
     }
+  };
+
+  const loadOffboardingPreview = async (member: UserRow) => {
+    setOffboardLoading(true); setOffboardPreview(null); setOffboardPlan({}); setOffboardError(null);
+    try { setOffboardPreview(await api.previewMembershipOffboarding(token, member.membership_id, member.version)); }
+    catch (error) { setOffboardError(mutationError(error, 'No se pudo verificar el impacto. Revisá tu conexión y volvé a intentar.')); }
+    finally { setOffboardLoading(false); }
+  };
+
+  const recoverOffboardingPreview = async () => {
+    const membershipId = offboardMember?.membership_id;
+    if (!membershipId) return;
+    setOffboardLoading(true); setOffboardPreview(null); setOffboardPlan({}); setOffboardError(null);
+    try {
+      const latest = await queryClient.fetchQuery<TeamDirectory>({ queryKey: queryKeys.team, queryFn: ({ signal }) => api.listMemberships(token, signal), staleTime: 0, retry: false });
+      const source = latest.items.find((member) => member.membership_id === membershipId);
+      if (!source || source.membership_status !== 'active') { setOffboardError('La membresía ya no está activa. Cerrá este flujo y revisá el equipo actualizado.'); return; }
+      setOffboardMember(source);
+      setOffboardPreview(await api.previewMembershipOffboarding(token, source.membership_id, source.version));
+    } catch (error) {
+      setOffboardError(mutationError(error, 'No se pudo actualizar el equipo y su impacto. Revisá tu conexión y volvé a intentar.'));
+    } finally { setOffboardLoading(false); }
+  };
+
+  const confirmOffboarding = async () => {
+    if (!offboardMember || !offboardPreview || !offboardReason.trim()) return;
+    setOffboardLoading(true); setOffboardError(null);
+    try {
+      await mutation.mutateAsync(async () => {
+        const result = await api.offboardMembership(token, offboardMember.membership_id, offboardPreview.membership_version, { impact_version: offboardPreview.impact_version, reason: offboardReason.trim(), reassignment: offboardPlan });
+        queryClient.setQueryData<TeamDirectory>(queryKeys.team, (current) => current ? {
+          items: current.items.map((member) => member.membership_id === result.member.membership_id ? { ...member, membership_status: result.member.status, roles: result.member.roles, version: result.member.version } : member),
+          summary: { ...current.summary, active_members: current.summary.active_members - 1, left_members: current.summary.left_members + 1 },
+        } : current);
+      });
+      setOffboardMember(null); setFilter('left'); showToast('Membresía finalizada');
+    } catch (error) {
+      setOffboardPreview(null); setOffboardPlan({});
+      setOffboardError(mutationError(error, 'No se pudo finalizar la membresía. Actualizá el impacto e intentá de nuevo.'));
+    } finally { setOffboardLoading(false); }
   };
 
   const confirmSessionRevocation = async () => {
@@ -711,6 +763,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
                             <MinusCircle size={13} strokeWidth={1.5} aria-hidden="true" /> Suspender membresía
                           </button>
                         ) : null}
+                        {u.membership_status === 'active' && canManageMember ? <button type="button" className="btn btn--ghost btn--small" disabled={isWorking} onClick={() => { setOffboardMember(u); setOffboardReason(''); void loadOffboardingPreview(u); }} aria-label={`Finalizar acceso de ${u.name || u.email}`}>Finalizar acceso</button> : null}
                         {canRevokeSessions ? <button
                           type="button"
                           className="btn btn--ghost btn--small"
@@ -982,6 +1035,13 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
         onClose={() => setTransferSource(null)}
         onReload={() => void reloadAdminTransfer()}
         onConfirm={() => void confirmAdminTransfer()}
+      />
+
+      <TeamOffboardingModal
+        member={offboardMember} preview={offboardPreview} candidates={users.filter((member) => member.membership_id !== offboardMember?.membership_id && member.membership_status === 'active' && member.account_status === 'active')}
+        reason={offboardReason} plan={offboardPlan} error={offboardError} loading={offboardLoading}
+        onReasonChange={setOffboardReason} onPlanChange={(field, membershipId) => setOffboardPlan((current) => ({ ...current, [field]: membershipId }))}
+        onReload={() => void recoverOffboardingPreview()} onClose={() => setOffboardMember(null)} onConfirm={() => void confirmOffboarding()}
       />
 
     </div>
