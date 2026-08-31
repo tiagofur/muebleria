@@ -1,19 +1,18 @@
-# Feature en curso: F199 — Tenant-safe Team, Organization and Platform UX (#458)
+# Sin feature activa
 
-- Inicio: 2026-08-30 America/Mexico_City
-- Rama tracker: `feat/458-tenant-safe-organization-ux`
-- Base verificada: `main@72dd224167adb6e4fa92abf28c70fbc8d587561c`
+- Actualizado: 2026-08-31 America/Mexico_City
+- F199 — Tenant-safe Team, Organization and Platform UX (#458) está **cerrada** (`done`).
+- Último merge relevante: PR #493 → `main@35bbfc07544b458485518a0a99dc0fd74d04d1e8`
+  (tracker head `d0b60c43c33df957d1a897ca061d52559865ec9f`, CI final 33444928121
+  SUCCESS sobre SHA exacto, revisión independiente exact-SHA APPROVED).
 
-## Ejecución
+## Estado
 
-- Introducir server state tenant/session-scoped y un transport generado abortable detrás de `SessionCoordinator`.
-- Hacer atómico el cambio de organización, la limpieza de cache/stores/media y la coordinación multi-tab/drafts.
-- Migrar Team/Invitations y Platform a adapters/hooks tipados, commands autoritativos y estados honestos.
-- Añadir read models mínimos, accessibility/responsive, negative guards y browser E2E real sin invadir #459–#461.
-- Mantener la feature `in_progress` hasta verificación completa y revisión independiente.
+- Ninguna feature del ledger está `in_progress`.
+- No hay PRs abiertos de F199/#458.
 
-## Baseline
+## Siguiente trabajo permitido (no activado)
 
-- PR #492 corrigió F197/current y PR #486/F198 mergeó como `72dd224167adb6e4fa92abf28c70fbc8d587561c`.
-- `scripts/pilot-gate.sh --fresh-container` pasó sobre PostgreSQL 16 y migration head `00103`.
-- El PostgreSQL local persistente está drifted (schema ledger en 00101 sin trigger de 000094); no se ejecutó SQL destructivo y las pruebas de feature usarán infraestructura fresca aislada.
+- #460 (critical #460/#461 según prioridad de AGENTS.md) puede iniciarse en una
+  nueva sesión/rama, marcando `in_progress` sólo cuando empiece de verdad.
+- No activar ninguna feature como parte del cierre administrativo de F199.

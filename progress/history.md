@@ -1892,3 +1892,37 @@ menores (truthiness del guard PATAS, muro length 0) y dos escenarios nuevos de
 agregado en el contract (15 totales, verdes en ambos motores). Pendiente:
 re-review y merge mantenedor. Fallo local pre-existente de 00102 (sesiones #458)
 no reproduce en CI del PR.
+
+## Cierre de F199 — Tenant-safe Team, Organization and Platform UX (#458) — 2026-08-31
+
+- **Issue:** #458. **Tracker:** PR #493 (`feat/458-tenant-safe-organization-ux`).
+- **Child PRs principales:** #494 (tenant-safe query transport), #495 (authoritative
+  session scope transitions), #507 (atomic session transitions), #509 (organization
+  switch snapshot hardening), #510 (Team server state), #511 (Platform lifecycle UX),
+  #512 (shell organization identity), #513 (Team lifecycle controls), #515
+  (offboarding/reassignment), #516 (draft safety), #517 (revoked membership
+  recovery), #518–#519 (browser gates), #520–#522 (real PG16/Go/Vite/Chromium
+  harness + tenant switch/draft/lifecycle proofs), #523 (CI cleanup + exact-SHA
+  dispatch), #524 (fixture deadlock fix + fail-closed Team role validation).
+- **Arquitectura entregada:** client OpenAPI generado como único transporte con
+  abort y session scope completo (`SessionCoordinator`), adapters/hooks tipados sin
+  fetch directo ni fallback legacy, commands autoritativos para switch/logout/support.
+- **Tenant-safe query/session scope:** toda query remota keyed por session scope
+  completo; el cambio de organización cancela requests in-flight y limpia
+  cache/stores/media sin renderizar datos del tenant previo (incl. multi-tab).
+- **Organization switching:** switch atómico con snapshot hardening y gates de
+  browser reales.
+- **Team/Invitations:** separación account vs membership status, suspended/left
+  visibles, roles/sectors/seats, transfer/offboarding con conflicts accionables;
+  invitations con lifecycle real, resend/revoke versionados y preview seguro.
+- **Platform lifecycle:** provisioning/readiness/license/entitlements/audit sin
+  JSON/UUID crudo.
+- **Draft safety y revoked membership recovery:** estados y recuperación probados
+  en browser gates (#516, #517, #519).
+- **Gate real:** harness con PostgreSQL 16 real + Go + Vite + Chromium (Playwright),
+  Pilot Readiness PASS con RLS direct-SQL y lifecycle HTTP; sin skips ni Gate A falso.
+- **Revisión independiente:** APPROVED exact-SHA sobre tracker head
+  `d0b60c43c33df957d1a897ca061d52559865ec9f`.
+- **CI final:** run `33444928121` SUCCESS sobre el SHA exacto.
+- **Merge:** PR #493 merged a `main` como `35bbfc07544b458485518a0a99dc0fd74d04d1e8`
+  (2026-08-31). F199 = `done`; issue #458 cerrada como completed.
