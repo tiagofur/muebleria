@@ -1,11 +1,11 @@
-# Feature activa: F202 (#460) — SEC-1 in progress
+# Feature activa: F202 (#460) — SEC-2A in progress
 
 - Actualizado: 2026-08-31 America/Mexico_City
 - F199 (#458) cerrada (`done`); ninguna otra feature `in_progress`.
-- F202 tracker abierto con slice **SEC-1** (session registry + token taxonomy
-  + JWT hardening) implementado en rama `feat/460-1-session-registry`.
+- F202 tracker abierto; **SEC-1** fue mergeado por PR #526 y el slice
+  **SEC-2A** se implementa en `feat/460-2-refresh-rotation`.
 
-## Estado SEC-1
+## Base SEC-1
 
 - Migration `000105_auth_session_registry` (RLS platform-global + inventory +
   grants sin DELETE; fresh y upgrade probados).
@@ -20,8 +20,21 @@
 - Verificación: `go test ./...` verde (con PostgreSQL real), `pnpm
   openapi:check`/`test`/`typecheck` verde.
 
-## Siguiente
+## Plan SEC-2A
 
-- SEC-2 (refresh rotation + reuse detection + logout + directorio de sesiones)
-  tras merge de SEC-1; media (SEC-3) y proxy/rate-limit (SEC-8) pueden
-  avanzar en paralelo según banda.
+- migration `000106` con refresh families y credentials hash-only;
+- HMAC-SHA-256 con pepper independiente y configuración fail-closed;
+- emisión inicial web/mobile, rotación atómica single-use y reuse detection;
+- logout server-side idempotente y typed OpenAPI sin migrar React (SEC-4);
+- pruebas unitarias, PostgreSQL real, API, concurrencia y failure injection.
+
+SEC-2B (directorio de sesiones y revocación self/org/platform) queda como child
+dependiente después del merge de SEC-2A para mantener el presupuesto revisable.
+
+## Evidencia SEC-2A
+
+- `GOFLAGS='-p=1' go test ./... -count=1`: verde, PostgreSQL real sin skips.
+- `pnpm openapi:check`, `pnpm typecheck`, `pnpm test`: verdes.
+- `scripts/organization-browser-gate.sh`: 7/7 Chromium con Go/PostgreSQL real.
+- `scripts/smoke-deploy.sh`: 29/29; `shellcheck` y `git diff --check`: verdes.
+- `PATH="$HOME/.rbenv/shims:$PATH" ./init.sh`: gate integral verde con Ruby 3.2.11.

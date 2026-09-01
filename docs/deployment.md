@@ -108,6 +108,7 @@ cp .env.production.example .env
 
 # Generar secretos criptográficos reales
 JWT_SECRET_GEN=$(openssl rand -base64 48)
+REFRESH_TOKEN_PEPPER_GEN=$(openssl rand -base64 48)
 DB_PASS_GEN=$(openssl rand -base64 32)
 
 # Editar el archivo .env con los valores de tu dominio y secretos
@@ -121,6 +122,7 @@ POSTGRES_USER=granete_prod
 POSTGRES_PASSWORD=tu_password_generado
 POSTGRES_DB=granete_prod
 JWT_SECRET=tu_jwt_secret_generado
+REFRESH_TOKEN_PEPPER=tu_pepper_refresh_independiente
 CORS_ALLOWED_ORIGINS=https://app.granete.io
 RATE_LIMIT_RPS=0.5
 RATE_LIMIT_BURST=10
@@ -399,6 +401,7 @@ umount /mnt/usb
 | `POSTGRES_PASSWORD` | Sí | — | Contraseña PostgreSQL (requerida) |
 | `POSTGRES_DB` | Sí | `granete_prod` | Nombre de la base de datos |
 | `JWT_SECRET` | Sí | — | Secreto JWT, >= 32 bytes (requerida) |
+| `REFRESH_TOKEN_PEPPER` | Sí | — | Pepper independiente >= 32 bytes para HMAC-SHA-256 de refresh credentials; rotarlo revoca refresh y requiere re-login coordinado |
 | `CORS_ALLOWED_ORIGINS` | Sí | — | Orígenes CORS permitidos, separados por coma |
 | `RATE_LIMIT_RPS` | No | `0.2` | Requests/segundo para auth endpoints |
 | `RATE_LIMIT_BURST` | No | `5` | Burst máximo para auth endpoints |
@@ -408,6 +411,7 @@ umount /mnt/usb
 **Generar secretos seguros:**
 ```bash
 JWT_SECRET=$(openssl rand -base64 48)
+REFRESH_TOKEN_PEPPER=$(openssl rand -base64 48)
 POSTGRES_PASSWORD=$(openssl rand -base64 32)
 ```
 
@@ -418,7 +422,7 @@ POSTGRES_PASSWORD=$(openssl rand -base64 32)
 ## 9. Seguridad
 
 - **Firewall**: Solo puertos 22, 80, 443 abiertos (UFW).
-- **Secretos**: Nunca en el repositorio. `JWT_SECRET` y `POSTGRES_PASSWORD` generados con `openssl rand`.
+- **Secretos**: Nunca en el repositorio. `JWT_SECRET`, `REFRESH_TOKEN_PEPPER` y `POSTGRES_PASSWORD` generados independientemente con `openssl rand`.
 - **Permisos**: `.env` con `chmod 600`, backups con `chmod 700` en directorio.
 - **TLS**: Certificados automáticos via Caddy/ACME. HSTS habilitado (1 año).
 - **CORS**: Allowlist explícita, nunca wildcard.

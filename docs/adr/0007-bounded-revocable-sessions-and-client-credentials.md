@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1 implemented; SEC-2..SEC-9 in progress)
+- **Status:** Accepted (SEC-1 and SEC-2A implemented; SEC-2B..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -98,6 +98,44 @@ F199's ephemeral cache generation so React server-state keys derive from the
 authoritative session. A sid alone grants nothing: it must be paired with a
 signed ver5 token whose claims the middleware revalidates.
 
+### 6. Refresh credentials are opaque, hash-only and single-use
+
+SEC-2A adds one refresh family per web/mobile `auth_session`. A credential is
+32 cryptographically random bytes encoded as an opaque bearer; PostgreSQL
+stores only an HMAC-SHA-256 verifier under the independent
+`REFRESH_TOKEN_PEPPER`, never the raw value. The pepper is mandatory in
+production, at least 32 bytes, and is not a JWT signing key. There is no
+reversible lookup, bcrypt cost, query parameter transport or secret-bearing
+audit field.
+
+Rotation locks the presented credential row, then its family and session in a
+single PostgreSQL transaction. The transaction revalidates account,
+membership, organization and the credential epochs snapshotted by the family,
+mints the capped access credential, inserts generation N+1, consumes N and
+writes the durable security event before commit. Any callback, audit or commit
+failure rolls the whole transition back, leaving N usable and N+1 absent.
+
+The concurrency policy is deliberately strict: if two requests present N,
+exactly one may create N+1. The second observes N consumed and is treated as
+reuse; it atomically revokes the family and `auth_session`, so N+1 and every
+still-unexpired access token from that session fail immediately. A refresh
+expiry is exactly the session `absolute_expires_at`; access minting is also
+explicitly capped there. No rotation creates a sliding lifetime.
+
+`POST /api/auth/refresh` now has an unauthenticated OpenAPI request body with
+the opaque credential plus expected web/mobile transport. `POST
+/api/auth/logout` is enumeration-safe and idempotently revokes both family and
+session. Web/mobile login and invitation acceptance emit the first credential;
+React does not persist or consume it until SEC-4. The legacy no-body
+access-bearer refresh branch remains a finite runtime-only compatibility bridge
+for deployed clients and SketchUp until SEC-4/SEC-6; it is no longer the
+canonical OpenAPI operation.
+
+Pepper rotation cannot re-key stored HMACs because the raw secrets do not
+exist server-side. Rotate it as a credential-boundary event: revoke affected
+sessions/families, deploy the new independent pepper, and require re-login.
+Missing or weak configuration fails server startup.
+
 ## Alternatives considered
 
 - **Keep exp-derived sessions without a registry.** Rejected: no per-session
@@ -126,9 +164,10 @@ signed ver5 token whose claims the middleware revalidates.
   scope update only the best-effort audit and the 200 response remain, and any
   hard failure surfaces as 5xx and rolls the transaction back together with
   the switch.
-- SEC-2 builds refresh families, logout and the session directory on this
-  registry (including the capability-checked organization boundary the RLS
-  model intentionally leaves out); SEC-4 replaces the web
+- SEC-2A builds refresh families, rotation/reuse detection and real logout on
+  this registry. SEC-2B adds the self/org/platform session directory and the
+  capability-checked organization boundary the RLS model intentionally leaves
+  out; SEC-4 replaces the web
   bearer-in-localStorage with short-lived in-memory access plus a rotating
   refresh credential; SEC-6 registers SketchUp devices; SEC-7 stores step-up
   freshness (`step_up_at`) server-side.
@@ -148,3 +187,10 @@ fresh+upgrade, lifecycle under the app role, membership/user/organization
 coherence negative proofs, and direct-SQL RLS under `granete_app`: self access,
 same-org ordinary member denied, other-org denied, platform authority path,
 owner-scoped inserts only).
+
+SEC-2A adds `internal/auth/refresh_test.go` (opaque generation, keyed verifier,
+malformed inputs and access-exp cap), `internal/storage/auth_refresh_test.go`
+(fresh+upgrade migration, verifier-scoped RLS, atomic rotation/replay,
+concurrency, absolute expiry, membership isolation, logout and failure
+injection for mint/audit/revoke/commit), and the real-PostgreSQL HTTP proof in
+`tests/pilotreadiness/auth_refresh_test.go`.

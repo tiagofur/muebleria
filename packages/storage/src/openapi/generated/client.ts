@@ -12,6 +12,8 @@ import type {
   Invitation,
   LoginRequest,
   LoginResponse,
+  LogoutRequest,
+  LogoutResponse,
   MeResponse,
   MembershipMutationResponse,
   MembershipOffboardingPreview,
@@ -29,6 +31,7 @@ import type {
   PlatformOrganization,
   PlatformUser,
   ProvisionOrganizationRequest,
+  RefreshRequest,
   ResendInvitationResponse,
   RevokeInvitationRequest,
   RevokeInvitationResponse,
@@ -66,7 +69,8 @@ export abstract class GeneratedGraneteApiClient {
   protected abstract createIdempotencyKey(): string;
 
   login(body: LoginRequest, signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/login", { schema: "LoginResponse", bodySchema: "LoginRequest", body, signal }); }
-  refreshSession(token: string, signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/refresh", { schema: "LoginResponse", token, signal }); }
+  refreshSession(body: RefreshRequest, signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/refresh", { schema: "LoginResponse", bodySchema: "RefreshRequest", body, signal }); }
+  logoutSession(body: LogoutRequest, signal?: AbortSignal): Promise<LogoutResponse> { return this.request("POST", "/auth/logout", { schema: "LogoutResponse", bodySchema: "LogoutRequest", body, signal }); }
   selectOrganization(token: string, body: SelectOrganizationRequest, signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/select-org", { schema: "LoginResponse", token, bodySchema: "SelectOrganizationRequest", body, signal }); }
   getSession(token: string, signal?: AbortSignal): Promise<MeResponse> { return this.request("GET", "/auth/me", { schema: "MeResponse", token, signal }); }
   listInvitations(token: string, signal?: AbortSignal): Promise<ReadonlyArray<Invitation>> { return this.request("GET", "/org/invitations", { arrayOf: "Invitation", token, signal }); }

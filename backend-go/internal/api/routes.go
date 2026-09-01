@@ -69,8 +69,14 @@ func RegisterRoutes(server *Server) http.Handler {
 	// installation, job costing) are factory-only — the sales org gets 404.
 	mfgOnly := server.manufacturingOnly
 
-	// Refresh: requires a still-valid token; re-issues JWT with current DB role.
-	mux.Handle("POST /api/auth/refresh", authMW(http.HandlerFunc(server.HandleRefresh)))
+	// SEC-2 primary path: opaque single-use refresh credential. The no-body
+	// bearer branch is a finite compatibility bridge for deployed clients and
+	// moves out with SEC-4/SEC-6; it is no longer the OpenAPI refresh contract.
+	mux.Handle("POST /api/auth/refresh", authRL(refreshTransitionHandler(
+		http.HandlerFunc(server.HandleRefreshCredential),
+		authMW(http.HandlerFunc(server.HandleRefresh)),
+	)))
+	mux.Handle("POST /api/auth/logout", authRL(http.HandlerFunc(server.HandleLogout)))
 	// Select-org: swaps an authenticated token for one scoped to a chosen
 	// organization (multi-membership users, ADR-0004).
 	mux.Handle("POST /api/auth/select-org", authMW(http.HandlerFunc(server.HandleSelectOrg)))

@@ -35,6 +35,7 @@ services:
       MIGRATION_DATABASE_URL: postgres://${POSTGRES_USER:-granete_prod}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-granete_prod}?sslmode=disable
       # Required: compose refuses to start without it.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      REFRESH_TOKEN_PEPPER: ${REFRESH_TOKEN_PEPPER:?REFRESH_TOKEN_PEPPER must be set in .env}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${DOMAIN:-localhost}}
       MEDIA_DIR: /data/media
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-0.5}

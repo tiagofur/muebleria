@@ -399,7 +399,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	roles := roleStrings(result.Membership.Roles)
 	// Invitation acceptance is a fresh login (#450): it registers the session
 	// and returns the sid alongside the ver5 token like /auth/login does.
-	session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+	session, refresh, err := s.createRefreshableAuthSession(r.Context(), storage.CreateAuthSessionCommand{
 		UserID:            result.User.ID,
 		MembershipID:      result.Membership.ID,
 		OrganizationID:    result.Organization.ID,
@@ -418,5 +418,7 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	}
 	org := toOrgSummaryDTO(result.Organization)
 	membership := MembershipDTO{ID: result.Membership.ID, OrganizationID: result.Membership.OrganizationID, UserID: result.Membership.UserID, Status: openapi.MembershipStatus(result.Membership.Status), Roles: roles, JoinedAt: result.Membership.JoinedAt.UTC().Format(time.RFC3339Nano), Version: result.Membership.Version, Organization: org}
-	respondWithJSON(w, http.StatusOK, LoginResponse{Token: token, SessionID: &session.ID, User: toOpenAPIUser(&result.User), License: org.License, Roles: roles, Organization: &org, Memberships: []MembershipDTO{membership}, SelectionRequired: false, Transport: openapi.AuthTransportWeb})
+	response := LoginResponse{Token: token, SessionID: &session.ID, User: toOpenAPIUser(&result.User), License: org.License, Roles: roles, Organization: &org, Memberships: []MembershipDTO{membership}, SelectionRequired: false, Transport: openapi.AuthTransportWeb}
+	attachRefreshCredential(&response, refresh)
+	respondWithJSON(w, http.StatusOK, response)
 }

@@ -28,10 +28,13 @@ type Config struct {
 	// pinned algorithm, issuer, per-client audience, token type and key id.
 	// Built from JWT_KEYRING when present, otherwise from the single
 	// JWT_SECRET registered under the legacy key id.
-	JWTAuthority   *auth.Authority
-	AllowedOrigins []string // CORS allowlist (reflected per-request); never "*"
-	RateLimitRPS   float64  // sustained requests/second for auth endpoints
-	RateLimitBurst int      // maximum burst for auth endpoints
+	JWTAuthority *auth.Authority
+	// RefreshCredentials hashes opaque refresh secrets with a dedicated
+	// pepper. It is intentionally independent from every JWT signing key.
+	RefreshCredentials *auth.RefreshCredentials
+	AllowedOrigins     []string // CORS allowlist (reflected per-request); never "*"
+	RateLimitRPS       float64  // sustained requests/second for auth endpoints
+	RateLimitBurst     int      // maximum burst for auth endpoints
 	// MediaDir is the filesystem root for catalog image uploads (F040).
 	MediaDir string
 }
@@ -77,6 +80,10 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("building token authority: %w", err)
 	}
+	refreshCredentials, err := auth.NewRefreshCredentials(os.Getenv("REFRESH_TOKEN_PEPPER"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	allowed := parseOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	if len(allowed) == 0 {
@@ -112,6 +119,7 @@ func LoadConfig() (Config, error) {
 		JWTSecret:            jwtSecret,
 		JWTIssuer:            issuer,
 		JWTAuthority:         authority,
+		RefreshCredentials:   refreshCredentials,
 		AllowedOrigins:       allowed,
 		RateLimitRPS:         rps,
 		RateLimitBurst:       burst,
