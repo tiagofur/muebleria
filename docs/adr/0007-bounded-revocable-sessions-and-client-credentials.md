@@ -28,20 +28,45 @@ every request: `revoked_at` or a passed `absolute_expires_at` invalidates the
 token immediately even with an unexpired JWT, and the row's `client_type` must
 match the token transport. The row keeps `absolute_expires_at = issued_at +
 18h` (web/mobile; 30d SketchUp device policy; 2h support) — refresh never
-extends it. Classification: platform-global under RLS (self or active
-organization or platform admin; inserts must carry the owning user), registered
-in the policy inventory; no DELETE grant — sessions end by revocation.
+extends it.
+
+**Current-scope authority.** The registry row is also the authority of the
+session's CURRENT scope, not just its lifetime: a ver5 token only validates
+while its claims equal the row's scope exactly (org-less while the row is
+org-less; `membership_id`+`organization_id` when scoped; the linked
+`support_sessions` row and organization for support). select-org's in-place
+update therefore invalidates every previously issued bearer of the previous
+scope on the next request — one session, one current scope, no second
+generation counter.
+
+**Scope coherence is enforced by the database.** Composite foreign keys require
+the membership to belong to the session's user and to the session's active
+organization, and a scope-shape CHECK admits exactly three states: org-less
+(both scope columns NULL), normal scoped (both set), support (organization +
+support session set, membership NULL). The storage boundary translates FK/CHECK
+violations into `ErrAuthSessionScopeIncoherent`.
+
+**Classification:** platform-global under RLS, `self-or-platform` — the owning
+user may read and update their rows, platform staff reach any row through
+their explicit authority, and inserts must carry the owning user. Organization
+administration of other members' sessions is deliberately NOT a tenant policy:
+it arrives with the SEC-2 capability-checked command boundary. Registered in
+the policy inventory; no DELETE grant — sessions end by revocation.
 
 ### 2. Exact JWT policy with key rotation
 
-Tokens are HS256 only — the exact instance, not the HMAC family — with `iss`
-(`granete-api`, override `JWT_ISSUER`), `aud` per client type
+Tokens are HS256 only — the exact instance, not the HMAC family — and every
+registered claim is REQUIRED and cross-checked for ver5: `iss` (`granete-api`,
+override `JWT_ISSUER`), `aud` per client type
 (`granete-web|mobile|sketchup|support`), `typ` (`access_web`, `access_mobile`,
-`device_sketchup`, `support_access`), `sid`, `jti`, `ver=5` and a `kid` header
-resolving into a keyring (`JWT_KEYRING`; single-secret deployments register
-`JWT_SECRET` under kid `legacy`). Rotation is zero-downtime: new tokens use the
-active kid, validation accepts every registered kid, and removing a kid from
-the ring revokes its tokens immediately.
+`device_sketchup`, `support_access`), `sid`, `jti`, `sub` (== `user_id`), `exp`,
+`nbf`, `iat`, `ver=5`, and a `kid` header resolving into a keyring
+(`JWT_KEYRING`; single-secret deployments register `JWT_SECRET` under kid
+`legacy`). Absence of any claim fails closed — a correctly signed token with
+stripped claims is not a credential, independent of what the minting helpers
+emit. Rotation is zero-downtime: new tokens use the active kid, validation
+accepts every registered kid, and removing a kid from the ring revokes its
+tokens immediately.
 
 ### 3. Credential classes never interchange
 
@@ -91,16 +116,30 @@ signed ver5 token whose claims the middleware revalidates.
   pattern (measured budgets: #462 Gate A).
 - `auth_sessions` is append-mostly platform-global data; retention/cleanup is
   an operational decision owned by #461 observability, not this ADR.
+- select-org is atomic with the F199 contract: every fallible step (target
+  validation, user fetch, token mint) runs BEFORE the scope mutation, so a
+  failed switch leaves the previous scope and its bearer untouched; after the
+  scope update only the best-effort audit and the 200 response remain, and any
+  hard failure surfaces as 5xx and rolls the transaction back together with
+  the switch.
 - SEC-2 builds refresh families, logout and the session directory on this
-  registry; SEC-4 replaces the web bearer-in-localStorage with short-lived
-  in-memory access plus a rotating refresh credential; SEC-6 registers SketchUp
-  devices; SEC-7 stores step-up freshness (`step_up_at`) server-side.
+  registry (including the capability-checked organization boundary the RLS
+  model intentionally leaves out); SEC-4 replaces the web
+  bearer-in-localStorage with short-lived in-memory access plus a rotating
+  refresh credential; SEC-6 registers SketchUp devices; SEC-7 stores step-up
+  freshness (`step_up_at`) server-side.
 
 ## Verification
 
-`internal/auth/auth_test.go` (exact-algorithm/iss/aud/typ/sid/jti policy,
-keyring rotation, legacy window), `internal/api/session_registry_test.go`
+`internal/auth/auth_test.go` (exact-algorithm policy; every registered claim
+required — exp/iat/nbf/sub==user_id/iss/aud/jti/sid/typ; keyring rotation;
+legacy window), `internal/api/session_registry_test.go`
 (revocation cuts an unexpired JWT, absolute expiry cut, fail-closed lookup,
-client-type confusion, stable sid across select-org, ver4 upgrade bounded by
+client-type confusion, current-scope invalidation of previous bearers across
+select-org A→B, failed-switch scope preservation with failure injection,
+stable sid across select-org, ver4 upgrade bounded by
 the original origin), `internal/storage/auth_sessions_test.go` (migration
-fresh+upgrade, lifecycle under the app role, RLS scopes and insert policy).
+fresh+upgrade, lifecycle under the app role, membership/user/organization
+coherence negative proofs, and direct-SQL RLS under `granete_app`: self access,
+same-org ordinary member denied, other-org denied, platform authority path,
+owner-scoped inserts only).

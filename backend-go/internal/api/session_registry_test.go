@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -56,10 +57,13 @@ func sessionRegistryFixture() *sessionAwareUsers {
 }
 
 func (s *sessionAwareUsers) addSession(id string, mutate func(*domain.AuthSession)) {
+	membershipID, orgID := "u-1:org-1", "org-1"
 	session := &domain.AuthSession{
 		ID: id, UserID: "u-1", ClientType: domain.SessionClientWeb,
-		CreatedAt:         time.Now().Add(-time.Hour),
-		AbsoluteExpiresAt: time.Now().Add(17 * time.Hour),
+		MembershipID:         &membershipID,
+		ActiveOrganizationID: &orgID,
+		CreatedAt:            time.Now().Add(-time.Hour),
+		AbsoluteExpiresAt:    time.Now().Add(17 * time.Hour),
 	}
 	if mutate != nil {
 		mutate(session)
@@ -280,5 +284,239 @@ func TestRefreshVer4UpgradesToVer5PreservingAbsoluteOrigin(t *testing.T) {
 	}
 	if want := started.Add(auth.AccessTokenTTL); !session.AbsoluteExpiresAt.Equal(want) {
 		t.Fatalf("registry absolute expiry = %s, want original origin + 18h (%s)", session.AbsoluteExpiresAt, want)
+	}
+}
+
+// Negative proof (#460 Blocker 1): the registry is the authority of the
+// CURRENT scope. After select-org A→B on the same sid, the previous scoped
+// bearer for A stops validating immediately, the org-less selection token is
+// rejected too, and only the new B token passes.
+func TestSelectOrgSwitchInvalidatesPreviousScopeTokens(t *testing.T) {
+	server, st := loginTestServer(t)
+	authority := mustAuthority("unit-test-secret-0123456789abcdef")
+
+	loginRec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "secret123"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login: %d %s", loginRec.Code, loginRec.Body.String())
+	}
+	var login LoginResponse
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &login); err != nil {
+		t.Fatal(err)
+	}
+	orglessClaims, err := authority.Validate(login.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var lastToken string
+	doSelectOrg := func(orgID string) LoginResponse {
+		t.Helper()
+		claims, err := authority.Validate(login.Token)
+		if err != nil {
+			t.Fatalf("validate before select %s: %v", orgID, err)
+		}
+		if claims.OrgID != "" {
+			// Refresh-style exchange is not needed here: reuse the scoped token
+			// the previous select returned.
+			claims, err = authority.Validate(lastToken)
+			if err != nil {
+				t.Fatalf("validate scoped before select %s: %v", orgID, err)
+			}
+		}
+		ctx := context.WithValue(context.Background(), UserContextKey, claims)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", strings.NewReader(`{"organization_id":"`+orgID+`"}`))
+		req = req.WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		server.HandleSelectOrg(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("select-org %s: %d %s", orgID, rec.Code, rec.Body.String())
+		}
+		var resp LoginResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		lastToken = resp.Token
+		return resp
+	}
+
+	serve := func(token, path string) int {
+		t.Helper()
+		handler := AuthMiddleware(authority, st)(okHandler())
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// Phase 1: org-less selection token is valid for auth routes while the
+	// session is still org-less.
+	if code := serve(login.Token, "/api/auth/me"); code != http.StatusOK {
+		t.Fatalf("org-less token before switch: expected 200, got %d", code)
+	}
+
+	// Phase 2: select org-1; the scoped A token works, and the org-less
+	// selection token is immediately rejected.
+	first := doSelectOrg("org-1")
+	tokenA := first.Token
+	if code := serve(tokenA, "/api/protected"); code != http.StatusOK {
+		t.Fatalf("scoped A token: expected 200, got %d", code)
+	}
+	if code := serve(login.Token, "/api/auth/me"); code != http.StatusUnauthorized {
+		t.Fatalf("org-less token after switch: expected 401, got %d", code)
+	}
+	_ = orglessClaims
+
+	// Phase 3: switch A→B on the same sid. The previous A bearer stops
+	// validating immediately; only the new B token passes.
+	second := doSelectOrg("org-2")
+	tokenB := second.Token
+	if code := serve(tokenA, "/api/protected"); code != http.StatusUnauthorized {
+		t.Fatalf("previous scope token after switch: expected 401, got %d", code)
+	}
+	if code := serve(tokenB, "/api/protected"); code != http.StatusOK {
+		t.Fatalf("new scope token after switch: expected 200, got %d", code)
+	}
+}
+
+// Negative proof (#460 Blocker 5): a failed switch never mutates the current
+// session scope. Failures are injected AFTER target validation — one at the
+// user fetch, one at the scope update itself — and the registry keeps the
+// previous scope so the outstanding bearer continues to validate.
+func TestSelectOrgFailedSwitchPreservesScope(t *testing.T) {
+	server, st := loginTestServer(t)
+	authority := mustAuthority("unit-test-secret-0123456789abcdef")
+
+	loginRec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "secret123"})
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login: %d %s", loginRec.Code, loginRec.Body.String())
+	}
+	var login LoginResponse
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &login); err != nil {
+		t.Fatal(err)
+	}
+	orglessClaims, err := authority.Validate(login.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doSwitch := func(store Store) *httptest.ResponseRecorder {
+		t.Helper()
+		failing := &Server{Store: store, Tokens: authority}
+		ctx := context.WithValue(context.Background(), UserContextKey, orglessClaims)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", strings.NewReader(`{"organization_id":"org-1"}`))
+		req = req.WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		failing.HandleSelectOrg(rec, req)
+		return rec
+	}
+
+	serveOrgless := func() int {
+		t.Helper()
+		handler := AuthMiddleware(authority, st)(okHandler())
+		req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer "+login.Token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := serveOrgless(); code != http.StatusOK {
+		t.Fatalf("org-less token before failed switch: expected 200, got %d", code)
+	}
+
+	// Injection 1: user lookup fails after target validation (before the scope
+	// mutation in the reordered flow).
+	userFailing := &selectOrgUserFailingStore{stubStore: st}
+	if rec := doSwitch(userFailing); rec.Code == http.StatusOK {
+		t.Fatal("switch with failing user lookup must not succeed")
+	}
+	if len(st.authSessions) != 1 || st.authSessions[*login.SessionID].ActiveOrganizationID != nil {
+		t.Fatalf("failed switch must not change the scope: %+v", st.authSessions)
+	}
+	if code := serveOrgless(); code != http.StatusOK {
+		t.Fatalf("org-less token after failed switch: expected 200, got %d", code)
+	}
+
+	// Injection 2: the scope update itself fails.
+	scopeFailing := &selectOrgScopeFailingStore{stubStore: st}
+	if rec := doSwitch(scopeFailing); rec.Code == http.StatusOK {
+		t.Fatal("switch with failing scope update must not succeed")
+	}
+	if st.authSessions[*login.SessionID].ActiveOrganizationID != nil {
+		t.Fatalf("failed scope update must leave the registry org-less: %+v", st.authSessions)
+	}
+	if code := serveOrgless(); code != http.StatusOK {
+		t.Fatalf("org-less token after failed scope update: expected 200, got %d", code)
+	}
+}
+
+type selectOrgUserFailingStore struct {
+	*stubStore
+}
+
+func (s *selectOrgUserFailingStore) GetUserByID(context.Context, string) (*domain.User, error) {
+	return nil, errors.New("injected user lookup failure")
+}
+
+type selectOrgScopeFailingStore struct {
+	*stubStore
+}
+
+func (s *selectOrgScopeFailingStore) UpdateAuthSessionScope(context.Context, string, string, string) error {
+	return storage.ErrAuthSessionNotFound
+}
+
+// sessionScopeMatchesClaims unit matrix: the registry scope must match the
+// token scope exactly for org-less, scoped, and support credentials.
+func TestSessionScopeMatchesClaimsMatrix(t *testing.T) {
+	value := func(v string) *string { return &v }
+	now := time.Now()
+	base := &domain.AuthSession{ID: "s", UserID: "u1", ClientType: domain.SessionClientWeb, CreatedAt: now, AbsoluteExpiresAt: now.Add(time.Hour)}
+
+	cases := []struct {
+		name    string
+		claims  *auth.Claims
+		session func(*domain.AuthSession)
+		want    bool
+	}{
+		{"orgless match", &auth.Claims{UserID: "u1"}, func(s *domain.AuthSession) {}, true},
+		{"orgless vs scoped session", &auth.Claims{UserID: "u1"}, func(s *domain.AuthSession) {
+			s.MembershipID, s.ActiveOrganizationID = value("m1"), value("org1")
+		}, false},
+		{"scoped match", &auth.Claims{UserID: "u1", OrgID: "org1", MembershipID: "m1"}, func(s *domain.AuthSession) {
+			s.MembershipID, s.ActiveOrganizationID = value("m1"), value("org1")
+		}, true},
+		{"scoped vs other org", &auth.Claims{UserID: "u1", OrgID: "org2", MembershipID: "m1"}, func(s *domain.AuthSession) {
+			s.MembershipID, s.ActiveOrganizationID = value("m1"), value("org1")
+		}, false},
+		{"scoped vs other membership same org", &auth.Claims{UserID: "u1", OrgID: "org1", MembershipID: "m2"}, func(s *domain.AuthSession) {
+			s.MembershipID, s.ActiveOrganizationID = value("m1"), value("org1")
+		}, false},
+		{"scoped vs orgless session", &auth.Claims{UserID: "u1", OrgID: "org1", MembershipID: "m1"}, func(s *domain.AuthSession) {}, false},
+		{"support match", &auth.Claims{UserID: "u1", Support: &auth.SupportClaims{OrgID: "org1", SessionID: "ss1"}}, func(s *domain.AuthSession) {
+			s.ClientType = domain.SessionClientSupport
+			s.ActiveOrganizationID, s.SupportSessionID = value("org1"), value("ss1")
+		}, true},
+		{"support wrong session row", &auth.Claims{UserID: "u1", Support: &auth.SupportClaims{OrgID: "org1", SessionID: "ss2"}}, func(s *domain.AuthSession) {
+			s.ClientType = domain.SessionClientSupport
+			s.ActiveOrganizationID, s.SupportSessionID = value("org1"), value("ss1")
+		}, false},
+		{"support with membership in session", &auth.Claims{UserID: "u1", Support: &auth.SupportClaims{OrgID: "org1", SessionID: "ss1"}}, func(s *domain.AuthSession) {
+			s.ClientType = domain.SessionClientSupport
+			s.ActiveOrganizationID, s.SupportSessionID = value("org1"), value("ss1")
+			s.MembershipID = value("m1")
+		}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := &domain.AuthSession{ID: base.ID, UserID: base.UserID, ClientType: base.ClientType, CreatedAt: base.CreatedAt, AbsoluteExpiresAt: base.AbsoluteExpiresAt}
+			tc.session(session)
+			if got := sessionScopeMatchesClaims(tc.claims, session); got != tc.want {
+				t.Fatalf("sessionScopeMatchesClaims = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

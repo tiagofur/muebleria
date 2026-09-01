@@ -200,9 +200,11 @@ func serveAuthenticatedRequest(
 		// #460/SEC-1: ver5 tokens are bounded by the server-side session
 		// registry. The row is resolved live on every request: revocation or
 		// absolute expiry cuts access immediately even with an unexpired JWT,
-		// and the registry's client type must match the token's transport so
-		// credential classes never interchange. A store that cannot resolve
-		// sessions fails CLOSED for registry-bound tokens.
+		// the registry's client type must match the token's transport, and the
+		// token's scope must still be the session's CURRENT scope — a bearer
+		// for organization A stops validating the moment select-org switches
+		// the session to B. A store that cannot resolve sessions fails CLOSED
+		// for registry-bound tokens.
 		if claims.Sid != "" {
 			lookup, ok := users.(authSessionLookup)
 			if !ok {
@@ -218,7 +220,7 @@ func serveAuthenticatedRequest(
 				respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeSessionRevoked, "La sesión ya no está activa. Iniciá sesión de nuevo.", nil)
 				return
 			}
-			if session.ClientType != expectedSessionClientType(claims) {
+			if session.ClientType != expectedSessionClientType(claims) || !sessionScopeMatchesClaims(claims, session) {
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
@@ -332,6 +334,27 @@ func expectedSessionClientType(claims *auth.Claims) domain.SessionClientType {
 	default:
 		return domain.SessionClientWeb
 	}
+}
+
+// sessionScopeMatchesClaims makes the registry the authority of the CURRENT
+// scope (ADR-0007): the token must carry exactly the scope the session row
+// holds right now. One session has one current scope, so select-org's in-place
+// update invalidates every previously issued bearer of the previous scope
+// immediately — no second generation counter is needed. Support tokens match
+// their linked support session and organization and never carry a normal
+// membership; an org-less token is valid only while the session is still in
+// its selection phase.
+func sessionScopeMatchesClaims(claims *auth.Claims, session *domain.AuthSession) bool {
+	if claims.Support != nil {
+		return session.MembershipID == nil &&
+			session.ActiveOrganizationID != nil && *session.ActiveOrganizationID == claims.Support.OrgID &&
+			session.SupportSessionID != nil && *session.SupportSessionID == claims.Support.SessionID
+	}
+	if claims.OrgID == "" {
+		return session.MembershipID == nil && session.ActiveOrganizationID == nil
+	}
+	return session.MembershipID != nil && *session.MembershipID == claims.MembershipID &&
+		session.ActiveOrganizationID != nil && *session.ActiveOrganizationID == claims.OrgID
 }
 
 // AdminMiddleware wraps AuthMiddleware and requires the live DB role to be admin.

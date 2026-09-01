@@ -445,6 +445,13 @@ func newJTI() string {
 // Validate enforces the exact HS256 policy and returns the claims. The error
 // is never sent to clients verbatim: handlers log it and answer with a generic
 // 401 so parser/identity state is not disclosed.
+//
+// For ver5 every registered claim is REQUIRED and cross-checked: alg, kid,
+// iss, aud, sub (== user_id), exp, nbf, iat, jti, plus sid/typ/ver. Absence
+// of any claim fails closed — a correctly signed token with stripped or
+// tampered claims is not a valid credential regardless of how the minting
+// helpers behave. Ver4 keeps only its transitional coherence checks
+// (ADR-0007, EOL SEC-9).
 func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Exact-algorithm policy: HS256 only. WithValidMethods below already
@@ -465,7 +472,7 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 			return nil, fmt.Errorf("unknown key id")
 		}
 		return []byte(secret), nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
@@ -498,6 +505,21 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 		if claims.ID == "" {
 			return nil, errors.New("token missing jti")
 		}
+		// Registered timestamps are mandatory: exp/nbf freshness is enforced by
+		// the parser validators above, but their ABSENCE (and iat's) must fail
+		// closed instead of being silently optional.
+		if claims.IssuedAt == nil {
+			return nil, errors.New("token missing iat")
+		}
+		if claims.NotBefore == nil {
+			return nil, errors.New("token missing nbf")
+		}
+		if claims.Subject == "" {
+			return nil, errors.New("token missing sub")
+		}
+		if claims.Subject != claims.UserID {
+			return nil, errors.New("token subject mismatch")
+		}
 	case LegacyTokenVersion:
 		// Transitional acceptance (removed with #460 SEC-9): ver4 tokens carry
 		// no sid/typ/iss/aud/jti. They still pass the coherence checks below
@@ -506,6 +528,9 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 		return nil, fmt.Errorf("unsupported token version")
 	}
 
+	if claims.UserID == "" {
+		return nil, errors.New("token missing user id")
+	}
 	if claims.AuthStartedAt == nil {
 		return nil, errors.New("token missing auth start")
 	}

@@ -7,12 +7,31 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 // ErrAuthSessionNotFound means the registry has no live row for the id (never
 // minted, revoked-and-pruned context, or belongs to another user).
 var ErrAuthSessionNotFound = errors.New("auth session not found")
+
+// ErrAuthSessionScopeIncoherent means the requested scope violates the
+// registry's membership/user/organization coherence: the membership must
+// belong to the session's user and to the session's active organization, the
+// scope shape must be org-less/scoped/support, and support never carries a
+// normal membership. The database enforces this (composite FKs + scope-shape
+// CHECK in migration 000105); this typed error is the storage-boundary
+// translation.
+var ErrAuthSessionScopeIncoherent = errors.New("auth session scope is inconsistent with membership, user, or organization")
+
+func mapAuthSessionScopeError(err error) error {
+	var pgErr *pgconn.PgError
+	// 23503 = foreign_key_violation, 23514 = check_violation.
+	if errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23514") {
+		return ErrAuthSessionScopeIncoherent
+	}
+	return err
+}
 
 // authSessionTouchInterval throttles last_seen_at writes: the middleware
 // resolves the session row on every request, but only stamps activity at most
@@ -56,7 +75,7 @@ func (s *PostgresStore) CreateAuthSession(ctx context.Context, cmd CreateAuthSes
 			&out.ClientType, &out.CreatedAt, &out.AbsoluteExpiresAt, &out.LastSeenAt, &out.RevokedAt,
 			&out.RevokedBy, &out.RevokeReason, &out.DeviceHint)
 	if err != nil {
-		return nil, err
+		return nil, mapAuthSessionScopeError(err)
 	}
 	out.ClientType = domain.SessionClientType(out.ClientType)
 	return &out, nil
@@ -102,15 +121,21 @@ func (s *PostgresStore) GetAuthSessionForRequest(ctx context.Context, sessionID,
 
 // UpdateAuthSessionScope changes the active membership/organization of a live
 // session (select-org). The session id stays stable across the switch so the
-// registry keeps one row per login, not per organization.
+// registry keeps one row per login, not per organization. Coherence is the
+// database's call: the composite FKs reject a membership from another user or
+// organization (translated to ErrAuthSessionScopeIncoherent), and the storage
+// guard refuses half-empty scopes before touching the row.
 func (s *PostgresStore) UpdateAuthSessionScope(ctx context.Context, sessionID, membershipID, organizationID string) error {
+	if (membershipID == "") != (organizationID == "") {
+		return ErrAuthSessionScopeIncoherent
+	}
 	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE auth_sessions
 		SET membership_id = NULLIF($2, '')::uuid, active_organization_id = NULLIF($3, '')::uuid, version = version + 1
 		WHERE id = $1::uuid AND revoked_at IS NULL AND absolute_expires_at > NOW()`,
 		sessionID, membershipID, organizationID)
 	if err != nil {
-		return err
+		return mapAuthSessionScopeError(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrAuthSessionNotFound

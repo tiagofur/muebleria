@@ -840,12 +840,15 @@ controls and refresh-reuse detection. Mobile and SketchUp use client-specific
 credentials and secure storage/device registration.
 
 **Implemented (ADR-0007 / #460 SEC-1):** the `auth_sessions` registry is the
-live revocation and absolute-lifetime authority behind ver5 tokens (sid, typ,
-iss/aud per client, jti, kid keyring, exact HS256), with revocation cutting
-unexpired JWTs immediately; ver4 acceptance is transitional and ends at the
-SEC-9 gate. Refresh rotation, web credential migration, MFA/step-up, media
-authorization and trusted-proxy rate limiting remain target work of the
-following #460 slices.
+live revocation, absolute-lifetime AND current-scope authority behind ver5
+tokens (sid, typ, iss/aud per client, sub==user_id, exp/nbf/iat, jti, kid
+keyring, exact HS256): revocation cuts unexpired JWTs immediately, a token
+only validates while its scope equals the session's current scope (so a
+select-org switch invalidates the previous scope's bearers at once), and
+membership/user/organization coherence is enforced in PostgreSQL. Ver4
+acceptance is transitional and ends at the SEC-9 gate. Refresh rotation, web
+credential migration, MFA/step-up, media authorization and trusted-proxy rate
+limiting remain target work of the following #460 slices.
 
 Mandatory hardening:
 

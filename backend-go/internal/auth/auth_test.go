@@ -392,6 +392,51 @@ func mustJSON(t *testing.T, v interface{}) []byte {
 	return out
 }
 
+// TestValidate_RequiresEveryRegisteredClaim locks the fail-closed claims
+// policy for ver5: a CORRECTLY SIGNED token missing any registered claim — or
+// whose subject does not match its user — is not a valid credential. The
+// minting helpers always emit these; validation must not depend on that.
+func TestValidate_RequiresEveryRegisteredClaim(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
+
+	mustReject := func(name string, mutate func(*Claims)) {
+		t.Helper()
+		claims := fullVer5Claims(TokenTypeAccessWeb)
+		mutate(claims)
+		token, err := jwtNewSigned(claims, secret)
+		if err != nil {
+			t.Fatalf("%s: sign: %v", name, err)
+		}
+		if _, err := authority.Validate(token); err == nil {
+			t.Fatalf("%s: token must be rejected", name)
+		}
+	}
+
+	mustReject("missing exp", func(c *Claims) { c.ExpiresAt = nil })
+	mustReject("missing iat", func(c *Claims) { c.IssuedAt = nil })
+	mustReject("missing nbf", func(c *Claims) { c.NotBefore = nil })
+	mustReject("missing sub", func(c *Claims) { c.Subject = "" })
+	mustReject("sub mismatch", func(c *Claims) { c.Subject = "someone-else" })
+	mustReject("missing iss", func(c *Claims) { c.Issuer = "" })
+	mustReject("missing aud", func(c *Claims) { c.Audience = nil })
+	mustReject("missing jti", func(c *Claims) { c.ID = "" })
+	mustReject("missing sid", func(c *Claims) { c.Sid = "" })
+	mustReject("missing typ", func(c *Claims) { c.Typ = "" })
+	mustReject("wrong typ", func(c *Claims) { c.Typ = TokenTypeDeviceSketchup })
+	mustReject("missing user_id", func(c *Claims) { c.UserID = "" })
+	mustReject("missing auth_started_at", func(c *Claims) { c.AuthStartedAt = nil })
+
+	// The unmodified claims set is the control: it must validate.
+	token, err := jwtNewSigned(fullVer5Claims(TokenTypeAccessWeb), secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err != nil {
+		t.Fatalf("complete ver5 claims must validate: %v", err)
+	}
+}
+
 // TestValidate_LegacyVer4StillValidates locks the transitional acceptance
 // window (#460 SEC-9 removes it together with GenerateLegacyToken).
 func TestValidate_LegacyVer4StillValidates(t *testing.T) {

@@ -630,11 +630,25 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The registry session keeps its id across the switch: select-org updates
-	// the active scope in place (#460 / ADR-0007). A ver4 token has no session
-	// yet, so this exchange registers one now, preserving the absolute origin.
+	// Atomic switch contract (F199 + #460): a FAILED switch must leave the
+	// current session scope untouched. Every step that can still fail runs
+	// BEFORE the scope mutation: the user payload fetch and the token mint
+	// (and, for a ver4 exchange, the registration of the new row — an unused
+	// row that simply expires if the flow dies afterwards). The scope update
+	// itself is the LAST mutation; after it only the best-effort audit and the
+	// 200 response remain, so no non-5xx outcome can commit a half-switch (a
+	// serialization failure would surface as 500 and roll the transaction back
+	// together with the scope change).
+	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || u == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
 	if claims.Sid == "" {
-		session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+		// A ver4 token has no session yet: this exchange registers one scoped
+		// to the target organization, preserving the absolute origin.
+		session, createErr := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
 			UserID:            claims.UserID,
 			MembershipID:      m.ID,
 			OrganizationID:    m.OrganizationID,
@@ -642,16 +656,12 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 			AbsoluteExpiresAt: claims.AuthStartedAt.Time.Add(auth.TransportSessionTTL(string(transport))),
 			DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
 		})
-		if err != nil {
-			respondWithInternalError(w, err, "select-org: create session")
+		if createErr != nil {
+			respondWithInternalError(w, createErr, "select-org: create session")
 			return
 		}
 		tc.SessionID = session.ID
 	} else {
-		if err := s.Store.UpdateAuthSessionScope(r.Context(), claims.Sid, m.ID, m.OrganizationID); err != nil {
-			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeSessionRevoked, "La sesión ya no está activa. Iniciá sesión de nuevo.", nil)
-			return
-		}
 		tc.SessionID = claims.Sid
 	}
 
@@ -661,15 +671,20 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Last mutation of the switch: the registry session keeps its id across it
+	// (#460 / ADR-0007). From this point the previous scope's bearers stop
+	// validating immediately (middleware current-scope check).
+	if claims.Sid != "" {
+		if err := s.Store.UpdateAuthSessionScope(r.Context(), claims.Sid, m.ID, m.OrganizationID); err != nil {
+			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeSessionRevoked, "La sesión ya no está activa. Iniciá sesión de nuevo.", nil)
+			return
+		}
+	}
+
 	s.audit(r.Context(), "organization_selected", claims.UserID, m.OrganizationID, clientIP(r), map[string]interface{}{
 		"session_id": tc.SessionID,
 	})
 
-	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
-	if err != nil || u == nil {
-		respondWithError(w, http.StatusUnauthorized, "invalid token")
-		return
-	}
 	org := toOrgSummaryDTO(m.Organization)
 	sessionID := tc.SessionID
 	respondWithJSON(w, http.StatusOK, LoginResponse{
