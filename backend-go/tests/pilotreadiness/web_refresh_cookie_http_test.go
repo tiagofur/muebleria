@@ -308,11 +308,133 @@ func TestWebRefreshCookieLogoutRevokesClearsAndIsolatesSessions(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("repeat logout status=%d body=%s", status, raw)
 	}
-	// So does a credential-less logout.
-	status, raw = fx.do(t, http.MethodPost, "/api/auth/logout", "", nil)
+	// So does a credential-less logout — now strictly mutation-free.
+	status, raw, noCredResp := fx.doWithHeaders(t, http.MethodPost, "/api/auth/logout", "", nil, nil)
 	if status != http.StatusOK {
 		t.Fatalf("credential-less logout status=%d body=%s", status, raw)
 	}
+	if findSetCookie(t, noCredResp) != nil {
+		t.Fatal("credential-less logout must not emit a granete_web_refresh Set-Cookie")
+	}
+}
+
+// Review blocker 1 (#460 SEC-4A): an INTERNAL refresh failure — the rotation
+// transaction rolled back — must NOT delete the browser's cookie. R1 is still
+// the live server-side credential and a retry with it must succeed.
+func TestWebRefreshCookieInternalFailurePreservesCredential(t *testing.T) {
+	ctx := context.Background()
+	sess := fx.webLogin(t, fx.a.admin.email, fx.a.slug)
+
+	dropFailure := func() {
+		_, _ = fx.pool.Exec(ctx, `DROP TRIGGER IF EXISTS fail_web_refresh_internal ON auth_refresh_credentials`)
+		_, _ = fx.pool.Exec(ctx, `DROP FUNCTION IF EXISTS fail_web_refresh_internal()`)
+	}
+	dropFailure()
+	t.Cleanup(dropFailure)
+	if _, err := fx.pool.Exec(ctx, `
+		CREATE FUNCTION fail_web_refresh_internal() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'injected rotation failure'; END $$;
+		CREATE TRIGGER fail_web_refresh_internal
+		BEFORE UPDATE ON auth_refresh_credentials
+		FOR EACH ROW EXECUTE FUNCTION fail_web_refresh_internal()`); err != nil {
+		t.Fatal(err)
+	}
+
+	status, raw, resp := fx.doWithHeaders(t, http.MethodPost, "/api/auth/refresh", "", nil, webCookieHeaders(sess.cookie))
+	if status != http.StatusInternalServerError {
+		t.Fatalf("injected rotation failure status=%d body=%s", status, raw)
+	}
+	if findSetCookie(t, resp) != nil {
+		t.Fatal("internal refresh failure must not emit any granete_web_refresh Set-Cookie: R1 is still the live credential")
+	}
+
+	// The rollback left the family coherent and R1 consumable: the retry rotates.
+	dropFailure()
+	rotated := fx.webRefresh(t, &sess)
+	fx.want(t, http.MethodGet, "/api/auth/me", rotated.Token, nil, http.StatusOK)
+}
+
+// Review blocker 2 (#460 SEC-4A): the cookie-flow logout clears the cookie
+// only AFTER the revocation commits. A failing logout answers 5xx with the
+// cookie intact, session/family roll back coherently, and the retry closes
+// everything and clears the cookie.
+func TestWebLogoutInternalFailurePreservesCookieAndRetryCloses(t *testing.T) {
+	ctx := context.Background()
+	sess := fx.webLogin(t, fx.a.admin.email, fx.a.slug)
+
+	dropFailure := func() {
+		_, _ = fx.pool.Exec(ctx, `DROP TRIGGER IF EXISTS fail_web_logout_audit ON security_audit_events`)
+		_, _ = fx.pool.Exec(ctx, `DROP FUNCTION IF EXISTS fail_web_logout_audit()`)
+	}
+	dropFailure()
+	t.Cleanup(dropFailure)
+	if _, err := fx.pool.Exec(ctx, `
+		CREATE FUNCTION fail_web_logout_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'injected logout audit failure'; END $$;
+		CREATE TRIGGER fail_web_logout_audit
+		BEFORE INSERT ON security_audit_events
+		FOR EACH ROW WHEN (NEW.event_type='logout')
+		EXECUTE FUNCTION fail_web_logout_audit()`); err != nil {
+		t.Fatal(err)
+	}
+
+	status, raw, resp := fx.doWithHeaders(t, http.MethodPost, "/api/auth/logout", "", nil, webCookieHeaders(sess.cookie))
+	if status != http.StatusInternalServerError {
+		t.Fatalf("injected logout failure status=%d body=%s", status, raw)
+	}
+	if findSetCookie(t, resp) != nil {
+		t.Fatal("failing logout must not delete the browser's cookie: the family/session rolled back open")
+	}
+	var sessionOpen, familyOpen bool
+	if err := fx.pool.QueryRow(ctx, `
+		SELECT s.revoked_at IS NULL, f.revoked_at IS NULL
+		FROM auth_sessions s JOIN auth_refresh_families f ON f.session_id=s.id
+		WHERE s.id=$1`, sess.login.SessionID).Scan(&sessionOpen, &familyOpen); err != nil {
+		t.Fatal(err)
+	}
+	if !sessionOpen || !familyOpen {
+		t.Fatalf("failed logout must roll back coherently: sessionOpen=%v familyOpen=%v", sessionOpen, familyOpen)
+	}
+
+	// Retry after the failure closes everything and clears the cookie.
+	dropFailure()
+	status, raw, resp = fx.doWithHeaders(t, http.MethodPost, "/api/auth/logout", "", nil, webCookieHeaders(sess.cookie))
+	if status != http.StatusOK {
+		t.Fatalf("logout retry status=%d body=%s", status, raw)
+	}
+	if cleared := findSetCookie(t, resp); cleared == nil || cleared.Value != "" || !cleared.Expires.Before(time.Now()) {
+		t.Fatalf("logout retry must clear granete_web_refresh, got %+v", cleared)
+	}
+	fx.want(t, http.MethodGet, "/api/auth/me", sess.login.Token, nil, http.StatusUnauthorized)
+	status, raw, _ = fx.doWithHeaders(t, http.MethodPost, "/api/auth/refresh", "", nil, webCookieHeaders(sess.cookie))
+	if status != http.StatusUnauthorized || apiErrorCode(raw) != "REFRESH_REVOKED" {
+		t.Fatalf("cookie after logout retry status=%d code=%s body=%s", status, apiErrorCode(raw), raw)
+	}
+}
+
+// Review blocker 3 (#460 SEC-4A): a credential-less logout is a mutation-free
+// 200. A cross-site form cannot carry the Strict cookie; such a request must
+// neither revoke anything nor trick the server into deleting the browser's
+// cookie (no logout-CSRF via cookie deletion).
+func TestLogoutWithoutCredentialIsMutationFree(t *testing.T) {
+	sess := fx.webLogin(t, fx.a.admin.email, fx.a.slug)
+
+	// Bodyless, form content type, foreign origin: the exact shape a
+	// cross-site logout-CSRF attempt can produce (no Cookie travels).
+	status, raw, resp := fx.doWithHeaders(t, http.MethodPost, "/api/auth/logout", "", nil, map[string]string{
+		"Origin": "https://evil.example", "Content-Type": "application/x-www-form-urlencoded",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("credential-less logout status=%d body=%s", status, raw)
+	}
+	if findSetCookie(t, resp) != nil {
+		t.Fatal("credential-less logout must not emit a granete_web_refresh Set-Cookie (no logout-CSRF cookie deletion)")
+	}
+
+	// Nothing was revoked: the session keeps working and the cookie still rotates.
+	fx.want(t, http.MethodGet, "/api/auth/me", sess.login.Token, nil, http.StatusOK)
+	rotated := fx.webRefresh(t, &sess)
+	fx.want(t, http.MethodGet, "/api/auth/me", rotated.Token, nil, http.StatusOK)
 }
 
 // TestWebRefreshCookieSecretsNeverLogged proves log redaction (#460 SEC-4A §23):

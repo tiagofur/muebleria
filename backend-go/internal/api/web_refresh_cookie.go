@@ -96,18 +96,22 @@ func (s *Server) originAllowed(origin string) bool {
 	return false
 }
 
+// csrfDeniedMessage is the single public denial message for the whole CSRF
+// boundary: the response must not reveal WHICH check failed (#460 SEC-4A).
+const csrfDeniedMessage = "no se pudo verificar el origen de la petición"
+
 // requireWebCookieCSRF enforces the CSRF boundary for cookie-authenticated
 // commands (Web cookie refresh/logout): the request must carry BOTH an Origin
 // that is exactly one of the configured Web origins AND the required non-simple
-// CSRF header. CORS alone is not trusted as a defense. Denials are uniform 403s
-// that do not reveal which boundary failed.
+// CSRF header. CORS alone is not trusted as a defense. Denials are uniform
+// 403s (same code, same message) that do not reveal which boundary failed.
 func (s *Server) requireWebCookieCSRF(w http.ResponseWriter, r *http.Request) bool {
 	if !s.originAllowed(r.Header.Get("Origin")) {
-		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "origen no autorizado", nil)
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, csrfDeniedMessage, nil)
 		return false
 	}
 	if r.Header.Get(csrfHeaderName) != csrfHeaderValue {
-		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "falta la cabecera anti-CSRF", nil)
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, csrfDeniedMessage, nil)
 		return false
 	}
 	return true

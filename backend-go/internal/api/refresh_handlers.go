@@ -144,6 +144,13 @@ func (s *Server) HandleRefreshCredential(w http.ResponseWriter, r *http.Request)
 // shared SEC-2A path; the rotated secret leaves the server ONLY as a fresh
 // Set-Cookie after the commit, bounded by the session's ORIGINAL absolute
 // expiry — refresh never slides the session deadline.
+//
+// Cookie-mutation semantics (#460 review): the browser's cookie is only
+// cleared for TERMINAL public refresh states (invalid/expired/revoked/reused),
+// where the credential is dead server-side. An internal failure rolled the
+// rotation back, so R1 is still the live credential — the response carries no
+// deletion Set-Cookie and a retry with the same cookie must be able to
+// succeed.
 func (s *Server) HandleWebCookieRefresh(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWebCookieCSRF(w, r) {
 		return
@@ -151,10 +158,12 @@ func (s *Server) HandleWebCookieRefresh(w http.ResponseWriter, r *http.Request) 
 	raw := webRefreshCookieValue(r)
 	outcome, err := s.performRefreshRotation(r, raw, domain.SessionClientWeb)
 	if err != nil {
-		// Terminal refresh states (invalid/expired/revoked/reused) clear the
-		// cookie so the browser drops the dead credential.
-		s.clearWebRefreshCookie(w)
-		respondRotationError(w, err)
+		if isPublicRefreshError(err) {
+			s.clearWebRefreshCookie(w)
+			respondRefreshError(w, err)
+			return
+		}
+		respondWithInternalError(w, err, "refresh rotation")
 		return
 	}
 	s.setWebRefreshCookie(w, outcome.nextRaw, outcome.absoluteExpiry)
@@ -174,37 +183,47 @@ func (s *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		if !decodeGeneratedJSONBody(w, r, &body) {
 			return
 		}
-		s.logoutByRawCredential(w, r, body.RefreshToken)
+		if err := s.revokeByRawRefreshCredential(r, body.RefreshToken); err != nil {
+			respondWithInternalError(w, err, "logout")
+			return
+		}
+		respondWithJSON(w, http.StatusOK, openapi.LogoutResponse{LoggedOut: true})
 		return
 	}
 	if raw := webRefreshCookieValue(r); raw != "" {
 		if !s.requireWebCookieCSRF(w, r) {
 			return
 		}
-		// Cleared with the issuing attributes even when the credential was
-		// already dead: the browser must end this flow without the cookie.
-		s.clearWebRefreshCookie(w)
-		s.logoutByRawCredential(w, r, raw)
-		return
-	}
-	// No credential presented: enumeration-safe idempotent success. The cookie
-	// is still cleared (matching attributes) so the browser ends up without it.
-	s.clearWebRefreshCookie(w)
-	respondWithJSON(w, http.StatusOK, openapi.LogoutResponse{LoggedOut: true})
-}
-
-// logoutByRawCredential revokes the family and its auth_session through the
-// SEC-2A logout path. Logout is intentionally enumeration-safe and idempotent:
-// a malformed, unknown, already-used or already-revoked credential receives
-// the same successful response as a real one.
-func (s *Server) logoutByRawCredential(w http.ResponseWriter, r *http.Request, raw string) {
-	if s.RefreshCredentials != nil && s.RefreshCredentials.Validate(raw) == nil {
-		if err := s.Store.LogoutByRefreshCredential(r.Context(), s.RefreshCredentials.Verifier(raw), clientIP(r), RequestIDFromContext(r.Context())); err != nil {
+		// Revocation FIRST, cookie clearing after it commits: a failed
+		// transaction must not cost the browser its only refresh credential
+		// (#460 review). Unknown/invalid credentials revoke nothing (no-op),
+		// so clearing after a nil error is safe there too.
+		if err := s.revokeByRawRefreshCredential(r, raw); err != nil {
 			respondWithInternalError(w, err, "logout")
 			return
 		}
+		s.clearWebRefreshCookie(w)
+		respondWithJSON(w, http.StatusOK, openapi.LogoutResponse{LoggedOut: true})
+		return
 	}
+	// No credential presented: enumeration-safe idempotent success with NO
+	// state change and NO Set-Cookie. SameSite=Strict keeps a cross-site form
+	// from carrying the cookie, and such an uncredentialed request must never
+	// be able to delete the browser's cookie or revoke anything (#460 review:
+	// no logout-CSRF via cookie deletion).
 	respondWithJSON(w, http.StatusOK, openapi.LogoutResponse{LoggedOut: true})
+}
+
+// revokeByRawRefreshCredential revokes the family and its auth_session through
+// the SEC-2A logout path. Logout is intentionally enumeration-safe and
+// idempotent: a malformed, unknown, already-used or already-revoked credential
+// revokes nothing (nil), while a real storage failure is RETURNED so callers
+// can answer 5xx without touching the client's cookie.
+func (s *Server) revokeByRawRefreshCredential(r *http.Request, raw string) error {
+	if s.RefreshCredentials == nil || s.RefreshCredentials.Validate(raw) != nil {
+		return nil
+	}
+	return s.Store.LogoutByRefreshCredential(r.Context(), s.RefreshCredentials.Verifier(raw), clientIP(r), RequestIDFromContext(r.Context()))
 }
 
 // refreshTransitionHandler dispatches POST /api/auth/refresh between the three

@@ -244,7 +244,14 @@ bound a structural database invariant. select-org rotates nothing: the cookie
 stays in its family and the in-place scope update redirects the next rotation
 to the current organization. Logout takes the credential from the cookie,
 applies the CSRF boundary, revokes family + session through SEC-2A, clears the
-cookie with matching attributes and stays enumeration-safe/idempotent.
+cookie with matching attributes only AFTER that revocation commits, and stays
+enumeration-safe/idempotent. A credential-less logout is a mutation-free 200:
+it neither revokes anything nor emits a deletion Set-Cookie, so a cross-site
+form — which SameSite=Strict keeps from carrying the cookie — cannot force the
+browser to drop it. Internal (5xx) failures of refresh or logout never touch
+the cookie: the transaction rolled back, the presented credential is still
+the live one, and a retry must be able to succeed; the cookie is only cleared
+for terminal public refresh states or after a committed logout.
 
 **CSRF boundary.** Cookie-authenticated refresh/logout require BOTH an
 exactly-allowed `Origin` (the CORS allowlist — never a wildcard) and the

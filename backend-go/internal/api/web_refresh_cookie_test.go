@@ -89,6 +89,7 @@ func TestRequireWebCookieCSRF(t *testing.T) {
 		{"missing header", "http://localhost:5173", ""},
 		{"wrong header value", "http://localhost:5173", "1 "},
 	}
+	var uniformDenial string
 	for _, tc := range denials {
 		req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
 		if tc.origin != "" {
@@ -104,6 +105,16 @@ func TestRequireWebCookieCSRF(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("%s: status=%d want 403", tc.name, rec.Code)
 		}
+		// The public denial must be indistinguishable across boundaries (#460
+		// review): same code, same message, no hint of which check failed.
+		if uniformDenial == "" {
+			uniformDenial = rec.Body.String()
+		} else if rec.Body.String() != uniformDenial {
+			t.Fatalf("%s: denial body differs: %q vs %q", tc.name, rec.Body.String(), uniformDenial)
+		}
+	}
+	if !strings.Contains(uniformDenial, csrfDeniedMessage) {
+		t.Fatalf("denial body must carry the uniform message: %s", uniformDenial)
 	}
 }
 

@@ -117,6 +117,34 @@ que SEC-4A no rompe producción entre 4A y 4B.
   operando con el flujo actual — el cutover es 4B).
 - `git diff --check`: limpio.
 
+## Review externa (PR #531 — CHANGES REQUIRED) y correcciones
+
+Tres blockers de semántica de cookie corregidos en el parche post-review
+(`refresh_handlers.go` + `web_refresh_cookie.go`):
+
+1. **Refresh 500 ya no borra la cookie**: `HandleWebCookieRefresh` sólo
+   limpia `granete_web_refresh` ante errores públicos terminales
+   (`REFRESH_INVALID/EXPIRED/REVOKED/REUSED/...`); un fallo interno (la
+   transacción hizo rollback y R1 sigue siendo la credencial live) responde
+   500 **sin** Set-Cookie de borrado. Proof con failure injection (trigger PG
+   sobre la rotación): 500 sin Set-Cookie + retry con la misma R1 rota y
+   `/api/auth/me` 200.
+2. **Logout limpia la cookie después del commit**: el flow cookie ahora
+   revoca (`revokeByRawRefreshCredential`) y sólo tras éxito (o credencial
+   desconocida/inválida, no-op enumeration-safe) emite el clearing. Proof con
+   trigger sobre el audit `logout`: 500 preserva cookie, sesión/familia
+   rollback-coherentes (abiertas), retry cierra todo + limpia cookie +
+   `/me` 401 + refresh `REFRESH_REVOKED`.
+3. **Logout sin credencial es mutation-free**: responde 200 idempotente sin
+   mutación ni Set-Cookie — un form cross-site (que no puede portar la cookie
+   Strict) ya no puede provocar el borrado de la cookie del navegador
+   (logout-CSRF). Negative proof incluido (form-compatible, Origin extranjero:
+   sin Set-Cookie, sesión viva, cookie sigue rotando).
+
+Corrección menor también aplicada: `requireWebCookieCSRF` devuelve un único
+error público uniforme (`csrfDeniedMessage`) para ambos boundaries; el test
+unitario verifica que las denegaciones son byte-idénticas.
+
 ## Estado de entrega
 
 SEC-4A queda `SEC-4A implemented pending review`. F202 sigue `in_progress`,
