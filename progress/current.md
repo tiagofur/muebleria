@@ -80,6 +80,28 @@ Recomendación no bloqueante también aplicada: `pendingMediaRefresh` en los
 webviews de SketchUp usa timestamp + ventana de reintento (5s) para que un
 mint fallido no deje la imagen marcada para siempre.
 
+## Bonus post-review: deuda previa eliminada (nada queda como "pre-existing")
+
+Diagnóstico real de los fallos que se etiquetaban pre-existing en la suite Ruby:
+**requires incompletos en los archivos de TEST** (la arquitectura del plugin es
+deliberadamente manifest-based: `main.rb` ordena la carga y el boundary test
+`test/boundary/ownership_test.rb` prohíbe `require_relative` entre archivos
+runtime — verificado verde). Los tests individuales dependían de la
+contaminación de constantes del proceso compartido del rake de CI; standalone
+fallaban. Corregido completando los requires de cada archivo de test con su
+clausura de dependencias en orden load-safe (catalog_provider antes de
+layout_contract; transports/auth/param-contract para RemoteCatalogProvider;
+assets/migration/selection para dialog_controller/application). Suite completa
+unit+boundary ahora verde archivo por archivo (antes: ~25 fallos/errores
+distribuidos en 10 archivos).
+
+También como bonus:
+- Flake real de CI corregido en `catalogStore.test.ts` (ventana fija de 10 ms
+  → polling con deadline de 2 s para la serialización de saves).
+- Readiness de PostgreSQL del browser gate endurecido: ventana 60→120 s y
+  dump del log del contenedor al fallar (el flake "did not become ready" era
+  no diagnosticable).
+
 ## Estado de entrega
 
 SEC-3 queda `SEC-3 implemented pending review`. F202 sigue `in_progress`,

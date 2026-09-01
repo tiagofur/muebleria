@@ -3,6 +3,7 @@
 require 'json'
 require 'open3'
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 
 class MaterialSelectorJsRoundtripTest < Minitest::Test

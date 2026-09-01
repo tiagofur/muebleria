@@ -62,11 +62,21 @@ docker run -d --rm --name "${CONTAINER}" \
   -v "${ROOT}/scripts/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro" \
   -p 127.0.0.1::5432 postgres:16-alpine >/dev/null
 
-for _ in $(seq 1 60); do
-  docker logs "${CONTAINER}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' && docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1 && break
+# 120 s (2x the previous window): the init-complete log line plus a real
+# pg_isready must BOTH hold -- the init script creates the runtime role the
+# migrations rely on. On failure the container log is printed so a flake is
+# diagnosable instead of a bare "did not become ready".
+postgres_ready() {
+  docker logs "${CONTAINER}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' &&
+    docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1
+}
+for _ in $(seq 1 120); do
+  postgres_ready && break
   sleep 1
 done
-if ! docker logs "${CONTAINER}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' || ! docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1; then
+if ! postgres_ready; then
+  echo "[organization-gate] PostgreSQL container log (diagnostics):" >&2
+  docker logs "${CONTAINER}" 2>&1 | tail -20 >&2
   fail "PostgreSQL did not become ready"
 fi
 
