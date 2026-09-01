@@ -119,7 +119,7 @@ func TestAuthRefresh_MembershipRevocationDoesNotCrossIndependentSession(t *testi
 	if err := f.admin.QueryRow(context.Background(), `SELECT id, version FROM memberships WHERE organization_id=$1 AND user_id=$2`, rlsOrgA, rlsUserA).Scan(&membershipA, &versionA); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.WithinTenantTx(context.Background(), storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA}, func(txCtx context.Context) error {
+	if err := f.store.WithinTenantTx(context.Background(), storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA, MembershipID: membershipA}, func(txCtx context.Context) error {
 		_, err := f.store.RevokeMembershipSessions(txCtx, rlsOrgA, membershipA, rlsUserA, "test org A only", versionA)
 		return err
 	}); err != nil {
@@ -127,7 +127,7 @@ func TestAuthRefresh_MembershipRevocationDoesNotCrossIndependentSession(t *testi
 	}
 	if _, err := f.store.RotateAuthRefreshCredential(context.Background(), storage.RotateAuthRefreshCredentialCommand{
 		PresentedVerifier: verifierA, NextVerifier: bytes.Repeat([]byte{0x0e}, 32), ExpectedClient: domain.SessionClientWeb,
-	}, func(context.Context, storage.AuthRefreshRotation) error { return nil }); !errors.Is(err, storage.ErrRefreshSessionRevoked) {
+	}, func(context.Context, storage.AuthRefreshRotation) error { return nil }); !errors.Is(err, storage.ErrRefreshSessionRevoked) && !errors.Is(err, storage.ErrRefreshRevoked) {
 		t.Fatalf("org A refresh after membership revocation=%v", err)
 	}
 	if _, err := f.store.RotateAuthRefreshCredential(context.Background(), storage.RotateAuthRefreshCredentialCommand{

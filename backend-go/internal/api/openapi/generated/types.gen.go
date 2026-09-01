@@ -48,6 +48,7 @@ const (
 	ApiErrorCodeRefreshExpired                 ApiErrorCode = "REFRESH_EXPIRED"
 	ApiErrorCodeRefreshRevoked                 ApiErrorCode = "REFRESH_REVOKED"
 	ApiErrorCodeRefreshReused                  ApiErrorCode = "REFRESH_REUSED"
+	ApiErrorCodeSessionNotFound                ApiErrorCode = "SESSION_NOT_FOUND"
 )
 
 type ApiError struct {
@@ -626,4 +627,46 @@ type LogoutRequest struct {
 
 type LogoutResponse struct {
 	LoggedOut bool `json:"logged_out"`
+}
+
+type SessionStatus string
+
+const (
+	SessionStatusActive  SessionStatus = "active"
+	SessionStatusRevoked SessionStatus = "revoked"
+	SessionStatusExpired SessionStatus = "expired"
+)
+
+type SessionOrganizationSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+type SessionSummary struct {
+	ID                 string                      `json:"id"`
+	ClientType         AuthTransport               `json:"client_type"`
+	CreatedAt          string                      `json:"created_at"`
+	LastSeenAt         *string                     `json:"last_seen_at"`
+	AbsoluteExpiresAt  string                      `json:"absolute_expires_at"`
+	RevokedAt          *string                     `json:"revoked_at"`
+	IsCurrent          bool                        `json:"is_current"`
+	DeviceHint         *string                     `json:"device_hint"`
+	ActiveOrganization *SessionOrganizationSummary `json:"active_organization,omitempty"`
+	MembershipID       *string                     `json:"membership_id"`
+	Status             SessionStatus               `json:"status"`
+}
+
+type SessionDirectory struct {
+	Items []SessionSummary `json:"items"`
+	Limit int64            `json:"limit"`
+}
+
+type RevokeSessionRequest struct {
+	Reason string `json:"reason"`
+}
+
+type SessionRevokeResponse struct {
+	Session SessionSummary `json:"session"`
+	Revoked bool           `json:"revoked"`
 }

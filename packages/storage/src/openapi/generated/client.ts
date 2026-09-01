@@ -36,9 +36,12 @@ import type {
   RevokeInvitationRequest,
   RevokeInvitationResponse,
   RevokeMembershipSessionsRequest,
+  RevokeSessionRequest,
   SalesNetworkReadModel,
   SecurityAuditEvent,
   SelectOrganizationRequest,
+  SessionDirectory,
+  SessionRevokeResponse,
   StartSupportSessionRequest,
   SupportSessionResponse,
   SuspendMembershipRequest,
@@ -110,4 +113,10 @@ export abstract class GeneratedGraneteApiClient {
   transferOrganizationAdmin(token: string, membershipId: string, version: number, body: TransferOrganizationAdminRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<AdminTransferResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:transfer-admin`, { schema: "AdminTransferResponse", token, ifMatch: version, bodySchema: "TransferOrganizationAdminRequest", body, idempotencyKey: key, signal }); }
   changeMembershipSectors(token: string, membershipId: string, version: number, body: ChangeMembershipSectorsRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipSectorMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:change-sectors`, { schema: "MembershipSectorMutationResponse", token, ifMatch: version, bodySchema: "ChangeMembershipSectorsRequest", body, idempotencyKey: key, signal }); }
   offboardMembership(token: string, membershipId: string, version: number, body: OffboardMembershipRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<OffboardMembershipResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:offboard`, { schema: "OffboardMembershipResponse", token, ifMatch: version, bodySchema: "OffboardMembershipRequest", body, idempotencyKey: key, signal }); }
+  listMySessions(token: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", "/auth/sessions", { schema: "SessionDirectory", token, signal }); }
+  revokeMySession(token: string, sessionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/auth/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, idempotencyKey: key, signal }); }
+  listMembershipSessions(token: string, membershipId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/org/memberships/${encodeURIComponent(membershipId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
+  revokeMembershipSession(token: string, membershipId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
+  listPlatformUserSessions(token: string, userId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/platform/users/${encodeURIComponent(userId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
+  revokePlatformUserSession(token: string, userId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/platform/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
 }
