@@ -79,7 +79,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/auth/logout", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleLogout))))
 	// Select-org: swaps an authenticated token for one scoped to a chosen
 	// organization (multi-membership users, ADR-0004).
-	mux.Handle("POST /api/auth/select-org", authMW(http.HandlerFunc(server.HandleSelectOrg)))
+	mux.Handle("POST /api/auth/select-org", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleSelectOrg))))
 	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))
 	mux.Handle("GET /api/auth/sessions", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMySessions)))))
 	mux.Handle("POST /api/auth/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("auth.revoke-session", http.HandlerFunc(server.HandleRevokeMySession))))))
@@ -94,7 +94,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/platform/users/{userId}/sessions", noStoreMiddleware(rejectSessionQueryToken(platformMW(http.HandlerFunc(server.HandleListPlatformUserSessions)))))
 	mux.Handle("POST /api/platform/users/{userId}/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(platformMW(server.RequireIdempotency("platform.revoke-user-session", http.HandlerFunc(server.HandleRevokePlatformUserSession))))))
 	mux.Handle("POST /api/platform/users/{userCommand...}", platformMW(http.HandlerFunc(server.HandlePlatformUserCommand)))
-	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession))))
+	mux.Handle("POST /api/platform/organizations/{id}/support-session", noStoreMiddleware(platformMW(server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession)))))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
 
 	// Factory sales network (#326): a factory admin lists/creates its
@@ -134,11 +134,11 @@ func RegisterRoutes(server *Server) http.Handler {
 		"offboard":            authMW(server.RequireIdempotency("org.offboard-membership", http.HandlerFunc(server.HandleOffboardMembership))),
 	}))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
-	mux.Handle("POST /api/org/invitations", authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation))))
-	mux.Handle("POST /api/org/invitations/{invitationCommand...}", authMW(http.HandlerFunc(server.HandleOrgInvitationCommand)))
+	mux.Handle("POST /api/org/invitations", noStoreMiddleware(authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation)))))
+	mux.Handle("POST /api/org/invitations/{invitationCommand...}", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleOrgInvitationCommand))))
 
 	// Public invitation acceptance (rate limited like login/register).
-	mux.Handle("POST /api/auth/invitations:accept", authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation))))
+	mux.Handle("POST /api/auth/invitations:accept", noStoreMiddleware(authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation)))))
 
 	// Biblioteca paramétrica de muebles (catálogo piloto compartido con el dominio TS;
 	// consumida hoy por la extensión de SketchUp; requiere licencia activa por usuario).
