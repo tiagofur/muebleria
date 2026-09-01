@@ -265,6 +265,13 @@ func jwtNewSigned(claims *Claims, secret string) (string, error) {
 	return token.SignedString([]byte(secret))
 }
 
+// signWithKID signs claims with an explicit kid header, the ver5 header shape.
+func signWithKID(claims *Claims, secret, kid string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = kid
+	return token.SignedString([]byte(secret))
+}
+
 // fullVer5Claims builds a policy-complete ver5 claims set for tamper tests.
 func fullVer5Claims(typ string) *Claims {
 	now := time.Now()
@@ -298,7 +305,7 @@ func TestValidate_RejectsTokenTypeTamper(t *testing.T) {
 	authority := mustTestAuthority(t, secret)
 
 	claims := fullVer5Claims(TokenTypeDeviceSketchup) // web transport, sketchup typ
-	token, err := jwtNewSigned(claims, secret)
+	token, err := signWithKID(claims, secret, LegacyKeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +315,7 @@ func TestValidate_RejectsTokenTypeTamper(t *testing.T) {
 
 	claims = fullVer5Claims(TokenTypeAccessWeb)
 	claims.Audience = jwt.ClaimStrings{AudienceSketchup}
-	token, err = jwtNewSigned(claims, secret)
+	token, err = signWithKID(claims, secret, LegacyKeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +325,7 @@ func TestValidate_RejectsTokenTypeTamper(t *testing.T) {
 
 	claims = fullVer5Claims(TokenTypeAccessWeb)
 	claims.Issuer = "other-issuer"
-	token, err = jwtNewSigned(claims, secret)
+	token, err = signWithKID(claims, secret, LegacyKeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +335,7 @@ func TestValidate_RejectsTokenTypeTamper(t *testing.T) {
 
 	claims = fullVer5Claims(TokenTypeAccessWeb)
 	claims.Sid = ""
-	token, err = jwtNewSigned(claims, secret)
+	token, err = signWithKID(claims, secret, LegacyKeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +345,7 @@ func TestValidate_RejectsTokenTypeTamper(t *testing.T) {
 
 	claims = fullVer5Claims(TokenTypeAccessWeb)
 	claims.ID = ""
-	token, err = jwtNewSigned(claims, secret)
+	token, err = signWithKID(claims, secret, LegacyKeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +411,7 @@ func TestValidate_RequiresEveryRegisteredClaim(t *testing.T) {
 		t.Helper()
 		claims := fullVer5Claims(TokenTypeAccessWeb)
 		mutate(claims)
-		token, err := jwtNewSigned(claims, secret)
+		token, err := signWithKID(claims, secret, LegacyKeyID)
 		if err != nil {
 			t.Fatalf("%s: sign: %v", name, err)
 		}
@@ -420,20 +427,67 @@ func TestValidate_RequiresEveryRegisteredClaim(t *testing.T) {
 	mustReject("sub mismatch", func(c *Claims) { c.Subject = "someone-else" })
 	mustReject("missing iss", func(c *Claims) { c.Issuer = "" })
 	mustReject("missing aud", func(c *Claims) { c.Audience = nil })
+	mustReject("extra aud", func(c *Claims) {
+		c.Audience = jwt.ClaimStrings{AudienceWeb, "someone-else"}
+	})
 	mustReject("missing jti", func(c *Claims) { c.ID = "" })
 	mustReject("missing sid", func(c *Claims) { c.Sid = "" })
 	mustReject("missing typ", func(c *Claims) { c.Typ = "" })
 	mustReject("wrong typ", func(c *Claims) { c.Typ = TokenTypeDeviceSketchup })
 	mustReject("missing user_id", func(c *Claims) { c.UserID = "" })
 	mustReject("missing auth_started_at", func(c *Claims) { c.AuthStartedAt = nil })
+	mustReject("iat in the future", func(c *Claims) {
+		c.IssuedAt = jwt.NewNumericDate(time.Now().Add(5 * time.Minute))
+	})
 
-	// The unmodified claims set is the control: it must validate.
-	token, err := jwtNewSigned(fullVer5Claims(TokenTypeAccessWeb), secret)
+	// The unmodified claims set with the ver5 kid header is the control: it
+	// must validate.
+	token, err := signWithKID(fullVer5Claims(TokenTypeAccessWeb), secret, LegacyKeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := authority.Validate(token); err != nil {
 		t.Fatalf("complete ver5 claims must validate: %v", err)
+	}
+}
+
+// TestValidate_Ver5RequiresKidHeader locks the residual exact-policy rule: a
+// kidless token is only acceptable while it is ver4 (legacy window). A ver5
+// token without a kid — even correctly signed with the legacy key — and a
+// malformed (non-string or empty) kid are rejected for every version.
+func TestValidate_Ver5RequiresKidHeader(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
+
+	// Kidless ver5, correctly signed with the legacy secret: rejected.
+	kidless, err := jwtNewSigned(fullVer5Claims(TokenTypeAccessWeb), secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(kidless); err == nil {
+		t.Fatal("ver5 token without kid header must be rejected")
+	}
+
+	// Non-string kid header: rejected before key resolution.
+	malformed := jwt.NewWithClaims(jwt.SigningMethodHS256, fullVer5Claims(TokenTypeAccessWeb))
+	malformed.Header["kid"] = 12345
+	malformedSigned, err := malformed.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(malformedSigned); err == nil {
+		t.Fatal("non-string kid header must be rejected")
+	}
+
+	// Empty-string kid header: malformed, rejected.
+	empty := jwt.NewWithClaims(jwt.SigningMethodHS256, fullVer5Claims(TokenTypeAccessWeb))
+	empty.Header["kid"] = ""
+	emptySigned, err := empty.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(emptySigned); err == nil {
+		t.Fatal("empty kid header must be rejected")
 	}
 }
 

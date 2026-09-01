@@ -62,11 +62,15 @@ override `JWT_ISSUER`), `aud` per client type
 `device_sketchup`, `support_access`), `sid`, `jti`, `sub` (== `user_id`), `exp`,
 `nbf`, `iat`, `ver=5`, and a `kid` header resolving into a keyring
 (`JWT_KEYRING`; single-secret deployments register `JWT_SECRET` under kid
-`legacy`). Absence of any claim fails closed — a correctly signed token with
-stripped claims is not a credential, independent of what the minting helpers
-emit. Rotation is zero-downtime: new tokens use the active kid, validation
-accepts every registered kid, and removing a kid from the ring revokes its
-tokens immediately.
+`legacy`). The `kid` header itself is mandatory for ver5 — a kidless token is
+accepted only while it is ver4 — a malformed (non-string or empty) kid is
+rejected outright, `iat` is validated against the clock (future `iat` fails)
+in addition to being required, and `aud` must be exactly the single audience
+of the token's client type. Absence of any claim fails closed — a correctly
+signed token with stripped claims is not a credential, independent of what
+the minting helpers emit. Rotation is zero-downtime: new tokens use the
+active kid, validation accepts every registered kid, and removing a kid from
+the ring revokes its tokens immediately.
 
 ### 3. Credential classes never interchange
 
@@ -132,8 +136,9 @@ signed ver5 token whose claims the middleware revalidates.
 ## Verification
 
 `internal/auth/auth_test.go` (exact-algorithm policy; every registered claim
-required — exp/iat/nbf/sub==user_id/iss/aud/jti/sid/typ; keyring rotation;
-legacy window), `internal/api/session_registry_test.go`
+required — exp/iat/nbf/sub==user_id/iss/aud/jti/sid/typ — with iat
+clock-validated, exactly-one audience, and a ver5-mandatory kid header
+including kidless/malformed-kid negatives; keyring rotation; legacy window), `internal/api/session_registry_test.go`
 (revocation cuts an unexpired JWT, absolute expiry cut, fail-closed lookup,
 client-type confusion, current-scope invalidation of previous bearers across
 select-org A→B, failed-switch scope preservation with failure injection,

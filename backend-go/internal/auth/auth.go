@@ -446,12 +446,15 @@ func newJTI() string {
 // is never sent to clients verbatim: handlers log it and answer with a generic
 // 401 so parser/identity state is not disclosed.
 //
-// For ver5 every registered claim is REQUIRED and cross-checked: alg, kid,
-// iss, aud, sub (== user_id), exp, nbf, iat, jti, plus sid/typ/ver. Absence
-// of any claim fails closed — a correctly signed token with stripped or
-// tampered claims is not a valid credential regardless of how the minting
-// helpers behave. Ver4 keeps only its transitional coherence checks
-// (ADR-0007, EOL SEC-9).
+// For ver5 every registered claim is REQUIRED and cross-checked: alg, kid
+// (header present, a string, registered), iss, exactly one aud matching the
+// client type, sub (== user_id), exp, nbf, iat (presence AND not in the
+// future), jti, plus sid/typ/ver. Absence of any claim fails closed — a
+// correctly signed token with stripped or tampered claims is not a valid
+// credential regardless of how the minting helpers behave. The kidless
+// fallback exists ONLY for ver4 during its transitional window (ADR-0007,
+// EOL SEC-9): a ver5 token without a kid header is rejected even when it
+// happens to verify against the legacy key.
 func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Exact-algorithm policy: HS256 only. WithValidMethods below already
@@ -459,12 +462,19 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 		if token.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method")
 		}
-		kid, _ := token.Header["kid"].(string)
-		if kid == "" {
-			// Pre-#460 tokens carry no kid; they validate against the legacy
-			// secret entry only. A deployment that rotates to a keyring must
-			// register the old JWT_SECRET under kid "legacy" or those tokens
-			// fail closed.
+		// A kid header, when present, must be a non-empty string — a malformed
+		// key id is not a key selection we are willing to guess.
+		kid := ""
+		if kidRaw, present := token.Header["kid"]; present {
+			value, isString := kidRaw.(string)
+			if !isString || value == "" {
+				return nil, fmt.Errorf("malformed key id")
+			}
+			kid = value
+		} else {
+			// Kidless tokens are the pre-#460 shape: they resolve against the
+			// legacy secret entry only. Whether such a token is still ACCEPTED
+			// is decided after parsing, by version (ver4 window only).
 			kid = LegacyKeyID
 		}
 		secret, ok := a.keyring.SecretForKeyID(kid)
@@ -472,7 +482,7 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 			return nil, fmt.Errorf("unknown key id")
 		}
 		return []byte(secret), nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
@@ -490,6 +500,13 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 
 	switch claims.Ver {
 	case TokenVersion:
+		// The kid header is part of the ver5 credential shape: present, a
+		// non-empty string, and registered (the keyfunc already resolved it to
+		// verify the signature — this rejects the kidless token that only
+		// happened to sign with the legacy key).
+		if _, present := token.Header["kid"]; !present {
+			return nil, errors.New("token missing key id")
+		}
 		if claims.Sid == "" {
 			return nil, errors.New("token missing session id")
 		}
@@ -499,15 +516,18 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 		if claims.Issuer != a.issuer {
 			return nil, errors.New("token issuer mismatch")
 		}
-		if len(claims.Audience) == 0 || claims.Audience[0] != audienceForTransport(transport) {
+		// Exactly ONE audience, equal to the client type's audience: minting
+		// emits a single-entry aud, so anything wider is a tampered token.
+		if len(claims.Audience) != 1 || claims.Audience[0] != audienceForTransport(transport) {
 			return nil, errors.New("token audience mismatch")
 		}
 		if claims.ID == "" {
 			return nil, errors.New("token missing jti")
 		}
-		// Registered timestamps are mandatory: exp/nbf freshness is enforced by
-		// the parser validators above, but their ABSENCE (and iat's) must fail
-		// closed instead of being silently optional.
+		// Registered timestamps are mandatory: exp/nbf/iat freshness is
+		// enforced by the parser validators above (WithExpirationRequired and
+		// WithIssuedAt reject a missing exp and a future iat), but their
+		// ABSENCE must fail closed instead of being silently optional.
 		if claims.IssuedAt == nil {
 			return nil, errors.New("token missing iat")
 		}
@@ -522,8 +542,8 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 		}
 	case LegacyTokenVersion:
 		// Transitional acceptance (removed with #460 SEC-9): ver4 tokens carry
-		// no sid/typ/iss/aud/jti. They still pass the coherence checks below
-		// and the middleware's live membership/org revalidation.
+		// no sid/typ/iss/aud/jti and no kid. They still pass the coherence
+		// checks below and the middleware's live membership/org revalidation.
 	default:
 		return nil, fmt.Errorf("unsupported token version")
 	}
