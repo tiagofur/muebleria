@@ -78,9 +78,9 @@ class MediaAuthorizerTest < Minitest::Test
 
   def test_media_payload_maps_filenames_to_absolute_signed_urls
     transport = FakeTransport.new([grant_response(FILE_A)])
-    payload = authorizer(transport).media_payload_for('definitions' => [
-      { 'imageUrl' => "/api/media/#{FILE_A}" }
-    ])
+    payload = authorizer(transport).media_payload_for(
+      'definitions' => [{ 'imageUrl' => "/api/media/#{FILE_A}" }]
+    )
 
     assert_equal(
       { 'baseUrl' => 'http://taller.local:8080',
@@ -93,7 +93,9 @@ class MediaAuthorizerTest < Minitest::Test
   def test_batches_more_than_one_hundred_files
     files = (1..101).map { |i| "#{format('%032x', i)[-32..]}.png" }
     transport = FakeTransport.new([grant_response(*files.first(100)), grant_response(files.last)])
-    payload = authorizer(transport).media_payload_for('definitions' => files.map { |f| { 'imageUrl' => "/api/media/#{f}" } })
+    payload = authorizer(transport).media_payload_for(
+      'definitions' => files.map { |f| { 'imageUrl' => "/api/media/#{f}" } }
+    )
 
     assert_equal 2, transport.requests.length
     assert_equal 100, transport.requests.first['payload']['body']['resources'].length
@@ -102,9 +104,9 @@ class MediaAuthorizerTest < Minitest::Test
 
   def test_returns_nil_when_nothing_could_be_authorized
     transport = FakeTransport.new([{ 'status' => 401, 'body' => {} }])
-    assert_nil authorizer(transport).media_payload_for('definitions' => [
-      { 'imageUrl' => "/api/media/#{FILE_A}" }
-    ])
+    assert_nil authorizer(transport).media_payload_for(
+      'definitions' => [{ 'imageUrl' => "/api/media/#{FILE_A}" }]
+    )
   end
 
   def test_returns_nil_without_media_references_or_configuration

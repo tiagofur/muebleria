@@ -104,9 +104,12 @@ test.describe('F199 mocked browser switch gates', () => {
 
     await page.getByRole('link', { name: 'Muebles' }).click();
     await expect(page.getByTestId('module-card-module-b')).toBeVisible();
+    // #460 SEC-3: media renders through a signed grant URL scoped to B —
+    // never a session JWT in the URL.
     const media = page.getByRole('img', { name: 'Mueble B' });
-    await expect(media).toHaveAttribute('src', /token=browser-token-b/);
+    await expect(media).toHaveAttribute('src', /grant=mock-grant-b/);
     expect(await media.getAttribute('src')).not.toContain(TOKEN_A);
+    expect(await media.getAttribute('src')).not.toContain('token=');
     const firstB = api.requests.findIndex((request) => request.authorization === `Bearer ${TOKEN_B}`);
     expect(firstB).toBeGreaterThanOrEqual(0);
     expect(api.requests.slice(firstB).some((request) => request.authorization === `Bearer ${TOKEN_A}`)).toBe(false);

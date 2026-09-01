@@ -90,7 +90,7 @@ module Granete
         end
 
         def handle_refresh_media_url(dialog, filename)
-          refresh = @media_refresher ? @media_refresher.call(filename.to_s) : nil
+          refresh = @media_refresher&.call(filename.to_s)
           return if refresh.nil?
 
           execute_bridge(dialog, 'updateMediaUrl', refresh)

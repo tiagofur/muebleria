@@ -480,8 +480,9 @@ class DialogControllerTest < Minitest::Test
     catalog_script = dialog.executed_scripts.find { |s| s.include?('setCatalog') }
     refute_nil catalog_script
     assert_includes catalog_script, '"media":{"baseUrl":"http://taller.local:8080"'
-    assert_includes catalog_script, '"urls":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png":' \
-                                   '"http://taller.local:8080/api/media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png?grant=signed-aaaaaa"'
+    signed_url = '"http://taller.local:8080/api/media/' \
+                 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png?grant=signed-aaaaaa"'
+    assert_includes catalog_script, '"urls":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png":' + signed_url
     # The session credential must NOT cross into the webview.
     refute_includes catalog_script, '"token"'
     refute_includes catalog_script, 'media-token-123'

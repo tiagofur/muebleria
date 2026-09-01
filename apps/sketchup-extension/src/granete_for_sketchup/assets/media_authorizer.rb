@@ -15,8 +15,8 @@ module Granete
       # perform GET; it is not a session credential and cannot reach business
       # APIs. Expired grants simply re-authorize through the same flow.
       class MediaAuthorizer
-        MEDIA_PATH = %r{/api/media/([0-9a-f]{32}\.(?:jpg|png|webp))}.freeze
-        MEDIA_FILENAME = /\A([0-9a-f]{32}\.(?:jpg|png|webp))\z/.freeze
+        MEDIA_PATH = %r{/api/media/([0-9a-f]{32}\.(?:jpg|png|webp))}
+        MEDIA_FILENAME = /\A([0-9a-f]{32}\.(?:jpg|png|webp))\z/
         BATCH_SIZE = 100
 
         # @param transport [Transport::Adapter] configured API transport
@@ -82,7 +82,8 @@ module Granete
         def authorize_urls(filenames)
           return {} unless configured?
 
-          filenames.each_slice(BATCH_SIZE).each_with_object({}) do |batch, acc|
+          urls = {}
+          filenames.each_slice(BATCH_SIZE) do |batch|
             response = @transport.request(
               { 'method' => 'POST', 'path' => '/media:authorize',
                 'body' => { 'resources' => batch } },
@@ -94,9 +95,10 @@ module Granete
             Array(body['grants']).each do |grant|
               next unless grant.is_a?(Hash) && grant['filename'] && grant['url']
 
-              acc[grant['filename']] = "#{media_origin}#{grant['url']}"
+              urls[grant['filename']] = "#{media_origin}#{grant['url']}"
             end
           end
+          urls
         rescue Auth::NotConfiguredError, Transport::RequestError, Transport::NotConfiguredError => e
           @logger&.error('media_authorize_failed', error: e)
           {}
