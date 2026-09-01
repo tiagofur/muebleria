@@ -2117,7 +2117,12 @@
         // the refresh_media_url callback and return "" so callers render the
         // placeholder meanwhile.
         var mediaFilenameRe = /\/api\/media\/([0-9a-f]{32}\.(?:jpg|png|webp))/;
+        // Filename → timestamp of the last refresh request. A failed mint
+        // (offline, expired session) would otherwise leave the flag stuck and
+        // the image dead until the dialog reopens; the retry window lets the
+        // next render/error retry without hammering Ruby.
         var pendingMediaRefresh = {};
+        var MEDIA_REFRESH_RETRY_MS = 5000;
 
         function mediaFilenameFromPath(url) {
           var m = mediaFilenameRe.exec(String(url || ""));
@@ -2131,8 +2136,10 @@
         }
 
         function requestMediaRefresh(filename) {
-          if (!filename || pendingMediaRefresh[filename]) return;
-          pendingMediaRefresh[filename] = true;
+          if (!filename) return;
+          var last = pendingMediaRefresh[filename];
+          if (last && Date.now() - last < MEDIA_REFRESH_RETRY_MS) return;
+          pendingMediaRefresh[filename] = Date.now();
           try {
             sketchup.refresh_media_url(filename);
           } catch (e) {

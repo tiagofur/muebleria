@@ -616,12 +616,17 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		"transport": transport, "session_id": session.ID,
 	})
 
+	roles := tc.Roles
+	if roles == nil {
+		roles = []string{}
+	}
+
 	response := LoginResponse{
 		Token:             token,
 		SessionID:         &session.ID,
 		User:              toOpenAPIUser(u),
 		License:           license,
-		Roles:             tc.Roles,
+		Roles:             roles,
 		Organization:      orgDTO,
 		Memberships:       toMembershipDTOs(memberships),
 		SelectionRequired: false,

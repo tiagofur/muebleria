@@ -871,7 +871,10 @@
     // authentication anymore. Missing/expired grants ask Ruby to re-authorize
     // (refresh_media_url) and render nothing until the URL arrives.
     const mediaFilenameRe = /\/api\/media\/([0-9a-f]{32}\.(?:jpg|png|webp))/;
+    // Filename → timestamp of the last refresh request; a failed mint must
+    // not pin the flag forever (retry window instead of a permanent skip).
     const pendingMediaRefresh = {};
+    const MEDIA_REFRESH_RETRY_MS = 5000;
 
     function mediaFilenameFromPath(url) {
       const m = mediaFilenameRe.exec(String(url || ''));
@@ -885,8 +888,10 @@
     }
 
     function requestMediaRefresh(filename) {
-      if (!filename || pendingMediaRefresh[filename]) return;
-      pendingMediaRefresh[filename] = true;
+      if (!filename) return;
+      const last = pendingMediaRefresh[filename];
+      if (last && Date.now() - last < MEDIA_REFRESH_RETRY_MS) return;
+      pendingMediaRefresh[filename] = Date.now();
       try {
         sketchup.refresh_media_url(filename);
       } catch (e) {

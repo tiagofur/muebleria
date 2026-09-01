@@ -242,4 +242,69 @@ describe('mediaAuthorization — resolveAuthorizedMediaUrl', () => {
     await authorizedMediaIdle();
     expect(resolveAuthorizedMediaUrl(`/api/media/${FILE_A}`, ctx)).toBeUndefined();
   });
+
+  // The server rejects >100 resources per request (#460 review): a large
+  // catalog page must split into ≤100-file chunks instead of failing whole.
+  it('chunks 101 requested files into two authorize requests (100 + 1)', async () => {
+    const files = Array.from({ length: 101 }, (_, i) => `${`${i}`.padStart(32, '0')}.png`);
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const resources = JSON.parse(String(init?.body)) as { resources: string[] };
+      return jsonOk(grantResponse(...resources.resources));
+    });
+    const ctx = makeContext(fetchImpl);
+
+    for (const file of files) resolveAuthorizedMediaUrl(`/api/media/${file}`, ctx);
+    await vi.advanceTimersByTimeAsync(20);
+    await authorizedMediaIdle();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const firstResources = JSON.parse(
+      (fetchImpl.mock.calls[0]![1] as RequestInit).body as string,
+    ) as { resources: string[] };
+    const secondResources = JSON.parse(
+      (fetchImpl.mock.calls[1]![1] as RequestInit).body as string,
+    ) as { resources: string[] };
+    expect(firstResources.resources).toHaveLength(100);
+    expect(secondResources.resources).toHaveLength(1);
+    for (const file of files) {
+      expect(resolveAuthorizedMediaUrl(`/api/media/${file}`, ctx)).toContain('grant=');
+    }
+  });
+
+  // Review blocker: a token switch inside the 15 ms batching window must
+  // abandon the previous scope — tenant B's files are never sent under
+  // tenant A's Authorization, and A's files are not smuggled into B's batch.
+  it('abandons the previous tenant’s pending batch on token switch', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const resources = JSON.parse(String(init?.body)) as { resources: string[] };
+      return jsonOk(grantResponse(...resources.resources));
+    });
+    const ctx = makeContext(fetchImpl, 'org-a-token');
+
+    resolveAuthorizedMediaUrl(`/api/media/${FILE_A}`, ctx);
+    // Switch BEFORE the flush fires: B's render enters the same window.
+    (ctx as unknown as { setToken: (t: string) => void }).setToken('org-b-token');
+    resolveAuthorizedMediaUrl(`/api/media/${FILE_B}`, ctx);
+    await vi.advanceTimersByTimeAsync(20);
+    await authorizedMediaIdle();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('http://test/api/media:authorize');
+    expect((init as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer org-b-token',
+    });
+    const sent = JSON.parse((init as RequestInit).body as string) as { resources: string[] };
+    expect(sent.resources).toEqual([FILE_B]);
+
+    // B's file resolves; A's stays pending for its own scope (next render).
+    expect(resolveAuthorizedMediaUrl(`/api/media/${FILE_B}`, ctx)).toContain('grant=');
+    expect(resolveAuthorizedMediaUrl(`/api/media/${FILE_A}`, ctx)).toBeUndefined();
+  });
 });

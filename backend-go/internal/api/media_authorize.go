@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
@@ -109,6 +110,12 @@ func mediaGrantAbsoluteCap(claims *auth.Claims) time.Time {
 	return claims.AuthStartedAt.Add(auth.TransportSessionTTL(claims.Transport))
 }
 
+// mediaGrantRemainingKey carries the signed grant's remaining lifetime into
+// the handler so its Cache-Control max-age never outlives the credential
+// that authorized the response (#460 review: a 3-minute grant must not pin a
+// "fresh" response for 24 hours).
+type mediaGrantRemainingKey struct{}
+
 // mediaGetAuth authenticates GET /api/media/{name} under exactly one of two
 // credential classes, with explicit precedence (#460 SEC-3):
 //
@@ -161,6 +168,7 @@ func (s *Server) mediaGetAuth(next http.Handler) http.Handler {
 			return
 		}
 		ctx := storage.WithOrgCtx(r.Context(), claims.OrgID)
+		ctx = context.WithValue(ctx, mediaGrantRemainingKey{}, time.Until(claims.ExpiresAt.Time))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

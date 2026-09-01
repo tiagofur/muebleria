@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -139,11 +140,30 @@ func TestMediaAuthorizeHappyPath(t *testing.T) {
 
 	// Cache semantics: private (never shared), vary on Authorization because
 	// the same URL also answers session-header requests per organization.
+	// Review fix: a grant-authorized read never claims freshness beyond the
+	// signed grant's remaining lifetime (≤ MediaGrantTTL).
 	if cc := rr.Header().Get("Cache-Control"); !strings.HasPrefix(cc, "private") {
 		t.Fatalf("media Cache-Control = %q, want private", cc)
 	}
+	grantMaxAge := cacheControlMaxAge(t, rr.Header().Get("Cache-Control"))
+	if grantMaxAge < 1 || grantMaxAge > int(auth.MediaGrantTTL.Seconds()) {
+		t.Fatalf("grant GET max-age=%d, want within (0, %d]", grantMaxAge, int(auth.MediaGrantTTL.Seconds()))
+	}
 	if vary := strings.Join(rr.Header().Values("Vary"), ","); !strings.Contains(vary, "Authorization") {
 		t.Fatalf("media Vary = %q, want Authorization", vary)
+	}
+
+	// The session-header read keeps the longer private cache: its freshness
+	// boundary is the live session, not a 3-minute credential.
+	headerGet := httptest.NewRequest(http.MethodGet, "/api/media/"+mediaTestFileA, nil)
+	headerGet.Header.Set("Authorization", "Bearer "+env.token)
+	headerRR := httptest.NewRecorder()
+	env.router.ServeHTTP(headerRR, headerGet)
+	if headerRR.Code != http.StatusOK {
+		t.Fatalf("session-header GET status %d", headerRR.Code)
+	}
+	if got := cacheControlMaxAge(t, headerRR.Header().Get("Cache-Control")); got != 86400 {
+		t.Fatalf("session-header GET max-age=%d, want 86400", got)
 	}
 
 	// The authorize endpoint itself is never cached (it returns credentials).
@@ -163,6 +183,22 @@ func mustBody(t *testing.T, env *mediaAuthEnv, file string) string {
 	rr := httptest.NewRecorder()
 	env.router.ServeHTTP(rr, req)
 	return rr.Body.String()
+}
+
+func cacheControlMaxAge(t *testing.T, cacheControl string) int {
+	t.Helper()
+	for _, part := range strings.Split(cacheControl, ",") {
+		part = strings.TrimSpace(part)
+		if value, ok := strings.CutPrefix(part, "max-age="); ok {
+			seconds, err := strconv.Atoi(value)
+			if err != nil {
+				t.Fatalf("malformed max-age in %q", cacheControl)
+			}
+			return seconds
+		}
+	}
+	t.Fatalf("no max-age in Cache-Control %q", cacheControl)
+	return 0
 }
 
 func TestMediaAuthorizeExactResourceBinding(t *testing.T) {

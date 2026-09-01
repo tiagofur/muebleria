@@ -12,10 +12,13 @@
  *
  * Security rules (#460):
  * - grants live in memory only — never persisted, never in localStorage;
- * - the cache is scoped to the auth token that minted the grants, so an
- *   organization/session switch can never reuse another tenant's URLs;
+ * - the cache AND the batching state are scoped to the auth token + origin,
+ *   so an organization/session switch can never reuse another tenant's URLs
+ *   nor send another tenant's resource ids under the previous token;
  * - late authorize responses are dropped when the token changed meanwhile;
- * - requests are batched and deduplicated (no per-image request storm);
+ * - requests are batched (≤100 files, the server's per-request bound),
+ *   deduplicated and chunked (no per-image request storm, no oversized
+ *   batch that the server would reject);
  * - entries refresh just before expiry and are simply re-requested after it.
  */
 
@@ -31,32 +34,51 @@ interface MediaCacheEntry {
   readonly token: string;
 }
 
+/**
+ * Everything pending belongs to exactly one session scope: the token plus the
+ * API origin that scheduled it. A token switch abandons the previous scope
+ * (timer cancelled, queue discarded) instead of flushing it under the wrong
+ * Authorization — the race where tenant B's files rode tenant A's batching
+ * window cannot happen.
+ */
+interface MediaScope {
+  readonly token: string;
+  readonly baseUrl: string;
+  queuedFiles: Set<string>;
+  inflightFiles: Set<string>;
+  flushTimer: ReturnType<typeof setTimeout> | null;
+}
+
 // Canonical catalog media path (server-generated upload names).
 const MEDIA_PATH_RE = /^\/api\/media\/([0-9a-f]{32}\.(?:jpg|png|webp))$/;
 // Refresh a grant before it expires so a render never races the TTL.
 const REFRESH_MARGIN_MS = 30_000;
-// Window that coalesces one render's images into a single authorize batch.
+// Window that coalesces one render's images into authorize batches.
 const BATCH_FLUSH_MS = 15;
+// Server bound: POST /media:authorize accepts at most 100 resources.
+const MAX_AUTHORIZE_BATCH = 100;
 
 const cache = new Map<string, MediaCacheEntry>();
-const queuedFiles = new Set<string>();
 const inflightBatches = new Set<Promise<void>>();
-let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<() => void>();
+let activeScope: MediaScope | null = null;
 
 export function subscribeToAuthorizedMedia(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-/** Drops every cached grant (logout, tests). In-memory only by design. */
+/** Drops every cached grant and abandons any pending batch (logout, tests). */
 export function invalidateAuthorizedMedia(): void {
   cache.clear();
-  queuedFiles.clear();
-  if (flushTimer !== null) {
-    clearTimeout(flushTimer);
-    flushTimer = null;
+  abandonActiveScope();
+}
+
+function abandonActiveScope(): void {
+  if (activeScope !== null && activeScope.flushTimer !== null) {
+    clearTimeout(activeScope.flushTimer);
   }
+  activeScope = null;
 }
 
 function mediaOrigin(baseUrl: string): string {
@@ -93,7 +115,7 @@ export function resolveAuthorizedMediaUrl(
   const entry = cache.get(filename);
   if (entry && entry.token !== token) {
     // Session/tenant switched: previous grants are dead weight, never reused.
-    invalidateAuthorizedMedia();
+    cache.clear();
   } else if (entry) {
     const remaining = entry.expiresAtMs - Date.now();
     if (remaining > REFRESH_MARGIN_MS) return entry.url;
@@ -110,72 +132,112 @@ function scheduleAuthorize(
   ctx: MediaAuthorizationContext,
   token: string,
 ): void {
-  queuedFiles.add(filename);
-  if (flushTimer === null) {
-    flushTimer = setTimeout(() => {
-      flushTimer = null;
-      void flushQueue(ctx, token);
+  const scope = scopeFor(ctx, token);
+  if (scope.inflightFiles.has(filename) || scope.queuedFiles.has(filename)) return;
+  scope.queuedFiles.add(filename);
+  if (scope.flushTimer === null) {
+    scope.flushTimer = setTimeout(() => {
+      scope.flushTimer = null;
+      flushScope(scope, ctx);
     }, BATCH_FLUSH_MS);
   }
 }
 
-async function flushQueue(ctx: MediaAuthorizationContext, token: string): Promise<void> {
-  const resources = [...queuedFiles];
-  queuedFiles.clear();
+// The batching scope belongs to one token+origin. Resolving under a different
+// session abandons the previous scope entirely — its queue is never flushed
+// with the new (or the old) token, which is what makes the batching window
+// tenant-safe.
+function scopeFor(ctx: MediaAuthorizationContext, token: string): MediaScope {
+  if (activeScope !== null && activeScope.token === token && activeScope.baseUrl === ctx.baseUrl) {
+    return activeScope;
+  }
+  abandonActiveScope();
+  activeScope = {
+    token,
+    baseUrl: ctx.baseUrl,
+    queuedFiles: new Set(),
+    inflightFiles: new Set(),
+    flushTimer: null,
+  };
+  return activeScope;
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
+function flushScope(scope: MediaScope, ctx: MediaAuthorizationContext): void {
+  const resources = [...scope.queuedFiles];
+  scope.queuedFiles.clear();
   if (resources.length === 0) return;
 
-  const run = (async () => {
-    const fetchImpl = ctx.fetchImpl ?? globalThis.fetch;
-    try {
-      const res = await fetchImpl(`${ctx.baseUrl}/media:authorize`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ resources }),
-      });
-      if (!res.ok) return; // placeholders stay; next render retries
-      const data = (await res.json()) as {
-        readonly grants?: ReadonlyArray<{
-          readonly filename: string;
-          readonly url: string;
-          readonly expiresAt: string;
-        }>;
-      };
-      // Late-response rule: a token change (logout/org switch) means the
-      // response belongs to another session scope and must not be applied.
-      if (ctx.getAuthToken() !== token) return;
-      const origin = mediaOrigin(ctx.baseUrl);
-      let applied = false;
-      for (const grant of data.grants ?? []) {
-        const expiresAtMs = Date.parse(grant.expiresAt);
-        if (!Number.isFinite(expiresAtMs)) continue;
-        cache.set(grant.filename, {
-          url: `${origin}${grant.url}`,
-          expiresAtMs,
-          token,
-        });
-        applied = true;
-      }
-      if (applied) notifyResolved();
-    } catch {
-      // network failure: consumers keep placeholders; retried on next render
-    }
-  })();
-  inflightBatches.add(run);
+  // The server rejects >100 resources per request: split into chunks so a
+  // large catalog page authorizes completely instead of failing as a whole.
+  for (const batch of chunk(resources, MAX_AUTHORIZE_BATCH)) {
+    const run = requestGrants(scope, ctx, batch);
+    inflightBatches.add(run);
+    void run.finally(() => {
+      inflightBatches.delete(run);
+    });
+  }
+}
+
+async function requestGrants(
+  scope: MediaScope,
+  ctx: MediaAuthorizationContext,
+  resources: readonly string[],
+): Promise<void> {
+  for (const filename of resources) scope.inflightFiles.add(filename);
+  const fetchImpl = ctx.fetchImpl ?? globalThis.fetch;
   try {
-    await run;
+    const res = await fetchImpl(`${ctx.baseUrl}/media:authorize`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${scope.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ resources }),
+    });
+    if (!res.ok) return; // placeholders stay; next render retries
+    const data = (await res.json()) as {
+      readonly grants?: ReadonlyArray<{
+        readonly filename: string;
+        readonly url: string;
+        readonly expiresAt: string;
+      }>;
+    };
+    // Late-response rule: a token change (logout/org switch) means the
+    // response belongs to another session scope and must not be applied.
+    if (ctx.getAuthToken() !== scope.token) return;
+    const origin = mediaOrigin(ctx.baseUrl);
+    let applied = false;
+    for (const grant of data.grants ?? []) {
+      const expiresAtMs = Date.parse(grant.expiresAt);
+      if (!Number.isFinite(expiresAtMs)) continue;
+      cache.set(grant.filename, {
+        url: `${origin}${grant.url}`,
+        expiresAtMs,
+        token: scope.token,
+      });
+      applied = true;
+    }
+    if (applied) notifyResolved();
+  } catch {
+    // network failure: consumers keep placeholders; retried on next render
   } finally {
-    inflightBatches.delete(run);
+    for (const filename of resources) scope.inflightFiles.delete(filename);
   }
 }
 
 /** Test/verification hook: resolves when every in-flight batch settles. */
 export async function authorizedMediaIdle(): Promise<void> {
-  while (inflightBatches.size > 0 || flushTimer !== null) {
+  while (inflightBatches.size > 0 || (activeScope !== null && activeScope.flushTimer !== null)) {
     const pending = [...inflightBatches];
-    if (flushTimer !== null) {
+    if (activeScope !== null && activeScope.flushTimer !== null) {
       await new Promise((resolve) => setTimeout(resolve, BATCH_FLUSH_MS + 5));
     }
     await Promise.all(pending);

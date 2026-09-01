@@ -60,6 +60,26 @@
   `go test ./...`, `git diff --check`) se ejecutan en la validación final del
   slice.
 
+## Review externa (Review ID 5080000775 — CHANGES REQUIRED) y correcciones
+
+Tres blockers corregidos en el parche post-review:
+
+1. **Chunking ≤100**: `flushQueue` parte la cola en batches de ≤100 (límite
+   del servidor); prueba 101 archivos → exactamente 2 requests (100+1).
+2. **Carrera en la ventana de batching**: la cola/timer ahora viven en un
+   scope por (token + baseUrl); un cambio de token abandona el scope previo
+   (timer cancelado, cola descartada) en vez de flusearla con el
+   Authorization de otro tenant. Prueba: A encola → switch a B → el único
+   request lleva sólo el archivo de B con el token de B.
+3. **Cache alineada al TTL del credential**: `GET /media/{name}` vía grant
+   responde `Cache-Control: private, max-age=<TTL restante del grant>` (≤180s);
+   la lectura con header de sesión conserva `max-age=86400`. Pruebas de ambos
+   valores.
+
+Recomendación no bloqueante también aplicada: `pendingMediaRefresh` en los
+webviews de SketchUp usa timestamp + ventana de reintento (5s) para que un
+mint fallido no deje la imagen marcada para siempre.
+
 ## Estado de entrega
 
 SEC-3 queda `SEC-3 implemented pending review`. F202 sigue `in_progress`,

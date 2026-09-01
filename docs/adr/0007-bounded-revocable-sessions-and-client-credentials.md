@@ -198,9 +198,13 @@ Grants live 3 minutes and never exceed the minting session's absolute expiry
 can stop minting immediately while outstanding URLs decay within minutes at
 most — the deliberate trade-off of a stateless signed read grant; the
 observable signal without any stored secret is the authorize request itself.
-Media responses stay `Cache-Control: private` (+`Vary: Authorization`) and the
-authorize endpoint is `no-store`; a signed URL never turns a private file into
-a public one. Grants are signed with the mandatory `MEDIA_SIGNING_KEY`
+Media responses stay `Cache-Control: private` (+`Vary: Authorization`) and
+the authorize endpoint is `no-store`; a signed URL never turns a private file
+into a public one, and the browser's freshness boundary never outlives the
+credential: a grant-authorized read caps `max-age` at the signed grant's
+remaining lifetime (≤ the 3-minute TTL) while session-header reads keep the
+day-long private cache whose validity the live session re-establishes per
+request. Grants are signed with the mandatory `MEDIA_SIGNING_KEY`
 (≥ 32 bytes; boot fails closed), which shares no primitive with
 `JWT_SECRET`/`JWT_KEYRING`/`REFRESH_TOKEN_PEPPER` — credential-class confusion
 is rejected at the signature level on top of disjoint `iss`/`aud`/`typ`/`ver`.
