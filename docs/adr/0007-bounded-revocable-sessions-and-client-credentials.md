@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A implemented pending review; SEC-4B..SEC-9 in progress)
+- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B implemented pending review; SEC-5..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -277,6 +277,57 @@ access-token TTL, which activates only when React can refresh automatically.
 Server reuse detection stays STRICT: two tabs refreshing the same cookie
 concurrently look like replay and revoke the family, so cross-tab
 serialization is a hard SEC-4B prerequisite, never a server-side relaxation.
+
+### 10. Web access credential lives only in tab memory (SEC-4B)
+
+The Web cutover completes the SEC-4 transport split: a SHORT access bearer in
+process/tab memory plus the SEC-4A HttpOnly rotating cookie as the only
+persistent session. `granete_token` (and the legacy `muebles_token`/`granete_user`/
+`muebles_user`) stop being an authority at boot: the migration destroys them
+(`DELETE, NEVER SEND`) — never migrates — and a Web session without a valid
+refresh cookie requires an explicit re-login by design.
+
+**Short rolling web access.** `WebAccessTokenTTL = 15m`, computed from the MINT
+instant (`min(now+15m, auth_sessions.absolute_expires_at)`), never from the
+session origin — origin-derived arithmetic would mint already-expired tokens
+after minute 15. The absolute bound is structural: every web mint path (login,
+org-less login, select-org, invitation accept, cookie refresh) goes through
+`IssueTransportTokenUntil`, and an unbounded web mint is a rejected
+programming error. Mobile keeps `MobileAccessTokenTTL = 18h` untouched until
+SEC-5; both absolute sessions stay T0+18h (`WebSessionAbsoluteTTL` /
+`MobileSessionAbsoluteTTL`), and refresh can never slide them — at the
+deadline the client purges and shows login.
+
+**Client architecture.** One canonical in-memory authority
+(`webAuthRuntime`: web | support | anonymous, monotonic generation for
+late-response guards) feeds a single authenticated fetch boundary
+(`webAuthClient`): Authorization only for the exact API origin+base (external
+URLs never receive the bearer), 401 → coordinated refresh → retry exactly
+ONCE only when session id AND organization scope are unchanged — an org
+switch or session replacement mid-request aborts the operation as a session
+transition instead of replaying it under another tenant. Scheduling uses the
+server-clock `access_expires_at` (refresh ≈2 min before expiry) plus
+visibility/focus/online wake-ups; no fixed intervals, no refresh storms.
+
+**Cross-tab serialization.** Every cookie rotation, logout and select-org runs
+under one exclusive cross-tab mutation lock — `navigator.locks` when
+available, otherwise a non-secret localStorage lease (random tab id + expiry,
+verify-after-write, expired-takeover; never tokens or user data). Broadcasts
+carry only `{ type }` signals (`session-replaced`, `session-ended`,
+`scope-changed`); tabs resolve their own state from the cookie via bootstrap,
+never from a broadcast token. A normal refresh reloads nothing. Support stays
+a distinct tab-local memory credential: entry/exit never touches the Web
+cookie, a support 401 is never retried under another credential class, and
+exit recovers the platform session through cookie bootstrap.
+
+**Failure honesty.** Refresh 5xx/network errors keep the local session (the
+cookie survived server-side) with bounded retries; only terminal states
+(`REFRESH_INVALID/EXPIRED/REVOKED/REUSED`) end it, each surfaced with its own
+UX (expired / revoked / security). CSRF 403 fails closed with an explicit
+configuration error. A failed server logout never claims success: the tab
+purges immediately (data protection) but exposes a retry affordance and
+suppresses cookie bootstrap until the server confirms, so the user's logout
+intent cannot be silently undone.
 
 ## Alternatives considered
 

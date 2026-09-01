@@ -256,24 +256,40 @@ function claimedProductionActivityFromApi(raw: Record<string, unknown>): {
 
 export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly baseUrl: string;
+  private readonly injectedFetch?: typeof fetch;
+  private readonly getAccessToken?: () => string | null;
 
-  constructor(baseUrl: string = 'http://localhost:8080/api') {
+  /**
+   * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
+   * token llega por dependencia (memoria del caller — webAuthRuntime en la
+   * Web) y todo fetch pasa por este boundary, que el caller puede inyectar
+   * para sumar refresh/retry (authenticatedApiFetch). Sin token disponible
+   * no se envía Authorization alguna.
+   */
+  constructor(
+    baseUrl: string = 'http://localhost:8080/api',
+    deps: {
+      readonly getAccessToken?: () => string | null;
+      readonly fetchImpl?: typeof fetch;
+    } = {},
+  ) {
     this.baseUrl = baseUrl;
+    this.getAccessToken = deps.getAccessToken;
+    this.injectedFetch = deps.fetchImpl;
+  }
+
+  private fetch(input: string | URL, init?: RequestInit): Promise<Response> {
+    const doFetch = this.injectedFetch ?? globalThis.fetch;
+    return doFetch(input, init);
   }
 
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
-      try {
-        const token = globalThis.localStorage.getItem('granete_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-      } catch {
-        // Ignorar si localStorage está deshabilitado
-      }
+    const token = this.getAccessToken?.();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     return headers;
   }
@@ -308,7 +324,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async getWorkshopSettings(): Promise<WorkshopSettings> {
     const headers = this.getHeaders();
     try {
-      const res = await fetch(`${this.baseUrl}/settings`, { headers });
+      const res = await this.fetch(`${this.baseUrl}/settings`, { headers });
       if (!res.ok) {
         return { ...DEFAULT_WORKSHOP_SETTINGS };
       }
@@ -320,7 +336,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   async saveWorkshopSettings(settings: WorkshopSettings): Promise<void> {
     const headers = this.getHeaders();
-    const res = await fetch(`${this.baseUrl}/settings`, {
+    const res = await this.fetch(`${this.baseUrl}/settings`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(workshopSettingsToApi(settings)),
@@ -335,7 +351,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async getCatalog(): Promise<Catalog> {
     const headers = this.getHeaders();
     const fetchJson = async (path: string): Promise<unknown> => {
-      const res = await fetch(`${this.baseUrl}${path}`, { headers });
+      const res = await this.fetch(`${this.baseUrl}${path}`, { headers });
       if (!res.ok) {
         throw new Error(`Failed to load ${path}: ${res.status} ${res.statusText}`);
       }
@@ -410,7 +426,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   ): Promise<void> {
     let res: Response | null = null;
     try {
-      res = await fetch(`${this.baseUrl}${pathById}`, {
+      res = await this.fetch(`${this.baseUrl}${pathById}`, {
         method: 'PUT',
         headers: this.getHeaders(),
         body: JSON.stringify(body),
@@ -445,7 +461,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
 
     try {
-      const created = await fetch(`${this.baseUrl}${pathCollection}`, {
+      const created = await this.fetch(`${this.baseUrl}${pathCollection}`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(body),
@@ -590,7 +606,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getProjects(): Promise<readonly Project[]> {
-    const res = await fetch(`${this.baseUrl}/projects`, {
+    const res = await this.fetch(`${this.baseUrl}/projects`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -606,7 +622,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
    * brand-new ids (noisy console) and is the correct verb for first insert.
    */
   async createProject(project: Project): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/projects`, {
+    const res = await this.fetch(`${this.baseUrl}/projects`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(projectToApi(project)),
@@ -627,7 +643,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deleteProject(projectId: string): Promise<void> {
-    await fetch(`${this.baseUrl}/projects/${projectId}`, {
+    await this.fetch(`${this.baseUrl}/projects/${projectId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -636,7 +652,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // --- Project templates (#110 / H15) ---
 
   async getProjectTemplates(): Promise<readonly ProjectTemplate[]> {
-    const res = await fetch(`${this.baseUrl}/project-templates`, {
+    const res = await this.fetch(`${this.baseUrl}/project-templates`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -651,7 +667,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async createProjectTemplate(template: ProjectTemplate): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/project-templates`, {
+    const res = await this.fetch(`${this.baseUrl}/project-templates`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(projectTemplateToApi(template)),
@@ -674,7 +690,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deleteProjectTemplate(templateId: string): Promise<void> {
-    await fetch(`${this.baseUrl}/project-templates/${templateId}`, {
+    await this.fetch(`${this.baseUrl}/project-templates/${templateId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -683,7 +699,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // --- Project gallery photos (CRM Phase 1) ---
 
   async getProjectPhotos(projectId: string): Promise<readonly ProjectPhoto[]> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/photos`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -706,17 +722,13 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (data?.caption) formData.append('caption', data.caption);
     if (data?.isShowcase !== undefined) formData.append('is_showcase', String(data.isShowcase));
 
+    // FormData sets its own multipart boundary; auth comes from the same
+    // memory-only dependency as every other request (SEC-4B: never storage).
     const headers: Record<string, string> = {};
-    if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
-      try {
-        const token = globalThis.localStorage.getItem('granete_token');
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-      } catch {
-        // ignore
-      }
-    }
+    const token = this.getAccessToken?.();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/photos`, {
       method: 'POST',
       headers,
       body: formData,
@@ -736,7 +748,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     caption?: string;
     isShowcase?: boolean;
   }): Promise<ProjectPhoto> {
-    const res = await fetch(`${this.baseUrl}/projects/${photo.projectId}/photos`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${photo.projectId}/photos`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -759,7 +771,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     photoId: string,
     updates: { stage?: ProjectPhotoStage; caption?: string; isShowcase?: boolean },
   ): Promise<ProjectPhoto> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos/${photoId}`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/photos/${photoId}`, {
       method: 'PATCH',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -777,7 +789,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deleteProjectPhoto(projectId: string, photoId: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/photos/${photoId}`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/photos/${photoId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -789,7 +801,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   async listShowcasePhotos(onlyShowcase = false): Promise<readonly ShowcasePhotoItem[]> {
     const url = `${this.baseUrl}/showcase/photos${onlyShowcase ? '?only_showcase=true' : ''}`;
-    const res = await fetch(url, {
+    const res = await this.fetch(url, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -803,7 +815,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
 
   async getProjectInternalMessages(projectId: string): Promise<readonly ProjectInternalMessage[]> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/messages`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/messages`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -823,7 +835,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     senderName?: string;
     attachments?: readonly string[];
   }): Promise<ProjectInternalMessage> {
-    const res = await fetch(`${this.baseUrl}/projects/${message.projectId}/messages`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${message.projectId}/messages`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -852,7 +864,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       forceRelease?: boolean;
     },
   ): Promise<Project> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/technical-workflow`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/technical-workflow`, {
       method: 'PATCH',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -896,7 +908,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     loadingProgress: LoadingProgress;
     event?: FloorStatusEvent | null;
   }> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/floor-scan`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/floor-scan`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -953,7 +965,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     moduleUnits: readonly ModuleUnitExecution[];
     assemblyReadiness: readonly Record<string, unknown>[];
   }> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -1075,7 +1087,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       force?: boolean;
     },
   ): Promise<{ partInstances: number; moduleUnits: number; forced: boolean }> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/part-executions`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1110,7 +1122,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getInstallation(projectId: string): Promise<InstallationView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/installation`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -1124,7 +1136,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectId: string,
     job: InstallationJob,
   ): Promise<InstallationView & { eventsAppended: number }> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/installation`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(installationJobToApi(job)),
@@ -1149,7 +1161,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       photoIds?: readonly string[];
     },
   ): Promise<{ installation: InstallationJob; closeout?: ClientCloseout } & InstallationView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/installation/closeout`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation/closeout`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1185,7 +1197,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   /** Shared POST + parse for the part-executions endpoints. */
   private async postPartExecution<T>(path: string, body: Record<string, unknown>): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await this.fetch(`${this.baseUrl}${path}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(body),
@@ -1212,7 +1224,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectName: string;
     loadingProgress: LoadingProgress;
   }> {
-    const res = await fetch(
+    const res = await this.fetch(
       `${this.baseUrl}/projects/${projectId}/loading-status`,
       {
         headers: this.getHeaders(),
@@ -1256,7 +1268,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     nextStatus: string;
     event?: FloorStatusEvent | null;
   }> {
-    const res = await fetch(
+    const res = await this.fetch(
       `${this.baseUrl}/projects/${projectId}/items/${itemId}/floor-status`,
       {
         method: 'PATCH',
@@ -1281,7 +1293,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async listFloorEvents(
     projectId: string,
   ): Promise<readonly FloorStatusEvent[]> {
-    const res = await fetch(
+    const res = await this.fetch(
       `${this.baseUrl}/projects/${projectId}/floor-events`,
       { headers: this.getHeaders() },
     );
@@ -1310,7 +1322,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (filter?.status) params.set('status', filter.status);
 
     const query = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`${this.baseUrl}/warranties${query}`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties${query}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -1324,7 +1336,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getWarrantyTicket(ticketId: string): Promise<WarrantyTicket | null> {
-    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties/${ticketId}`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -1339,7 +1351,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   async createWarrantyTicket(
     ticket: Partial<WarrantyTicket> & Pick<WarrantyTicket, 'projectId' | 'title'>,
   ): Promise<WarrantyTicket> {
-    const res = await fetch(`${this.baseUrl}/warranties`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1369,7 +1381,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     ticketId: string,
     updates: Partial<WarrantyTicket>,
   ): Promise<WarrantyTicket> {
-    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties/${ticketId}`, {
       method: 'PATCH',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1394,7 +1406,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deleteWarrantyTicket(ticketId: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties/${ticketId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1417,7 +1429,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     const headers = this.getHeaders();
     delete headers['Content-Type'];
 
-    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}/photos`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties/${ticketId}/photos`, {
       method: 'POST',
       headers,
       body: formData,
@@ -1436,7 +1448,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     kind?: WarrantyPhotoKind;
     caption?: string;
   }): Promise<WarrantyTicketPhoto> {
-    const res = await fetch(`${this.baseUrl}/warranties/${photo.ticketId}/photos`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties/${photo.ticketId}/photos`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1454,7 +1466,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deleteWarrantyTicketPhoto(ticketId: string, photoId: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/warranties/${ticketId}/photos/${photoId}`, {
+    const res = await this.fetch(`${this.baseUrl}/warranties/${ticketId}/photos/${photoId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1497,7 +1509,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       }>;
     }>;
   }> {
-    const res = await fetch(`${this.baseUrl}/production/dashboard`, {
+    const res = await this.fetch(`${this.baseUrl}/production/dashboard`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -1522,7 +1534,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     startedAt: string;
     durationMin: number;
   }>> {
-    const res = await fetch(`${this.baseUrl}/production/active`, {
+    const res = await this.fetch(`${this.baseUrl}/production/active`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -1552,7 +1564,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     startedAt: string;
     createdAt: string;
   }> {
-    const res = await fetch(`${this.baseUrl}/production/activity/claim`, {
+    const res = await this.fetch(`${this.baseUrl}/production/activity/claim`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1587,7 +1599,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     piecesCount: number;
     notes: string;
   }> {
-    const res = await fetch(`${this.baseUrl}/production/activity/finish/${activityId}`, {
+    const res = await this.fetch(`${this.baseUrl}/production/activity/finish/${activityId}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(payload),
@@ -1621,7 +1633,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     reportedAt: string;
     needsReplace: boolean;
   }> {
-    const res = await fetch(`${this.baseUrl}/production/activity/damage`, {
+    const res = await this.fetch(`${this.baseUrl}/production/activity/damage`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(payload),
@@ -1635,7 +1647,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async resolveProductionDamage(damageId: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/production/damage/${damageId}/resolve`, {
+    const res = await this.fetch(`${this.baseUrl}/production/damage/${damageId}/resolve`, {
       method: 'PATCH',
       headers: this.getHeaders(),
     });
@@ -1650,7 +1662,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     sector: string;
     subSector?: string;
   }>> {
-    const res = await fetch(`${this.baseUrl}/me/sectors`, {
+    const res = await this.fetch(`${this.baseUrl}/me/sectors`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1672,7 +1684,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     name: string;
     email: string;
   }>> {
-    const res = await fetch(`${this.baseUrl}/production/operators?sector=${encodeURIComponent(sector)}`, {
+    const res = await this.fetch(`${this.baseUrl}/production/operators?sector=${encodeURIComponent(sector)}`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1691,7 +1703,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // --- Compras / Almacén picking (Fase 3) ---
 
   async listPickingStates(): Promise<readonly ProjectPickingState[]> {
-    const res = await fetch(`${this.baseUrl}/picking`, {
+    const res = await this.fetch(`${this.baseUrl}/picking`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1708,7 +1720,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async setProjectPickingState(state: ProjectPickingState): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/picking`, {
+    const res = await this.fetch(`${this.baseUrl}/picking`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1726,7 +1738,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // --- Compras / Almacén stock (Fase 3b) ---
 
   async getStock(): Promise<readonly MaterialStock[]> {
-    const res = await fetch(`${this.baseUrl}/stock`, {
+    const res = await this.fetch(`${this.baseUrl}/stock`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1747,7 +1759,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     materialId: string;
     minStock: number;
   }): Promise<MaterialStock> {
-    const res = await fetch(`${this.baseUrl}/stock`, {
+    const res = await this.fetch(`${this.baseUrl}/stock`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1773,7 +1785,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     note?: string;
     revertsId?: string;
   }): Promise<StockMovement> {
-    const res = await fetch(`${this.baseUrl}/stock/movements`, {
+    const res = await this.fetch(`${this.baseUrl}/stock/movements`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1806,7 +1818,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     if (filter?.projectId) params.set('project_id', filter.projectId);
     if (filter?.limit) params.set('limit', String(filter.limit));
     const query = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`${this.baseUrl}/stock/movements${query}`, {
+    const res = await this.fetch(`${this.baseUrl}/stock/movements${query}`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1825,7 +1837,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // --- Compras / Almacén proveedores + órdenes de compra (Fase 3c) ---
 
   async listSuppliers(): Promise<readonly Supplier[]> {
-    const res = await fetch(`${this.baseUrl}/suppliers`, {
+    const res = await this.fetch(`${this.baseUrl}/suppliers`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1850,7 +1862,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     notes?: string;
     active?: boolean;
   }): Promise<Supplier> {
-    const res = await fetch(`${this.baseUrl}/suppliers`, {
+    const res = await this.fetch(`${this.baseUrl}/suppliers`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(supplierToApi(supplier)),
@@ -1872,7 +1884,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     notes?: string;
     active?: boolean;
   }): Promise<Supplier> {
-    const res = await fetch(`${this.baseUrl}/suppliers/${supplier.id}`, {
+    const res = await this.fetch(`${this.baseUrl}/suppliers/${supplier.id}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(supplierToApi(supplier)),
@@ -1886,7 +1898,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deactivateSupplier(id: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/suppliers/${id}`, {
+    const res = await this.fetch(`${this.baseUrl}/suppliers/${id}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1897,7 +1909,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async listPurchaseOrders(): Promise<readonly PurchaseOrder[]> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1914,7 +1926,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getPurchaseOrder(id: string): Promise<PurchaseOrder | null> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders/${id}`, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -1941,7 +1953,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       allocatedProjectId?: string;
     }[];
   }): Promise<PurchaseOrder> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1975,7 +1987,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       allocatedProjectId?: string;
     }[];
   }): Promise<PurchaseOrder> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders/${po.id}`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders/${po.id}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -1995,7 +2007,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async emitPurchaseOrder(id: string): Promise<PurchaseOrder> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}/emit`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders/${id}/emit`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -2008,7 +2020,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async cancelPurchaseOrder(id: string): Promise<PurchaseOrder> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}/cancel`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders/${id}/cancel`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -2024,7 +2036,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     id: string,
     lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
   ): Promise<PurchaseOrder> {
-    const res = await fetch(`${this.baseUrl}/purchase-orders/${id}/receive`, {
+    const res = await this.fetch(`${this.baseUrl}/purchase-orders/${id}/receive`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ lines: lines.map(poItemToApi) }),
@@ -2052,7 +2064,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getMaterialPlanning(projectId: string): Promise<MaterialPlanningView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -2066,7 +2078,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectId: string,
     lines: readonly MaterialRequirementLine[],
   ): Promise<MaterialPlanningView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/derive`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/derive`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2084,7 +2096,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectId: string,
     lines?: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
   ): Promise<MaterialPlanningView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/reserve`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/reserve`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2102,7 +2114,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectId: string,
     lines: readonly { kind: StockMaterialKind; materialId: string; quantity: number }[],
   ): Promise<MaterialPlanningView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/consume`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/consume`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2117,7 +2129,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async releaseMaterials(projectId: string, overrideReason?: string): Promise<MaterialPlanningView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/materials/release`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/materials/release`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}),
@@ -2163,7 +2175,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getQuality(projectId: string): Promise<QualityView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -2186,7 +2198,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       photoIds?: readonly string[];
     },
   ): Promise<QualityView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/issue`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality/issue`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2213,7 +2225,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     toStatus: QualityIssueStatus,
     notes?: string,
   ): Promise<QualityView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/issue/${issueId}/transition`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality/issue/${issueId}/transition`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ to_status: toStatus, ...(notes ? { notes } : {}) }),
@@ -2237,7 +2249,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       laborMinutes?: number;
     },
   ): Promise<QualityView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/rework`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality/rework`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2263,7 +2275,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     checklist: readonly UnitQcChecklistItem[],
     notes?: string,
   ): Promise<QualityView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2279,7 +2291,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async overrideQualityUnitQc(projectId: string, unitId: string, reason: string): Promise<QualityView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}/override`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}/override`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ reason }),
@@ -2301,7 +2313,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getJobCosting(projectId: string): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) {
@@ -2312,7 +2324,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async captureCostBaseline(projectId: string): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/baseline`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing/baseline`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({}),
@@ -2325,7 +2337,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async setCostingLaborRate(projectId: string, ratePerHour: number): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/labor-rate`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing/labor-rate`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ rate_per_hour: ratePerHour }),
@@ -2341,7 +2353,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectId: string,
     payload: { category: TimeEntry['category']; minutes: number; note?: string },
   ): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/time`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing/time`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2358,7 +2370,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async voidCostingTime(projectId: string, entryId: string, reason?: string): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/time/${entryId}/void`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing/time/${entryId}/void`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ ...(reason ? { reason } : {}) }),
@@ -2374,7 +2386,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     projectId: string,
     payload: { kind: OtherActualCost['kind']; amount: number; vendor?: string; note?: string },
   ): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/other`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing/other`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
@@ -2392,7 +2404,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   }
 
   async voidCostingOtherCost(projectId: string, costId: string, reason?: string): Promise<JobCostingView> {
-    const res = await fetch(`${this.baseUrl}/projects/${projectId}/costing/other/${costId}/void`, {
+    const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/costing/other/${costId}/void`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ ...(reason ? { reason } : {}) }),
@@ -2420,7 +2432,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     failureLabel: string,
     body?: Record<string, unknown>,
   ): Promise<SiteSurveyView> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await this.fetch(`${this.baseUrl}${path}`, {
       method,
       headers: this.getHeaders(),
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

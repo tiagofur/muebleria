@@ -1,17 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   SESSION_STORAGE_KEY,
-  TOKEN_STORAGE_KEY,
-  USER_STORAGE_KEY,
+  LEGACY_BEARER_STORAGE_KEYS,
   clearSession,
   isAdminRole,
   loginRequest,
   meRequest,
   parseAuthResponse,
-  readAuthUser,
   readSessionMode,
-  storeAuthToken,
-  storeAuthUser,
   type SessionSnapshot,
   validateOrganizationSessionTransition,
   writeSessionMode,
@@ -54,67 +50,32 @@ function memoryStorage(initial: Record<string, string> = {}): Storage {
 
 describe('session helpers', () => {
   it('readSessionMode returns null when empty', () => {
-    expect(readSessionMode(memoryStorage(), memoryStorage())).toBeNull();
+    expect(readSessionMode(memoryStorage())).toBeNull();
   });
 
   it('readSessionMode returns guest without requiring token', () => {
     const session = memoryStorage({ [SESSION_STORAGE_KEY]: 'guest' });
-    expect(readSessionMode(session, memoryStorage())).toBe('guest');
+    expect(readSessionMode(session)).toBe('guest');
   });
 
-  it('readSessionMode returns auth only when token present', () => {
+  it('readSessionMode returns the auth hint without touching any token (#460 SEC-4B: hint, not authority)', () => {
     const session = memoryStorage({ [SESSION_STORAGE_KEY]: 'auth' });
-    const local = memoryStorage();
-    expect(readSessionMode(session, local)).toBeNull();
-    local.setItem(TOKEN_STORAGE_KEY, 'jwt-demo');
-    expect(readSessionMode(session, local)).toBe('auth');
+    expect(readSessionMode(session)).toBe('auth');
   });
 
-  it('writeSessionMode and clearSession round-trip (token + user)', () => {
+  it('writeSessionMode and clearSession round-trip; clearSession destroys legacy bearers', () => {
     const session = memoryStorage();
-    const local = memoryStorage({
-      [TOKEN_STORAGE_KEY]: 'jwt',
-      [USER_STORAGE_KEY]: JSON.stringify({
-        id: '1',
-        email: 'a@b.com',
-        name: 'A',
-        role: 'admin',
-        account_status: 'active',
-      }),
-    });
+    const local = memoryStorage();
+    for (const key of LEGACY_BEARER_STORAGE_KEYS) {
+      local.setItem(key, key.endsWith('_user') ? '{"id":"1"}' : 'legacy-jwt-value');
+    }
     writeSessionMode('auth', session);
     expect(session.getItem(SESSION_STORAGE_KEY)).toBe('auth');
     clearSession(session, local);
     expect(session.getItem(SESSION_STORAGE_KEY)).toBeNull();
-    expect(local.getItem(TOKEN_STORAGE_KEY)).toBeNull();
-    expect(local.getItem(USER_STORAGE_KEY)).toBeNull();
-  });
-
-  it('storeAuthToken writes granete_token', () => {
-    const local = memoryStorage();
-    storeAuthToken('abc.def', local);
-    expect(local.getItem(TOKEN_STORAGE_KEY)).toBe('abc.def');
-  });
-
-  it('storeAuthUser / readAuthUser round-trip', () => {
-    const local = memoryStorage();
-    storeAuthUser(
-      {
-        id: 'u1',
-        email: 'tiagofur@gmail.com',
-        name: 'Tiago',
-        role: 'admin',
-        account_status: 'active',
-      },
-      local,
-    );
-    expect(readAuthUser(local)).toEqual({
-      id: 'u1',
-      email: 'tiagofur@gmail.com',
-      name: 'Tiago',
-      role: 'admin',
-      account_status: 'active',
-    });
+    for (const key of LEGACY_BEARER_STORAGE_KEYS) {
+      expect(local.getItem(key)).toBeNull();
+    }
   });
 
   it('isAdminRole only true for admin', () => {

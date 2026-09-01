@@ -20,13 +20,31 @@ const BcryptCost = 12
 // MinPasswordLen is the minimum accepted password length on register (issue #19).
 const MinPasswordLen = 8
 
-// AccessTokenTTL is how long a web/mobile JWT remains valid before re-login.
-// One login per workday (18h covers a full shift plus overtime): 15-minute
-// tokens kicked users out mid-design and mid-client session (#441/#445).
-// Revocation does NOT wait for expiry — role/active/membership/org/session are
-// re-checked against the DB on every request. SEC-4 will shorten the access
-// token and add a rotating refresh credential WITHOUT extending this bound.
-const AccessTokenTTL = 18 * time.Hour
+// WebAccessTokenTTL is the short-lived Web access bearer (#460 SEC-4B). The
+// Web client keeps it in tab memory ONLY and renews it through the rotating
+// HttpOnly refresh cookie, so the exposure window of a leaked bearer is
+// minutes, not a workday. Expiry rolls from the MINT instant (now) — never
+// from the session origin, which would mint already-expired tokens past the
+// first 15 minutes — and is always capped by the session's absolute expiry.
+const WebAccessTokenTTL = 15 * time.Minute
+
+// MobileAccessTokenTTL keeps the pre-SEC-4B mobile policy (one login per
+// workday) until SEC-5 migrates mobile to short access + secure-store
+// refresh. Mobile has no cookie transport: shortening it here would kick
+// mobile users out mid-shift with no way to renew.
+const MobileAccessTokenTTL = 18 * time.Hour
+
+// LegacyAccessTokenTTL is the historical pre-SEC-4B access policy carried by
+// the ver4 transitional window (SEC-9 removes it together with ver4
+// validation). GenerateLegacyToken is its only minting site (tests).
+const LegacyAccessTokenTTL = 18 * time.Hour
+
+// WebSessionAbsoluteTTL and MobileSessionAbsoluteTTL bound the WHOLE session
+// (registry absolute_expires_at): T0 + 18h, refresh never slides it (#441).
+const (
+	WebSessionAbsoluteTTL    = 18 * time.Hour
+	MobileSessionAbsoluteTTL = 18 * time.Hour
+)
 
 // SupportTokenTTL bounds platform support sessions ("entrar a taller"):
 // short-lived by design, independent of the web/extension token kinds.
@@ -320,6 +338,8 @@ func (a *Authority) IssueTransportToken(userID string, email string, tc TokenCon
 // IssueTransportTokenUntil additionally caps exp at the registry's absolute
 // expiry. Refresh uses this even though the normal origin-derived limit should
 // match, making the server-side bound explicit and impossible to overshoot.
+// WEB tokens REQUIRE the cap (SEC-4B): their 15-minute window rolls from now,
+// so only the registry row keeps exp <= absolute_expires_at structurally true.
 func (a *Authority) IssueTransportTokenUntil(userID string, email string, tc TokenContext, transport string, absoluteExpiresAt time.Time) (string, error) {
 	if absoluteExpiresAt.IsZero() || !absoluteExpiresAt.After(time.Now()) {
 		return "", errors.New("token requires a future absolute session expiry")
@@ -328,18 +348,37 @@ func (a *Authority) IssueTransportTokenUntil(userID string, email string, tc Tok
 }
 
 func (a *Authority) issueTransportTokenUntil(userID string, email string, tc TokenContext, transport string, absoluteExpiresAt time.Time) (string, error) {
-	client, ttl := "", AccessTokenTTL
-	switch transport {
-	case "web", "mobile":
-	case "sketchup":
-		client, ttl = ExtensionClient, ExtensionTokenTTL
-	default:
+	// SEC-4B structural invariant: a web access bearer is ALWAYS registry-
+	// capped (exp <= absolute_expires_at), whichever entry point mints it.
+	if transport == "web" && absoluteExpiresAt.IsZero() {
+		return "", errors.New("web access token requires the session's absolute expiry cap")
+	}
+	client, ttl := "", accessTokenTTLFor(transport)
+	if ttl == 0 {
 		return "", fmt.Errorf("invalid login transport %q", transport)
+	}
+	if transport == "sketchup" {
+		client = ExtensionClient
 	}
 	if tc.SessionID == "" {
 		return "", errors.New("token requires a registry session id")
 	}
 	return a.issueToken(userID, email, tc, client, transport, ttl, absoluteExpiresAt)
+}
+
+// accessTokenTTLFor resolves the access-token lifetime per transport. Web is
+// the short rolling bearer; mobile keeps the workday policy until SEC-5; the
+// SketchUp extension keeps its workshop-spanning credential until SEC-6.
+func accessTokenTTLFor(transport string) time.Duration {
+	switch transport {
+	case "web":
+		return WebAccessTokenTTL
+	case "mobile":
+		return MobileAccessTokenTTL
+	case "sketchup":
+		return ExtensionTokenTTL
+	}
+	return 0
 }
 
 // PrimaryRole resolves the transitional single role: the first role of the
@@ -351,16 +390,22 @@ func PrimaryRole(roles []string) string {
 	return roles[0]
 }
 
-// TransportSessionTTL is the absolute session bound per client type. It seeds
-// the registry's absolute_expires_at, which refresh never extends.
+// TransportSessionTTL is the ABSOLUTE session bound per client type (distinct
+// from the access-token TTL: the web session lives 18h while each access
+// bearer lives 15 minutes). It seeds the registry's absolute_expires_at,
+// which refresh never extends.
 func TransportSessionTTL(transport string) time.Duration {
 	switch transport {
+	case "web":
+		return WebSessionAbsoluteTTL
+	case "mobile":
+		return MobileSessionAbsoluteTTL
 	case "sketchup":
 		return ExtensionTokenTTL
 	case "support":
 		return SupportTokenTTL
 	default:
-		return AccessTokenTTL
+		return MobileSessionAbsoluteTTL
 	}
 }
 
@@ -370,32 +415,38 @@ func TransportSessionTTL(transport string) time.Duration {
 // clock behind minting, never from client-side JWT decoding). A zero
 // authStartedAt means "now", matching issueToken; a non-zero
 // absoluteExpiresAt caps the result exactly like IssueTransportTokenUntil.
-// Support tokens have no registry cap: their live session row is the
-// authority (GetOpenSupportSession).
+// Web bearers roll from `now` (short access); every other transport stays
+// origin-derived. Support tokens have no registry cap: their live session
+// row is the authority (GetOpenSupportSession).
 func AccessTokenExpiry(now, authStartedAt time.Time, transport string, absoluteExpiresAt time.Time) (time.Time, error) {
-	ttl := AccessTokenTTL
-	switch transport {
-	case "web", "mobile":
-	case "sketchup":
-		ttl = ExtensionTokenTTL
-	case "support":
+	ttl := accessTokenTTLFor(transport)
+	if transport == "support" {
 		if authStartedAt.IsZero() {
 			authStartedAt = now
 		}
 		return authStartedAt.Add(SupportTokenTTL), nil
-	default:
+	}
+	if ttl == 0 {
 		return time.Time{}, fmt.Errorf("invalid login transport %q", transport)
 	}
-	return transportTokenExpiry(now, authStartedAt, ttl, absoluteExpiresAt), nil
+	return transportTokenExpiry(now, authStartedAt, transport, ttl, absoluteExpiresAt), nil
 }
 
 // transportTokenExpiry is the single expiry computation shared by minting and
-// the reported metadata so the two can never drift.
-func transportTokenExpiry(now, authStartedAt time.Time, ttl time.Duration, absoluteExpiresAt time.Time) time.Time {
-	if authStartedAt.IsZero() {
-		authStartedAt = now
+// the reported metadata so the two can never drift. Web access bearers roll
+// from the MINT instant (SEC-4B short access): computing them from the
+// session origin would mint already-expired tokens after minute 15. Every
+// other transport keeps the origin-derived semantics. A known absolute
+// session bound always caps the result.
+func transportTokenExpiry(now, authStartedAt time.Time, transport string, ttl time.Duration, absoluteExpiresAt time.Time) time.Time {
+	base := authStartedAt
+	if transport == "web" {
+		base = now
 	}
-	expiresAt := authStartedAt.Add(ttl)
+	if base.IsZero() {
+		base = now
+	}
+	expiresAt := base.Add(ttl)
 	if !absoluteExpiresAt.IsZero() && absoluteExpiresAt.Before(expiresAt) {
 		expiresAt = absoluteExpiresAt
 	}
@@ -417,7 +468,7 @@ func (a *Authority) issueToken(userID string, email string, tc TokenContext, cli
 	if tc.OrgID != "" && tc.OrganizationCredentialVersion < 1 {
 		return "", errors.New("organization-scoped token requires organization credential version")
 	}
-	expiresAt := transportTokenExpiry(now, authStartedAt, ttl, absoluteExpiresAt)
+	expiresAt := transportTokenExpiry(now, authStartedAt, transport, ttl, absoluteExpiresAt)
 	claims := &Claims{
 		UserID:                        userID,
 		Email:                         email,
@@ -623,7 +674,7 @@ func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 // accepted until the #460 SEC-9 gate removes LegacyTokenVersion validation
 // together with this function. Production code never mints ver4.
 func GenerateLegacyToken(userID string, email string, tc TokenContext, transport string, secret string) (string, error) {
-	client, ttl := "", AccessTokenTTL
+	client, ttl := "", LegacyAccessTokenTTL
 	switch transport {
 	case "web", "mobile":
 	case "sketchup":

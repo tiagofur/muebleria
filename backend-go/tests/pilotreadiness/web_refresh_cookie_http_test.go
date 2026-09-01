@@ -3,6 +3,7 @@ package pilotreadiness
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,91 @@ func findSetCookie(t *testing.T, resp *http.Response) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+// accessTokenClaims decodes the fixture-signed JWT's payload without
+// re-validating (the assertions are about exp arithmetic, not signature).
+func accessTokenClaims(t *testing.T, token string) (iat, exp time.Time) {
+	t.Helper()
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("access token is not a JWS: %d parts", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims struct {
+		Iat int64 `json:"iat"`
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatal(err)
+	}
+	return time.Unix(claims.Iat, 0), time.Unix(claims.Exp, 0)
+}
+
+// TestWebAccessTokenShortTTLAndAbsoluteCap locks the SEC-4B lifetime policy at
+// the HTTP boundary: the Web bearer is a ~15-minute rolling credential whose
+// exp equals access_expires_at and never overshoots the session's absolute
+// bound — while Mobile keeps the workday credential until SEC-5.
+func TestWebAccessTokenShortTTLAndAbsoluteCap(t *testing.T) {
+	sess := fx.webLogin(t, fx.a.admin.email, fx.a.slug)
+	webIat, webExp := accessTokenClaims(t, sess.login.Token)
+	webTTL := webExp.Sub(webIat)
+	if webTTL < 14*time.Minute || webTTL > 16*time.Minute {
+		t.Fatalf("web access TTL = %v, want ~15m", webTTL)
+	}
+	webAccessExpiry, err := time.Parse(time.RFC3339Nano, sess.login.AccessExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// access_expires_at mirrors the minting arithmetic exactly (same server
+	// clock, same cap): it must equal the JWT exp to the second.
+	if !webAccessExpiry.Truncate(time.Second).Equal(webExp.Truncate(time.Second)) {
+		t.Fatalf("access_expires_at %s != JWT exp %s", webAccessExpiry, webExp)
+	}
+	webAbsolute, err := time.Parse(time.RFC3339Nano, sess.login.AbsoluteSessionExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if webExp.After(webAbsolute) {
+		t.Fatalf("web JWT exp %s overshoots absolute session bound %s", webExp, webAbsolute)
+	}
+
+	mobile := fx.mobileLogin(t, fx.a.admin.email, fx.a.slug)
+	mobileIat, mobileExp := accessTokenClaims(t, mobile.Token)
+	if ttl := mobileExp.Sub(mobileIat); ttl < 18*time.Hour-time.Minute || ttl > 18*time.Hour+time.Minute {
+		t.Fatalf("mobile access TTL = %v, want ~18h (SEC-5 boundary untouched)", ttl)
+	}
+
+	// T0+17:59 shape: shrink the live absolute bound under one rolling window
+	// and rotate — the minted bearer must be capped by the deadline, not by
+	// now+15m, and its metadata must still equal the JWT exp.
+	ctx := context.Background()
+	shrunk := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Second)
+	if _, err := fx.pool.Exec(ctx, `
+		WITH session_update AS (
+			UPDATE auth_sessions SET absolute_expires_at=$2 WHERE id=$1 RETURNING id
+		), family_update AS (
+			UPDATE auth_refresh_families SET absolute_expires_at=$2 WHERE session_id=$1 RETURNING id
+		)
+		UPDATE auth_refresh_credentials SET expires_at=$2 WHERE session_id=$1`,
+		sess.login.SessionID, shrunk); err != nil {
+		t.Fatal(err)
+	}
+	capped := fx.webRefresh(t, &sess)
+	_, cappedExp := accessTokenClaims(t, capped.Token)
+	if cappedExp.Truncate(time.Second).After(shrunk) {
+		t.Fatalf("capped refresh JWT exp %s overshoots shrunk absolute bound %s", cappedExp, shrunk)
+	}
+	cappedAccessExpiry, err := time.Parse(time.RFC3339Nano, capped.AccessExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cappedAccessExpiry.Truncate(time.Second).Equal(cappedExp.Truncate(time.Second)) {
+		t.Fatalf("capped access_expires_at %s != JWT exp %s", cappedAccessExpiry, cappedExp)
+	}
 }
 
 func TestWebRefreshCookieLoginAttributesAndTransportMatrix(t *testing.T) {

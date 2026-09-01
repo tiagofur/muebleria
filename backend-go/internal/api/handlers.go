@@ -564,9 +564,11 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "login: create session")
 			return
 		}
-		orgless, err := s.tokenAuthority().IssueTransportToken(u.ID, u.Email, auth.TokenContext{
+		// SEC-4B: every mint that knows the registry row passes the absolute
+		// cap — mandatory for web, whose short access window rolls from now.
+		orgless, err := s.tokenAuthority().IssueTransportTokenUntil(u.ID, u.Email, auth.TokenContext{
 			PlatformAdmin: u.PlatformAdmin, SessionID: session.ID,
-		}, string(transport))
+		}, string(transport), session.AbsoluteExpiresAt)
 		if err != nil {
 			respondWithInternalError(w, err, "login: generate orgless token")
 			return
@@ -641,7 +643,8 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	tc.SessionID = session.ID
 
 	var token string
-	token, err = s.tokenAuthority().IssueTransportToken(u.ID, u.Email, tc, string(transport))
+	// SEC-4B: bounded mint for every transport — web REQUIRES the cap.
+	token, err = s.tokenAuthority().IssueTransportTokenUntil(u.ID, u.Email, tc, string(transport), session.AbsoluteExpiresAt)
 	if err != nil {
 		respondWithInternalError(w, err, "login: generate token")
 		return
@@ -758,6 +761,12 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Absolute session bound for the bounded mint + response metadata. For a
+	// ver5 token the registry row must resolve (the middleware validated it
+	// live moments ago); a nil lookup means the session died in between — the
+	// switch aborts with the same revoked-session 401 the scope update below
+	// would produce. SEC-4B: web mints REQUIRE this cap.
+	var sessionAbsoluteExpiry *time.Time
 	if claims.Sid == "" {
 		// A ver4 token has no session yet: this exchange registers one scoped
 		// to the target organization, preserving the absolute origin.
@@ -774,11 +783,19 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tc.SessionID = session.ID
+		sessionAbsoluteExpiry = &session.AbsoluteExpiresAt
 	} else {
 		tc.SessionID = claims.Sid
+		sessionAbsoluteExpiry = s.authSessionAbsoluteExpiry(r.Context(), claims)
+		if sessionAbsoluteExpiry == nil {
+			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeSessionRevoked, "La sesión ya no está activa. Iniciá sesión de nuevo.", nil)
+			return
+		}
 	}
 
-	token, err := s.tokenAuthority().IssueTransportToken(claims.UserID, claims.Email, tc, string(transport))
+	// Bounded mint for every transport (web REQUIRES the cap; the others are
+	// capped at their own origin+TTL, which this row already equals).
+	token, err := s.tokenAuthority().IssueTransportTokenUntil(claims.UserID, claims.Email, tc, string(transport), *sessionAbsoluteExpiry)
 	if err != nil {
 		respondWithInternalError(w, err, "select-org: generate token")
 		return
@@ -813,7 +830,7 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		Memberships:  []MembershipDTO{},
 		Transport:    transport,
 	}
-	setAuthExpiryMetadata(&response, claims.AuthStartedAt.Time, transport, s.authSessionAbsoluteExpiry(r.Context(), claims))
+	setAuthExpiryMetadata(&response, claims.AuthStartedAt.Time, transport, sessionAbsoluteExpiry)
 	respondWithJSON(w, http.StatusOK, response)
 }
 
@@ -838,7 +855,8 @@ func (s *Server) authSessionAbsoluteExpiry(ctx context.Context, claims *auth.Cla
 
 // HandleRefresh re-issues an access token for the authenticated user after
 // AuthMiddleware has already re-validated role/active against the DB (issue #16).
-// Clients should call this before AccessTokenTTL elapses to avoid re-login.
+// Clients should call this before their transport's access TTL elapses to
+// avoid re-login.
 //
 // #460 SEC-4A: this bodyless bearer branch is a FINITE compatibility bridge
 // restricted to the credential classes that have no opaque refresh family —

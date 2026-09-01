@@ -1,23 +1,18 @@
 /**
- * Global 401 safety net (pre-demo audit P0-1).
+ * Global 401 safety net (pre-demo audit P0-1, #460 SEC-4B rewrite).
  *
- * Access tokens now cover a full workday (18 h) and the middleware keeps
- * re-validating user/membership/organization from the DB on every request,
- * so mid-session expiry is rare. But it is not impossible: a revoked
- * membership, a deactivated user, a token-version bump or simply leaving the
- * tab open past the TTL. In those cases every write used to fail with the
- * misleading "Error de conexión al sincronizar cambios" toast while the UI
- * kept showing phantom local-only state.
+ * Con el access corto (15 min) el refresh coordinado vive en
+ * webAuthClient.authenticatedApiFetch (retry-once con validación de scope).
+ * Este interceptor es la RED para las requests que no pasan por ese boundary:
+ * ante un 401 de negocio dispara UN refresh coordinado — si es terminal,
+ * cierra la sesión local; si renueva, no hace nada (el caller supera el error
+ * y la siguiente request ya sale con el token nuevo). Se dispara una vez por
+ * access token: el fan-out de saves del catálogo no genera refresh storms.
  *
- * This interceptor watches every fetch and, on a 401 from a business
- * endpoint, calls markSessionExpired() — which logs out synchronously and
- * surfaces the proper "Tu sesión expiró" login screen (SessionGate) instead.
- * Auth endpoints manage their own 401 UX (wrong password, boot detection)
- * and are excluded. Repeated 401s with the same token (catalog save fan-out
- * fires dozens) trigger the callback once; a fresh login re-arms it.
+ * Auth endpoints (/auth/*) gestionan su propio 401 UX y quedan excluidos.
  */
 
-type OnSessionExpired = () => void;
+type OnSessionEnded = () => void;
 
 let installed = false;
 let lastFiredForToken: string | null = null;
@@ -30,12 +25,17 @@ function requestUrl(init: RequestInfo | URL): string {
 }
 
 export function installAuth401Interceptor(
-  onExpired: OnSessionExpired,
-  opts: { readToken?: () => string | null } = {},
+  onEnded: OnSessionEnded,
+  opts: {
+    readToken?: () => string | null;
+    /** Refresh coordinado singleflight (default: webAuthClient). */
+    refresh?: () => Promise<{ status: string }>;
+  } = {},
 ): void {
   if (installed || typeof window === 'undefined') return;
   installed = true;
-  const readToken = opts.readToken ?? (() => window.localStorage.getItem('granete_token'));
+  const readToken = opts.readToken ?? (() => null);
+  const refresh = opts.refresh ?? (async () => ({ status: 'terminal' as const }));
   const original = window.fetch;
   const originalBound = original.bind(window);
 
@@ -48,7 +48,9 @@ export function installAuth401Interceptor(
     const token = readToken();
     if (!token || token === lastFiredForToken) return res;
     lastFiredForToken = token;
-    onExpired();
+    void refresh().then((outcome) => {
+      if (outcome.status === 'terminal') onEnded();
+    });
     return res;
   };
   const installedFetch = window.fetch;

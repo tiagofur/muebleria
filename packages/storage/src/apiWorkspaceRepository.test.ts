@@ -1037,3 +1037,87 @@ describe('APIWorkspaceRepository', () => {
     expect(metrics.sectors[1]!.activeJobs).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #460 SEC-4B — auth por dependencia de memoria, nunca storage
+// ---------------------------------------------------------------------------
+
+describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
+  function memoryStorage(seed: Record<string, string> = {}): Storage {
+    const map = new Map<string, string>(Object.entries(seed));
+    return {
+      get length() {
+        return map.size;
+      },
+      key: (index: number) => [...map.keys()][index] ?? null,
+      getItem: (k) => map.get(k) ?? null,
+      setItem: (k, v) => void map.set(k, v),
+      removeItem: (k) => void map.delete(k),
+      clear: () => map.clear(),
+    } as Storage;
+  }
+
+  function catalogOk(): Response {
+    return {
+      ok: true,
+      json: async () => ({ materials: [], edges: [], hardware: [], optionGroups: [], categories: [], customers: [], modules: [], structures: [], components: [] }),
+    } as Response;
+  }
+
+  it('usa el token de memoria (getAccessToken) y NUNCA un granete_token de localStorage', async () => {
+    const storage = memoryStorage({ granete_token: 'FAKE-STORAGE-TOKEN' });
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
+    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => catalogOk());
+    try {
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        getAccessToken: () => 'memory-token',
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+      await repo.getCatalog();
+
+      const headers = new Headers(
+        (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+      );
+      expect(headers.get('Authorization')).toBe('Bearer memory-token');
+    } finally {
+      Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  });
+
+  it('sin token en memoria no envía Authorization alguna', async () => {
+    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => catalogOk());
+    const repo = new APIWorkspaceRepository('http://test/api', {
+      getAccessToken: () => null,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    await repo.getCatalog();
+
+    const headers = new Headers(
+      (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+    );
+    expect(headers.get('Authorization')).toBeNull();
+  });
+
+  it('uploadProjectPhoto usa la misma dependencia de memoria (multipart sin storage)', async () => {
+    const storage = memoryStorage({ granete_token: 'FAKE-STORAGE-TOKEN' });
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
+    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ id: 'photo-1', url: '/api/media/x.png', stage: 'before' }),
+    } as Response));
+    try {
+      const repo = new APIWorkspaceRepository('http://test/api', {
+        getAccessToken: () => 'memory-token',
+        fetchImpl: fetchMock as unknown as typeof fetch,
+      });
+      await repo.uploadProjectPhoto('p1', new Blob(['x']));
+
+      const headers = new Headers(
+        (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.headers,
+      );
+      expect(headers.get('Authorization')).toBe('Bearer memory-token');
+    } finally {
+      Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  });
+});

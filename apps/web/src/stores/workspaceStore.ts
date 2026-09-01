@@ -10,7 +10,6 @@
  */
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 
 import type { Workspace, WorkshopSettings } from '@granete/domain';
 import {
@@ -28,7 +27,22 @@ import {
   type SessionScope,
 } from '../shared/query/sessionScope';
 import { tenantTransition } from '../shared/query/tenantTransition';
-import { notifySessionChanged } from '../sessionSync';
+import { broadcastWebSessionEvent } from '../webSessionChannel';
+import {
+  applyLoginResponse,
+  authenticatedApiFetch,
+  configureWebAuthClient,
+  coordinatedWebRefresh,
+  scheduleWebAccessRefresh,
+  webLogout,
+  WebSessionEndedError,
+} from '../webAuthClient';
+import {
+  applySupportCredential,
+  clearCredential,
+  getCredential,
+  getAccessToken,
+} from '../webAuthRuntime';
 import {
   invalidateAuthorizedMedia,
   resolveAuthorizedMediaUrl,
@@ -41,16 +55,13 @@ import {
   DEFAULT_API_BASE,
   clearSession,
   loginRequest,
-  readAuthToken,
-  readAuthUser,
   readSessionMode,
-  storeAuthToken,
-  storeAuthUser,
   writeSessionMode,
   selectOrgRequest,
   meRequest,
   endSupportRequest,
   parseAuthResponse,
+  type LoginSuccess,
   type MembershipChoice,
   type OrgSummary,
   type SupportInfo,
@@ -82,24 +93,48 @@ export interface WorkspaceStoreDeps {
 
 export type RepositoryFactory = (
   mode: SessionMode,
-  deps: { readonly baseUrl: string },
+  deps: {
+    readonly baseUrl: string;
+    readonly getAccessToken: () => string | null;
+    readonly fetchImpl: typeof fetch;
+  },
 ) => WorkspaceRepository;
 
-const defaultRepositoryFactory: RepositoryFactory = (mode, { baseUrl }) =>
+const defaultRepositoryFactory: RepositoryFactory = (mode, { baseUrl, getAccessToken, fetchImpl }) =>
   mode === 'auth'
-    ? new APIWorkspaceRepository(baseUrl)
+    ? new APIWorkspaceRepository(baseUrl, {
+        // SEC-4B: el access token vive en memoria (webAuthRuntime) y todo
+        // request pasa por el boundary con refresh-once/retry-once.
+        getAccessToken,
+        fetchImpl: (input, init) => authenticatedApiFetch(String(input), init ?? {}),
+      })
     : new LocalStorageWorkspaceRepository();
 
 export interface WorkspaceState {
   // --- Session ---
   readonly session: SessionMode | null;
+  /**
+   * #460 SEC-4B: true mientras el boot decide entre cookie-session y login.
+   * Evita el flash login→shell: SessionGate muestra el estado de arranque.
+   */
+  readonly authBootstrapping: boolean;
+  /** Boot falló por red/5xx o CSRF: el login screen lo explica. */
+  readonly sessionBootError: 'unavailable' | 'config' | null;
   readonly loginLoading: boolean;
   readonly loginError: string | null;
   /**
-   * Set when the session ended because the token expired (401) — the login
-   * screen shows a notice instead of kicking the user out silently.
+   * Set when the session ended because the token expired/revoked (401) — the
+   * login screen shows a notice instead of kicking the user out silently.
    */
-  readonly sessionEndReason: 'expired' | null;
+  readonly sessionEndReason: 'expired' | 'revoked' | 'security' | 'connection' | null;
+  /**
+   * El logout server-side falló (5xx preserva cookie): no se claim "logout
+   * completado", se ofrece reintentar y se bloquea el auto-bootstrap para no
+   * ignorar la intención de cierre del usuario.
+   */
+  readonly logoutServerPending: boolean;
+  /** Usuario autenticado en memoria (nunca persistido, SEC-4B §6). */
+  readonly authUser: AuthUser | null;
 
   // --- Workspace lifecycle ---
   /**
@@ -144,6 +179,8 @@ export interface WorkspaceState {
   // --- Actions: session ---
   readonly clearAuthErrors: () => void;
   readonly enterAsGuest: () => void;
+  /** Boot: guest hint o cookie bootstrap — decide el estado inicial (SEC-4B). */
+  readonly beginAuthBootstrap: () => Promise<void>;
   readonly login: (email: string, password: string) => Promise<void>;
   readonly loginWithAuthPayload: (payload: unknown) => void;
   readonly selectOrg: (organizationId: string) => Promise<void>;
@@ -152,8 +189,8 @@ export interface WorkspaceState {
   readonly enterSupportSession: (token: string, orgId: string) => Promise<void>;
   readonly exitSupport: () => Promise<void>;
   readonly logout: () => void;
-  /** Logout with an "expired" reason so LoginScreen can explain it. */
-  readonly markSessionExpired: () => void;
+  /** Logout with an end reason so LoginScreen can explain it. */
+  readonly markSessionEnded: (reason: NonNullable<WorkspaceState['sessionEndReason']>) => void;
 
   // --- Actions: workspace lifecycle ---
   readonly loadWorkspace: () => Promise<void>;
@@ -200,10 +237,7 @@ interface InternalOptions {
 interface ResolvedDeps {
   readonly baseUrl: string;
   readonly fetchImpl: typeof fetch;
-  readonly repositoryFactory: (
-    mode: SessionMode,
-    deps: { readonly baseUrl: string },
-  ) => WorkspaceRepository;
+  readonly repositoryFactory: RepositoryFactory;
   readonly tenantTransition: typeof tenantTransition;
 }
 
@@ -215,21 +249,28 @@ export function createWorkspaceStore(options?: InternalOptions) {
   // stable injected function so their dependency isolation remains explicit.
   const safeFetch: typeof fetch = (...args) =>
     (injectedFetch ?? globalThis.fetch)(...args);
+  const baseUrl = options?.deps?.baseUrl ?? DEFAULT_API_BASE;
+  // SEC-4B: el boundary de fetch autenticado comparte exactamente el fetch y
+  // la base del store (tests incluidos).
+  configureWebAuthClient({ baseUrl, fetchImpl: safeFetch });
   const deps: ResolvedDeps = {
-    baseUrl: options?.deps?.baseUrl ?? DEFAULT_API_BASE,
+    baseUrl,
     fetchImpl: safeFetch,
     repositoryFactory: options?.deps?.repositoryFactory ?? defaultRepositoryFactory,
     tenantTransition: options?.deps?.tenantTransition ?? tenantTransition,
   };
 
   const store = create<WorkspaceState>()(
-    persist(
-      (set, get) => ({
+    (set, get) => ({
         // --- Session ---
-        session: readSessionModeInitial(),
+        session: null,
+        authBootstrapping: true,
+        sessionBootError: null,
         loginLoading: false,
         loginError: null,
         sessionEndReason: null,
+        logoutServerPending: false,
+        authUser: null,
         pendingOrgSelection: null,
         organizationChoices: [],
         orgSelectionLoading: false,
@@ -263,6 +304,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           writeSessionMode('guest');
           set({
             session: 'guest',
+            authBootstrapping: false,
             loginError: null,
             sessionEndReason: null,
             workspace: null,
@@ -270,16 +312,105 @@ export function createWorkspaceStore(options?: InternalOptions) {
             workspaceLoadError: null,
             assignableOwners: [],
             pendingGuestImport: false,
-          pendingOrgSelection: null,
-          organizationChoices: [],
-          orgSelectionLoading: false,
-          orgSelectionError: null,
-          orgSelectionRecoveryAvailable: false,
-          activeOrg: null,
-          sessionScope: null,
-          supportInfo: null,
+            pendingOrgSelection: null,
+            organizationChoices: [],
+            orgSelectionLoading: false,
+            orgSelectionError: null,
+            orgSelectionRecoveryAvailable: false,
+            activeOrg: null,
+            sessionScope: null,
+            supportInfo: null,
+            authUser: null,
             guestImportLoading: false,
             guestImportError: null,
+          });
+        },
+
+        /**
+         * Boot SEC-4B: el navegador no puede leer la cookie HttpOnly, así que
+         * el estado inicial autenticado se descubre con un cookie bootstrap
+         * (POST /auth/refresh bodyless bajo el lock cross-tab). El hint
+         * `granete_session` sólo sirve para respetar un guest explícito de
+         * esta pestaña — jamás es requisito para descubrir la cookie.
+         */
+        beginAuthBootstrap: async () => {
+          // Ya decidido (boot completado / sesión activa): no re-rotar. El
+          // re-bootstrap (p.ej. exitSupport) re-arma authBootstrapping antes
+          // de llamar.
+          if (!get().authBootstrapping || get().session !== null) return;
+          if (readSessionMode() === 'guest') {
+            set({ session: 'guest', authBootstrapping: false });
+            return;
+          }
+          if (get().logoutServerPending) {
+            // El usuario pidió cerrar sesión y el server aún no la revocó: no
+            // resurrect via bootstrap ignorando su intención.
+            set({ authBootstrapping: false, session: null });
+            return;
+          }
+          const outcome = await coordinatedWebRefresh();
+          if (get().logoutServerPending) return; // logout llegó durante el boot
+          if (outcome.status === 'refreshed' || outcome.status === 'replaced') {
+            scheduleWebAccessRefresh();
+            if (
+              outcome.response.selection_required &&
+              (outcome.response.memberships?.length ?? 0) > 0
+            ) {
+              // Cookie-session viva pero org-less: sólo elegir taller.
+              set({
+                authBootstrapping: false,
+                sessionBootError: null,
+                pendingOrgSelection: outcome.response.memberships,
+                organizationChoices: outcome.response.memberships,
+              });
+              return;
+            }
+            try {
+              const snapshot = await meRequest(outcome.credential.accessToken, {
+                baseUrl: deps.baseUrl,
+                fetchImpl: deps.fetchImpl,
+              });
+              applySessionSnapshot(snapshot, set, get);
+              set({ session: 'auth', authBootstrapping: false, sessionBootError: null });
+            } catch {
+              // /me falló pero el access es válido: la sesión se revalida en
+              // cada request; arrancar autenticado sin el snapshot inicial.
+              set({ session: 'auth', authBootstrapping: false, sessionBootError: null });
+            }
+            return;
+          }
+          if (outcome.status === 'terminal') {
+            // Cookie muerta/inexistente: login explícito. Destruir el hint
+            // 'auth' vencido para no repetir el intento en cada boot.
+            if (readSessionMode() === 'auth') {
+              try {
+                globalThis.sessionStorage?.removeItem('granete_session');
+              } catch {
+                // ignore
+              }
+            }
+            clearCredential();
+            if (outcome.code === 'CSRF_DENIED') {
+              // 403 del boundary CSRF: fail closed con error claro, sin loop.
+              set({ session: null, authBootstrapping: false, sessionBootError: 'config' });
+              return;
+            }
+            set({
+              session: null,
+              authBootstrapping: false,
+              sessionBootError: null,
+              sessionEndReason: outcome.code === 'REFRESH_REVOKED' ? 'revoked'
+                : outcome.code === 'REFRESH_REUSED' ? 'security'
+                : 'expired',
+            });
+            return;
+          }
+          // network (5xx/fallo de red): la cookie sigue viva server-side; no
+          // es un logout. Login screen con aviso de conexión, sin loop.
+          set({
+            session: null,
+            authBootstrapping: false,
+            sessionBootError: 'unavailable',
           });
         },
 
@@ -290,41 +421,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
-            storeAuthToken(result.token);
-            storeAuthUser(result.user);
-            writeSessionMode('auth');
-            if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
-              // Multi-taller: el token sin org sólo sirve para elegir taller.
-              set({
-                loginLoading: false,
-                loginError: null,
-                pendingOrgSelection: result.memberships,
-                organizationChoices: result.memberships,
-              });
-              notifySessionChanged();
-              return;
-            }
-            set({
-              session: 'auth',
-              loginLoading: false,
-              loginError: null,
-              sessionEndReason: null,
-              pendingOrgSelection: null,
-              organizationChoices: result.memberships ?? [],
-              activeOrg: result.organization ?? null,
-              sessionScope: null,
-              // Reset workspace so AppContent reloads for the new session.
-              workspace: null,
-              workspaceSeq: get().workspaceSeq + 1,
-              workspaceLoadError: null,
-              assignableOwners: [],
-            });
-            // F118 S3: if the guest session produced real work, offer to
-            // bring it into the account instead of discarding it silently.
-            if (guestWorkspaceHasProjects()) {
-              set({ pendingGuestImport: true });
-            }
-            notifySessionChanged();
+            finishLogin(result, set, get, deps);
           } catch (err) {
             const message =
               err instanceof Error ? err.message : 'No se pudo iniciar sesión';
@@ -334,33 +431,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
         loginWithAuthPayload: (payload: unknown) => {
           const result = parseAuthResponse(payload);
-          storeAuthToken(result.token);
-          storeAuthUser(result.user);
-          writeSessionMode('auth');
-          if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
-            set({
-              pendingOrgSelection: result.memberships,
-              organizationChoices: result.memberships,
-            });
-            notifySessionChanged();
-            return;
-          }
-          set({
-            session: 'auth',
-            activeOrg: result.organization ?? null,
-            sessionScope: null,
-            pendingOrgSelection: null,
-            organizationChoices: result.memberships ?? [],
-            workspace: null,
-            workspaceSeq: get().workspaceSeq + 1,
-            workspaceLoadError: null,
-            assignableOwners: [],
-          });
-          notifySessionChanged();
+          finishLogin(result, set, get, deps);
         },
 
         selectOrg: async (organizationId: string) => {
-          const token = readAuthToken();
+          const credential = getCredential();
+          const token = credential?.accessToken ?? null;
           if (!token) {
             set({ pendingOrgSelection: null, orgSelectionLoading: false });
             return;
@@ -371,17 +447,32 @@ export function createWorkspaceStore(options?: InternalOptions) {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
+            // select-org NO crea sesión/familia nueva: mismo sid con scope
+            // actualizado. Un sid distinto es un contrato roto — no aplicar.
+            const currentSid = getCredential()?.sessionId;
+            if (result.sessionId && currentSid && result.sessionId !== currentSid) {
+              throw new Error('La sesión seleccionada no coincide con la sesión activa');
+            }
             await deps.tenantTransition.prepare();
-            storeAuthToken(result.token);
-            storeAuthUser(result.user);
+            applyLoginResponse({
+              token: result.token,
+              user: { ...result.user, id: result.user.id },
+              access_expires_at: result.accessExpiresAt ?? '',
+              absolute_session_expires_at: result.absoluteSessionExpiresAt ?? '',
+              session_id: result.sessionId ?? currentSid ?? '',
+              organization: result.organization,
+              selection_required: false,
+            } as Parameters<typeof applyLoginResponse>[0]);
+            scheduleWebAccessRefresh();
             deps.tenantTransition.commit();
-            notifySessionChanged();
+            broadcastWebSessionEvent({ type: 'scope-changed' });
             set({
               session: 'auth',
               // authUserSeq re-keys the authUser/authToken memos in the
               // shell — without it an in-app org switch (F178 N6) kept
               // serving the PREVIOUS org's token to child screens.
               authUserSeq: get().authUserSeq + 1,
+              authUser: result.user,
               orgSelectionLoading: false,
               orgSelectionError: null,
               orgSelectionRecoveryAvailable: false,
@@ -414,9 +505,11 @@ export function createWorkspaceStore(options?: InternalOptions) {
         },
 
         refreshOrganizationChoices: async () => {
-          const token = readAuthToken();
-          if (!token) return;
+          const credential = getCredential();
+          if (!credential) return;
+          const token = credential.accessToken;
           const requestedSession = { session: get().session, sessionScope: get().sessionScope };
+          const requestedGeneration = credential.generation;
           set({ orgSelectionLoading: true });
           try {
             const me = await meRequest(token, {
@@ -426,7 +519,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 ? { sessionGeneration: requestedSession.sessionScope.sessionGeneration }
                 : {}),
             });
-            if (readAuthToken() !== token || !isSameWorkspaceSession(requestedSession, get())) return;
+            if (getCredential()?.generation !== requestedGeneration || !isSameWorkspaceSession(requestedSession, get())) return;
             if (
               requestedSession.sessionScope &&
               (me.sessionScope.userId !== requestedSession.sessionScope.userId ||
@@ -435,8 +528,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
             ) {
               throw new Error('Authoritative session identity changed');
             }
-            storeAuthUser(me.user);
             set({
+              authUser: me.user,
               authUserSeq: get().authUserSeq + 1,
               activeOrg: me.organization ?? null,
               organizationChoices: me.organizationChoices,
@@ -447,7 +540,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
               orgSelectionRecoveryAvailable: false,
             });
           } catch {
-            if (readAuthToken() !== token || !isSameWorkspaceSession(requestedSession, get())) return;
+            if (getCredential()?.generation !== requestedGeneration || !isSameWorkspaceSession(requestedSession, get())) return;
             set({
               orgSelectionLoading: false,
               orgSelectionRecoveryAvailable: true,
@@ -456,20 +549,34 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
         },
 
+        /**
+         * Support (#460 SEC-4B §39–40): el token de soporte vive SOLO en
+         * memoria de esta pestaña, es tab-local (sin broadcast) y NO toca la
+         * cookie — la underlying cookie sigue representando la sesión
+         * platform original.
+         */
         enterSupportSession: async (token: string) => {
           await deps.tenantTransition.prepare();
           const sessionInfo = await meRequest(token, {
             baseUrl: deps.baseUrl,
             fetchImpl: deps.fetchImpl,
           });
-          storeAuthToken(token);
-          storeAuthUser(sessionInfo.user);
+          if (!sessionInfo.support || !sessionInfo.organization) {
+            throw new Error('La sesión de soporte no está activa');
+          }
+          applySupportCredential({
+            accessToken: token,
+            accessExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+            sessionId: sessionInfo.support.session_id,
+            organizationId: sessionInfo.organization.id,
+          });
           deps.tenantTransition.commit();
-          notifySessionChanged();
           writeSessionMode('auth');
           set({
             session: 'auth',
+            authBootstrapping: false,
             authUserSeq: get().authUserSeq + 1,
+            authUser: sessionInfo.user,
             activeOrg: sessionInfo.organization ?? null,
             supportInfo: sessionInfo.support ?? null,
             organizationChoices: sessionInfo.organizationChoices,
@@ -481,29 +588,56 @@ export function createWorkspaceStore(options?: InternalOptions) {
           });
         },
 
+        /**
+         * Salir de soporte NO es un Web logout (§41): termina la sesión de
+         * soporte con el token de soporte, purga, y recupera la sesión
+         * platform original mediante cookie bootstrap. Sin cookie viva →
+         * login screen.
+         */
         exitSupport: async () => {
-          const token = readAuthToken();
+          const credential = getCredential();
           const support = get().supportInfo;
-          if (!token || !support) {
+          const supportToken =
+            credential !== null && credential.kind === 'support' ? credential.accessToken : null;
+          if (!supportToken || !support) {
             get().logout();
             return;
           }
           set({ supportExiting: true });
           try {
-            await endSupportRequest(token, support.session_id, {
+            await endSupportRequest(supportToken, support.session_id, {
               baseUrl: deps.baseUrl,
               fetchImpl: deps.fetchImpl,
             });
           } catch {
-            // El backend igual corta por expiración; continuar al logout.
+            // El backend igual corta por expiración; continuar.
           }
-          set({ supportExiting: false });
-          get().logout();
+          // Purge support credential + tenant data; recover platform session.
+          clearCredential();
+          invalidateAuthorizedMedia();
+          deps.tenantTransition.commit();
+          set({
+            supportExiting: false,
+            supportInfo: null,
+            session: null,
+            authUser: null,
+            activeOrg: null,
+            sessionScope: null,
+            organizationChoices: [],
+            workspace: null,
+            workspaceSeq: get().workspaceSeq + 1,
+            workspaceLoadError: null,
+            assignableOwners: [],
+            authBootstrapping: true,
+          });
+          await get().beginAuthBootstrap();
         },
 
         hydrateSessionInfo: async () => {
-          const token = readAuthToken();
-          if (!token) return;
+          const credential = getCredential();
+          if (!credential) return;
+          const token = credential.accessToken;
+          const requestedGeneration = credential.generation;
           const requestedSession = {
             session: get().session,
             sessionScope: get().sessionScope,
@@ -518,29 +652,25 @@ export function createWorkspaceStore(options?: InternalOptions) {
                 : {}),
             });
             if (
-              readAuthToken() !== token ||
+              getCredential()?.generation !== requestedGeneration ||
               !isSameWorkspaceSession(requestedSession, get())
             ) {
               return;
             }
             if (me.user) {
               // /auth/me devuelve los roles de la membresía como clave
-              // hermana `roles` (el DTO de usuario no los trae). Merge en el
-              // usuario persistido: guardar el DTO tal cual perdería la
-              // unión multi-rol en cada reload (#325). Si la respuesta no
-              // trae roles, se conservan los ya persistidos.
+              // hermana `roles` (el DTO de usuario no los trae). Si la
+              // respuesta no trae roles, se conservan los ya presentes (#325).
               const roles = Array.isArray(me.roles)
                 ? me.roles.filter((r): r is string => typeof r === 'string' && r !== '')
                 : [];
-              const persisted = readAuthUser();
+              const current = get().authUser;
               const nextRoles =
-                roles.length > 0 ? roles : (persisted?.roles ?? []);
-              storeAuthUser(
-                nextRoles.length > 0
-                  ? { ...me.user, roles: nextRoles }
-                  : me.user,
-              );
-              set({ authUserSeq: get().authUserSeq + 1 });
+                roles.length > 0 ? roles : (current?.roles ?? []);
+              set({
+                authUser: nextRoles.length > 0 ? { ...me.user, roles: nextRoles } : me.user,
+                authUserSeq: get().authUserSeq + 1,
+              });
             }
             set({
               activeOrg: me.organization ?? null,
@@ -553,16 +683,94 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
         },
 
+        /**
+         * Logout SEC-4B: POST /auth/logout con cookie+CSRF bajo el lock
+         * cross-tab. Sólo tras la revocación server-side se purga y se
+         * difunde `session-ended`; un 5xx (cookie preservada) deja
+         * `logoutServerPending` — nunca se claim "logout completado", se
+         * ofrece reintentar y se bloquea el auto-bootstrap.
+         */
         logout: () => {
+          // Guest/anónimo no tiene cookie-session que revocar: purge local
+          // directo, sin red (y sin logoutServerPending espurio).
+          if (get().session !== 'auth') {
+            clearSession();
+            invalidateAuthorizedMedia();
+            deps.tenantTransition.commit();
+            set({
+              session: null,
+              loginError: null,
+              sessionEndReason: null,
+              logoutServerPending: false,
+              pendingOrgSelection: null,
+              organizationChoices: [],
+              orgSelectionError: null,
+              orgSelectionRecoveryAvailable: false,
+              activeOrg: null,
+              sessionScope: null,
+              supportInfo: null,
+              authUser: null,
+              loginLoading: false,
+              workspace: null,
+              workspaceSeq: get().workspaceSeq + 1,
+              workspaceLoadError: null,
+              assignableOwners: [],
+              pendingGuestImport: false,
+              guestImportLoading: false,
+              guestImportError: null,
+              authBootstrapping: false,
+            });
+            return;
+          }
+          void (async () => {
+            const outcome = await webLogout();
+            // El estado local se purga SIEMPRE: la intención del usuario es
+            // salir y el business data no debe quedar tras el login screen
+            // aunque el server siga vivo. El bearer de memoria muere aquí
+            // también (pending-retry NO conserva credential local).
+            clearCredential();
+            clearSession();
+            invalidateAuthorizedMedia();
+            deps.tenantTransition.commit();
+            if (outcome.status === 'revoked') {
+              broadcastWebSessionEvent({ type: 'session-ended' });
+            }
+            set({
+              session: null,
+              loginError: null,
+              sessionEndReason: null,
+              logoutServerPending: outcome.status === 'pending-retry',
+              pendingOrgSelection: null,
+              organizationChoices: [],
+              orgSelectionError: null,
+              orgSelectionRecoveryAvailable: false,
+              activeOrg: null,
+              sessionScope: null,
+              supportInfo: null,
+              authUser: null,
+              loginLoading: false,
+              workspace: null,
+              workspaceSeq: get().workspaceSeq + 1,
+              workspaceLoadError: null,
+              assignableOwners: [],
+              pendingGuestImport: false,
+              guestImportLoading: false,
+              guestImportError: null,
+              authBootstrapping: false,
+            });
+          })();
+        },
+
+        markSessionEnded: (reason) => {
+          // Sesión muerta server-side (401 terminal): purge local sin llamar
+          // al server — la cookie ya no sirve y el access murió.
+          clearCredential();
           clearSession();
-          // #460 SEC-3: cached media grants die with the session.
           invalidateAuthorizedMedia();
           deps.tenantTransition.commit();
-          notifySessionChanged();
           set({
             session: null,
-            loginError: null,
-            sessionEndReason: null,
+            sessionEndReason: reason,
             pendingOrgSelection: null,
             organizationChoices: [],
             orgSelectionError: null,
@@ -570,6 +778,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             activeOrg: null,
             sessionScope: null,
             supportInfo: null,
+            authUser: null,
             loginLoading: false,
             workspace: null,
             workspaceSeq: get().workspaceSeq + 1,
@@ -578,12 +787,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
             pendingGuestImport: false,
             guestImportLoading: false,
             guestImportError: null,
+            authBootstrapping: false,
           });
-        },
-
-        markSessionExpired: () => {
-          get().logout();
-          set({ sessionEndReason: 'expired' });
         },
 
         // --- Actions: workspace lifecycle ---
@@ -611,8 +816,17 @@ export function createWorkspaceStore(options?: InternalOptions) {
               err instanceof Error
                 ? err.message
                 : 'No se pudo cargar el espacio de trabajo';
-            if (/401|unauthorized/i.test(message) && get().session === 'auth') {
-              get().markSessionExpired();
+            if (
+              get().session === 'auth' &&
+              (err instanceof WebSessionEndedError || /401|unauthorized/i.test(message))
+            ) {
+              get().markSessionEnded(
+                err instanceof WebSessionEndedError && err.terminalCode === 'REFRESH_REVOKED'
+                  ? 'revoked'
+                  : err instanceof WebSessionEndedError && err.terminalCode === 'REFRESH_REUSED'
+                    ? 'security'
+                    : 'expired',
+              );
               return;
             }
             set({ workspaceLoading: false, workspaceLoadError: message });
@@ -720,7 +934,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             );
             if (!res.ok) {
               if (res.status === 401 && get().session === 'auth') {
-                get().markSessionExpired();
+                get().markSessionEnded('expired');
                 return;
               }
               throw new Error(`owners ${res.status}`);
@@ -742,7 +956,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (/401|unauthorized/i.test(msg)) {
-              get().markSessionExpired();
+              get().markSessionEnded('expired');
               return;
             }
             // Fall back to current authUser on fetch failure (#12).
@@ -791,32 +1005,17 @@ export function createWorkspaceStore(options?: InternalOptions) {
         },
 
         // --- Selectors ---
-        getAuthToken: () => (get().session === 'auth' ? readAuthToken() : null),
-        getAuthUser: () => (get().session === 'auth' ? readAuthUser() : null),
+        // SEC-4B: el bearer sale de la MEMORIA del runtime — nunca storage.
+        getAuthToken: () => (get().session === 'auth' ? getAccessToken() : null),
+        getAuthUser: () => (get().session === 'auth' ? get().authUser : null),
         getAuthUserSeq: () => get().authUserSeq,
         getRepository: () =>
           deps.repositoryFactory(get().session ?? 'guest', {
             baseUrl: deps.baseUrl,
+            getAccessToken: () => get().getAuthToken(),
+            fetchImpl: deps.fetchImpl,
           }),
       }),
-      {
-        // Only persist `session` — everything else is derived or loaded.
-        name: 'muebles-workspace-store',
-        storage: createJSONStorage(() => safeSessionStorage()),
-        partialize: (state) => ({ session: state.session }),
-        merge: (persisted, current) => {
-          // Prefer reading session from `session.ts` helpers (they validate
-          // token presence). Falls back to persisted if helpers return null
-          // but we had a stored session (rare race).
-          const fromHelpers = readSessionModeInitial();
-          const persistedState = persisted as { session?: SessionMode } | undefined;
-          return {
-            ...current,
-            session: fromHelpers ?? persistedState?.session ?? null,
-          };
-        },
-      },
-    ),
   );
 
   // #460 SEC-3: signed media grants land asynchronously; the bump re-renders
@@ -866,32 +1065,95 @@ function guestWorkspaceHasProjects(): boolean {
   }
 }
 
+type SessionSet = (partial: Partial<WorkspaceState>) => void;
+type SessionGet = () => WorkspaceState;
+
+/** Aplica el snapshot autoritativo de /auth/me al estado del shell. */
+function applySessionSnapshot(
+  snapshot: import('../session').SessionSnapshot,
+  set: SessionSet,
+  get: SessionGet,
+): void {
+  set({
+    authUser: snapshot.user,
+    authUserSeq: get().authUserSeq + 1,
+    organizationChoices: snapshot.organizationChoices,
+    activeOrg: snapshot.organization ?? null,
+    sessionScope: snapshot.sessionScope,
+    supportInfo: snapshot.support ?? null,
+  });
+}
+
 /**
- * Read initial session mode from `session.ts` (validates token presence for
- * `auth`). Returns null when running without sessionStorage (SSR/tests).
+ * Login/invitación post-éxito (SEC-4B): access → memoria del runtime (con la
+ * metadata de expiridad server-clock), refresh scheduling, snapshot
+ * autoritativo y broadcast NO-secreto `session-replaced` para que las demás
+ * pestañas purguen y re-bootstrapeen la cookie — jamás copiar el token.
  */
-function readSessionModeInitial(): SessionMode | null {
-  return readSessionMode();
-}
-
-function safeSessionStorage(): Storage {
-  try {
-    if (typeof globalThis !== 'undefined' && 'sessionStorage' in globalThis) {
-      return globalThis.sessionStorage;
-    }
-  } catch {
-    // ignore
+function finishLogin(
+  result: LoginSuccess,
+  set: SessionSet,
+  get: SessionGet,
+  deps: { readonly baseUrl: string; readonly fetchImpl: typeof fetch },
+): void {
+  if (!result.accessExpiresAt || !result.absoluteSessionExpiresAt || !result.sessionId) {
+    set({
+      loginLoading: false,
+      loginError: 'Respuesta de autenticación sin metadata de sesión completa',
+    });
+    return;
   }
-  // Zustand persist requires a Storage-like object; provide an inert fallback
-  // so SSR/test environments without sessionStorage don't crash.
-  return inertStorage;
+  applyLoginResponse({
+    token: result.token,
+    user: { ...result.user },
+    access_expires_at: result.accessExpiresAt,
+    absolute_session_expires_at: result.absoluteSessionExpiresAt,
+    session_id: result.sessionId,
+    organization: result.organization,
+    selection_required: false,
+  } as Parameters<typeof applyLoginResponse>[0]);
+  scheduleWebAccessRefresh();
+  writeSessionMode('auth');
+  if (result.selectionRequired && result.memberships && result.memberships.length > 0) {
+    // Multi-taller: el token sin org sólo sirve para elegir taller.
+    set({
+      loginLoading: false,
+      loginError: null,
+      authBootstrapping: false,
+      authUser: result.user,
+      authUserSeq: get().authUserSeq + 1,
+      pendingOrgSelection: result.memberships,
+      organizationChoices: result.memberships,
+    });
+    broadcastWebSessionEvent({ type: 'session-replaced' });
+    return;
+  }
+  set({
+    session: 'auth',
+    loginLoading: false,
+    loginError: null,
+    sessionEndReason: null,
+    logoutServerPending: false,
+    sessionBootError: null,
+    authBootstrapping: false,
+    authUser: result.user,
+    authUserSeq: get().authUserSeq + 1,
+    pendingOrgSelection: null,
+    organizationChoices: result.memberships ?? [],
+    activeOrg: result.organization ?? null,
+    sessionScope: null,
+    // Reset workspace so AppContent reloads for the new session.
+    workspace: null,
+    workspaceSeq: get().workspaceSeq + 1,
+    workspaceLoadError: null,
+    assignableOwners: [],
+  });
+  // F118 S3: if the guest session produced real work, offer to bring it into
+  // the account instead of discarding it silently.
+  if (guestWorkspaceHasProjects()) {
+    set({ pendingGuestImport: true });
+  }
+  broadcastWebSessionEvent({ type: 'session-replaced' });
 }
 
-const inertStorage: Storage = {
-  getItem: () => null,
-  setItem: () => undefined,
-  removeItem: () => undefined,
-  clear: () => undefined,
-  key: () => null,
-  length: 0,
-};
+/** El usuario autenticado vive en memoria del store; nada se persiste (§6). */

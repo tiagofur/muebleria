@@ -1,15 +1,19 @@
 /**
- * #366 — rename de marca Muebles → Granete: las claves de storage pasaron de
- * `muebles_*` a `granete_*`. Migración one-shot leer-viejo → escribir-nuevo →
- * borrar-viejo, para que nadie se desloguee ni pierda el workspace invitado.
+ * #366 — rename de marca Muebles → Granete para las claves de storage, y
+ * #460 SEC-4B para las credenciales legacy.
  *
- * Idempotente: si la clave nueva ya existe, gana la nueva y la vieja se borra.
- * Best-effort: storage deshabilitado o con quota llena no debe romper el boot.
+ * Dos políticas distintas:
+ * - Datos guest legítimos (workspace, picking, stock, suppliers, purchase
+ *   orders, contadores): migración one-shot leer-viejo → escribir-nuevo →
+ *   borrar-viejo. Nadie pierde su workspace invitado.
+ * - Bearers/metadata de auth legacy (`muebles_token`, `granete_token`,
+ *   `muebles_user`, `granete_user`): DISCARD. Nunca se migran ni se leen; el
+ *   boot los destruye apenas arranca. La sesión Web vive en la cookie HttpOnly
+ *   (`granete_web_refresh`) + memoria — un bearer viejo en localStorage es
+ *   superficie de robo, no una credencial.
  */
 
 const LEGACY_LOCAL_STORAGE_KEYS: Readonly<Record<string, string>> = {
-  muebles_token: 'granete_token',
-  muebles_user: 'granete_user',
   muebles_guest_workspace: 'granete_guest_workspace',
   muebles_guest_picking: 'granete_guest_picking',
   muebles_guest_stock: 'granete_guest_stock',
@@ -23,6 +27,17 @@ const LEGACY_LOCAL_STORAGE_KEYS: Readonly<Record<string, string>> = {
 const LEGACY_SESSION_STORAGE_KEYS: Readonly<Record<string, string>> = {
   muebles_session: 'granete_session',
 };
+
+/**
+ * Claves de bearer/metadata legacy que se DESTRUYEN en el boot (#460
+ * SEC-4B): `old localStorage bearer → DELETE → NEVER SEND`.
+ */
+export const DISCARDED_CREDENTIAL_STORAGE_KEYS: readonly string[] = [
+  'muebles_token',
+  'granete_token',
+  'muebles_user',
+  'granete_user',
+];
 
 function migrateStore(
   store: Storage | null | undefined,
@@ -43,15 +58,28 @@ function migrateStore(
   }
 }
 
+function discardCredentialKeys(store: Storage | null | undefined): void {
+  if (!store) return;
+  for (const key of DISCARDED_CREDENTIAL_STORAGE_KEYS) {
+    try {
+      store.removeItem(key);
+    } catch {
+      // best-effort: nunca romper el boot
+    }
+  }
+}
+
 /**
- * Migra las claves legacy `muebles_*` a `granete_*` en localStorage y
- * sessionStorage. Debe correr una vez al arrancar la app, antes de que nada
- * lea storage. Acepta stores inyectables para tests.
+ * Arranque de storage: destruye credenciales legacy (nunca migradas) y migra
+ * las claves guest `muebles_*` a `granete_*`. Debe correr una vez al arrancar
+ * la app, antes de que nada lea storage. Acepta stores inyectables para
+ * tests.
  */
 export function migrateLegacyStorageKeys(
   localStore: Storage | null | undefined = defaultLocalStorage(),
   sessionStore: Storage | null | undefined = defaultSessionStorage(),
 ): void {
+  discardCredentialKeys(localStore);
   migrateStore(localStore, LEGACY_LOCAL_STORAGE_KEYS);
   migrateStore(sessionStore, LEGACY_SESSION_STORAGE_KEYS);
 }

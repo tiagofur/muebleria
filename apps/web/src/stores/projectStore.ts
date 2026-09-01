@@ -715,7 +715,7 @@ export function createProjectStore(options: InternalOptions) {
           const workspaceState = useWorkspaceStore.getState();
           if (workspaceState.session === null) return;
           if (/401|unauthorized/i.test(message) && workspaceState.session === 'auth') {
-            workspaceState.markSessionExpired();
+            workspaceState.markSessionEnded('expired');
             return;
           }
           toast({

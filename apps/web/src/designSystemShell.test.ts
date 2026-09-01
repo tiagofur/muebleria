@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -176,7 +176,8 @@ describe('web shell login gate (Slice E)', () => {
     expect(shellViewSrc()).toContain('UsersScreen');
     expect(shellViewSrc()).toContain('showAdminUsers');
     expect(appContentSrc()).toContain('isAdminRole');
-    expect(appContentSrc()).toContain('storeAuthUser');
+    // SEC-4B: el usuario autenticado vive en memoria del store, no en storage.
+    expect(gate).toContain('credentialedWebFetch');
     expect(gate).not.toContain("authGate === 'register'");
   });
 
@@ -184,8 +185,9 @@ describe('web shell login gate (Slice E)', () => {
     const sessionPath = join(here, 'session.ts');
     const session = readFileSync(sessionPath, 'utf8');
     expect(session).toContain('granete_session');
-    expect(session).toContain('granete_token');
-    expect(session).toContain('granete_user');
+    // SEC-4B: granete_token/muebles_token se DESTRUYEN, nunca se escriben.
+    expect(session).toContain('LEGACY_BEARER_STORAGE_KEYS');
+    expect(session).not.toContain("setItem('granete_token'");
     expect(session).toContain('/auth/login');
     expect(session).not.toContain('/auth/register');
     expect(session).toContain('http://localhost:8080/api');
@@ -201,9 +203,17 @@ describe('web shell logout (Slice F)', () => {
 
     // Behavior: workspaceStore.logout clears session + storage + workspace.
     const { createWorkspaceStore } = await import('./stores/workspaceStore');
+    const { applyWebCredential } = await import('./webAuthRuntime');
     const store = createWorkspaceStore();
-    // Seed an auth session + token, then logout.
-    globalThis.localStorage.setItem('granete_token', 'jwt');
+    // Seed an auth session (memory credential, SEC-4B), then logout.
+    applyWebCredential({
+      accessToken: 'jwt',
+      accessExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      absoluteSessionExpiresAt: new Date(Date.now() + 18 * 3_600_000).toISOString(),
+      sessionId: 'sess-1',
+      userId: 'user-1',
+      organizationId: null,
+    });
     globalThis.sessionStorage.setItem('granete_session', 'auth');
     store.setState({
       session: 'auth',
@@ -212,6 +222,9 @@ describe('web shell logout (Slice F)', () => {
     });
 
     store.getState().logout();
+    await vi.waitFor(() => {
+      expect(store.getState().session).toBeNull();
+    });
 
     expect(store.getState().session).toBeNull();
     expect(store.getState().workspace).toBeNull();

@@ -20,33 +20,40 @@ function createStorage(): Storage {
   } as Storage;
 }
 
-describe('migrateLegacyStorageKeys (#366 — muebles_* → granete_*)', () => {
-  it('copia cada clave vieja a la nueva y borra la vieja', () => {
+describe('migrateLegacyStorageKeys (#366 guest keys + #460 SEC-4B bearer discard)', () => {
+  it('migra las claves guest y destruye los bearers legacy (never migrate, never send)', () => {
     const local = createStorage();
     const session = createStorage();
-    local.setItem('muebles_token', 'jwt-1');
+    local.setItem('muebles_token', 'legacy-jwt');
+    local.setItem('granete_token', 'newer-legacy-jwt');
+    local.setItem('muebles_user', '{"id":"u1"}');
+    local.setItem('granete_user', '{"id":"u1"}');
     local.setItem('muebles_guest_workspace', '{"schemaVersion":2}');
     local.setItem('muebles_guest_po_counter', '7');
     session.setItem('muebles_session', 'auth');
 
     migrateLegacyStorageKeys(local, session);
 
-    expect(local.getItem('granete_token')).toBe('jwt-1');
+    // Los datos guest legítimos migran.
     expect(local.getItem('granete_guest_workspace')).toBe('{"schemaVersion":2}');
     expect(local.getItem('granete_guest_po_counter')).toBe('7');
     expect(session.getItem('granete_session')).toBe('auth');
-    expect(local.getItem('muebles_token')).toBeNull();
     expect(local.getItem('muebles_guest_workspace')).toBeNull();
     expect(local.getItem('muebles_guest_po_counter')).toBeNull();
     expect(session.getItem('muebles_session')).toBeNull();
+    // Los bearers/metadata de auth se DESTRUYEN: ni migrados ni conservados.
+    expect(local.getItem('granete_token')).toBeNull();
+    expect(local.getItem('muebles_token')).toBeNull();
+    expect(local.getItem('granete_user')).toBeNull();
+    expect(local.getItem('muebles_user')).toBeNull();
   });
 
-  it('es idempotente: correr dos veces no duplica ni pisa datos', () => {
+  it('es idempotente: correr dos veces no duplica ni revive nada', () => {
     const local = createStorage();
-    local.setItem('muebles_user', '{"id":"u1"}');
+    local.setItem('muebles_guest_workspace', '{"schemaVersion":2}');
     migrateLegacyStorageKeys(local, createStorage());
     migrateLegacyStorageKeys(local, createStorage());
-    expect(local.getItem('granete_user')).toBe('{"id":"u1"}');
+    expect(local.getItem('granete_guest_workspace')).toBe('{"schemaVersion":2}');
     expect(local.length).toBe(1);
   });
 
@@ -61,12 +68,12 @@ describe('migrateLegacyStorageKeys (#366 — muebles_* → granete_*)', () => {
     expect(local.getItem('muebles_guest_stock')).toBeNull();
   });
 
-  it('no hace nada cuando no hay claves viejas', () => {
+  it('un bearer legacy solo (sin nada más) desaparece en el boot', () => {
     const local = createStorage();
-    local.setItem('granete_token', 'jwt-2');
+    local.setItem('granete_token', 'valid-looking-old-jwt');
     migrateLegacyStorageKeys(local, createStorage());
-    expect(local.getItem('granete_token')).toBe('jwt-2');
-    expect(local.length).toBe(1);
+    expect(local.getItem('granete_token')).toBeNull();
+    expect(local.length).toBe(0);
   });
 
   it('tolera stores null (entorno sin storage) sin romper', () => {

@@ -75,7 +75,7 @@ func TestSessionDirectorySelfMarksCurrentAndCurrentRevokeCutsAccess(t *testing.T
 	}
 
 	authority := mustAuthority("session-directory-api-secret-32-bytes-min")
-	token, err := authority.IssueTransportToken(directoryAPIUser, "directory@test.com", auth.TokenContext{SessionID: directoryCurrentSID}, "web")
+	token, err := issueTransportTokenCapped(authority, directoryAPIUser, "directory@test.com", auth.TokenContext{SessionID: directoryCurrentSID}, "web")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestSessionDirectoryRoutesRejectQueryTokenAndNonPlatform(t *testing.T) {
 	authority := server.tokenAuthority()
 	session := &domain.AuthSession{ID: directoryCurrentSID, UserID: directoryAPIUser, ClientType: domain.SessionClientWeb, CreatedAt: time.Now(), AbsoluteExpiresAt: time.Now().Add(time.Hour)}
 	store.authSessions = map[string]*domain.AuthSession{directoryCurrentSID: session}
-	token, err := authority.IssueTransportToken(directoryAPIUser, "directory@test.com", auth.TokenContext{SessionID: directoryCurrentSID}, "web")
+	token, err := issueTransportTokenCapped(authority, directoryAPIUser, "directory@test.com", auth.TokenContext{SessionID: directoryCurrentSID}, "web")
 	if err != nil {
 		t.Fatal(err)
 	}

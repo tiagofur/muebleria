@@ -404,14 +404,15 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		MembershipID:      result.Membership.ID,
 		OrganizationID:    result.Organization.ID,
 		ClientType:        domain.SessionClientWeb,
-		AbsoluteExpiresAt: time.Now().Add(auth.AccessTokenTTL),
+		AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL("web")),
 		DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
 	})
 	if err != nil {
 		respondWithInternalError(w, err, "accept invitation session")
 		return
 	}
-	token, err := s.tokenAuthority().IssueTransportToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, OrganizationCredentialVersion: result.Organization.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin, SessionID: session.ID}, "web")
+	// SEC-4B: web mints REQUIRE the registry's absolute cap.
+	token, err := s.tokenAuthority().IssueTransportTokenUntil(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, OrganizationCredentialVersion: result.Organization.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin, SessionID: session.ID}, "web", session.AbsoluteExpiresAt)
 	if err != nil {
 		respondWithInternalError(w, err, "accept invitation token")
 		return
