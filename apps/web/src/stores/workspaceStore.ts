@@ -29,6 +29,11 @@ import {
 } from '../shared/query/sessionScope';
 import { tenantTransition } from '../shared/query/tenantTransition';
 import { notifySessionChanged } from '../sessionSync';
+import {
+  invalidateAuthorizedMedia,
+  resolveAuthorizedMediaUrl,
+  subscribeToAuthorizedMedia,
+} from './mediaAuthorization';
 
 import {
   type AuthUser,
@@ -125,6 +130,11 @@ export interface WorkspaceState {
   readonly supportInfo: SupportInfo | null;
   readonly supportExiting: boolean;
   readonly authUserSeq: number;
+  /**
+   * Bumped when signed media grants resolve (#460 SEC-3) so trees consuming
+   * resolveMediaUrl re-render with the freshly authorized URLs.
+   */
+  readonly mediaSeq: number;
   readonly guestImportLoading: boolean;
   readonly guestImportError: string | null;
 
@@ -212,7 +222,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
     tenantTransition: options?.deps?.tenantTransition ?? tenantTransition,
   };
 
-  return create<WorkspaceState>()(
+  const store = create<WorkspaceState>()(
     persist(
       (set, get) => ({
         // --- Session ---
@@ -230,6 +240,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
         supportInfo: null,
         supportExiting: false,
         authUserSeq: 0,
+        mediaSeq: 0,
 
         // --- Workspace lifecycle ---
         workspace: null,
@@ -544,6 +555,8 @@ export function createWorkspaceStore(options?: InternalOptions) {
 
         logout: () => {
           clearSession();
+          // #460 SEC-3: cached media grants die with the session.
+          invalidateAuthorizedMedia();
           deps.tenantTransition.commit();
           notifySessionChanged();
           set({
@@ -748,17 +761,16 @@ export function createWorkspaceStore(options?: InternalOptions) {
         },
 
         // --- Media ---
-        resolveMediaUrl: (url) => {
-          if (!url) return undefined;
-          if (url.startsWith('http') || url.startsWith('blob:')) return url;
-          const token = get().getAuthToken() ?? '';
-          const abs = url.startsWith('/api/')
-            ? `${deps.baseUrl.replace(/\/api\/?$/, '')}${url}`
-            : url;
-          return token
-            ? `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
-            : abs;
-        },
+        // #460 SEC-3: session JWTs never ride the query string. Canonical
+        // /api/media paths resolve through short-lived signed grant URLs
+        // (batched + token-scoped, see mediaAuthorization.ts); everything
+        // else passes through untouched.
+        resolveMediaUrl: (url) =>
+          resolveAuthorizedMediaUrl(url, {
+            baseUrl: deps.baseUrl,
+            getAuthToken: () => get().getAuthToken(),
+            fetchImpl: deps.fetchImpl,
+          }),
 
         uploadCatalogImage: async (file) => {
           const token = get().getAuthToken();
@@ -806,6 +818,14 @@ export function createWorkspaceStore(options?: InternalOptions) {
       },
     ),
   );
+
+  // #460 SEC-3: signed media grants land asynchronously; the bump re-renders
+  // every tree that consumes resolveMediaUrl so cached grant URLs appear.
+  subscribeToAuthorizedMedia(() => {
+    const { mediaSeq } = store.getState();
+    store.setState({ mediaSeq: mediaSeq + 1 });
+  });
+  return store;
 }
 
 /** Default singleton — production wiring. */

@@ -865,16 +865,71 @@
       return '';
     }
 
+    // #460 SEC-3: server media resolves through SHORT-LIVED signed per-file
+    // URLs minted by Ruby (state.media.urls). The extension session credential
+    // never enters this webview and there is no `?token=` query
+    // authentication anymore. Missing/expired grants ask Ruby to re-authorize
+    // (refresh_media_url) and render nothing until the URL arrives.
+    const mediaFilenameRe = /\/api\/media\/([0-9a-f]{32}\.(?:jpg|png|webp))/;
+    // Filename → timestamp of the last refresh request; a failed mint must
+    // not pin the flag forever (retry window instead of a permanent skip).
+    const pendingMediaRefresh = {};
+    const MEDIA_REFRESH_RETRY_MS = 5000;
+
+    function mediaFilenameFromPath(url) {
+      const m = mediaFilenameRe.exec(String(url || ''));
+      return m ? m[1] : null;
+    }
+
+    function mediaUrls() {
+      if (!state.media) state.media = { baseUrl: '', urls: {} };
+      if (!state.media.urls) state.media.urls = {};
+      return state.media.urls;
+    }
+
+    function requestMediaRefresh(filename) {
+      if (!filename) return;
+      const last = pendingMediaRefresh[filename];
+      if (last && Date.now() - last < MEDIA_REFRESH_RETRY_MS) return;
+      pendingMediaRefresh[filename] = Date.now();
+      try {
+        sketchup.refresh_media_url(filename);
+      } catch (e) {
+        delete pendingMediaRefresh[filename];
+      }
+    }
+
     function resolveMediaUrl(url) {
       if (!url) return '';
       if (url.startsWith('http://') || url.startsWith('https://')) return url;
-      if (state.media && state.media.baseUrl) {
-        const cleanPath = url.startsWith('/') ? url : `/${url}`;
-        const tokenParam = state.media.token ? `?token=${encodeURIComponent(state.media.token)}` : '';
-        return `${state.media.baseUrl}${cleanPath}${tokenParam}`;
-      }
-      return url;
+      if (!url.startsWith('/api/media/')) return url;
+      const filename = mediaFilenameFromPath(url);
+      if (!filename) return url;
+      const signed = mediaUrls()[filename];
+      if (signed) return signed;
+      requestMediaRefresh(filename);
+      return '';
     }
+
+    // Ruby pushes re-minted grants here; repaint everything tagged with the
+    // canonical filename (swatch thumbnails and previews).
+    window.updateMediaUrl = function(payload) {
+      if (!payload || !payload.filename || !payload.url) return;
+      mediaUrls()[payload.filename] = payload.url;
+      delete pendingMediaRefresh[payload.filename];
+      document.querySelectorAll('[data-media-name]').forEach((el) => {
+        const signed = mediaUrls()[el.getAttribute('data-media-name')];
+        if (!signed) return;
+        if (el.tagName === 'IMG') {
+          if (el.getAttribute('src') !== signed) {
+            el.setAttribute('src', signed);
+            if (el.style.display === 'none') el.style.display = '';
+          }
+        } else if (el.style.backgroundImage !== `url('${signed}')`) {
+          el.style.backgroundImage = `url('${signed}')`;
+        }
+      });
+    };
 
     // Initialize from Ruby controller
     window.initOptionSelector = function(payload) {
@@ -1270,17 +1325,21 @@
       grid.innerHTML = materials.map(mat => {
         const matId = mat.materialId || mat.id;
         const isSelected = state.selectedMaterialId === matId;
-        const textureUrl = sanitizeUrl(resolveMediaUrl(mat.previewTextureUrl || mat.imageUrl));
+        const rawMediaUrl = mat.previewTextureUrl || mat.imageUrl;
+        const mediaName = mediaFilenameFromPath(rawMediaUrl);
+        const textureUrl = sanitizeUrl(resolveMediaUrl(rawMediaUrl));
         const color = sanitizeColor(mat.previewColor);
         const bgFallback = color ? `background-color: ${color};` : 'background-color: var(--surface-card-subtle);';
         const dataSrcAttr = textureUrl ? `data-src="${textureUrl}"` : '';
+        // Tagged so a re-minted grant (updateMediaUrl) can repaint the swatch.
+        const mediaNameAttr = mediaName ? `data-media-name="${mediaName}"` : '';
         const grainBadge = (mat.grain || mat.grainDefault) ? `<span class="grain-indicator">${GRAIN_ICON} Veta</span>` : '';
         const mfgBadge = mat.manufacturer ? `<span class="card-manufacturer">${escapeHtml(mat.manufacturer)}</span>` : '';
         const thickness = mat.thicknessMm ? `${escapeHtml(mat.thicknessMm)} mm` : '—';
 
         return `
           <div class="swatch-card ${isSelected ? 'active' : ''}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="0" aria-label="${escapeHtml(mat.name)}" data-id="${escapeHtml(matId)}">
-            <div class="card-preview" ${dataSrcAttr} style="${bgFallback}">
+            <div class="card-preview" ${dataSrcAttr} ${mediaNameAttr} style="${bgFallback}">
               <span class="card-check">✓</span>
               ${grainBadge}
             </div>
@@ -1383,8 +1442,15 @@
         return;
       }
 
-      const textureUrl = resolveMediaUrl(mat.previewTextureUrl || mat.imageUrl);
+      const rawTextureUrl = mat.previewTextureUrl || mat.imageUrl;
+      const textureUrl = resolveMediaUrl(rawTextureUrl);
       if (preview) {
+        const previewMediaName = mediaFilenameFromPath(rawTextureUrl);
+        if (previewMediaName) {
+          preview.setAttribute('data-media-name', previewMediaName);
+        } else {
+          preview.removeAttribute('data-media-name');
+        }
         if (textureUrl) {
           preview.style.backgroundImage = `url('${textureUrl}')`;
           preview.style.backgroundColor = 'transparent';

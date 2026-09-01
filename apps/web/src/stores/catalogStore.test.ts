@@ -1094,13 +1094,25 @@ describe('catalogStore — save serialization (P1-4)', () => {
     store.getState().createMaterial({ ...materialDraft, code: 'MAT-NEW-2' });
     store.getState().createMaterial({ ...materialDraft, code: 'MAT-NEW-3' });
 
-    await new Promise((r) => setTimeout(r, 10));
+    // Poll for the serialized chain to settle instead of a fixed 10 ms
+    // window: under a loaded CI runner the debounced saves legitimately
+    // need longer, and asserting early turned this test flaky.
+    const carriesAllThree = () => {
+      const last = saved[saved.length - 1];
+      return (
+        last !== undefined &&
+        last.materials.filter((m) => m.code.startsWith('MAT-NEW')).length === 3
+      );
+    };
+    const deadline = Date.now() + 2000;
+    while (!carriesAllThree() && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
 
     expect(saved.length).toBeGreaterThan(0);
     expect(maxConcurrent).toBe(1);
     // The last save carries the whole accumulated catalog.
-    const last = saved[saved.length - 1]!;
-    expect(last.materials.filter((m) => m.code.startsWith('MAT-NEW')).length).toBe(3);
+    expect(carriesAllThree()).toBe(true);
   });
 
   it('a failed save does not poison the chain — the next mutation still saves', async () => {

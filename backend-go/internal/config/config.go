@@ -32,6 +32,11 @@ type Config struct {
 	// RefreshCredentials hashes opaque refresh secrets with a dedicated
 	// pepper. It is intentionally independent from every JWT signing key.
 	RefreshCredentials *auth.RefreshCredentials
+	// MediaAuthority signs resource-scoped media read grants (#460 SEC-3)
+	// with the dedicated MEDIA_SIGNING_KEY. It shares no cryptographic
+	// primitive with the JWT keyring or the refresh pepper: a media grant can
+	// never validate as a session credential and vice versa.
+	MediaAuthority *auth.MediaAuthority
 	AllowedOrigins     []string // CORS allowlist (reflected per-request); never "*"
 	RateLimitRPS       float64  // sustained requests/second for auth endpoints
 	RateLimitBurst     int      // maximum burst for auth endpoints
@@ -84,6 +89,10 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	mediaAuthority, err := auth.NewMediaAuthority(os.Getenv("MEDIA_SIGNING_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	allowed := parseOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	if len(allowed) == 0 {
@@ -120,6 +129,7 @@ func LoadConfig() (Config, error) {
 		JWTIssuer:            issuer,
 		JWTAuthority:         authority,
 		RefreshCredentials:   refreshCredentials,
+		MediaAuthority:       mediaAuthority,
 		AllowedOrigins:       allowed,
 		RateLimitRPS:         rps,
 		RateLimitBurst:       burst,

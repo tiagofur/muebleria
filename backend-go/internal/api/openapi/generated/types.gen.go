@@ -49,6 +49,8 @@ const (
 	ApiErrorCodeRefreshRevoked                 ApiErrorCode = "REFRESH_REVOKED"
 	ApiErrorCodeRefreshReused                  ApiErrorCode = "REFRESH_REUSED"
 	ApiErrorCodeSessionNotFound                ApiErrorCode = "SESSION_NOT_FOUND"
+	ApiErrorCodeMediaAccessExpired             ApiErrorCode = "MEDIA_ACCESS_EXPIRED"
+	ApiErrorCodeMediaAccessInvalid             ApiErrorCode = "MEDIA_ACCESS_INVALID"
 )
 
 type ApiError struct {
@@ -669,4 +671,18 @@ type RevokeSessionRequest struct {
 type SessionRevokeResponse struct {
 	Session SessionSummary `json:"session"`
 	Revoked bool           `json:"revoked"`
+}
+
+type MediaAuthorizeRequest struct {
+	Resources []string `json:"resources"`
+}
+
+type MediaGrant struct {
+	Filename  string `json:"filename"`
+	URL       string `json:"url"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+type MediaAuthorizeResponse struct {
+	Grants []MediaGrant `json:"grants"`
 }

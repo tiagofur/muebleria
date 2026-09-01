@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -168,7 +170,24 @@ func (s *Server) HandleMediaGet(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	// Cache semantics (#460 SEC-3 + review): private only (never a shared
+	// cache) and Vary: Authorization because the same URL answers different
+	// organizations when reached with a session header. Session-header reads
+	// may cache for a day; a grant-authorized read is capped at the signed
+	// grant's remaining lifetime so the browser's freshness boundary can
+	// never outlive the 3-minute credential that authorized the response.
+	maxAge := 86400
+	if remaining, ok := r.Context().Value(mediaGrantRemainingKey{}).(time.Duration); ok {
+		capped := int(remaining.Seconds())
+		if capped < 0 {
+			capped = 0
+		}
+		if capped < maxAge {
+			maxAge = capped
+		}
+	}
+	w.Header().Set("Cache-Control", "private, max-age="+strconv.Itoa(maxAge))
+	w.Header().Add("Vary", "Authorization")
 	http.ServeContent(w, r, name, stat.ModTime(), f)
 }
 

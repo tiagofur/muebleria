@@ -391,6 +391,13 @@ func buildFixture() (*fixture, error) {
 		return nil, err
 	}
 	server.RefreshCredentials = refreshCredentials
+	// #460 SEC-3: dedicated media grant signing key (independent of the JWT
+	// secret and the refresh pepper, exactly like production).
+	mediaAuthority, err := auth.NewMediaAuthority(strings.Repeat("media-pilot-signing-", 2))
+	if err != nil {
+		return nil, err
+	}
+	server.MediaTokens = mediaAuthority
 	f.ts = httptest.NewServer(api.RegisterRoutes(server))
 	f.base = f.ts.URL
 

@@ -77,6 +77,10 @@ func main() {
 	// single-key fallback.
 	serverAPI.Tokens = cfg.JWTAuthority
 	serverAPI.RefreshCredentials = cfg.RefreshCredentials
+	// #460 SEC-3: resource-scoped media read grants are signed with the
+	// dedicated MEDIA_SIGNING_KEY — never with a session JWT key or the
+	// refresh pepper. Config validation already refused to boot without it.
+	serverAPI.MediaTokens = cfg.MediaAuthority
 	handler := api.RegisterRoutes(serverAPI)
 
 	// Timeouts mitigate slowloris and hung clients (issue #20).

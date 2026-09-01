@@ -4,6 +4,12 @@ export const GATE_MODULE_A_ID = 'a1111111-1111-4111-8111-111111111111';
 export const GATE_MODULE_B_ID = 'b2222222-2222-4222-8222-222222222222';
 export const LIFECYCLE_SUBJECT_EMAIL = 'browser-gate-lifecycle@example.com';
 
+// #460 SEC-3: canonical server media names — the gate writes these files into
+// each organization's media partition, so the browser exercises the real
+// signed-grant media flow (never a session JWT in the URL).
+export const GATE_MEDIA_A_URL = '/api/media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+export const GATE_MEDIA_B_URL = '/api/media/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png';
+
 export interface LifecycleSubject {
   readonly email: string;
   readonly organizationAId: string;
@@ -38,7 +44,7 @@ async function seedDistinctModule(token: string, id: string, tenant: 'A' | 'B'):
     const template = catalog.modules[0];
     await repository.saveCatalog({ ...catalog, modules: [{
       ...template, id, code: `GATE-${tenant}`, name: `Mueble real ${tenant}`, hardwareLines: template?.hardwareLines ?? [],
-      imageUrl: `/api/media/browser-gate-${tenant.toLowerCase()}.png`,
+      imageUrl: tenant === 'A' ? GATE_MEDIA_A_URL : GATE_MEDIA_B_URL,
     }] });
   } finally {
     if (original) Object.defineProperty(globalThis, 'localStorage', original);

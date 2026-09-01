@@ -3,6 +3,10 @@
 require 'json'
 
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/auth/provider'
+require_relative '../../src/granete_for_sketchup/transport/adapter'
+require_relative '../../src/granete_for_sketchup/transport/http_adapter'
+require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 
 class RemoteCatalogProviderTest < Minitest::Test

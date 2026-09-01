@@ -1837,6 +1837,37 @@
           }
         }
       }
+    },
+    "/media:authorize": {
+      "post": {
+        "operationId": "authorizeMedia",
+        "description": "Issue short-lived, resource-scoped read grants for canonical catalog media files. The caller authenticates with a session bearer (organization scope required); each grant is a media_read credential bound to exactly one file of the caller's organization and expires within minutes. Grants never authenticate business APIs.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaAuthorizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Grants for every requested file that exists in the caller's organization (missing files are omitted, not erroring, so responses stay enumeration-safe)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAuthorizeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1972,7 +2003,9 @@
           "REFRESH_EXPIRED",
           "REFRESH_REVOKED",
           "REFRESH_REUSED",
-          "SESSION_NOT_FOUND"
+          "SESSION_NOT_FOUND",
+          "MEDIA_ACCESS_EXPIRED",
+          "MEDIA_ACCESS_INVALID"
         ]
       },
       "ApiError": {
@@ -4173,6 +4206,63 @@
           },
           "revoked": {
             "type": "boolean"
+          }
+        }
+      },
+      "MediaAuthorizeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resources"
+        ],
+        "description": "Canonical catalog media filenames (server-generated upload names) to authorize for read. Clients request typed resource ids, never arbitrary URLs.",
+        "properties": {
+          "resources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}\\\\.(jpg|png|webp)$"
+            }
+          }
+        }
+      },
+      "MediaGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "filename",
+          "url",
+          "expiresAt"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "Short-lived signed GET URL for exactly this file"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MediaAuthorizeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grants"
+        ],
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaGrant"
+            }
           }
         }
       }

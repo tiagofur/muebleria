@@ -6,17 +6,23 @@ require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
 require_relative '../../src/granete_for_sketchup/assets/asset_loader'
 require_relative '../../src/granete_for_sketchup/assets/texture_cache'
+require_relative '../../src/granete_for_sketchup/auth/provider'
+require_relative '../../src/granete_for_sketchup/transport/adapter'
+require_relative '../../src/granete_for_sketchup/transport/http_adapter'
+require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
-require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
-require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 require_relative '../../src/granete_for_sketchup/selection/capabilities'
 require_relative '../../src/granete_for_sketchup/selection/selection_context'
 require_relative '../../src/granete_for_sketchup/selection/capability_policy'
+require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
+require_relative '../../src/granete_for_sketchup/observers/selection_observer'
+require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
+require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 
 class DialogControllerTest < Minitest::Test
   class StatusProvider
@@ -42,18 +48,63 @@ class DialogControllerTest < Minitest::Test
   end
 
   # Session double that also exposes the configured-transport surface the
-  # media payload reads (configured?/status/authorization_header).
+  # media grants flow reads (configured?/transport/authorization_header).
   class MediaEnabledSession < FakeSession
+    attr_reader :media_requests
+
+    def initialize
+      super
+      @media_requests = []
+    end
+
     def configured?
       true
     end
 
-    def status
-      { 'state' => 'logged_in', 'server_url' => 'http://taller.local:8080/api' }
-    end
-
     def authorization_header
       'Bearer media-token-123'
+    end
+
+    # Transport double answering POST /media:authorize with signed grants
+    # (#460 SEC-3). Records every request so tests can prove the session
+    # credential stayed in the Authorization header of the authorize call.
+    def transport
+      session = self
+      @transport ||= Class.new do
+        def initialize(session)
+          @session = session
+        end
+
+        def configured?
+          true
+        end
+
+        def base_url
+          'http://taller.local:8080/api'
+        end
+
+        def request(payload, authorization_header: nil)
+          @session.media_requests << { 'payload' => payload, 'authorization_header' => authorization_header }
+          { 'status' => 200, 'body' => {
+            'grants' => payload['body']['resources'].map do |filename|
+              { 'filename' => filename,
+                'url' => "/api/media/#{filename}?grant=signed-#{filename[0, 6]}",
+                'expiresAt' => '2026-09-01T12:03:00Z' }
+            end
+          } }
+        end
+      end.new(session)
+    end
+  end
+
+  # Catalog double whose definitions reference server media previews.
+  class MediaCatalog < Granete::SketchUpExtension::Library::StaticCatalogProvider
+    MEDIA_FILE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'
+
+    def all_definitions
+      super.map do |definition|
+        definition.merge('imageUrl' => "/api/media/#{MEDIA_FILE}")
+      end
     end
   end
 
@@ -415,12 +466,17 @@ class DialogControllerTest < Minitest::Test
     assert_includes dialog.executed_scripts.last, 'contraseña'
   end
 
-  def test_catalog_payload_carries_media_origin_and_token_for_session
+  # #460 SEC-3: the dialog never receives the session credential. The media
+  # payload carries per-file signed grant URLs minted through the authorize
+  # endpoint, with the bearer confined to that request's Authorization header.
+  def test_catalog_payload_carries_signed_media_urls_without_session_token
+    session = MediaEnabledSession.new
     controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
       logger: @logger,
       status_provider: StatusProvider.new,
       metadata_store: @store,
-      session: MediaEnabledSession.new
+      catalog_provider: MediaCatalog.new,
+      session: session
     )
     dialog = controller.show
 
@@ -428,11 +484,45 @@ class DialogControllerTest < Minitest::Test
 
     catalog_script = dialog.executed_scripts.find { |s| s.include?('setCatalog') }
     refute_nil catalog_script
-    # Workshop previews are server-relative; the dialog needs the origin
-    # (without the /api suffix) plus the media token to load them.
-    assert_includes catalog_script, '"media":{'
-    assert_includes catalog_script, '"baseUrl":"http://taller.local:8080"'
-    assert_includes catalog_script, '"token":"media-token-123"'
+    assert_includes catalog_script, '"media":{"baseUrl":"http://taller.local:8080"'
+    signed_url = '"http://taller.local:8080/api/media/' \
+                 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png?grant=signed-aaaaaa"'
+    assert_includes catalog_script, "\"urls\":{\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png\":#{signed_url}"
+    # The session credential must NOT cross into the webview.
+    refute_includes catalog_script, '"token"'
+    refute_includes catalog_script, 'media-token-123'
+
+    # The authorize call kept the bearer in the header and requested typed
+    # resource ids — never an arbitrary URL to sign.
+    assert_equal 1, session.media_requests.length
+    request = session.media_requests.first
+    assert_equal 'POST', request['payload']['method']
+    assert_equal '/media:authorize', request['payload']['path']
+    assert_equal ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'],
+                 request['payload']['body']['resources']
+    assert_equal 'Bearer media-token-123', request['authorization_header']
+  end
+
+  # Webviews re-mint expired grants on demand through the refresh callback;
+  # Ruby pushes the fresh signed URL back via the updateMediaUrl bridge.
+  def test_refresh_media_url_callback_mints_grant_and_pushes_bridge
+    session = MediaEnabledSession.new
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      catalog_provider: MediaCatalog.new,
+      session: session
+    )
+    dialog = controller.show
+
+    dialog.callbacks.fetch('refresh_media_url').call(nil, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png')
+
+    update_script = dialog.executed_scripts.find { |s| s.include?('updateMediaUrl') }
+    refute_nil update_script
+    assert_includes update_script, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png'
+    assert_includes update_script, 'grant=signed-bbbbbb'
+    refute_includes update_script, 'media-token-123'
   end
 
   def test_catalog_payload_without_session_omits_media

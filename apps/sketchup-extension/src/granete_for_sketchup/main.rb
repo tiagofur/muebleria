@@ -23,6 +23,7 @@ module Granete
         assets/asset_resolver
         assets/asset_loader
         assets/texture_cache
+        assets/media_authorizer
         model/furniture_builder
         migration/scanner
         migration/migrator

@@ -50,8 +50,12 @@ type Server struct {
 	// RefreshCredentials is configured from the independent
 	// REFRESH_TOKEN_PEPPER. Production refuses to boot without it.
 	RefreshCredentials *auth.RefreshCredentials
-	authorityOnce      sync.Once
-	lazyAuthority      *auth.Authority
+	// MediaTokens signs/validates resource-scoped media read grants under the
+	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
+	// built without one neither mints nor accepts media grants.
+	MediaTokens     *auth.MediaAuthority
+	authorityOnce   sync.Once
+	lazyAuthority   *auth.Authority
 }
 
 func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
@@ -612,12 +616,17 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		"transport": transport, "session_id": session.ID,
 	})
 
+	roles := tc.Roles
+	if roles == nil {
+		roles = []string{}
+	}
+
 	response := LoginResponse{
 		Token:             token,
 		SessionID:         &session.ID,
 		User:              toOpenAPIUser(u),
 		License:           license,
-		Roles:             tc.Roles,
+		Roles:             roles,
 		Organization:      orgDTO,
 		Memberships:       toMembershipDTOs(memberships),
 		SelectionRequired: false,

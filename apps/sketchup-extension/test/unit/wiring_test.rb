@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/runtime'
 
 # Executes the packaged support entrypoint exactly as SketchUp would after
 # installing the RBZ, proving the wiring itself: requires resolved, runtime

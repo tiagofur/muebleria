@@ -15,6 +15,8 @@ import type {
   LogoutRequest,
   LogoutResponse,
   MeResponse,
+  MediaAuthorizeRequest,
+  MediaAuthorizeResponse,
   MembershipMutationResponse,
   MembershipOffboardingPreview,
   MembershipSectorMutationResponse,
@@ -119,4 +121,5 @@ export abstract class GeneratedGraneteApiClient {
   revokeMembershipSession(token: string, membershipId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
   listPlatformUserSessions(token: string, userId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/platform/users/${encodeURIComponent(userId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
   revokePlatformUserSession(token: string, userId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/platform/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
+  authorizeMedia(token: string, body: MediaAuthorizeRequest, signal?: AbortSignal): Promise<MediaAuthorizeResponse> { return this.request("POST", "/media:authorize", { schema: "MediaAuthorizeResponse", token, bodySchema: "MediaAuthorizeRequest", body, signal }); }
 }

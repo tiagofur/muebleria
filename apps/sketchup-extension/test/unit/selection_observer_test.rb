@@ -2,11 +2,13 @@
 
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
+require_relative '../../src/granete_for_sketchup/library/layout_contract'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/selection/capabilities'
 require_relative '../../src/granete_for_sketchup/selection/selection_context'
 require_relative '../../src/granete_for_sketchup/selection/capability_policy'
+require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 

@@ -98,12 +98,6 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
-			// Allow ?token= for <img src> catalog media (F040); header still preferred.
-			if authHeader == "" {
-				if q := strings.TrimSpace(r.URL.Query().Get("token")); q != "" {
-					authHeader = "Bearer " + q
-				}
-			}
 			if authHeader == "" {
 				respondWithError(w, http.StatusUnauthorized, "missing authorization header")
 				return
@@ -508,6 +502,10 @@ var extensionTokenMayPostPaths = map[string]struct{}{
 	// business records; it still passes the same auth/license gates as every
 	// furniture endpoint. Full session/capability hardening is #460's scope.
 	"/api/furniture/authoring/resolve": {},
+	// #460 SEC-3: the SketchUp dialog mints short-lived read-only media
+	// grants for files the extension token can already GET. The response
+	// contains only signed read URLs — no session credential, no mutation.
+	"/api/media:authorize": {},
 }
 
 func extensionTokenMayPost(path string) bool {

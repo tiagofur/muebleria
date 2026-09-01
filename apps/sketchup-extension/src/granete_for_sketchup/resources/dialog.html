@@ -2110,15 +2110,77 @@
         }
 
         // Workshop previews arrive as server-relative paths (/api/media/...).
-        // Resolve them against the authenticated workshop origin and append
-        // the media token accepted by GET /api/media/{name}. Absolute and
-        // data URLs pass through untouched.
+        // #460 SEC-3: they resolve through SHORT-LIVED signed per-file URLs
+        // minted by Ruby (catalogMedia.urls). The extension session credential
+        // never enters the webview, and no `?token=` query authentication
+        // exists anymore. Missing/expired grants ask Ruby to re-authorize via
+        // the refresh_media_url callback and return "" so callers render the
+        // placeholder meanwhile.
+        var mediaFilenameRe = /\/api\/media\/([0-9a-f]{32}\.(?:jpg|png|webp))/;
+        // Filename → timestamp of the last refresh request. A failed mint
+        // (offline, expired session) would otherwise leave the flag stuck and
+        // the image dead until the dialog reopens; the retry window lets the
+        // next render/error retry without hammering Ruby.
+        var pendingMediaRefresh = {};
+        var MEDIA_REFRESH_RETRY_MS = 5000;
+
+        function mediaFilenameFromPath(url) {
+          var m = mediaFilenameRe.exec(String(url || ""));
+          return m ? m[1] : null;
+        }
+
+        function mediaUrls() {
+          if (!catalogMedia) catalogMedia = { baseUrl: "", urls: {} };
+          if (!catalogMedia.urls) catalogMedia.urls = {};
+          return catalogMedia.urls;
+        }
+
+        function requestMediaRefresh(filename) {
+          if (!filename) return;
+          var last = pendingMediaRefresh[filename];
+          if (last && Date.now() - last < MEDIA_REFRESH_RETRY_MS) return;
+          pendingMediaRefresh[filename] = Date.now();
+          try {
+            sketchup.refresh_media_url(filename);
+          } catch (e) {
+            delete pendingMediaRefresh[filename];
+          }
+        }
+
         function resolveMediaUrl(url) {
           if (!url || typeof url !== "string") return url;
-          if (!catalogMedia || url.indexOf("http") === 0 || url.indexOf("data:") === 0) return url;
-          if (url.charAt(0) !== "/") return url;
-          var sep = url.indexOf("?") >= 0 ? "&" : "?";
-          return catalogMedia.baseUrl + url + sep + "token=" + encodeURIComponent(catalogMedia.token);
+          if (url.indexOf("http") === 0 || url.indexOf("data:") === 0) return url;
+          if (url.indexOf("/api/media/") !== 0) return url;
+          var filename = mediaFilenameFromPath(url);
+          if (!filename) return url;
+          var signed = mediaUrls()[filename];
+          if (signed) return signed;
+          requestMediaRefresh(filename);
+          return "";
+        }
+
+        // Re-applies signed URLs to everything currently tagged with its
+        // canonical media filename (module <img> cards and material swatches).
+        function applyMediaToDom() {
+          var nodes = document.querySelectorAll("[data-media-name]");
+          for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i];
+            var signed = mediaUrls()[el.getAttribute("data-media-name")];
+            if (!signed) continue;
+            if (el.tagName === "IMG") {
+              if (el.getAttribute("src") !== signed) {
+                el.setAttribute("src", signed);
+                // A grant landing after the placeholder covered a pending
+                // image must reveal the <img> again.
+                if (el.style.display === "none") {
+                  el.style.display = "";
+                  if (el.nextElementSibling) el.nextElementSibling.style.display = "none";
+                }
+              }
+            } else if (el.style.backgroundImage !== "url('" + signed + "')") {
+              el.style.backgroundImage = "url('" + signed + "')";
+            }
+          }
         }
 
         function getDefinitionDefaultDims(def) {
@@ -2264,11 +2326,20 @@
 
         function updateMaterialSwatch(el, mat) {
           if (!mat) {
+            el.removeAttribute("data-media-name");
             el.style.backgroundColor = "#e2e8f0";
             el.style.backgroundImage = "none";
             return;
           }
-          var url = resolveMediaUrl(mat.previewTextureUrl || mat.imageUrl);
+          var rawUrl = mat.previewTextureUrl || mat.imageUrl;
+          var mediaName = mediaFilenameFromPath(rawUrl);
+          var url = resolveMediaUrl(rawUrl);
+          if (mediaName) {
+            // Tagged so a re-minted grant (updateMediaUrl) can repaint it.
+            el.setAttribute("data-media-name", mediaName);
+          } else {
+            el.removeAttribute("data-media-name");
+          }
           if (url) {
             el.style.backgroundImage = "url('" + url + "')";
             el.style.backgroundColor = mat.previewColor || "#e2e8f0";
@@ -3129,8 +3200,37 @@
             var preview = document.createElement("div");
             preview.className = "furniture-card-preview";
 
-            var imageUrl = resolveMediaUrl(def.imageUrl || def.thumbnailUrl || def.previewUrl);
-            if (imageUrl) {
+            var rawImageUrl = def.imageUrl || def.thumbnailUrl || def.previewUrl;
+            var mediaName = mediaFilenameFromPath(rawImageUrl);
+            var imageUrl = resolveMediaUrl(rawImageUrl);
+            if (mediaName) {
+              // Server catalog media: the <img> always exists (tagged with its
+              // canonical filename) so a re-minted grant can repaint it; while
+              // the signed URL is pending the placeholder covers it.
+              var img = document.createElement("img");
+              img.alt = def.name;
+              img.className = "furniture-card-img";
+              img.loading = "lazy";
+              img.setAttribute("data-media-name", mediaName);
+              if (imageUrl) {
+                img.src = imageUrl;
+              } else {
+                img.style.display = "none";
+              }
+              img.onerror = function () {
+                img.style.display = "none";
+                if (img.nextElementSibling) img.nextElementSibling.style.display = "flex";
+                // #460 SEC-3: most likely an expired grant — re-mint and retry.
+                requestMediaRefresh(mediaName);
+              };
+              preview.appendChild(img);
+
+              var fallbackPlaceholder = document.createElement("div");
+              fallbackPlaceholder.className = "furniture-card-placeholder";
+              fallbackPlaceholder.style.display = imageUrl ? "none" : "flex";
+              fallbackPlaceholder.innerHTML = createFurniturePlaceholderSvg();
+              preview.appendChild(fallbackPlaceholder);
+            } else if (imageUrl) {
               var img = document.createElement("img");
               img.src = imageUrl;
               img.alt = def.name;
@@ -3263,6 +3363,13 @@
 
         // Bridge exposed to Ruby
         window.GraneteDialog = {
+          updateMediaUrl: function (payload) {
+            if (!payload || !payload.filename || !payload.url) return;
+            mediaUrls()[payload.filename] = payload.url;
+            delete pendingMediaRefresh[payload.filename];
+            applyMediaToDom();
+          },
+
           setStatus: function (status) {
             status = status || {};
             if (status.heading) connectionHeading.textContent = String(status.heading);

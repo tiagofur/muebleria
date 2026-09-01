@@ -6,7 +6,24 @@ require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/auth/provider'
 require_relative '../../src/granete_for_sketchup/transport/adapter'
+require_relative '../../src/granete_for_sketchup/auth/session_provider'
 require_relative '../../src/granete_for_sketchup/metadata/store'
+require_relative '../../src/granete_for_sketchup/transport/http_adapter'
+require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
+require_relative '../../src/granete_for_sketchup/library/catalog_provider'
+require_relative '../../src/granete_for_sketchup/library/layout_contract'
+require_relative '../../src/granete_for_sketchup/model/furniture_builder'
+require_relative '../../src/granete_for_sketchup/selection/capabilities'
+require_relative '../../src/granete_for_sketchup/selection/selection_context'
+require_relative '../../src/granete_for_sketchup/selection/capability_policy'
+require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
+require_relative '../../src/granete_for_sketchup/selection/resolver'
+require_relative '../../src/granete_for_sketchup/observers/selection_observer'
+require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
+require_relative '../../src/granete_for_sketchup/assets/asset_resolver'
+require_relative '../../src/granete_for_sketchup/assets/asset_loader'
+require_relative '../../src/granete_for_sketchup/assets/texture_cache'
+require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/lifecycle'
 require_relative '../../src/granete_for_sketchup/application'
@@ -129,7 +146,7 @@ class ApplicationTest < Minitest::Test
 
     expected_callbacks = %w[
       close_dialog delete_selected_furniture dialog_ready get_catalog insert_furniture login logout
-      open_material_selector select_furniture update_furniture
+      open_material_selector refresh_media_url select_furniture update_furniture
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)

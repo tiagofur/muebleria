@@ -152,8 +152,19 @@ export async function installOrganizationApi(
     }
     if (path.endsWith('/catalog/modules')) return fulfill(route, [{
       id: `module-${tenant.toLowerCase()}`, code: `MOD-${tenant}`, name: `Mueble ${tenant}`,
-      image_url: `/api/media/${tenant.toLowerCase()}.webp`, hardware_lines: [],
+      image_url: `/api/media/${tenant === 'A' ? 'a'.repeat(32) : 'b'.repeat(32)}.webp`, hardware_lines: [],
     }]);
+    // #460 SEC-3: media resolves through short-lived signed grants — the mock
+    // mints one per requested canonical file, tenant-scoped like the server.
+    if (path.endsWith('/media:authorize')) {
+      const body = request.postDataJSON() as { resources?: readonly string[] };
+      const grants = (body.resources ?? []).map((filename) => ({
+        filename,
+        url: `/api/media/${filename}?grant=mock-grant-${tenant.toLowerCase()}`,
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+      }));
+      return fulfill(route, { grants });
+    }
     if (path.includes('/media/')) return route.fulfill({ status: 200, contentType: 'image/webp', body: '' });
     if (path.endsWith('/settings')) return fulfill(route, { workshop_name: `Taller ${tenant}` });
     if (path.endsWith('/project-templates')) return fulfill(route, []);

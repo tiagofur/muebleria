@@ -36,15 +36,40 @@ func TestLoadConfig_RejectsShortSecret(t *testing.T) {
 func TestLoadConfig_RequiresIndependentRefreshPepper(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", "")
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	_, err := LoadConfig()
 	if err == nil || !strings.Contains(err.Error(), "refresh credential pepper") {
 		t.Fatalf("expected fail-closed refresh pepper error, got %v", err)
 	}
 }
 
+// MEDIA_SIGNING_KEY is a mandatory, independently-sized secret (#460 SEC-3):
+// media grants must not share a key with session tokens or the refresh
+// pepper, and a deployment without one refuses to boot.
+func TestLoadConfig_RequiresMediaSigningKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", "")
+	_, err := LoadConfig()
+	if err == nil || !strings.Contains(err.Error(), "media signing key") {
+		t.Fatalf("expected fail-closed media signing key error, got %v", err)
+	}
+}
+
+func TestLoadConfig_RejectsShortMediaSigningKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", "short")
+	_, err := LoadConfig()
+	if err == nil || !strings.Contains(err.Error(), "media signing key") {
+		t.Fatalf("expected short media signing key error, got %v", err)
+	}
+}
+
 func TestLoadConfig_SuccessWithDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("a", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	t.Setenv("PORT", "")                 // exercise default port
 	t.Setenv("CORS_ALLOWED_ORIGINS", "") // exercise default dev allowlist
 	t.Setenv("RATE_LIMIT_RPS", "")
@@ -72,6 +97,7 @@ func TestLoadConfig_SuccessWithDefaults(t *testing.T) {
 func TestLoadConfig_ParsesOriginsList(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://a.test, https://b.test ,https://c.test")
 
 	cfg, err := LoadConfig()
@@ -92,6 +118,7 @@ func TestLoadConfig_ParsesOriginsList(t *testing.T) {
 func TestLoadConfig_RejectsBadRateLimit(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	t.Setenv("RATE_LIMIT_RPS", "not-a-number")
 
 	_, err := LoadConfig()
@@ -106,6 +133,7 @@ func TestLoadConfig_RejectsBadRateLimit(t *testing.T) {
 func TestLoadConfig_MediaDirDefaultsToHome(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	t.Setenv("MEDIA_DIR", "")
 
 	cfg, err := LoadConfig()
@@ -129,6 +157,7 @@ func TestLoadConfig_MediaDirDefaultsToHome(t *testing.T) {
 func TestLoadConfig_MediaDirOverride(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	t.Setenv("MEDIA_DIR", "/var/lib/muebles/media")
 
 	cfg, err := LoadConfig()
@@ -144,6 +173,7 @@ func TestLoadConfig_MediaDirOverride(t *testing.T) {
 func TestLoadConfig_MediaDirWhitespaceFallsBack(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
 	t.Setenv("MEDIA_DIR", "   ")
 
 	cfg, err := LoadConfig()

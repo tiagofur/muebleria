@@ -109,6 +109,7 @@ cp .env.production.example .env
 # Generar secretos criptográficos reales
 JWT_SECRET_GEN=$(openssl rand -base64 48)
 REFRESH_TOKEN_PEPPER_GEN=$(openssl rand -base64 48)
+MEDIA_SIGNING_KEY_GEN=$(openssl rand -base64 48)
 DB_PASS_GEN=$(openssl rand -base64 32)
 
 # Editar el archivo .env con los valores de tu dominio y secretos
@@ -123,6 +124,7 @@ POSTGRES_PASSWORD=tu_password_generado
 POSTGRES_DB=granete_prod
 JWT_SECRET=tu_jwt_secret_generado
 REFRESH_TOKEN_PEPPER=tu_pepper_refresh_independiente
+MEDIA_SIGNING_KEY=tu_media_signing_key_independiente
 CORS_ALLOWED_ORIGINS=https://app.granete.io
 RATE_LIMIT_RPS=0.5
 RATE_LIMIT_BURST=10
@@ -402,6 +404,7 @@ umount /mnt/usb
 | `POSTGRES_DB` | Sí | `granete_prod` | Nombre de la base de datos |
 | `JWT_SECRET` | Sí | — | Secreto JWT, >= 32 bytes (requerida) |
 | `REFRESH_TOKEN_PEPPER` | Sí | — | Pepper independiente >= 32 bytes para HMAC-SHA-256 de refresh credentials; rotarlo revoca refresh y requiere re-login coordinado |
+| `MEDIA_SIGNING_KEY` | Sí | — | Key independiente >= 32 bytes (#460 SEC-3) para firmar media grants `media_read` de 3 minutos por recurso exacto; rotarla sólo invalida grants en vuelo |
 | `CORS_ALLOWED_ORIGINS` | Sí | — | Orígenes CORS permitidos, separados por coma |
 | `RATE_LIMIT_RPS` | No | `0.2` | Requests/segundo para auth endpoints |
 | `RATE_LIMIT_BURST` | No | `5` | Burst máximo para auth endpoints |

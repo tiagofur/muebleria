@@ -20,8 +20,10 @@ module Granete
       # Whole URLs that embed userinfo, before path rules can split them.
       URL_WITH_CREDENTIALS = %r{\b[a-z][a-z0-9+.-]*://[^\s/'"@]+@[^\s"']+}i
       # Credentials carried in query strings, e.g. ?token=abc&api_key=xyz.
+      # `grant` covers #460 SEC-3 signed media URLs: the raw grant is a
+      # (short-lived) credential and must never reach the logs.
       QUERY_CREDENTIALS = /
-        ([?&](?:access_?token|api_?key|token|secret|password)=)[^\s&'"]+
+        ([?&](?:access_?token|api_?key|token|grant|secret|password)=)[^\s&'"]+
       /ix
       # Absolute POSIX paths (/Volumes/…, /Users/…), Windows drive roots
       # (D:\Projects\…), and UNC shares (\\server\share\…) — including spaces
