@@ -42,6 +42,8 @@ const (
 	ApiErrorCodeOrganizationOffboardingBlocked ApiErrorCode = "ORGANIZATION_OFFBOARDING_BLOCKED"
 	ApiErrorCodeOrganizationSlugConflict       ApiErrorCode = "ORGANIZATION_SLUG_CONFLICT"
 	ApiErrorCodeOrganizationRecoveryOnly       ApiErrorCode = "ORGANIZATION_RECOVERY_ONLY"
+	ApiErrorCodeSessionRevoked                 ApiErrorCode = "SESSION_REVOKED"
+	ApiErrorCodeTokenTypeMismatch              ApiErrorCode = "TOKEN_TYPE_MISMATCH"
 )
 
 type ApiError struct {
@@ -128,6 +130,7 @@ type LoginResponse struct {
 	SelectionRequired bool                 `json:"selection_required"`
 	Support           *bool                `json:"support,omitempty"`
 	Transport         AuthTransport        `json:"transport"`
+	SessionID         *string              `json:"session_id,omitempty"`
 }
 
 type SupportInfo struct {
@@ -146,6 +149,7 @@ type SessionScope struct {
 	MembershipCredentialVersion   *int64  `json:"membership_credential_version"`
 	OrganizationCredentialVersion *int64  `json:"organization_credential_version"`
 	AbsoluteExpiresAt             string  `json:"absolute_expires_at"`
+	SessionID                     *string `json:"session_id,omitempty"`
 }
 
 type MeResponse struct {

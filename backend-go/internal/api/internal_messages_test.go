@@ -75,7 +75,7 @@ func TestHandleProjectInternalMessages_ListAndCreate(t *testing.T) {
 
 	server := &Server{
 		Store:     store,
-		JWTSecret: "test-secret",
+		JWTSecret: "test-secret-0123456789abcdefghij",
 	}
 
 	// 1. GET /api/projects/proj-1/messages
@@ -122,7 +122,7 @@ func TestHandleProjectTechnicalWorkflow_Update(t *testing.T) {
 	store := &messagesTestStore{}
 	server := &Server{
 		Store:     store,
-		JWTSecret: "test-secret",
+		JWTSecret: "test-secret-0123456789abcdefghij",
 	}
 
 	engID := "user-eng-99"
@@ -168,7 +168,7 @@ func TestHandleProjectTechnicalWorkflow_DeliveryReleaseValidation(t *testing.T) 
 	store := &messagesTestStore{projectReturned: proj}
 	server := &Server{
 		Store:     store,
-		JWTSecret: "test-secret",
+		JWTSecret: "test-secret-0123456789abcdefghij",
 	}
 
 	// 1. Attempting to release to ready_to_install without all loaded must fail with 400

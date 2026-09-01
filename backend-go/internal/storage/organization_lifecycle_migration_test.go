@@ -433,7 +433,7 @@ func TestFactoryProvisioningHTTPPostgresRuntimeRoleSuccessRollbackAndReplay(t *t
 		Scan(&membershipID, &membershipCredentialVersion, &organizationCredentialVersion); err != nil {
 		t.Fatal(err)
 	}
-	token, err := auth.GenerateToken(rlsUserA, "rls-a@example.test", auth.TokenContext{
+	token, err := auth.GenerateLegacyWebToken(rlsUserA, "rls-a@example.test", auth.TokenContext{
 		Roles: []string{string(domain.RoleAdmin)}, OrgID: rlsOrgA, MembershipID: membershipID,
 		MembershipCredentialVersion:   membershipCredentialVersion,
 		OrganizationCredentialVersion: organizationCredentialVersion,
@@ -632,7 +632,7 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, err := auth.GenerateToken(rlsUserA, "rls-a@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
+	token, err := auth.GenerateLegacyWebToken(rlsUserA, "rls-a@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}

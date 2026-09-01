@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -82,18 +84,35 @@ func TestDummyHash_IsValidBcrypt(t *testing.T) {
 	}
 }
 
-func TestJWTTokenLifecycle(t *testing.T) {
-	secret := "test-secret-key-12345"
+// mustTestAuthority builds a single-key authority for the common case.
+func mustTestAuthority(t *testing.T, secret string) *Authority {
+	t.Helper()
+	keyring, err := SingleKeyKeyring(secret)
+	if err != nil {
+		t.Fatalf("keyring: %v", err)
+	}
+	authority, err := NewAuthority(keyring, "")
+	if err != nil {
+		t.Fatalf("authority: %v", err)
+	}
+	return authority
+}
+
+func TestAuthorityTokenLifecycle(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
 	userID := "user-uuid-123"
 	email := "test@example.com"
 	role := "vendedor"
+	authority := mustTestAuthority(t, secret)
 
-	token, err := GenerateToken(userID, email, TokenContext{Roles: []string{role}}, secret)
+	token, err := authority.IssueTransportToken(userID, email, TokenContext{
+		Roles: []string{role}, SessionID: "sess-1",
+	}, "web")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	claims, err := ValidateToken(token, secret)
+	claims, err := authority.Validate(token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,10 +121,25 @@ func TestJWTTokenLifecycle(t *testing.T) {
 		t.Errorf("expected UserID = %s, got %s", userID, claims.UserID)
 	}
 	if claims.Email != email {
-		t.Errorf("expected Email = %s, got %s", email, claims.Email)
+		t.Errorf("expected Email = %s, got %s", claims.Email, email)
 	}
 	if claims.Role != role {
-		t.Errorf("expected Role = %s, got %s", role, claims.Role)
+		t.Errorf("expected Role = %s, got %s", claims.Role, role)
+	}
+	if claims.Sid != "sess-1" {
+		t.Errorf("expected Sid = sess-1, got %s", claims.Sid)
+	}
+	if claims.Typ != TokenTypeAccessWeb {
+		t.Errorf("expected Typ = %s, got %s", TokenTypeAccessWeb, claims.Typ)
+	}
+	if claims.Issuer != DefaultIssuer {
+		t.Errorf("expected Issuer = %s, got %s", DefaultIssuer, claims.Issuer)
+	}
+	if len(claims.Audience) != 1 || claims.Audience[0] != AudienceWeb {
+		t.Errorf("expected Audience = [%s], got %v", AudienceWeb, claims.Audience)
+	}
+	if claims.ID == "" {
+		t.Error("expected jti set")
 	}
 	if claims.ExpiresAt == nil {
 		t.Fatal("expected ExpiresAt set")
@@ -116,18 +150,102 @@ func TestJWTTokenLifecycle(t *testing.T) {
 		t.Errorf("token TTL = %v, want ~%v", ttl, AccessTokenTTL)
 	}
 
-	// Probar con una firma incorrecta
-	_, err = ValidateToken(token, "wrong-secret-key")
-	if err == nil {
+	// A different key must not validate the token.
+	if _, err := mustTestAuthority(t, "another-secret-key-0987654321fedcba").Validate(token); err == nil {
 		t.Error("expected token validation to fail with incorrect secret key")
 	}
 }
 
-// TestValidateToken_RejectsWrongVersion locks the one-time token invalidation
-// of the multi-org claims (ADR-0004 §6): any token without Ver == TokenVersion
-// is refused and the client must re-login.
-func TestValidateToken_RejectsWrongVersion(t *testing.T) {
-	secret := "test-secret-key-12345"
+// TestAuthority_KidHeaderAndRotation locks the zero-downtime rotation policy:
+// tokens signed with a previous kid stay valid while it remains registered, and
+// an unknown kid fails closed.
+func TestAuthority_KidHeaderAndRotation(t *testing.T) {
+	keyring, err := NewKeyring("k-new", map[string]string{
+		"k-new": "new-secret-key-1234567890abcdef0",
+		"k-old": "old-secret-key-1234567890abcdef0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, err := NewAuthority(keyring, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := authority.IssueTransportToken("u1", "u@example.com", TokenContext{
+		Roles: []string{"admin"}, SessionID: "sess-1",
+	}, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _, err := (jwt.NewParser()).ParseUnverified(token, &Claims{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kid, _ := parsed.Header["kid"].(string); kid != "k-new" {
+		t.Fatalf("kid header = %q, want k-new", kid)
+	}
+
+	// A token signed with the previous key still validates while registered.
+	oldAuthority := authorityForKid(t, "k-old", "old-secret-key-1234567890abcdef0")
+	oldToken, err := oldAuthority.IssueTransportToken("u1", "u@example.com", TokenContext{
+		Roles: []string{"admin"}, SessionID: "sess-1",
+	}, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(oldToken); err != nil {
+		t.Fatalf("previous-kid token must validate during rotation: %v", err)
+	}
+
+	// An unknown kid is rejected — that is how a rotated-out key is revoked.
+	unknownAuthority := authorityForKid(t, "k-gone", "gone-secret-key-1234567890abcdef0")
+	unknownToken, err := unknownAuthority.IssueTransportToken("u1", "u@example.com", TokenContext{
+		Roles: []string{"admin"}, SessionID: "sess-1",
+	}, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(unknownToken); err == nil {
+		t.Fatal("unknown kid must be rejected")
+	}
+}
+
+func authorityForKid(t *testing.T, kid, secret string) *Authority {
+	t.Helper()
+	keyring, err := NewKeyring(kid, map[string]string{kid: secret})
+	if err != nil {
+		t.Fatalf("keyring %s: %v", kid, err)
+	}
+	authority, err := NewAuthority(keyring, "")
+	if err != nil {
+		t.Fatalf("authority %s: %v", kid, err)
+	}
+	return authority
+}
+
+// TestKeyring_Validation locks the keyring invariants: non-empty, active kid
+// registered, secrets ≥32 bytes, kid charset.
+func TestKeyring_Validation(t *testing.T) {
+	if _, err := NewKeyring("k1", nil); err == nil {
+		t.Fatal("empty keyring must be rejected")
+	}
+	if _, err := NewKeyring("missing", map[string]string{"k1": "secret-key-1234567890abcdef"}); err == nil {
+		t.Fatal("active kid without secret must be rejected")
+	}
+	if _, err := NewKeyring("k1", map[string]string{"k1": "short"}); err == nil {
+		t.Fatal("short secret must be rejected")
+	}
+	if _, err := NewKeyring("bad kid!", map[string]string{"bad kid!": "secret-key-1234567890abcdef"}); err == nil {
+		t.Fatal("invalid kid charset must be rejected")
+	}
+}
+
+// TestValidate_RejectsWrongVersion locks the one-time token invalidation: a
+// token whose Ver is neither current nor legacy is refused.
+func TestValidate_RejectsWrongVersion(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
 	claims := &Claims{
 		UserID: "u", Email: "e@x.com", Role: "admin", Ver: 1,
 	}
@@ -135,31 +253,183 @@ func TestValidateToken_RejectsWrongVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ValidateToken(token, secret); err == nil {
+	if _, err := authority.Validate(token); err == nil {
 		t.Fatal("v1 token must be rejected")
 	}
 }
 
-// jwtNewSigned signs arbitrary claims for version-rejection tests.
+// jwtNewSigned signs arbitrary claims with a bare secret and NO kid header —
+// exactly the shape of a forged/legacy token, used for negative-policy tests.
 func jwtNewSigned(claims *Claims, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
 
-func TestGenerateToken_PreservesAbsoluteSessionLifetimeAndMembershipCredentials(t *testing.T) {
-	secret := "test-secret-key-12345"
+// fullVer5Claims builds a policy-complete ver5 claims set for tamper tests.
+func fullVer5Claims(typ string) *Claims {
+	now := time.Now()
+	return &Claims{
+		UserID: "u1", Email: "u@example.com", Role: "admin",
+		Roles: []string{"admin"},
+		OrgID: "org-1", MembershipID: "m-1",
+		MembershipCredentialVersion:   1,
+		OrganizationCredentialVersion: 1,
+		Transport:                     "web",
+		Sid:                           "sess-1",
+		Typ:                           typ,
+		Ver:                           TokenVersion,
+		AuthStartedAt:                 jwt.NewNumericDate(now),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "u1",
+			Audience:  jwt.ClaimStrings{AudienceWeb},
+			Issuer:    DefaultIssuer,
+			ID:        "jti-1",
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+}
+
+// TestValidate_RejectsTokenTypeTamper locks the non-interchangeable credential
+// classes: a ver5 token whose typ does not match its transport fails closed.
+func TestValidate_RejectsTokenTypeTamper(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
+
+	claims := fullVer5Claims(TokenTypeDeviceSketchup) // web transport, sketchup typ
+	token, err := jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err == nil {
+		t.Fatal("typ/transport mismatch must be rejected")
+	}
+
+	claims = fullVer5Claims(TokenTypeAccessWeb)
+	claims.Audience = jwt.ClaimStrings{AudienceSketchup}
+	token, err = jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err == nil {
+		t.Fatal("audience/transport mismatch must be rejected")
+	}
+
+	claims = fullVer5Claims(TokenTypeAccessWeb)
+	claims.Issuer = "other-issuer"
+	token, err = jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err == nil {
+		t.Fatal("issuer mismatch must be rejected")
+	}
+
+	claims = fullVer5Claims(TokenTypeAccessWeb)
+	claims.Sid = ""
+	token, err = jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err == nil {
+		t.Fatal("ver5 token without sid must be rejected")
+	}
+
+	claims = fullVer5Claims(TokenTypeAccessWeb)
+	claims.ID = ""
+	token, err = jwtNewSigned(claims, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err == nil {
+		t.Fatal("ver5 token without jti must be rejected")
+	}
+}
+
+// TestValidate_RejectsNonHS256Algorithms pins the exact algorithm: HS384/HS512
+// and unsigned tokens are refused even though they are HMAC or unsigned.
+func TestValidate_RejectsNonHS256Algorithms(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
+	now := time.Now()
+
+	for _, tc := range []struct {
+		name  string
+		token *jwt.Token
+	}{
+		{"hs384", jwt.NewWithClaims(jwt.SigningMethodHS384, fullVer5Claims(TokenTypeAccessWeb))},
+		{"hs512", jwt.NewWithClaims(jwt.SigningMethodHS512, fullVer5Claims(TokenTypeAccessWeb))},
+	} {
+		signed, err := tc.token.SignedString([]byte(secret))
+		if err != nil {
+			t.Fatalf("%s sign: %v", tc.name, err)
+		}
+		if _, err := authority.Validate(signed); err == nil {
+			t.Fatalf("%s token must be rejected", tc.name)
+		}
+	}
+
+	// Unsigned ("alg":"none") token, hand-crafted: header.payload with an
+	// empty signature segment.
+	unsigned := base64RawURL([]byte(`{"alg":"none"}`)) + "." + base64RawURL(mustJSON(t, fullVer5Claims(TokenTypeAccessWeb))) + "."
+	if _, err := authority.Validate(unsigned); err == nil {
+		t.Fatal("unsigned token must be rejected")
+	}
+	_ = now
+}
+
+func base64RawURL(b []byte) string {
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func mustJSON(t *testing.T, v interface{}) []byte {
+	t.Helper()
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return out
+}
+
+// TestValidate_LegacyVer4StillValidates locks the transitional acceptance
+// window (#460 SEC-9 removes it together with GenerateLegacyToken).
+func TestValidate_LegacyVer4StillValidates(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
+
+	token, err := GenerateLegacyWebToken("u1", "u@example.com", TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "m-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+	}, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := authority.Validate(token)
+	if err != nil {
+		t.Fatalf("legacy ver4 token must validate during transition: %v", err)
+	}
+	if claims.Ver != LegacyTokenVersion || claims.Sid != "" {
+		t.Fatalf("legacy claims wrong: ver=%d sid=%q", claims.Ver, claims.Sid)
+	}
+}
+
+func TestIssueTransportToken_PreservesAbsoluteSessionLifetimeAndMembershipCredentials(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
 	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
-	token, err := GenerateToken("user-1", "user@example.com", TokenContext{
+	token, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
 		Roles:                       []string{"admin"},
 		OrgID:                       "org-1",
 		MembershipID:                "membership-1",
 		MembershipCredentialVersion: 7, OrganizationCredentialVersion: 1,
 		AuthStartedAt: started,
-	}, secret)
+		SessionID:     "sess-1",
+	}, "web")
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := ValidateToken(token, secret)
+	claims, err := authority.Validate(token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,43 +447,62 @@ func TestGenerateToken_PreservesAbsoluteSessionLifetimeAndMembershipCredentials(
 	}
 }
 
-func TestGenerateToken_RejectsOrganizationScopeWithoutMembershipCredentials(t *testing.T) {
-	_, err := GenerateToken("user-1", "user@example.com", TokenContext{OrgID: "org-1", Roles: []string{"admin"}}, "secret")
+func TestIssueTransportToken_RejectsMissingSessionID(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	if _, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"},
+	}, "web"); err == nil {
+		t.Fatal("ver5 token without registry session id must be rejected")
+	}
+}
+
+func TestIssueTransportToken_RejectsOrganizationScopeWithoutMembershipCredentials(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	_, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{OrgID: "org-1", Roles: []string{"admin"}, SessionID: "sess-1"}, "web")
 	if err == nil {
 		t.Fatal("organization-scoped token without membership credentials must be rejected")
 	}
 }
 
-func TestGenerateToken_RejectsOrganizationScopeWithoutOrganizationCredentialVersion(t *testing.T) {
-	_, err := GenerateToken("user-1", "user@example.com", TokenContext{
+func TestIssueTransportToken_RejectsOrganizationScopeWithoutOrganizationCredentialVersion(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	_, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
 		OrgID:                       "org-1",
 		Roles:                       []string{"admin"},
 		MembershipID:                "membership-1",
 		MembershipCredentialVersion: 1,
-	}, "secret")
+		SessionID:                   "sess-1",
+	}, "web")
 	if err == nil {
 		t.Fatal("organization-scoped token without organization credential version must be rejected")
 	}
 }
 
-func TestGenerateSupportToken_PreservesCredentialEpochAndAbsoluteLifetime(t *testing.T) {
-	secret := "test-secret-key-12345"
+func TestIssueSupportToken_PreservesCredentialEpochAndAbsoluteLifetime(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
 	started := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Second)
-	token, err := GenerateSupportTokenFrom("platform-admin-1", "support@example.com", SupportClaims{
+	token, err := authority.IssueSupportTokenFrom("platform-admin-1", "support@example.com", SupportClaims{
 		OrgID:                         "organization-1",
 		SessionID:                     "support-session-1",
 		OrganizationCredentialVersion: 9,
 		Reason:                        "customer support",
-	}, started, secret)
+	}, started, "sess-support-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := ValidateToken(token, secret)
+	claims, err := authority.Validate(token)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if claims.Support == nil || claims.Support.OrganizationCredentialVersion != 9 {
 		t.Fatalf("support claims = %+v, want credential version 9", claims.Support)
+	}
+	if claims.Sid != "sess-support-1" || claims.Typ != TokenTypeSupportAccess {
+		t.Fatalf("sid/typ = %q/%q, want sess-support-1/%s", claims.Sid, claims.Typ, TokenTypeSupportAccess)
+	}
+	if len(claims.Audience) != 1 || claims.Audience[0] != AudienceSupport {
+		t.Fatalf("audience = %v, want [%s]", claims.Audience, AudienceSupport)
 	}
 	if !claims.AuthStartedAt.Time.Equal(started) {
 		t.Fatalf("auth started at = %s, want %s", claims.AuthStartedAt.Time, started)
@@ -223,26 +512,33 @@ func TestGenerateSupportToken_PreservesCredentialEpochAndAbsoluteLifetime(t *tes
 	}
 }
 
-func TestGenerateSupportToken_RejectsMissingSessionCredentials(t *testing.T) {
+func TestIssueSupportToken_RejectsMissingSessionCredentials(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
 	tests := []SupportClaims{
 		{SessionID: "support-session-1", OrganizationCredentialVersion: 1},
 		{OrgID: "organization-1", OrganizationCredentialVersion: 1},
 		{OrgID: "organization-1", SessionID: "support-session-1"},
 	}
 	for _, support := range tests {
-		if _, err := GenerateSupportToken("platform-admin-1", "support@example.com", support, "secret"); err == nil {
+		if _, err := authority.IssueSupportToken("platform-admin-1", "support@example.com", support, "sess-1"); err == nil {
 			t.Fatalf("support claims %+v must be rejected", support)
 		}
 	}
+	if _, err := authority.IssueSupportToken("platform-admin-1", "support@example.com", SupportClaims{
+		OrgID: "organization-1", SessionID: "support-session-1", OrganizationCredentialVersion: 1,
+	}, ""); err == nil {
+		t.Fatal("support token without registry session id must be rejected")
+	}
 }
 
-func TestValidateToken_RejectsSupportOrganizationMismatch(t *testing.T) {
-	secret := "test-secret-key-12345"
+func TestValidate_RejectsSupportOrganizationMismatch(t *testing.T) {
+	secret := "test-secret-key-1234567890abcdef"
+	authority := mustTestAuthority(t, secret)
 	now := time.Now()
 	claims := &Claims{
 		UserID: "platform-admin-1", Email: "support@example.com", OrgID: "organization-1",
 		Support:       &SupportClaims{OrgID: "organization-2", SessionID: "support-session-1", OrganizationCredentialVersion: 1},
-		Ver:           TokenVersion,
+		Ver:           LegacyTokenVersion,
 		AuthStartedAt: jwt.NewNumericDate(now),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
@@ -254,7 +550,30 @@ func TestValidateToken_RejectsSupportOrganizationMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ValidateToken(token, secret); err == nil {
+	if _, err := authority.Validate(token); err == nil {
 		t.Fatal("support organization mismatch must be rejected")
+	}
+}
+
+// TestValidate_RejectsKilessTokenUnderKeyringWithoutLegacyEntry documents the
+// fail-closed rotation rule: ver4 tokens (no kid) only validate while the old
+// secret is registered under the legacy kid.
+func TestValidate_RejectsKilessTokenUnderKeyringWithoutLegacyEntry(t *testing.T) {
+	keyring, err := NewKeyring("k-new", map[string]string{"k-new": "new-secret-key-1234567890abcdef0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, err := NewAuthority(keyring, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := GenerateLegacyWebToken("u1", "u@example.com", TokenContext{
+		Roles: []string{"admin"},
+	}, "old-secret-key-1234567890abcdef0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.Validate(token); err == nil {
+		t.Fatal("kidless ver4 token must fail closed when the legacy secret is not registered")
 	}
 }

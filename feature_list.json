@@ -5239,6 +5239,47 @@
         "progress/host_smoke_F201_testup_ci.json"
       ],
       "evidence": "bundle exec rake verify verde (syntax+lint+unit 280 tests+boundary+RBZ sha 960f8ac85b5db13dedbe6479ebc4ffaa7be1c2470d412692195123ef6177c6d2); TestUp 2.5.4 en SketchUp 2026.2 macOS real contra ese RBZ: 52 tests / 1308 assertions / 0 failures con TC_MigrationSmoke 4/4 (migración exitosa, undo único del lote, fallo-preserva-fuente, save/reopen). Evidencia con sha registrado en progress/host_smoke_F201_testup_ci.json (metadata.rbz_sha256)."
+    },
+    {
+      "id": "F202",
+      "title": "Bounded revocable sessions, MFA, media authorization and auth hardening (#460)",
+      "description": "Tracker del programa de seguridad de sesiones de #460: session registry server-side revocable con límite absoluto de 18h, taxonomía de credenciales por cliente (web/mobile/sketchup/support) no intercambiables, hardening JWT exacto (alg/iss/aud/typ/sid/jti/kid con keyring), MFA/step-up para superficies privilegiadas, autorización de media resource-scoped sin JWT de sesión en query, y trusted-proxy/rate limiting resistentes a abuso. Se ejecuta como SEC-1..SEC-9; este tracker queda in_progress hasta el gate final.",
+      "tags": [
+        "organization-foundation",
+        "security",
+        "backend",
+        "web",
+        "mobile",
+        "sketchup",
+        "openapi",
+        "p0"
+      ],
+      "created": "2026-08-31",
+      "status": "in_progress",
+      "acceptance": [
+        "Existe session registry server-side (auth_sessions) con sid/typ/iss/aud/jti/kid ver5, alg HS256 exacto, keyring con rotación kid y validación live por request que corta tokens revocados o con absolute_expires_at vencido aunque el JWT no haya expirado",
+        "absoluteSessionExpiresAt = issuedAt + 18h se conserva en refresh/select-org y upgrades ver4→ver5 nunca extienden el origen absoluto; la aceptación de ver4 es finita con EOL en el slice gate",
+        "Tipos de token no intercambiables: web/mobile/sketchup/support con typ+aud+client_type verificados; token web como sketchup/support y viceversa fallan cerrado",
+        "Login/refresh/select-org/invitación/soporte crean sesión estable (sid preservado en select-org) y exponen session_id en LoginResponse y SessionScope",
+        "auth_sessions clasificada platform-global con RLS FORCE, inventory, grants sin DELETE, y pruebas direct-SQL bajo app role (cross-user invisible, insert sin dueño rechazado)",
+        "SEC-2..SEC-9 (rotación refresh con reuse detection, logout, directorio/revocación, migración de credencial web, boundary SketchUp por dispositivo, MFA/step-up, media signed URL sin ?token= de sesión, trusted proxy/rate limits, gate de seguridad con EOL ver4) permanecen fuera de este primer slice y avanzan como children"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/460",
+        "https://github.com/tiagofur/muebleria/issues/446",
+        "https://github.com/tiagofur/muebleria/issues/462",
+        "docs/adr/0007-bounded-revocable-sessions-and-client-credentials.md",
+        "docs/architecture/organization-foundation-v2.md"
+      ],
+      "depends_on": [
+        "F191",
+        "F192",
+        "F194",
+        "F196",
+        "F197",
+        "F199"
+      ],
+      "review_notes": "SEC-1 (session registry + token taxonomy + JWT hardening) implementado en feat/460-1-session-registry: migration 000105 con RLS+inventory, auth.Authority/Keyring ver5 con dual validación ver4 finita, middleware fail-closed por sid con client_type, handlers login/select-org/refresh/me/support/invitación con sid estable, OpenAPI session_id + SESSION_REVOKED/TOKEN_TYPE_MISMATCH, ADR-0007. Negative proofs: revocación corta JWT vigente, expiración absoluta, confusión de tipo, fail-closed sin lookup, upgrade ver4 acotado al origen original, RLS cross-user/insert."
     }
   ]
 }

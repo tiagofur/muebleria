@@ -50,7 +50,7 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 		listHardwares:      catalog.Hardware,
 		listMaterials:      materials,
 	}
-	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{
+	token, err := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{
 		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, furnitureTestSecret)
@@ -208,7 +208,7 @@ func shelfRelJSON(id, shelfID string) engine.AuthoringRelationship {
 }
 
 func postAuthoringResolve(server *Server, token, query string, body any) *httptest.ResponseRecorder {
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
 	raw, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/resolve"+query, bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -785,7 +785,7 @@ func TestAuthoringResolveContractFixtureGolden(t *testing.T) {
 func TestAuthoringResolveParityWithGetLayout(t *testing.T) {
 	server, token := authoringStubServer(t)
 
-	getHandler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	getHandler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	getReq := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout?choice.FRENTE=mat-oak18", nil)
 	getReq.Header.Set("Authorization", "Bearer "+token)
 	getReq.SetPathValue("definitionId", authoringFixtureModuleID)
@@ -857,7 +857,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 
 	// Org-less token → fail closed before the handler.
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
-	orgless, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
+	orgless, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}}, furnitureTestSecret)
 	rec = postAuthoringResolve(server, orgless, "", authoringFixtureRequest("", authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("org-less status = %d", rec.Code)
@@ -865,7 +865,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 
 	// Extension tokens hold the EXPLICIT authoring-resolve POST capability
 	// (#460 coordination) and stay read-only everywhere else.
-	extension, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{
+	extension, _ := auth.GenerateLegacyExtensionToken(u.ID, "u@example.com", auth.TokenContext{
 		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, furnitureTestSecret)
@@ -874,7 +874,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 		t.Fatalf("extension token resolve status = %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	post := func(path string) int {
@@ -899,7 +899,7 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 		getUserByEmail: u, getOrgByID: noLicense, moduleReturnedByID: module,
 		listStructures: catalog.Structures, listComponents: catalog.Components, listHardwares: catalog.Hardware,
 	}
-	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{
+	webToken, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{
 		Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, furnitureTestSecret)
@@ -926,7 +926,7 @@ func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	assertIssueCode(t, rec.Body.Bytes(), "SCHEMA_ID_MISMATCH")
 
 	// Malformed JSON.
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
 	req := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/resolve", strings.NewReader("{not json"))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -1082,7 +1082,7 @@ func TestAuthoringResolveRejectsDimensionTypeAndDecimalsWithDetails(t *testing.T
 
 func TestAuthoringResolveTransportMetadataValidation(t *testing.T) {
 	server, token := authoringStubServer(t)
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
 	valid := authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID})
 	raw, _ := json.Marshal(valid)
 

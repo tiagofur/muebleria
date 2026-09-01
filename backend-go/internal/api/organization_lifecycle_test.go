@@ -12,7 +12,7 @@ import (
 )
 
 func TestOrganizationLifecycleRoutesReplaceLegacyCreateRoutes(t *testing.T) {
-	server := NewServer(&stubStore{}, "test-secret", nil, 100, 100)
+	server := NewServer(&stubStore{}, "test-secret-0123456789abcdefghij", nil, 100, 100)
 	handler := RegisterRoutes(server)
 
 	tests := []struct {

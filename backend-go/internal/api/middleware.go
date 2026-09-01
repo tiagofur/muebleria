@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -33,6 +34,14 @@ type MembershipLookup interface {
 	// GetOpenSupportSession resolves a platform support session that is still
 	// open and unexpired (ADR-0005 §5).
 	GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error)
+}
+
+// authSessionLookup resolves ver5 session registry rows. Production stores
+// always implement it; a store that cannot look sessions up fails CLOSED for
+// ver5 tokens (they are registry-bound by design), so test stubs that omit it
+// simply keep exercising the transitional ver4 path.
+type authSessionLookup interface {
+	GetAuthSessionForRequest(ctx context.Context, sessionID, expectedUserID string) (*domain.AuthSession, error)
 }
 
 type tenantTransactionRunner interface {
@@ -79,12 +88,13 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	}
 }
 
-// AuthMiddleware validates the Bearer JWT, re-loads the user from the DB to
-// refresh active/platform flags, re-resolves the live membership when the
-// token carries an organization scope (issue #16 pattern, ADR-0004) and puts
-// claims in the request context. Failure responses are JSON and never leak
-// parser/DB errors to the client.
-func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler) http.Handler {
+// AuthMiddleware validates the Bearer JWT under the exact HS256 policy
+// (#460), re-loads the user from the DB to refresh active/platform flags,
+// re-resolves the live membership when the token carries an organization scope
+// (issue #16 pattern, ADR-0004), resolves the ver5 session registry row and
+// puts claims in the request context. Failure responses are JSON and never
+// leak parser/DB errors to the client.
+func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -105,7 +115,7 @@ func AuthMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler)
 				return
 			}
 
-			claims, err := auth.ValidateToken(strings.TrimSpace(parts[1]), jwtSecret)
+			claims, err := tokens.Validate(strings.TrimSpace(parts[1]))
 			if err != nil {
 				// Generic message: never echo the parser error back to the client.
 				respondWithError(w, http.StatusUnauthorized, "invalid token")
@@ -186,6 +196,33 @@ func serveAuthenticatedRequest(
 		}
 		claims.Email = u.Email
 		claims.PlatformAdmin = u.PlatformAdmin
+
+		// #460/SEC-1: ver5 tokens are bounded by the server-side session
+		// registry. The row is resolved live on every request: revocation or
+		// absolute expiry cuts access immediately even with an unexpired JWT,
+		// and the registry's client type must match the token's transport so
+		// credential classes never interchange. A store that cannot resolve
+		// sessions fails CLOSED for registry-bound tokens.
+		if claims.Sid != "" {
+			lookup, ok := users.(authSessionLookup)
+			if !ok {
+				respondWithError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			session, err := lookup.GetAuthSessionForRequest(r.Context(), claims.Sid, claims.UserID)
+			if err != nil || session == nil {
+				respondWithError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+			if session.RevokedAt != nil || !session.AbsoluteExpiresAt.After(time.Now()) {
+				respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeSessionRevoked, "La sesión ya no está activa. Iniciá sesión de nuevo.", nil)
+				return
+			}
+			if session.ClientType != expectedSessionClientType(claims) {
+				respondWithError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+		}
 
 		// Live organization scope: the token names the organization,
 		// but membership roles and the organization's active flag are
@@ -280,9 +317,26 @@ func serveAuthenticatedRequest(
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
+// expectedSessionClientType derives the registry client type a token's
+// transport must map to. A mismatch (web token resolved against a sketchup
+// session row, etc.) is a credential-class confusion and fails closed.
+func expectedSessionClientType(claims *auth.Claims) domain.SessionClientType {
+	if claims.Support != nil {
+		return domain.SessionClientSupport
+	}
+	switch claims.Transport {
+	case "mobile":
+		return domain.SessionClientMobile
+	case "sketchup":
+		return domain.SessionClientSketchup
+	default:
+		return domain.SessionClientWeb
+	}
+}
+
 // AdminMiddleware wraps AuthMiddleware and requires the live DB role to be admin.
-func AdminMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler) http.Handler {
-	authMW := AuthMiddleware(jwtSecret, users)
+func AdminMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Handler) http.Handler {
+	authMW := AuthMiddleware(tokens, users)
 	return func(next http.Handler) http.Handler {
 		return authMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
@@ -298,8 +352,8 @@ func AdminMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler
 }
 
 // RoleMiddleware wraps AuthMiddleware and requires the live DB role to be one of the allowed roles.
-func RoleMiddleware(jwtSecret string, users MembershipLookup, allowedRoles ...domain.UserRole) func(http.Handler) http.Handler {
-	authMW := AuthMiddleware(jwtSecret, users)
+func RoleMiddleware(tokens *auth.Authority, users MembershipLookup, allowedRoles ...domain.UserRole) func(http.Handler) http.Handler {
+	authMW := AuthMiddleware(tokens, users)
 	roleSet := make(map[string]struct{}, len(allowedRoles))
 	for _, r := range allowedRoles {
 		roleSet[string(r)] = struct{}{}

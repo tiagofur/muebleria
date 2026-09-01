@@ -1,0 +1,116 @@
+package api
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/tiagofur/muebles-backend/internal/auth"
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
+)
+
+// mustAuthority builds a single-key token authority for handler/middleware
+// tests. Secrets must satisfy the production 32-byte minimum.
+func mustAuthority(secret string) *auth.Authority {
+	keyring, err := auth.SingleKeyKeyring(secret)
+	if err != nil {
+		panic(fmt.Sprintf("test keyring: %v", err))
+	}
+	authority, err := auth.NewAuthority(keyring, "")
+	if err != nil {
+		panic(fmt.Sprintf("test authority: %v", err))
+	}
+	return authority
+}
+
+// --- stubStore: session registry hooks (#460 / SEC-1) ---
+
+func (s *stubStore) CreateAuthSession(_ context.Context, cmd storage.CreateAuthSessionCommand) (*domain.AuthSession, error) {
+	if s.authSessions == nil {
+		s.authSessions = map[string]*domain.AuthSession{}
+	}
+	if s.nextAuthSessionID == "" {
+		s.nextAuthSessionID = "sess-1"
+	}
+	id := s.nextAuthSessionID
+	s.nextAuthSessionID = "sess-" + fmt.Sprint(len(s.authSessions)+2)
+	now := time.Now()
+	out := &domain.AuthSession{
+		ID: id, UserID: cmd.UserID, ClientType: cmd.ClientType,
+		CreatedAt: now, AbsoluteExpiresAt: cmd.AbsoluteExpiresAt,
+	}
+	if cmd.MembershipID != "" {
+		out.MembershipID = &cmd.MembershipID
+	}
+	if cmd.OrganizationID != "" {
+		out.ActiveOrganizationID = &cmd.OrganizationID
+	}
+	if cmd.SupportSessionID != "" {
+		out.SupportSessionID = &cmd.SupportSessionID
+	}
+	s.authSessions[id] = out
+	return out, nil
+}
+
+func (s *stubStore) GetAuthSessionForRequest(_ context.Context, sessionID, expectedUserID string) (*domain.AuthSession, error) {
+	if session, ok := s.authSessions[sessionID]; ok && session.UserID == expectedUserID {
+		return session, nil
+	}
+	return nil, storage.ErrAuthSessionNotFound
+}
+
+func (s *stubStore) UpdateAuthSessionScope(_ context.Context, sessionID, membershipID, organizationID string) error {
+	session, ok := s.authSessions[sessionID]
+	if !ok {
+		return storage.ErrAuthSessionNotFound
+	}
+	session.MembershipID = nil
+	if membershipID != "" {
+		session.MembershipID = &membershipID
+	}
+	session.ActiveOrganizationID = nil
+	if organizationID != "" {
+		session.ActiveOrganizationID = &organizationID
+	}
+	return nil
+}
+
+func (s *stubStore) RevokeAuthSession(_ context.Context, sessionID, revokedBy, reason string) (bool, error) {
+	session, ok := s.authSessions[sessionID]
+	if !ok || session.RevokedAt != nil {
+		return false, nil
+	}
+	now := time.Now()
+	session.RevokedAt = &now
+	if revokedBy != "" {
+		session.RevokedBy = &revokedBy
+	}
+	if reason != "" {
+		session.RevokeReason = &reason
+	}
+	return true, nil
+}
+
+// mintSessionToken mints a ver5 token bound to a registry row on the stub so
+// middleware-routed tests exercise the live session path (#460).
+func mintSessionToken(t *testing.T, authority *auth.Authority, st *stubStore, userID, email string, tc auth.TokenContext, transport string) string {
+	t.Helper()
+	session, err := st.CreateAuthSession(context.Background(), storage.CreateAuthSessionCommand{
+		UserID:            userID,
+		MembershipID:      tc.MembershipID,
+		OrganizationID:    tc.OrgID,
+		ClientType:        sessionClientType(transport),
+		AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL(transport)),
+	})
+	if err != nil {
+		t.Fatalf("create auth session: %v", err)
+	}
+	tc.SessionID = session.ID
+	token, err := authority.IssueTransportToken(userID, email, tc, transport)
+	if err != nil {
+		t.Fatalf("issue token: %v", err)
+	}
+	return token
+}

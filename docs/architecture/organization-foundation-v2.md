@@ -839,6 +839,14 @@ short-lived access in memory and a protected rotating credential, with CSRF
 controls and refresh-reuse detection. Mobile and SketchUp use client-specific
 credentials and secure storage/device registration.
 
+**Implemented (ADR-0007 / #460 SEC-1):** the `auth_sessions` registry is the
+live revocation and absolute-lifetime authority behind ver5 tokens (sid, typ,
+iss/aud per client, jti, kid keyring, exact HS256), with revocation cutting
+unexpired JWTs immediately; ver4 acceptance is transitional and ends at the
+SEC-9 gate. Refresh rotation, web credential migration, MFA/step-up, media
+authorization and trusted-proxy rate limiting remain target work of the
+following #460 slices.
+
 Mandatory hardening:
 
 - exact JWT algorithm, issuer, audience, token type and session ID;

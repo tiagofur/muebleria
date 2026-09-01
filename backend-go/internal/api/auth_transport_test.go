@@ -11,6 +11,8 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 )
 
+const transportTestSecret = "transport-test-secret-0123456789ab"
+
 func TestLoginTransportBoundaryAcceptsCanonicalTransports(t *testing.T) {
 	for _, transport := range []openapi.LoginTransport{
 		openapi.LoginTransportWeb, openapi.LoginTransportMobile,
@@ -51,11 +53,11 @@ func TestLoginTransportBoundaryRejectsInvalidMismatchAndUnknown(t *testing.T) {
 
 func TestTransportClaimSurvivesCanonicalToken(t *testing.T) {
 	for _, transport := range []string{"web", "mobile", "sketchup"} {
-		token, err := auth.GenerateTransportToken("00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{}, transport, "secret")
+		token, err := auth.GenerateLegacyToken("00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{}, transport, transportTestSecret)
 		if err != nil {
 			t.Fatal(err)
 		}
-		claims, err := auth.ValidateToken(token, "secret")
+		claims, err := mustAuthority(transportTestSecret).Validate(token)
 		if err != nil || claims.Transport != transport {
 			t.Fatalf("transport=%s claims=%+v err=%v", transport, claims, err)
 		}
@@ -63,22 +65,60 @@ func TestTransportClaimSurvivesCanonicalToken(t *testing.T) {
 			t.Fatalf("sketchup client=%q", claims.Client)
 		}
 	}
-	if _, err := auth.GenerateTransportToken("00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{}, "support", "secret"); err == nil {
+	if _, err := auth.GenerateLegacyToken("00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{}, "support", transportTestSecret); err == nil {
 		t.Fatal("normal token generator accepted support transport")
 	}
 }
 
+// TestVer5TokenTypeAndAudiencePerTransport locks the #460 credential classes:
+// every transport mints its own typ/aud pair, and the registry client type
+// matches the transport.
+func TestVer5TokenTypeAndAudiencePerTransport(t *testing.T) {
+	authority := mustAuthority(transportTestSecret)
+	cases := []struct {
+		transport  string
+		typ        string
+		audience   string
+		clientType string
+	}{
+		{"web", auth.TokenTypeAccessWeb, auth.AudienceWeb, "web"},
+		{"mobile", auth.TokenTypeAccessMobile, auth.AudienceMobile, "mobile"},
+		{"sketchup", auth.TokenTypeDeviceSketchup, auth.AudienceSketchup, "sketchup"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.transport, func(t *testing.T) {
+			token, err := authority.IssueTransportToken("00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{SessionID: "sess-1"}, tc.transport)
+			if err != nil {
+				t.Fatal(err)
+			}
+			claims, err := authority.Validate(token)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if claims.Typ != tc.typ {
+				t.Fatalf("typ=%q want %q", claims.Typ, tc.typ)
+			}
+			if len(claims.Audience) != 1 || claims.Audience[0] != tc.audience {
+				t.Fatalf("aud=%v want [%s]", claims.Audience, tc.audience)
+			}
+			if got := string(sessionClientType(tc.transport)); got != tc.clientType {
+				t.Fatalf("registry client type=%q want %q", got, tc.clientType)
+			}
+		})
+	}
+}
+
 func TestSupportTransportOnlyComesFromAuditedSupportToken(t *testing.T) {
-	token, err := auth.GenerateSupportToken(
+	token, err := auth.GenerateLegacySupportToken(
 		"00000000-0000-0000-0000-000000000001",
 		"support@example.test",
 		auth.SupportClaims{OrgID: "00000000-0000-0000-0000-000000000002", SessionID: "session-448", OrganizationCredentialVersion: 1, Reason: "customer support"},
-		"secret",
+		transportTestSecret,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := auth.ValidateToken(token, "secret")
+	claims, err := mustAuthority(transportTestSecret).Validate(token)
 	if err != nil || claims.Support == nil || claims.Support.SessionID != "session-448" || claims.Transport != "support" {
 		t.Fatalf("claims=%+v err=%v", claims, err)
 	}

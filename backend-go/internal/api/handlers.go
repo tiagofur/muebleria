@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -41,6 +42,13 @@ type Server struct {
 	rateLimitBurst int
 	// MediaDir filesystem root for catalog images (F040). Empty disables upload.
 	MediaDir string
+	// Tokens mints and validates ver5 credentials under the exact HS256 policy
+	// (#460). When nil, a single-key authority is derived lazily from JWTSecret
+	// (tests and minimal embedders); production always sets it from config so
+	// issuer/keyring come from the environment.
+	Tokens        *auth.Authority
+	authorityOnce sync.Once
+	lazyAuthority *auth.Authority
 }
 
 func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
@@ -58,6 +66,75 @@ func NewServerWithMedia(store Store, jwtSecret string, allowedOrigins []string, 
 	s := NewServer(store, jwtSecret, allowedOrigins, rateLimitRPS, rateLimitBurst)
 	s.MediaDir = mediaDir
 	return s
+}
+
+// tokenAuthority resolves the minting/validation authority. A server built
+// with only a secret gets the implicit single-key ring under the legacy kid,
+// matching the default config of a deployment without JWT_KEYRING.
+func (s *Server) tokenAuthority() *auth.Authority {
+	s.authorityOnce.Do(func() {
+		if s.Tokens != nil {
+			s.lazyAuthority = s.Tokens
+			return
+		}
+		keyring, err := auth.SingleKeyKeyring(s.JWTSecret)
+		if err != nil {
+			panic("auth: invalid server JWT secret: " + err.Error())
+		}
+		authority, err := auth.NewAuthority(keyring, "")
+		if err != nil {
+			panic("auth: building token authority: " + err.Error())
+		}
+		s.lazyAuthority = authority
+	})
+	return s.lazyAuthority
+}
+
+// sessionClientType maps the login transport to the registry client type.
+func sessionClientType(transport string) domain.SessionClientType {
+	switch transport {
+	case "mobile":
+		return domain.SessionClientMobile
+	case "sketchup":
+		return domain.SessionClientSketchup
+	default:
+		return domain.SessionClientWeb
+	}
+}
+
+// sanitizeDeviceHint reduces a User-Agent to a short, whitespace-collapsed
+// hint. The registry stores sanitized metadata only — never free-form PII.
+func sanitizeDeviceHint(userAgent string) string {
+	hint := strings.Join(strings.Fields(userAgent), " ")
+	runes := []rune(hint)
+	if len(runes) > 120 {
+		runes = runes[:120]
+	}
+	return string(runes)
+}
+
+// createAuthSession inserts a registry row inside a tenant transaction that
+// carries the owning user, so the RLS insert policy (app.user_id = user_id)
+// holds. Public routes (login, invitation accept) establish that context here
+// right after validating credentials; routes already wrapped by AuthMiddleware
+// reuse their ambient transaction.
+func (s *Server) createAuthSession(ctx context.Context, cmd storage.CreateAuthSessionCommand) (*domain.AuthSession, error) {
+	if runner, ok := s.Store.(tenantTransactionRunner); ok {
+		var session *domain.AuthSession
+		err := runner.WithinTenantTx(ctx, storage.TenantActor{
+			UserID:         cmd.UserID,
+			OrganizationID: cmd.OrganizationID,
+		}, func(txCtx context.Context) error {
+			created, err := s.Store.CreateAuthSession(txCtx, cmd)
+			session = created
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		return session, nil
+	}
+	return s.Store.CreateAuthSession(ctx, cmd)
 }
 
 // Helpers para JSON
@@ -375,9 +452,19 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// Multi-organization user without a hint: an org-less token is issued
 		// ONLY to complete /api/auth/select-org (it carries no business scope
 		// — the middleware denies data access to org-less non-staff tokens).
-		orgless, err := auth.GenerateTransportToken(u.ID, u.Email, auth.TokenContext{
-			PlatformAdmin: u.PlatformAdmin,
-		}, string(transport), s.JWTSecret)
+		session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+			UserID:            u.ID,
+			ClientType:        sessionClientType(string(transport)),
+			AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL(string(transport))),
+			DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+		})
+		if err != nil {
+			respondWithInternalError(w, err, "login: create session")
+			return
+		}
+		orgless, err := s.tokenAuthority().IssueTransportToken(u.ID, u.Email, auth.TokenContext{
+			PlatformAdmin: u.PlatformAdmin, SessionID: session.ID,
+		}, string(transport))
 		if err != nil {
 			respondWithInternalError(w, err, "login: generate orgless token")
 			return
@@ -387,10 +474,11 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
-			"transport": transport, "selection_required": true,
+			"transport": transport, "selection_required": true, "session_id": session.ID,
 		})
 		respondWithJSON(w, http.StatusOK, LoginResponse{
 			Token:             orgless,
+			SessionID:         &session.ID,
 			User:              toOpenAPIUser(u),
 			License:           LicenseDTO{Plan: string(domain.LicensePlanNone), Status: string(domain.LicenseStatusNone)},
 			Roles:             []string{},
@@ -430,8 +518,25 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		license = LicenseDTO{Plan: string(domain.LicensePlanNone), Status: string(domain.LicenseStatusNone)}
 	}
 
+	// Registry row first: the ver5 token embeds its sid, and the row's
+	// absolute_expires_at is the authoritative 18h/#441 bound refresh can
+	// never extend.
+	session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+		UserID:            u.ID,
+		MembershipID:      tc.MembershipID,
+		OrganizationID:    tc.OrgID,
+		ClientType:        sessionClientType(string(transport)),
+		AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL(string(transport))),
+		DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+	})
+	if err != nil {
+		respondWithInternalError(w, err, "login: create session")
+		return
+	}
+	tc.SessionID = session.ID
+
 	var token string
-	token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
+	token, err = s.tokenAuthority().IssueTransportToken(u.ID, u.Email, tc, string(transport))
 	if err != nil {
 		respondWithInternalError(w, err, "login: generate token")
 		return
@@ -442,11 +547,12 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r.Context(), "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
-		"transport": transport,
+		"transport": transport, "session_id": session.ID,
 	})
 
 	respondWithJSON(w, http.StatusOK, LoginResponse{
 		Token:             token,
+		SessionID:         &session.ID,
 		User:              toOpenAPIUser(u),
 		License:           license,
 		Roles:             tc.Roles,
@@ -523,13 +629,41 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusForbidden, "support sessions cannot change organization")
 		return
 	}
-	token, err := auth.GenerateTransportToken(claims.UserID, claims.Email, tc, string(transport), s.JWTSecret)
+
+	// The registry session keeps its id across the switch: select-org updates
+	// the active scope in place (#460 / ADR-0007). A ver4 token has no session
+	// yet, so this exchange registers one now, preserving the absolute origin.
+	if claims.Sid == "" {
+		session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+			UserID:            claims.UserID,
+			MembershipID:      m.ID,
+			OrganizationID:    m.OrganizationID,
+			ClientType:        sessionClientType(string(transport)),
+			AbsoluteExpiresAt: claims.AuthStartedAt.Time.Add(auth.TransportSessionTTL(string(transport))),
+			DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+		})
+		if err != nil {
+			respondWithInternalError(w, err, "select-org: create session")
+			return
+		}
+		tc.SessionID = session.ID
+	} else {
+		if err := s.Store.UpdateAuthSessionScope(r.Context(), claims.Sid, m.ID, m.OrganizationID); err != nil {
+			respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeSessionRevoked, "La sesión ya no está activa. Iniciá sesión de nuevo.", nil)
+			return
+		}
+		tc.SessionID = claims.Sid
+	}
+
+	token, err := s.tokenAuthority().IssueTransportToken(claims.UserID, claims.Email, tc, string(transport))
 	if err != nil {
 		respondWithInternalError(w, err, "select-org: generate token")
 		return
 	}
 
-	s.audit(r.Context(), "organization_selected", claims.UserID, m.OrganizationID, clientIP(r), nil)
+	s.audit(r.Context(), "organization_selected", claims.UserID, m.OrganizationID, clientIP(r), map[string]interface{}{
+		"session_id": tc.SessionID,
+	})
 
 	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
 	if err != nil || u == nil {
@@ -537,8 +671,10 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	org := toOrgSummaryDTO(m.Organization)
+	sessionID := tc.SessionID
 	respondWithJSON(w, http.StatusOK, LoginResponse{
 		Token:        token,
+		SessionID:    &sessionID,
 		User:         toOpenAPIUser(u),
 		License:      org.License,
 		Roles:        rolesToStrings(m.Roles),
@@ -579,13 +715,44 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		MembershipCredentialVersion:   claims.MembershipCredentialVersion,
 		OrganizationCredentialVersion: claims.OrganizationCredentialVersion,
 		PlatformAdmin:                 claims.PlatformAdmin, AuthStartedAt: claims.AuthStartedAt.Time,
+		SessionID: claims.Sid,
 	}
 	transport := authTransportFromClaims(claims)
+
+	// A ver4 refresh upgrades to the current credential version: the registry
+	// row is created here, bounded by the ORIGINAL absolute origin so the
+	// upgrade can never extend the session (#441/#445).
+	if tc.SessionID == "" {
+		cmd := storage.CreateAuthSessionCommand{
+			UserID:            u.ID,
+			MembershipID:      tc.MembershipID,
+			OrganizationID:    tc.OrgID,
+			ClientType:        sessionClientType(string(transport)),
+			AbsoluteExpiresAt: claims.AuthStartedAt.Time.Add(auth.TransportSessionTTL(string(transport))),
+			DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+		}
+		if claims.Support != nil {
+			cmd = storage.CreateAuthSessionCommand{
+				UserID:            u.ID,
+				OrganizationID:    claims.Support.OrgID,
+				SupportSessionID:  claims.Support.SessionID,
+				ClientType:        domain.SessionClientSupport,
+				AbsoluteExpiresAt: claims.AuthStartedAt.Time.Add(auth.SupportTokenTTL),
+			}
+		}
+		upgraded, createErr := s.createAuthSession(r.Context(), cmd)
+		if createErr != nil {
+			respondWithInternalError(w, createErr, "refresh: create session")
+			return
+		}
+		tc.SessionID = upgraded.ID
+	}
+
 	var token string
 	if claims.Support != nil {
-		token, err = auth.GenerateSupportTokenFrom(u.ID, u.Email, *claims.Support, claims.AuthStartedAt.Time, s.JWTSecret)
+		token, err = s.tokenAuthority().IssueSupportTokenFrom(u.ID, u.Email, *claims.Support, claims.AuthStartedAt.Time, tc.SessionID)
 	} else {
-		token, err = auth.GenerateTransportToken(u.ID, u.Email, tc, string(transport), s.JWTSecret)
+		token, err = s.tokenAuthority().IssueTransportToken(u.ID, u.Email, tc, string(transport))
 	}
 	if err != nil {
 		respondWithInternalError(w, err, "refresh: generate token")
@@ -594,6 +761,7 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	resp := LoginResponse{
 		Token:       token,
+		SessionID:   &tc.SessionID,
 		User:        toOpenAPIUser(u),
 		Roles:       append([]string(nil), claims.Roles...),
 		Memberships: []MembershipDTO{},
@@ -2198,6 +2366,12 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 		UserID:            claims.UserID,
 		Mode:              "auth",
 		AbsoluteExpiresAt: claims.ExpiresAt.Time.UTC().Format(time.RFC3339Nano),
+	}
+	// sid is present on ver5 tokens; null only while pre-#460 tokens are
+	// exchanged (the field becomes required at the SEC-9 gate).
+	if claims.Sid != "" {
+		value := claims.Sid
+		scope.SessionID = &value
 	}
 	if claims.MembershipID != "" {
 		scope.MembershipID = &claims.MembershipID

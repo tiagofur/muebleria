@@ -71,6 +71,11 @@ func main() {
 	// default, so it survives clean/clone cycles but is not obvious from cwd).
 	slog.Info("Media storage configured", "media_dir", cfg.MediaDir)
 	serverAPI := api.NewServerWithMedia(store, cfg.JWTSecret, cfg.AllowedOrigins, cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.MediaDir)
+	// #460: tokens mint/validate under the exact HS256 policy (issuer, keyring
+	// with kid rotation, per-client audience). Set after construction so the
+	// config-built authority (JWT_KEYRING/JWT_ISSUER) wins over the implicit
+	// single-key fallback.
+	serverAPI.Tokens = cfg.JWTAuthority
 	handler := api.RegisterRoutes(serverAPI)
 
 	// Timeouts mitigate slowloris and hung clients (issue #20).

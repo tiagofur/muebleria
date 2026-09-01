@@ -64,7 +64,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	})
 
 	// Endpoints protegidos por JWT (role/active re-checked against DB — #16)
-	authMW := AuthMiddleware(server.JWTSecret, server.Store)
+	authMW := AuthMiddleware(server.tokenAuthority(), server.Store)
 	// #327: manufacturing subresources (physical execution, MRP, quality,
 	// installation, job costing) are factory-only — the sales org gets 404.
 	mfgOnly := server.manufacturingOnly
@@ -78,7 +78,7 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Platform console (ADR-0005 §5 / #326): org lifecycle, licenses, users,
 	// audit and audited support sessions. Platform staff only.
-	platformMW := PlatformAdminMiddleware(server.JWTSecret, server.Store)
+	platformMW := PlatformAdminMiddleware(server.tokenAuthority(), server.Store)
 	mux.Handle("GET /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformListOrganizations)))
 	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
 	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
