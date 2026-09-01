@@ -140,6 +140,21 @@ func (s *PostgresStore) UpdateAuthSessionScope(ctx context.Context, sessionID, m
 	if tag.RowsAffected() == 0 {
 		return ErrAuthSessionNotFound
 	}
+	// A refresh family follows the session's CURRENT scope. Snapshot the new
+	// credential epochs in the same transaction so refresh can never revive an
+	// older membership/org authority after select-org.
+	if _, err := s.db(ctx).Exec(ctx, `
+		UPDATE auth_refresh_families f
+		SET membership_id = NULLIF($2, '')::uuid,
+			active_organization_id = NULLIF($3, '')::uuid,
+			membership_credential_version = m.credential_version,
+			organization_credential_version = o.credential_version
+		FROM memberships m, organizations o
+		WHERE f.session_id = $1::uuid
+		  AND m.id = NULLIF($2, '')::uuid
+		  AND o.id = NULLIF($3, '')::uuid`, sessionID, membershipID, organizationID); err != nil {
+		return err
+	}
 	return nil
 }
 

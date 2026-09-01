@@ -314,6 +314,20 @@ func (a *Authority) IssueSupportTokenFrom(userID string, email string, sc Suppor
 // IssueTransportToken records the validated API transport in the token so
 // select-org, refresh and /me preserve the same canonical session boundary.
 func (a *Authority) IssueTransportToken(userID string, email string, tc TokenContext, transport string) (string, error) {
+	return a.issueTransportTokenUntil(userID, email, tc, transport, time.Time{})
+}
+
+// IssueTransportTokenUntil additionally caps exp at the registry's absolute
+// expiry. Refresh uses this even though the normal origin-derived limit should
+// match, making the server-side bound explicit and impossible to overshoot.
+func (a *Authority) IssueTransportTokenUntil(userID string, email string, tc TokenContext, transport string, absoluteExpiresAt time.Time) (string, error) {
+	if absoluteExpiresAt.IsZero() || !absoluteExpiresAt.After(time.Now()) {
+		return "", errors.New("token requires a future absolute session expiry")
+	}
+	return a.issueTransportTokenUntil(userID, email, tc, transport, absoluteExpiresAt)
+}
+
+func (a *Authority) issueTransportTokenUntil(userID string, email string, tc TokenContext, transport string, absoluteExpiresAt time.Time) (string, error) {
 	client, ttl := "", AccessTokenTTL
 	switch transport {
 	case "web", "mobile":
@@ -325,7 +339,7 @@ func (a *Authority) IssueTransportToken(userID string, email string, tc TokenCon
 	if tc.SessionID == "" {
 		return "", errors.New("token requires a registry session id")
 	}
-	return a.issueToken(userID, email, tc, client, transport, ttl)
+	return a.issueToken(userID, email, tc, client, transport, ttl, absoluteExpiresAt)
 }
 
 // PrimaryRole resolves the transitional single role: the first role of the
@@ -350,7 +364,7 @@ func TransportSessionTTL(transport string) time.Duration {
 	}
 }
 
-func (a *Authority) issueToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration) (string, error) {
+func (a *Authority) issueToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration, absoluteExpiresAt time.Time) (string, error) {
 	now := time.Now()
 	authStartedAt := tc.AuthStartedAt
 	if authStartedAt.IsZero() {
@@ -364,6 +378,10 @@ func (a *Authority) issueToken(userID string, email string, tc TokenContext, cli
 	}
 	if tc.OrgID != "" && tc.OrganizationCredentialVersion < 1 {
 		return "", errors.New("organization-scoped token requires organization credential version")
+	}
+	expiresAt := authStartedAt.Add(ttl)
+	if !absoluteExpiresAt.IsZero() && absoluteExpiresAt.Before(expiresAt) {
+		expiresAt = absoluteExpiresAt
 	}
 	claims := &Claims{
 		UserID:                        userID,
@@ -386,7 +404,7 @@ func (a *Authority) issueToken(userID string, email string, tc TokenContext, cli
 			Audience:  jwt.ClaimStrings{audienceForTransport(transport)},
 			Issuer:    a.issuer,
 			ID:        newJTI(),
-			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(ttl)),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
