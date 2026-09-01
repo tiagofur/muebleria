@@ -418,7 +418,12 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	}
 	org := toOrgSummaryDTO(result.Organization)
 	membership := MembershipDTO{ID: result.Membership.ID, OrganizationID: result.Membership.OrganizationID, UserID: result.Membership.UserID, Status: openapi.MembershipStatus(result.Membership.Status), Roles: roles, JoinedAt: result.Membership.JoinedAt.UTC().Format(time.RFC3339Nano), Version: result.Membership.Version, Organization: org}
+	// Invitation acceptance is Web onboarding today (no mobile caller), so the
+	// first refresh credential is delivered through the SEC-4A Web cookie —
+	// the raw secret never appears in the response body. A future mobile
+	// acceptance flow must add an explicit transport to this contract first.
 	response := LoginResponse{Token: token, SessionID: &session.ID, User: toOpenAPIUser(&result.User), License: org.License, Roles: roles, Organization: &org, Memberships: []MembershipDTO{membership}, SelectionRequired: false, Transport: openapi.AuthTransportWeb}
-	attachRefreshCredential(&response, refresh)
+	s.attachRefreshCredential(w, &response, refresh, domain.SessionClientWeb, session)
+	setAuthExpiryMetadata(&response, time.Time{}, openapi.AuthTransportWeb, &session.AbsoluteExpiresAt)
 	respondWithJSON(w, http.StatusOK, response)
 }

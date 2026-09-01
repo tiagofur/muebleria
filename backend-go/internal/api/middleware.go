@@ -58,6 +58,12 @@ var errTenantHandlerFailure = errors.New("tenant handler failed")
 // origin is reflected per request; non-matching origins get no Allow-Origin
 // header at all. The wildcard "*" is intentionally never used so that
 // authenticated cross-origin requests cannot come from arbitrary sites (#3).
+// Credentialed CORS (#460 SEC-4A): an explicitly allowed origin also receives
+// Access-Control-Allow-Credentials so the Web refresh cookie can ride the
+// dev-shape cross-origin fetch (localhost:5173 → localhost:8080). A foreign
+// origin never gets the pair — reflect + credentials together would be the
+// classic wildcard-credentials hole, and "*" + credentials is unreachable by
+// construction.
 func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	allow := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
@@ -71,10 +77,15 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			if origin != "" {
 				if _, ok := allow[origin]; ok {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
 				}
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, If-Match, Idempotency-Key")
+			// X-Granete-CSRF is the required non-simple custom header of the
+			// cookie-authenticated refresh/logout commands (SEC-4A CSRF
+			// boundary); listing it makes the preflight pass only for clients
+			// that send exactly that header.
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, If-Match, Idempotency-Key, "+csrfHeaderName)
 			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, ETag, Idempotency-Replayed")
 			w.Header().Set("Access-Control-Max-Age", "600")
 

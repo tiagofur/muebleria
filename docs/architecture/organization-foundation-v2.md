@@ -864,9 +864,21 @@ to one exact canonical media file of one organization, minted only after the
 live session/org authorization via `POST /api/media:authorize`, and capped at
 the session's absolute expiry. React resolves them through a token-scoped
 in-memory cache; SketchUp webviews never see the extension credential (Ruby
-exchanges it for per-file URLs and re-mints on expiry). React storage/cookies
-remain SEC-4. MFA/step-up and
-trusted-proxy rate limiting remain target work of the following #460 slices.
+exchanges it for per-file URLs and re-mints on expiry). The Web refresh
+credential now travels exclusively as the HttpOnly `granete_web_refresh`
+cookie (SEC-4A): `HttpOnly; SameSite=Strict; Path=/api/auth`, host-only,
+`Secure` in production (fail-closed boot under `GRANETE_ENV=production`),
+bounded by the session's absolute expiry, rotated through the same SEC-2A
+family with strict reuse detection, and guarded by the CSRF boundary
+(exact allowed `Origin` + required `X-Granete-CSRF: 1` header) with
+exact-origin credentialed CORS. Web login/refresh/invitation responses carry
+no refresh secret in JSON; mobile keeps the body contract; SketchUp/support
+keep the bodyless bearer bridge, now transport-restricted. The React cutover
+(in-memory access, cookie bootstrap, cross-tab refresh serialization, removal
+of the `granete_token` localStorage bearer — one explicit re-login for stale
+Web sessions) is SEC-4B, together with the short Web access-token TTL.
+MFA/step-up and trusted-proxy rate limiting remain target work of the
+following #460 slices.
 
 Mandatory hardening:
 

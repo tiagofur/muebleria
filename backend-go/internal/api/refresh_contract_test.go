@@ -20,19 +20,26 @@ func TestRefreshOpenAPIContractIsOpaqueAndTyped(t *testing.T) {
 	paths := spec["paths"].(map[string]any)
 	refresh := paths["/auth/refresh"].(map[string]any)["post"].(map[string]any)
 	if security, ok := refresh["security"].([]any); !ok || len(security) != 0 {
-		t.Fatal("refresh must authenticate with the opaque request credential, not BearerAuth")
+		t.Fatal("refresh must authenticate with the presented credential, not BearerAuth")
 	}
-	body := refresh["requestBody"].(map[string]any)
-	if required, _ := body["required"].(bool); !required {
-		t.Fatal("refresh request body must be required")
+	// SEC-4A: the JSON body is the mobile transport contract only. The body is
+	// optional because the Web cookie flow POSTs with no body at all.
+	if required, _ := refresh["requestBody"].(map[string]any)["required"].(bool); required {
+		t.Fatal("refresh request body must be optional (web cookie flow is bodyless)")
 	}
-	if _, ok := paths["/auth/logout"]; !ok {
-		t.Fatal("logout operation missing")
+	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
+	refreshTransport := schemas["RefreshTransport"].(map[string]any)
+	if enum, _ := refreshTransport["enum"].([]any); len(enum) != 1 || enum[0] != "mobile" {
+		t.Fatalf("RefreshTransport must be mobile-only, got %v", enum)
+	}
+	logout := paths["/auth/logout"].(map[string]any)["post"].(map[string]any)
+	if required, _ := logout["requestBody"].(map[string]any)["required"].(bool); required {
+		t.Fatal("logout request body must be optional (web cookie flow is bodyless)")
 	}
 
 	// Compile-time lock that generated Go types and typed error vocabulary
 	// came from the canonical contract rather than hand-written DTOs.
-	_ = openapi.RefreshRequest{RefreshToken: "opaque", Transport: openapi.AuthTransportWeb}
+	_ = openapi.RefreshRequest{RefreshToken: "opaque", Transport: openapi.RefreshTransportMobile}
 	for _, code := range []openapi.ApiErrorCode{
 		openapi.ApiErrorCodeRefreshInvalid,
 		openapi.ApiErrorCodeRefreshExpired,

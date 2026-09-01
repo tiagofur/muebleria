@@ -364,6 +364,44 @@ func TransportSessionTTL(transport string) time.Duration {
 	}
 }
 
+// AccessTokenExpiry reports the exact instant an access token minted at now
+// for the transport will expire, using the same arithmetic as the minting
+// path (#460 SEC-4A: `access_expires_at` metadata must come from the server
+// clock behind minting, never from client-side JWT decoding). A zero
+// authStartedAt means "now", matching issueToken; a non-zero
+// absoluteExpiresAt caps the result exactly like IssueTransportTokenUntil.
+// Support tokens have no registry cap: their live session row is the
+// authority (GetOpenSupportSession).
+func AccessTokenExpiry(now, authStartedAt time.Time, transport string, absoluteExpiresAt time.Time) (time.Time, error) {
+	ttl := AccessTokenTTL
+	switch transport {
+	case "web", "mobile":
+	case "sketchup":
+		ttl = ExtensionTokenTTL
+	case "support":
+		if authStartedAt.IsZero() {
+			authStartedAt = now
+		}
+		return authStartedAt.Add(SupportTokenTTL), nil
+	default:
+		return time.Time{}, fmt.Errorf("invalid login transport %q", transport)
+	}
+	return transportTokenExpiry(now, authStartedAt, ttl, absoluteExpiresAt), nil
+}
+
+// transportTokenExpiry is the single expiry computation shared by minting and
+// the reported metadata so the two can never drift.
+func transportTokenExpiry(now, authStartedAt time.Time, ttl time.Duration, absoluteExpiresAt time.Time) time.Time {
+	if authStartedAt.IsZero() {
+		authStartedAt = now
+	}
+	expiresAt := authStartedAt.Add(ttl)
+	if !absoluteExpiresAt.IsZero() && absoluteExpiresAt.Before(expiresAt) {
+		expiresAt = absoluteExpiresAt
+	}
+	return expiresAt
+}
+
 func (a *Authority) issueToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration, absoluteExpiresAt time.Time) (string, error) {
 	now := time.Now()
 	authStartedAt := tc.AuthStartedAt
@@ -379,10 +417,7 @@ func (a *Authority) issueToken(userID string, email string, tc TokenContext, cli
 	if tc.OrgID != "" && tc.OrganizationCredentialVersion < 1 {
 		return "", errors.New("organization-scoped token requires organization credential version")
 	}
-	expiresAt := authStartedAt.Add(ttl)
-	if !absoluteExpiresAt.IsZero() && absoluteExpiresAt.Before(expiresAt) {
-		expiresAt = absoluteExpiresAt
-	}
+	expiresAt := transportTokenExpiry(now, authStartedAt, ttl, absoluteExpiresAt)
 	claims := &Claims{
 		UserID:                        userID,
 		Email:                         email,

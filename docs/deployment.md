@@ -405,7 +405,9 @@ umount /mnt/usb
 | `JWT_SECRET` | Sí | — | Secreto JWT, >= 32 bytes (requerida) |
 | `REFRESH_TOKEN_PEPPER` | Sí | — | Pepper independiente >= 32 bytes para HMAC-SHA-256 de refresh credentials; rotarlo revoca refresh y requiere re-login coordinado |
 | `MEDIA_SIGNING_KEY` | Sí | — | Key independiente >= 32 bytes (#460 SEC-3) para firmar media grants `media_read` de 3 minutos por recurso exacto; rotarla sólo invalida grants en vuelo |
-| `CORS_ALLOWED_ORIGINS` | Sí | — | Orígenes CORS permitidos, separados por coma |
+| `CORS_ALLOWED_ORIGINS` | Sí | — | Orígenes CORS permitidos, separados por coma; exactos, nunca `*` (el middleware refleja el origin y emite `Access-Control-Allow-Credentials: true` sólo para los exactos) |
+| `GRANETE_ENV` | Fijado | `production` | `docker-compose.prod.yml` lo fija a `production` (no sobreescribible por `.env`): señal explícita de deployment que hace fail-closed la resolución del `Secure` de la cookie web |
+| `WEB_REFRESH_COOKIE_SECURE` | No | `auto` | Atributo `Secure` de la cookie HttpOnly `granete_web_refresh` (#460 SEC-4A): `auto` (Secure salvo orígenes CORS loopback HTTP — forma local de dev/gates), `true` o `false`. Con `GRANETE_ENV=production`, cualquier resolución a `Secure=false` hace que el backend se niegue a arrancar |
 | `RATE_LIMIT_RPS` | No | `0.2` | Requests/segundo para auth endpoints |
 | `RATE_LIMIT_BURST` | No | `5` | Burst máximo para auth endpoints |
 | `MEDIA_DIR` | No | `/data/media` | Ruta del directorio de media dentro del contenedor |

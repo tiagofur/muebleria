@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1 and SEC-2A integrated; SEC-2B and SEC-3 implemented pending review; SEC-4..SEC-9 in progress)
+- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A implemented pending review; SEC-4B..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -122,14 +122,18 @@ still-unexpired access token from that session fail immediately. A refresh
 expiry is exactly the session `absolute_expires_at`; access minting is also
 explicitly capped there. No rotation creates a sliding lifetime.
 
-`POST /api/auth/refresh` now has an unauthenticated OpenAPI request body with
-the opaque credential plus expected web/mobile transport. `POST
-/api/auth/logout` is enumeration-safe and idempotently revokes both family and
-session. Web/mobile login and invitation acceptance emit the first credential;
-React does not persist or consume it until SEC-4. The legacy no-body
-access-bearer refresh branch remains a finite runtime-only compatibility bridge
-for deployed clients and SketchUp until SEC-4/SEC-6; it is no longer the
-canonical OpenAPI operation.
+`POST /api/auth/refresh` dispatches per transport (SEC-4A): the mobile JSON
+body carries the opaque credential with `transport: "mobile"`; the Web rotates
+bodyless through its HttpOnly cookie under the CSRF boundary. `POST
+/api/auth/logout` is enumeration-safe and idempotent and revokes both family
+and session from either the mobile body or the Web cookie. Web login and
+invitation acceptance emit the first credential exclusively as the
+`granete_web_refresh` cookie; React consumes the cookie flow in SEC-4B. The
+legacy no-body access-bearer refresh branch remains a finite runtime-only
+compatibility bridge now RESTRICTED to the credential classes without an
+opaque family — SketchUp extension tokens and support sessions — until SEC-6;
+web/mobile bearers are denied there, and it is not the canonical OpenAPI
+operation.
 
 Pepper rotation cannot re-key stored HMACs because the raw secrets do not
 exist server-side. Rotate it as a credential-boundary event: revoke affected
@@ -215,9 +219,57 @@ credential: Ruby exchanges it for per-file signed URLs and re-mints expired
 grants on demand via the `refresh_media_url` callback. SketchUp's logger
 redacts `grant=` query credentials like every other credential.
 
-Remaining roadmap: SEC-4 Web credential migration, SEC-5 Mobile credential
+Remaining roadmap: SEC-4B Web in-memory access cutover, SEC-5 Mobile credential
 migration, SEC-6 SketchUp device credentials, SEC-7 MFA/step-up, SEC-8 trusted
 proxy/rate limits/account hardening, SEC-9 final gate + ver4 EOL.
+
+### 9. Web refresh credential travels only in a HttpOnly cookie (SEC-4A)
+
+The Web transport's rotating refresh credential is the SAME SEC-2A opaque
+single-use secret Mobile receives as JSON — only the transport differs. It is
+delivered exclusively as `Set-Cookie: granete_web_refresh=<opaque>` on login,
+invitation acceptance and every rotation, with `HttpOnly; SameSite=Strict;
+Path=/api/auth`, host-only (no `Domain`), and `Secure` in production. It never
+appears in a Web response body, URL, log or client store; the Web JSON carries
+only the access token plus server-clock `access_expires_at` /
+`absolute_session_expires_at` metadata so SEC-4B can schedule refresh without
+decoding JWTs. Mobile keeps the body contract untouched until SEC-5; SketchUp
+and support keep the (now transport-restricted) bodyless bearer bridge until
+SEC-6; invitation acceptance is Web onboarding today and therefore cookie-based.
+
+The cookie expiry is the auth session's `absolute_expires_at` — never
+`now + TTL` — so every `Set-Cookie` in a family preserves the original login
+deadline; the composite FK chain (sessions ← families ← credentials) makes that
+bound a structural database invariant. select-org rotates nothing: the cookie
+stays in its family and the in-place scope update redirects the next rotation
+to the current organization. Logout takes the credential from the cookie,
+applies the CSRF boundary, revokes family + session through SEC-2A, clears the
+cookie with matching attributes and stays enumeration-safe/idempotent.
+
+**CSRF boundary.** Cookie-authenticated refresh/logout require BOTH an
+exactly-allowed `Origin` (the CORS allowlist — never a wildcard) and the
+non-simple custom header `X-Granete-CSRF: 1`. A cross-site form can set
+neither; CORS alone is not trusted as the defense. `Access-Control-Allow-Credentials:
+true` is emitted only next to an exactly reflected allowed origin. Presenting
+a JSON body together with the Web cookie is rejected as credential mixing
+(fail closed), and the refresh dispatcher precedence is total: body → mobile,
+bodyless+cookie → Web, bodyless+bearer → SketchUp/support only.
+
+**Fail-closed configuration.** `GRANETE_ENV` is an explicit deployment signal
+(`docker-compose.prod.yml` pins it to `production`, not overridable via `.env`).
+`WEB_REFRESH_COOKIE_SECURE` is `auto` (default: Secure unless every CORS origin
+is loopback HTTP — the local gate shape), `true`, or `false`; any resolution
+that would ship an insecure Web refresh cookie under
+`GRANETE_ENV=production` makes the server refuse to boot.
+
+**Deferred to SEC-4B by design:** the React cutover (in-memory access token,
+cookie bootstrap/refresh, cross-tab refresh serialization via
+`navigator.locks`/`BroadcastChannel`, removal of the `granete_token`
+localStorage bearer — old Web sessions re-login once), and the short Web
+access-token TTL, which activates only when React can refresh automatically.
+Server reuse detection stays STRICT: two tabs refreshing the same cookie
+concurrently look like replay and revoke the family, so cross-tab
+serialization is a hard SEC-4B prerequisite, never a server-side relaxation.
 
 ## Alternatives considered
 
@@ -265,7 +317,15 @@ including kidless/malformed-kid negatives; keyring rotation; legacy window), `in
 client-type confusion, current-scope invalidation of previous bearers across
 select-org A→B, failed-switch scope preservation with failure injection,
 stable sid across select-org, ver4 upgrade bounded by
-the original origin), `internal/storage/auth_sessions_test.go` (migration
+the original origin), SEC-4A proofs in
+`internal/api/web_refresh_cookie_test.go` (cookie attributes, CSRF boundary,
+dispatcher precedence), `internal/config/config_test.go` (production
+fail-closed Secure resolution) and `tests/pilotreadiness/web_refresh_cookie_http_test.go`
+(real-PostgreSQL HTTP: transport matrix with raw-secret absence in Web JSON,
+rotation preserving the absolute bound against a shrunk live registry row,
+CSRF denials incl. form-shaped requests, credential mixing, strict replay
+revocation, cookie logout + session isolation, log redaction on the happy and
+injected-failure paths, exact-origin credentialed CORS), `internal/storage/auth_sessions_test.go` (migration
 fresh+upgrade, lifecycle under the app role, membership/user/organization
 coherence negative proofs, and direct-SQL RLS under `granete_app`: self access,
 same-org ordinary member denied, other-org denied, platform authority path,

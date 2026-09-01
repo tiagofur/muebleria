@@ -128,18 +128,20 @@ type AcceptInvitationRequest struct {
 }
 
 type LoginResponse struct {
-	Token             string               `json:"token"`
-	User              User                 `json:"user"`
-	License           License              `json:"license"`
-	Roles             []string             `json:"roles"`
-	Organization      *OrganizationSummary `json:"organization,omitempty"`
-	Memberships       []Membership         `json:"memberships"`
-	SelectionRequired bool                 `json:"selection_required"`
-	Support           *bool                `json:"support,omitempty"`
-	Transport         AuthTransport        `json:"transport"`
-	SessionID         *string              `json:"session_id,omitempty"`
-	RefreshToken      *string              `json:"refresh_token,omitempty"`
-	RefreshExpiresAt  *string              `json:"refresh_expires_at,omitempty"`
+	Token                    string               `json:"token"`
+	User                     User                 `json:"user"`
+	License                  License              `json:"license"`
+	Roles                    []string             `json:"roles"`
+	Organization             *OrganizationSummary `json:"organization,omitempty"`
+	Memberships              []Membership         `json:"memberships"`
+	SelectionRequired        bool                 `json:"selection_required"`
+	Support                  *bool                `json:"support,omitempty"`
+	Transport                AuthTransport        `json:"transport"`
+	SessionID                *string              `json:"session_id,omitempty"`
+	RefreshToken             *string              `json:"refresh_token,omitempty"`
+	RefreshExpiresAt         *string              `json:"refresh_expires_at,omitempty"`
+	AccessExpiresAt          *string              `json:"access_expires_at,omitempty"`
+	AbsoluteSessionExpiresAt *string              `json:"absolute_session_expires_at,omitempty"`
 }
 
 type SupportInfo struct {
@@ -619,9 +621,15 @@ type OffboardMembershipResponse struct {
 }
 
 type RefreshRequest struct {
-	RefreshToken string        `json:"refresh_token"`
-	Transport    AuthTransport `json:"transport"`
+	RefreshToken string           `json:"refresh_token"`
+	Transport    RefreshTransport `json:"transport"`
 }
+
+type RefreshTransport string
+
+const (
+	RefreshTransportMobile RefreshTransport = "mobile"
+)
 
 type LogoutRequest struct {
 	RefreshToken string `json:"refresh_token"`

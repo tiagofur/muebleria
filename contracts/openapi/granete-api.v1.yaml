@@ -32,6 +32,14 @@
         "responses": {
           "200": {
             "description": "Authenticated or organization selection required",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Web transport only (#460 SEC-4A): granete_web_refresh=<opaque first refresh credential>; HttpOnly; SameSite=Strict; Path=/api/auth; Secure (production); expires at the session absolute bound. Mobile receives its opaque credential in the body instead; sketchup/support receive none.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -49,9 +57,19 @@
     "/auth/refresh": {
       "post": {
         "operationId": "refreshSession",
+        "summary": "Rotate the refresh credential (transport-dispatched)",
+        "description": "#460 SEC-4A credential transport contract. Mobile: POST the JSON body {refresh_token, transport:\"mobile\"} and receive the rotated credential in the body. Web: POST with no body; the HttpOnly granete_web_refresh cookie carries the credential, the request must send an exactly-allowed Origin plus the X-Granete-CSRF: 1 header (403 otherwise), and the rotated credential returns only as a fresh Set-Cookie bounded by the session's ORIGINAL absolute expiry. SketchUp/support (compatibility bridge until SEC-6): POST with no body and the Authorization bearer. A JSON body together with the web cookie is rejected as credential mixing.",
         "responses": {
           "200": {
-            "description": "Rotated access and refresh credentials",
+            "description": "Rotated access credential; rotated refresh credential via body (mobile) or Set-Cookie (web)",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Web transport only: granete_web_refresh=<opaque>; HttpOnly; SameSite=Strict; Path=/api/auth; Secure (production); expires at the session's absolute bound. Never present for mobile/sketchup transports.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -66,7 +84,7 @@
         },
         "security": [],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -80,9 +98,11 @@
     "/auth/logout": {
       "post": {
         "operationId": "logoutSession",
+        "summary": "Revoke the session behind the presented refresh credential",
+        "description": "#460 SEC-4A: mobile POSTs {refresh_token} in the JSON body; web POSTs with no body, the HttpOnly granete_web_refresh cookie, an exactly-allowed Origin and the X-Granete-CSRF: 1 header. Both are enumeration-safe and idempotent; the web flow always clears the cookie with matching attributes.",
         "security": [],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -94,6 +114,14 @@
         "responses": {
           "200": {
             "description": "Session is no longer usable",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Web transport only: granete_web_refresh deleted (Max-Age=0, same Path).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -909,6 +937,14 @@
         "responses": {
           "200": {
             "description": "Invitation accepted and organization-scoped session created",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Web onboarding is cookie-based today (#460 SEC-4A): the first refresh credential is set as the HttpOnly granete_web_refresh cookie and never appears in the body. A future mobile acceptance flow must extend this contract with an explicit transport first.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2330,12 +2366,22 @@
           },
           "refresh_token": {
             "type": "string",
-            "description": "Opaque single-use refresh credential. Emitted only for web/mobile during SEC-2; SEC-4 moves web storage to a protected cookie."
+            "description": "Opaque single-use refresh credential. Mobile-only transport (#460 SEC-4A): the mobile client stores it in its secure-store flow. Web never receives a refresh secret in JSON — its rotating credential is delivered exclusively as the HttpOnly granete_web_refresh Set-Cookie."
           },
           "refresh_expires_at": {
             "type": "string",
             "format": "date-time",
-            "description": "Never later than the auth session absolute expiry."
+            "description": "Never later than the auth session absolute expiry. Mobile transport only."
+          },
+          "access_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server-clock instant the returned access token expires (#460 SEC-4A). Mirrors the minting arithmetic exactly so clients can schedule refresh without decoding the JWT. Never a client-generated value."
+          },
+          "absolute_session_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Registry-authoritative absolute session deadline (#460 SEC-4A): after it, re-login is mandatory — refresh cannot extend it. The Web refresh cookie carries the same bound as its expiry."
           }
         }
       },
@@ -4025,12 +4071,19 @@
             "type": "string",
             "minLength": 58,
             "maxLength": 128,
-            "description": "Opaque single-use bearer credential; never an access JWT."
+            "description": "Opaque single-use bearer credential; never an access JWT. Mobile transport (#460 SEC-4A): the Web refresh credential only travels as the HttpOnly granete_web_refresh cookie and is never accepted in a JSON body."
           },
           "transport": {
-            "$ref": "#/components/schemas/AuthTransport"
+            "$ref": "#/components/schemas/RefreshTransport"
           }
         }
+      },
+      "RefreshTransport": {
+        "type": "string",
+        "enum": [
+          "mobile"
+        ],
+        "description": "Transports allowed to rotate a refresh credential through the JSON body (#460 SEC-4A). Web uses the HttpOnly cookie flow; SketchUp/support renew through the bodyless bearer bridge until SEC-6."
       },
       "LogoutRequest": {
         "type": "object",

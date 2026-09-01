@@ -50,12 +50,16 @@ type Server struct {
 	// RefreshCredentials is configured from the independent
 	// REFRESH_TOKEN_PEPPER. Production refuses to boot without it.
 	RefreshCredentials *auth.RefreshCredentials
+	// WebRefreshCookieInsecureLocalDev drops the Secure attribute from the Web
+	// refresh cookie (#460 SEC-4A). Zero value = Secure (fail-closed default);
+	// only config may opt local dev/gates out, and production can never.
+	WebRefreshCookieInsecureLocalDev bool
 	// MediaTokens signs/validates resource-scoped media read grants under the
 	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
 	// built without one neither mints nor accepts media grants.
-	MediaTokens     *auth.MediaAuthority
-	authorityOnce   sync.Once
-	lazyAuthority   *auth.Authority
+	MediaTokens   *auth.MediaAuthority
+	authorityOnce sync.Once
+	lazyAuthority *auth.Authority
 }
 
 func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
@@ -192,13 +196,47 @@ func (s *Server) createRefreshableAuthSession(ctx context.Context, cmd storage.C
 	return session, &issuedRefreshCredential{Raw: raw, ExpiresAt: refresh.ExpiresAt}, nil
 }
 
-func attachRefreshCredential(response *LoginResponse, refresh *issuedRefreshCredential) {
+// attachRefreshCredential delivers the first refresh credential per transport
+// (#460 SEC-4A): Mobile keeps the opaque secret in the JSON body (its
+// secure-store flow, revisited by SEC-5), while Web receives it exclusively as
+// a HttpOnly cookie — the raw secret never appears in Web JSON. The cookie's
+// expiry is the session's absolute bound, which rotation preserves.
+func (s *Server) attachRefreshCredential(w http.ResponseWriter, response *LoginResponse, refresh *issuedRefreshCredential, clientType domain.SessionClientType, session *domain.AuthSession) {
 	if refresh == nil {
+		return
+	}
+	if clientType == domain.SessionClientWeb && session != nil {
+		s.setWebRefreshCookie(w, refresh.Raw, session.AbsoluteExpiresAt)
+		return
+	}
+	if clientType != domain.SessionClientMobile {
 		return
 	}
 	response.RefreshToken = &refresh.Raw
 	expiresAt := refresh.ExpiresAt.UTC().Format(time.RFC3339Nano)
 	response.RefreshExpiresAt = &expiresAt
+}
+
+// setAuthExpiryMetadata stamps the server-clock session metadata SEC-4B uses
+// to schedule refreshes without decoding JWTs client-side (#460 SEC-4A §21):
+// access_expires_at mirrors the minting arithmetic exactly (auth.AccessTokenExpiry
+// is the same helper issueToken uses) and absolute_session_expires_at is the
+// registry's authoritative re-login deadline.
+func setAuthExpiryMetadata(response *LoginResponse, authStartedAt time.Time, transport openapi.AuthTransport, absoluteSessionExpiry *time.Time) {
+	var cap time.Time
+	if absoluteSessionExpiry != nil {
+		cap = *absoluteSessionExpiry
+	}
+	accessExpiry, err := auth.AccessTokenExpiry(time.Now(), authStartedAt, string(transport), cap)
+	if err != nil {
+		return
+	}
+	formatted := accessExpiry.UTC().Format(time.RFC3339Nano)
+	response.AccessExpiresAt = &formatted
+	if absoluteSessionExpiry != nil {
+		absolute := absoluteSessionExpiry.UTC().Format(time.RFC3339Nano)
+		response.AbsoluteSessionExpiresAt = &absolute
+	}
 }
 
 // Helpers para JSON
@@ -550,7 +588,8 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			SelectionRequired: true,
 			Transport:         openapi.AuthTransport(transport),
 		}
-		attachRefreshCredential(&response, refresh)
+		s.attachRefreshCredential(w, &response, refresh, sessionClientType(string(transport)), session)
+		setAuthExpiryMetadata(&response, time.Time{}, openapi.AuthTransport(transport), &session.AbsoluteExpiresAt)
 		respondWithJSON(w, http.StatusOK, response)
 		return
 	}
@@ -632,7 +671,8 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		SelectionRequired: false,
 		Transport:         openapi.AuthTransport(transport),
 	}
-	attachRefreshCredential(&response, refresh)
+	s.attachRefreshCredential(w, &response, refresh, sessionClientType(string(transport)), session)
+	setAuthExpiryMetadata(&response, time.Time{}, openapi.AuthTransport(transport), &session.AbsoluteExpiresAt)
 	respondWithJSON(w, http.StatusOK, response)
 }
 
@@ -760,7 +800,10 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 
 	org := toOrgSummaryDTO(m.Organization)
 	sessionID := tc.SessionID
-	respondWithJSON(w, http.StatusOK, LoginResponse{
+	// select-org deliberately rotates NO refresh credential: the Web cookie /
+	// Mobile secret of this session keeps its family (scope updated in place
+	// by UpdateAuthSessionScope). Only the access bearer is re-scoped.
+	response := LoginResponse{
 		Token:        token,
 		SessionID:    &sessionID,
 		User:         toOpenAPIUser(u),
@@ -769,12 +812,39 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		Organization: &org,
 		Memberships:  []MembershipDTO{},
 		Transport:    transport,
-	})
+	}
+	setAuthExpiryMetadata(&response, claims.AuthStartedAt.Time, transport, s.authSessionAbsoluteExpiry(r.Context(), claims))
+	respondWithJSON(w, http.StatusOK, response)
+}
+
+// authSessionAbsoluteExpiry resolves the registry's authoritative absolute
+// bound for a live session when the store exposes the lookup. Nil means the
+// row cannot be resolved here (older embedders); callers then omit the
+// metadata instead of guessing a client-side value.
+func (s *Server) authSessionAbsoluteExpiry(ctx context.Context, claims *auth.Claims) *time.Time {
+	if claims == nil || claims.Sid == "" {
+		return nil
+	}
+	lookup, ok := s.Store.(authSessionLookup)
+	if !ok {
+		return nil
+	}
+	session, err := lookup.GetAuthSessionForRequest(ctx, claims.Sid, claims.UserID)
+	if err != nil || session == nil {
+		return nil
+	}
+	return &session.AbsoluteExpiresAt
 }
 
 // HandleRefresh re-issues an access token for the authenticated user after
 // AuthMiddleware has already re-validated role/active against the DB (issue #16).
 // Clients should call this before AccessTokenTTL elapses to avoid re-login.
+//
+// #460 SEC-4A: this bodyless bearer branch is a FINITE compatibility bridge
+// restricted to the credential classes that have no opaque refresh family —
+// the SketchUp extension (until SEC-6 device credentials) and platform support
+// sessions. Web/mobile sessions own SEC-2A families and must rotate through
+// their canonical transports (HttpOnly cookie / JSON body).
 func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -784,6 +854,13 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
 	if !ok || claims == nil {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	transport := authTransportFromClaims(claims)
+	if claims.Support == nil && transport != openapi.AuthTransportSketchup {
+		respondWithAPIError(w, http.StatusUnauthorized, openapi.ApiErrorCodeRefreshInvalid,
+			"La credencial de renovación no es válida. Iniciá sesión de nuevo.", nil)
 		return
 	}
 
@@ -805,11 +882,11 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		PlatformAdmin:                 claims.PlatformAdmin, AuthStartedAt: claims.AuthStartedAt.Time,
 		SessionID: claims.Sid,
 	}
-	transport := authTransportFromClaims(claims)
 
 	// A ver4 refresh upgrades to the current credential version: the registry
 	// row is created here, bounded by the ORIGINAL absolute origin so the
 	// upgrade can never extend the session (#441/#445).
+	var absoluteExpiry *time.Time
 	if tc.SessionID == "" {
 		cmd := storage.CreateAuthSessionCommand{
 			UserID:            u.ID,
@@ -834,6 +911,9 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tc.SessionID = upgraded.ID
+		absoluteExpiry = &upgraded.AbsoluteExpiresAt
+	} else {
+		absoluteExpiry = s.authSessionAbsoluteExpiry(r.Context(), claims)
 	}
 
 	var token string
@@ -866,6 +946,7 @@ func (s *Server) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 			resp.License = org.License
 		}
 	}
+	setAuthExpiryMetadata(&resp, claims.AuthStartedAt.Time, transport, absoluteExpiry)
 
 	respondWithJSON(w, http.StatusOK, resp)
 }
