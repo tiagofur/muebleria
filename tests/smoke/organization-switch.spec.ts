@@ -3,6 +3,7 @@ import {
   ORG_B,
   TOKEN_A,
   TOKEN_B,
+  createMockOrganizationCookieState,
   installBroadcastRecorder,
   installOrganizationApi,
   seedBrowserSession,
@@ -25,7 +26,8 @@ test.describe('F199 mocked browser switch gates', () => {
     await expect(page).toHaveURL(urlA);
     await expect(name).toHaveValue('Tenant A unsaved');
     expect(api.requests.some(({ path }) => path.endsWith('/auth/select-org'))).toBe(false);
-    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_A);
+    // SEC-4B: sin bearer en storage; el access sigue vivo sólo en memoria.
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
 
     await page.getByLabel('Cambiar organización').selectOption(ORG_B);
     await confirmation.getByRole('button', { name: 'Descartar y cambiar' }).click();
@@ -54,7 +56,7 @@ test.describe('F199 mocked browser switch gates', () => {
     await expect(page).toHaveURL(routeA);
     await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Taller A');
     await expect(page.getByText('Ana A')).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_A);
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
 
     await alert.getByRole('button', { name: 'Actualizar talleres' }).click();
     await expect(page.getByLabel('Cambiar organización')).toHaveCount(0);
@@ -78,7 +80,7 @@ test.describe('F199 mocked browser switch gates', () => {
       await expect(alert).not.toContainText('revocado');
       await expect(alert.getByRole('button', { name: 'Actualizar talleres' })).toHaveCount(0);
       await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Taller A');
-      expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_A);
+      expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
     });
   }
 
@@ -94,7 +96,7 @@ test.describe('F199 mocked browser switch gates', () => {
     await expect(activeOrganization).toHaveText('Taller B');
     await expect(page.getByText('Bruno B')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Suspender membresía de Bruno B' })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_B);
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
 
     api.releaseTeamA();
     await page.waitForTimeout(150);
@@ -142,22 +144,27 @@ test.describe('F199 mocked browser switch gates', () => {
   test('synchronizes two real tabs with only the opaque session signal', async ({ context }) => {
     await seedBrowserSession(context);
     await installBroadcastRecorder(context);
+    // SEC-4B: la cookie-session es compartida por el context — el estado del
+    // mock también debe serlo para que el bootstrap de tab2 vea el scope B.
+    const cookieState = createMockOrganizationCookieState();
     const tab1 = await context.newPage();
     const tab2 = await context.newPage();
-    await installOrganizationApi(tab1);
-    await installOrganizationApi(tab2);
+    await installOrganizationApi(tab1, { cookieState });
+    await installOrganizationApi(tab2, { cookieState });
     await Promise.all([tab1.goto('/users'), tab2.goto('/users')]);
     await expect(tab1.getByText('Ana A')).toBeVisible();
     await expect(tab2.getByText('Ana A')).toBeVisible();
 
     await tab1.getByLabel('Cambiar organización').selectOption(ORG_B);
     await expect(tab1.getByText('Bruno B')).toBeVisible();
-    await expect(tab2.getByText('Bruno B')).toBeVisible();
+    await expect(tab2.getByText('Bruno B')).toBeVisible({ timeout: 15_000 });
     await expect(tab2.getByText('Ana A')).toHaveCount(0);
-    expect(await tab2.evaluate(() => localStorage.getItem('granete_token'))).toBe(TOKEN_B);
+    expect(await tab2.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
 
+    // La señal cross-tab es { type }-only; tab2 re-derivó su sesión desde la
+    // cookie (bootstrap), nunca desde un token broadcasteado.
     const payloads = await tab1.evaluate(() => Reflect.get(window, '__sessionMessages'));
-    expect(payloads).toEqual(['session-changed']);
+    expect(payloads).toEqual([{ type: 'scope-changed' }]);
     const serialized = JSON.stringify(payloads);
     expect(serialized).not.toMatch(/token|org-|owner|membership|Taller|browser-token/i);
   });

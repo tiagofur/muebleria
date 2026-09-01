@@ -55,12 +55,25 @@ function me(tenant: 'A' | 'B', rolesB: readonly string[], includeB = true): MeRe
   };
 }
 
-function selection(rolesB: readonly string[]): LoginResponse {
+const MOCK_SESSION_ID = '11111111-1111-4111-8111-111111111110';
+const inMinutes = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+
+/** LoginResponse con la metadata server-clock que SEC-4B exige aplicar. */
+function accessResponse(token: string, tenant: 'A' | 'B', roles: readonly string[]): LoginResponse {
   return {
-    token: TOKEN_B, user: user(), license: { plan: 'pro', status: 'active' },
-    roles: rolesB, organization: organization('B'), memberships: memberships(rolesB),
+    token, user: user(), license: { plan: 'pro', status: 'active' },
+    roles: tenant === 'A' ? ['admin'] : roles,
+    organization: organization(tenant), memberships: memberships(roles),
     selection_required: false, transport: 'web',
+    session_id: MOCK_SESSION_ID,
+    access_expires_at: inMinutes(15),
+    absolute_session_expires_at: inMinutes(18 * 60),
   };
+}
+
+function selection(rolesB: readonly string[]): LoginResponse {
+  // select-org NO crea sesión nueva: mismo session_id, scope B.
+  return accessResponse(TOKEN_B, 'B', rolesB);
 }
 
 function team(tenant: 'A' | 'B'): TeamDirectory {
@@ -82,15 +95,17 @@ function team(tenant: 'A' | 'B'): TeamDirectory {
   };
 }
 
+/**
+ * #460 SEC-4B: ya NO se siembra bearer/user en storage. La sesión se
+ * establece con el cookie bootstrap real del app (POST /auth/refresh contra
+ * el mock) — igual que producción. Sólo queda el flag de onboarding.
+ */
 export async function seedBrowserSession(target: Page | BrowserContext): Promise<void> {
-  await target.addInitScript(({ token, userId }) => {
-    sessionStorage.setItem('granete_session', 'auth');
+  await target.addInitScript(() => {
     localStorage.setItem('muebles_has_seen_onboarding_v1', 'true');
-    if (!localStorage.getItem('granete_token')) localStorage.setItem('granete_token', token);
-    if (!localStorage.getItem('granete_user')) localStorage.setItem('granete_user', JSON.stringify({
-      id: userId, email: 'owner@example.test', name: 'Owner', account_status: 'active', roles: ['admin'],
-    }));
-  }, { token: TOKEN_A, userId: USER_ID });
+  });
+  void TOKEN_A;
+  void USER_ID;
 }
 
 export type ApiRecorder = {
@@ -99,6 +114,19 @@ export type ApiRecorder = {
   releaseTeamA(): void;
 };
 
+/**
+ * Estado de la cookie-session mockeada: qué scope verá el próximo
+ * /auth/refresh (bodyless, sin Authorization). Compartible entre las rutas de
+ * dos pestañas del mismo context para emular la cookie compartida real.
+ */
+export interface MockOrganizationCookieState {
+  cookieTenant: 'A' | 'B';
+}
+
+export function createMockOrganizationCookieState(): MockOrganizationCookieState {
+  return { cookieTenant: 'A' };
+}
+
 export async function installOrganizationApi(
   page: Page,
   options: {
@@ -106,13 +134,14 @@ export async function installOrganizationApi(
     readonly delayTeamA?: boolean;
     readonly failTeam?: boolean;
     readonly selectFailure?: 'revoked' | 'forbidden' | 'network';
+    readonly cookieState?: MockOrganizationCookieState;
   } = {},
 ): Promise<ApiRecorder> {
   const rolesB = options.rolesB ?? ['admin'];
+  const cookieState = options.cookieState ?? createMockOrganizationCookieState();
   const requests: Array<{ path: string; authorization: string }> = [];
   let releaseTeamA = () => undefined;
   let markTeamAStarted = () => undefined;
-  let selectionSnapshotExpected = false;
   let refreshWithoutB = false;
   const teamAStarted = new Promise<void>((resolve) => { markTeamAStarted = resolve; });
   const teamAGate = new Promise<void>((resolve) => { releaseTeamA = resolve; });
@@ -124,9 +153,19 @@ export async function installOrganizationApi(
     const authorization = request.headers().authorization ?? '';
     const tenant = authorization === `Bearer ${TOKEN_B}` ? 'B' : 'A';
     requests.push({ path, authorization });
+    // SEC-4B cookie bootstrap/refresh: bodyless + credentialed, sin bearer.
+    if (path.endsWith('/auth/refresh')) {
+      return fulfill(route, accessResponse(
+        cookieState.cookieTenant === 'B' ? TOKEN_B : TOKEN_A,
+        cookieState.cookieTenant,
+        rolesB,
+      ));
+    }
+    if (path.endsWith('/auth/logout')) {
+      return fulfill(route, { logged_out: true });
+    }
     if (path.endsWith('/auth/me')) {
       if (refreshWithoutB) return fulfill(route, me('A', rolesB, false));
-      if (selectionSnapshotExpected) selectionSnapshotExpected = false;
       return fulfill(route, me(tenant, rolesB, !refreshWithoutB));
     }
     if (path.endsWith('/auth/select-org')) {
@@ -139,7 +178,7 @@ export async function installOrganizationApi(
           retryable: false, details: {},
         }, 403);
       }
-      selectionSnapshotExpected = true;
+      cookieState.cookieTenant = 'B';
       return fulfill(route, selection(rolesB));
     }
     if (path.endsWith('/org/memberships')) {
