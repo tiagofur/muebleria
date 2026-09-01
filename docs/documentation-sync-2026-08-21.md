@@ -246,6 +246,7 @@ panel Costos en la cotización).
 **Riesgo:** tokens en URLs/logs/historial.
 
 **Resolución:** deuda de seguridad documentada; migrar hacia URL firmada/media token/fetch autenticado.
+*(Resuelta 2026-09-01 por #460 SEC-3: el middleware ya no acepta `?token=` con session JWT; media usa grants `media_read` firmados de 3 minutos por recurso exacto — ver ADR-0007 §8.)*
 
 ---
 

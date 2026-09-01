@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1 and SEC-2A integrated; SEC-2B implemented pending review; SEC-3..SEC-9 in progress)
+- **Status:** Accepted (SEC-1 and SEC-2A integrated; SEC-2B and SEC-3 implemented pending review; SEC-4..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -168,6 +168,53 @@ atomic boundary so the membership credential epoch, every matching session and
 every refresh family commit or roll back together. Idempotent command transactions
 preserve the live membership actor used by database authorization.
 
+### 8. Media reads use resource-scoped short-lived grants; the query-string session JWT is gone
+
+SEC-3 removes the generic `?token=<session JWT>` authentication from the
+middleware entirely: a session credential only travels as an Authorization
+header, and every route — auth, business and media — answers 401 to a
+session JWT in the URL (the explicit precedence is header-wins; the query
+string never participates in session authentication).
+
+Direct-URL media consumers (web `<img>`, SketchUp HtmlDialog webviews) that
+motivated the historical fallback now use a dedicated `media_read` credential
+class. `POST /api/media:authorize` authenticates a session (organization scope
+required) and mints one signed grant per canonical catalog media filename that
+physically exists under the caller's organization partition — typed resource
+ids only, never an arbitrary URL/path to sign, and files of other tenants are
+omitted so responses stay enumeration-safe. A grant carries
+`ver=1|typ=media_read|iss=granete-media|aud=granete-media`, the exact
+canonical resource key `media/<filename>` (in both `resource` and `sub`), the
+owning `org_id`, `op=read`, mandatory `exp/nbf/iat/jti` and optional
+`sid`/`uid` mint provenance. `GET /api/media/{name}` accepts exactly one of
+two credential classes: a session Authorization header (full live policy) or
+`?grant=<media_read>`; precedence is explicit (header present → grant ignored),
+a grant naming any other file is a plain 404, and consumption is stateless —
+the exact-resource and organization binding are signed material, not runtime
+lookups.
+
+Grants live 3 minutes and never exceed the minting session's absolute expiry
+(cap = `auth_started_at` + the transport's session TTL), so a revoked session
+can stop minting immediately while outstanding URLs decay within minutes at
+most — the deliberate trade-off of a stateless signed read grant; the
+observable signal without any stored secret is the authorize request itself.
+Media responses stay `Cache-Control: private` (+`Vary: Authorization`) and the
+authorize endpoint is `no-store`; a signed URL never turns a private file into
+a public one. Grants are signed with the mandatory `MEDIA_SIGNING_KEY`
+(≥ 32 bytes; boot fails closed), which shares no primitive with
+`JWT_SECRET`/`JWT_KEYRING`/`REFRESH_TOKEN_PEPPER` — credential-class confusion
+is rejected at the signature level on top of disjoint `iss`/`aud`/`typ`/`ver`.
+React resolves media through a token-scoped in-memory cache (batched, deduped,
+refreshed before expiry, dropped on logout/organization switch; never
+persisted). The SketchUp webviews never receive the extension session
+credential: Ruby exchanges it for per-file signed URLs and re-mints expired
+grants on demand via the `refresh_media_url` callback. SketchUp's logger
+redacts `grant=` query credentials like every other credential.
+
+Remaining roadmap: SEC-4 Web credential migration, SEC-5 Mobile credential
+migration, SEC-6 SketchUp device credentials, SEC-7 MFA/step-up, SEC-8 trusted
+proxy/rate limits/account hardening, SEC-9 final gate + ver4 EOL.
+
 ## Alternatives considered
 
 - **Keep exp-derived sessions without a registry.** Rejected: no per-session
@@ -237,3 +284,16 @@ real PostgreSQL/runtime-role HTTP proof in
 `tests/pilotreadiness/session_directory_http_test.go` (independent memberships,
 self current/other session, organization and platform boundaries, access+refresh
 cut, enumeration safety and both failure injections).
+
+SEC-3 adds `internal/auth/media_test.go` (canonical resource-key grammar, exact
+grant claims, disjoint-issuer/audience/typ negatives, expiry), `internal/api/media_authorize_test.go`
+(happy path over the full router, exact-resource and same-name cross-partition
+binding, tenant omission, expiry with clock-controlled tokens, session/refresh
+credential confusion in both directions, query-session-JWT negative proofs on
+auth/business/media routes, header-wins precedence, extension POST capability,
+fail-closed missing key, cache semantics and log redaction), the web resolver
+suite `apps/web/src/stores/mediaAuthorization.test.ts` plus the workspace-store
+media tests (batching, dedupe, TTL refresh, token-switch invalidation,
+late-response drop, logout cleanup, JWT never in URLs), and the extension suites
+`test/unit/media_authorizer_test.rb`, the dialog-controller grant/refresh proofs
+and the `grant=` redaction proof in `test/unit/logging_test.rb`.

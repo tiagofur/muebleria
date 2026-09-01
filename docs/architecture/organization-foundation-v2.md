@@ -856,7 +856,16 @@ command functions while auth session/family RLS remains self-or-platform; an
 exact or membership-wide revoke commits session, family, credential epoch and
 critical audit coherently. Support-session business lifecycle remains separate.
 Login, refresh, logout and all session-directory responses are no-store; directory
-routes reject query tokens. React storage/cookies remain SEC-4. MFA/step-up, media authorization and
+routes reject query tokens. The generic `?token=<session JWT>` authentication
+is removed entirely (SEC-3): session credentials only travel as Authorization
+headers, and media reads that need direct URLs use `media_read` grants —
+short-lived (3 minutes), signed with the dedicated `MEDIA_SIGNING_KEY`, bound
+to one exact canonical media file of one organization, minted only after the
+live session/org authorization via `POST /api/media:authorize`, and capped at
+the session's absolute expiry. React resolves them through a token-scoped
+in-memory cache; SketchUp webviews never see the extension credential (Ruby
+exchanges it for per-file URLs and re-mints on expiry). React storage/cookies
+remain SEC-4. MFA/step-up and
 trusted-proxy rate limiting remain target work of the following #460 slices.
 
 Mandatory hardening:

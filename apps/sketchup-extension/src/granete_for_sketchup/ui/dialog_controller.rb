@@ -209,14 +209,19 @@ module Granete
         def handle_open_material_selector(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           params = extract_selector_params(payload)
+          allowed_materials = selector_allowed_materials(params)
+          categories = selector_categories
 
           option_selector.show_selector(
             role: params[:role],
             role_name: params[:role_name],
             current_material_id: params[:current_material_id],
-            allowed_materials: selector_allowed_materials(params),
-            categories: selector_categories,
-            media: build_media_payload,
+            allowed_materials: allowed_materials,
+            categories: categories,
+            media: media_authorizer.media_payload_for(
+              'materials' => allowed_materials, 'categories' => categories
+            ),
+            media_refresher: ->(filename) { media_authorizer.refresh_url(filename) },
             on_apply: lambda do |selected_role, selected_material_id, scope|
               execute_bridge(dialog, 'onMaterialChoiceApplied', {
                                'role' => selected_role,
@@ -598,6 +603,9 @@ module Granete
           dialog.add_action_callback('close_dialog') { dialog.close }
           dialog.add_action_callback('login') { |_c, p| handle_login(dialog, p) }
           dialog.add_action_callback('logout') { handle_logout(dialog) }
+          # #460 SEC-3: webviews re-mint expired media grants on demand; the
+          # session credential itself never crosses into the dialog.
+          dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
         end
 
         def handle_dialog_ready(dialog)
@@ -631,7 +639,7 @@ module Granete
             'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&
                                 @catalog_provider.last_license_blocked
           }
-          media = build_media_payload
+          media = media_authorizer.media_payload_for(payload)
           payload['media'] = media if media
           execute_bridge(dialog, 'setCatalog', payload)
         rescue StandardError => e
@@ -639,22 +647,24 @@ module Granete
         end
 
         # The workshop catalog references module previews with server-relative
-        # paths (/api/media/...); the webview needs the origin plus the media
-        # token (GET media accepts ?token=) to render them.
-        def build_media_payload
-          return nil unless @session.respond_to?(:configured?) && @session.configured?
+        # paths (/api/media/...). #460 SEC-3: the webview receives per-file
+        # SHORT-LIVED signed URLs minted here — never the extension session
+        # credential, and never a `?token=` query authentication.
+        def media_authorizer
+          @media_authorizer ||= Assets::MediaAuthorizer.new(
+            transport: @session.respond_to?(:transport) ? @session.transport : nil,
+            auth_provider: @session,
+            logger: @logger
+          )
+        end
 
-          server_url = @session.respond_to?(:status) ? @session.status['server_url'].to_s : ''
-          base = server_url.sub(%r{/api/?\z}, '').sub(%r{/+\z}, '')
-          return nil if base.empty?
+        def handle_refresh_media_url(dialog, filename)
+          refresh = media_authorizer.refresh_url(filename)
+          return if refresh.nil?
 
-          token = @session.authorization_header.to_s.sub(/\ABearer\s+/, '')
-          return nil if token.empty?
-
-          { 'baseUrl' => base, 'token' => token }
-        rescue Auth::NotConfiguredError, StandardError => e
-          @logger.error('dialog_media_payload_failed', error: e)
-          nil
+          execute_bridge(dialog, 'updateMediaUrl', refresh)
+        rescue StandardError => e
+          @logger.error('dialog_media_refresh_failed', error: e)
         end
 
         def handle_delete(dialog, raw_payload = nil)

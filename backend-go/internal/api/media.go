@@ -168,7 +168,14 @@ func (s *Server) HandleMediaGet(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}
+	// Cache semantics (#460 SEC-3): private only (never a shared cache), and
+	// Vary: Authorization because the same URL answers different
+	// organizations when reached with a session header. Grant URLs carry
+	// their own unique credential so they need no vary key; a cached grant
+	// response stays private to the browser that fetched it and can never
+	// republish the file after the grant expires.
 	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Header().Add("Vary", "Authorization")
 	http.ServeContent(w, r, name, stat.ModTime(), f)
 }
 

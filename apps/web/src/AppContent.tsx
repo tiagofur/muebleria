@@ -454,6 +454,10 @@ export function AppContent({
     (s) => s.saveWorkshopSettings,
   );
   const resolveMediaUrlFromStore = useWorkspaceStore((s) => s.resolveMediaUrl);
+  // #460 SEC-3: signed media grants land asynchronously; subscribing to the
+  // bump re-renders the shell so media consumers resolve again with fresh
+  // grant URLs instead of staying on placeholders.
+  const mediaSeq = useWorkspaceStore((s) => s.mediaSeq);
   const uploadCatalogImageFromStore = useWorkspaceStore(
     (s) => s.uploadCatalogImage,
   );
@@ -2557,7 +2561,12 @@ export function AppContent({
 
   // F062: media helpers now delegate to catalogStore (which reads authToken
   // from workspaceStore). Toast on upload success/error stays here.
-  const resolveMediaUrl = catalogActions.resolveMediaUrl;
+  // #460 SEC-3: the identity re-binds on mediaSeq so grant resolution during
+  // this render is observable by memoized consumers down the tree.
+  const resolveMediaUrl = useMemo(
+    () => (url: string | undefined) => catalogActions.resolveMediaUrl(url),
+    [catalogActions, mediaSeq],
+  );
   const uploadCatalogImage = useCallback(
     async (file: File): Promise<string> => {
       try {

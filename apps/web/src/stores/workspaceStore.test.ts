@@ -9,6 +9,7 @@ import {
   type RepositoryFactory,
   createWorkspaceStore,
 } from './workspaceStore';
+import { invalidateAuthorizedMedia } from './mediaAuthorization';
 
 import {
   SESSION_STORAGE_KEY,
@@ -190,6 +191,8 @@ beforeEach(() => {
   // Provide inert storages by default; tests that need auth state override.
   (globalThis as { sessionStorage: Storage }).sessionStorage = memoryStorage();
   (globalThis as { localStorage: Storage }).localStorage = memoryStorage();
+  // Media grants are module-level and token-scoped; keep tests isolated.
+  invalidateAuthorizedMedia();
 });
 
 afterEach(() => {
@@ -677,27 +680,93 @@ describe('workspaceStore — resolveMediaUrl', () => {
     expect(store.getState().resolveMediaUrl('blob:abc')).toBe('blob:abc');
   });
 
-  it('appends token as query param when authed with relative api url', () => {
+  it('non-canonical api paths pass through unchanged (no token query)', () => {
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api' },
+    });
+    expect(store.getState().resolveMediaUrl('/api/media/abc.png')).toBe(
+      '/api/media/abc.png',
+    );
+  });
+
+  // #460 SEC-3: session JWTs never ride the query string. Canonical media
+  // paths resolve through short-lived signed grant URLs.
+  it('resolves canonical media paths via signed grant URLs, never via ?token=', async () => {
+    const file = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonOk({
+        grants: [
+          {
+            filename: file,
+            url: `/api/media/${file}?grant=media-grant-token`,
+            expiresAt: new Date(Date.now() + 120_000).toISOString(),
+          },
+        ],
+      }),
+    );
     globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-xyz');
     globalThis.sessionStorage.setItem(SESSION_STORAGE_KEY, 'auth');
     const store = createWorkspaceStore({
-      deps: { baseUrl: 'http://test/api' },
+      deps: { baseUrl: 'http://test/api', fetchImpl },
     });
     store.setState({ session: 'auth' });
+    invalidateAuthorizedMedia();
 
-    // baseUrl origin (http://test) + relative path (/api/media/...) + token.
+    // First (synchronous) render: the grant is on its way, no usable URL yet.
     expect(
-      store.getState().resolveMediaUrl('/api/media/abc.png'),
-    ).toBe('http://test/api/media/abc.png?token=jwt-xyz');
+      store.getState().resolveMediaUrl(`/api/media/${file}`),
+    ).toBeUndefined();
+
+    await vi.waitFor(() => {
+      if (store.getState().resolveMediaUrl(`/api/media/${file}`) === undefined) {
+        throw new Error('grant not resolved yet');
+      }
+    });
+    const resolved = store.getState().resolveMediaUrl(`/api/media/${file}`);
+    expect(resolved).toBe(`http://test/api/media/${file}?grant=media-grant-token`);
+    expect(resolved).not.toContain('token=jwt-xyz');
+
+    // The authorize call carried the session JWT in the HEADER only.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [calledUrl, init] = fetchImpl.mock.calls[0]!;
+    expect(calledUrl).toBe('http://test/api/media:authorize');
+    expect((init as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer jwt-xyz',
+    });
   });
 
-  it('without token returns absolute url without query', () => {
+  it('logout drops cached media grants', async () => {
+    const file = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonOk({
+        grants: [
+          {
+            filename: file,
+            url: `/api/media/${file}?grant=media-grant-token`,
+            expiresAt: new Date(Date.now() + 120_000).toISOString(),
+          },
+        ],
+      }),
+    );
+    globalThis.localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-xyz');
+    globalThis.sessionStorage.setItem(SESSION_STORAGE_KEY, 'auth');
     const store = createWorkspaceStore({
-      deps: { baseUrl: 'http://test/api' },
+      deps: { baseUrl: 'http://test/api', fetchImpl },
     });
+    store.setState({ session: 'auth' });
+    invalidateAuthorizedMedia();
+
+    store.getState().resolveMediaUrl(`/api/media/${file}`);
+    await vi.waitFor(() => {
+      if (store.getState().resolveMediaUrl(`/api/media/${file}`) === undefined) {
+        throw new Error('grant not resolved yet');
+      }
+    });
+
+    store.getState().logout();
     expect(
-      store.getState().resolveMediaUrl('/api/media/abc.png'),
-    ).toBe('http://test/api/media/abc.png');
+      store.getState().resolveMediaUrl(`/api/media/${file}`),
+    ).toBeUndefined();
   });
 });
 

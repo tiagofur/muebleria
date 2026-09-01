@@ -19,7 +19,7 @@ module Granete
         end
 
         def show_selector(role:, role_name:, current_material_id:, allowed_materials:, categories:, media: nil,
-                          on_apply: nil)
+                          media_refresher: nil, on_apply: nil)
           @current_payload = {
             'role' => role,
             'roleName' => role_name || role,
@@ -29,6 +29,9 @@ module Granete
             'media' => media
           }
           @on_apply = on_apply
+          # #460 SEC-3: re-mints an expired media grant on demand. The webview
+          # never holds the session credential — only short-lived signed URLs.
+          @media_refresher = media_refresher
 
           if @dialog&.visible?
             @dialog.bring_to_front
@@ -83,6 +86,16 @@ module Granete
           dialog.add_action_callback('selector_ready') { handle_ready(dialog) }
           dialog.add_action_callback('apply_selection') { |_c, p| handle_apply(p) }
           dialog.add_action_callback('close_selector') { close }
+          dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
+        end
+
+        def handle_refresh_media_url(dialog, filename)
+          refresh = @media_refresher ? @media_refresher.call(filename.to_s) : nil
+          return if refresh.nil?
+
+          execute_bridge(dialog, 'updateMediaUrl', refresh)
+        rescue StandardError => e
+          @logger&.error('option_selector_media_refresh_failed', error: e)
         end
 
         def handle_ready(dialog)

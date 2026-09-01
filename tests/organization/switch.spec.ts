@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { GATE_MODULE_A_ID, GATE_MODULE_B_ID, required } from './support/api';
+import {
+  GATE_MEDIA_A_URL,
+  GATE_MEDIA_B_URL,
+  GATE_MODULE_A_ID,
+  GATE_MODULE_B_ID,
+  required,
+} from './support/api';
 
 async function loginToA(page: Page): Promise<void> {
   await page.goto('/');
@@ -24,7 +30,9 @@ test('real delayed A media cannot replace the B shell, card, action, token, or h
       url: request.url(), authorization: request.headers().authorization ?? '',
     });
   });
-  await page.route('**/api/media/browser-gate-a.png*', async (route) => {
+  // #460 SEC-3: A's media now travels as a short-lived signed grant URL —
+  // delay the file GET itself so a late A response cannot pollute B.
+  await page.route(`**${GATE_MEDIA_A_URL}*`, async (route) => {
     const response = await route.fetch();
     markAStarted();
     await aGate;
@@ -47,8 +55,10 @@ test('real delayed A media cannot replace the B shell, card, action, token, or h
   expect(tokenB).toBeTruthy();
   expect(tokenB).not.toBe(tokenA);
   const imageB = page.getByRole('img', { name: 'Mueble real B' });
-  await expect(imageB).toHaveAttribute('src', /browser-gate-b\.png/);
-  await expect(imageB).toHaveAttribute('src', new RegExp(`token=${tokenB}`));
+  // Signed grant URL for exactly org B's file — never a session JWT in the URL.
+  await expect(imageB).toHaveAttribute('src', new RegExp(`${GATE_MEDIA_B_URL.slice('/api/media/'.length)}\\?grant=`));
+  await expect(imageB).toHaveAttribute('src', /grant=/);
+  await expect(imageB).not.toHaveAttribute('src', /token=/);
 
   releaseA();
   await page.waitForTimeout(150);
@@ -59,8 +69,8 @@ test('real delayed A media cannot replace the B shell, card, action, token, or h
   const firstB = requests.findIndex(({ authorization }) => authorization === `Bearer ${tokenB}`);
   expect(firstB).toBeGreaterThanOrEqual(0);
   const afterB = requests.slice(firstB);
-  expect(afterB.some(({ url }) => url.includes('browser-gate-b.png'))).toBe(true);
-  expect(afterB.some(({ url }) => url.includes('browser-gate-a.png'))).toBe(false);
+  expect(afterB.some(({ url }) => url.includes(GATE_MEDIA_B_URL))).toBe(true);
+  expect(afterB.some(({ url }) => url.includes(GATE_MEDIA_A_URL))).toBe(false);
   expect(afterB.some(({ authorization }) => authorization === `Bearer ${tokenA}`)).toBe(false);
 });
 

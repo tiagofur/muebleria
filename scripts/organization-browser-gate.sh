@@ -13,7 +13,7 @@ cleanup() {
   fi
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
   rm -rf "${TMP_ROOT}"
-  unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER ADMIN_PASSWORD
+  unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY ADMIN_PASSWORD
 }
 trap cleanup EXIT INT TERM
 
@@ -41,6 +41,7 @@ POSTGRES_PASSWORD="$(openssl rand -hex 32)"
 APP_DATABASE_PASSWORD="$(openssl rand -hex 32)"
 JWT_SECRET="$(openssl rand -hex 48)"
 REFRESH_TOKEN_PEPPER="$(openssl rand -hex 48)"
+MEDIA_SIGNING_KEY="$(openssl rand -hex 48)"
 ADMIN_PASSWORD="Gate-$(openssl rand -hex 24)-7a"
 BACKEND_PORT="$(free_port)"
 ORGANIZATION_WEB_PORT="$(free_port)"
@@ -77,7 +78,7 @@ ROLE_FLAGS="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate \
   -c "SELECT rolcanlogin, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'granete_app'")"
 [ "${ROLE_FLAGS}" = 't|f|f' ] || fail "runtime role must be LOGIN, NOSUPERUSER, NOBYPASSRLS"
 
-export DATABASE_URL MIGRATION_DATABASE_URL JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_DIR ADMIN_PASSWORD
+export DATABASE_URL MIGRATION_DATABASE_URL JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MEDIA_DIR ADMIN_PASSWORD
 export PORT="${BACKEND_PORT}"
 export CORS_ALLOWED_ORIGINS="http://127.0.0.1:${ORGANIZATION_WEB_PORT}"
 export RATE_LIMIT_RPS=100 RATE_LIMIT_BURST=100
@@ -108,11 +109,20 @@ curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null \
   --name "Browser Gate B" --slug browser-gate-b --type factory \
   --admin-email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" \
   --idempotency-key browser-gate-b-bootstrap --license pro) >/dev/null
-python3 - "${MEDIA_DIR}" <<'PY'
+# #460 SEC-3: canonical server media names (32 hex chars), placed under each
+# organization's partition like the real upload endpoint does — the browser
+# gate then exercises the signed-grant media flow end to end.
+ORG_A_MEDIA_ID="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate -c "SELECT id FROM organizations WHERE slug='browser-gate-a'")"
+ORG_B_MEDIA_ID="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate -c "SELECT id FROM organizations WHERE slug='browser-gate-b'")"
+python3 - "${MEDIA_DIR}" "${ORG_A_MEDIA_ID}" "${ORG_B_MEDIA_ID}" <<'PY'
 import base64, pathlib, sys
-root = pathlib.Path(sys.argv[1])
-root.joinpath('browser-gate-a.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))
-root.joinpath('browser-gate-b.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8zwAAAgEBAScY42YAAAAASUVORK5CYII='))
+root, org_a, org_b = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+for org, name, data in (
+    (org_a, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='),
+    (org_b, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8zwAAAgEBAScY42YAAAAASUVORK5CYII='),
+):
+    (root / org).mkdir(parents=True, exist_ok=True)
+    (root / org / name).write_bytes(base64.b64decode(data))
 PY
 
 export ORGANIZATION_WEB_PORT ORGANIZATION_GATE_EMAIL

@@ -36,6 +36,7 @@ services:
       # Required: compose refuses to start without it.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       REFRESH_TOKEN_PEPPER: ${REFRESH_TOKEN_PEPPER:?REFRESH_TOKEN_PEPPER must be set in .env}
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:?MEDIA_SIGNING_KEY must be set in .env}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${DOMAIN:-localhost}}
       MEDIA_DIR: /data/media
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-0.5}

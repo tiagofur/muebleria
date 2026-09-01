@@ -106,7 +106,7 @@ forma consistente:
 - `PublicUserDTO` explícito;
 - login/refresh/list user con DTO público;
 - test que garantiza ausencia de password hash;
-- revisar estrategia de `?token=` para media y planear URLs firmadas/token específico.
+- ~~revisar estrategia de `?token=` para media y planear URLs firmadas/token específico~~ resuelto por #460 SEC-3: grants `media_read` short-lived resource-scoped (`POST /api/media:authorize`), sin session JWT en query.
 
 ### OC-006 — Data Truth Contract
 

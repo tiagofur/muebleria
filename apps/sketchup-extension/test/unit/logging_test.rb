@@ -85,6 +85,19 @@ class LoggingTest < Minitest::Test
     assert_includes query, 'example.test/v1'
   end
 
+  # #460 SEC-3: signed media grant URLs carry a (short-lived) credential in
+  # the query string; the raw grant must never survive the redaction boundary.
+  def test_redacts_media_grant_query_credentials
+    grant = 'eyJhbGciOiJIUzI1NiJ9.payload.signature'
+    output = JSON.generate(
+      Granete::SketchUpExtension::LogRedactor.call(
+        "GET https://taller.local/api/media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png?grant=#{grant} failed"
+      )
+    )
+    refute_includes output, grant
+    assert_includes output, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'
+  end
+
   def test_leaves_relative_words_and_plain_urls_alone
     message = 'safe status and catalog see https://example.test/docs'
     output = JSON.generate(Granete::SketchUpExtension::LogRedactor.call(message))
