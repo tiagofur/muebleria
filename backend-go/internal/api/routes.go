@@ -69,11 +69,14 @@ func RegisterRoutes(server *Server) http.Handler {
 	// installation, job costing) are factory-only — the sales org gets 404.
 	mfgOnly := server.manufacturingOnly
 
-	// SEC-2 primary path: opaque single-use refresh credential. The no-body
-	// bearer branch is a finite compatibility bridge for deployed clients and
-	// moves out with SEC-4/SEC-6; it is no longer the OpenAPI refresh contract.
+	// SEC-2 primary path: opaque single-use refresh credential, dispatched per
+	// transport (#460 SEC-4A): JSON body = Mobile; HttpOnly web refresh cookie
+	// (CSRF-gated) = Web; the no-body bearer branch is a finite compatibility
+	// bridge restricted to SketchUp/support tokens (it moves out with SEC-6)
+	// and is no longer the OpenAPI refresh contract.
 	mux.Handle("POST /api/auth/refresh", noStoreMiddleware(authRL(refreshTransitionHandler(
 		http.HandlerFunc(server.HandleRefreshCredential),
+		http.HandlerFunc(server.HandleWebCookieRefresh),
 		authMW(http.HandlerFunc(server.HandleRefresh)),
 	))))
 	mux.Handle("POST /api/auth/logout", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleLogout))))

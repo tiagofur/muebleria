@@ -44,6 +44,22 @@ are rejected. Reading transport/client claims from already-issued JWTs remains
 temporarily compatible only until those finite tokens expire; that is token
 migration, not an HTTP DTO fallback.
 
+### Refresh/logout credential transport (#460 SEC-4A)
+
+`/auth/refresh` and `/auth/logout` dispatch on the presented credential, not
+on User-Agent heuristics: a JSON body is the **mobile** contract
+(`RefreshRequest.transport` is the `RefreshTransport` enum, `mobile` only) and
+returns the rotated secret in the body; a bodyless request carrying the
+HttpOnly `granete_web_refresh` cookie is the **web** contract and requires an
+exactly-allowed `Origin` plus the `X-Granete-CSRF: 1` header, rotating the
+secret only as a fresh `Set-Cookie` bounded by the session's absolute expiry;
+a bodyless `Authorization` bearer remains the finite **sketchup/support**
+compatibility bridge (web/mobile bearers are denied there). Presenting a JSON
+body together with the web cookie is rejected as credential mixing. Web
+login/refresh/invitation responses never contain `refresh_token`; they expose
+the server-clock `access_expires_at` / `absolute_session_expires_at` metadata
+instead, so clients never decode JWTs to schedule refresh.
+
 ## Migration boundary
 
 Auth, Team, Platform and the current `/factory/organizations` sales-network

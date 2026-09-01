@@ -378,7 +378,9 @@ func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
 func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	server, _ := loginTestServer(t)
 	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	token, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{
+	// SEC-4A: the bodyless bearer bridge is the SketchUp/support compatibility
+	// path; the absolute-origin preservation is proven with that transport.
+	token, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", auth.TokenContext{
 		Roles:                         []string{string(domain.RoleVendedor)},
 		OrgID:                         "org-1",
 		MembershipID:                  "u1:org-1",
@@ -407,7 +409,7 @@ func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	if !claims.AuthStartedAt.Time.Equal(started) {
 		t.Fatalf("auth_started_at = %s, want %s", claims.AuthStartedAt.Time, started)
 	}
-	if want := started.Add(auth.AccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
+	if want := started.Add(auth.ExtensionTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
 		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
 	}
 }

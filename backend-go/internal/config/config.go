@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,11 +39,16 @@ type Config struct {
 	// primitive with the JWT keyring or the refresh pepper: a media grant can
 	// never validate as a session credential and vice versa.
 	MediaAuthority *auth.MediaAuthority
-	AllowedOrigins     []string // CORS allowlist (reflected per-request); never "*"
-	RateLimitRPS       float64  // sustained requests/second for auth endpoints
-	RateLimitBurst     int      // maximum burst for auth endpoints
+	AllowedOrigins []string // CORS allowlist (reflected per-request); never "*"
+	RateLimitRPS   float64  // sustained requests/second for auth endpoints
+	RateLimitBurst int      // maximum burst for auth endpoints
 	// MediaDir is the filesystem root for catalog image uploads (F040).
 	MediaDir string
+	// WebRefreshCookieInsecureLocalDev opts the Web refresh cookie out of the
+	// Secure attribute (#460 SEC-4A). It may only become true outside
+	// production: LoadConfig refuses an insecure Web refresh cookie whenever
+	// GRANETE_ENV=production, whatever the input combination.
+	WebRefreshCookieInsecureLocalDev bool
 }
 
 const minJWTSecretBytes = 32
@@ -105,6 +112,11 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	cookieInsecure, err := parseWebRefreshCookieSecurity(allowed)
+	if err != nil {
+		return Config{}, err
+	}
+
 	mediaDir := os.Getenv("MEDIA_DIR")
 	if strings.TrimSpace(mediaDir) == "" {
 		// Default to an absolute path OUTSIDE the repo (~/.muebles-media).
@@ -134,7 +146,73 @@ func LoadConfig() (Config, error) {
 		RateLimitRPS:         rps,
 		RateLimitBurst:       burst,
 		MediaDir:             mediaDir,
+
+		WebRefreshCookieInsecureLocalDev: cookieInsecure,
 	}, nil
+}
+
+// parseWebRefreshCookieSecurity resolves whether the Web refresh cookie may
+// drop the Secure attribute (#460 SEC-4A). The resolution is fail-closed:
+//
+//   - WEB_REFRESH_COOKIE_SECURE=true  → always Secure.
+//   - WEB_REFRESH_COOKIE_SECURE=false → allowed only when GRANETE_ENV is not
+//     "production"; a production deployment that asks for an insecure refresh
+//     cookie refuses to boot instead of shipping one.
+//   - WEB_REFRESH_COOKIE_SECURE=auto (the default) → Secure unless EVERY
+//     configured CORS origin is a loopback HTTP origin (the local dev/gate
+//     shape). Any real origin keeps the cookie Secure even over plain HTTP,
+//     where browsers then refuse it — degraded, never insecure.
+//
+// GRANETE_ENV is an explicit deployment signal, not a Host-header guess;
+// docker-compose.prod.yml pins it to "production".
+func parseWebRefreshCookieSecurity(allowedOrigins []string) (bool, error) {
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("GRANETE_ENV")))
+	switch env {
+	case "", "development", "dev":
+		env = "development"
+	case "production", "prod":
+		env = "production"
+	default:
+		return false, fmt.Errorf("GRANETE_ENV must be \"production\" or \"development\", got %q", env)
+	}
+
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("WEB_REFRESH_COOKIE_SECURE")))
+	secure := true
+	switch raw {
+	case "", "auto":
+		secure = !allOriginsLoopbackHTTP(allowedOrigins)
+	case "true":
+	case "false":
+		secure = false
+	default:
+		return false, fmt.Errorf("WEB_REFRESH_COOKIE_SECURE must be \"auto\", \"true\" or \"false\", got %q", raw)
+	}
+
+	if env == "production" && !secure {
+		return false, errors.New("production (GRANETE_ENV=production) requires a Secure Web refresh cookie: WEB_REFRESH_COOKIE_SECURE must not be \"false\"" + map[bool]string{true: " and CORS origins must not be loopback-only under \"auto\"", false: ""}[raw == "auto" || raw == ""])
+	}
+	return !secure, nil
+}
+
+// allOriginsLoopbackHTTP reports whether every origin is plain HTTP on a
+// loopback host — the local development/gates shape (Vite on localhost against
+// a local backend). An empty list is not loopback: fail toward Secure.
+func allOriginsLoopbackHTTP(origins []string) bool {
+	if len(origins) == 0 {
+		return false
+	}
+	for _, o := range origins {
+		u, err := url.Parse(strings.TrimSpace(o))
+		if err != nil || u.Scheme != "http" {
+			return false
+		}
+		switch u.Hostname() {
+		case "localhost", "127.0.0.1", "::1":
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // parseJWTKeyring resolves the signing key ring and issuer. Without

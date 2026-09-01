@@ -186,3 +186,58 @@ func TestLoadConfig_MediaDirWhitespaceFallsBack(t *testing.T) {
 		t.Errorf("MediaDir = %q, want default %q", cfg.MediaDir, want)
 	}
 }
+
+// #460 SEC-4A: the Web refresh cookie's Secure attribute resolves fail-closed.
+// Production (GRANETE_ENV=production) can never end up with Secure=false —
+// neither by explicit opt-out nor by the loopback-only "auto" heuristic.
+func TestWebRefreshCookieSecurityResolution(t *testing.T) {
+	cases := []struct {
+		name       string
+		env        string
+		secure     string
+		origins    string
+		wantErr    bool
+		wantSecure bool // value of cfg.WebRefreshCookieInsecureLocalDev (inverted)
+	}{
+		// Explicit false is a local-dev-only opt-out.
+		{name: "dev explicit insecure", env: "development", secure: "false", wantSecure: true},
+		{name: "default env explicit insecure", env: "", secure: "false", wantSecure: true},
+		{name: "production explicit insecure", env: "production", secure: "false", wantErr: true},
+		// auto: Secure unless every origin is loopback HTTP.
+		{name: "dev loopback auto", env: "development", secure: "auto", origins: "http://localhost:5173,http://127.0.0.1:4173", wantSecure: true},
+		{name: "default env loopback auto", env: "", secure: "", origins: "http://localhost:5173", wantSecure: true},
+		{name: "production loopback auto", env: "production", secure: "auto", origins: "http://localhost:5173", wantErr: true},
+		{name: "production https auto", env: "production", secure: "auto", origins: "https://granete.example", wantSecure: false},
+		{name: "dev real origin auto", env: "development", secure: "auto", origins: "http://workshop.lan", wantSecure: false},
+		{name: "mixed loopback and real auto", env: "development", secure: "auto", origins: "http://localhost:5173,https://granete.example", wantSecure: false},
+		// Explicit true always wins.
+		{name: "dev explicit secure", env: "development", secure: "true", wantSecure: false},
+		{name: "production explicit secure", env: "production", secure: "true", wantSecure: false},
+		// Garbage is rejected everywhere.
+		{name: "invalid flag", env: "development", secure: "maybe", wantErr: true},
+		{name: "invalid env", env: "staging", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+			t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+			t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+			t.Setenv("GRANETE_ENV", tc.env)
+			t.Setenv("WEB_REFRESH_COOKIE_SECURE", tc.secure)
+			t.Setenv("CORS_ALLOWED_ORIGINS", tc.origins)
+			cfg, err := LoadConfig()
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "Secure Web refresh cookie") && !strings.Contains(err.Error(), "WEB_REFRESH_COOKIE_SECURE") && !strings.Contains(err.Error(), "GRANETE_ENV") {
+					t.Fatalf("expected fail-closed error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.WebRefreshCookieInsecureLocalDev != tc.wantSecure {
+				t.Fatalf("insecure-local-dev=%v, want %v", cfg.WebRefreshCookieInsecureLocalDev, tc.wantSecure)
+			}
+		})
+	}
+}

@@ -122,6 +122,16 @@ func gateMode() bool { return os.Getenv("PILOT_READINESS_GATE") != "" }
 
 func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, []byte) {
 	t.Helper()
+	status, raw, _ := f.doWithHeaders(t, method, path, token, body, nil)
+	return status, raw
+}
+
+// pilotWebOrigin is the exact origin allowed by the fixture server. The Web
+// cookie refresh/logout flows (#460 SEC-4A) require it plus X-Granete-CSRF.
+const pilotWebOrigin = "http://localhost:5173"
+
+func (f *fixture) doWithHeaders(t *testing.T, method, path, token string, body any, extraHeaders map[string]string) (int, []byte, *http.Response) {
+	t.Helper()
 	var rd io.Reader
 	var rawBody []byte
 	if body != nil {
@@ -142,6 +152,9 @@ func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, [
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	for key, value := range extraHeaders {
+		req.Header.Set(key, value)
+	}
 	if method == http.MethodPost || (method == http.MethodPut && strings.HasPrefix(path, "/api/org/memberships/")) {
 		req.Header.Set("Idempotency-Key", pilotIdempotencyKey(path, token, rawBody))
 	}
@@ -157,7 +170,7 @@ func (f *fixture) do(t *testing.T, method, path, token string, body any) (int, [
 	if err != nil {
 		t.Fatalf("read response of %s %s: %v", method, path, err)
 	}
-	return resp.StatusCode, raw
+	return resp.StatusCode, raw, resp
 }
 
 func pilotIdempotencyKey(path, token string, body []byte) string {
@@ -199,6 +212,8 @@ type loginResponse struct {
 	SessionID        string `json:"session_id"`
 	RefreshToken     string `json:"refresh_token"`
 	RefreshExpiresAt string `json:"refresh_expires_at"`
+	AccessExpiresAt   string `json:"access_expires_at"`
+	AbsoluteSessionExpiresAt string `json:"absolute_session_expires_at"`
 	User             struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`
@@ -226,6 +241,82 @@ func (f *fixture) login(t *testing.T, email, org string) loginResponse {
 		"transport": "web",
 	}, http.StatusOK, &resp)
 	return resp
+}
+
+// mobileLogin authenticates through the mobile transport: the opaque refresh
+// credential arrives in the JSON body (#460 SEC-4A transport contract).
+func (f *fixture) mobileLogin(t *testing.T, email, org string) loginResponse {
+	t.Helper()
+	var resp loginResponse
+	f.decode(t, http.MethodPost, "/api/auth/login", "", map[string]string{
+		"email":     email,
+		"password":  pilotPassword,
+		"org":       org,
+		"transport": "mobile",
+	}, http.StatusOK, &resp)
+	if resp.RefreshToken == "" {
+		t.Fatalf("mobile login must emit the refresh credential in the body: %+v", resp)
+	}
+	return resp
+}
+
+// webSession is a web login plus its HttpOnly refresh cookie value, extracted
+// from Set-Cookie (#460 SEC-4A: the web secret never appears in JSON).
+type webSession struct {
+	login  loginResponse
+	cookie string
+}
+
+func webRefreshCookieFromResponse(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "granete_web_refresh" {
+			return cookie.Value
+		}
+	}
+	return ""
+}
+
+func (f *fixture) webLogin(t *testing.T, email, org string) webSession {
+	t.Helper()
+	status, raw, resp := f.doWithHeaders(t, http.MethodPost, "/api/auth/login", "", map[string]string{
+		"email": email, "password": pilotPassword, "org": org, "transport": "web",
+	}, nil)
+	if status != http.StatusOK {
+		t.Fatalf("web login: status=%d body=%s", status, raw)
+	}
+	var out loginResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("web login decode: %v body=%s", err, raw)
+	}
+	return webSession{login: out, cookie: webRefreshCookieFromResponse(t, resp)}
+}
+
+// webRefresh rotates the session's refresh cookie (Origin + CSRF header are
+// the SEC-4A boundary) and updates sess.cookie to the rotated credential.
+func (f *fixture) webRefresh(t *testing.T, sess *webSession) loginResponse {
+	t.Helper()
+	status, raw, resp := f.doWithHeaders(t, http.MethodPost, "/api/auth/refresh", "", nil, webCookieHeaders(sess.cookie))
+	if status != http.StatusOK {
+		t.Fatalf("web cookie refresh: status=%d body=%s", status, raw)
+	}
+	var out loginResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("web cookie refresh decode: %v body=%s", err, raw)
+	}
+	sess.cookie = webRefreshCookieFromResponse(t, resp)
+	if sess.cookie == "" {
+		t.Fatal("web cookie refresh must set a rotated granete_web_refresh cookie")
+	}
+	return out
+}
+
+func webCookieHeaders(cookie string) map[string]string {
+	return map[string]string{
+		"Cookie":          "granete_web_refresh=" + cookie,
+		"Origin":          pilotWebOrigin,
+		"X-Granete-CSRF":  "1",
+	}
 }
 
 // scopedToken returns an org-scoped token for email via the real login flow
@@ -385,7 +476,7 @@ func buildFixture() (*fixture, error) {
 		return nil, fmt.Errorf("media temp dir: %w", err)
 	}
 	f.mediaDir = mediaDir
-	server := api.NewServerWithMedia(f.store, pilotJWTSecret, nil, 1000, 1000, mediaDir)
+	server := api.NewServerWithMedia(f.store, pilotJWTSecret, []string{pilotWebOrigin}, 1000, 1000, mediaDir)
 	refreshCredentials, err := auth.NewRefreshCredentials(strings.Repeat("refresh-pilot-pepper-", 2))
 	if err != nil {
 		return nil, err

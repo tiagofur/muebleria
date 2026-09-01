@@ -252,7 +252,9 @@ func TestSelectOrgKeepsStableSessionID(t *testing.T) {
 func TestRefreshVer4UpgradesToVer5PreservingAbsoluteOrigin(t *testing.T) {
 	server, st := loginTestServer(t)
 	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
-	legacy, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{
+	// SEC-4A: the bodyless bearer bridge is the SketchUp/support compatibility
+	// path; the upgrade mechanism is proven with the extension transport.
+	legacy, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", auth.TokenContext{
 		Roles: []string{"vendedor"}, OrgID: "org-1", MembershipID: "u1:org-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1, AuthStartedAt: started,
 	}, "unit-test-secret-0123456789abcdef")
@@ -282,8 +284,53 @@ func TestRefreshVer4UpgradesToVer5PreservingAbsoluteOrigin(t *testing.T) {
 	if session == nil {
 		t.Fatal("upgraded refresh must register the session")
 	}
-	if want := started.Add(auth.AccessTokenTTL); !session.AbsoluteExpiresAt.Equal(want) {
-		t.Fatalf("registry absolute expiry = %s, want original origin + 18h (%s)", session.AbsoluteExpiresAt, want)
+	if want := started.Add(auth.ExtensionTokenTTL); !session.AbsoluteExpiresAt.Equal(want) {
+		t.Fatalf("registry absolute expiry = %s, want original origin + sketchup TTL (%s)", session.AbsoluteExpiresAt, want)
+	}
+}
+
+// SEC-4A: the legacy bodyless bearer bridge is restricted to the credential
+// classes without an opaque refresh family (SketchUp/support). A web bearer —
+// ver4 or ver5 — must be denied so web sessions only rotate through the
+// cookie flow.
+func TestRefreshLegacyBridgeDeniesWebAndMobileBearers(t *testing.T) {
+	server, _ := loginTestServer(t)
+	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	legacyWeb, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{
+		Roles: []string{"vendedor"}, OrgID: "org-1", MembershipID: "u1:org-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1, AuthStartedAt: started,
+	}, "unit-test-secret-0123456789abcdef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, token := range map[string]string{"ver4 web": legacyWeb} {
+		claims, err := mustAuthority("unit-test-secret-0123456789abcdef").Validate(token)
+		if err != nil {
+			t.Fatalf("validate %s: %v", name, err)
+		}
+		ctx := context.WithValue(context.Background(), UserContextKey, claims)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+		server.HandleRefresh(rec, req)
+		if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "REFRESH_INVALID") {
+			t.Fatalf("%s bearer bridge must be denied, got %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// A ver5 web session token is equally denied: its family rotates through
+	// the HttpOnly cookie flow, never through the bearer bridge.
+	loginRec := doLogin(t, server, map[string]string{"email": "u@example.com", "password": "secret123"})
+	var login LoginResponse
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &login); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.Header.Set("Authorization", "Bearer "+login.Token)
+	AuthMiddleware(mustAuthority("unit-test-secret-0123456789abcdef"), server.Store)(http.HandlerFunc(server.HandleRefresh)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "REFRESH_INVALID") {
+		t.Fatalf("ver5 web bearer bridge must be denied, got %d %s", rec.Code, rec.Body.String())
 	}
 }
 

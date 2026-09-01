@@ -81,6 +81,10 @@ func main() {
 	// dedicated MEDIA_SIGNING_KEY — never with a session JWT key or the
 	// refresh pepper. Config validation already refused to boot without it.
 	serverAPI.MediaTokens = cfg.MediaAuthority
+	// #460 SEC-4A: the Web refresh cookie's Secure attribute. Config already
+	// refused to boot for GRANETE_ENV=production with an insecure resolution,
+	// so the flag reaching here can only be a local dev/gate opt-out.
+	serverAPI.WebRefreshCookieInsecureLocalDev = cfg.WebRefreshCookieInsecureLocalDev
 	handler := api.RegisterRoutes(serverAPI)
 
 	// Timeouts mitigate slowloris and hung clients (issue #20).

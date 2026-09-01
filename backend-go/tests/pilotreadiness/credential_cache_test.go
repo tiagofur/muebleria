@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func credentialResponse(t *testing.T, path, token string, body any, headers map[string]string, accepted int, dst any) {
+func credentialResponse(t *testing.T, path, token string, body any, headers map[string]string, accepted int, dst any) *http.Response {
 	t.Helper()
 	rawBody, err := json.Marshal(body)
 	if err != nil {
@@ -51,6 +51,7 @@ func credentialResponse(t *testing.T, path, token string, body any, headers map[
 			t.Fatalf("POST %s: decode response: %v body=%s", path, err, truncate(raw))
 		}
 	}
+	return resp
 }
 
 func TestCredentialIssuingResponsesAreNoStore(t *testing.T) {
@@ -80,11 +81,15 @@ func TestCredentialIssuingResponsesAreNoStore(t *testing.T) {
 	}
 
 	var acceptedA loginResponse
-	credentialResponse(t, "/api/auth/invitations:accept", "", map[string]string{
+	acceptedAResp := credentialResponse(t, "/api/auth/invitations:accept", "", map[string]string{
 		"token": resentA.InvitationToken, "password": pilotPassword, "name": "Credential Cache Member",
 	}, nil, http.StatusOK, &acceptedA)
-	if acceptedA.Token == "" || acceptedA.RefreshToken == "" {
-		t.Fatalf("invitation acceptance did not emit access and refresh credentials: %+v", acceptedA)
+	if acceptedA.RefreshToken != "" {
+		t.Fatalf("web invitation acceptance must not leak the refresh secret in JSON: %+v", acceptedA)
+	}
+	acceptedACookie := webRefreshCookieFromResponse(t, acceptedAResp)
+	if acceptedA.Token == "" || acceptedACookie == "" {
+		t.Fatalf("invitation acceptance did not emit access token + web refresh cookie: %+v", acceptedA)
 	}
 
 	var invitationB struct {

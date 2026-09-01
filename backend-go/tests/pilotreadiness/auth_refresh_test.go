@@ -9,25 +9,28 @@ import (
 	"time"
 )
 
-func TestRefreshRotationReplayAndLogoutHTTP(t *testing.T) {
-	login := fx.login(t, fx.a.admin.email, fx.a.slug)
-	if login.RefreshToken == "" || login.RefreshExpiresAt == "" {
-		t.Fatal("web login must emit initial opaque refresh credentials")
+// TestRefreshRotationReplayAndLogoutMobileBodyHTTP locks the MOBILE transport
+// contract (#460 SEC-4A): the opaque credential rotates through the JSON body.
+// The Web equivalent (HttpOnly cookie) is locked in web_refresh_cookie_http_test.go.
+func TestRefreshRotationReplayAndLogoutMobileBodyHTTP(t *testing.T) {
+	login := fx.mobileLogin(t, fx.a.admin.email, fx.a.slug)
+	if login.RefreshExpiresAt == "" || login.AccessExpiresAt == "" || login.AbsoluteSessionExpiresAt == "" {
+		t.Fatalf("mobile login must emit refresh/access/absolute expiry metadata: %+v", login)
 	}
-	for _, wrongTransport := range []string{"mobile", "sketchup", "support"} {
+	for _, wrongTransport := range []string{"web", "sketchup", "support"} {
 		status, raw := fx.do(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 			"refresh_token": login.RefreshToken,
 			"transport":     wrongTransport,
 		})
 		if status != http.StatusUnauthorized || apiErrorCode(raw) != "REFRESH_INVALID" {
-			t.Fatalf("web refresh as %s status=%d code=%s", wrongTransport, status, apiErrorCode(raw))
+			t.Fatalf("mobile refresh as %s status=%d code=%s", wrongTransport, status, apiErrorCode(raw))
 		}
 	}
 
 	var rotated loginResponse
 	fx.decode(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 		"refresh_token": login.RefreshToken,
-		"transport":     "web",
+		"transport":     "mobile",
 	}, http.StatusOK, &rotated)
 	if rotated.Token == "" || rotated.RefreshToken == "" || rotated.RefreshToken == login.RefreshToken {
 		t.Fatalf("rotation did not return distinct A2/R2: %+v", rotated)
@@ -36,14 +39,14 @@ func TestRefreshRotationReplayAndLogoutHTTP(t *testing.T) {
 
 	status, raw := fx.do(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 		"refresh_token": login.RefreshToken,
-		"transport":     "web",
+		"transport":     "mobile",
 	})
 	if status != http.StatusUnauthorized || apiErrorCode(raw) != "REFRESH_REUSED" {
 		t.Fatalf("R1 replay status=%d code=%s body=%s", status, apiErrorCode(raw), raw)
 	}
 	status, raw = fx.do(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 		"refresh_token": rotated.RefreshToken,
-		"transport":     "web",
+		"transport":     "mobile",
 	})
 	if status != http.StatusUnauthorized || apiErrorCode(raw) != "REFRESH_REVOKED" {
 		t.Fatalf("R2 after replay status=%d code=%s body=%s", status, apiErrorCode(raw), raw)
@@ -55,15 +58,15 @@ func TestRefreshRotationReplayAndLogoutHTTP(t *testing.T) {
 
 	// A separate family proves the replacement itself is consumable once;
 	// replay coverage above intentionally revokes R2 before it can rotate.
-	happyLogin := fx.login(t, fx.a.admin.email, fx.a.slug)
+	happyLogin := fx.mobileLogin(t, fx.a.admin.email, fx.a.slug)
 	var happyR2, logoutLogin loginResponse
 	fx.decode(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 		"refresh_token": happyLogin.RefreshToken,
-		"transport":     "web",
+		"transport":     "mobile",
 	}, http.StatusOK, &happyR2)
 	fx.decode(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 		"refresh_token": happyR2.RefreshToken,
-		"transport":     "web",
+		"transport":     "mobile",
 	}, http.StatusOK, &logoutLogin)
 	fx.want(t, http.MethodGet, "/api/auth/me", logoutLogin.Token, nil, http.StatusOK)
 	for i := 0; i < 2; i++ {
@@ -77,7 +80,7 @@ func TestRefreshRotationReplayAndLogoutHTTP(t *testing.T) {
 	}
 	status, raw = fx.do(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
 		"refresh_token": logoutLogin.RefreshToken,
-		"transport":     "web",
+		"transport":     "mobile",
 	})
 	if status != http.StatusUnauthorized || apiErrorCode(raw) != "REFRESH_REVOKED" {
 		t.Fatalf("refresh credential after logout status=%d code=%s", status, apiErrorCode(raw))
@@ -94,9 +97,12 @@ func TestSelectOrgRefreshScopeIsAtomicAndAuthoritative(t *testing.T) {
 	}
 	membershipB := acceptedB.Memberships[0].ID
 
-	loginA := fx.login(t, email, fx.a.slug)
-	if loginA.SessionID == "" || loginA.RefreshToken == "" {
-		t.Fatalf("login missing session/refresh: %+v", loginA)
+	// Web transport (#460 SEC-4A): the refresh credential is the HttpOnly
+	// cookie; select-org must keep the SAME family and the cookie refresh must
+	// return the CURRENT (B) scope.
+	loginA := fx.webLogin(t, email, fx.a.slug)
+	if loginA.login.SessionID == "" || loginA.cookie == "" {
+		t.Fatalf("login missing session/refresh cookie: %+v", loginA.login)
 	}
 	dropFailureInjection := func() {
 		_, _ = fx.pool.Exec(ctx, `DROP TRIGGER IF EXISTS fail_select_org_refresh_family ON auth_refresh_families`)
@@ -113,28 +119,24 @@ func TestSelectOrgRefreshScopeIsAtomicAndAuthoritative(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, raw := fx.do(t, http.MethodPost, "/api/auth/select-org", loginA.Token, map[string]string{"organization_id": fx.b.id})
+	status, raw := fx.do(t, http.MethodPost, "/api/auth/select-org", loginA.login.Token, map[string]string{"organization_id": fx.b.id})
 	if status < http.StatusBadRequest || strings.Contains(string(raw), `"token"`) {
 		t.Fatalf("failed switch status=%d body=%s", status, raw)
 	}
-	assertSessionAndFamilyScope(t, loginA.SessionID, fx.a.id, "")
-	fx.want(t, http.MethodGet, "/api/auth/me", loginA.Token, nil, http.StatusOK)
+	assertSessionAndFamilyScope(t, loginA.login.SessionID, fx.a.id, "")
+	fx.want(t, http.MethodGet, "/api/auth/me", loginA.login.Token, nil, http.StatusOK)
 
 	dropFailureInjection()
 	var selectedB loginResponse
-	fx.decode(t, http.MethodPost, "/api/auth/select-org", loginA.Token, map[string]string{"organization_id": fx.b.id}, http.StatusOK, &selectedB)
+	fx.decode(t, http.MethodPost, "/api/auth/select-org", loginA.login.Token, map[string]string{"organization_id": fx.b.id}, http.StatusOK, &selectedB)
 	if selectedB.Organization == nil || selectedB.Organization.ID != fx.b.id || selectedB.Token == "" {
 		t.Fatalf("successful switch did not return B token: %+v", selectedB)
 	}
-	assertSessionAndFamilyScope(t, loginA.SessionID, fx.b.id, membershipB)
-	fx.want(t, http.MethodGet, "/api/auth/me", loginA.Token, nil, http.StatusUnauthorized)
+	assertSessionAndFamilyScope(t, loginA.login.SessionID, fx.b.id, membershipB)
+	fx.want(t, http.MethodGet, "/api/auth/me", loginA.login.Token, nil, http.StatusUnauthorized)
 	fx.want(t, http.MethodGet, "/api/auth/me", selectedB.Token, nil, http.StatusOK)
 
-	var refreshedB loginResponse
-	fx.decode(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
-		"refresh_token": loginA.RefreshToken,
-		"transport":     "web",
-	}, http.StatusOK, &refreshedB)
+	refreshedB := fx.webRefresh(t, &loginA)
 	if refreshedB.Organization == nil || refreshedB.Organization.ID != fx.b.id {
 		t.Fatalf("refresh after switch must use current B scope: %+v", refreshedB)
 	}
@@ -168,25 +170,31 @@ func assertSessionAndFamilyScope(t *testing.T, sessionID, organizationID, member
 
 func TestLogoutClosesFamilyWhenSessionWasAlreadyRevoked(t *testing.T) {
 	ctx := context.Background()
-	login := fx.login(t, fx.a.admin.email, fx.a.slug)
-	if login.SessionID == "" || login.RefreshToken == "" {
-		t.Fatalf("login missing session/refresh: %+v", login)
+	login := fx.webLogin(t, fx.a.admin.email, fx.a.slug)
+	if login.login.SessionID == "" || login.cookie == "" {
+		t.Fatalf("login missing session/refresh cookie: %+v", login.login)
 	}
 	if _, err := fx.pool.Exec(ctx, `
 		UPDATE auth_sessions
 		SET revoked_at=NOW(), revoked_by=$2::uuid, revoke_reason='prior_policy', version=version+1
-		WHERE id=$1::uuid`, login.SessionID, fx.a.admin.id); err != nil {
+		WHERE id=$1::uuid`, login.login.SessionID, fx.a.admin.id); err != nil {
 		t.Fatal(err)
 	}
 	var familyInitiallyOpen bool
-	if err := fx.pool.QueryRow(ctx, `SELECT revoked_at IS NULL FROM auth_refresh_families WHERE session_id=$1`, login.SessionID).Scan(&familyInitiallyOpen); err != nil {
+	if err := fx.pool.QueryRow(ctx, `SELECT revoked_at IS NULL FROM auth_refresh_families WHERE session_id=$1`, login.login.SessionID).Scan(&familyInitiallyOpen); err != nil {
 		t.Fatal(err)
 	}
 	if !familyInitiallyOpen {
 		t.Fatal("precondition: prior session revocation must leave family open")
 	}
-	fx.want(t, http.MethodGet, "/api/auth/me", login.Token, nil, http.StatusUnauthorized)
-	fx.want(t, http.MethodPost, "/api/auth/logout", "", map[string]string{"refresh_token": login.RefreshToken}, http.StatusOK)
+	fx.want(t, http.MethodGet, "/api/auth/me", login.login.Token, nil, http.StatusUnauthorized)
+	status, raw, resp := fx.doWithHeaders(t, http.MethodPost, "/api/auth/logout", "", nil, webCookieHeaders(login.cookie))
+	if status != http.StatusOK {
+		t.Fatalf("web cookie logout status=%d body=%s", status, raw)
+	}
+	if c := webRefreshCookieFromResponse(t, resp); c != "" {
+		t.Fatalf("web cookie logout must clear granete_web_refresh, got %q", c)
+	}
 
 	var sessionRevokedAt, familyRevokedAt time.Time
 	var sessionVersion int64
@@ -197,12 +205,12 @@ func TestLogoutClosesFamilyWhenSessionWasAlreadyRevoked(t *testing.T) {
 		if err := fx.pool.QueryRow(ctx, `
 			SELECT s.revoked_at, s.revoke_reason, s.version, f.revoked_at, f.revoke_reason
 			FROM auth_sessions s JOIN auth_refresh_families f ON f.session_id=s.id
-			WHERE s.id=$1`, login.SessionID).Scan(&sessionRevokedAt, &sessionReason, &sessionVersion, &familyRevokedAt, &familyReason); err != nil {
+			WHERE s.id=$1`, login.login.SessionID).Scan(&sessionRevokedAt, &sessionReason, &sessionVersion, &familyRevokedAt, &familyReason); err != nil {
 			t.Fatal(err)
 		}
 		if err := fx.pool.QueryRow(ctx, `
 			SELECT count(*) FROM security_audit_events
-			WHERE event_type='logout' AND details->>'session_id'=$1`, login.SessionID).Scan(&logoutEvents); err != nil {
+			WHERE event_type='logout' AND details->>'session_id'=$1`, login.login.SessionID).Scan(&logoutEvents); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -212,14 +220,15 @@ func TestLogoutClosesFamilyWhenSessionWasAlreadyRevoked(t *testing.T) {
 	}
 	firstSessionRevokedAt, firstFamilyRevokedAt, firstVersion := sessionRevokedAt, familyRevokedAt, sessionVersion
 
-	status, raw := fx.do(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
-		"refresh_token": login.RefreshToken, "transport": "web",
-	})
+	status, raw, _ = fx.doWithHeaders(t, http.MethodPost, "/api/auth/refresh", "", nil, webCookieHeaders(login.cookie))
 	if status != http.StatusUnauthorized || apiErrorCode(raw) != "REFRESH_REVOKED" {
 		t.Fatalf("refresh after logout status=%d code=%s", status, apiErrorCode(raw))
 	}
-	fx.want(t, http.MethodGet, "/api/auth/me", login.Token, nil, http.StatusUnauthorized)
-	fx.want(t, http.MethodPost, "/api/auth/logout", "", map[string]string{"refresh_token": login.RefreshToken}, http.StatusOK)
+	fx.want(t, http.MethodGet, "/api/auth/me", login.login.Token, nil, http.StatusUnauthorized)
+	status, raw, _ = fx.doWithHeaders(t, http.MethodPost, "/api/auth/logout", "", nil, webCookieHeaders(login.cookie))
+	if status != http.StatusOK {
+		t.Fatalf("repeated web cookie logout must stay idempotent: status=%d body=%s", status, raw)
+	}
 	readState()
 	if !sessionRevokedAt.Equal(firstSessionRevokedAt) || !familyRevokedAt.Equal(firstFamilyRevokedAt) || sessionVersion != firstVersion || logoutEvents != 1 {
 		t.Fatalf("second logout changed state: session=%s/%s family=%s/%s version=%d/%d audit=%d",
