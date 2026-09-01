@@ -14,11 +14,15 @@ import { invalidateAuthorizedMedia } from './mediaAuthorization';
 import { SESSION_STORAGE_KEY } from '../session';
 import * as webSessionChannel from '../webSessionChannel';
 import {
+  __setWebSessionLockBackendForTests,
+  createInMemoryWebSessionLockBackendForTests,
+} from '../webSessionLock';
+import {
   __resetWebAuthRuntimeForTests,
   applyWebCredential,
   getCredential,
 } from '../webAuthRuntime';
-import { __resetWebAuthClientForTests } from '../webAuthClient';
+import { __resetWebAuthClientForTests, coordinatedWebRefresh } from '../webAuthClient';
 import {
   createSessionGeneration,
   sessionScopeFromSession,
@@ -225,12 +229,17 @@ beforeEach(() => {
   invalidateAuthorizedMedia();
   __resetWebAuthRuntimeForTests();
   __resetWebAuthClientForTests();
+  // jsdom no tiene navigator.locks ni indexedDB: backend in-memory para que
+  // logout/refresh/select-org del store funcionen bajo exclusión (los proofs
+  // de fail-closed viven en webSessionLock/webAuthClient tests).
+  __setWebSessionLockBackendForTests(createInMemoryWebSessionLockBackendForTests());
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   __resetWebAuthRuntimeForTests();
   __resetWebAuthClientForTests();
+  __setWebSessionLockBackendForTests(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -1331,5 +1340,122 @@ describe('workspaceStore — atomic organization transition', () => {
       'http://test/api/auth/select-org',
       'http://test/api/auth/select-org',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #460 SEC-4B review Blocker 2 — transición autoritativa de sesión en el store
+// ---------------------------------------------------------------------------
+
+describe('workspaceStore — session replacement/scope-change con purge autoritativo', () => {
+  function transitionFetch(
+    overrides: {
+      readonly refreshBody: Record<string, unknown>;
+      readonly meUserId: string;
+      readonly meOrganizationId: string;
+      readonly observed?: { workspaceAtMe?: Workspace | null | undefined };
+    },
+    storeRef: { current: ReturnType<typeof createWorkspaceStore> | null } = { current: null },
+  ) {
+    const meResponse = {
+      user: { ...AUTH_USER, id: overrides.meUserId },
+      roles: ['admin'],
+      memberships: [],
+      organization: {
+        ...ACTIVE_MEMBERSHIP.organization,
+        id: overrides.meOrganizationId,
+        slug: overrides.meOrganizationId,
+      },
+      transport: 'web',
+      session_scope: {
+        ...SESSION_SCOPE,
+        user_id: overrides.meUserId,
+        organization_id: overrides.meOrganizationId,
+      },
+    };
+    return vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith('/auth/refresh')) return jsonOk(overrides.refreshBody);
+      if (url.endsWith('/auth/me')) {
+        // Observabilidad: al momento del snapshot de S2, el workspace de S1
+        // YA fue purgado por el executor (purge → apply → /me).
+        if (overrides.observed) {
+          overrides.observed.workspaceAtMe = storeRef.current?.getState().workspace ?? null;
+        }
+        return jsonOk(meResponse);
+      }
+      return jsonOk([]);
+    });
+  }
+
+  it('replacement (otro login): purga S1 antes de aplicar S2; snapshot S2 después; sin BroadcastChannel', async () => {
+    vi.spyOn(webSessionChannel, 'broadcastWebSessionEvent').mockImplementation(() => undefined);
+    const observed: { workspaceAtMe?: Workspace | null } = {};
+    const storeRef: { current: ReturnType<typeof createWorkspaceStore> | null } = { current: null };
+    const fetchImpl = transitionFetch({
+      refreshBody: {
+        token: 'access-S2', user: { ...AUTH_USER, id: 'user-2' },
+        license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [],
+        selection_required: false, transport: 'web',
+        ...AUTH_RESPONSE_META, session_id: 'sess-2',
+      },
+      meUserId: 'user-2',
+      meOrganizationId: 'org-b',
+      observed,
+    }, storeRef);
+    const transition = { prepare: vi.fn(async () => undefined), commit: vi.fn() };
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl: fetchImpl as unknown as typeof fetch, tenantTransition: transition },
+    });
+    storeRef.current = store;
+    seedAuthSession(store); // S1: user-1 / org-1
+    store.setState({ session: 'auth', authBootstrapping: false, workspace: createSeedWorkspace(), activeOrg: ACTIVE_MEMBERSHIP.organization, sessionScope: authScope('org-1') });
+    const workspaceS1 = store.getState().workspace;
+    expect(workspaceS1).not.toBeNull();
+
+    const outcome = await coordinatedWebRefresh();
+
+    expect(outcome).toMatchObject({ status: 'transitioned', kind: 'session-replaced' });
+    // S1 business state purgado y S2 aplicado por el executor (en ese orden).
+    expect(store.getState().workspace).toBeNull();
+    expect(observed.workspaceAtMe).toBeNull(); // purge visible ya al snapshot
+    expect(getCredential()).toMatchObject({ sessionId: 'sess-2', accessToken: 'access-S2' });
+    // Snapshot autoritativo de S2 aplicado (user/org de S2, no de S1).
+    expect(store.getState().authUser?.id).toBe('user-2');
+    expect(store.getState().activeOrg?.id).toBe('org-b');
+    expect(transition.prepare).toHaveBeenCalled();
+    expect(transition.commit).toHaveBeenCalled();
+  });
+
+  it('scope-change (mismo sid, Org A→B): igual purge antes de activar B', async () => {
+    vi.spyOn(webSessionChannel, 'broadcastWebSessionEvent').mockImplementation(() => undefined);
+    const observed: { workspaceAtMe?: Workspace | null } = {};
+    const storeRef: { current: ReturnType<typeof createWorkspaceStore> | null } = { current: null };
+    const fetchImpl = transitionFetch({
+      refreshBody: {
+        token: 'access-B', user: AUTH_USER,
+        license: { plan: 'none', status: 'none' }, roles: ['admin'], memberships: [],
+        organization: { ...ACTIVE_MEMBERSHIP.organization, id: 'org-b', slug: 'org-b' },
+        selection_required: false, transport: 'web',
+        ...AUTH_RESPONSE_META, // session_id: 'sess-1' (mismo sid)
+      },
+      meUserId: AUTH_USER.id,
+      meOrganizationId: 'org-b',
+      observed,
+    }, storeRef);
+    const store = createWorkspaceStore({
+      deps: { baseUrl: 'http://test/api', fetchImpl: fetchImpl as unknown as typeof fetch },
+    });
+    storeRef.current = store;
+    seedAuthSession(store); // mismo sess-1, org-1
+    store.setState({ session: 'auth', authBootstrapping: false, workspace: createSeedWorkspace(), sessionScope: authScope('org-1') });
+
+    const outcome = await coordinatedWebRefresh();
+
+    expect(outcome).toMatchObject({ status: 'transitioned', kind: 'scope-changed' });
+    expect(store.getState().workspace).toBeNull();
+    expect(observed.workspaceAtMe).toBeNull();
+    expect(getCredential()).toMatchObject({ accessToken: 'access-B', organizationId: 'org-b' });
+    expect(store.getState().activeOrg?.id).toBe('org-b');
   });
 });

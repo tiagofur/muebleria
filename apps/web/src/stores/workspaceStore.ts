@@ -36,7 +36,9 @@ import {
   scheduleWebAccessRefresh,
   webLogout,
   WebSessionEndedError,
+  type WebSessionTransitionPlan,
 } from '../webAuthClient';
+import { withWebSessionMutation } from '../webSessionLock';
 import {
   applySupportCredential,
   clearCredential,
@@ -350,23 +352,27 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
           const outcome = await coordinatedWebRefresh();
           if (get().logoutServerPending) return; // logout llegó durante el boot
-          if (outcome.status === 'refreshed' || outcome.status === 'replaced') {
+          const bootOutcome =
+            outcome.status === 'refreshed' || outcome.status === 'transitioned'
+              ? { credential: outcome.credential, response: outcome.response }
+              : null;
+          if (bootOutcome !== null && bootOutcome.credential !== null) {
             scheduleWebAccessRefresh();
             if (
-              outcome.response.selection_required &&
-              (outcome.response.memberships?.length ?? 0) > 0
+              bootOutcome.response.selection_required &&
+              (bootOutcome.response.memberships?.length ?? 0) > 0
             ) {
               // Cookie-session viva pero org-less: sólo elegir taller.
               set({
                 authBootstrapping: false,
                 sessionBootError: null,
-                pendingOrgSelection: outcome.response.memberships,
-                organizationChoices: outcome.response.memberships,
+                pendingOrgSelection: bootOutcome.response.memberships,
+                organizationChoices: bootOutcome.response.memberships,
               });
               return;
             }
             try {
-              const snapshot = await meRequest(outcome.credential.accessToken, {
+              const snapshot = await meRequest(bootOutcome.credential.accessToken, {
                 baseUrl: deps.baseUrl,
                 fetchImpl: deps.fetchImpl,
               });
@@ -443,10 +449,15 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }
           set({ orgSelectionLoading: true, orgSelectionError: null, orgSelectionRecoveryAvailable: false });
           try {
-            const result = await selectOrgRequest(token, organizationId, {
-              baseUrl: deps.baseUrl,
-              fetchImpl: deps.fetchImpl,
-            });
+            // §32: select-org muta la cookie-session compartida (scope
+            // in-place) — el exchange server corre bajo el MISMO lock
+            // cross-tab que refresh/logout.
+            const result = await withWebSessionMutation(() =>
+              selectOrgRequest(token, organizationId, {
+                baseUrl: deps.baseUrl,
+                fetchImpl: deps.fetchImpl,
+              }),
+            );
             // select-org NO crea sesión/familia nueva: mismo sid con scope
             // actualizado. Un sid distinto es un contrato roto — no aplicar.
             const currentSid = getCredential()?.sessionId;
@@ -1017,6 +1028,54 @@ export function createWorkspaceStore(options?: InternalOptions) {
           }),
       }),
   );
+
+  // #460 SEC-4B (review Blocker 2): transition owner del app. Un refresh que
+  // descubre OTRA sesión/scope purga S1 (credential + grants + business
+  // state) y SÓLO ENTONCES instala S2 y pide el snapshot autoritativo. El
+  // ordering NO depende del BroadcastChannel (best-effort para OTRAS tabs).
+  configureWebAuthClient({
+    baseUrl,
+    fetchImpl: safeFetch,
+    runSessionTransition: runWebSessionTransition,
+  });
+
+  async function runWebSessionTransition(plan: WebSessionTransitionPlan): Promise<void> {
+    await deps.tenantTransition.prepare();
+    // 1) S1 muere primero: credential, media grants y TODO el tenant state.
+    clearCredential();
+    invalidateAuthorizedMedia();
+    store.setState({
+      workspace: null,
+      workspaceSeq: store.getState().workspaceSeq + 1,
+      workspaceLoadError: null,
+      sessionScope: null,
+      activeOrg: null,
+      organizationChoices: [],
+      supportInfo: null,
+      assignableOwners: [],
+      authUser: null,
+      authUserSeq: store.getState().authUserSeq + 1,
+      pendingOrgSelection: null,
+      pendingGuestImport: false,
+    });
+    deps.tenantTransition.commit();
+    // 2) Sólo ahora S2 queda activo y usable para business requests.
+    plan.applyCredential();
+    scheduleWebAccessRefresh();
+    // 3) Snapshot autoritativo de S2 (/auth/me) antes de considerarlo usable
+    //    por la UI. Si falla, la sesión se revalida en cada request.
+    const token = getAccessToken();
+    if (token === null) return; // el runner decidió terminar en login
+    try {
+      const snapshot = await meRequest(token, {
+        baseUrl: deps.baseUrl,
+        fetchImpl: deps.fetchImpl,
+      });
+      applySessionSnapshot(snapshot, (partial) => store.setState(partial), store.getState);
+    } catch {
+      // best-effort
+    }
+  }
 
   // #460 SEC-3: signed media grants land asynchronously; the bump re-renders
   // every tree that consumes resolveMediaUrl so cached grant URLs appear.

@@ -178,3 +178,85 @@ test('logout en una pestaña corta la sesión compartida: la otra termina en log
   // Sin business data residual visible.
   await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveCount(0);
 });
+
+test('fallback SIN Web Locks: dos pestañas coordinan por IndexedDB y no hay replay', async ({ context }) => {
+  // Simula browsers sin Web Locks: el app debe caer al mutex IndexedDB
+  // (transacción readwrite get+put atómica) — nunca correr la rotación sin
+  // exclusión mutua real.
+  await context.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'locks', {
+      configurable: true,
+      get: () => undefined,
+    });
+  });
+
+  const tabA = await context.newPage();
+  await login(tabA);
+  await tabA.waitForTimeout(300);
+
+  const tabB = await context.newPage();
+  await tabB.goto('/');
+  await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
+  await dismissTour(tabB);
+
+  // DOS rotaciones de la MISMA cookie, casi simultáneas, a través del app
+  // (coordinatedWebRefresh sobre el mutex IndexedDB real).
+  const appRefresh = (page: Page) =>
+    page.evaluate(async () => {
+      const outcome = await (
+        window as unknown as { __graneteWebAuthTestRefresh: () => Promise<{ status: string }> }
+      ).__graneteWebAuthTestRefresh();
+      return outcome.status;
+    });
+  const [statusA, statusB] = await Promise.all([appRefresh(tabA), appRefresh(tabB)]);
+  expect([statusA, statusB].sort()).toEqual(['refreshed', 'refreshed']);
+
+  // Sesión viva: strict single-use server-side intacto (sin REFRESH_REUSED).
+  for (const page of [tabA, tabB]) {
+    expect(await rawCookieRefresh(page), 'session alive after fallback concurrent refresh').toBe(200);
+  }
+});
+
+test('FAIL CLOSED: sin Web Locks NI IndexedDB la rotación se rechaza (nunca corre sin exclusión)', async ({ context }) => {
+  await context.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'locks', {
+      configurable: true,
+      get: () => undefined,
+    });
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      get: () => undefined,
+    });
+  });
+
+  const refreshRequests: string[] = [];
+  const page = await context.newPage();
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/auth/refresh')) {
+      refreshRequests.push(request.url());
+    }
+  });
+
+  // Login con el OWNER de Browser Gate A (membresía única → sin select-org,
+  // que también corre bajo el lock). El login mismo no usa lock: la sesión
+  // queda en memoria y el shell renderiza.
+  await page.goto('/');
+  await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
+  await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
+  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
+  const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
+  if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
+
+  const outcome = await page.evaluate(async () => {
+    const result = await (
+      window as unknown as { __graneteWebAuthTestRefresh: () => Promise<{ status: string }> }
+    ).__graneteWebAuthTestRefresh();
+    return result.status;
+  });
+
+  // Sin primitiva segura la mutación NO se ejecuta: no hubo rotación alguna
+  // (fail closed) — el access local sigue y el server quedó intacto.
+  expect(outcome).not.toBe('refreshed');
+  expect(refreshRequests).toHaveLength(0);
+});

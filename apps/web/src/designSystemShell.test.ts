@@ -196,6 +196,8 @@ describe('web shell login gate (Slice E)', () => {
 
 describe('web shell logout (Slice F)', () => {
   it('App.tsx wires onLogout from workspaceStore + clearSession behavior (F057)', async () => {
+    const lock = await import('./webSessionLock');
+    lock.__setWebSessionLockBackendForTests(lock.createInMemoryWebSessionLockBackendForTests());
     // F057: logout moved to workspaceStore.logout(). App.tsx reads `logout`
     // from the store and passes it as onLogout to AppContent.
     const app = readFileSync(appTsxPath, 'utf8');
@@ -231,6 +233,7 @@ describe('web shell logout (Slice F)', () => {
     expect(store.getState().loginError).toBeNull();
     expect(globalThis.localStorage.getItem('granete_token')).toBeNull();
     expect(globalThis.sessionStorage.getItem('granete_session')).toBeNull();
+    lock.__setWebSessionLockBackendForTests(null);
   });
 });
 

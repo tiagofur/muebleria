@@ -34,11 +34,31 @@ import {
   type WebCredentialSnapshot,
 } from './webAuthRuntime';
 import { broadcastWebSessionEvent } from './webSessionChannel';
-import { withWebSessionMutation } from './webSessionLock';
+import { withWebSessionMutation, WebSessionLockUnavailableError } from './webSessionLock';
+
+/**
+ * Plan de transición de sesión (#460 SEC-4B review, Blocker 2): la cookie pasó
+ * a representar OTRA sesión/scope (nuevo login o select-org en otra pestaña).
+ * El credential NUEVO NO está instalado: el transition owner debe purgar S1
+ * ANTES de llamar `applyCredential` — nunca S1 visible + S2 activo.
+ */
+export interface WebSessionTransitionPlan {
+  readonly kind: 'session-replaced' | 'scope-changed';
+  readonly draft: WebAccessCredentialDraft;
+  /** Instala el credential nuevo. Llamar SÓLO tras purgar S1. */
+  applyCredential(): WebCredentialSnapshot;
+}
+
+export type WebSessionTransitionRunner = (plan: WebSessionTransitionPlan) => Promise<void>;
 
 export interface WebAuthClientDeps {
   readonly baseUrl: string;
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Transition owner del app (purga S1 → apply S2 → /auth/me autoritativo).
+   * Default mínimo: invalidar S1 y aplicar S2, en ese orden.
+   */
+  readonly runSessionTransition?: WebSessionTransitionRunner;
 }
 
 // --- Errores tipificados -------------------------------------------------------
@@ -86,6 +106,20 @@ let deps: WebAuthClientDeps = { baseUrl: '/api' };
 /** Test-only dependency injection (ver webAuthClient.test.ts). */
 export function configureWebAuthClient(next: WebAuthClientDeps): void {
   deps = next;
+}
+
+/**
+ * Runner por defecto sin wiring del app: garantiza el ordering mínimo del
+ * invariante — S1 invalidado ANTES de que S2 quede activo.
+ */
+const defaultTransitionRunner: WebSessionTransitionRunner = async (plan) => {
+  clearCredential();
+  plan.applyCredential();
+  scheduleWebAccessRefresh();
+};
+
+function transitionRunner(): WebSessionTransitionRunner {
+  return deps.runSessionTransition ?? defaultTransitionRunner;
 }
 
 function fetchImpl(): typeof fetch {
@@ -167,8 +201,17 @@ export function applyLoginResponse(response: LoginResponse): WebCredentialSnapsh
 
 export type WebRefreshOutcome =
   | { readonly status: 'refreshed'; readonly credential: WebCredentialSnapshot; readonly response: LoginResponse }
-  /** La cookie ahora pertenece a OTRA sesión (nuevo login en otra pestaña). */
-  | { readonly status: 'replaced'; readonly credential: WebCredentialSnapshot; readonly response: LoginResponse }
+  /**
+   * La cookie pasó a representar OTRA sesión/scope: el transition owner purgó
+   * S1 y SÓLO ENTONCES instaló S2 (credential puede ser null si el runner
+   * decidió terminar en login). El caller NO reintenta operaciones de S1.
+   */
+  | {
+      readonly status: 'transitioned';
+      readonly kind: 'session-replaced' | 'scope-changed';
+      readonly credential: WebCredentialSnapshot | null;
+      readonly response: LoginResponse;
+    }
   | { readonly status: 'terminal'; readonly code: WebRefreshTerminalCode | 'SESSION_ENDED' | 'CSRF_DENIED' }
   | { readonly status: 'network' };
 
@@ -211,7 +254,22 @@ function outcomeFromError(error: unknown): WebRefreshOutcome {
   if (error instanceof WebSessionEndedError) {
     return { status: 'terminal', code: error.terminalCode };
   }
+  // LockUnavailable incluido: la rotación fue RECHAZADA (fail closed), no
+  // ejecutada — el access local puede seguir vigente y la sesión server-side
+  // está intacta. Se reporta como network: sin logout, sin loop.
   return { status: 'network' };
+}
+
+/** Identidad de sesión comparable: sid + user + org (no sólo sessionId). */
+function isSameWebIdentity(
+  previous: { sessionId: string; userId: string; organizationId: string | null },
+  next: WebAccessCredentialDraft,
+): boolean {
+  return (
+    previous.sessionId === next.sessionId &&
+    previous.userId === next.userId &&
+    (previous.organizationId ?? null) === (next.organizationId ?? null)
+  );
 }
 
 async function rotateCookie(): Promise<WebRefreshOutcome> {
@@ -221,14 +279,36 @@ async function rotateCookie(): Promise<WebRefreshOutcome> {
     throw refreshErrorFromStatus(response.status);
   }
   const body = (await response.json()) as LoginResponse;
-  const credential = applyLoginResponse(body);
-  if (previous !== null && previous.kind === 'web' && credential.sessionId !== previous.sessionId) {
-    // Session identity mismatch (#460 §38): la cookie fue reemplazada por un
-    // nuevo login. El credential NUEVO ya quedó aplicado (con purge previo a
-    // cargo del caller); el outcome 'replaced' fuerza la transición.
-    return { status: 'replaced', credential, response: body };
+  const draft = credentialFromLoginResponse(body);
+  if (previous === null || previous.kind !== 'web' || isSameWebIdentity(previous, draft)) {
+    // Rotación normal de LA MISMA identidad: aplica directo (sin transición).
+    const credential = applyWebCredential(draft);
+    return { status: 'refreshed', credential, response: body };
   }
-  return { status: 'refreshed', credential, response: body };
+  // La cookie ya NO representa la sesión/scope que esta pestaña esperaba
+  // (#460 §38 + review Blocker 2): NUEVO login en otra pestaña (sid distinto)
+  // o select-org compartido (mismo sid, otro user/org). S2 NO se aplica aquí:
+  // el transition owner purga S1 primero y sólo entonces instala S2 y pide
+  // el snapshot autoritativo. La señal cross-tab (best-effort) no participa
+  // del ordering.
+  const kind: 'session-replaced' | 'scope-changed' =
+    draft.sessionId !== previous.sessionId ? 'session-replaced' : 'scope-changed';
+  await transitionRunner()({
+    kind,
+    draft,
+    applyCredential: () => applyWebCredential(draft),
+  });
+  // El runner puede haber terminado en login (credential null): respetarlo.
+  const applied = getCredential();
+  broadcastWebSessionEvent({
+    type: kind === 'session-replaced' ? 'session-replaced' : 'scope-changed',
+  });
+  return {
+    status: 'transitioned',
+    kind,
+    credential: applied !== null && applied.kind === 'web' ? applied : null,
+    response: body,
+  };
 }
 
 function refreshErrorFromStatus(status: number): Error {
@@ -381,7 +461,8 @@ function maybeRefreshAfterWake(): void {
   const expiresIn = credentialExpiresIn();
   if (expiresIn !== null && expiresIn <= REFRESH_LEAD_MS) {
     void coordinatedWebRefresh().then((outcome) => {
-      if (outcome.status === 'refreshed') {
+      if (outcome.status === 'terminal' || outcome.status === 'network') return;
+      if (outcome.credential !== null) {
         scheduleWebAccessRefresh();
       }
     });
@@ -454,16 +535,21 @@ export async function authenticatedApiFetch(
     broadcastWebSessionEvent({ type: 'session-ended' });
     throw new WebSessionEndedError('La sesión expiró', outcome.code);
   }
+  if (outcome.status === 'transitioned' || outcome.credential === null) {
+    // La sesión/scope cambió y la transición ya purgó S1: la operación
+    // original se preparó para otro tenant — NUNCA se reintenta bajo S2.
+    throw new WebSessionTransitionError('La sesión cambió durante la operación');
+  }
   const stillSame =
     credentialBefore !== null &&
     credentialBefore.kind === 'web' &&
-    outcome.status !== 'replaced' &&
     outcome.credential.sessionId === credentialBefore.sessionId &&
+    outcome.credential.userId === credentialBefore.userId &&
     (outcome.credential.organizationId ?? null) === (credentialBefore.organizationId ?? null) &&
     getCredential()?.generation === outcome.credential.generation;
   if (!stillSame) {
-    // El scope/sesión cambió (otra pestaña hizo select-org o un nuevo login):
-    // la operación original se preparó para otro tenant — NO se reintenta.
+    // Defense-in-depth: la identidad volvió a moverse entre el refresh y el
+    // retry — no reintentar.
     throw new WebSessionTransitionError('La sesión cambió durante la operación');
   }
   // Mismo scope con access nuevo: exactamente UN reintento.

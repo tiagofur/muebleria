@@ -13,11 +13,18 @@ import {
   isGraneteApiUrl,
   scheduleWebAccessRefresh,
   webLogout,
+  type WebSessionTransitionPlan,
 } from './webAuthClient';
+import {
+  WebSessionLockUnavailableError,
+  __setWebSessionLockBackendForTests,
+  createInMemoryWebSessionLockBackendForTests,
+} from './webSessionLock';
 import {
   __resetWebAuthRuntimeForTests,
   applySupportCredential,
   applyWebCredential,
+  clearCredential,
   getCredential,
 } from './webAuthRuntime';
 
@@ -68,6 +75,46 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+/** MeResponse de /auth/me para el snapshot autoritativo post-transición. */
+function meBody(userId: string, organizationId: string) {
+  return {
+    user: {
+      id: userId,
+      email: 'a@b.test',
+      normalized_email: 'a@b.test',
+      name: 'A',
+      account_status: 'active',
+      email_verified_at: null,
+      last_login_at: null,
+      platform_admin: false,
+      created_at: '2026-08-29T00:00:00Z',
+      updated_at: '2026-08-29T00:00:00Z',
+    },
+    roles: ['admin'],
+    memberships: [],
+    organization: {
+      id: organizationId,
+      name: `Taller ${organizationId}`,
+      slug: organizationId,
+      type: 'factory',
+      status: 'active',
+      license: { plan: 'pro', status: 'active' },
+    },
+    transport: 'web',
+    session_scope: {
+      user_id: userId,
+      membership_id: 'membership-1',
+      organization_id: organizationId,
+      mode: 'auth',
+      support_session_id: null,
+      recovery_session_id: null,
+      membership_credential_version: 2,
+      organization_credential_version: 3,
+      absolute_expires_at: new Date(Date.now() + 18 * 3_600_000).toISOString(),
+    },
+  };
+}
+
 function seedSession(token = 'access-1', organizationId: string | null = 'org-1') {
   return applyWebCredential({
     accessToken: token,
@@ -82,14 +129,37 @@ function seedSession(token = 'access-1', organizationId: string | null = 'org-1'
 beforeEach(() => {
   __resetWebAuthRuntimeForTests();
   __resetWebAuthClientForTests();
+  // jsdom no tiene navigator.locks ni indexedDB: sin backend, toda mutación
+  // fallaría cerrado. Se inyecta el backend in-memory (misma garantía de
+  // exclusión que los reales).
+  __setWebSessionLockBackendForTests(createInMemoryWebSessionLockBackendForTests());
   configureWebAuthClient({ baseUrl: BASE, fetchImpl: vi.fn(async () => json({})) });
 });
 
 afterEach(() => {
   __resetWebAuthRuntimeForTests();
   __resetWebAuthClientForTests();
+  __setWebSessionLockBackendForTests(null);
   vi.restoreAllMocks();
 });
+
+/**
+ * Ejecutor de transición de PRUEBA que graba el ordering exacto de los pasos
+ * (review Blocker 2): purge S1 → apply S2 → snapshot /me. Simula un
+ * BroadcastChannel ausente/perdido: el ordering NO depende de él.
+ */
+function recordingTransitionRunner() {
+  const steps: string[] = [];
+  const runner = async (plan: WebSessionTransitionPlan) => {
+    steps.push(`transition:${plan.kind}`);
+    steps.push('purge-S1');            // invalidar credential + tenant state
+    clearCredential();
+    steps.push(`apply-S2:${plan.draft.accessToken}`);
+    plan.applyCredential();            // SÓLO ahora S2 queda activo
+    steps.push('me-S2');               // snapshot autoritativo posterior
+  };
+  return { steps, runner };
+}
 
 describe('isGraneteApiUrl — bearer sólo para el origin+base exacto (SEC-4B §21)', () => {
   it('acepta paths relativos y absolutos del API Granete', () => {
@@ -152,8 +222,11 @@ describe('authenticatedApiFetch — boundary de requests autenticadas', () => {
       const url = String(input);
       if (url.endsWith('/auth/refresh')) {
         // La cookie compartida ahora pertenece a org-B (otra pestaña hizo
-        // select-org): el access devuelto es de OTRO scope.
-        return json(refreshBody({ token: 'access-B' }));
+        // select-org): el access devuelto es de OTRO scope — identity distinta.
+        return json(refreshBody({
+          token: 'access-B',
+          organization: { id: 'org-B', name: 'Taller B', slug: 'taller-b', type: 'factory', status: 'active', license: { plan: 'pro', status: 'active' } },
+        }));
       }
       // Business request con el token de A: 401.
       if (new Headers(init?.headers).get('Authorization') === 'Bearer access-A') {
@@ -177,24 +250,105 @@ describe('authenticatedApiFetch — boundary de requests autenticadas', () => {
     ).toHaveLength(1);
   });
 
-  it('NEGATIVE PROOF: session replacement (otro login) tampoco reintenta (§38)', async () => {
-    seedSession('access-S1');
+  it('NEGATIVE PROOF (§38, Blocker 2): replacement purga S1 ANTES de usar S2; sin retry; BroadcastChannel perdido', async () => {
+    seedSession('access-S1', 'org-A');
+    const { steps, runner } = recordingTransitionRunner();
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
       if (url.endsWith('/auth/refresh')) {
-        // La cookie fue reemplazada por un NUEVO login: sesión S2, otro user.
-        return json(refreshBody({ token: 'access-S2', session_id: 'sess-2', user: { id: 'user-2', email: 'b@b.test', name: 'B', account_status: 'active' } }));
+        // La cookie fue reemplazada por un NUEVO login en otra pestaña:
+        // sesión S2, OTRO user (identity completa distinta).
+        return json(refreshBody({
+          token: 'access-S2',
+          session_id: 'sess-2',
+          user: { id: 'user-2', email: 'b@b.test', normalized_email: 'b@b.test', name: 'B', account_status: 'active' },
+        }));
       }
-      return json({ error: 'unauthorized' }, 401);
+      if (url.endsWith('/auth/me')) return json(meBody('user-2', 'org-B'));
+      // Business request con el token de S1: 401 (la sesión A murió).
+      if (new Headers(init?.headers).get('Authorization') === 'Bearer access-S1') {
+        return json({ error: 'unauthorized' }, 401);
+      }
+      return json({ never: 'executed-under-S2' });
     });
-    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+    configureWebAuthClient({
+      baseUrl: BASE,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      runSessionTransition: runner,
+    });
 
     await expect(authenticatedApiFetch(`${BASE}/projects`)).rejects.toBeInstanceOf(
       WebSessionTransitionError,
     );
-    expect(fetchImpl.mock.calls.filter(([url]) => String(url).endsWith('/projects'))).toHaveLength(1);
-    // El credential aplicado es el NUEVO (con purge previo a cargo del caller).
+
+    // La operación original se ejecutó UNA sola vez y jamás bajo S2.
+    const projectsCalls = fetchImpl.mock.calls.filter(
+      ([url]) => String(url).endsWith('/projects'),
+    );
+    expect(projectsCalls).toHaveLength(1);
+    const authorizations = fetchImpl.mock.calls.map(
+      ([, init]) => new Headers((init as RequestInit).headers).get('Authorization') ?? '',
+    );
+    expect(authorizations).not.toContain('Bearer access-S2');
+    // Ordering del invariante: purge S1 → apply S2 → /me de S2 (el executor
+    // corre en-proceso; ningún evento del canal participa).
+    expect(steps).toEqual(['transition:session-replaced', 'purge-S1', 'apply-S2:access-S2', 'me-S2']);
     expect(getCredential()).toMatchObject({ sessionId: 'sess-2', accessToken: 'access-S2' });
+  });
+
+  it('NEGATIVE PROOF (scope-change mismo sid, Blocker 2): Org A→B vía cookie purga A antes de usar B; sin retry', async () => {
+    seedSession('access-A', 'org-A'); // misma sesión sess-1, scope A
+    const { steps, runner } = recordingTransitionRunner();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith('/auth/refresh')) {
+        // MISMO session_id/user, OTRA organización: select-org en otra pestaña.
+        return json(refreshBody({ token: 'access-B', organization: { id: 'org-B', name: 'Taller B', slug: 'taller-b', type: 'factory', status: 'active', license: { plan: 'pro', status: 'active' } } }));
+      }
+      if (url.endsWith('/auth/me')) return json(meBody('user-1', 'org-B'));
+      if (new Headers(init?.headers).get('Authorization') === 'Bearer access-A') {
+        return json({ error: 'unauthorized' }, 401);
+      }
+      return json({ never: 'executed-under-B' });
+    });
+    configureWebAuthClient({
+      baseUrl: BASE,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      runSessionTransition: runner,
+    });
+
+    await expect(
+      authenticatedApiFetch(`${BASE}/projects`, { method: 'POST', body: '{}' }),
+    ).rejects.toBeInstanceOf(WebSessionTransitionError);
+
+    expect(fetchImpl.mock.calls.filter(([url]) => String(url).endsWith('/projects'))).toHaveLength(1);
+    expect(fetchImpl.mock.calls.map(([, init]) => new Headers((init as RequestInit).headers).get('Authorization') ?? '')).not.toContain('Bearer access-B');
+    expect(steps).toEqual(['transition:scope-changed', 'purge-S1', 'apply-S2:access-B', 'me-S2']);
+    expect(getCredential()).toMatchObject({ accessToken: 'access-B', organizationId: 'org-B' });
+  });
+
+  it('coordinatedWebRefresh expone la transición sin aplicar S2 ella misma (Option A)', async () => {
+    seedSession('access-S1', 'org-A');
+    const { steps, runner } = recordingTransitionRunner();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      if (String(input).endsWith('/auth/refresh')) {
+        return json(refreshBody({ token: 'access-S2', session_id: 'sess-2' }));
+      }
+      return json({});
+    });
+    configureWebAuthClient({
+      baseUrl: BASE,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      runSessionTransition: runner,
+    });
+
+    const outcome = await coordinatedWebRefresh();
+
+    expect(outcome).toMatchObject({ status: 'transitioned', kind: 'session-replaced' });
+    if (outcome.status === 'transitioned') {
+      expect(outcome.credential?.accessToken).toBe('access-S2'); // aplicado por el RUNNER tras el purge
+    }
+    expect(steps[0]).toBe('transition:session-replaced');
   });
 
   it('una URL externa jamás recibe el bearer', async () => {
@@ -491,5 +645,38 @@ describe('scheduleWebAccessRefresh — scheduler por expiry real (§28/§29)', (
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('fail closed del lock de sesión (review Blocker 1)', () => {
+  it('refresh: sin primitiva de coordinación NO se llama al server y el outcome es network', async () => {
+    seedSession('access-1');
+    __setWebSessionLockBackendForTests(null); // jsdom: sin locks ni indexedDB
+    const fetchImpl = vi.fn(async () => json(refreshBody()));
+    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const outcome = await coordinatedWebRefresh();
+
+    // La rotación fue RECHAZADA (fail closed): jamás un fetch concurrente
+    // potencial; el access local sigue y la sesión server-side está intacta.
+    expect(outcome.status).toBe('network');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(getCredential()?.accessToken).toBe('access-1');
+  });
+
+  it('logout: sin primitiva NO se llama al server y queda pending-retry (nunca "completado")', async () => {
+    seedSession('access-1');
+    __setWebSessionLockBackendForTests(null);
+    const fetchImpl = vi.fn(async () => json({ logged_out: true }));
+    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const outcome = await webLogout();
+
+    expect(outcome.status).toBe('pending-retry');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('WebSessionLockUnavailableError es el error tipificado del fail closed', () => {
+    expect(new WebSessionLockUnavailableError('sin primitiva')).toBeInstanceOf(Error);
   });
 });

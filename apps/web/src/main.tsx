@@ -45,7 +45,7 @@ installAuth401Interceptor(
 // session-replaced / session-ended / scope-changed ⇒ purge + reload con boot
 // autoritativo; refresh-completed no recarga nada (rotación normal).
 subscribeToWebSessionEvents((event) => {
-  if (event.type === 'refresh-completed' || event.type === 'lock-released') return;
+  if (event.type === 'refresh-completed') return;
   clearCredential();
   tenantTransition.commit();
   window.location.reload();

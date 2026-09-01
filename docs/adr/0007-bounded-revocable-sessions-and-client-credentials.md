@@ -310,15 +310,35 @@ server-clock `access_expires_at` (refresh ≈2 min before expiry) plus
 visibility/focus/online wake-ups; no fixed intervals, no refresh storms.
 
 **Cross-tab serialization.** Every cookie rotation, logout and select-org runs
-under one exclusive cross-tab mutation lock — `navigator.locks` when
-available, otherwise a non-secret localStorage lease (random tab id + expiry,
-verify-after-write, expired-takeover; never tokens or user data). Broadcasts
-carry only `{ type }` signals (`session-replaced`, `session-ended`,
-`scope-changed`); tabs resolve their own state from the cookie via bootstrap,
-never from a broadcast token. A normal refresh reloads nothing. Support stays
-a distinct tab-local memory credential: entry/exit never touches the Web
-cookie, a support 401 is never retried under another credential class, and
-exit recovers the platform session through cookie bootstrap.
+under one exclusive cross-tab mutation lock backed by a REAL mutual-exclusion
+primitive: `navigator.locks` when available, otherwise an IndexedDB
+transactional mutex — the acquisition is a `get`+`put` pair inside ONE
+`readwrite` transaction over a single record, and IndexedDB serializes
+overlapping readwrite transactions, so two tabs can never both believe they
+hold the lock (a read/write/verify localStorage lease is NOT sufficient and
+is not used). The record holds only `{holder: <random tab id>, expiresAt}`
+(never tokens or user data); expired records are taken over inside the same
+transaction (crash safety) and live locks renew while the mutation runs. If
+no safe primitive exists (neither Web Locks nor IndexedDB), the mutation
+FAILS CLOSED: it is not executed at all — a cookie rotation never runs
+without genuine cross-tab exclusion. Broadcasts carry only `{ type }` signals
+(`session-replaced`, `session-ended`, `scope-changed`); tabs resolve their own
+state from the cookie via bootstrap, never from a broadcast token. A normal
+refresh reloads nothing. Support stays a distinct tab-local memory credential:
+entry/exit never touches the Web cookie, a support 401 is never retried under
+another credential class, and exit recovers the platform session through
+cookie bootstrap.
+
+**Replacement/scope-change ordering.** When a refresh reveals that the cookie
+now represents a different session (new sid) or a different scope (same sid,
+other user/org — identity is compared across sid + userId + organizationId,
+never sid alone), the new credential is NOT installed by the refresh itself.
+A transition owner runs first and must, in order: invalidate the old
+credential and purge all of the old tenant's business state, and only then
+install the new credential, fetch the authoritative `/auth/me` snapshot, and
+let the new session become visible/usable. The original request that
+triggered the refresh is never retried under the new credential, and the
+ordering never depends on the (best-effort) BroadcastChannel signal.
 
 **Failure honesty.** Refresh 5xx/network errors keep the local session (the
 cookie survived server-side) with bounded retries; only terminal states

@@ -3,39 +3,29 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  __forceLocalStorageLeaseForTests,
+  WebSessionLockUnavailableError,
+  __setWebSessionLockBackendForTests,
+  createInMemoryWebSessionLockBackendForTests,
+  createWebSessionMutationLock,
+  webSessionMutationLock,
   withWebSessionMutation,
+  type WebSessionLockBackend,
 } from './webSessionLock';
 
-function memoryStorage(): Storage {
-  const map = new Map<string, string>();
-  return {
-    get length() {
-      return map.size;
-    },
-    key: (index: number) => [...map.keys()][index] ?? null,
-    getItem: (k) => map.get(k) ?? null,
-    setItem: (k, v) => void map.set(k, v),
-    removeItem: (k) => void map.delete(k),
-    clear: () => map.clear(),
-  } as Storage;
-}
-
 beforeEach(() => {
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: memoryStorage(),
-  });
+  // jsdom no tiene navigator.locks ni indexedDB: sin backend inyectado, toda
+  // mutación del singleton FAIL CLOSED (lo prueban los casos dedicados).
+  __setWebSessionLockBackendForTests(null);
 });
 
 afterEach(() => {
-  __forceLocalStorageLeaseForTests(false);
-  Reflect.deleteProperty(globalThis, 'localStorage');
+  __setWebSessionLockBackendForTests(null);
   vi.restoreAllMocks();
 });
 
-describe('webSessionLock — serialización cross-tab de mutaciones (SEC-4B §31–34)', () => {
-  it('serializa dos mutaciones concurrentes del mismo runtime (una por vez)', async () => {
+describe('webSessionLock — exclusión mutua real (SEC-4B review Blocker 1)', () => {
+  it('serializa dos mutaciones concurrentes del MISMO runtime (cola in-tab)', async () => {
+    const backend = createInMemoryWebSessionLockBackendForTests();
     const active: string[] = [];
     let peak = 0;
     const mutation = (id: string) => async () => {
@@ -45,107 +35,168 @@ describe('webSessionLock — serialización cross-tab de mutaciones (SEC-4B §31
       active.splice(active.indexOf(id), 1);
       return id;
     };
+    const lock = createWebSessionMutationLock({ backend });
 
     const [a, b] = await Promise.all([
-      withWebSessionMutation(mutation('A')),
-      withWebSessionMutation(mutation('B')),
+      lock.withWebSessionMutation(mutation('A')),
+      lock.withWebSessionMutation(mutation('B')),
     ]);
+
     expect(a).toBe('A');
     expect(b).toBe('B');
-    expect(peak).toBe(1); // jamás dos rotaciones de cookie en vuelo
+    expect(peak).toBe(1);
+    expect(backend.peakConcurrentHolders()).toBe(1);
   });
 
-  it('navigator.locks disponible: delega en el lock real del browser', async () => {
-    const requestedNames: string[] = [];
-    const originalLocks = (globalThis as { navigator?: { locks?: unknown } }).navigator?.locks;
+  it(
+    'FALLBACK PROOF: DOS runtimes/tab identities independientes (sólo el backend compartido) ' +
+      'serializan las network mutations con peak = 1',
+    async () => {
+      // Backend compartido = única interacción entre "pestañas". Cada runtime
+      // tiene su PROPIO tabId y su PROPIA inTabQueue (sin singleton).
+      const backend = createInMemoryWebSessionLockBackendForTests();
+      const tabA = createWebSessionMutationLock({ backend, tabId: 'tab-A' });
+      const tabB = createWebSessionMutationLock({ backend, tabId: 'tab-B' });
+      const tabC = createWebSessionMutationLock({ backend, tabId: 'tab-C' });
+
+      let inFlight = 0;
+      let peak = 0;
+      const networkRefresh = async (tab: string) => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * 10));
+        inFlight -= 1;
+        return `${tab}-refreshed`;
+      };
+
+      const results = await Promise.all([
+        tabA.withWebSessionMutation(() => networkRefresh('tab-A')),
+        tabB.withWebSessionMutation(() => networkRefresh('tab-B')),
+        tabC.withWebSessionMutation(() => networkRefresh('tab-C')),
+      ]);
+
+      expect(results.sort()).toEqual([
+        'tab-A-refreshed',
+        'tab-B-refreshed',
+        'tab-C-refreshed',
+      ]);
+      // La garantía: at most UNA mutación cross-tab a la vez — sin replay de
+      // cookie concurrente (SEC-2A strict single-use intacto).
+      expect(peak).toBe(1);
+      expect(backend.peakConcurrentHolders()).toBe(1);
+    },
+  );
+
+  it('navigator.locks disponible: acquire/release promisificado sobre el lock real', async () => {
+    const held: string[] = [];
+    const released: string[] = [];
+    const original = (globalThis as { navigator?: unknown }).navigator;
     Object.defineProperty(globalThis, 'navigator', {
       configurable: true,
       value: {
         locks: {
-          request: async (name: string, callback: () => Promise<void>) => {
-            requestedNames.push(name);
+          request: async (_name: string, _options: unknown, callback: () => Promise<void>) => {
+            held.push('lock');
             await callback();
+            released.push('lock');
           },
         },
       },
     });
     try {
-      const result = await withWebSessionMutation(async () => 'rotated');
+      const lock = createWebSessionMutationLock({ tabId: 'tab-locks' });
+      const result = await lock.withWebSessionMutation(async () => 'rotated');
       expect(result).toBe('rotated');
-      expect(requestedNames).toEqual(['granete:web-session-mutation']);
+      expect(held).toEqual(['lock']);
+      expect(released).toEqual(['lock']); // release efectivo antes de resolver
     } finally {
       Object.defineProperty(globalThis, 'navigator', {
         configurable: true,
-        value: { locks: originalLocks },
+        value: original,
       });
     }
   });
 
-  it('FALLBACK PROOF: sin navigator.locks, dos actores concurrentes serializan las network refreshes', async () => {
-    __forceLocalStorageLeaseForTests(true);
-    // Fuerza el path de lease aunque exista Web Locks (simula browsers viejos).
-
-    let inFlight = 0;
-    let peak = 0;
-    const networkRefresh = async (id: string) => {
-      inFlight += 1;
-      peak = Math.max(peak, inFlight);
-      await new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * 10));
-      inFlight -= 1;
-      return id;
-    };
-
-    const results = await Promise.all([
-      withWebSessionMutation(() => networkRefresh('tab-A-refresh')),
-      withWebSessionMutation(() => networkRefresh('tab-B-refresh')),
-      withWebSessionMutation(() => networkRefresh('tab-C-refresh')),
-    ]);
-
-    expect(results.sort()).toEqual([
-      'tab-A-refresh',
-      'tab-B-refresh',
-      'tab-C-refresh',
-    ]);
-    expect(peak).toBe(1); // no same-cookie concurrent replay: sesión sigue viva
-    expect(globalThis.localStorage.getItem('granete:web-session-lock')).toBeNull();
-  });
-
-  it('el lease del fallback nunca contiene secrets ni datos de negocio', async () => {
-    __forceLocalStorageLeaseForTests(true);
-    let captured = '';
-    const store = globalThis.localStorage;
-    const originalSet = store.setItem.bind(store);
-    store.setItem = (k: string, v: string) => {
-      if (k === 'granete:web-session-lock') captured = v;
-      originalSet(k, v);
-    };
-    await withWebSessionMutation(async () => undefined);
-    const lease = JSON.parse(captured) as { holder: string; expiresAt: number };
-    expect(Object.keys(lease).sort()).toEqual(['expiresAt', 'holder']);
-    expect(JSON.stringify(lease)).not.toMatch(/eyJ|Bearer|token|user/i);
-  });
-
-  it('un lease vencido de otra pestaña se toma over (takeover), sin deadlock', async () => {
-    __forceLocalStorageLeaseForTests(true);
-    // Lease muerto hace una hora a nombre de una pestaña inexistente.
-    globalThis.localStorage.setItem(
-      'granete:web-session-lock',
-      JSON.stringify({ holder: 'ghost-tab', expiresAt: Date.now() - 3_600_000 }),
-    );
-    const result = await withWebSessionMutation(async () => 'recovered');
-    expect(result).toBe('recovered');
-    expect(globalThis.localStorage.getItem('granete:web-session-lock')).toBeNull();
-  });
-
-  it('propaga el error de la mutación y libera el lease para la siguiente', async () => {
-    __forceLocalStorageLeaseForTests(true);
+  it('FAIL CLOSED: sin navigator.locks ni IndexedDB la mutación NO se ejecuta', async () => {
+    // jsdom: sin locks ni indexedDB reales; sin backend inyectado.
+    expect((globalThis as { indexedDB?: unknown }).indexedDB).toBeUndefined();
+    let executed = false;
     await expect(
       withWebSessionMutation(async () => {
+        executed = true;
+        return 'never';
+      }),
+    ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
+    expect(executed).toBe(false);
+
+    // El singleton de producción comparte el destino fail-closed.
+    let singletonExecuted = false;
+    await expect(
+      webSessionMutationLock.withWebSessionMutation(async () => {
+        singletonExecuted = true;
+      }),
+    ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
+    expect(singletonExecuted).toBe(false);
+  });
+
+  it('IndexedDB denegado en runtime (open rechazado): mutación NO se ejecuta', async () => {
+    // indexedDB presente pero bloqueado (p.ej. contexto denegado): el acquire
+    // debe fallar cerrado, no degradar a "correr igual".
+    const factory = { open: () => { throw new Error('The user denied permission'); } };
+    Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: factory });
+    try {
+      const lock = createWebSessionMutationLock({ tabId: 'tab-denied' });
+      let executed = false;
+      await expect(
+        lock.withWebSessionMutation(async () => {
+          executed = true;
+        }),
+      ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
+      expect(executed).toBe(false);
+    } finally {
+      Reflect.deleteProperty(globalThis, 'indexedDB');
+    }
+  });
+
+  it('un lease vencido de otra pestaña se toma over (crash-safety), sin deadlock', async () => {
+    // TTL corto para no esperar el real (15 s) en el test.
+    const backend = createInMemoryWebSessionLockBackendForTests({ ttlMs: 25 });
+    // Simula un crash: la mutación de la pestaña fantasma nunca libera.
+    const ghost = createWebSessionMutationLock({ backend, tabId: 'ghost-tab' });
+    const ghostRun = ghost.withWebSessionMutation(() => new Promise<string>(() => undefined));
+    void ghostRun.catch(() => undefined);
+    // Deja pasar el TTL del registro.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const survivor = createWebSessionMutationLock({ backend, tabId: 'survivor-tab' });
+    const result = await survivor.withWebSessionMutation(async () => 'recovered');
+    expect(result).toBe('recovered');
+  });
+
+  it('propaga el error de la mutación y libera para la siguiente', async () => {
+    const backend = createInMemoryWebSessionLockBackendForTests();
+    const lock = createWebSessionMutationLock({ backend });
+    await expect(
+      lock.withWebSessionMutation(async () => {
         throw new Error('network down');
       }),
     ).rejects.toThrow('network down');
-    expect(globalThis.localStorage.getItem('granete:web-session-lock')).toBeNull();
-    const next = await withWebSessionMutation(async () => 'ok-after-failure');
+    const next = await lock.withWebSessionMutation(async () => 'ok-after-failure');
     expect(next).toBe('ok-after-failure');
+  });
+
+  it('la metadata de coordinación jamás contiene secrets', async () => {
+    const backend = createInMemoryWebSessionLockBackendForTests();
+    const seen: string[] = [];
+    const wrapping: WebSessionLockBackend = {
+      acquire: (holder) => {
+        seen.push(holder);
+        return backend.acquire(holder);
+      },
+    };
+    const lock = createWebSessionMutationLock({ backend: wrapping, tabId: 'tab-audit' });
+    await lock.withWebSessionMutation(async () => undefined);
+    for (const holder of seen) {
+      expect(holder).not.toMatch(/eyJ|Bearer|token|secret/i);
+    }
   });
 });

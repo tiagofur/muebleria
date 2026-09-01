@@ -8,6 +8,14 @@
   eliminación del bearer en localStorage) implementado en rama
   `feat/460-4b-web-in-memory-auth`, pendiente de revisión independiente y sin
   merge.
+- Review de PR #532 (CHANGES REQUIRED, 2 blockers) corregido en la misma
+  rama: (1) fallback lock reemplazado por un mutex IndexedDB transaccional
+  real (get+put dentro de UNA transacción readwrite serializada) con FAIL
+  CLOSED cuando no existe primitiva segura; (2) session replacement/scope
+  change ya no instala S2 en el refresh: un transition owner purga S1
+  (credential + grants + business state) y SÓLO ENTONCES aplica S2 y pide
+  /auth/me autoritativo; select-org ahora corre bajo el mismo boundary
+  cross-tab (§32).
 - SEC-5/6/7/8/9 no avanzaron en este slice.
 
 ## Hechos implementados SEC-4B
@@ -47,14 +55,20 @@
   (~2 min lead) + wake visibility/focus/online con singleflight in-tab (20
   callers = 1 rotación).
 - `webSessionLock` — TODA mutación de cookie (refresh/logout/select-org)
-  serializada cross-tab: `navigator.locks` o fallback lease NO-secreto en
-  localStorage (tab id random + expiry, verify-after-write, takeover de
-  vencidos). Proof fallback: 3 actores concurrentes ⇒ peak 1 rotación en
-  vuelo, lease sin secrets.
+  serializada cross-tab con EXCLUSIÓN MUTUA REAL: `navigator.locks`
+  (acquire/release promisificado) o mutex IndexedDB transaccional (get+put
+  atómico en una transacción readwrite; registro `{holder, expiresAt}`
+  no-secreto con renewal y takeover de vencidos). Sin ninguna primitiva
+  segura ⇒ FAIL CLOSED (la mutación no se ejecuta). Proofs: DOS runtimes/tab
+  identities independientes compartiendo sólo el backend (peak = 1),
+  locks promisificado, fail closed sin locks ni IndexedDB (unit + gate real),
+  IndexedDB denegado en runtime, takeover.
 - `webSessionChannel` — BroadcastChannel `granete-web-session` con payloads
   `{ type }` ÚNICAMENTE (session-replaced/session-ended/scope-changed);
   refresh normal no recarga pestañas; el resto purge+reload y re-deriva
-  estado desde la cookie (jamás tokens por mensaje).
+  estado desde la cookie (jamás tokens por mensaje). El ordering de una
+  transición NUNCA depende del canal (best-effort): purge S1 → apply S2 →
+  /auth/me autoritativo ocurre en-proceso (review Blocker 2).
 - `workspaceStore` — login/loginWithAuthPayload/selectOrg/enterSupport/
   exitSupport/logout/markSessionEnded/boot sobre el runtime; `authBootstrapping`
   evita el flash login→shell; `sessionBootError` (unavailable/config) y

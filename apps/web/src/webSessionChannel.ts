@@ -12,15 +12,13 @@
  *   scope-changed     → select-org cambió el scope de la sesión compartida
  *   refresh-completed → rotación normal (mismo user/org/sid): nadie debe
  *                       recargar nada
- *   lock-released     → interno del fallback lock (webSessionLock)
  */
 
 export type WebSessionEvent =
   | { readonly type: 'session-replaced' }
   | { readonly type: 'session-ended' }
   | { readonly type: 'scope-changed' }
-  | { readonly type: 'refresh-completed' }
-  | { readonly type: 'lock-released' };
+  | { readonly type: 'refresh-completed' };
 
 const CHANNEL_NAME = 'granete-web-session';
 
