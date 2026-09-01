@@ -187,7 +187,11 @@ func (s *Server) RequireIdempotency(operation string, next http.Handler) http.Ha
 			if claims != nil {
 				if setter, ok := s.Store.(tenantActorSetter); ok {
 					var setErr error
-					ctx, setErr = setter.SetTenantActor(ctx, storage.TenantActor{OrganizationID: claims.OrgID, UserID: claims.UserID})
+					ctx, setErr = setter.SetTenantActor(ctx, storage.TenantActor{
+						OrganizationID: claims.OrgID,
+						UserID:         claims.UserID,
+						MembershipID:   claims.MembershipID,
+					})
 					if setErr != nil {
 						return storage.IdempotencyResponse{}, setErr
 					}

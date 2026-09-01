@@ -52,6 +52,12 @@ type Store interface {
 	GetAuthSessionForRequest(ctx context.Context, sessionID, expectedUserID string) (*domain.AuthSession, error)
 	UpdateAuthSessionScope(ctx context.Context, sessionID, membershipID, organizationID string) error
 	RevokeAuthSession(ctx context.Context, sessionID, revokedBy, reason string) (bool, error)
+	ListOwnAuthSessions(ctx context.Context, userID string, limit int) ([]storage.AuthSessionDirectoryEntry, error)
+	ListMembershipAuthSessions(ctx context.Context, actorUserID, organizationID, membershipID string, limit int) ([]storage.AuthSessionDirectoryEntry, error)
+	ListPlatformUserAuthSessions(ctx context.Context, userID string, limit int) ([]storage.AuthSessionDirectoryEntry, error)
+	RevokeOwnAuthSession(ctx context.Context, cmd storage.RevokeAuthSessionCommand) (*storage.AuthSessionRevocation, error)
+	RevokeMembershipAuthSession(ctx context.Context, cmd storage.RevokeAuthSessionCommand) (*storage.AuthSessionRevocation, error)
+	RevokePlatformAuthSession(ctx context.Context, cmd storage.RevokeAuthSessionCommand) (*storage.AuthSessionRevocation, error)
 	CreateAuthRefreshCredential(ctx context.Context, cmd storage.CreateAuthRefreshCredentialCommand) (*storage.AuthRefreshCredential, error)
 	RotateAuthRefreshCredential(ctx context.Context, cmd storage.RotateAuthRefreshCredentialCommand, execute storage.AuthRefreshRotationCallback) (*storage.AuthRefreshRotation, error)
 	LogoutByRefreshCredential(ctx context.Context, verifier []byte, ip, requestID string) error

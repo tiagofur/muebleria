@@ -54,7 +54,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	authRL := RateLimitMiddleware(server.rateLimitRPS, server.rateLimitBurst)
 
 	// Endpoints públicos (Auth) — with rate limiting
-	mux.Handle("POST /api/auth/login", authRL(http.HandlerFunc(server.HandleLogin)))
+	mux.Handle("POST /api/auth/login", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleLogin))))
 
 	// Health check endpoint (unauthenticated) — used by Docker healthchecks and Caddy depends_on.
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -72,15 +72,17 @@ func RegisterRoutes(server *Server) http.Handler {
 	// SEC-2 primary path: opaque single-use refresh credential. The no-body
 	// bearer branch is a finite compatibility bridge for deployed clients and
 	// moves out with SEC-4/SEC-6; it is no longer the OpenAPI refresh contract.
-	mux.Handle("POST /api/auth/refresh", authRL(refreshTransitionHandler(
+	mux.Handle("POST /api/auth/refresh", noStoreMiddleware(authRL(refreshTransitionHandler(
 		http.HandlerFunc(server.HandleRefreshCredential),
 		authMW(http.HandlerFunc(server.HandleRefresh)),
-	)))
-	mux.Handle("POST /api/auth/logout", authRL(http.HandlerFunc(server.HandleLogout)))
+	))))
+	mux.Handle("POST /api/auth/logout", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleLogout))))
 	// Select-org: swaps an authenticated token for one scoped to a chosen
 	// organization (multi-membership users, ADR-0004).
 	mux.Handle("POST /api/auth/select-org", authMW(http.HandlerFunc(server.HandleSelectOrg)))
 	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))
+	mux.Handle("GET /api/auth/sessions", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMySessions)))))
+	mux.Handle("POST /api/auth/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("auth.revoke-session", http.HandlerFunc(server.HandleRevokeMySession))))))
 
 	// Platform console (ADR-0005 §5 / #326): org lifecycle, licenses, users,
 	// audit and audited support sessions. Platform staff only.
@@ -89,6 +91,8 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
 	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
+	mux.Handle("GET /api/platform/users/{userId}/sessions", noStoreMiddleware(rejectSessionQueryToken(platformMW(http.HandlerFunc(server.HandleListPlatformUserSessions)))))
+	mux.Handle("POST /api/platform/users/{userId}/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(platformMW(server.RequireIdempotency("platform.revoke-user-session", http.HandlerFunc(server.HandleRevokePlatformUserSession))))))
 	mux.Handle("POST /api/platform/users/{userCommand...}", platformMW(http.HandlerFunc(server.HandlePlatformUserCommand)))
 	mux.Handle("POST /api/platform/organizations/{id}/support-session", platformMW(server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession))))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
@@ -115,6 +119,8 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/org/memberships", authMW(http.HandlerFunc(server.HandleOrgTeam)))
 	mux.Handle("GET /api/org/memberships/{membershipId}", authMW(http.HandlerFunc(server.HandleOrgTeamMember)))
 	mux.Handle("GET /api/org/team/summary", authMW(http.HandlerFunc(server.HandleOrgTeamSummary)))
+	mux.Handle("GET /api/org/memberships/{membershipId}/sessions", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMembershipSessions)))))
+	mux.Handle("POST /api/org/memberships/{membershipId}/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("org.revoke-membership-session", http.HandlerFunc(server.HandleRevokeMembershipSession))))))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles))))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/status", authMW(server.RequireIdempotency("org.update-membership-status", http.HandlerFunc(server.HandleOrgMemberStatus))))
 	mux.Handle("POST /api/org/memberships/{membershipCommand...}", membershipCommandRouter(map[string]http.Handler{

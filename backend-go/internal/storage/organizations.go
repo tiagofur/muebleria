@@ -656,12 +656,12 @@ func (s *PostgresStore) UpdateMembershipStatus(ctx context.Context, organization
 // membership without changing its lifecycle state.
 func (s *PostgresStore) RevokeMembershipSessions(ctx context.Context, organizationID, membershipID, actorID, reason string, expectedVersion int64) (*OrgTeamMember, error) {
 	out, err := scanOrgTeamMember(s.db(ctx).QueryRow(ctx, `
-		UPDATE memberships m SET credential_version=credential_version+1,
-			sessions_revoked_at=NOW(), sessions_revoked_by=NULLIF($3,'')::uuid,
-			sessions_revocation_reason=NULLIF($4,''), updated_at=NOW(), version=version+1
-		FROM users u WHERE m.id=$2 AND m.organization_id=$1 AND m.version=$5 AND u.id=m.user_id
-		RETURNING m.id,u.id,u.email,u.name,u.account_status,m.status,m.roles,m.joined_at,m.version,u.last_login_at,m.credential_version,m.sessions_revoked_at`,
-		organizationID, membershipID, actorID, reason, expectedVersion))
+		SELECT membership_id, user_id, email, name, account_status,
+			membership_status, roles, joined_at, version, last_login_at,
+			credential_version, sessions_revoked_at
+		FROM app_revoke_membership_auth_sessions(
+			$1::uuid, $2::uuid, $3::uuid, $4, $5
+		)`, actorID, organizationID, membershipID, reason, expectedVersion))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, classifyMembershipMiss(ctx, s.db(ctx), organizationID, membershipID)
 	}

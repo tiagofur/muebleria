@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1 and SEC-2A implemented; SEC-2B..SEC-9 in progress)
+- **Status:** Accepted (SEC-1 and SEC-2A integrated; SEC-2B implemented pending review; SEC-3..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -136,6 +136,38 @@ exist server-side. Rotate it as a credential-boundary event: revoke affected
 sessions/families, deploy the new independent pepper, and require re-login.
 Missing or weak configuration fails server startup.
 
+### 7. Session directory and revocation boundaries preserve least privilege
+
+SEC-2B exposes bounded, active-first directories and exact session revocation
+for self, organization and platform through the generated OpenAPI contract.
+Responses contain session identity, client type, timestamps, current/status flags,
+a non-secret device hint and optional current organization/membership; they never
+contain access or refresh credentials and are capped at 100 rows. Login, refresh,
+logout and every session-directory response are `no-store`. Session-directory
+routes require an Authorization header and reject the generic query-token fallback.
+
+Self may enumerate and revoke only its own session rows. Organization admins use
+the live `team:revoke_sessions` capability and an exact target membership inside
+the active organization. Because `auth_sessions` and `auth_refresh_families` keep
+FORCE RLS `self-or-platform`, organization access is implemented by narrow
+`SECURITY DEFINER` list/command functions with fixed `search_path`, exact actor,
+organization, membership, session and live role validation. Support sessions have
+no membership and therefore are absent from organization member directories;
+revoking an auth session does not close or reinterpret the separate
+`support_sessions` business row. Platform authority remains explicit. Foreign and
+missing session ids produce the same typed `SESSION_NOT_FOUND` response.
+
+An exact revoke locks the session, monotonically revokes the session when open,
+always CAS-revokes any still-open refresh family, and writes one critical audit
+event in the same transaction if either row transitioned. This repairs the edge
+where a session was already revoked but its family remained open; a later retry
+changes neither timestamp nor audit. Concurrent commands produce one transition.
+Failure updating the family or inserting audit rolls back both rows and leaves the
+access and refresh credentials usable. Membership-wide revocation uses the same
+atomic boundary so the membership credential epoch, every matching session and
+every refresh family commit or roll back together. Idempotent command transactions
+preserve the live membership actor used by database authorization.
+
 ## Alternatives considered
 
 - **Keep exp-derived sessions without a registry.** Rejected: no per-session
@@ -165,8 +197,8 @@ Missing or weak configuration fails server startup.
   hard failure surfaces as 5xx and rolls the transaction back together with
   the switch.
 - SEC-2A builds refresh families, rotation/reuse detection and real logout on
-  this registry. SEC-2B adds the self/org/platform session directory and the
-  capability-checked organization boundary the RLS model intentionally leaves
+  this registry. SEC-2B implements the self/org/platform session directory and
+  the capability-checked organization boundary the RLS model intentionally leaves
   out; SEC-4 replaces the web
   bearer-in-localStorage with short-lived in-memory access plus a rotating
   refresh credential; SEC-6 registers SketchUp devices; SEC-7 stores step-up
@@ -194,3 +226,14 @@ malformed inputs and access-exp cap), `internal/storage/auth_refresh_test.go`
 concurrency, absolute expiry, membership isolation, logout and failure
 injection for mint/audit/revoke/commit), and the real-PostgreSQL HTTP proof in
 `tests/pilotreadiness/auth_refresh_test.go`.
+
+
+SEC-2B adds `internal/storage/session_directory_test.go` (fresh and upgrade
+migration, unchanged direct-RLS role graph, bounded self/org/platform listing,
+cross-tenant and seller denial, concurrent/idempotent exact revocation,
+family-only repair and family/audit rollback), `internal/api/session_directory_test.go`
+(typed HTTP behavior, current-session cut and query-token rejection), and the
+real PostgreSQL/runtime-role HTTP proof in
+`tests/pilotreadiness/session_directory_http_test.go` (independent memberships,
+self current/other session, organization and platform boundaries, access+refresh
+cut, enumeration safety and both failure injections).

@@ -93,6 +93,74 @@ func (s *stubStore) RevokeAuthSession(_ context.Context, sessionID, revokedBy, r
 	return true, nil
 }
 
+func (s *stubStore) ListOwnAuthSessions(_ context.Context, userID string, _ int) ([]storage.AuthSessionDirectoryEntry, error) {
+	return s.stubSessionDirectory(userID, "", ""), nil
+}
+
+func (s *stubStore) ListMembershipAuthSessions(_ context.Context, _ string, organizationID, membershipID string, _ int) ([]storage.AuthSessionDirectoryEntry, error) {
+	return s.stubSessionDirectory("", organizationID, membershipID), nil
+}
+
+func (s *stubStore) ListPlatformUserAuthSessions(_ context.Context, userID string, _ int) ([]storage.AuthSessionDirectoryEntry, error) {
+	return s.stubSessionDirectory(userID, "", ""), nil
+}
+
+func (s *stubStore) stubSessionDirectory(userID, organizationID, membershipID string) []storage.AuthSessionDirectoryEntry {
+	out := make([]storage.AuthSessionDirectoryEntry, 0)
+	for _, session := range s.authSessions {
+		if userID != "" && session.UserID != userID {
+			continue
+		}
+		if organizationID != "" && (session.ActiveOrganizationID == nil || *session.ActiveOrganizationID != organizationID) {
+			continue
+		}
+		if membershipID != "" && (session.MembershipID == nil || *session.MembershipID != membershipID) {
+			continue
+		}
+		out = append(out, storage.AuthSessionDirectoryEntry{
+			ID: session.ID, UserID: session.UserID, MembershipID: session.MembershipID,
+			ActiveOrganizationID: session.ActiveOrganizationID, ClientType: session.ClientType,
+			CreatedAt: session.CreatedAt, LastSeenAt: session.LastSeenAt,
+			AbsoluteExpiresAt: session.AbsoluteExpiresAt, RevokedAt: session.RevokedAt,
+			DeviceHint: session.DeviceHint,
+		})
+	}
+	return out
+}
+
+func (s *stubStore) RevokeOwnAuthSession(_ context.Context, cmd storage.RevokeAuthSessionCommand) (*storage.AuthSessionRevocation, error) {
+	return s.stubRevokeSession(cmd, cmd.ActorUserID, "", "")
+}
+
+func (s *stubStore) RevokeMembershipAuthSession(_ context.Context, cmd storage.RevokeAuthSessionCommand) (*storage.AuthSessionRevocation, error) {
+	return s.stubRevokeSession(cmd, "", cmd.OrganizationID, cmd.TargetMembershipID)
+}
+
+func (s *stubStore) RevokePlatformAuthSession(_ context.Context, cmd storage.RevokeAuthSessionCommand) (*storage.AuthSessionRevocation, error) {
+	return s.stubRevokeSession(cmd, cmd.TargetUserID, "", "")
+}
+
+func (s *stubStore) stubRevokeSession(cmd storage.RevokeAuthSessionCommand, userID, organizationID, membershipID string) (*storage.AuthSessionRevocation, error) {
+	session, ok := s.authSessions[cmd.SessionID]
+	if !ok || (userID != "" && session.UserID != userID) ||
+		(organizationID != "" && (session.ActiveOrganizationID == nil || *session.ActiveOrganizationID != organizationID)) ||
+		(membershipID != "" && (session.MembershipID == nil || *session.MembershipID != membershipID)) {
+		return nil, storage.ErrAuthSessionNotFound
+	}
+	revoked := session.RevokedAt == nil
+	if revoked {
+		now := time.Now()
+		session.RevokedAt = &now
+	}
+	return &storage.AuthSessionRevocation{Session: storage.AuthSessionDirectoryEntry{
+		ID: session.ID, UserID: session.UserID, MembershipID: session.MembershipID,
+		ActiveOrganizationID: session.ActiveOrganizationID, ClientType: session.ClientType,
+		CreatedAt: session.CreatedAt, LastSeenAt: session.LastSeenAt,
+		AbsoluteExpiresAt: session.AbsoluteExpiresAt, RevokedAt: session.RevokedAt,
+		DeviceHint: session.DeviceHint,
+	}, Revoked: revoked}, nil
+}
+
 func (s *stubStore) CreateAuthRefreshCredential(_ context.Context, cmd storage.CreateAuthRefreshCredentialCommand) (*storage.AuthRefreshCredential, error) {
 	return &storage.AuthRefreshCredential{ID: "refresh-1", FamilyID: "family-1", SessionID: cmd.SessionID, UserID: cmd.UserID, Generation: 1, ExpiresAt: time.Now().Add(auth.AccessTokenTTL)}, nil
 }
