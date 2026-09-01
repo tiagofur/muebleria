@@ -27,7 +27,8 @@ echo ""
 
 # ---------- 1. Compose file parses ----------
 echo "[1] docker-compose.prod.yml parses correctly"
-if POSTGRES_PASSWORD=test JWT_SECRET=testsecret1234567890123456789012345678 \
+if POSTGRES_PASSWORD=test APP_DATABASE_PASSWORD=testappsecret1234567890123456789012345678 \
+  JWT_SECRET=testsecret1234567890123456789012345678 REFRESH_TOKEN_PEPPER=testrefresh1234567890123456789012345678 \
   docker compose -f "$PROJECT_DIR/docker-compose.prod.yml" config &>/dev/null; then
   pass "Compose config validates"
 else
@@ -41,7 +42,7 @@ ENV_FILE="$PROJECT_DIR/.env.production.example"
 if [[ ! -f "$ENV_FILE" ]]; then
   fail ".env.production.example does not exist"
 else
-  REQUIRED_VARS="DOMAIN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB JWT_SECRET CORS_ALLOWED_ORIGINS"
+  REQUIRED_VARS="DOMAIN POSTGRES_USER POSTGRES_PASSWORD APP_DATABASE_PASSWORD POSTGRES_DB JWT_SECRET REFRESH_TOKEN_PEPPER CORS_ALLOWED_ORIGINS"
   for var in $REQUIRED_VARS; do
     if grep -q "^${var}=" "$ENV_FILE"; then
       pass "Variable $var is defined"

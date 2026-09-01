@@ -46,9 +46,12 @@ type Server struct {
 	// (#460). When nil, a single-key authority is derived lazily from JWTSecret
 	// (tests and minimal embedders); production always sets it from config so
 	// issuer/keyring come from the environment.
-	Tokens        *auth.Authority
-	authorityOnce sync.Once
-	lazyAuthority *auth.Authority
+	Tokens *auth.Authority
+	// RefreshCredentials is configured from the independent
+	// REFRESH_TOKEN_PEPPER. Production refuses to boot without it.
+	RefreshCredentials *auth.RefreshCredentials
+	authorityOnce      sync.Once
+	lazyAuthority      *auth.Authority
 }
 
 func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
@@ -135,6 +138,63 @@ func (s *Server) createAuthSession(ctx context.Context, cmd storage.CreateAuthSe
 		return session, nil
 	}
 	return s.Store.CreateAuthSession(ctx, cmd)
+}
+
+type issuedRefreshCredential struct {
+	Raw       string
+	ExpiresAt time.Time
+}
+
+// createRefreshableAuthSession commits the registry row and its first refresh
+// credential in one transaction. SketchUp/support remain separate credential
+// classes and deliberately do not enter this SEC-2 family.
+func (s *Server) createRefreshableAuthSession(ctx context.Context, cmd storage.CreateAuthSessionCommand) (*domain.AuthSession, *issuedRefreshCredential, error) {
+	if cmd.ClientType != domain.SessionClientWeb && cmd.ClientType != domain.SessionClientMobile {
+		session, err := s.createAuthSession(ctx, cmd)
+		return session, nil, err
+	}
+	if s.RefreshCredentials == nil {
+		// Minimal embedders and pre-SEC-2 unit stubs may omit the authority;
+		// production cannot reach this branch because config.LoadConfig fails
+		// closed without REFRESH_TOKEN_PEPPER.
+		session, err := s.createAuthSession(ctx, cmd)
+		return session, nil, err
+	}
+	raw, verifier, err := s.RefreshCredentials.Generate()
+	if err != nil {
+		return nil, nil, err
+	}
+	var session *domain.AuthSession
+	var refresh *storage.AuthRefreshCredential
+	execute := func(txCtx context.Context) error {
+		created, err := s.Store.CreateAuthSession(txCtx, cmd)
+		if err != nil {
+			return err
+		}
+		session = created
+		refresh, err = s.Store.CreateAuthRefreshCredential(txCtx, storage.CreateAuthRefreshCredentialCommand{
+			SessionID: created.ID, UserID: created.UserID, Verifier: verifier,
+		})
+		return err
+	}
+	if runner, ok := s.Store.(tenantTransactionRunner); ok {
+		err = runner.WithinTenantTx(ctx, storage.TenantActor{UserID: cmd.UserID, OrganizationID: cmd.OrganizationID}, execute)
+	} else {
+		err = execute(ctx)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return session, &issuedRefreshCredential{Raw: raw, ExpiresAt: refresh.ExpiresAt}, nil
+}
+
+func attachRefreshCredential(response *LoginResponse, refresh *issuedRefreshCredential) {
+	if refresh == nil {
+		return
+	}
+	response.RefreshToken = &refresh.Raw
+	expiresAt := refresh.ExpiresAt.UTC().Format(time.RFC3339Nano)
+	response.RefreshExpiresAt = &expiresAt
 }
 
 // Helpers para JSON
@@ -452,7 +512,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// Multi-organization user without a hint: an org-less token is issued
 		// ONLY to complete /api/auth/select-org (it carries no business scope
 		// — the middleware denies data access to org-less non-staff tokens).
-		session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+		session, refresh, err := s.createRefreshableAuthSession(r.Context(), storage.CreateAuthSessionCommand{
 			UserID:            u.ID,
 			ClientType:        sessionClientType(string(transport)),
 			AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL(string(transport))),
@@ -476,7 +536,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
 			"transport": transport, "selection_required": true, "session_id": session.ID,
 		})
-		respondWithJSON(w, http.StatusOK, LoginResponse{
+		response := LoginResponse{
 			Token:             orgless,
 			SessionID:         &session.ID,
 			User:              toOpenAPIUser(u),
@@ -485,7 +545,9 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			Memberships:       toMembershipDTOs(memberships),
 			SelectionRequired: true,
 			Transport:         openapi.AuthTransport(transport),
-		})
+		}
+		attachRefreshCredential(&response, refresh)
+		respondWithJSON(w, http.StatusOK, response)
 		return
 	}
 
@@ -521,7 +583,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Registry row first: the ver5 token embeds its sid, and the row's
 	// absolute_expires_at is the authoritative 18h/#441 bound refresh can
 	// never extend.
-	session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+	session, refresh, err := s.createRefreshableAuthSession(r.Context(), storage.CreateAuthSessionCommand{
 		UserID:            u.ID,
 		MembershipID:      tc.MembershipID,
 		OrganizationID:    tc.OrgID,
@@ -550,7 +612,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		"transport": transport, "session_id": session.ID,
 	})
 
-	respondWithJSON(w, http.StatusOK, LoginResponse{
+	response := LoginResponse{
 		Token:             token,
 		SessionID:         &session.ID,
 		User:              toOpenAPIUser(u),
@@ -560,7 +622,9 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Memberships:       toMembershipDTOs(memberships),
 		SelectionRequired: false,
 		Transport:         openapi.AuthTransport(transport),
-	})
+	}
+	attachRefreshCredential(&response, refresh)
+	respondWithJSON(w, http.StatusOK, response)
 }
 
 // HandleSelectOrg: POST /api/auth/select-org {organization_id}

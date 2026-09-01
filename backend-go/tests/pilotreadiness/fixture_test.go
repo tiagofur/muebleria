@@ -195,8 +195,10 @@ func truncate(b []byte) string {
 }
 
 type loginResponse struct {
-	Token string `json:"token"`
-	User  struct {
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refresh_token"`
+	RefreshExpiresAt string `json:"refresh_expires_at"`
+	User             struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`
 	} `json:"user"`
@@ -383,6 +385,11 @@ func buildFixture() (*fixture, error) {
 	}
 	f.mediaDir = mediaDir
 	server := api.NewServerWithMedia(f.store, pilotJWTSecret, nil, 1000, 1000, mediaDir)
+	refreshCredentials, err := auth.NewRefreshCredentials(strings.Repeat("refresh-pilot-pepper-", 2))
+	if err != nil {
+		return nil, err
+	}
+	server.RefreshCredentials = refreshCredentials
 	f.ts = httptest.NewServer(api.RegisterRoutes(server))
 	f.base = f.ts.URL
 

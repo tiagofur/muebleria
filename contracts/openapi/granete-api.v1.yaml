@@ -51,11 +51,53 @@
         "operationId": "refreshSession",
         "responses": {
           "200": {
-            "description": "Refreshed session",
+            "description": "Rotated access and refresh credentials",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logoutSession",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session is no longer usable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
                 }
               }
             }
@@ -198,7 +240,7 @@
         }
       }
     },
-        "/organizations": {
+    "/organizations": {
       "post": {
         "operationId": "provisionOrganization",
         "parameters": [
@@ -1703,7 +1745,11 @@
           "ORGANIZATION_SLUG_CONFLICT",
           "ORGANIZATION_RECOVERY_ONLY",
           "SESSION_REVOKED",
-          "TOKEN_TYPE_MISMATCH"
+          "TOKEN_TYPE_MISMATCH",
+          "REFRESH_INVALID",
+          "REFRESH_EXPIRED",
+          "REFRESH_REVOKED",
+          "REFRESH_REUSED"
         ]
       },
       "ApiError": {
@@ -2025,6 +2071,15 @@
           "session_id": {
             "type": "string",
             "description": "Server-side session registry id (#460). Present on tokens of version 5+; absent while a pre-#460 token is exchanged. Becomes required when the #460 SEC-9 gate retires version 4."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Opaque single-use refresh credential. Emitted only for web/mobile during SEC-2; SEC-4 moves web storage to a protected cookie."
+          },
+          "refresh_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Never later than the auth session absolute expiry."
           }
         }
       },
@@ -2063,16 +2118,66 @@
           "absolute_expires_at"
         ],
         "properties": {
-          "user_id": { "type": "string" },
-          "membership_id": { "type": ["string", "null"] },
-          "organization_id": { "type": ["string", "null"] },
-          "mode": { "type": "string", "enum": ["auth", "support", "recovery"] },
-          "support_session_id": { "type": ["string", "null"] },
-          "recovery_session_id": { "type": ["string", "null"] },
-          "membership_credential_version": { "type": ["integer", "null"], "minimum": 1 },
-          "organization_credential_version": { "type": ["integer", "null"], "minimum": 1 },
-          "absolute_expires_at": { "type": "string", "format": "date-time" },
-          "session_id": { "type": ["string", "null"], "description": "Server-side session registry id (#460). Null only for pre-#460 tokens; required once the SEC-9 gate retires version 4." }
+          "user_id": {
+            "type": "string"
+          },
+          "membership_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organization_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auth",
+              "support",
+              "recovery"
+            ]
+          },
+          "support_session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recovery_session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "membership_credential_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "organization_credential_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "absolute_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Server-side session registry id (#460). Null only for pre-#460 tokens; required once the SEC-9 gate retires version 4."
+          }
         }
       },
       "MeResponse": {
@@ -2523,7 +2628,7 @@
           }
         }
       },
-            "OrganizationStatus": {
+      "OrganizationStatus": {
         "type": "string",
         "enum": [
           "provisioning",
@@ -3649,6 +3754,51 @@
           },
           "inventory": {
             "$ref": "#/components/schemas/MembershipResponsibilityInventory"
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "refresh_token",
+          "transport"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "minLength": 58,
+            "maxLength": 128,
+            "description": "Opaque single-use bearer credential; never an access JWT."
+          },
+          "transport": {
+            "$ref": "#/components/schemas/AuthTransport"
+          }
+        }
+      },
+      "LogoutRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "minLength": 58,
+            "maxLength": 128
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "logged_out"
+        ],
+        "properties": {
+          "logged_out": {
+            "type": "boolean"
           }
         }
       }

@@ -76,6 +76,7 @@ func main() {
 	// config-built authority (JWT_KEYRING/JWT_ISSUER) wins over the implicit
 	// single-key fallback.
 	serverAPI.Tokens = cfg.JWTAuthority
+	serverAPI.RefreshCredentials = cfg.RefreshCredentials
 	handler := api.RegisterRoutes(serverAPI)
 
 	// Timeouts mitigate slowloris and hung clients (issue #20).

@@ -8,7 +8,7 @@
 #   ./dev.sh build            # solo compila, no arranca
 #
 # Carga ../.env.local (raíz del repo). Si no existe, usa defaults de desarrollo
-# pero NO arranca sin JWT_SECRET — el server falla cerrado por diseño.
+# pero NO arranca sin JWT_SECRET/REFRESH_TOKEN_PEPPER — falla cerrado por diseño.
 #
 set -euo pipefail
 
@@ -17,9 +17,10 @@ ENV_FILE="${SCRIPT_DIR}/../.env.local"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "⚠ No se encontró $ENV_FILE" >&2
-  echo "  Copia .env.example -> .env.local y completa JWT_SECRET:" >&2
+  echo "  Copia .env.example -> .env.local y completa JWT_SECRET y REFRESH_TOKEN_PEPPER:" >&2
   echo "    cp .env.example .env.local" >&2
   echo "    # edita .env.local: JWT_SECRET=\$(openssl rand -base64 48)" >&2
+  echo "    # edita .env.local: REFRESH_TOKEN_PEPPER=\$(openssl rand -base64 48)" >&2
   exit 1
 fi
 

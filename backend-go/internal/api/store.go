@@ -52,6 +52,9 @@ type Store interface {
 	GetAuthSessionForRequest(ctx context.Context, sessionID, expectedUserID string) (*domain.AuthSession, error)
 	UpdateAuthSessionScope(ctx context.Context, sessionID, membershipID, organizationID string) error
 	RevokeAuthSession(ctx context.Context, sessionID, revokedBy, reason string) (bool, error)
+	CreateAuthRefreshCredential(ctx context.Context, cmd storage.CreateAuthRefreshCredentialCommand) (*storage.AuthRefreshCredential, error)
+	RotateAuthRefreshCredential(ctx context.Context, cmd storage.RotateAuthRefreshCredentialCommand, execute storage.AuthRefreshRotationCallback) (*storage.AuthRefreshRotation, error)
+	LogoutByRefreshCredential(ctx context.Context, verifier []byte, ip, requestID string) error
 
 	// Support sessions (ADR-0005 §5)
 	StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration, organizationCredentialVersion int64) (*domain.SupportSession, error)

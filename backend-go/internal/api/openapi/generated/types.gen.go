@@ -44,6 +44,10 @@ const (
 	ApiErrorCodeOrganizationRecoveryOnly       ApiErrorCode = "ORGANIZATION_RECOVERY_ONLY"
 	ApiErrorCodeSessionRevoked                 ApiErrorCode = "SESSION_REVOKED"
 	ApiErrorCodeTokenTypeMismatch              ApiErrorCode = "TOKEN_TYPE_MISMATCH"
+	ApiErrorCodeRefreshInvalid                 ApiErrorCode = "REFRESH_INVALID"
+	ApiErrorCodeRefreshExpired                 ApiErrorCode = "REFRESH_EXPIRED"
+	ApiErrorCodeRefreshRevoked                 ApiErrorCode = "REFRESH_REVOKED"
+	ApiErrorCodeRefreshReused                  ApiErrorCode = "REFRESH_REUSED"
 )
 
 type ApiError struct {
@@ -131,6 +135,8 @@ type LoginResponse struct {
 	Support           *bool                `json:"support,omitempty"`
 	Transport         AuthTransport        `json:"transport"`
 	SessionID         *string              `json:"session_id,omitempty"`
+	RefreshToken      *string              `json:"refresh_token,omitempty"`
+	RefreshExpiresAt  *string              `json:"refresh_expires_at,omitempty"`
 }
 
 type SupportInfo struct {
@@ -607,4 +613,17 @@ type OffboardMembershipRequest struct {
 type OffboardMembershipResponse struct {
 	Member    MembershipMutationResponse        `json:"member"`
 	Inventory MembershipResponsibilityInventory `json:"inventory"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string        `json:"refresh_token"`
+	Transport    AuthTransport `json:"transport"`
+}
+
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type LogoutResponse struct {
+	LoggedOut bool `json:"logged_out"`
 }

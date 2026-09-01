@@ -33,9 +33,19 @@ func TestLoadConfig_RejectsShortSecret(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RequiresIndependentRefreshPepper(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", "")
+	_, err := LoadConfig()
+	if err == nil || !strings.Contains(err.Error(), "refresh credential pepper") {
+		t.Fatalf("expected fail-closed refresh pepper error, got %v", err)
+	}
+}
+
 func TestLoadConfig_SuccessWithDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("a", 40))
-	t.Setenv("PORT", "")             // exercise default port
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("PORT", "")                 // exercise default port
 	t.Setenv("CORS_ALLOWED_ORIGINS", "") // exercise default dev allowlist
 	t.Setenv("RATE_LIMIT_RPS", "")
 	t.Setenv("RATE_LIMIT_BURST", "")
@@ -61,6 +71,7 @@ func TestLoadConfig_SuccessWithDefaults(t *testing.T) {
 
 func TestLoadConfig_ParsesOriginsList(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://a.test, https://b.test ,https://c.test")
 
 	cfg, err := LoadConfig()
@@ -80,6 +91,7 @@ func TestLoadConfig_ParsesOriginsList(t *testing.T) {
 
 func TestLoadConfig_RejectsBadRateLimit(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("RATE_LIMIT_RPS", "not-a-number")
 
 	_, err := LoadConfig()
@@ -93,6 +105,7 @@ func TestLoadConfig_RejectsBadRateLimit(t *testing.T) {
 // missing after a git clean / re-clone: the store must outlive the worktree.
 func TestLoadConfig_MediaDirDefaultsToHome(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_DIR", "")
 
 	cfg, err := LoadConfig()
@@ -115,6 +128,7 @@ func TestLoadConfig_MediaDirDefaultsToHome(t *testing.T) {
 // An explicit MEDIA_DIR wins (back-compat for existing deployments).
 func TestLoadConfig_MediaDirOverride(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_DIR", "/var/lib/muebles/media")
 
 	cfg, err := LoadConfig()
@@ -129,6 +143,7 @@ func TestLoadConfig_MediaDirOverride(t *testing.T) {
 // Whitespace-only MEDIA_DIR falls back to the default (operator typo defense).
 func TestLoadConfig_MediaDirWhitespaceFallsBack(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_DIR", "   ")
 
 	cfg, err := LoadConfig()

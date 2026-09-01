@@ -93,6 +93,18 @@ func (s *stubStore) RevokeAuthSession(_ context.Context, sessionID, revokedBy, r
 	return true, nil
 }
 
+func (s *stubStore) CreateAuthRefreshCredential(_ context.Context, cmd storage.CreateAuthRefreshCredentialCommand) (*storage.AuthRefreshCredential, error) {
+	return &storage.AuthRefreshCredential{ID: "refresh-1", FamilyID: "family-1", SessionID: cmd.SessionID, UserID: cmd.UserID, Generation: 1, ExpiresAt: time.Now().Add(auth.AccessTokenTTL)}, nil
+}
+
+func (s *stubStore) RotateAuthRefreshCredential(_ context.Context, _ storage.RotateAuthRefreshCredentialCommand, _ storage.AuthRefreshRotationCallback) (*storage.AuthRefreshRotation, error) {
+	return nil, storage.ErrRefreshInvalid
+}
+
+func (s *stubStore) LogoutByRefreshCredential(_ context.Context, _ []byte, _, _ string) error {
+	return nil
+}
+
 // mintSessionToken mints a ver5 token bound to a registry row on the stub so
 // middleware-routed tests exercise the live session path (#460).
 func mintSessionToken(t *testing.T, authority *auth.Authority, st *stubStore, userID, email string, tc auth.TokenContext, transport string) string {
