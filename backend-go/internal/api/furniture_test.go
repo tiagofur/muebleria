@@ -52,12 +52,12 @@ func TestFurnitureDefinitionsRequiresActiveLicense(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			server := licenseTestServer(t, tc.user, tc.org)
-			token, err := auth.GenerateToken(tc.user.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: tc.user.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+			token, err := auth.GenerateLegacyWebToken(tc.user.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: tc.user.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 			if err != nil {
 				t.Fatalf("generate token: %v", err)
 			}
 			// Route through the real middleware so auth + license gate are both exercised.
-			handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+			handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 			req.Header.Set("Authorization", "Bearer "+token)
@@ -103,9 +103,9 @@ func TestFurnitureDefinitionsServesWorkshopModules(t *testing.T) {
 		listModules:    modules,
 		listCategories: []domain.ModuleCategory{{ID: "cat-base", Name: "Cocinas"}},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -173,11 +173,11 @@ func TestFurnitureDefinitionsFailsClosedOnInvalidPublishedParameter(t *testing.T
 			ParameterDefinitions: []domain.FurnitureParameterDefinition{{Name: "unbound", Label: "Unbound", Type: domain.FurnitureParameterTypeString, Category: domain.FurnitureParameterCategoryConfiguration}},
 		}},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions)).ServeHTTP(rec, req)
+	AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -196,9 +196,9 @@ func TestFurnitureDefinitionsFailsClosedOnInvalidPublishedParameter(t *testing.T
 func TestFurnitureDefinitionsEmptyWorkshop(t *testing.T) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -221,9 +221,9 @@ func TestFurnitureDefinitionsStoreErrorIs500(t *testing.T) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{getUserByEmail: u, listModulesErr: errors.New("db down")}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -239,8 +239,8 @@ func TestFurnitureDefinitionsCachesPerContentRevision(t *testing.T) {
 	modules := []domain.Module{{ID: "m1", Code: "M1", Name: "Módulo 1", WidthMm: 600, HeightMm: 720, DepthMm: 500}}
 	server := licenseTestServer(t, u, nil)
 	server.Store = &stubStore{getUserByEmail: u, listModules: modules}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 
 	get := func(ifNoneMatch string) int {
 		rec := httptest.NewRecorder()
@@ -326,7 +326,7 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	claims, err := auth.ValidateToken(resp.Token, furnitureTestSecret)
+	claims, err := mustAuthority(furnitureTestSecret).Validate(resp.Token)
 	if err != nil {
 		t.Fatalf("validate issued token: %v", err)
 	}
@@ -345,9 +345,9 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 func TestExtensionTokenIsReadOnly(t *testing.T) {
 	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
 	server := licenseTestServer(t, u, nil)
-	token, _ := auth.GenerateExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	send := func(method, path string) int {
@@ -368,7 +368,7 @@ func TestExtensionTokenIsReadOnly(t *testing.T) {
 	}
 
 	// Web tokens keep full access.
-	webToken, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	webToken, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/projects/1", nil)
 	req.Header.Set("Authorization", "Bearer "+webToken)

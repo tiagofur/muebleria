@@ -249,10 +249,10 @@ func TestAuthenticatedProvisioningServerFailureCommitsOnlyFailureAudit(t *testin
 		backend:   newDurableBackend(time.Now),
 	}}
 	server := NewServer(store, secret, nil, 1, 1)
-	handler := AuthMiddleware(secret, store)(server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := AuthMiddleware(mustAuthority(secret), store)(server.RequireIdempotency("organizations.provision", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		respondWithAPIError(w, http.StatusInternalServerError, openapi.ApiErrorCodeInternalError, "failed", nil)
 	})))
-	token, err := auth.GenerateToken("00000000-0000-0000-0000-000000000001", "platform@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
+	token, err := auth.GenerateLegacyWebToken("00000000-0000-0000-0000-000000000001", "platform@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}

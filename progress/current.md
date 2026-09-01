@@ -1,18 +1,27 @@
-# Sin feature activa
+# Feature activa: F202 (#460) — SEC-1 in progress
 
 - Actualizado: 2026-08-31 America/Mexico_City
-- F199 — Tenant-safe Team, Organization and Platform UX (#458) está **cerrada** (`done`).
-- Último merge relevante: PR #493 → `main@35bbfc07544b458485518a0a99dc0fd74d04d1e8`
-  (tracker head `d0b60c43c33df957d1a897ca061d52559865ec9f`, CI final 33444928121
-  SUCCESS sobre SHA exacto, revisión independiente exact-SHA APPROVED).
+- F199 (#458) cerrada (`done`); ninguna otra feature `in_progress`.
+- F202 tracker abierto con slice **SEC-1** (session registry + token taxonomy
+  + JWT hardening) implementado en rama `feat/460-1-session-registry`.
 
-## Estado
+## Estado SEC-1
 
-- Ninguna feature del ledger está `in_progress`.
-- No hay PRs abiertos de F199/#458.
+- Migration `000105_auth_session_registry` (RLS platform-global + inventory +
+  grants sin DELETE; fresh y upgrade probados).
+- `auth.Authority`/`Keyring`: ver5 con sid/typ/iss/aud/jti/kid, HS256 exacto,
+  keyring con rotación, aceptación transitoria de ver4 (EOL en SEC-9).
+- Middleware: validación live del registry row por request (revocación/expiry
+  cortan JWT vigente; client_type debe matchear; fail-closed sin lookup).
+- Handlers login/select-org/refresh/me/soporte/invitación con sid estable y
+  `session_id` en LoginResponse/SessionScope (OpenAPI regenerado, códigos
+  SESSION_REVOKED/TOKEN_TYPE_MISMATCH).
+- ADR-0007 + foundation-v2 §13 actualizados; ledger F202 in_progress.
+- Verificación: `go test ./...` verde (con PostgreSQL real), `pnpm
+  openapi:check`/`test`/`typecheck` verde.
 
-## Siguiente trabajo permitido (no activado)
+## Siguiente
 
-- #460 (critical #460/#461 según prioridad de AGENTS.md) puede iniciarse en una
-  nueva sesión/rama, marcando `in_progress` sólo cuando empiece de verdad.
-- No activar ninguna feature como parte del cierre administrativo de F199.
+- SEC-2 (refresh rotation + reuse detection + logout + directorio de sesiones)
+  tras merge de SEC-1; media (SEC-3) y proxy/rate-limit (SEC-8) pueden
+  avanzar en paralelo según banda.

@@ -1701,7 +1701,9 @@
           "ORGANIZATION_NOT_READY",
           "ORGANIZATION_OFFBOARDING_BLOCKED",
           "ORGANIZATION_SLUG_CONFLICT",
-          "ORGANIZATION_RECOVERY_ONLY"
+          "ORGANIZATION_RECOVERY_ONLY",
+          "SESSION_REVOKED",
+          "TOKEN_TYPE_MISMATCH"
         ]
       },
       "ApiError": {
@@ -2019,6 +2021,10 @@
           },
           "transport": {
             "$ref": "#/components/schemas/AuthTransport"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Server-side session registry id (#460). Present on tokens of version 5+; absent while a pre-#460 token is exchanged. Becomes required when the #460 SEC-9 gate retires version 4."
           }
         }
       },
@@ -2065,7 +2071,8 @@
           "recovery_session_id": { "type": ["string", "null"] },
           "membership_credential_version": { "type": ["integer", "null"], "minimum": 1 },
           "organization_credential_version": { "type": ["integer", "null"], "minimum": 1 },
-          "absolute_expires_at": { "type": "string", "format": "date-time" }
+          "absolute_expires_at": { "type": "string", "format": "date-time" },
+          "session_id": { "type": ["string", "null"], "description": "Server-side session registry id (#460). Null only for pre-#460 tokens; required once the SEC-9 gate retires version 4." }
         }
       },
       "MeResponse": {

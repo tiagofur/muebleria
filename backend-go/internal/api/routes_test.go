@@ -27,7 +27,7 @@ func TestMembershipCommandRouterDispatchesExactCommandAndSetsMembershipID(t *tes
 }
 
 func TestRegisterRoutesAcceptsTeamCommandPaths(t *testing.T) {
-	router := RegisterRoutes(&Server{})
+	router := RegisterRoutes(&Server{JWTSecret: "routes-test-secret-0123456789abc"})
 	commands := []string{
 		"change-roles",
 		"suspend",
@@ -51,7 +51,7 @@ func TestRegisterRoutesAcceptsTeamCommandPaths(t *testing.T) {
 }
 
 func TestRegisterRoutesRejectsUnknownTeamCommand(t *testing.T) {
-	router := RegisterRoutes(&Server{})
+	router := RegisterRoutes(&Server{JWTSecret: "routes-test-secret-0123456789abc"})
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/org/memberships/membership-123:unknown", nil))
 

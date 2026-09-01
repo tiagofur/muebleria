@@ -23,8 +23,8 @@ import (
 )
 
 // PlatformAdminMiddleware requires the platform staff flag.
-func PlatformAdminMiddleware(jwtSecret string, users MembershipLookup) func(http.Handler) http.Handler {
-	authMW := AuthMiddleware(jwtSecret, users)
+func PlatformAdminMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Handler) http.Handler {
+	authMW := AuthMiddleware(tokens, users)
 	return func(next http.Handler) http.Handler {
 		return authMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
@@ -296,10 +296,25 @@ func (s *Server) HandlePlatformStartSupportSession(w http.ResponseWriter, r *htt
 		return
 	}
 	ss := result.Session
-	token, err := auth.GenerateSupportToken(claims.UserID, claims.Email, auth.SupportClaims{
+	// Registry row for the support credential (#460): client_type=support
+	// linked to the audited support_sessions row. The ver5 token carries this
+	// sid, so revoking the registry session cuts the support credential even
+	// before its own 2h expiry.
+	authSession, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+		UserID:            claims.UserID,
+		OrganizationID:    result.Organization.ID,
+		SupportSessionID:  ss.ID,
+		ClientType:        domain.SessionClientSupport,
+		AbsoluteExpiresAt: ss.ExpiresAt,
+	})
+	if err != nil {
+		respondWithInternalError(w, err, "support session registry")
+		return
+	}
+	token, err := s.tokenAuthority().IssueSupportToken(claims.UserID, claims.Email, auth.SupportClaims{
 		OrgID: result.Organization.ID, SessionID: ss.ID, Reason: ss.Reason,
 		OrganizationCredentialVersion: ss.OrganizationCredentialVersion,
-	}, s.JWTSecret)
+	}, authSession.ID)
 	if err != nil {
 		respondWithInternalError(w, err, "support token")
 		return
@@ -382,12 +397,26 @@ func (s *Server) HandleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	roles := roleStrings(result.Membership.Roles)
-	token, err := auth.GenerateToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, OrganizationCredentialVersion: result.Organization.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin}, s.JWTSecret)
+	// Invitation acceptance is a fresh login (#450): it registers the session
+	// and returns the sid alongside the ver5 token like /auth/login does.
+	session, err := s.createAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+		UserID:            result.User.ID,
+		MembershipID:      result.Membership.ID,
+		OrganizationID:    result.Organization.ID,
+		ClientType:        domain.SessionClientWeb,
+		AbsoluteExpiresAt: time.Now().Add(auth.AccessTokenTTL),
+		DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+	})
+	if err != nil {
+		respondWithInternalError(w, err, "accept invitation session")
+		return
+	}
+	token, err := s.tokenAuthority().IssueTransportToken(result.User.ID, result.User.Email, auth.TokenContext{Roles: roles, OrgID: result.Organization.ID, MembershipID: result.Membership.ID, MembershipCredentialVersion: result.Membership.CredentialVersion, OrganizationCredentialVersion: result.Organization.CredentialVersion, PlatformAdmin: result.User.PlatformAdmin, SessionID: session.ID}, "web")
 	if err != nil {
 		respondWithInternalError(w, err, "accept invitation token")
 		return
 	}
 	org := toOrgSummaryDTO(result.Organization)
 	membership := MembershipDTO{ID: result.Membership.ID, OrganizationID: result.Membership.OrganizationID, UserID: result.Membership.UserID, Status: openapi.MembershipStatus(result.Membership.Status), Roles: roles, JoinedAt: result.Membership.JoinedAt.UTC().Format(time.RFC3339Nano), Version: result.Membership.Version, Organization: org}
-	respondWithJSON(w, http.StatusOK, LoginResponse{Token: token, User: toOpenAPIUser(&result.User), License: org.License, Roles: roles, Organization: &org, Memberships: []MembershipDTO{membership}, SelectionRequired: false, Transport: openapi.AuthTransportWeb})
+	respondWithJSON(w, http.StatusOK, LoginResponse{Token: token, SessionID: &session.ID, User: toOpenAPIUser(&result.User), License: org.License, Roles: roles, Organization: &org, Memberships: []MembershipDTO{membership}, SelectionRequired: false, Transport: openapi.AuthTransportWeb})
 }

@@ -46,6 +46,13 @@ type Store interface {
 	UpdateOrganizationVersion(ctx context.Context, o *domain.Organization, expectedVersion int64) error
 	CloneCatalog(ctx context.Context, srcOrg, dstOrg string) error
 
+	// Session registry (#460 / SEC-1): revocation and absolute-lifetime
+	// authority behind every ver5 token.
+	CreateAuthSession(ctx context.Context, cmd storage.CreateAuthSessionCommand) (*domain.AuthSession, error)
+	GetAuthSessionForRequest(ctx context.Context, sessionID, expectedUserID string) (*domain.AuthSession, error)
+	UpdateAuthSessionScope(ctx context.Context, sessionID, membershipID, organizationID string) error
+	RevokeAuthSession(ctx context.Context, sessionID, revokedBy, reason string) (bool, error)
+
 	// Support sessions (ADR-0005 §5)
 	StartSupportSession(ctx context.Context, adminUserID, organizationID, reason string, ttl time.Duration, organizationCredentialVersion int64) (*domain.SupportSession, error)
 	GetOpenSupportSession(ctx context.Context, sessionID string) (*domain.SupportSession, error)

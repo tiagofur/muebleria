@@ -140,7 +140,7 @@ func TestAuthMiddleware(t *testing.T) {
 			},
 		},
 	}
-	middleware := AuthMiddleware(secret, users)
+	middleware := AuthMiddleware(mustAuthority(secret), users)
 
 	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
@@ -186,7 +186,7 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 
 	// Case 4: Valid org-scoped Token + active user in DB → 200.
-	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	token, err := auth.GenerateLegacyWebToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,14 +218,14 @@ func TestAuthMiddleware_MapsDeferredTeamInvariantCommitError(t *testing.T) {
 		},
 		commitErr: &pgconn.PgError{Code: "23514", ConstraintName: organizationRequiresActiveAdminConstraint},
 	}
-	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	token, err := auth.GenerateLegacyWebToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "user-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodPut, "/api/org/memberships/member-2/roles", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
-	AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(rr, req)
 	if rr.Code != http.StatusConflict {
@@ -252,14 +252,14 @@ func TestAuthMiddleware_OrgLessTokenFailClosed(t *testing.T) {
 	}}
 
 	var sawRoles []string
-	handler := AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if claims, ok := r.Context().Value(UserContextKey).(*auth.Claims); ok && claims != nil {
 			sawRoles = claims.Roles
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	token, err := auth.GenerateToken("p-1", "platform@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
+	token, err := auth.GenerateLegacyWebToken("p-1", "platform@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,9 +316,9 @@ func TestAuthMiddleware_RejectsDeactivatedUser(t *testing.T) {
 			AccountStatus: domain.AccountStatusDisabled,
 		},
 	}}
-	handler := AuthMiddleware(secret, users)(okHandler())
+	handler := AuthMiddleware(mustAuthority(secret), users)(okHandler())
 
-	token, err := auth.GenerateToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
+	token, err := auth.GenerateLegacyWebToken("user-1", "user@test.com", auth.TokenContext{Roles: []string{"admin"}}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,12 +353,12 @@ func TestAuthMiddleware_UsesLiveRoleFromDB(t *testing.T) {
 			},
 		},
 	}
-	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AdminMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("admin-ok"))
 	}))
 
-	adminToken, err := auth.GenerateToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "a-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	adminToken, err := auth.GenerateLegacyWebToken("a-1", "was-admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "a-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,13 +395,13 @@ func TestAdminMiddleware(t *testing.T) {
 			},
 		},
 	}
-	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AdminMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("admin-ok"))
 	}))
 
 	// Non-admin role → 403 JSON.
-	userToken, err := auth.GenerateToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	userToken, err := auth.GenerateLegacyWebToken("u-1", "user@test.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +417,7 @@ func TestAdminMiddleware(t *testing.T) {
 	}
 
 	// Admin role → 200.
-	adminToken, err := auth.GenerateToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "a-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
+	adminToken, err := auth.GenerateLegacyWebToken("a-1", "admin@test.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "a-1:org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +519,7 @@ func orgScopedToken(t *testing.T, secret, userID, orgID string, roles []domain.U
 	for i, r := range roles {
 		strRoles[i] = string(r)
 	}
-	token, err := auth.GenerateToken(userID, "u@test.com", auth.TokenContext{
+	token, err := auth.GenerateLegacyWebToken(userID, "u@test.com", auth.TokenContext{
 		Roles: strRoles, OrgID: orgID, MembershipID: userID + ":" + orgID, MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 	}, secret)
 	if err != nil {
@@ -556,7 +556,7 @@ func TestAuthMiddleware_RevokedMembershipCutsAccess(t *testing.T) {
 			"u-1:org-1": memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, true),
 		},
 	}
-	handler := AuthMiddleware(secret, users)(okHandler())
+	handler := AuthMiddleware(mustAuthority(secret), users)(okHandler())
 
 	token := orgScopedToken(t, secret, "u-1", "org-1", []domain.UserRole{domain.RoleAdmin})
 	req := httptest.NewRequest("GET", "/api/protected", nil)
@@ -590,7 +590,7 @@ func TestAuthMiddleware_SuspendedOrganizationCutsAccess(t *testing.T) {
 			"u-1:org-1": memEntry("u-1", "org-1", []domain.UserRole{domain.RoleAdmin}, false),
 		},
 	}
-	handler := AuthMiddleware(secret, users)(okHandler())
+	handler := AuthMiddleware(mustAuthority(secret), users)(okHandler())
 
 	token := orgScopedToken(t, secret, "u-1", "org-1", []domain.UserRole{domain.RoleAdmin})
 	req := httptest.NewRequest("GET", "/api/protected", nil)
@@ -615,7 +615,7 @@ func TestAuthMiddleware_OrgTokenUsesLiveMembershipRoles(t *testing.T) {
 			"a-1:org-1": memEntry("a-1", "org-1", []domain.UserRole{domain.RoleVendedor}, true),
 		},
 	}
-	handler := AdminMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AdminMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -642,7 +642,7 @@ func TestAuthMiddleware_MultiRoleMembershipUsesPrimaryRole(t *testing.T) {
 		},
 	}
 	var seenRole string
-	handler := AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := r.Context().Value(UserContextKey).(*auth.Claims)
 		seenRole = claims.Role
 		w.WriteHeader(http.StatusOK)
@@ -673,7 +673,7 @@ func TestRoleMiddleware_MultiRoleTokenPassesUnion(t *testing.T) {
 			"m-1:org-1": memEntry("m-1", "org-1", []domain.UserRole{domain.RoleVendedor, domain.RoleIngeniero}, true),
 		},
 	}
-	handler := RoleMiddleware(secret, users, domain.RoleIngeniero)(okHandler())
+	handler := RoleMiddleware(mustAuthority(secret), users, domain.RoleIngeniero)(okHandler())
 
 	token := orgScopedToken(t, secret, "m-1", "org-1", []domain.UserRole{domain.RoleVendedor})
 	req := httptest.NewRequest("GET", "/api/protected", nil)
@@ -685,7 +685,7 @@ func TestRoleMiddleware_MultiRoleTokenPassesUnion(t *testing.T) {
 	}
 
 	// Gate que ninguno de los dos roles satisface → 403.
-	handler403 := RoleMiddleware(secret, users, domain.RoleAdmin)(okHandler())
+	handler403 := RoleMiddleware(mustAuthority(secret), users, domain.RoleAdmin)(okHandler())
 	req = httptest.NewRequest("GET", "/api/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr = httptest.NewRecorder()
@@ -728,13 +728,13 @@ func TestAuthMiddleware_SupportSessionActsAsOrgAdmin(t *testing.T) {
 		},
 	}
 	var seenRole string
-	handler := AuthMiddleware(secret, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := r.Context().Value(UserContextKey).(*auth.Claims)
 		seenRole = claims.Role
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	token, err := auth.GenerateSupportToken("pa-1", "soporte@granete.test", auth.SupportClaims{
+	token, err := auth.GenerateLegacySupportToken("pa-1", "soporte@granete.test", auth.SupportClaims{
 		OrgID: "org-9", SessionID: "ss-1", Reason: "ayuda catálogo", OrganizationCredentialVersion: 5,
 	}, secret)
 	if err != nil {
@@ -775,8 +775,8 @@ func TestAuthMiddleware_SupportTokenRequiresPlatformAdmin(t *testing.T) {
 			LiveOrganizationStatus: domain.OrganizationStatusActive, LiveOrganizationCredentialVersion: 5,
 		},
 	}
-	handler := AuthMiddleware(secret, users)(okHandler())
-	token, _ := auth.GenerateSupportToken("u-1", "u@test.com", auth.SupportClaims{
+	handler := AuthMiddleware(mustAuthority(secret), users)(okHandler())
+	token, _ := auth.GenerateLegacySupportToken("u-1", "u@test.com", auth.SupportClaims{
 		OrgID: "org-9", SessionID: "ss-x", OrganizationCredentialVersion: 5,
 	}, secret)
 	req := httptest.NewRequest("GET", "/api/projects", nil)
@@ -825,7 +825,7 @@ func TestAuthMiddleware_SupportSessionFailsClosedOnEveryLiveBoundary(t *testing.
 				},
 			}
 			test.mutate(users)
-			token, err := auth.GenerateSupportToken("pa-1", "support@example.test", auth.SupportClaims{
+			token, err := auth.GenerateLegacySupportToken("pa-1", "support@example.test", auth.SupportClaims{
 				OrgID: "org-9", SessionID: "ss-1", OrganizationCredentialVersion: 5,
 			}, secret)
 			if err != nil {
@@ -834,7 +834,7 @@ func TestAuthMiddleware_SupportSessionFailsClosedOnEveryLiveBoundary(t *testing.
 			req := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			recorder := httptest.NewRecorder()
-			AuthMiddleware(secret, users)(okHandler()).ServeHTTP(recorder, req)
+			AuthMiddleware(mustAuthority(secret), users)(okHandler()).ServeHTTP(recorder, req)
 			if recorder.Code != http.StatusUnauthorized {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
@@ -852,7 +852,7 @@ func TestAuthMiddleware_RejectsMembershipIdentityCredentialAndSessionRevocationM
 		},
 		memberships: map[string]*domain.MembershipWithOrg{"u-1:org-1": membership},
 	}
-	token, err := auth.GenerateToken("u-1", "u@test.com", auth.TokenContext{
+	token, err := auth.GenerateLegacyWebToken("u-1", "u@test.com", auth.TokenContext{
 		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: membership.ID,
 		MembershipCredentialVersion: membership.CredentialVersion, OrganizationCredentialVersion: membership.Organization.CredentialVersion, AuthStartedAt: started,
 	}, secret)
@@ -864,7 +864,7 @@ func TestAuthMiddleware_RejectsMembershipIdentityCredentialAndSessionRevocationM
 		req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		rr := httptest.NewRecorder()
-		AuthMiddleware(secret, users)(okHandler()).ServeHTTP(rr, req)
+		AuthMiddleware(mustAuthority(secret), users)(okHandler()).ServeHTTP(rr, req)
 		return rr.Code
 	}
 	if got := serve(); got != http.StatusOK {

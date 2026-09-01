@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 	"unicode"
 
@@ -17,11 +20,12 @@ const BcryptCost = 12
 // MinPasswordLen is the minimum accepted password length on register (issue #19).
 const MinPasswordLen = 8
 
-// AccessTokenTTL is how long a JWT remains valid before re-login (issue #16).
+// AccessTokenTTL is how long a web/mobile JWT remains valid before re-login.
 // One login per workday (18h covers a full shift plus overtime): 15-minute
-// tokens kicked users out mid-design and mid-client session. Revocation does
-// NOT wait for expiry — Role/active/membership/org are re-checked against the
-// DB on every request, and manual logout clears the token immediately.
+// tokens kicked users out mid-design and mid-client session (#441/#445).
+// Revocation does NOT wait for expiry — role/active/membership/org/session are
+// re-checked against the DB on every request. SEC-4 will shorten the access
+// token and add a rotating refresh credential WITHOUT extending this bound.
 const AccessTokenTTL = 18 * time.Hour
 
 // SupportTokenTTL bounds platform support sessions ("entrar a taller"):
@@ -34,8 +38,9 @@ const SupportTokenTTL = 2 * time.Hour
 const ExtensionClient = "sketchup-extension"
 
 // ExtensionTokenTTL is the lifetime of tokens issued for the SketchUp
-// extension. Revocation does not wait for expiry: AuthMiddleware re-checks
-// the user (active/role/license) against the DB on every request.
+// extension. Revocation does not wait for expiry: AuthMiddleware re-checks the
+// user and session against the DB on every request. #460 SEC-6 replaces this
+// password-login credential with a registered, revocable device credential.
 const ExtensionTokenTTL = 30 * 24 * time.Hour
 
 // DummyHash is a valid bcrypt hash used only to equalize login timing when the
@@ -52,10 +57,44 @@ func init() {
 	DummyHash = string(h)
 }
 
-// TokenVersion identifies the claims layout. Tokens with any other version
-// are rejected: the multi-org claims (org context, roles[], platform_admin)
-// are a one-time breaking change and every client re-logs in once (ADR-0004 §6).
-const TokenVersion = 4
+// TokenVersion is the current claims layout (#460 / ADR-0007). Ver5 adds the
+// exact-policy credential claims: iss, aud (per client type), typ, sid (server
+// session registry id), jti and a kid signing-key header. A ver5 token is only
+// valid while its sid resolves to a live auth_sessions row.
+const TokenVersion = 5
+
+// LegacyTokenVersion is the pre-#460 claims layout (no iss/aud/typ/sid/jti/kid).
+// It remains accepted while deployed clients hold ver4 bearer tokens; the
+// acceptance window is finite and is removed with the #460 SEC-9 gate, together
+// with GenerateLegacyToken (its only minting site is the test suite).
+const LegacyTokenVersion = 4
+
+// DefaultIssuer identifies this API as the token issuer. Overridable with
+// JWT_ISSUER for deployments that run more than one issuer.
+const DefaultIssuer = "granete-api"
+
+// LegacyKeyID is the key id assigned to a single-secret deployment (JWT_SECRET
+// without JWT_KEYRING) and the id a ver4 token implicitly uses: ver4 tokens
+// carry no kid header, so they validate against this key ring entry only.
+const LegacyKeyID = "legacy"
+
+// TokenType is the non-interchangeable credential class carried in the `typ`
+// claim. Validation rejects a token whose typ does not match its transport, so
+// a web access token can never act as a SketchUp device token or vice versa.
+const (
+	TokenTypeAccessWeb      = "access_web"
+	TokenTypeAccessMobile   = "access_mobile"
+	TokenTypeDeviceSketchup = "device_sketchup"
+	TokenTypeSupportAccess  = "support_access"
+)
+
+// Audience values per client type (`aud` claim).
+const (
+	AudienceWeb      = "granete-web"
+	AudienceMobile   = "granete-mobile"
+	AudienceSketchup = "granete-sketchup"
+	AudienceSupport  = "granete-support"
+)
 
 type Claims struct {
 	UserID string `json:"user_id"`
@@ -90,7 +129,14 @@ type Claims struct {
 	// Support marks a platform support session into Support.OrgID: effective
 	// admin of that organization, real actor = the platform admin (ADR-0005 §5).
 	Support *SupportClaims `json:"support,omitempty"`
-	Ver     int            `json:"ver"`
+	// Sid is the auth_sessions registry id (ver5+). The middleware resolves it
+	// to a live row on every request: revocation or absolute expiry of the
+	// session invalidates the token even before its own exp.
+	Sid string `json:"sid,omitempty"`
+	// Typ is the token type (ver5+): access_web | access_mobile |
+	// device_sketchup | support_access. Not interchangeable across clients.
+	Typ string `json:"typ,omitempty"`
+	Ver int    `json:"ver"`
 	jwt.RegisteredClaims
 }
 
@@ -138,7 +184,7 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 // TokenContext is the organization scope embedded in a token: the active
-// membership's roles plus the platform staff flag.
+// membership's roles plus the platform staff flag and the session registry id.
 type TokenContext struct {
 	Roles                         []string
 	OrgID                         string
@@ -147,21 +193,94 @@ type TokenContext struct {
 	OrganizationCredentialVersion int64
 	PlatformAdmin                 bool
 	AuthStartedAt                 time.Time
+	// SessionID is the auth_sessions row id (ver5+). Required for every token
+	// minted by the Authority.
+	SessionID string
 }
 
-// GenerateSupportToken issues the short-lived support-session token: org
-// context with effective admin role. The middleware re-validates the session
-// row on every request, so logout/expiry cut access immediately.
-func GenerateSupportToken(userID string, email string, sc SupportClaims, secret string) (string, error) {
-	return GenerateSupportTokenFrom(userID, email, sc, time.Time{}, secret)
+var kidPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// Keyring holds the symmetric signing secrets keyed by key id (`kid`). New
+// tokens are signed with the active kid; validation accepts every registered
+// kid so rotation happens without downtime. Rotation with revocation means
+// removing a kid from the ring: its tokens stop validating immediately.
+type Keyring struct {
+	activeKid string
+	secrets   map[string]string
 }
 
-// GenerateSupportTokenFrom preserves the absolute support-session origin when
-// a support token is refreshed. Support remains a separate scoped read-only
+// NewKeyring validates and builds a key ring. Every secret must be at least 32
+// bytes and every key id must match kidPattern.
+func NewKeyring(activeKid string, secrets map[string]string) (*Keyring, error) {
+	if len(secrets) == 0 {
+		return nil, errors.New("keyring requires at least one key")
+	}
+	if _, ok := secrets[activeKid]; !ok {
+		return nil, fmt.Errorf("keyring active kid %q has no secret", activeKid)
+	}
+	for kid, secret := range secrets {
+		if !kidPattern.MatchString(kid) {
+			return nil, fmt.Errorf("keyring kid %q must match %s", kid, kidPattern.String())
+		}
+		if len(secret) < 32 {
+			return nil, fmt.Errorf("keyring secret for kid %q must be at least 32 bytes", kid)
+		}
+	}
+	return &Keyring{activeKid: activeKid, secrets: secrets}, nil
+}
+
+// SingleKeyKeyring is the implicit ring of a single-secret deployment: the
+// JWT_SECRET is registered under LegacyKeyID and is also the active key.
+func SingleKeyKeyring(secret string) (*Keyring, error) {
+	return NewKeyring(LegacyKeyID, map[string]string{LegacyKeyID: secret})
+}
+
+// ActiveKeyID is the kid new tokens are signed with.
+func (k *Keyring) ActiveKeyID() string { return k.activeKid }
+
+// SecretForKeyID resolves a registered secret. Unknown kids are rejected, which
+// is how a rotated-out key stops validating.
+func (k *Keyring) SecretForKeyID(kid string) (string, bool) {
+	secret, ok := k.secrets[kid]
+	return secret, ok
+}
+
+// Authority mints and validates tokens under the exact HS256 policy: pinned
+// algorithm, issuer, per-client audience, token type, key id and — for ver5 —
+// a server-side session id.
+type Authority struct {
+	keyring *Keyring
+	issuer  string
+}
+
+// NewAuthority builds the minting/validation authority. An empty issuer falls
+// back to DefaultIssuer.
+func NewAuthority(keyring *Keyring, issuer string) (*Authority, error) {
+	if keyring == nil {
+		return nil, errors.New("authority requires a keyring")
+	}
+	if issuer == "" {
+		issuer = DefaultIssuer
+	}
+	return &Authority{keyring: keyring, issuer: issuer}, nil
+}
+
+// IssueSupportToken issues the short-lived support-session token: org context
+// with effective admin role. The middleware re-validates the session rows on
+// every request, so logout/expiry cut access immediately.
+func (a *Authority) IssueSupportToken(userID string, email string, sc SupportClaims, sid string) (string, error) {
+	return a.IssueSupportTokenFrom(userID, email, sc, time.Time{}, sid)
+}
+
+// IssueSupportTokenFrom preserves the absolute support-session origin when a
+// support token is refreshed. Support remains a separate scoped read-only
 // boundary and intentionally carries no membership credentials.
-func GenerateSupportTokenFrom(userID string, email string, sc SupportClaims, authStartedAt time.Time, secret string) (string, error) {
+func (a *Authority) IssueSupportTokenFrom(userID string, email string, sc SupportClaims, authStartedAt time.Time, sid string) (string, error) {
 	if sc.OrgID == "" || sc.SessionID == "" || sc.OrganizationCredentialVersion < 1 {
 		return "", errors.New("support token requires organization, session, and credential version")
+	}
+	if sid == "" {
+		return "", errors.New("support token requires a registry session id")
 	}
 	now := time.Now()
 	if authStartedAt.IsZero() {
@@ -175,30 +294,26 @@ func GenerateSupportTokenFrom(userID string, email string, sc SupportClaims, aut
 		OrgID:         sc.OrgID,
 		Transport:     "support",
 		Support:       &sc,
+		Sid:           sid,
+		Typ:           TokenTypeSupportAccess,
 		Ver:           TokenVersion,
 		AuthStartedAt: jwt.NewNumericDate(authStartedAt),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
+			Audience:  jwt.ClaimStrings{AudienceSupport},
+			Issuer:    a.issuer,
+			ID:        newJTI(),
 			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(SupportTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(secret))
-	if err != nil {
-		return "", fmt.Errorf("failed to sign token: %w", err)
-	}
-	return tokenString, nil
+	return a.sign(claims)
 }
 
-func GenerateToken(userID string, email string, tc TokenContext, secret string) (string, error) {
-	return GenerateTransportToken(userID, email, tc, "web", secret)
-}
-
-// GenerateTransportToken records the validated API transport in the token so
+// IssueTransportToken records the validated API transport in the token so
 // select-org, refresh and /me preserve the same canonical session boundary.
-func GenerateTransportToken(userID string, email string, tc TokenContext, transport string, secret string) (string, error) {
+func (a *Authority) IssueTransportToken(userID string, email string, tc TokenContext, transport string) (string, error) {
 	client, ttl := "", AccessTokenTTL
 	switch transport {
 	case "web", "mobile":
@@ -207,14 +322,10 @@ func GenerateTransportToken(userID string, email string, tc TokenContext, transp
 	default:
 		return "", fmt.Errorf("invalid login transport %q", transport)
 	}
-	return generateToken(userID, email, tc, client, transport, ttl, secret)
-}
-
-// GenerateExtensionToken issues a long-lived token carrying the extension
-// client claim. AuthMiddleware restricts these tokens to GET requests (plus
-// /api/auth/refresh) so a leaked extension token cannot mutate workshop data.
-func GenerateExtensionToken(userID string, email string, tc TokenContext, secret string) (string, error) {
-	return generateToken(userID, email, tc, ExtensionClient, "sketchup", ExtensionTokenTTL, secret)
+	if tc.SessionID == "" {
+		return "", errors.New("token requires a registry session id")
+	}
+	return a.issueToken(userID, email, tc, client, transport, ttl)
 }
 
 // PrimaryRole resolves the transitional single role: the first role of the
@@ -226,7 +337,20 @@ func PrimaryRole(roles []string) string {
 	return roles[0]
 }
 
-func generateToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration, secret string) (string, error) {
+// TransportSessionTTL is the absolute session bound per client type. It seeds
+// the registry's absolute_expires_at, which refresh never extends.
+func TransportSessionTTL(transport string) time.Duration {
+	switch transport {
+	case "sketchup":
+		return ExtensionTokenTTL
+	case "support":
+		return SupportTokenTTL
+	default:
+		return AccessTokenTTL
+	}
+}
+
+func (a *Authority) issueToken(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	authStartedAt := tc.AuthStartedAt
 	if authStartedAt.IsZero() {
@@ -253,31 +377,112 @@ func generateToken(userID string, email string, tc TokenContext, client, transpo
 		PlatformAdmin:                 tc.PlatformAdmin,
 		Client:                        client,
 		Transport:                     transport,
+		Sid:                           tc.SessionID,
+		Typ:                           typForTransport(transport),
 		Ver:                           TokenVersion,
 		AuthStartedAt:                 jwt.NewNumericDate(authStartedAt),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
+			Audience:  jwt.ClaimStrings{audienceForTransport(transport)},
+			Issuer:    a.issuer,
+			ID:        newJTI(),
 			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
 	}
 
+	return a.sign(claims)
+}
+
+func (a *Authority) sign(claims *Claims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(secret))
+	token.Header["kid"] = a.keyring.ActiveKeyID()
+	tokenString, err := token.SignedString([]byte(a.keyring.secrets[a.keyring.activeKid]))
 	if err != nil {
 		return "", fmt.Errorf("failed to sign token: %w", err)
 	}
 	return tokenString, nil
 }
 
-func ValidateToken(tokenStr string, secret string) (*Claims, error) {
+func typForTransport(transport string) string {
+	switch transport {
+	case "web":
+		return TokenTypeAccessWeb
+	case "mobile":
+		return TokenTypeAccessMobile
+	case "sketchup":
+		return TokenTypeDeviceSketchup
+	case "support":
+		return TokenTypeSupportAccess
+	}
+	return ""
+}
+
+func audienceForTransport(transport string) string {
+	switch transport {
+	case "web":
+		return AudienceWeb
+	case "mobile":
+		return AudienceMobile
+	case "sketchup":
+		return AudienceSketchup
+	case "support":
+		return AudienceSupport
+	}
+	return ""
+}
+
+// newJTI mints a unique token id for the jti claim (ver5+).
+func newJTI() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		panic("auth: crypto/rand unavailable: " + err.Error())
+	}
+	return hex.EncodeToString(buf)
+}
+
+// Validate enforces the exact HS256 policy and returns the claims. The error
+// is never sent to clients verbatim: handlers log it and answer with a generic
+// 401 so parser/identity state is not disclosed.
+//
+// For ver5 every registered claim is REQUIRED and cross-checked: alg, kid
+// (header present, a string, registered), iss, exactly one aud matching the
+// client type, sub (== user_id), exp, nbf, iat (presence AND not in the
+// future), jti, plus sid/typ/ver. Absence of any claim fails closed — a
+// correctly signed token with stripped or tampered claims is not a valid
+// credential regardless of how the minting helpers behave. The kidless
+// fallback exists ONLY for ver4 during its transitional window (ADR-0007,
+// EOL SEC-9): a ver5 token without a kid header is rejected even when it
+// happens to verify against the legacy key.
+func (a *Authority) Validate(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		// Exact-algorithm policy: HS256 only. WithValidMethods below already
+		// rejects every other alg family; this check pins the instance.
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		// A kid header, when present, must be a non-empty string — a malformed
+		// key id is not a key selection we are willing to guess.
+		kid := ""
+		if kidRaw, present := token.Header["kid"]; present {
+			value, isString := kidRaw.(string)
+			if !isString || value == "" {
+				return nil, fmt.Errorf("malformed key id")
+			}
+			kid = value
+		} else {
+			// Kidless tokens are the pre-#460 shape: they resolve against the
+			// legacy secret entry only. Whether such a token is still ACCEPTED
+			// is decided after parsing, by version (ver4 window only).
+			kid = LegacyKeyID
+		}
+		secret, ok := a.keyring.SecretForKeyID(kid)
+		if !ok {
+			return nil, fmt.Errorf("unknown key id")
 		}
 		return []byte(secret), nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
@@ -287,8 +492,64 @@ func ValidateToken(tokenStr string, secret string) (*Claims, error) {
 	if !ok || !token.Valid {
 		return nil, errors.New("invalid token claims")
 	}
-	if claims.Ver != TokenVersion {
+
+	transport := claims.Transport
+	if claims.Support != nil {
+		transport = "support"
+	}
+
+	switch claims.Ver {
+	case TokenVersion:
+		// The kid header is part of the ver5 credential shape: present, a
+		// non-empty string, and registered (the keyfunc already resolved it to
+		// verify the signature — this rejects the kidless token that only
+		// happened to sign with the legacy key).
+		if _, present := token.Header["kid"]; !present {
+			return nil, errors.New("token missing key id")
+		}
+		if claims.Sid == "" {
+			return nil, errors.New("token missing session id")
+		}
+		if claims.Typ == "" || claims.Typ != typForTransport(transport) {
+			return nil, errors.New("token type mismatch")
+		}
+		if claims.Issuer != a.issuer {
+			return nil, errors.New("token issuer mismatch")
+		}
+		// Exactly ONE audience, equal to the client type's audience: minting
+		// emits a single-entry aud, so anything wider is a tampered token.
+		if len(claims.Audience) != 1 || claims.Audience[0] != audienceForTransport(transport) {
+			return nil, errors.New("token audience mismatch")
+		}
+		if claims.ID == "" {
+			return nil, errors.New("token missing jti")
+		}
+		// Registered timestamps are mandatory: exp/nbf/iat freshness is
+		// enforced by the parser validators above (WithExpirationRequired and
+		// WithIssuedAt reject a missing exp and a future iat), but their
+		// ABSENCE must fail closed instead of being silently optional.
+		if claims.IssuedAt == nil {
+			return nil, errors.New("token missing iat")
+		}
+		if claims.NotBefore == nil {
+			return nil, errors.New("token missing nbf")
+		}
+		if claims.Subject == "" {
+			return nil, errors.New("token missing sub")
+		}
+		if claims.Subject != claims.UserID {
+			return nil, errors.New("token subject mismatch")
+		}
+	case LegacyTokenVersion:
+		// Transitional acceptance (removed with #460 SEC-9): ver4 tokens carry
+		// no sid/typ/iss/aud/jti and no kid. They still pass the coherence
+		// checks below and the middleware's live membership/org revalidation.
+	default:
 		return nil, fmt.Errorf("unsupported token version")
+	}
+
+	if claims.UserID == "" {
+		return nil, errors.New("token missing user id")
 	}
 	if claims.AuthStartedAt == nil {
 		return nil, errors.New("token missing auth start")
@@ -302,4 +563,114 @@ func ValidateToken(tokenStr string, secret string) (*Claims, error) {
 	}
 
 	return claims, nil
+}
+
+// GenerateLegacyToken mints a ver4 token for the transitional test suite only:
+// existing api-package tests exercise the legacy credential path that stays
+// accepted until the #460 SEC-9 gate removes LegacyTokenVersion validation
+// together with this function. Production code never mints ver4.
+func GenerateLegacyToken(userID string, email string, tc TokenContext, transport string, secret string) (string, error) {
+	client, ttl := "", AccessTokenTTL
+	switch transport {
+	case "web", "mobile":
+	case "sketchup":
+		client, ttl = ExtensionClient, ExtensionTokenTTL
+	default:
+		return "", fmt.Errorf("invalid login transport %q", transport)
+	}
+	return signLegacy(userID, email, tc, client, transport, ttl, secret)
+}
+
+// GenerateLegacyWebToken mints a ver4 web token (transitional tests).
+func GenerateLegacyWebToken(userID string, email string, tc TokenContext, secret string) (string, error) {
+	return GenerateLegacyToken(userID, email, tc, "web", secret)
+}
+
+// GenerateLegacyExtensionToken mints a ver4 SketchUp extension token
+// (transitional tests).
+func GenerateLegacyExtensionToken(userID string, email string, tc TokenContext, secret string) (string, error) {
+	return GenerateLegacyToken(userID, email, tc, "sketchup", secret)
+}
+
+// GenerateLegacySupportToken mints a ver4 support token (transitional tests).
+func GenerateLegacySupportToken(userID string, email string, sc SupportClaims, secret string) (string, error) {
+	return GenerateLegacySupportTokenFrom(userID, email, sc, time.Time{}, secret)
+}
+
+// GenerateLegacySupportTokenFrom preserves the support origin (transitional tests).
+func GenerateLegacySupportTokenFrom(userID string, email string, sc SupportClaims, authStartedAt time.Time, secret string) (string, error) {
+	if sc.OrgID == "" || sc.SessionID == "" || sc.OrganizationCredentialVersion < 1 {
+		return "", errors.New("support token requires organization, session, and credential version")
+	}
+	now := time.Now()
+	if authStartedAt.IsZero() {
+		authStartedAt = now
+	}
+	claims := &Claims{
+		UserID:        userID,
+		Email:         email,
+		Role:          "admin",
+		Roles:         []string{"admin"},
+		OrgID:         sc.OrgID,
+		Transport:     "support",
+		Support:       &sc,
+		Ver:           LegacyTokenVersion,
+		AuthStartedAt: jwt.NewNumericDate(authStartedAt),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(SupportTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+	return tokenString, nil
+}
+
+func signLegacy(userID string, email string, tc TokenContext, client, transport string, ttl time.Duration, secret string) (string, error) {
+	now := time.Now()
+	authStartedAt := tc.AuthStartedAt
+	if authStartedAt.IsZero() {
+		authStartedAt = now
+	}
+	if tc.OrgID != "" && tc.MembershipID == "" {
+		return "", errors.New("organization-scoped token requires membership id")
+	}
+	if tc.OrgID != "" && tc.MembershipCredentialVersion < 1 {
+		return "", errors.New("organization-scoped token requires membership credential version")
+	}
+	if tc.OrgID != "" && tc.OrganizationCredentialVersion < 1 {
+		return "", errors.New("organization-scoped token requires organization credential version")
+	}
+	claims := &Claims{
+		UserID:                        userID,
+		Email:                         email,
+		Role:                          PrimaryRole(tc.Roles),
+		Roles:                         tc.Roles,
+		OrgID:                         tc.OrgID,
+		MembershipID:                  tc.MembershipID,
+		MembershipCredentialVersion:   tc.MembershipCredentialVersion,
+		OrganizationCredentialVersion: tc.OrganizationCredentialVersion,
+		PlatformAdmin:                 tc.PlatformAdmin,
+		Client:                        client,
+		Transport:                     transport,
+		Ver:                           LegacyTokenVersion,
+		AuthStartedAt:                 jwt.NewNumericDate(authStartedAt),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(authStartedAt.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+	return tokenString, nil
 }

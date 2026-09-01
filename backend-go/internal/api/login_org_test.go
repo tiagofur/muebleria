@@ -97,7 +97,7 @@ func TestLogin_MultiMembershipRequiresSelection(t *testing.T) {
 	if resp.Token == "" {
 		t.Fatal("org-less token must be issued for the selection step")
 	}
-	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(resp.Token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestLogin_OrgHintPreSelectsMembership(t *testing.T) {
 	if resp.Token == "" || resp.Organization == nil || resp.Organization.Slug != "taller-dos" {
 		t.Fatalf("expected org-scoped token for taller-dos, got %+v", resp.Organization)
 	}
-	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(resp.Token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,14 +147,14 @@ func TestMe_EmitsAuthoritativeSessionScope(t *testing.T) {
 	suspended := orgTestMembership("u1", "org-suspended", "suspended", []domain.UserRole{domain.RoleAdmin})
 	suspended.Status = domain.MembershipStatusSuspended
 	st.membershipsByUser["u1"] = append(st.membershipsByUser["u1"], suspended)
-	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
+	token, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{
 		Roles: []string{"admin"}, OrgID: "org-2", MembershipID: "u1:org-2",
 		MembershipCredentialVersion: 4, OrganizationCredentialVersion: 7,
 	}, server.JWTSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := auth.ValidateToken(token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,13 +197,13 @@ func TestMe_SeparatesSupportScopeFromMembershipScope(t *testing.T) {
 		ID: "org-2", Name: "Support target", Slug: "support-target", Type: domain.OrganizationTypeFactory,
 		Status: domain.OrganizationStatusActive, CredentialVersion: 9,
 	}
-	token, err := auth.GenerateSupportToken("u1", "u@example.com", auth.SupportClaims{
+	token, err := auth.GenerateLegacySupportToken("u1", "u@example.com", auth.SupportClaims{
 		OrgID: "org-2", SessionID: "support-1", OrganizationCredentialVersion: 9, Reason: "investigation",
 	}, server.JWTSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := auth.ValidateToken(token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestSelectOrg_IssuesScopedToken(t *testing.T) {
 	server, _ := loginTestServer(t)
 
 	// Org-less token (as issued to platform staff / multi-membership users).
-	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	token, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestSelectOrg_IssuesScopedToken(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
-	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+	AuthMiddleware(mustAuthority(server.JWTSecret), server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
@@ -249,7 +249,7 @@ func TestSelectOrg_IssuesScopedToken(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(resp.Token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestSelectOrg_ScopesValidatedSelectionBeforeAudit(t *testing.T) {
 	server, stub := loginTestServer(t)
 	store := &selectOrgTenantActorStore{stubStore: stub}
 	server.Store = store
-	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	token, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestSelectOrg_ScopesValidatedSelectionBeforeAudit(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
-	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+	AuthMiddleware(mustAuthority(server.JWTSecret), server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK || store.actor.OrganizationID != "org-1" || store.actor.UserID != "u1" {
 		t.Fatalf("status=%d actor=%+v", rec.Code, store.actor)
@@ -279,13 +279,13 @@ func TestSelectOrg_ScopesValidatedSelectionBeforeAudit(t *testing.T) {
 
 func TestSelectOrg_RejectsForeignOrganization(t *testing.T) {
 	server, _ := loginTestServer(t)
-	token, _ := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	token, _ := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
 
 	body, _ := json.Marshal(map[string]string{"organization_id": "org-x"})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
-	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+	AuthMiddleware(mustAuthority(server.JWTSecret), server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("foreign org: expected 403, got %d", rec.Code)
 	}
@@ -309,12 +309,12 @@ func TestSelectOrg_InternalMembershipFailureIsNotRevoked(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			server, store := loginTestServer(t)
 			test.configure(store)
-			token, _ := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+			token, _ := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
 			body, _ := json.Marshal(map[string]string{"organization_id": "org-1"})
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
 			req.Header.Set("Authorization", "Bearer "+token)
-			AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+			AuthMiddleware(mustAuthority(server.JWTSecret), server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusInternalServerError {
 				t.Fatalf("internal membership failure: expected 500, got %d", rec.Code)
@@ -347,7 +347,7 @@ func TestLogin_FailureIsAudited(t *testing.T) {
 func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
 	server, _ := loginTestServer(t)
 	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{AuthStartedAt: started}, server.JWTSecret)
+	token, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{AuthStartedAt: started}, server.JWTSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/select-org", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
-	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
+	AuthMiddleware(mustAuthority(server.JWTSecret), server.Store)(http.HandlerFunc(server.HandleSelectOrg)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -363,7 +363,7 @@ func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(resp.Token)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
 func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	server, _ := loginTestServer(t)
 	started := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	token, err := auth.GenerateToken("u1", "u@example.com", auth.TokenContext{
+	token, err := auth.GenerateLegacyWebToken("u1", "u@example.com", auth.TokenContext{
 		Roles:                         []string{string(domain.RoleVendedor)},
 		OrgID:                         "org-1",
 		MembershipID:                  "u1:org-1",
@@ -392,7 +392,7 @@ func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	AuthMiddleware(server.JWTSecret, server.Store)(http.HandlerFunc(server.HandleRefresh)).ServeHTTP(rec, req)
+	AuthMiddleware(mustAuthority(server.JWTSecret), server.Store)(http.HandlerFunc(server.HandleRefresh)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -400,7 +400,7 @@ func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	claims, err := auth.ValidateToken(resp.Token, server.JWTSecret)
+	claims, err := server.tokenAuthority().Validate(resp.Token)
 	if err != nil {
 		t.Fatal(err)
 	}

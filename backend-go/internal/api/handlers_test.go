@@ -67,6 +67,9 @@ type stubStore struct {
 	updateMaterialCategoryCalled  bool
 	deleteMaterialCategoryCalled  bool
 	deleteMaterialCategoryErrHook error
+	// Session registry hooks (#460 / SEC-1)
+	authSessions      map[string]*domain.AuthSession
+	nextAuthSessionID string
 	// Auth test hooks
 	getUserByEmail    *domain.User
 	getUserByEmailErr error

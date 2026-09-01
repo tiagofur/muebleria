@@ -26,7 +26,7 @@ func layoutStubServer(t *testing.T) (*Server, string) {
 		listAgregados:      catalog.Agregados,
 		listHardwares:      catalog.Hardware,
 	}
-	token, err := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, err := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
@@ -86,7 +86,7 @@ func layoutCabinetFixture() (*domain.Module, domain.Catalog) {
 func TestFurnitureDefinitionLayoutServesCompleteComposition(t *testing.T) {
 	server, token := layoutStubServer(t)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/11111111-1111-1111-1111-111111111111/layout", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
@@ -125,7 +125,7 @@ func TestFurnitureDefinitionLayoutServesCompleteComposition(t *testing.T) {
 func TestFurnitureDefinitionLayoutServesLocalTransformContract(t *testing.T) {
 	server, token := layoutStubServer(t)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
@@ -176,7 +176,7 @@ func TestFurnitureDefinitionLayoutServesLocalTransformContract(t *testing.T) {
 func TestFurnitureDefinitionLayoutQueryDimsOverride(t *testing.T) {
 	server, token := layoutStubServer(t)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout?widthMm=900&heightMm=800&depthMm=500", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
@@ -198,7 +198,7 @@ func TestFurnitureDefinitionLayoutQueryDimsOverride(t *testing.T) {
 func TestFurnitureDefinitionLayoutRejectsInvalidDims(t *testing.T) {
 	server, token := layoutStubServer(t)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout?widthMm=abc", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
@@ -223,7 +223,7 @@ func TestFurnitureDefinitionLayoutUnknownDefinition(t *testing.T) {
 	server, token := layoutStubServer(t)
 	server.Store.(*stubStore).moduleReturnedByID = nil // no such definition
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/unknown/layout", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "unknown")
@@ -239,7 +239,7 @@ func TestFurnitureDefinitionLayoutUnresolvableComposition(t *testing.T) {
 	server, token := layoutStubServer(t)
 	server.Store.(*stubStore).listStructures = nil // structure gone: layout cannot resolve
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
@@ -277,9 +277,9 @@ func TestFurnitureDefinitionLayoutRequiresActiveLicense(t *testing.T) {
 		listComponents:     catalog.Components,
 		listHardwares:      catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.SetPathValue("definitionId", "11111111-1111-1111-1111-111111111111")
@@ -299,7 +299,7 @@ func TestFurnitureDefinitionLayoutMaterialChoices(t *testing.T) {
 		{ID: "mat-oak", Code: "ROBLE-CLARO", Name: "Roble Claro", ThicknessMm: 18, PreviewColor: "#c4a574", Active: true},
 	}
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))
 	send := func(query string) (*httptest.ResponseRecorder, engine.FurnitureLayout) {
 		req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions/x/layout"+query, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -363,9 +363,9 @@ func TestFurnitureDefinitionsCarryMaterialsAndRoles(t *testing.T) {
 				OptionIDs: []string{"hw-x"}},
 		},
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -421,9 +421,9 @@ func TestFurnitureDefinitionsCarryEstimatedCounts(t *testing.T) {
 		listComponents: catalog.Components,
 		listHardwares:  catalog.Hardware,
 	}
-	token, _ := auth.GenerateToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+	token, _ := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"user"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
 
-	handler := AuthMiddleware(furnitureTestSecret, server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))
 	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
