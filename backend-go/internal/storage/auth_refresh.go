@@ -292,6 +292,23 @@ func (s *PostgresStore) LogoutByRefreshCredential(ctx context.Context, verifier 
 		if err := revokeRefreshSession(txCtx, s, session, current.FamilyID, "logout", ip, requestID); err != nil {
 			return err
 		}
+	} else {
+		// Logout closes both resources even when another policy already closed
+		// the session. Only the first family transition emits the logout event,
+		// keeping repeated logout state- and audit-idempotent.
+		familyRevoked, err := revokeOpenRefreshFamily(txCtx, tx, current.FamilyID, "logout")
+		if err != nil {
+			return err
+		}
+		if familyRevoked {
+			if err := s.InsertSecurityAuditEvent(txCtx, SecurityAuditEvent{
+				EventType: "logout", ActorUserID: session.UserID,
+				OrganizationID: refreshStringValue(session.ActiveOrganizationID), IP: ip,
+				Details: map[string]interface{}{"session_id": session.ID, "family_id": current.FamilyID, "reason": "logout", "request_id": requestID},
+			}); err != nil {
+				return err
+			}
+		}
 	}
 	return tx.Commit(ctx)
 }
@@ -338,8 +355,16 @@ func lockRefreshSession(ctx context.Context, tx pgx.Tx, current *lockedRefreshCr
 }
 
 func revokeRefreshFamily(ctx context.Context, tx pgx.Tx, familyID, reason string) error {
-	_, err := tx.Exec(ctx, `UPDATE auth_refresh_families SET revoked_at = COALESCE(revoked_at, NOW()), revoke_reason = COALESCE(revoke_reason, $2) WHERE id = $1::uuid`, familyID, reason)
+	_, err := revokeOpenRefreshFamily(ctx, tx, familyID, reason)
 	return err
+}
+
+func revokeOpenRefreshFamily(ctx context.Context, tx pgx.Tx, familyID, reason string) (bool, error) {
+	tag, err := tx.Exec(ctx, `
+		UPDATE auth_refresh_families
+		SET revoked_at = NOW(), revoke_reason = $2
+		WHERE id = $1::uuid AND revoked_at IS NULL`, familyID, reason)
+	return tag.RowsAffected() > 0, err
 }
 
 func refreshSessionAuthorityValid(ctx context.Context, tx pgx.Tx, session *domain.AuthSession, membershipVersion, organizationVersion *int64) (bool, error) {

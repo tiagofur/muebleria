@@ -196,6 +196,7 @@ func truncate(b []byte) string {
 
 type loginResponse struct {
 	Token            string `json:"token"`
+	SessionID        string `json:"session_id"`
 	RefreshToken     string `json:"refresh_token"`
 	RefreshExpiresAt string `json:"refresh_expires_at"`
 	User             struct {
