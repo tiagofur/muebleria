@@ -3,7 +3,8 @@
 - Actualizado: 2026-09-01 America/Mexico_City
 - F199 (#458) cerrada (`done`); ninguna otra feature `in_progress`.
 - F202 y #460 continúan abiertos. SEC-1 y SEC-2A están integrados; SEC-2B está
-  implementado en `feat/460-2b-session-directory`, pendiente de revisión.
+  publicado en PR #528 desde `feat/460-2b-session-directory`, pendiente de
+  revisión independiente y sin merge.
 - SEC-3/4/6/7/8/9 no avanzaron en este slice.
 
 ## Hechos implementados SEC-2B
@@ -41,5 +42,7 @@
 
 ## Estado de entrega
 
-No se marcó F202 como `done` y no se cerró #460. La publicación y el readback
-remoto quedan pendientes hasta crear el PR sin merge.
+PR #528 está abierto contra `main`, con `type:feature` + `size:exception`. No se
+marcó F202 como `done`, no se cerró #460 y no se hizo merge. El SHA final y el
+readback remoto se reportan en la entrega externa para no autorreferenciar el
+commit dentro del propio ledger.
