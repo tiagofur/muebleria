@@ -28,11 +28,9 @@ const MinPasswordLen = 8
 // first 15 minutes — and is always capped by the session's absolute expiry.
 const WebAccessTokenTTL = 15 * time.Minute
 
-// MobileAccessTokenTTL keeps the pre-SEC-4B mobile policy (one login per
-// workday) until SEC-5 migrates mobile to short access + secure-store
-// refresh. Mobile has no cookie transport: shortening it here would kick
-// mobile users out mid-shift with no way to renew.
-const MobileAccessTokenTTL = 18 * time.Hour
+// MobileAccessTokenTTL keeps the short access + secure-store refresh policy for mobile
+// (SEC-5). Mobile has no cookie transport, so it uses an opaque refresh body JSON.
+const MobileAccessTokenTTL = 15 * time.Minute
 
 // LegacyAccessTokenTTL is the historical pre-SEC-4B access policy carried by
 // the ver4 transitional window (SEC-9 removes it together with ver4

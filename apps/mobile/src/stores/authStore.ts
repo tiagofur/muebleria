@@ -2,10 +2,17 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { isValidUserRole, type UserRole, DomainError } from '@granete/domain';
-import { generatedApiClient } from '../services/apiClient';
+import { generatedApiClient, apiClient } from '../services/apiClient';
 import { ensureSecureStoreMigrated } from '../services/secureStoreMigration';
+import { 
+  applyCredential, 
+  clearCredential, 
+  refreshSession, 
+  storeRefreshSecret, 
+  purgeSecureRefresh,
+  REFRESH_KEY
+} from '../services/mobileAuthRuntime';
 
-const TOKEN_KEY = 'granete_auth_token';
 const USER_KEY = 'granete_auth_user';
 
 export interface UserSession {
@@ -79,7 +86,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setSessionDirect: async (token: string, user: UserSession) => {
     try {
-      await SecureStore.setItemAsync(TOKEN_KEY, token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
     } catch {
       // SecureStore may fail in tests or web, state still updates
@@ -108,6 +114,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         roles: sanitizeSessionRoles({ roles: response.roles }),
       };
 
+      if (!response.refresh_token) {
+        throw new DomainError('Respuesta de inicio de sesión incompleta (sin refresh token).');
+      }
+
+      await storeRefreshSecret(response.refresh_token);
+
+      applyCredential({
+        accessToken: response.token,
+        accessExpiresAt: response.access_expires_at ?? '',
+        absoluteSessionExpiresAt: response.absolute_session_expires_at ?? '',
+        sessionId: response.session_id ?? '',
+        userId: user.userId,
+        organizationId: null,
+      });
+
       await get().setSessionDirect(response.token, user);
     } catch (err: any) {
       set({ isLoading: false });
@@ -117,17 +138,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      await SecureStore.deleteItemAsync(USER_KEY);
+      const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
+      if (refreshToken) {
+        await apiClient.post('/auth/logout', { refresh_token: refreshToken });
+      }
     } catch {
-      // ignore
+      // If network fails, we still purge local data, but backend state might remain.
+      // (As per SEC-5 Rule 20, we shouldn't leave business data visible)
+    } finally {
+      await purgeSecureRefresh();
+      clearCredential();
+      try {
+        await SecureStore.deleteItemAsync(USER_KEY);
+      } catch {
+        // ignore
+      }
+      set({
+        token: null,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
     }
-    set({
-      token: null,
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-    });
   },
 
   loadSession: async () => {
@@ -135,7 +167,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await get().checkBiometrics();
       await ensureSecureStoreMigrated();
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+
+      try {
+        await refreshSession();
+      } catch (err) {
+        // Refresh failed (no token, expired, revoked, or network failed permanently)
+        set({
+          token: null,
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+        return;
+      }
+
+      // If refresh succeeded, we have a valid access token in memory
+      const { getAccessToken, getCredential } = await import('../services/mobileAuthRuntime');
+      const token = getAccessToken();
       const userJson = await SecureStore.getItemAsync(USER_KEY);
 
       if (token && userJson) {
@@ -175,7 +223,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loginWithBiometrics: async () => {
     try {
       await ensureSecureStoreMigrated();
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      const { getAccessToken } = await import('../services/mobileAuthRuntime');
+      let token = getAccessToken();
+      
+      if (!token) {
+        try {
+          await refreshSession();
+          token = getAccessToken();
+        } catch {
+          return false;
+        }
+      }
+
       const userJson = await SecureStore.getItemAsync(USER_KEY);
 
       if (!token || !userJson) {

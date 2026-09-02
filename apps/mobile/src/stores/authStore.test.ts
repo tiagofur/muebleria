@@ -1,12 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore, type UserSession } from './authStore';
-import { generatedApiClient } from '../services/apiClient';
+import { generatedApiClient, apiClient } from '../services/apiClient';
 import {
   primaryRoleOf,
   roleCanExportProduction,
   roleCanDeleteProject,
 } from '@granete/domain';
+
+// Mock mobileAuthRuntime
+vi.mock('../services/mobileAuthRuntime', () => {
+  let _token: string | null = null;
+  return {
+    REFRESH_KEY: 'granete_mobile_refresh',
+    applyCredential: vi.fn(),
+    clearCredential: vi.fn(),
+    refreshSession: vi.fn(async () => {
+      // Simulate successful refresh by default in some tests, but allow override
+      if (_token === 'fail') throw new Error('Refresh failed');
+    }),
+    storeRefreshSecret: vi.fn(async () => {}),
+    purgeSecureRefresh: vi.fn(async () => {}),
+    getAccessToken: vi.fn(() => _token),
+    getCredential: vi.fn(() => null),
+    __setMockToken: (t: string | null) => { _token = t; }
+  };
+});
 
 // Mock expo-secure-store
 vi.mock('expo-secure-store', () => {
@@ -31,6 +50,9 @@ vi.mock('expo-local-authentication', () => ({
 
 vi.mock('../services/apiClient', () => ({
   generatedApiClient: vi.fn(),
+  apiClient: {
+    post: vi.fn(),
+  }
 }));
 
 vi.mock('../services/secureStoreMigration', () => ({
@@ -38,7 +60,7 @@ vi.mock('../services/secureStoreMigration', () => ({
 }));
 
 describe('authStore Mobile', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -48,6 +70,9 @@ describe('authStore Mobile', () => {
       isBiometricEnrolled: false,
     });
     vi.clearAllMocks();
+    
+    const { __setMockToken } = await import('../services/mobileAuthRuntime') as any;
+    __setMockToken(null);
   });
 
   it('inicia con estado no autenticado', () => {
@@ -76,6 +101,7 @@ describe('authStore Mobile', () => {
   it('login lee LoginResponse.roles y descarta roles no canónicos', async () => {
     const login = vi.fn().mockResolvedValue({
       token: 'tok-login',
+      refresh_token: 'R1',
       user: { id: 'usr-9', name: 'Ana Pérez', email: 'ana@taller.com' },
       roles: ['produccion', 'instalador', 'almacen'],
     });
@@ -94,15 +120,17 @@ describe('authStore Mobile', () => {
     expect(state.user?.roles).toEqual(['produccion', 'almacen']);
   });
 
-  it('migra sesión persistida legacy (role único) a roles[]', async () => {
-    await SecureStore.setItemAsync('granete_auth_token', 'tok-legacy');
+  it('loadSession uses refresh flow and loads user from SecureStore if success', async () => {
+    const { __setMockToken } = await import('../services/mobileAuthRuntime') as any;
+    __setMockToken('tok-new-refreshed');
+    
     await SecureStore.setItemAsync(
       'granete_auth_user',
       JSON.stringify({
-        userId: 'usr-old',
-        name: 'Legacy User',
-        email: 'legacy@taller.com',
-        role: 'produccion',
+        userId: 'usr-ok',
+        name: 'Refreshed User',
+        email: 'refreshed@taller.com',
+        role: 'produccion', // migrates legacy single role
       }),
     );
 
@@ -110,27 +138,27 @@ describe('authStore Mobile', () => {
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);
-    expect(state.user?.roles).toEqual(['produccion']);
+    expect(state.token).toBe('tok-new-refreshed');
+    expect(state.user?.roles).toEqual(['produccion']); // legacy migrates correctly to array
   });
 
-  it('sesión persistida con rol rechazado queda sin roles (nunca se muestra)', async () => {
-    await SecureStore.setItemAsync('granete_auth_token', 'tok-bad');
+  it('loadSession clears state if refreshSession fails', async () => {
+    const { __setMockToken } = await import('../services/mobileAuthRuntime') as any;
+    __setMockToken('fail'); // will throw
+
     await SecureStore.setItemAsync(
       'granete_auth_user',
       JSON.stringify({
-        userId: 'usr-old2',
-        name: 'Legacy Bad',
-        email: 'bad@taller.com',
-        role: 'carpintero',
+        userId: 'usr-bad',
+        roles: ['produccion'],
       }),
     );
 
     await useAuthStore.getState().loadSession();
 
     const state = useAuthStore.getState();
-    expect(state.isAuthenticated).toBe(true);
-    expect(state.user?.roles).toEqual([]);
-    expect(primaryRoleOf(state.user?.roles)).toBeNull();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.token).toBeNull();
   });
 
   it('valida permisos del usuario autenticado con @granete/domain', async () => {
