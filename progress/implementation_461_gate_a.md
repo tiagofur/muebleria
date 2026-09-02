@@ -107,6 +107,31 @@ pnpm openapi:check                PASS
 git diff --check                  PASS
 ```
 
+### Reviewer blocker repair
+
+Corrective implementation commit
+`b9c004f323ee452f56fbe63834bd9cd50fa1676b` restores the platform organization
+edit flow after the backend step-up boundary was added:
+
+- `PlatformScreen` now runs organization PATCH through the existing
+  `platform_admin` step-up flow;
+- the initial challenged request and the post-MFA retry reuse the same
+  `Idempotency-Key`;
+- cancelling or otherwise resolving the challenge with `null` leaves the edit
+  open and does not announce success or reload organizations;
+- a focused routed-client test proves `STEP_UP_REQUIRED`, TOTP verification,
+  successful retry and exact key reuse.
+
+Corrective verification:
+
+```text
+./node_modules/.bin/vitest run packages/ui/src/platform/PlatformScreen.test.tsx
+  PASS (8/8)
+pnpm typecheck                    PASS
+pnpm openapi:check                PASS
+git diff --check                  PASS
+```
+
 The OpenAPI contract now declares `Idempotency-Key` on platform organization
 PATCH; the generated TypeScript client was regenerated via
 `scripts/generate_openapi.py` and creates a key by default.
