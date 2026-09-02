@@ -243,7 +243,6 @@ describe('authStore Mobile', () => {
   it('selectOrg correctly fetches new session and updates state', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({
       token: 'tok-org2',
-      refresh_token: 'R2',
       access_expires_at: '2050-01-01T00:00:00Z',
       absolute_session_expires_at: '2050-01-01T00:00:00Z',
       session_id: 'sess-2',
@@ -259,5 +258,25 @@ describe('authStore Mobile', () => {
     expect(state.token).toBe('tok-org2');
     expect(state.user?.roles).toEqual(['admin']);
     expect(state.user?.userId).toBe('usr-1');
+  });
+
+  it('login with SecureStore failure attempts best-effort logout', async () => {
+    const login = vi.fn().mockResolvedValue({
+      token: 'tok-login',
+      refresh_token: 'R1-fail',
+      user: { id: 'usr-9', name: 'Ana Pérez', email: 'ana@taller.com' },
+      roles: ['produccion'],
+    });
+    vi.mocked(generatedApiClient).mockReturnValue({ login } as never);
+
+    const { storeRefreshSecret } = await import('../services/mobileAuthRuntime') as any;
+    storeRefreshSecret.mockRejectedValueOnce(new Error('SecureStore broken'));
+    vi.mocked(apiClient.post).mockResolvedValueOnce({}); // best effort logout
+
+    await expect(useAuthStore.getState().login('ana@taller.com', 'secreta')).rejects.toThrow('SecureStore broken');
+    
+    expect(apiClient.post).toHaveBeenCalledWith('/auth/logout', { refresh_token: 'R1-fail' }, { skipAuthRetry: true });
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(false);
   });
 });

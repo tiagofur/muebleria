@@ -441,8 +441,8 @@ func TestAccessTokenTTLSeparation(t *testing.T) {
 	if auth.WebAccessTokenTTL != 15*time.Minute {
 		t.Errorf("WebAccessTokenTTL = %v, want 15m", auth.WebAccessTokenTTL)
 	}
-	if auth.MobileAccessTokenTTL != 18*time.Hour {
-		t.Errorf("MobileAccessTokenTTL = %v, want 18h", auth.MobileAccessTokenTTL)
+	if auth.MobileAccessTokenTTL != 15*time.Minute {
+		t.Errorf("MobileAccessTokenTTL = %v, want 15m", auth.MobileAccessTokenTTL)
 	}
 	if auth.TransportSessionTTL("web") != 18*time.Hour || auth.TransportSessionTTL("mobile") != 18*time.Hour {
 		t.Errorf("absolute session TTLs = web %v / mobile %v, want 18h/18h", auth.TransportSessionTTL("web"), auth.TransportSessionTTL("mobile"))

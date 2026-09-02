@@ -135,7 +135,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new DomainError('Respuesta de inicio de sesión incompleta (sin refresh token).');
       }
 
-      await storeRefreshSecret(response.refresh_token);
+      try {
+        await storeRefreshSecret(response.refresh_token);
+      } catch (err) {
+        // Best-effort revoke to prevent orphaned session on the server
+        apiClient.post('/auth/logout', { refresh_token: response.refresh_token }, { skipAuthRetry: true }).catch(() => {});
+        throw err;
+      }
 
       applyCredential({
         accessToken: response.token,
@@ -302,12 +308,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await apiClient.post<any>('/auth/select-org', {
         org_id: orgId,
       });
-
-      if (!response.refresh_token) {
-        throw new DomainError('Respuesta de selección de organización incompleta (sin refresh token).');
-      }
-
-      await storeRefreshSecret(response.refresh_token);
 
       applyCredential({
         accessToken: response.token,

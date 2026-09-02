@@ -247,17 +247,32 @@ func (f *fixture) login(t *testing.T, email, org string) loginResponse {
 // credential arrives in the JSON body (#460 SEC-4A transport contract).
 func (f *fixture) mobileLogin(t *testing.T, email, org string) loginResponse {
 	t.Helper()
-	var resp loginResponse
+	var out loginResponse
 	f.decode(t, http.MethodPost, "/api/auth/login", "", map[string]string{
 		"email":     email,
 		"password":  pilotPassword,
 		"org":       org,
 		"transport": "mobile",
-	}, http.StatusOK, &resp)
-	if resp.RefreshToken == "" {
-		t.Fatalf("mobile login must emit the refresh credential in the body: %+v", resp)
+	}, http.StatusOK, &out)
+	if out.RefreshToken == "" || out.RefreshExpiresAt == "" {
+		t.Fatalf("mobile login must expose the refresh credential in JSON: %+v", out)
 	}
-	return resp
+	return out
+}
+
+// mobileRefresh rotates the session's mobile refresh token by sending the current one.
+func (f *fixture) mobileRefresh(t *testing.T, sess *loginResponse) loginResponse {
+	t.Helper()
+	var out loginResponse
+	f.decode(t, http.MethodPost, "/api/auth/refresh", "", map[string]string{
+		"refresh_token": sess.RefreshToken,
+		"transport":     "mobile",
+	}, http.StatusOK, &out)
+	if out.RefreshToken == "" {
+		t.Fatal("mobile refresh must return a rotated refresh token")
+	}
+	sess.RefreshToken = out.RefreshToken
+	return out
 }
 
 // webSession is a web login plus its HttpOnly refresh cookie value, extracted

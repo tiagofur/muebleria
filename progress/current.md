@@ -6,8 +6,10 @@
   #530) y SEC-4A (PR #531) están integrados; slice **SEC-4B** (Web in-memory
   access credential, cookie bootstrap/refresh, serialización cross-tab y
   eliminación del bearer en localStorage) implementado en rama
-  `feat/460-4b-web-in-memory-auth`, pendiente de revisión independiente y sin
-  merge.
+  `feat/460-4b-web-in-memory-auth`, integrado tras revisión.
+- Slice **SEC-5** (Mobile refresh credential in secure storage + short access 
+  credential in memory) implementado en rama `feat/460-5-mobile-credential-migration`
+  y documentado en ADR-0007, pendiente de revisión (PR #533).
 - Review de PR #532 (CHANGES REQUIRED, 2 blockers) corregido en la misma
   rama: (1) fallback lock reemplazado por exclusión mutua real; (2) session
   replacement/scope change ya no instala S2 en el refresh: un transition
@@ -22,7 +24,7 @@
   sin Web Locks ⇒ FAIL CLOSED para refresh/logout/select-org. Sin fallback
   de lease. Negative proof: holder congelado ⇒ nadie entra (sin takeover por
   TTL); gate real: locks off con IndexedDB disponible ⇒ cero rotaciones.
-- SEC-5/6/7/8/9 no avanzaron en este slice.
+- **SEC-5** Mobile in-memory access y SecureStore refresh implementado; SEC-6/7/8/9 no avanzaron.
 
 ## Hechos implementados SEC-4B
 
@@ -134,8 +136,10 @@ expiresAt}`. BroadcastChannel payloads `{type}`-only.
 
 ## Estado de entrega
 
-SEC-4A integrado. SEC-4B `implemented pending review`. F202 sigue
+## Estado de entrega
+
+SEC-4B integrado. SEC-5 `implemented pending review`. F202 sigue
 `in_progress`, #460 sigue abierto, sin merge. Roadmap restante explícito:
-SEC-5 Mobile credential migration, SEC-6 SketchUp device credentials, SEC-7
+SEC-6 SketchUp device credentials, SEC-7
 MFA/step-up, SEC-8 trusted-proxy/rate limits/account hardening, SEC-9 gate
 final + ver4 EOL.
