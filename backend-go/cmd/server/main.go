@@ -81,6 +81,11 @@ func main() {
 	// dedicated MEDIA_SIGNING_KEY — never with a session JWT key or the
 	// refresh pepper. Config validation already refused to boot without it.
 	serverAPI.MediaTokens = cfg.MediaAuthority
+	// #460 SEC-7: TOTP secrets are AES-256-GCM encrypted and recovery codes
+	// hash to keyed verifiers under the dedicated MFA_ENCRYPTION_KEYS keyring
+	// — disjoint from every other credential secret. Config already refused
+	// to boot without it.
+	serverAPI.MFASecrets = cfg.MFASecrets
 	// #460 SEC-4A: the Web refresh cookie's Secure attribute. Config already
 	// refused to boot for GRANETE_ENV=production with an insecure resolution,
 	// so the flag reaching here can only be a local dev/gate opt-out.

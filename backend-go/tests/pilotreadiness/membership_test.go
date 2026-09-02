@@ -136,6 +136,8 @@ func TestPilotReadiness_RoleChangeRevalidatesTokens(t *testing.T) {
 	tok := fx.scopedToken(t, "promote@pilot-readiness.test", fx.a.slug)
 	fx.want(t, http.MethodGet, "/api/org/memberships", tok, nil, http.StatusForbidden)
 
+	// Role changes are organization_admin step-up gated (#460 SEC-7).
+	fx.pilotStepUp(t, fx.a.admin, fx.mfaFor(t, fx.a.admin), "organization_admin")
 	fx.want(t, http.MethodPut, "/api/org/memberships/"+accept.Memberships[0].ID+"/roles", fx.a.admin.token,
 		map[string][]string{"roles": {"admin"}}, http.StatusOK)
 

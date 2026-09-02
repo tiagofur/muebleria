@@ -1934,6 +1934,198 @@
         }
       }
     },
+    "/auth/mfa/factors": {
+      "get": {
+        "operationId": "listMFAFactors",
+        "summary": "List the caller's MFA factors",
+        "description": "Metadata only: the encrypted secret never leaves the storage layer. Pending (unverified) enrollments are listed with their expiry; revoked factors are omitted.",
+        "responses": {
+          "200": {
+            "description": "The caller's factors, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFAFactorDirectory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/mfa/totp:begin": {
+      "post": {
+        "operationId": "beginMFAEnrollment",
+        "summary": "Start a TOTP enrollment",
+        "description": "Generates a sealed 160-bit secret and returns the otpauth:// provisioning URI exactly ONCE; it is never logged, persisted or re-shown. The factor is pending and authorizes nothing until verified with a live TOTP. Any previous pending enrollment is revoked in the same transaction. Pending enrollments expire and can never be enabled afterwards.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MFAEnrollBeginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending factor with its one-time provisioning material",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFAEnrollBeginResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/mfa/totp/{factorId}:verify": {
+      "post": {
+        "operationId": "verifyMFAEnrollment",
+        "summary": "Verify a pending enrollment and enable the factor",
+        "description": "The current TOTP is verified against the pending factor's sealed secret; the pending→enabled transition, the accepted counter (replay high-water mark) and the recovery-code batch commit in one transaction. The recovery codes' plaintext exists only in this response. An expired or already-verified enrollment answers MFA_ENROLLMENT_EXPIRED / MFA_FACTOR_NOT_FOUND.",
+        "parameters": [
+          {
+            "name": "factorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MFAEnrollVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Factor enabled; single-use recovery codes shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFAEnrollVerifiedResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/mfa/factors/{factorId}:remove": {
+      "post": {
+        "operationId": "removeMFAFactor",
+        "summary": "Remove one of the caller's MFA factors",
+        "description": "Requires a fresh security_admin step-up (STEP_UP_REQUIRED otherwise). Removing the LAST enabled factor also revokes every outstanding recovery code: MFA off means no fallback credential either.",
+        "parameters": [
+          {
+            "name": "factorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The factor is revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFAFactorRemovedResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/mfa/recovery-codes:regenerate": {
+      "post": {
+        "operationId": "regenerateMFARecoveryCodes",
+        "summary": "Regenerate the caller's recovery codes",
+        "description": "Requires a fresh security_admin step-up. Every outstanding code is revoked and a new batch is minted atomically; the plaintext exists only in this response. Requires at least one enabled factor.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh single-use recovery codes shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFARecoveryCodesResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/mfa/step-up": {
+      "post": {
+        "operationId": "requestMFAStepUp",
+        "summary": "Verify a second factor and elevate the session for one scope",
+        "description": "One verification elevates exactly ONE least-privilege scope (never every sensitive action). The grant is server-side, bound to the caller's registry session (sid) and user, lives 10 minutes and never survives session replacement (a new sid starts clean) or session revocation. A TOTP time-step accepted here can never be accepted again (counter high-water mark).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MFAStepUpRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fresh elevated authority for the requested scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MFAStepUpResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/org/memberships/{membershipId}/sessions": {
       "get": {
         "operationId": "listMembershipSessions",
@@ -2269,7 +2461,14 @@
           "REFRESH_REUSED",
           "SESSION_NOT_FOUND",
           "MEDIA_ACCESS_EXPIRED",
-          "MEDIA_ACCESS_INVALID"
+          "MEDIA_ACCESS_INVALID",
+          "STEP_UP_REQUIRED",
+          "STEP_UP_EXPIRED",
+          "MFA_REQUIRED",
+          "MFA_INVALID",
+          "MFA_ENROLLMENT_EXPIRED",
+          "MFA_FACTOR_NOT_FOUND",
+          "MFA_RECOVERY_INVALID"
         ]
       },
       "ApiError": {
@@ -4774,6 +4973,255 @@
         "properties": {
           "revoked": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAFactorView": {
+        "type": "object",
+        "required": [
+          "id",
+          "factor_type",
+          "status",
+          "label",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "factor_type": {
+            "type": "string",
+            "enum": [
+              "totp"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "enabled"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enabled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "pending_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAFactorDirectory": {
+        "type": "object",
+        "required": [
+          "factors"
+        ],
+        "properties": {
+          "factors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MFAFactorView"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAEnrollBeginRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Optional display label (e.g. 'Teléfono personal')"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAEnrollBeginResponse": {
+        "type": "object",
+        "required": [
+          "factor_id",
+          "provisioning_uri",
+          "expires_at"
+        ],
+        "properties": {
+          "factor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provisioning_uri": {
+            "type": "string",
+            "description": "otpauth:// URI rendered as a QR by the client exactly once; never logged or persisted"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Pending-enrollment deadline: after it the factor can never be enabled"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAEnrollVerifyRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 10,
+            "description": "Current 6-digit TOTP; separators are normalized server-side"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAEnrollVerifiedResponse": {
+        "type": "object",
+        "required": [
+          "factor_id",
+          "status",
+          "recovery_codes"
+        ],
+        "properties": {
+          "factor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "enabled"
+            ]
+          },
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Single-use codes shown exactly once; the database stores keyed verifiers only"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAFactorRemovedResponse": {
+        "type": "object",
+        "required": [
+          "factor_id",
+          "status"
+        ],
+        "properties": {
+          "factor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "revoked"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFARecoveryCodesResponse": {
+        "type": "object",
+        "required": [
+          "recovery_codes"
+        ],
+        "properties": {
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAStepUpScope": {
+        "type": "string",
+        "enum": [
+          "device_enrollment",
+          "support_access",
+          "security_admin",
+          "organization_admin",
+          "platform_admin"
+        ]
+      },
+      "MFAStepUpRequest": {
+        "type": "object",
+        "required": [
+          "scope",
+          "method",
+          "code"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/MFAStepUpScope"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "totp",
+              "recovery"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 16,
+            "description": "Current TOTP or a single-use recovery code"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MFAStepUpResponse": {
+        "type": "object",
+        "required": [
+          "scope",
+          "method",
+          "expires_at"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/MFAStepUpScope"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "totp",
+              "recovery"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server-clock end of the elevated authority (≤10 minutes, bounded by the session's absolute expiry)"
           }
         },
         "additionalProperties": false

@@ -886,8 +886,18 @@ only under the same session+org scope; `granete_token`/`muebles_token` are
 destroyed at boot (one explicit re-login for stale Web sessions); support is
 a distinct tab-local memory credential with cookie-bootstrap recovery on
 exit. Absolute web sessions remain T0+18h (refresh never slides them);
-mobile/sketchup lifetimes are untouched until SEC-5/SEC-6. MFA/step-up and
-trusted-proxy rate limiting remain target work of the following #460 slices.
+mobile/sketchup lifetimes are untouched until SEC-5/SEC-6. MFA/step-up is
+implemented (SEC-7, ADR-0007 §12): TOTP factors with AES-256-GCM sealed
+secrets under the dedicated `MFA_ENCRYPTION_KEYS` keyring, single-use keyed
+recovery verifiers, atomic replay protection, and a server-side sid-bound
+scoped step-up grant (10 minutes) behind one reusable `RequireStepUp`
+boundary that runs before the idempotency wrapper — a challenge never
+consumes the command's `Idempotency-Key`. Sensitive commands (SketchUp
+device approval, platform support entry, MFA management, team authority
+changes, org lifecycle, entitlements, global account status) answer a typed
+403 (`MFA_REQUIRED`/`STEP_UP_REQUIRED`/`STEP_UP_EXPIRED`) that no client can
+mistake for access expiry; MFA proves identity and adds no authority.
+Trusted-proxy rate limiting remains target work of SEC-8.
 
 Mandatory hardening:
 

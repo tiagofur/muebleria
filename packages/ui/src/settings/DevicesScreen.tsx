@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { CheckCircle, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react';
 import { GraneteApiClient, type AuthDeviceView } from '@granete/storage';
 import { PageHeader, submitBusyLabel } from '../common';
+import { MFAEnrollmentHint, useStepUp } from '../security';
 import './settings.css';
 
 export type DevicesScreenProps = {
@@ -22,6 +23,10 @@ function formatWhen(iso: string | null | undefined): string {
  * only shows after the authoritative commit. */
 export function DevicesScreen({ baseUrl, token }: DevicesScreenProps): ReactNode {
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
+  // #460 SEC-7: approving a device binds a 30-day credential to this account —
+  // it requires a fresh device_enrollment step-up. The challenge re-runs this
+  // exact command under the SAME Idempotency-Key.
+  const stepUp = useStepUp({ baseUrl, token });
   const [devices, setDevices] = useState<readonly AuthDeviceView[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
@@ -56,10 +61,17 @@ export function DevicesScreen({ baseUrl, token }: DevicesScreenProps): ReactNode
     setStatus('submitting');
     setErrorMsg(null);
     try {
-      await api.approveDeviceEnrollment(token, { code: cleanCode });
-      setStatus('success');
-      setCode('');
-      void load(true);
+      const result = await stepUp.run('device_enrollment', 'aprobar el dispositivo', (key) =>
+        api.approveDeviceEnrollment(token, { code: cleanCode }, key));
+      if (result) {
+        setStatus('success');
+        setCode('');
+        void load(true);
+      } else {
+        // Cancelled challenge or MFA enrollment required: back to idle, the
+        // user decides the next step.
+        setStatus('idle');
+      }
     } catch (err: any) {
       setStatus('error');
       const status_ = err?.status ?? null;
@@ -67,7 +79,7 @@ export function DevicesScreen({ baseUrl, token }: DevicesScreenProps): ReactNode
         status_ === 409
           ? 'El código ya fue usado o expiró. Generá uno nuevo en SketchUp.'
           : status_ === 404 || status_ === 400
-            ? 'Código inválido o expirado.'
+            ? 'Código inválido o expiró.'
             : 'Error al aprobar el dispositivo.',
       );
     }
@@ -93,6 +105,15 @@ export function DevicesScreen({ baseUrl, token }: DevicesScreenProps): ReactNode
         subtitle="Administra los accesos de SketchUp a tu cuenta"
         icon={<Smartphone size={16} strokeWidth={1.5} />}
       />
+      {stepUp.modal}
+      {stepUp.enrollmentRequired ? (
+        <div style={{ marginBottom: 16 }}>
+          <MFAEnrollmentHint />
+          <button type="button" className="btn btn--secondary" style={{ marginTop: 8 }} onClick={stepUp.dismissEnrollmentHint}>
+            Cerrar aviso
+          </button>
+        </div>
+      ) : null}
 
       <div className="settings-form">
         <div className="catalog-form__section">

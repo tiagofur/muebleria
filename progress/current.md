@@ -1,145 +1,108 @@
-# Feature activa: F202 (#460) — SEC-4B in progress
+# Feature activa: F202 (#460) — SEC-7 implemented pending review
 
-- Actualizado: 2026-09-01 America/Mexico_City
-- F199 (#458) cerrada (`done`); ninguna otra feature `in_progress`.
-- F202 y #460 continúan abiertos. SEC-1, SEC-2A, SEC-2B (PR #528), SEC-3 (PR
-  #530) y SEC-4A (PR #531) están integrados; slice **SEC-4B** (Web in-memory
-  access credential, cookie bootstrap/refresh, serialización cross-tab y
-  eliminación del bearer en localStorage) implementado en rama
-  `feat/460-4b-web-in-memory-auth`, integrado tras revisión.
-- Slice **SEC-5** (Mobile refresh credential in secure storage + short access 
-  credential in memory) implementado en rama `feat/460-5-mobile-credential-migration`
-  y documentado en ADR-0007, pendiente de revisión (PR #533).
-- Review de PR #532 (CHANGES REQUIRED, 2 blockers) corregido en la misma
-  rama: (1) fallback lock reemplazado por exclusión mutua real; (2) session
-  replacement/scope change ya no instala S2 en el refresh: un transition
-  owner purga S1 (credential + grants + business state) y SÓLO ENTONCES
-  aplica S2 y pide /auth/me autoritativo; select-org ahora corre bajo el
-  mismo boundary cross-tab (§32).
-- SEGUNDA revisión (CHANGES REQUIRED, 1 blocker residual): el lease IndexedDB
-  con TTL seguía permitiendo takeover ante un holder congelado/suspendido
-  (dos mutaciones coexistentes ⇒ falso REFRESH_REUSED). Simplificado según
-  recomendación: `navigator.locks` es el ÚNICO mecanismo (el browser ata el
-  lock a la vida del document: congelado lo mantiene, muerto lo libera);
-  sin Web Locks ⇒ FAIL CLOSED para refresh/logout/select-org. Sin fallback
-  de lease. Negative proof: holder congelado ⇒ nadie entra (sin takeover por
-  TTL); gate real: locks off con IndexedDB disponible ⇒ cero rotaciones.
-- **SEC-5** Mobile in-memory access y SecureStore refresh implementado; SEC-6/7/8/9 no avanzaron.
+- Actualizado: 2026-09-02 America/Mexico_City
+- F199 (#458) cerrada (`done`); ninguna otra feature `in_progress` salvo F202.
+- F202 y #460 continúan abiertos. SEC-1, SEC-2A/B (PR #528), SEC-3 (PR #530),
+  SEC-4A (PR #531), SEC-4B, SEC-5 y SEC-6 (PR #534, merge `f5d59a46`) están
+  integrados; slice **SEC-7** (MFA TOTP + step-up para acciones sensibles)
+  implementado en rama `feat/460-7-mfa-step-up`, pendiente de revisión.
+- Roadmap restante: SEC-8 trusted-proxy/rate limits distribuidos/account
+  hardening, SEC-9 gate final + ver4 EOL.
 
-## Hechos implementados SEC-4B
+## SEC-7 — qué se implementó
 
-### Backend (TTLs y cap estructural)
+### Modelo y storage (migration 000109)
 
-- `WebAccessTokenTTL = 15m` ROLLING desde el mint (`min(now+15m,
-  auth_sessions.absolute_expires_at)`), nunca desde el session origin (eso
-  mintearía tokens ya vencidos tras el minuto 15). `MobileAccessTokenTTL =
-  18h` y `ExtensionTokenTTL` intactos hasta SEC-5/6; `WebSessionAbsoluteTTL`/
-  `MobileSessionAbsoluteTTL` = 18h (refresh nunca los desliza); ver4 legacy
-  mintea su política histórica (`LegacyAccessTokenTTL`).
-- Cap ESTRUCTURAL: `IssueTransportToken`/`issueTransportTokenUntil` rechazan
-  un mint web sin cap absoluto futuro (error de programación, no política).
-  Todos los paths web (login org-less, login, select-org, invitación,
-  cookie refresh) usan `IssueTransportTokenUntil`; select-org resuelve la
-  fila ANTES del mint (401 SESSION_REVOKED si murió) y reutiliza el mismo
-  cap para metadata.
-- `AccessTokenExpiry` (metadata `access_expires_at`) comparte la aritmética
-  exacta del minting — proof HTTP: JWT exp == access_expires_at al segundo.
+- `auth_mfa_factors`: factor TOTP por usuario, `pending → enabled → revoked`;
+  secreto AES-256-GCM (nonce‖ciphertext‖tag) kid-pinned; `pending_expires_at`
+  terminal; `last_used_counter` high-water de replay; CHECKs de shape.
+- `auth_mfa_recovery_codes`: 10 verificadores HMAC-SHA256 (nunca plaintext),
+  `used_at`/`revoked_at` single-use por UPDATE condicional.
+- `auth_step_up_grants`: autoridad server-side (sid, user, scope, method,
+  expiración ≤10 min); freshness joinea la fila viva de `auth_sessions` (la
+  revocación corta el grant sin cleanup); S2 nunca hereda (sid distinto).
+- `auth_sessions.step_up_at` (reservada en 000105) se mantiene como hint de
+  frescura; los grants son la autoridad por scope.
+- RLS platform-global self-or-platform en las tres tablas + registro en
+  `rls_policy_inventory`; sin DELETE (revocación/uso son UPDATE; grants
+  expiran solos).
 
-### Frontend (arquitectura client-side)
+### Crypto
 
-- `webAuthRuntime` — ÚNICA autoridad del credential Web en memoria
-  (web|support|anonymous, generación monotónica para late-response guards;
-  ningún secret sale salvo el access al fetch boundary). `getAuthUser` vive
-  en estado del store (nada de usuario persistido).
-- `webAuthClient` — boundary canónico: Authorization sólo para origin+base
-  exacto de la API (URL externa jamás recibe bearer); cookie bootstrap y
-  refresh bodyless `credentials:'include'` + `X-Granete-CSRF: 1` (sin
-  Authorization) bajo lock; 401 de negocio → coordinated refresh → retry
-  EXACTAMENTE UNA vez y sólo con mismo sessionId+organizationId (org switch
-  o session replacement mid-request ⇒ WebSessionTransitionError, nunca
-  replay cross-tenant); refresh terminal (INVALID/EXPIRED/REVOKED/REUSED) ⇒
-  fin de sesión local; 5xx/red NO cierra sesión (cookie viva server-side);
-  403 CSRF fail-closed sin loop; scheduler por access_expires_at real
-  (~2 min lead) + wake visibility/focus/online con singleflight in-tab (20
-  callers = 1 rotación).
-- `webSessionLock` — TODA mutación de cookie (refresh/logout/select-org)
-  serializada cross-tab con EXCLUSIÓN MUTUA REAL vía `navigator.locks`
-  (acquire/release promisificado; lock exclusivo
-  `granete:web-session-mutation`). Sin Web Locks ⇒ FAIL CLOSED (la mutación
-  no se ejecuta): NO existe fallback de lease — ningún TTL distingue un
-  holder muerto de uno suspendido. Proofs: DOS runtimes/tab identities
-  independientes compartiendo sólo el backend (peak = 1), locks promisificado,
-  holder congelado ⇒ nadie entra (sin takeover), fail closed sin locks
-  (unit + gate real con IndexedDB disponible y sin usarlo).
-- `webSessionChannel` — BroadcastChannel `granete-web-session` con payloads
-  `{ type }` ÚNICAMENTE (session-replaced/session-ended/scope-changed);
-  refresh normal no recarga pestañas; el resto purge+reload y re-deriva
-  estado desde la cookie (jamás tokens por mensaje). El ordering de una
-  transición NUNCA depende del canal (best-effort): purge S1 → apply S2 →
-  /auth/me autoritativo ocurre en-proceso (review Blocker 2).
-- `workspaceStore` — login/loginWithAuthPayload/selectOrg/enterSupport/
-  exitSupport/logout/markSessionEnded/boot sobre el runtime; `authBootstrapping`
-  evita el flash login→shell; `sessionBootError` (unavailable/config) y
-  `logoutServerPending` (logout server fallido: purge local inmediato, retry
-  visible, bootstrap suprimido — nunca claim "logout completado");
-  `granete_session` queda como hint no-secreto de guest por pestaña.
-- Support: token SOLO en memoria tab-local (applySupportCredential), entry
-  sin tocar cookie, exit = DELETE con token support → purge → cookie
-  bootstrap que recupera la sesión platform (o login); 401 en modo support
-  NUNCA se reintenta con otra credential class (negative proof).
-- `APIWorkspaceRepository(baseUrl, { getAccessToken, fetchImpl })` — cero
-  localStorage; el web inyecta el boundary autenticado (refresh-once).
-  `AcceptInvitationScreen` acepta `fetchImpl` (web pasa credentialed fetch).
-- Legacy: `migrateLegacyStorageKeys` DESTRUYE `muebles_token`/
-  `granete_token`/`muebles_user`/`granete_user` (DELETE, NEVER SEND) y
-  sigue migrando las claves guest; `auth401` reescrito (runtime + refresh
-  coordinado, sin storage); `sessionSync` eliminado (reemplazado por el
-  canal no-secreto).
+- Keyring dedicado `MFA_ENCRYPTION_KEYS` (`{"active_kid","keys":{kid:base64}}`)
+  o `MFA_ENCRYPTION_KEY` single (kid `primary`); ≥32 bytes; boot fail-closed
+  (LoadConfig) igual que REFRESH_TOKEN_PEPPER. Subkeys por propósito vía
+  HKDF-SHA256 (AEAD TOTP vs HMAC recovery no cruzan). Rotación: active kid
+  sella lo nuevo; quitar un kid fail-closed su material.
+- TOTP RFC 6238 (SHA1/6/30, ventana ±1) con vectores del RFC; replay
+  protection atómica (counter aceptado una sola vez, incluso concurrente).
+- Disjunto de JWT/refresh/media/device secrets por construcción.
 
-## Inventario granete_token (estado final)
+### API y boundaries
 
-Runtime Web bearer persistence: CERO. Los únicos matches restantes son las
-listas de discard (`legacyStorageKeys.DISCARDED_CREDENTIAL_STORAGE_KEYS`,
-`session.LEGACY_BEARER_STORAGE_KEYS`), comentarios y tests que asertan la
-destrucción/never-send. Storage del lock = lease no-secreto `{holder,
-expiresAt}`. BroadcastChannel payloads `{type}`-only.
+- Endpoints (`/api/auth/mfa/*`, OpenAPI generado sin drift): factors list,
+  totp:begin (URI una sola vez), totp/{id}:verify (habilita + recovery),
+  factors/{id}:remove y recovery-codes:regenerate (security_admin step-up),
+  step-up (un scope por verificación).
+- `RequireStepUp(scope)` corre DESPUÉS de auth/platform y ANTES del wrapper de
+  idempotencia: el challenge no consume la `Idempotency-Key`; el reintento
+  verificado reutiliza la misma key (proof HTTP + browser).
+- 403 tipado (nunca 401): `MFA_REQUIRED` (sin factor; sin bypass — enrollment
+  exige TOTP vivo), `STEP_UP_REQUIRED` (+`details.scope`), `STEP_UP_EXPIRED`.
+- Comandos protegidos: devices approve (device_enrollment), support entry
+  (support_access), MFA remove/regenerate (security_admin), team
+  change-roles/transfer-admin/offboard/revoke-sessions (organization_admin),
+  org lifecycle + entitlements + set-account-status (platform_admin).
+  Documentado: password change no existe aún (deberá nacer con step-up);
+  self-revoke/revocación de dispositivo propio/suspend memberships quedan en
+  su boundary (bajo impacto o reversibles); MFA obligatoria para admins NO se
+  fuerza aún (decision de rollout para SEC-8/9; MFA_REQUIRED es la mecánica).
+- Rate limiting por usuario+propósito: 5 fallos, refill 1/min, éxitos gratis
+  (in-memory; SEC-8 lo distribuye). Auditoría `mfa_*`/`step_up_*` sin material
+  secreto (proof de redacción en storage+HTTP).
+
+### Web / Mobile
+
+- `SecurityScreen` (`/security`, nav base para todo rol): wizard enrollment
+  (QR en memoria + clave manual), verificación, recovery codes one-time
+  (copiar/guardar), regenerar y eliminar factor con step-up.
+- `useStepUp` + `StepUpModal`: modal ligado a la acción exacta ("Confirma tu
+  identidad"), reintento del MISMO comando con la misma Idempotency-Key, sin
+  retry global automático; hint MFA_REQUIRED → Seguridad. Nada MFA toca
+  localStorage/sessionStorage/IndexedDB.
+- Wiring: DevicesScreen (approve), UsersScreen (roles/transfer/offboard/
+  revoke-sessions), PlatformScreen (support + account status),
+  OrganizationLifecyclePanel (suspend/reactivate/terminate/begin-offboarding).
+- Mobile: 403 STEP_UP se superficie como DomainError con code y NUNCA entra al
+  path de refresh (regression proof).
 
 ## Evidencia ejecutada
 
-- `GOFLAGS='-p=1' go test ./... -count=1`: verde, incl.
-  `TestWebAccessTokenShortTTLAndAbsoluteCap` (HTTP real + PostgreSQL: web
-  ~15m con exp==access_expires_at y cap al bound shrunk T+17:59; mobile
-  ~18h intacto), `TestAccessTokenTTLSeparation`, proofs auth/unbounded-web-
-  mint-rejected/mobile-policy/rolling-vs-origin.
-- `pnpm typecheck`: verde (web, mobile, desktop, ui, storage, domain, excel).
-- `pnpm test`: verde (web 404 incl. suites nuevas runtime/lock/fallback/
-  client: bootstrap, singleflight, 401-retry-once, cross-scope no-retry,
-  session replacement, support-401, scheduler fake-timers, lease secrets;
-  monorepo 3475 tests; mobile 49 sin regresión).
-- `pnpm openapi:check`: verde sin drift (SEC-4B no cambió contrato).
-- `scripts/organization-browser-gate.sh`: PASS 13/13 chromium — nuevos gates
-  SEC-4B: no-bearer-en-storage + cookie HttpOnly no legible, reload bootstrap
-  (access nuevo ≠ previo), pestaña nueva bootstrap sin transporte de token,
-  refresh concurrente DOS PESTAÑAS a través del lock del app (ambos
-  `refreshed`, sesión viva, sin REFRESH_REUSED), org switch dos tabs
-  (bearer B ≠ A, storage limpio), logout corta ambas pestañas. Specs
-  existentes (switch/lifecycle) actualizados al modelo memoria.
-- `scripts/smoke-deploy.sh`: 30/30.
+- `GOFLAGS='-p=1' go test ./... -count=1`: verde (crypto/TOTP unit, storage
+  PostgreSQL: migration fresh+upgrade, lifecycle, replay CON concurrencia,
+  recovery single-use CON concurrencia, TTL/binding/scopes/revocación, RLS,
+  redacción de audit; api: boundaries tipados, ver4 no elevable, fail-closed
+  sin keyring; pilotreadiness HTTP real: enrollment, challenge+retry misma
+  key, enrollment expirado post-MFA, scope isolation, TTL, session
+  replacement, recovery+management, rate limit, redacción).
+- `pnpm openapi:check`: sin drift. `pnpm typecheck`: verde.
+- `pnpm test` (monorepo): verde (UI 1503 incl. SecurityScreen/stepUp/
+  DevicesScreen challenge; mobile 6/6 apiClient).
+- `scripts/organization-browser-gate.sh`: PASS con `mfa.spec.ts` (enrollment
+  QR+manual, recovery one-time, STEP_UP_REQUIRED → verificación → mismo
+  comando prospera, sin secretos MFA en storage).
+- `scripts/smoke-deploy.sh`: 31/31 (con `MFA_ENCRYPTION_KEYS` añadida a la
+  validación de compose y a `.env.production.example`).
 - `git diff --check`: limpio.
 
 ## Decisiones documentadas
 
-- ADR-0007 §10 (SEC-4B) + status actualizado; organization-foundation-v2
-  security section actualizada (cutover implementado).
-- Re-login explícito para sesiones web stale (bearer localStorage destruido,
-  sin credencial de migración long-lived) — intencional, heredado de SEC-4A.
+- ADR-0007 §12 (SEC-7) + status; organization-foundation-v2 §13 actualizado;
+  `.env.example`/`docker-compose.prod.yml`/gates con el nuevo secreto.
 
 ## Estado de entrega
 
-## Estado de entrega
-
-SEC-4B integrado. SEC-5 `implemented pending review`. F202 sigue
+SEC-6 integrado. SEC-7 `implemented pending review`. F202 sigue
 `in_progress`, #460 sigue abierto, sin merge. Roadmap restante explícito:
-SEC-6 SketchUp device credentials, SEC-7
-MFA/step-up, SEC-8 trusted-proxy/rate limits/account hardening, SEC-9 gate
-final + ver4 EOL.
+SEC-8 trusted-proxy/rate limits/account hardening, SEC-9 gate final + ver4
+EOL.

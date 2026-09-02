@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B integrated; SEC-5 implemented pending review; SEC-6..SEC-9 in progress)
+- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B integrated; SEC-5 integrated; SEC-6 integrated; SEC-7 implemented pending review; SEC-8..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -372,6 +372,118 @@ aborted instead of being replayed under organization B.
 rotate the refresh family. Mobile does not ask for, nor expect, a new `refresh_token` 
 on `select-org`, maintaining alignment with Web's behavior where the `granete_web_refresh` 
 cookie remains stable across scope switches.
+
+### 12. MFA and step-up authority for sensitive actions (SEC-7)
+
+A normal authenticated session must NOT be enough for security-sensitive
+commands: "login una vez → autoridad administrativa sensible durante 18h" is
+the failure mode SEC-7 removes. The flow is
+`authenticated → sensitive command → STEP_UP_REQUIRED (403) → MFA challenge →
+short-lived elevated authority → same command retries and succeeds`.
+
+**MFA baseline: TOTP (RFC 6238).** Fixed interoperable profile — SHA1, 6
+digits, 30-second period, ±1 interval acceptance — so any standard
+authenticator provisions from the `otpauth://` URI. WebAuthn/passkeys remain
+a future evolution. The provisioning URI exists exactly once, in the begin
+response; it is never logged, persisted or re-shown (the Web renders the QR
+in memory from component state). A factor generated but not verified is
+`pending` and authorizes nothing: pending → enabled requires a live TOTP, and
+pending enrollments expire (15 min) terminally.
+
+**Secret protection.** `auth_mfa_factors` (migration 000109) stores the TOTP
+secret AES-256-GCM sealed under a DEDICATED keyring
+(`MFA_ENCRYPTION_KEYS`/`MFA_ENCRYPTION_KEY`, mandatory ≥32-byte keys — boot
+fails closed, exactly like the refresh pepper), kid-pinned per factor.
+Purpose-bound subkeys derive via HKDF-SHA256: the AEAD key for TOTP secrets
+and the HMAC-SHA256 key for recovery verifiers can never cross-use. Rotation
+mirrors the JWT keyring: the active kid encrypts new material; removing a kid
+fails its stored factors closed.
+
+**Recovery codes.** Enabling a factor (or regenerating, under step-up) mints
+10 single-use codes; the DB stores only keyed verifiers (kid-pinned).
+Plaintext exists exactly once in the response. Consumption is an atomic
+conditional UPDATE — two concurrent uses of the same code produce exactly one
+winner. Removing the LAST enabled factor revokes every outstanding recovery
+code: MFA off means no fallback credential either.
+
+**TOTP replay protection.** Each accepted time-step counter becomes the
+factor's high-water mark through an atomic conditional UPDATE
+(`last_used_counter < candidate`); the same counter can never verify twice,
+concurrently or later, while `candidate+1` stays acceptable within the ±1
+window. A same-session second verification therefore uses the future slot of
+the window — at most two verifications per 30-second interval, which is the
+deliberate ceiling (each step-up lives 10 minutes).
+
+**Step-up authority is server-side, sid-bound and scoped.** One verification
+elevates exactly ONE least-privilege scope — `device_enrollment`,
+`support_access`, `security_admin`, `organization_admin` or `platform_admin`
+(never every sensitive action at once) — for 10 minutes, recorded in
+`auth_step_up_grants` keyed by the registry session id and user. The grant
+never outlives the session's own absolute bound, a session replacement (new
+sid starts clean; S2 never inherits S1) or revocation (the freshness check
+joins the live `auth_sessions` row), and is NEVER a JWT claim a client could
+forge or cache. `auth_sessions.step_up_at` (reserved since 000105) records
+the last successful verification as a human-readable freshness hint; the
+grants table is the scope-aware authority. Within one sid the grant is
+user/session-bound: it survives an Org A→B switch for its TTL because it
+proves the HUMAN's identity, while the final authorization still requires the
+live membership/role/capability in the target organization — scopes are
+action-bound, not org-bound. Legacy ver4 bearers carry no sid and can never
+be elevated: sensitive commands on them require re-login by design.
+
+**The boundary is one reusable middleware.** `RequireStepUp(scope)` runs
+after auth/platform middleware and BEFORE the idempotency wrapper, so a
+challenge never consumes the command's `Idempotency-Key` — the verified retry
+reuses it (HTTP proof: retry with the same key succeeds and a later replay
+returns the stored 200, not the 403). The typed 403 contract distinguishes
+`MFA_REQUIRED` (no factor yet — enroll first; no bypass exists because
+enrollment only completes after a live TOTP), `STEP_UP_REQUIRED` (with
+`details.scope`) and `STEP_UP_EXPIRED`. 403 — never 401 — so no client can
+mistake it for access-token expiry (Web/mobile refresh paths never trigger).
+
+**Protected surface (minimum set).** SketchUp device enrollment approval
+(`device_enrollment`), platform support entry (`support_access`), MFA factor
+removal and recovery regeneration (`security_admin`), membership role
+changes/admin transfer/offboarding/mass session revocation
+(`organization_admin`), and the platform mutations (org lifecycle,
+entitlements, global account status) (`platform_admin`). Self-revocation of
+one's own session, single-session revocations, device revocation of one's
+own device, membership suspend/reactivate and invitations stay on their
+capability boundaries (documented policy: low-impact or reversible
+operations). No password-change endpoint exists yet; when one is added it
+MUST ship with `security_admin` step-up (tracked in the sensitive-ops
+matrix). Mandatory-MFA-for-admins is deliberately NOT hard-enforced yet —
+deploying it would lock existing admin accounts out of sensitive operations
+at upgrade time; the enrollment path plus the typed `MFA_REQUIRED` signal are
+the rollout mechanics, and flipping the policy is a deployment decision for
+SEC-8/9.
+
+**MFA proves identity; it adds no authority.** Final authorization remains
+`authenticated identity ∩ live membership/role/capability ∩ client type ∩
+required recent step-up`. An org admin with MFA never becomes a platform
+admin.
+
+**Brute-force floor.** Per-user token buckets (5 failures, 1/minute refill,
+successes free) bound TOTP/recovery/enrollment/step-up verification per
+identity — in-memory today, moving to distributed storage with SEC-8.
+Failed attempts audit (`mfa_verification_failed`, `step_up_failed`) inside
+the same transaction where possible; the audit events carry ids and reasons
+only — never TOTP codes, provisioning URIs or recovery plaintext.
+
+**Web UX.** `STEP_UP_REQUIRED` opens a modal bound to the exact action
+("Confirma tu identidad"), verifies, and retries exactly that action under
+the same key — no generic global auto-retry. The typed code lives in
+component state only; nothing MFA-related ever touches
+localStorage/sessionStorage/IndexedDB (browser-gate proof). Multi-tab: the
+step-up is server-side keyed by sid, so tabs sharing the session share the
+elevated authority; BroadcastChannel never carries TOTP/recovery/secret
+material. Mobile: a 403 step-up surfaces as a DomainError with its code and
+never triggers the refresh path (regression proof).
+
+**Audit events.** `mfa_enrollment_started`, `mfa_factor_enabled`,
+`mfa_factor_removed`, `mfa_recovery_codes_generated`, `mfa_recovery_code_used`,
+`mfa_verification_failed`, `step_up_succeeded`, `step_up_failed` — all
+secret-free by construction and covered by a redaction proof.
 
 ## Alternatives considered
 

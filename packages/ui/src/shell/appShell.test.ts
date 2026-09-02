@@ -137,6 +137,7 @@ describe('AppShell nav model (F017)', () => {
     expect(config.items.map((i) => i.id)).toEqual([
       'settings',
       'devices',
+      'security',
     ]);
   });
 

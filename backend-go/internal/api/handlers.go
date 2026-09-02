@@ -16,6 +16,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
+	"golang.org/x/time/rate"
 )
 
 // actorCanViewCosts resolves COST-01/COST-02 for the request actor (F039 + F044).
@@ -57,18 +58,25 @@ type Server struct {
 	// MediaTokens signs/validates resource-scoped media read grants under the
 	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
 	// built without one neither mints nor accepts media grants.
-	MediaTokens   *auth.MediaAuthority
-	authorityOnce sync.Once
-	lazyAuthority *auth.Authority
+	MediaTokens *auth.MediaAuthority
+	// MFASecrets encrypts TOTP secrets and keys recovery verifiers under the
+	// dedicated MFA_ENCRYPTION_KEYS keyring (#460 SEC-7). Nil fails closed:
+	// every MFA endpoint refuses to operate, and step-up-gated commands stay
+	// blocked — no plaintext fallback ever exists.
+	MFASecrets        *auth.MFASecrets
+	mfaAttemptLimiter *userRateLimiter
+	authorityOnce     sync.Once
+	lazyAuthority     *auth.Authority
 }
 
 func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
 	return &Server{
-		Store:          store,
-		JWTSecret:      jwtSecret,
-		allowedOrigins: allowedOrigins,
-		rateLimitRPS:   rateLimitRPS,
-		rateLimitBurst: rateLimitBurst,
+		Store:             store,
+		JWTSecret:         jwtSecret,
+		allowedOrigins:    allowedOrigins,
+		rateLimitRPS:      rateLimitRPS,
+		rateLimitBurst:    rateLimitBurst,
+		mfaAttemptLimiter: newUserRateLimiter(rate.Every(mfaAttemptEvery), mfaAttemptBurst),
 	}
 }
 

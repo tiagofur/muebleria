@@ -195,6 +195,14 @@ type stubStore struct {
 	deleteModuleReceivedID string
 	approveDeviceReceived  *storage.ApproveDeviceEnrollmentCommand
 	resolveDeviceResult    *storage.DeviceTokenResult
+	// MFA / step-up (#460 SEC-7)
+	mfaEnabledFactors  int
+	mfaStepUpFreshness storage.MFAStepUpFreshness
+	mfaEnrollFn        func(context.Context, storage.CreateMFAEnrollmentCommand) (*domain.MFAFactor, error)
+	mfaEnableFn        func(context.Context, storage.EnableMFAFactorCommand) (*storage.EnabledMFAFactor, error)
+	mfaRevokeFn        func(context.Context, storage.RevokeMFAFactorCommand) (*domain.MFAFactor, error)
+	mfaRegenFn         func(context.Context, storage.RegenerateMFARecoveryCommand) ([]string, error)
+	mfaStepUpFn        func(context.Context, storage.MFAStepUpCommand) (*storage.MFAStepUpResult, error)
 }
 
 func (s *stubStore) CreateAuthDeviceEnrollment(ctx context.Context, cmd storage.DeviceEnrollmentCommand) (*domain.AuthDeviceEnrollment, error) {
@@ -220,7 +228,55 @@ func (s *stubStore) ResolveDeviceToken(ctx context.Context, cmd storage.DeviceTo
 func (s *stubStore) ListAuthDevicesByUser(ctx context.Context, userID string) ([]domain.AuthDevice, error) {
 	return nil, nil
 }
-func (s *stubStore) RevokeAuthDevice(ctx context.Context, cmd storage.RevokeDeviceCommand) error { return nil }
+func (s *stubStore) RevokeAuthDevice(ctx context.Context, cmd storage.RevokeDeviceCommand) error {
+	return nil
+}
+
+// MFA / step-up stubs (#460 SEC-7): the default answers model a user with no
+// factors and no grants so step-up-gated routes fail closed exactly like a
+// fresh account; specific tests override the hooks they need.
+func (s *stubStore) CreateMFAEnrollment(ctx context.Context, cmd storage.CreateMFAEnrollmentCommand) (*domain.MFAFactor, error) {
+	if s.mfaEnrollFn != nil {
+		return s.mfaEnrollFn(ctx, cmd)
+	}
+	panic("stubStore: CreateMFAEnrollment not configured for this test")
+}
+func (s *stubStore) GetMFAFactor(ctx context.Context, userID, factorID string) (*domain.MFAFactor, error) {
+	return nil, storage.ErrMFAFactorNotFound
+}
+func (s *stubStore) ListMFAFactors(ctx context.Context, userID string) ([]domain.MFAFactor, error) {
+	return nil, nil
+}
+func (s *stubStore) CountEnabledMFAFactors(ctx context.Context, userID string) (int, error) {
+	return s.mfaEnabledFactors, nil
+}
+func (s *stubStore) EnableMFAFactor(ctx context.Context, cmd storage.EnableMFAFactorCommand) (*storage.EnabledMFAFactor, error) {
+	if s.mfaEnableFn != nil {
+		return s.mfaEnableFn(ctx, cmd)
+	}
+	panic("stubStore: EnableMFAFactor not configured for this test")
+}
+func (s *stubStore) RevokeMFAFactor(ctx context.Context, cmd storage.RevokeMFAFactorCommand) (*domain.MFAFactor, error) {
+	if s.mfaRevokeFn != nil {
+		return s.mfaRevokeFn(ctx, cmd)
+	}
+	panic("stubStore: RevokeMFAFactor not configured for this test")
+}
+func (s *stubStore) RegenerateMFARecoveryCodes(ctx context.Context, cmd storage.RegenerateMFARecoveryCommand) ([]string, error) {
+	if s.mfaRegenFn != nil {
+		return s.mfaRegenFn(ctx, cmd)
+	}
+	panic("stubStore: RegenerateMFARecoveryCodes not configured for this test")
+}
+func (s *stubStore) VerifyMFAStepUp(ctx context.Context, cmd storage.MFAStepUpCommand) (*storage.MFAStepUpResult, error) {
+	if s.mfaStepUpFn != nil {
+		return s.mfaStepUpFn(ctx, cmd)
+	}
+	panic("stubStore: VerifyMFAStepUp not configured for this test")
+}
+func (s *stubStore) GetMFAStepUpFreshness(ctx context.Context, sessionID, userID, scope string) (storage.MFAStepUpFreshness, error) {
+	return s.mfaStepUpFreshness, nil
+}
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
 	if s.createCustomerErr != nil {

@@ -10,6 +10,41 @@ describe('mobile generated API client', () => {
     authRuntime.__resetMobileAuthRuntimeForTests();
   });
 
+
+  it('#460 SEC-7: 403 STEP_UP_REQUIRED no se interpreta como expiración de acceso (sin refresh, sin loop)', async () => {
+    authRuntime.applyCredential({
+      accessToken: 'token-1',
+      accessExpiresAt: '2050-01-01T00:00:00Z',
+      absoluteSessionExpiresAt: '2050-01-01T00:00:00Z',
+      sessionId: 'sess-1',
+      userId: 'usr-1',
+      organizationId: 'org-A',
+    });
+
+    const refreshSpy = vi.spyOn(authRuntime, 'refreshSession').mockImplementation(async () => {});
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({
+        code: 'STEP_UP_REQUIRED',
+        message: 'Confirmá tu identidad para continuar.',
+        fieldErrors: {}, requestId: '', retryable: false,
+        details: { scope: 'device_enrollment' },
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await apiClient
+      .post('/auth/devices/approve', { code: 'K7M2QP' })
+      .catch((err: unknown) => err);
+
+    // The typed challenge surfaces as a DomainError carrying the code — never
+    // as access expiry: no refresh attempt, exactly one request, no loop.
+    expect((error as any).context?.status).toBe(403);
+    expect((error as any).context?.data?.code).toBe('STEP_UP_REQUIRED');
+    expect(refreshSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the generated contract under the legacy /api base path', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 500 }));
     vi.stubGlobal('fetch', fetchMock);

@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const testMFAEncryptionKey = "bWZhLXRlc3Qta2V5LTMyLWJ5dGVzLWFhYWFhYWFhYWE="
+
 func TestLoadConfig_RequiresJWTSecret(t *testing.T) {
 	// Force JWT_SECRET empty to trigger the fail-closed path.
 	t.Setenv("JWT_SECRET", "")
@@ -37,6 +39,7 @@ func TestLoadConfig_RequiresIndependentRefreshPepper(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", "")
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	_, err := LoadConfig()
 	if err == nil || !strings.Contains(err.Error(), "refresh credential pepper") {
 		t.Fatalf("expected fail-closed refresh pepper error, got %v", err)
@@ -66,10 +69,68 @@ func TestLoadConfig_RejectsShortMediaSigningKey(t *testing.T) {
 	}
 }
 
+// MFA_ENCRYPTION_KEYS is a mandatory, independently-sized secret (#460
+// SEC-7): TOTP secrets and recovery verifiers must not share key material
+// with session tokens, the refresh pepper or the media key, and a deployment
+// without one refuses to boot.
+func TestLoadConfig_RequiresMFAEncryptionKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", "")
+	t.Setenv("MFA_ENCRYPTION_KEYS", "")
+	_, err := LoadConfig()
+	if err == nil || !strings.Contains(err.Error(), "mfa encryption keys are required") {
+		t.Fatalf("expected fail-closed mfa key error, got %v", err)
+	}
+}
+
+func TestLoadConfig_RejectsShortMFAEncryptionKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", "c2hvcnQ=") // decodes < 32 bytes
+	_, err := LoadConfig()
+	if err == nil || !strings.Contains(err.Error(), "at least 32 bytes") {
+		t.Fatalf("expected short mfa key error, got %v", err)
+	}
+}
+
+func TestLoadConfig_ParsesMFAKeyringRotation(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", "")
+	t.Setenv("MFA_ENCRYPTION_KEYS", `{"active_kid":"k1","keys":{"k1":"`+testMFAEncryptionKey+`","k0":"`+testMFAEncryptionKey+`"}}`)
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if cfg.MFASecrets == nil {
+		t.Fatal("expected configured MFASecrets")
+	}
+	// A round-trip through the authority proves the keyring materializes.
+	if _, _, err := cfg.MFASecrets.EncryptTOTPSecret([]byte("probe")); err != nil {
+		t.Fatalf("encrypt probe through config-built keyring: %v", err)
+	}
+}
+
+func TestLoadConfig_MFAKeyringTakesPrecedenceOverSingleKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", "invalid-not-base64!!")
+	t.Setenv("MFA_ENCRYPTION_KEYS", `{"active_kid":"k1","keys":{"k1":"`+testMFAEncryptionKey+`"}}`)
+	if _, err := LoadConfig(); err != nil {
+		t.Fatalf("keyring form must win over the single key: %v", err)
+	}
+}
+
 func TestLoadConfig_SuccessWithDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("a", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	t.Setenv("PORT", "")                 // exercise default port
 	t.Setenv("CORS_ALLOWED_ORIGINS", "") // exercise default dev allowlist
 	t.Setenv("RATE_LIMIT_RPS", "")
@@ -98,6 +159,7 @@ func TestLoadConfig_ParsesOriginsList(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://a.test, https://b.test ,https://c.test")
 
 	cfg, err := LoadConfig()
@@ -119,6 +181,7 @@ func TestLoadConfig_RejectsBadRateLimit(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	t.Setenv("RATE_LIMIT_RPS", "not-a-number")
 
 	_, err := LoadConfig()
@@ -134,6 +197,7 @@ func TestLoadConfig_MediaDirDefaultsToHome(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	t.Setenv("MEDIA_DIR", "")
 
 	cfg, err := LoadConfig()
@@ -158,6 +222,7 @@ func TestLoadConfig_MediaDirOverride(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	t.Setenv("MEDIA_DIR", "/var/lib/muebles/media")
 
 	cfg, err := LoadConfig()
@@ -174,6 +239,7 @@ func TestLoadConfig_MediaDirWhitespaceFallsBack(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("k", 40))
 	t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 	t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 	t.Setenv("MEDIA_DIR", "   ")
 
 	cfg, err := LoadConfig()
@@ -222,6 +288,7 @@ func TestWebRefreshCookieSecurityResolution(t *testing.T) {
 			t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
 			t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
 			t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+			t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
 			t.Setenv("GRANETE_ENV", tc.env)
 			t.Setenv("WEB_REFRESH_COOKIE_SECURE", tc.secure)
 			t.Setenv("CORS_ALLOWED_ORIGINS", tc.origins)

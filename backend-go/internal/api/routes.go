@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strings"
+
+	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 // membershipCommandRouter adapts the command-oriented OpenAPI paths
@@ -86,14 +88,33 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	// Device Auth (#460 SEC-6): anonymous enrollment is rate-limited like the
 	// other auth entry points; approve/list/revoke require the web session
-	// (approve and revoke are idempotent commands).
+	// (approve and revoke are idempotent commands). #460 SEC-7: approving a
+	// device binds a 30-day credential to the caller's identity, so it needs
+	// a fresh device_enrollment step-up — the boundary runs BEFORE the
+	// idempotency wrapper so a STEP_UP_REQUIRED challenge never consumes the
+	// command's Idempotency-Key (the retried command reuses it).
 	mux.Handle("POST /api/auth/devices/enroll", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceEnroll))))
 	mux.Handle("POST /api/auth/devices/enroll/poll", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceEnrollPoll))))
-	mux.Handle("POST /api/auth/devices/approve", noStoreMiddleware(authMW(server.RequireIdempotency("auth.approve-device", http.HandlerFunc(server.HandleDeviceApprove)))))
+	mux.Handle("POST /api/auth/devices/approve", noStoreMiddleware(authMW(server.RequireStepUp(domain.StepUpScopeDeviceEnrollment, server.RequireIdempotency("auth.approve-device", http.HandlerFunc(server.HandleDeviceApprove))))))
 	mux.Handle("POST /api/auth/devices/exchange", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceExchange))))
 	mux.Handle("POST /api/auth/devices/token", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceToken))))
 	mux.Handle("GET /api/auth/devices", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMyDevices)))))
 	mux.Handle("POST /api/auth/devices/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("auth.revoke-device", http.HandlerFunc(server.HandleRevokeDevice))))))
+
+	// MFA management + step-up (#460 SEC-7). The provisioning URI and the
+	// recovery codes exist only inside their responses (no-store); factor
+	// removal and recovery regeneration require a fresh security_admin
+	// step-up BEFORE their idempotency wrappers.
+	mux.Handle("GET /api/auth/mfa/factors", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMFAFactors)))))
+	mux.Handle("POST /api/auth/mfa/totp:begin", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleBeginMFAEnrollment)))))
+	mux.Handle("POST /api/auth/mfa/totp/{factorCommand...}", noStoreMiddleware(rejectSessionQueryToken(authMW(mfaCommandRouter(map[string]http.Handler{
+		"verify": http.HandlerFunc(server.HandleVerifyMFAEnrollment),
+	})))))
+	mux.Handle("POST /api/auth/mfa/factors/{factorCommand...}", noStoreMiddleware(rejectSessionQueryToken(authMW(mfaCommandRouter(map[string]http.Handler{
+		"remove": server.RequireStepUp(domain.StepUpScopeSecurityAdmin, server.RequireIdempotency("auth.remove-mfa-factor", http.HandlerFunc(server.HandleRemoveMFAFactor))),
+	})))))
+	mux.Handle("POST /api/auth/mfa/recovery-codes:regenerate", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireStepUp(domain.StepUpScopeSecurityAdmin, server.RequireIdempotency("auth.regenerate-mfa-recovery", http.HandlerFunc(server.HandleRegenerateMFARecoveryCodes)))))))
+	mux.Handle("POST /api/auth/mfa/step-up", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleMFAStepUp)))))
 
 	mux.Handle("POST /api/auth/select-org", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleSelectOrg))))
 	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))
@@ -101,7 +122,11 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/auth/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("auth.revoke-session", http.HandlerFunc(server.HandleRevokeMySession))))))
 
 	// Platform console (ADR-0005 §5 / #326): org lifecycle, licenses, users,
-	// audit and audited support sessions. Platform staff only.
+	// audit and audited support sessions. Platform staff only. #460 SEC-7:
+	// support entry and the high-impact platform mutations (account status,
+	// org lifecycle, entitlements) require a fresh platform_admin/support_access
+	// step-up — a stolen platform bearer alone cannot silently enter a tenant
+	// or disable accounts.
 	platformMW := PlatformAdminMiddleware(server.tokenAuthority(), server.Store)
 	mux.Handle("GET /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformListOrganizations)))
 	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
@@ -109,8 +134,8 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
 	mux.Handle("GET /api/platform/users/{userId}/sessions", noStoreMiddleware(rejectSessionQueryToken(platformMW(http.HandlerFunc(server.HandleListPlatformUserSessions)))))
 	mux.Handle("POST /api/platform/users/{userId}/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(platformMW(server.RequireIdempotency("platform.revoke-user-session", http.HandlerFunc(server.HandleRevokePlatformUserSession))))))
-	mux.Handle("POST /api/platform/users/{userCommand...}", platformMW(http.HandlerFunc(server.HandlePlatformUserCommand)))
-	mux.Handle("POST /api/platform/organizations/{id}/support-session", noStoreMiddleware(platformMW(server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession)))))
+	mux.Handle("POST /api/platform/users/{userCommand...}", platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, http.HandlerFunc(server.HandlePlatformUserCommand))))
+	mux.Handle("POST /api/platform/organizations/{id}/support-session", noStoreMiddleware(platformMW(server.RequireStepUp(domain.StepUpScopeSupportAccess, server.RequireIdempotency("platform.start-support-session", http.HandlerFunc(server.HandlePlatformStartSupportSession))))))
 	mux.Handle("DELETE /api/platform/support-sessions/{sessionId}", platformMW(http.HandlerFunc(server.HandlePlatformEndSupportSession)))
 
 	// Factory sales network (#326): a factory admin lists/creates its
@@ -118,17 +143,19 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/factory/organizations", authMW(http.HandlerFunc(server.HandleFactoryOrganizations)))
 
 	// Organization lifecycle commands share one authoritative application
-	// service across Platform, Factory and the admin CLI.
+	// service across Platform, Factory and the admin CLI. #460 SEC-7: the
+	// lifecycle transitions and entitlement changes are platform_admin
+	// step-up gated (before their idempotency wrappers).
 	mux.Handle("POST /api/organizations", authMW(server.RequireIdempotency("organizations.provision", http.HandlerFunc(server.HandleProvisionOrganization))))
 	mux.Handle("GET /api/organizations/{id}/readiness", platformMW(http.HandlerFunc(server.HandleOrganizationReadiness)))
 	mux.Handle("GET /api/organizations/{id}/offboarding-preview", platformMW(http.HandlerFunc(server.HandleOrganizationOffboardingPreview)))
 	mux.Handle("GET /api/organizations/{id}/entitlements", platformMW(http.HandlerFunc(server.HandleOrganizationEntitlements)))
-	mux.Handle("PUT /api/organizations/{id}/entitlements", platformMW(server.RequireIdempotency("organizations.update-entitlements", http.HandlerFunc(server.HandleOrganizationEntitlements))))
+	mux.Handle("PUT /api/organizations/{id}/entitlements", platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, server.RequireIdempotency("organizations.update-entitlements", http.HandlerFunc(server.HandleOrganizationEntitlements)))))
 	mux.Handle("POST /api/organizations/{organizationCommand...}", organizationCommandRouter(map[string]http.Handler{
-		"suspend":           platformMW(server.RequireIdempotency("organizations.suspend", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
-		"reactivate":        platformMW(server.RequireIdempotency("organizations.reactivate", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
-		"begin-offboarding": platformMW(server.RequireIdempotency("organizations.begin-offboarding", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
-		"terminate":         platformMW(server.RequireIdempotency("organizations.terminate", http.HandlerFunc(server.HandleOrganizationLifecycleCommand))),
+		"suspend":           platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, server.RequireIdempotency("organizations.suspend", http.HandlerFunc(server.HandleOrganizationLifecycleCommand)))),
+		"reactivate":        platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, server.RequireIdempotency("organizations.reactivate", http.HandlerFunc(server.HandleOrganizationLifecycleCommand)))),
+		"begin-offboarding": platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, server.RequireIdempotency("organizations.begin-offboarding", http.HandlerFunc(server.HandleOrganizationLifecycleCommand)))),
+		"terminate":         platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, server.RequireIdempotency("organizations.terminate", http.HandlerFunc(server.HandleOrganizationLifecycleCommand)))),
 	}))
 
 	// Org team management (#326): active-org admin (or support session).
@@ -137,17 +164,23 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/org/team/summary", authMW(http.HandlerFunc(server.HandleOrgTeamSummary)))
 	mux.Handle("GET /api/org/memberships/{membershipId}/sessions", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMembershipSessions)))))
 	mux.Handle("POST /api/org/memberships/{membershipId}/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("org.revoke-membership-session", http.HandlerFunc(server.HandleRevokeMembershipSession))))))
-	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles))))
+	// #460 SEC-7: membership commands that change authority or cut access
+	// wholesale (role changes, admin transfer, offboarding, mass session
+	// revocation) require a fresh organization_admin step-up; reversible
+	// ordinary operations (suspend/reactivate/sectors/invitations) stay on
+	// the capability boundary. Step-up runs BEFORE the idempotency wrapper so
+	// a challenge never consumes the command's key.
+	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles)))))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/status", authMW(server.RequireIdempotency("org.update-membership-status", http.HandlerFunc(server.HandleOrgMemberStatus))))
 	mux.Handle("POST /api/org/memberships/{membershipCommand...}", membershipCommandRouter(map[string]http.Handler{
-		"change-roles":        authMW(server.RequireIdempotency("org.change-membership-roles", http.HandlerFunc(server.HandleChangeMembershipRoles))),
+		"change-roles":        authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.change-membership-roles", http.HandlerFunc(server.HandleChangeMembershipRoles)))),
 		"suspend":             authMW(server.RequireIdempotency("org.suspend-membership", http.HandlerFunc(server.HandleSuspendMembership))),
 		"reactivate":          authMW(server.RequireIdempotency("org.reactivate-membership", http.HandlerFunc(server.HandleReactivateMembership))),
-		"revoke-sessions":     authMW(server.RequireIdempotency("org.revoke-membership-sessions", http.HandlerFunc(server.HandleRevokeMembershipSessions))),
+		"revoke-sessions":     authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.revoke-membership-sessions", http.HandlerFunc(server.HandleRevokeMembershipSessions)))),
 		"offboarding-preview": authMW(server.RequireIdempotency("org.offboarding-preview", http.HandlerFunc(server.HandleMembershipOffboardingPreview))),
-		"transfer-admin":      authMW(server.RequireIdempotency("org.transfer-admin", http.HandlerFunc(server.HandleTransferOrganizationAdmin))),
+		"transfer-admin":      authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.transfer-admin", http.HandlerFunc(server.HandleTransferOrganizationAdmin)))),
 		"change-sectors":      authMW(server.RequireIdempotency("org.change-membership-sectors", http.HandlerFunc(server.HandleChangeMembershipSectors))),
-		"offboard":            authMW(server.RequireIdempotency("org.offboard-membership", http.HandlerFunc(server.HandleOffboardMembership))),
+		"offboard":            authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.offboard-membership", http.HandlerFunc(server.HandleOffboardMembership)))),
 	}))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
 	mux.Handle("POST /api/org/invitations", noStoreMiddleware(authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation)))))

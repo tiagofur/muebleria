@@ -26,6 +26,15 @@ import type {
   LoginResponse,
   LogoutRequest,
   LogoutResponse,
+  MFAEnrollBeginRequest,
+  MFAEnrollBeginResponse,
+  MFAEnrollVerifiedResponse,
+  MFAEnrollVerifyRequest,
+  MFAFactorDirectory,
+  MFAFactorRemovedResponse,
+  MFARecoveryCodesResponse,
+  MFAStepUpRequest,
+  MFAStepUpResponse,
   MeResponse,
   MediaAuthorizeRequest,
   MediaAuthorizeResponse,
@@ -136,6 +145,12 @@ export abstract class GeneratedGraneteApiClient {
   requestDeviceToken(body: DeviceTokenRequest, signal?: AbortSignal): Promise<DeviceTokenResponse> { return this.request("POST", "/auth/devices/token", { schema: "DeviceTokenResponse", bodySchema: "DeviceTokenRequest", body, signal }); }
   listMyDevices(token: string, signal?: AbortSignal): Promise<AuthDeviceDirectory> { return this.request("GET", "/auth/devices", { schema: "AuthDeviceDirectory", token, signal }); }
   revokeMyDevice(token: string, body: DeviceRevokeRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DeviceRevokeResponse> { return this.request("POST", "/auth/devices/revoke", { schema: "DeviceRevokeResponse", token, bodySchema: "DeviceRevokeRequest", body, idempotencyKey: key, signal }); }
+  listMFAFactors(token: string, signal?: AbortSignal): Promise<MFAFactorDirectory> { return this.request("GET", "/auth/mfa/factors", { schema: "MFAFactorDirectory", token, signal }); }
+  beginMFAEnrollment(token: string, body: MFAEnrollBeginRequest, signal?: AbortSignal): Promise<MFAEnrollBeginResponse> { return this.request("POST", "/auth/mfa/totp:begin", { schema: "MFAEnrollBeginResponse", token, bodySchema: "MFAEnrollBeginRequest", body, signal }); }
+  verifyMFAEnrollment(token: string, factorId: string, body: MFAEnrollVerifyRequest, signal?: AbortSignal): Promise<MFAEnrollVerifiedResponse> { return this.request("POST", `/auth/mfa/totp/${encodeURIComponent(factorId)}:verify`, { schema: "MFAEnrollVerifiedResponse", token, bodySchema: "MFAEnrollVerifyRequest", body, signal }); }
+  removeMFAFactor(token: string, factorId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MFAFactorRemovedResponse> { return this.request("POST", `/auth/mfa/factors/${encodeURIComponent(factorId)}:remove`, { schema: "MFAFactorRemovedResponse", token, idempotencyKey: key, signal }); }
+  regenerateMFARecoveryCodes(token: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MFARecoveryCodesResponse> { return this.request("POST", "/auth/mfa/recovery-codes:regenerate", { schema: "MFARecoveryCodesResponse", token, idempotencyKey: key, signal }); }
+  requestMFAStepUp(token: string, body: MFAStepUpRequest, signal?: AbortSignal): Promise<MFAStepUpResponse> { return this.request("POST", "/auth/mfa/step-up", { schema: "MFAStepUpResponse", token, bodySchema: "MFAStepUpRequest", body, signal }); }
   listMembershipSessions(token: string, membershipId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/org/memberships/${encodeURIComponent(membershipId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
   revokeMembershipSession(token: string, membershipId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
   listPlatformUserSessions(token: string, userId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/platform/users/${encodeURIComponent(userId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
