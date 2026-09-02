@@ -333,9 +333,12 @@ func TestLoginIssuesExtensionTokenAndLicenseBlock(t *testing.T) {
 	if claims.Client != auth.ExtensionClient {
 		t.Fatalf("claims.Client = %q, want %q", claims.Client, auth.ExtensionClient)
 	}
+	// #460 SEC-6: the extension ACCESS bearer is short-lived (15 min); the
+	// workshop-spanning policy lives in the registry session bound and the
+	// durable device secret, not in this token.
 	remaining := time.Until(claims.ExpiresAt.Time)
-	if remaining < 29*24*time.Hour || remaining > auth.ExtensionTokenTTL {
-		t.Fatalf("extension token TTL = %v, want ~%v", remaining, auth.ExtensionTokenTTL)
+	if remaining <= 0 || remaining > auth.SketchUpAccessTokenTTL {
+		t.Fatalf("extension token TTL = %v, want <= %v", remaining, auth.SketchUpAccessTokenTTL)
 	}
 	if resp.License.Plan != "trial" || resp.License.Status != string(domain.LicenseStatusActive) {
 		t.Fatalf("license block = %+v", resp.License)
@@ -375,6 +378,72 @@ func TestExtensionTokenIsReadOnly(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code == http.StatusForbidden {
 		t.Fatalf("web token must not be read-only restricted")
+	}
+}
+
+// TestExtensionTokenDenyByDefault locks the #460 SEC-6 least-privilege
+// boundary: a VALID SketchUp bearer (even owned by an admin) is rejected on
+// every authenticated surface that is not the plugin's furniture/media
+// contract. Administration, session/device management, platform and support
+// belong to web/mobile/admin credentials, never to the extension class.
+func TestExtensionTokenDenyByDefault(t *testing.T) {
+	u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive, PlatformAdmin: true}
+	server := licenseTestServer(t, u, nil)
+	// Platform admin owner on purpose: the boundary must hold even when the
+	// claims would otherwise pass platform gates.
+	token, _ := auth.GenerateLegacyExtensionToken(u.ID, "u@example.com", auth.TokenContext{Roles: []string{"admin"}, OrgID: "org-1", MembershipID: u.ID + ":org-1", MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1}, furnitureTestSecret)
+
+	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	send := func(method, path string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// The plugin's real surface stays open.
+	for _, path := range []string{
+		"/api/furniture/definitions",
+		"/api/furniture/definitions/kitchen-base-standard/layout",
+		"/api/media/picture.png",
+	} {
+		if got := send(http.MethodGet, path); got != http.StatusOK {
+			t.Fatalf("GET %s with extension token = %d, want 200 (plugin surface)", path, got)
+		}
+	}
+	if got := send(http.MethodPost, "/api/furniture/authoring/resolve"); got == http.StatusForbidden {
+		t.Fatal("authoring resolve is part of the extension POST contract")
+	}
+	if got := send(http.MethodPost, "/api/media:authorize"); got == http.StatusForbidden {
+		t.Fatal("media authorize is part of the extension POST contract")
+	}
+
+	// Everything else denies the credential CLASS: team admin, session and
+	// device management, org/business reads and writes, platform — even for
+	// a platform-admin owner.
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/org/team/summary"},
+		{http.MethodGet, "/api/org/memberships"},
+		{http.MethodPut, "/api/org/memberships/m1/roles"},
+		{http.MethodGet, "/api/auth/sessions"},
+		{http.MethodPost, "/api/auth/sessions/sess-1/revoke"},
+		{http.MethodGet, "/api/auth/devices"},
+		{http.MethodPost, "/api/auth/devices/revoke"},
+		{http.MethodGet, "/api/projects"},
+		{http.MethodPost, "/api/projects"},
+		{http.MethodDelete, "/api/projects/1"},
+		{http.MethodGet, "/api/customers"},
+		{http.MethodGet, "/api/platform/organizations"},
+		{http.MethodPost, "/api/platform/organizations/org-1/support-session"},
+		{http.MethodGet, "/api/catalog/ambient-materials"},
+		{http.MethodPost, "/api/media"},
+	} {
+		if got := send(tc.method, tc.path); got != http.StatusForbidden {
+			t.Fatalf("%s %s with extension token = %d, want 403 (deny by default)", tc.method, tc.path, got)
+		}
 	}
 }
 

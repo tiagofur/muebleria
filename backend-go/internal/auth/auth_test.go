@@ -582,6 +582,56 @@ func TestIssueTransportToken_WebCapBeatsRollingTTL(t *testing.T) {
 	}
 }
 
+// TestIssueTransportToken_SketchUpKeepsShortAccessPolicy locks the SEC-6
+// boundary: the SketchUp access bearer is 15 minutes ROLLING from the mint
+// (computing it from the session origin would mint already-expired tokens
+// after minute 15), and the 30-day workshop-spanning policy lives only in
+// the registry session's absolute bound.
+func TestIssueTransportToken_SketchUpKeepsShortAccessPolicy(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second) // device session is hours old
+	minted := time.Now().UTC()
+	token, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+		AuthStartedAt: started, SessionID: "sess-dev-1",
+	}, "sketchup", started.Add(ExtensionTokenTTL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := authority.Validate(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := minted.Add(SketchUpAccessTokenTTL); claims.ExpiresAt.Time.Before(want.Add(-2*time.Second)) || claims.ExpiresAt.Time.After(want.Add(2*time.Second)) {
+		t.Fatalf("sketchup expiry = %s, want ~%s (mint + SketchUpAccessTokenTTL), not origin-derived", claims.ExpiresAt.Time, want)
+	}
+}
+
+// The T+29d proof for SketchUp: when the rolling 15-minute window would
+// overshoot the device session's absolute bound, exp is the absolute bound —
+// re-minting from the device secret never slides the 30-day deadline.
+func TestIssueTransportToken_SketchUpCapBeatsRollingTTL(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	started := time.Now().UTC().Add(-ExtensionTokenTTL + time.Minute).Truncate(time.Second) // T0 + 29d23:59
+	cap := started.Add(ExtensionTokenTTL)
+	token, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+		AuthStartedAt: started, SessionID: "sess-dev-1",
+	}, "sketchup", cap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := authority.Validate(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !claims.ExpiresAt.Time.Equal(cap) {
+		t.Fatalf("sketchup expiry = %s, want absolute cap %s", claims.ExpiresAt.Time, cap)
+	}
+}
+
 // TestIssueTransportToken_MobileKeepsShortAccessPolicy locks the SEC-5 boundary:
 // mobile uses the short 15m credential.
 func TestIssueTransportToken_MobileKeepsShortAccessPolicy(t *testing.T) {

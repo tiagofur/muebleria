@@ -134,18 +134,25 @@ func TestDeviceToken_MintedBearerPassesSessionRegistryMiddleware(t *testing.T) {
 		CreatedAt:            time.Now().Add(-time.Minute),
 		AbsoluteExpiresAt:    time.Now().Add(29 * 24 * time.Hour),
 	}
-	mwRec := serveSessionRegistry(t, users, body.AccessToken)
-	if mwRec.Code != http.StatusOK {
-		t.Fatalf("device bearer must pass the registry middleware, got %d: %s", mwRec.Code, mwRec.Body.String())
+	// Probe through the extension's OWN allowed surface: the SEC-6 bearer is
+	// deny-by-default everywhere else (see the boundary negative proofs).
+	probe := func(token string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		AuthMiddleware(mustAuthority(sessionRegistryTestSecret), users)(okHandler()).ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := probe(body.AccessToken); code != http.StatusOK {
+		t.Fatalf("device bearer must pass the registry middleware, got %d", code)
 	}
 
 	// Revoking the registry session cuts the bearer on the next request,
 	// even with the JWT itself unexpired.
 	revoked := time.Now().Add(-time.Second)
 	users.sessions[sessionID].RevokedAt = &revoked
-	mwRec = serveSessionRegistry(t, users, body.AccessToken)
-	if mwRec.Code != http.StatusUnauthorized {
-		t.Fatalf("revoked device session must cut the bearer, got %d", mwRec.Code)
+	if code := probe(body.AccessToken); code != http.StatusUnauthorized {
+		t.Fatalf("revoked device session must cut the bearer, got %d", code)
 	}
 }
 

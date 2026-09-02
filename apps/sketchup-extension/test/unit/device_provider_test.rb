@@ -44,7 +44,8 @@ class DeviceProviderTest < Minitest::Test
   # Hermetic provider: the secure storage becomes an instance variable so the
   # tests never touch the host Keychain or the fallback file.
   class HermeticProvider < Granete::SketchUpExtension::Auth::DeviceProvider
-    attr_reader :stored_secret
+    attr_accessor :stored_secret
+    attr_reader :deleted
 
     def secure_store_secret(secret)
       @stored_secret = secret.to_s
@@ -52,6 +53,11 @@ class DeviceProviderTest < Minitest::Test
 
     def secure_read_secret
       @stored_secret.to_s.empty? ? nil : @stored_secret
+    end
+
+    def secure_delete_secret
+      @deleted = true
+      @stored_secret = ''
     end
   end
 
@@ -173,6 +179,118 @@ class DeviceProviderTest < Minitest::Test
     assert_raises(Granete::SketchUpExtension::Auth::NotConfiguredError) do
       @provider.authorization_header
     end
+  end
+
+  # #460 SEC-6 review: the access bearer is MEMORY-ONLY — the on-disk
+  # session file must never contain it, restart must re-mint from the
+  # device secret, and legacy persisted bearers are scrubbed on boot.
+  def test_access_token_never_persists_to_disk
+    @transport.respond_with('/auth/devices/exchange', 200, 'device_secret' => "dev-1:#{'a1' * 32}")
+    @transport.respond_with('/auth/devices/token', 200, 'access_token' => valid_jwt)
+    @provider.exchange_enrollment('enr-1')
+    @provider.authorization_header
+
+    on_disk = File.exist?(@store_path) ? File.read(@store_path) : ''
+    refute_includes on_disk, 'session_access', 'access bearer must not live in the session file'
+    refute_includes on_disk, valid_jwt
+  end
+
+  def test_restart_re_mints_access_from_device_secret
+    @transport.respond_with('/auth/devices/exchange', 200, 'device_secret' => "dev-1:#{'a1' * 32}")
+    @transport.respond_with('/auth/devices/token', 200, 'access_token' => valid_jwt)
+    @provider.exchange_enrollment('enr-1')
+
+    rebooted_transport = FakeTransport.new
+    rebooted_transport.base_url = @transport.base_url
+    rebooted_transport.respond_with('/auth/devices/token', 200, 'access_token' => valid_jwt)
+    rebooted = HermeticProvider.new(
+      logger: @logger, transport: rebooted_transport, store_path: @store_path
+    )
+    rebooted.stored_secret = @provider.stored_secret
+
+    header = rebooted.authorization_header
+
+    assert_equal "Bearer #{valid_jwt}", header
+    mints = rebooted_transport.requests.select { |r| r['path'] == '/auth/devices/token' }
+    assert_equal 1, mints.length, 'restart must re-mint the access bearer from the secret'
+  end
+
+  def test_boot_scrubs_legacy_persisted_access_token
+    legacy_dir = File.dirname(@store_path)
+    File.write(@store_path, JSON.generate('session_access' => 'legacy-bearer', 'server_url' => 'http://x'))
+
+    scrubbed = HermeticProvider.new(logger: @logger, transport: FakeTransport.new, store_path: @store_path)
+
+    on_disk = File.read(@store_path)
+    refute_includes on_disk, 'legacy-bearer'
+    assert_equal 'http://x', scrubbed.status['server_url'], 'non-sensitive state must survive the scrub'
+    FileUtils.remove_entry(legacy_dir)
+  end
+
+  # Fail closed: without a secure OS store the exchange refuses to complete
+  # and nothing (memory or disk) keeps the secret. These dispatch tests stub
+  # the backend branches, NOT the public secure_* methods: the dispatch and
+  # its fail-closed arm are the code under test.
+  def test_exchange_fails_closed_without_secure_storage
+    unavailable = Class.new(Granete::SketchUpExtension::Auth::DeviceProvider) do
+      define_method(:secure_backend) { :unavailable }
+    end
+    provider = unavailable.new(logger: @logger, transport: @transport, store_path: @store_path)
+    @transport.respond_with('/auth/devices/exchange', 200, 'device_secret' => "dev-1:#{'a1' * 32}")
+
+    result = provider.exchange_enrollment('enr-1')
+
+    assert_equal false, result['success']
+    assert_includes result['error'], 'almacenamiento seguro'
+    assert provider.send(:secure_read_secret).nil?
+    refute provider.configured?
+  end
+
+  # Windows: the secret travels through stdin into the Credential Manager
+  # vault — never on the powershell command line.
+  def test_windows_vault_stores_secret_via_stdin
+    captured = []
+    windows = Class.new(Granete::SketchUpExtension::Auth::DeviceProvider) do
+      define_method(:secure_backend) { :windows_vault }
+      define_method(:run_powershell) do |script, stdin: nil|
+        captured << { script: script, stdin: stdin }
+        ''
+      end
+    end
+    provider = windows.new(logger: @logger, transport: @transport, store_path: @store_path)
+
+    provider.send(:secure_store_secret, 'dev-1:supersecret')
+
+    store_call = captured.first
+    assert_includes store_call[:script], 'PasswordVault'
+    assert_equal 'dev-1:supersecret', store_call[:stdin]
+    # The secret rides stdin; the script (and therefore the powershell argv)
+    # is a fixed template that must not embed it.
+    refute_includes store_call[:script], 'dev-1:supersecret'
+  end
+
+  def test_keychain_backend_dispatches_to_security_cli
+    dispatched = []
+    keychain = Class.new(Granete::SketchUpExtension::Auth::DeviceProvider) do
+      define_method(:secure_backend) { :keychain }
+      define_method(:store_mac_keychain) do |secret|
+        dispatched << [:store, secret]
+      end
+      define_method(:read_mac_keychain) do
+        dispatched << [:read]
+        'stored-secret'
+      end
+      define_method(:delete_mac_keychain) do
+        dispatched << [:delete]
+      end
+    end
+    provider = keychain.new(logger: @logger, transport: @transport, store_path: @store_path)
+
+    provider.send(:secure_store_secret, 'dev-1:xyz')
+    assert_equal [:store, 'dev-1:xyz'], dispatched.first
+    assert_equal 'stored-secret', provider.send(:secure_read_secret)
+    provider.send(:secure_delete_secret)
+    assert_includes dispatched, [:delete]
   end
 
   private

@@ -416,7 +416,11 @@ func TestRefresh_PreservesAbsoluteAuthStart(t *testing.T) {
 	if !claims.AuthStartedAt.Time.Equal(started) {
 		t.Fatalf("auth_started_at = %s, want %s", claims.AuthStartedAt.Time, started)
 	}
-	if want := started.Add(auth.ExtensionTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
-		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	// #460 SEC-6: the bridge re-mints a SHORT sketchup bearer rolling from
+	// the mint instant (capped by the session absolute bound); the
+	// auth_started_at CLAIM is what must stay preserved, not the expiry.
+	remaining := time.Until(claims.ExpiresAt.Time)
+	if remaining <= 0 || remaining > auth.SketchUpAccessTokenTTL {
+		t.Fatalf("bridge expiry = %s, want a fresh bearer of at most %v (remaining %v)", claims.ExpiresAt.Time, auth.SketchUpAccessTokenTTL, remaining)
 	}
 }

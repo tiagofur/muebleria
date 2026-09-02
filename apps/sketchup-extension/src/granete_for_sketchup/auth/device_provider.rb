@@ -8,28 +8,54 @@ require 'time'
 module Granete
   module SketchUpExtension
     module Auth
-      # Secure secret storage helpers (macOS Keychain or restricted-file fallback).
+      # Secure device-secret storage (#460 SEC-6). The device secret is the
+      # ONLY persisted credential: it lives in the OS credential store
+      # (macOS Keychain, Windows Credential Manager vault). There is NO
+      # plaintext file fallback — on any other platform the provider fails
+      # closed and enrollment is refused there.
       module SecretStorage
         SECRET_KEY = 'granete_sketchup_device_secret'
         SERVICE_NAME = 'granete_sketchup'
 
+        # Raised when the platform has no secure store. Callers must fail
+        # closed: never downgrade the secret to a plain file.
+        class SecureStorageUnavailableError < StandardError; end
+
         def secure_store_secret(secret)
-          if RUBY_PLATFORM =~ /darwin/
-            store_mac_keychain(secret)
+          case secure_backend
+          when :keychain then store_mac_keychain(secret)
+          when :windows_vault then store_windows_vault(secret)
           else
-            store_fallback(secret)
+            raise SecureStorageUnavailableError,
+                  'No hay almacenamiento seguro disponible en este sistema.'
           end
         end
 
         def secure_read_secret
-          if RUBY_PLATFORM =~ /darwin/
-            read_mac_keychain
-          else
-            read_fallback
+          case secure_backend
+          when :keychain then read_mac_keychain
+          when :windows_vault then read_windows_vault
+          end
+        end
+
+        def secure_delete_secret
+          case secure_backend
+          when :keychain then delete_mac_keychain
+          when :windows_vault then delete_windows_vault
           end
         end
 
         private
+
+        def secure_backend
+          if RUBY_PLATFORM.include?('darwin')
+            :keychain
+          elsif RUBY_PLATFORM.match?(/mswin|mingw|cygwin|win/)
+            :windows_vault
+          else
+            :unavailable
+          end
+        end
 
         def store_mac_keychain(secret)
           if secret.nil? || secret.empty?
@@ -44,25 +70,83 @@ module Granete
           out.strip
         end
 
-        def store_fallback(secret)
-          path = File.join(File.dirname(@store_path), 'secure_token.dat')
-          if secret.nil? || secret.empty?
-            FileUtils.rm_f(path)
-          else
-            File.open(path, 'w', 0o600) { |f| f.write(secret) }
-            File.chmod(0o600, path)
-          end
-        end
-
-        def read_fallback
-          path = File.join(File.dirname(@store_path), 'secure_token.dat')
-          return nil unless File.exist?(path)
-
-          File.read(path).strip
+        def delete_mac_keychain
+          `security delete-generic-password -s "#{SECRET_KEY}" -a "#{SERVICE_NAME}" 2>/dev/null`
+          nil
         end
       end
 
-      # File-backed session store for non-sensitive data (server URL, cached state).
+      # Windows Credential Manager vault adapter (WinRT PasswordVault via
+      # Windows PowerShell). The secret travels over stdin — never on the
+      # powershell command line, where process listings would expose it.
+      module WindowsVaultStorage
+        VAULT_RESOURCE = 'granete_sketchup'
+        VAULT_USER = 'granete_sketchup'
+
+        private
+
+        def store_windows_vault(secret)
+          run_powershell(windows_vault_store_script, stdin: secret)
+          nil
+        end
+
+        def read_windows_vault
+          run_powershell(windows_vault_read_script).to_s.strip
+        end
+
+        def delete_windows_vault
+          run_powershell(windows_vault_delete_script)
+          nil
+        end
+
+        def windows_vault_store_script
+          <<~POWERSHELL
+            [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime] | Out-Null
+            $vault = New-Object Windows.Security.Credentials.PasswordVault
+            $secret = [Console]::In.ReadToEnd()
+            $credential = New-Object Windows.Security.Credentials.PasswordCredential('#{VAULT_RESOURCE}', '#{VAULT_USER}', $secret)
+            $vault.Add($credential)
+          POWERSHELL
+        end
+
+        def windows_vault_read_script
+          <<~POWERSHELL
+            [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime] | Out-Null
+            $vault = New-Object Windows.Security.Credentials.PasswordVault
+            try {
+              $credential = $vault.Retrieve('#{VAULT_RESOURCE}', '#{VAULT_USER}')
+              Write-Output $credential.Password
+            } catch {
+              Write-Output ''
+            }
+          POWERSHELL
+        end
+
+        def windows_vault_delete_script
+          <<~POWERSHELL
+            [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime] | Out-Null
+            $vault = New-Object Windows.Security.Credentials.PasswordVault
+            try {
+              $credential = $vault.Retrieve('#{VAULT_RESOURCE}', '#{VAULT_USER}')
+              $vault.Remove($credential)
+            } catch {
+            }
+          POWERSHELL
+        end
+
+        def run_powershell(script, stdin: nil)
+          IO.popen(['powershell', '-NoProfile', '-NonInteractive', '-Command', script], 'w+') do |io|
+            io.write(stdin) if stdin
+            io.close_write
+            io.read
+          end
+        end
+      end
+
+      # File-backed session store for non-sensitive data (server URL, cached
+      # state label). The access bearer is deliberately NOT part of this
+      # store: it lives only in memory and is re-minted from the device
+      # secret on every SketchUp start.
       module SessionStore
         private
 
@@ -88,6 +172,15 @@ module Granete
 
         def write_value(key, value)
           @store[key] = value
+          persist_store
+        end
+
+        def delete_value(key)
+          @store.delete(key)
+          persist_store
+        end
+
+        def persist_store
           dirname = File.dirname(@store_path)
           FileUtils.mkdir_p(dirname, mode: 0o700)
           tmp_path = "#{@store_path}.tmp.#{Process.pid}.#{rand(10_000)}"
@@ -107,15 +200,19 @@ module Granete
       # and exchanges it for short-lived access tokens.
       class DeviceProvider < Provider
         include SecretStorage
+        include WindowsVaultStorage
         include SessionStore
 
         AUTH_TRANSPORT = 'sketchup'
         KEY_SERVER_URL = 'server_url'
-        KEY_SESSION_ACCESS = 'session_access'
         KEY_SESSION_STATE = 'session_state'
+        # Pre-review builds persisted the access bearer in the session file;
+        # boot scrubs it so the on-disk contract holds everywhere.
+        LEGACY_KEY_SESSION_ACCESS = 'session_access'
 
-        # Refresh when the access token has less than this left to live (15 min).
-        REFRESH_MARGIN_SECONDS = 15 * 60
+        # The backend issues 15-minute bearers; re-mint only near expiry so a
+        # normal request never pays a token round-trip.
+        REFRESH_MARGIN_SECONDS = 2 * 60
 
         attr_reader :transport, :store_path
 
@@ -124,6 +221,10 @@ module Granete
           @logger = logger
           @store_path = store_path || default_store_path
           @store = load_store
+          # #460 SEC-6 review: the access bearer is MEMORY-ONLY. Restarting
+          # SketchUp re-mints it from the device secret.
+          @access_token = nil
+          delete_value(LEGACY_KEY_SESSION_ACCESS) if @store.key?(LEGACY_KEY_SESSION_ACCESS)
           @transport = transport || Transport::HttpAdapter.new(base_url: stored_server_url, logger: logger)
         end
 
@@ -170,7 +271,13 @@ module Granete
           )
           if response['status'] == 200
             body = response['body'].is_a?(Hash) ? response['body'] : {}
-            secure_store_secret(body['device_secret'])
+            begin
+              secure_store_secret(body['device_secret'])
+            rescue SecureStorageUnavailableError => e
+              # Fail closed: never keep the secret in memory-only or plain
+              # storage when the OS has no secure store.
+              return { 'success' => false, 'error' => e.message }
+            end
             fetch_token(body['device_secret'])
           else
             { 'success' => false, 'error' => "Error al intercambiar credencial (#{response['status']})." }
@@ -180,9 +287,9 @@ module Granete
         end
 
         def logout
-          write_value(KEY_SESSION_ACCESS, '')
+          @access_token = nil
           write_value(KEY_SESSION_STATE, '')
-          secure_store_secret('')
+          secure_delete_secret
           @transport.base_url = nil
           nil
         end
@@ -193,10 +300,10 @@ module Granete
         end
 
         def authorization_header
-          access = read_value(KEY_SESSION_ACCESS, '').to_s
+          access = @access_token.to_s
           if access.empty? || access_token_expired?
             refresh_if_needed
-            access = read_value(KEY_SESSION_ACCESS, '').to_s
+            access = @access_token.to_s
           end
           raise NotConfiguredError, 'Authentication is not configured' if access.empty?
 
@@ -236,7 +343,7 @@ module Granete
           )
           if response['status'] == 200
             body = response['body'].is_a?(Hash) ? response['body'] : {}
-            write_value(KEY_SESSION_ACCESS, body['access_token'].to_s)
+            @access_token = body['access_token'].to_s
             { 'success' => true }
           else
             { 'success' => false, 'error' => "Error de autenticación (#{response['status']})." }
@@ -266,7 +373,7 @@ module Granete
         end
 
         def decode_session_payload
-          access = read_value(KEY_SESSION_ACCESS, '').to_s
+          access = @access_token.to_s
           return nil if access.empty?
 
           segments = access.split('.')
