@@ -98,6 +98,71 @@ describe('PlatformScreen audit UX', () => {
     expect(mutation.init?.body).toBe(JSON.stringify({ account_status: 'disabled', reason: 'Cuenta comprometida' }));
   });
 
+  it('challenges an organization update and retries it with the same idempotency key', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    let updateAttempts = 0;
+    const updatedOrganization = { ...organization, name: 'Taller Norte Renovado', version: 2 };
+    const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith(`/platform/organizations/${organization.id}`) && init?.method === 'PATCH') {
+        updateAttempts += 1;
+        if (updateAttempts === 1) {
+          return jsonResponse({
+            code: 'STEP_UP_REQUIRED',
+            message: 'Confirmá tu identidad para continuar.',
+            fieldErrors: {},
+            requestId: '',
+            retryable: false,
+            details: { scope: 'platform_admin' },
+          }, 403);
+        }
+        return jsonResponse(updatedOrganization);
+      }
+      if (url.endsWith('/auth/mfa/step-up')) {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body).toMatchObject({ scope: 'platform_admin', method: 'totp', code: '123456' });
+        return jsonResponse({ scope: 'platform_admin', method: 'totp', expires_at: '2026-09-02T12:00:00Z' });
+      }
+      if (url.endsWith('/platform/organizations')) return jsonResponse([organization]);
+      if (url.endsWith(`/organizations/${organization.id}/readiness`)) {
+        return jsonResponse({
+          organization_id: organization.id,
+          organization_version: organization.version,
+          ready: true,
+          checks: [],
+          checked_at: '2026-09-02T11:00:00Z',
+        });
+      }
+      return jsonResponse([]);
+    }));
+    const actor = userEvent.setup();
+    render(<PlatformScreen baseUrl="http://api.test" token="t" />);
+
+    await actor.click(await screen.findByRole('button', { name: 'Editar' }));
+    await actor.clear(screen.getByLabelText('Nombre de la Organización'));
+    await actor.type(screen.getByLabelText('Nombre de la Organización'), updatedOrganization.name);
+    await actor.click(screen.getByRole('button', { name: 'Guardar Cambios' }));
+
+    expect(await screen.findByTestId('step-up-modal')).toBeTruthy();
+    expect(screen.queryByText('✓ Organización actualizada')).toBeNull();
+    await actor.type(screen.getByLabelText(/Código de autenticación/i), '123456');
+    await actor.click(screen.getByRole('button', { name: /Verificar/i }));
+
+    expect(await screen.findByText('✓ Organización actualizada')).toBeTruthy();
+    expect(updateAttempts).toBe(2);
+    const keys = requests
+      .filter(({ url, init }) => url.endsWith(`/platform/organizations/${organization.id}`) && init?.method === 'PATCH')
+      .map(({ init }) => new Headers(init?.headers).get('Idempotency-Key'));
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[0]).toMatch(/^web:/);
+  });
+
   it('provisions through the canonical command and confirms only authoritative readiness', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const bootstrapUser = {

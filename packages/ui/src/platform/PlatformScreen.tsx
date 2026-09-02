@@ -102,8 +102,8 @@ export function PlatformScreen({
 
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
   // #460 SEC-7: support entry needs a support_access step-up; global
-  // account status is platform_admin gated — a stolen platform bearer
-  // alone can neither enter a tenant nor disable accounts.
+  // organization and account mutations are platform_admin gated — a stolen
+  // platform bearer alone can neither enter a tenant nor alter global state.
   const stepUp = useStepUp({ baseUrl, token });
 
   const showToast = (msg: string) => {
@@ -251,11 +251,13 @@ export function PlatformScreen({
     setSubmitting(true);
     setModalError(null);
     try {
-      await api.updatePlatformOrganization(token, editingOrg.id, editingOrg.version, {
+      const updated = await stepUp.run('platform_admin', 'actualizar la organización', (key) =>
+        api.updatePlatformOrganization(token, editingOrg.id, editingOrg.version, {
           name: editName.trim(),
           license_plan: editPlan,
           license_expires_at: editExpiry ? new Date(`${editExpiry}T23:59:59Z`).toISOString() : null,
-        });
+        }, key));
+      if (!updated) { setSubmitting(false); return; }
       showToast('✓ Organización actualizada');
       setEditingOrg(null);
       await loadOrganizations();
