@@ -115,6 +115,9 @@ func TestPilotReadiness_MFAEnrollmentFlow(t *testing.T) {
 
 func TestPilotReadiness_DeviceApprovalRequiresStepUp(t *testing.T) {
 	user := fx.a.admin
+	// Self-sufficient (shared fixture): ensure the user HAS a factor first so
+	// the first assertion is deterministically the grant-shaped challenge.
+	provider := fx.mfaFor(t, user)
 	_, code := enrollDeviceOnSketchUpFlow(t, "Mac del taller SEC-7")
 
 	// Without step-up: the typed challenge naming its scope.
@@ -126,7 +129,6 @@ func TestPilotReadiness_DeviceApprovalRequiresStepUp(t *testing.T) {
 		t.Fatalf("challenge must name its scope: %s", body)
 	}
 
-	provider := fx.mfaFor(t, user)
 	fx.pilotStepUp(t, user, provider, "device_enrollment")
 
 	status, body = fx.rawRequest(http.MethodPost, "/api/auth/devices/approve", user.token, map[string]string{"code": code})
