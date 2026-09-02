@@ -185,6 +185,16 @@ export {
   type DevicesScreenProps,
 } from './settings';
 
+export { SecurityScreen, type SecurityScreenProps } from './security';
+export {
+  useStepUp,
+  isStepUpChallenge,
+  isMFARequired,
+  MFAEnrollmentHint,
+  type StepUpScope,
+  type UseStepUpOptions,
+} from './security';
+
 export {
   BrandMark,
   CatalogImage,

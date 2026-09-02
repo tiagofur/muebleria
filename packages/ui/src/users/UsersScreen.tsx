@@ -47,6 +47,7 @@ import {
   type MembershipReassignmentPlan,
   type Invitation,
 } from '@granete/storage';
+import { useStepUp } from '../security';
 
 export type UserRow = TeamMember;
 export type OrgInvitationRow = Invitation;
@@ -191,6 +192,10 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   );
 
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
+  // #460 SEC-7: authority-changing team commands (roles, admin transfer,
+  // offboarding, mass session revocation) require a fresh organization_admin
+  // step-up; the challenge re-runs the exact command under the same key.
+  const stepUp = useStepUp({ baseUrl, token });
   const queryClient = useQueryClient();
   const teamQuery = useQuery({
     queryKey: queryKeys.team,
@@ -282,7 +287,8 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
     setActionError(null);
     try {
       await mutation.mutateAsync(async () => {
-        await api.changeMembershipRoles(token, membershipId, member.version, { roles });
+        await stepUp.run('organization_admin', 'guardar los roles del miembro', (key) =>
+          api.changeMembershipRoles(token, membershipId, member.version, { roles }, key));
       });
       showToast('✓ Roles del miembro actualizados');
       setRoleEditUser(null);
@@ -333,12 +339,13 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
     setTransferError(null);
     try {
       await mutation.mutateAsync(async () => {
-        await api.transferOrganizationAdmin(token, source.membership_id, source.version, {
-          target_membership_id: target.membership_id,
-          target_version: target.version,
-          demote_source: false,
-          reason: transferReason.trim(),
-        });
+        await stepUp.run('organization_admin', 'transferir la administración', (key) =>
+          api.transferOrganizationAdmin(token, source.membership_id, source.version, {
+            target_membership_id: target.membership_id,
+            target_version: target.version,
+            demote_source: false,
+            reason: transferReason.trim(),
+          }, key));
       });
       setTransferSource(null);
       showToast('Administración transferida. Volvé a intentar el cambio original.');
@@ -394,7 +401,9 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
     setOffboardLoading(true); setOffboardError(null);
     try {
       await mutation.mutateAsync(async () => {
-        const result = await api.offboardMembership(token, offboardMember.membership_id, offboardPreview.membership_version, { impact_version: offboardPreview.impact_version, reason: offboardReason.trim(), reassignment: offboardPlan });
+        const result = await stepUp.run('organization_admin', 'finalizar la membresía', (key) =>
+          api.offboardMembership(token, offboardMember.membership_id, offboardPreview.membership_version, { impact_version: offboardPreview.impact_version, reason: offboardReason.trim(), reassignment: offboardPlan }, key));
+        if (!result) return;
         queryClient.setQueryData<TeamDirectory>(queryKeys.team, (current) => current ? {
           items: current.items.map((member) => member.membership_id === result.member.membership_id ? { ...member, membership_status: result.member.status, roles: result.member.roles, version: result.member.version } : member),
           summary: { ...current.summary, active_members: current.summary.active_members - 1, left_members: current.summary.left_members + 1 },
@@ -413,7 +422,8 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
     setActionError(null);
     try {
       await mutation.mutateAsync(async () => {
-        await api.revokeMembershipSessions(token, revokeSessionsMember.membership_id, revokeSessionsMember.version, { reason: revokeSessionsReason.trim() });
+        await stepUp.run('organization_admin', 'revocar todas las sesiones del miembro', (key) =>
+          api.revokeMembershipSessions(token, revokeSessionsMember.membership_id, revokeSessionsMember.version, { reason: revokeSessionsReason.trim() }, key));
       });
       showToast('Sesiones revocadas');
       setRevokeSessionsMember(null);
@@ -512,6 +522,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
 
   return (
     <div className="catalogs-page">
+      {stepUp.modal}
       <PageHeader
         title="Usuarios"
         subtitle="Equipo del taller, roles, estados de membresía e invitaciones"

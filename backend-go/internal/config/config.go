@@ -39,6 +39,11 @@ type Config struct {
 	// primitive with the JWT keyring or the refresh pepper: a media grant can
 	// never validate as a session credential and vice versa.
 	MediaAuthority *auth.MediaAuthority
+	// MFASecrets protects MFA material (#460 SEC-7): TOTP shared secrets are
+	// AES-256-GCM encrypted and recovery codes hash to keyed verifiers under
+	// the dedicated MFA_ENCRYPTION_KEYS keyring — disjoint from the JWT keys,
+	// the refresh pepper, the media key and the device credential hashes.
+	MFASecrets     *auth.MFASecrets
 	AllowedOrigins []string // CORS allowlist (reflected per-request); never "*"
 	RateLimitRPS   float64  // sustained requests/second for auth endpoints
 	RateLimitBurst int      // maximum burst for auth endpoints
@@ -100,6 +105,14 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	mfaKeyring, err := parseMFAKeyringEnv()
+	if err != nil {
+		return Config{}, err
+	}
+	mfaSecrets, err := auth.NewMFASecrets(mfaKeyring)
+	if err != nil {
+		return Config{}, err
+	}
 
 	allowed := parseOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	if len(allowed) == 0 {
@@ -142,6 +155,7 @@ func LoadConfig() (Config, error) {
 		JWTAuthority:         authority,
 		RefreshCredentials:   refreshCredentials,
 		MediaAuthority:       mediaAuthority,
+		MFASecrets:           mfaSecrets,
 		AllowedOrigins:       allowed,
 		RateLimitRPS:         rps,
 		RateLimitBurst:       burst,
@@ -149,6 +163,19 @@ func LoadConfig() (Config, error) {
 
 		WebRefreshCookieInsecureLocalDev: cookieInsecure,
 	}, nil
+}
+
+// parseMFAKeyringEnv resolves the MFA secret keyring (#460 SEC-7).
+// MFA_ENCRYPTION_KEYS is the rotation-shaped form:
+// {"active_kid":"k1","keys":{"k1":"<base64 32B>","k0":"..."}}. A deployment
+// without rotation may set the single MFA_ENCRYPTION_KEY (base64, ≥32 bytes)
+// instead. Missing/invalid configuration fails boot — MFA secrets have no
+// insecure fallback, exactly like the refresh pepper.
+func parseMFAKeyringEnv() (*auth.MFAKeyring, error) {
+	if raw := strings.TrimSpace(os.Getenv("MFA_ENCRYPTION_KEYS")); raw != "" {
+		return auth.ParseMFAKeyringSecrets(raw)
+	}
+	return auth.ParseMFAKeyringSecrets(strings.TrimSpace(os.Getenv("MFA_ENCRYPTION_KEY")))
 }
 
 // parseWebRefreshCookieSecurity resolves whether the Web refresh cookie may

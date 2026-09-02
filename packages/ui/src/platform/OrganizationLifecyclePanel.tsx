@@ -7,6 +7,7 @@ import {
   type PlatformOrganization,
 } from '@granete/storage';
 import { Modal, PageLoading } from '../common';
+import { useStepUp } from '../security';
 
 type Props = {
   readonly api: GraneteApiClient;
@@ -35,6 +36,8 @@ const isConflict = (error: unknown) =>
   ].includes(error.code);
 
 export function OrganizationLifecyclePanel({ api, token, organization, onUpdated, onReadiness, onReload }: Props): ReactNode {
+  // #460 SEC-7: org lifecycle transitions are platform_admin step-up gated.
+  const stepUp = useStepUp({ baseUrl: api.baseUrl, token });
   const [open, setOpen] = useState(false);
   const [readiness, setReadiness] = useState<OrganizationReadiness | null>(null);
   const [preview, setPreview] = useState<OrganizationOffboardingPreview | null>(null);
@@ -78,9 +81,11 @@ export function OrganizationLifecyclePanel({ api, token, organization, onUpdated
     setError(null);
     setConflict(false);
     try {
-      const response = action === 'suspend'
-        ? await api.suspendOrganization(token, organization.id, organization.version, { reason: reason.trim() })
-        : await api.reactivateOrganization(token, organization.id, organization.version, { reason: reason.trim() });
+      const response = await stepUp.run('platform_admin', action === 'suspend' ? 'suspender la organización' : 'reactivar la organización', (key) =>
+        action === 'suspend'
+          ? api.suspendOrganization(token, organization.id, organization.version, { reason: reason.trim() }, key)
+          : api.reactivateOrganization(token, organization.id, organization.version, { reason: reason.trim() }, key));
+      if (!response) { setSubmitting(false); return; }
       onUpdated(response.organization);
       setReason('');
       if (response.readiness) {
@@ -120,9 +125,11 @@ export function OrganizationLifecyclePanel({ api, token, organization, onUpdated
     setError(null);
     try {
       const body = { reason: reason.trim(), impact_version: preview.impact_version };
-      const response = organization.status === 'offboarding' || organization.status === 'provisioning_failed'
-        ? await api.terminateOrganization(token, organization.id, preview.organization_version, body)
-        : await api.beginOrganizationOffboarding(token, organization.id, preview.organization_version, body);
+      const response = await stepUp.run('platform_admin', 'continuar el cierre de la organización', (key) =>
+        organization.status === 'offboarding' || organization.status === 'provisioning_failed'
+          ? api.terminateOrganization(token, organization.id, preview.organization_version, body, key)
+          : api.beginOrganizationOffboarding(token, organization.id, preview.organization_version, body, key));
+      if (!response) { setSubmitting(false); return; }
       onUpdated(response.organization);
       setPreview(null);
       setReason('');
@@ -166,6 +173,7 @@ export function OrganizationLifecyclePanel({ api, token, organization, onUpdated
   };
 
   return <>
+    {stepUp.modal}
     <button type="button" className="btn btn--secondary btn--sm" onClick={() => setOpen(true)}>
       Estado y ciclo de vida
     </button>

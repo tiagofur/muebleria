@@ -24,14 +24,9 @@ const device = {
 
 type Responder = (url: string, init?: RequestInit) => Response;
 
-function stubFetch(responses: Responder[]) {
-  let call = 0;
-  const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit): Promise<Response> => {
-    const respond = responses[Math.min(call, responses.length - 1)];
-    if (!respond) throw new Error('no responder registered');
-    call += 1;
-    return respond(String(url), init);
-  });
+function stubFetch(responder: Responder) {
+  const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit): Promise<Response> =>
+    responder(String(url), init));
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -42,38 +37,54 @@ const jsonResponse = (body: unknown, status = 200) =>
 describe('DevicesScreen (#460 SEC-6)', () => {
   it('approves through the canonical endpoint with an Idempotency-Key and reloads the directory', async () => {
     const user = userEvent.setup();
-    const fetchMock = stubFetch([
-      () => jsonResponse({ devices: [] }),
-      (_url, init) => {
-        if (String(_url).endsWith('/auth/devices/approve')) {
-          const key = new Headers(init?.headers).get('Idempotency-Key');
-          expect(key).toMatch(/^web:/);
-          return jsonResponse({ status: 'approved' });
+    let approveCalls = 0;
+    const fetchMock = stubFetch((url, init) => {
+      if (url.endsWith('/auth/devices')) return jsonResponse({ devices: approveCalls === 0 ? [] : [device] });
+      if (url.endsWith('/auth/devices/approve')) {
+        approveCalls += 1;
+        const key = new Headers(init?.headers).get('Idempotency-Key');
+        expect(key).toMatch(/^web:/);
+        // #460 SEC-7: the first attempt answers the typed step-up challenge.
+        if (approveCalls === 1) {
+          return jsonResponse({ code: 'STEP_UP_REQUIRED', message: 'Confirmá tu identidad para continuar.', fieldErrors: {}, requestId: '', retryable: false, details: { scope: 'device_enrollment' } }, 403);
         }
-        return jsonResponse({}, 500);
-      },
-      () => jsonResponse({ devices: [device] }),
-    ]);
+        return jsonResponse({ status: 'approved' });
+      }
+      if (url.endsWith('/auth/mfa/step-up')) {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.scope).toBe('device_enrollment');
+        return jsonResponse({ scope: 'device_enrollment', method: 'totp', expires_at: '2026-09-02T12:10:00Z' });
+      }
+      return jsonResponse({}, 500);
+    });
 
     render(<DevicesScreen baseUrl="http://test" token="token-1" />);
 
     await user.type(await screen.findByLabelText(/Código de vinculación/i), 'k7m2qp');
     await user.click(screen.getByRole('button', { name: /Aprobar/i }));
 
+    // The challenge modal is bound to this exact action.
+    expect(await screen.findByTestId('step-up-modal')).toBeTruthy();
+    await user.type(screen.getByLabelText(/Código de autenticación/i), '123456');
+    await user.click(screen.getByRole('button', { name: /Verificar/i }));
+
     expect(await screen.findByText(/¡Dispositivo aprobado!/i)).toBeTruthy();
     expect(await screen.findByText('Mac del taller')).toBeTruthy();
 
-    const approveCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/devices/approve'));
-    expect(approveCall).toBeTruthy();
-    expect(new Headers(approveCall?.[1]?.headers).get('Authorization')).toBe('Bearer token-1');
+    const approveCallsList = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/devices/approve'));
+    expect(approveCallsList).toHaveLength(2);
+    expect(new Headers(approveCallsList[0]?.[1]?.headers).get('Authorization')).toBe('Bearer token-1');
+    // The retried command reuses the SAME Idempotency-Key.
+    const keys = approveCallsList.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
+    expect(keys[0]).toBe(keys[1]);
   });
 
   it('explains an already-used or expired code instead of a generic error', async () => {
     const user = userEvent.setup();
-    stubFetch([
-      () => jsonResponse({ devices: [] }),
-      () => jsonResponse({ code: 'CONFLICT', message: 'conflict', fieldErrors: {}, requestId: '', retryable: false, details: {} }, 409),
-    ]);
+    stubFetch((url) => {
+      if (url.endsWith('/auth/devices')) return jsonResponse({ devices: [] });
+      return jsonResponse({ code: 'CONFLICT', message: 'conflict', fieldErrors: {}, requestId: '', retryable: false, details: {} }, 409);
+    });
 
     render(<DevicesScreen baseUrl="http://test" token="token-1" />);
     await user.type(await screen.findByLabelText(/Código de vinculación/i), 'K7M2QP');
@@ -86,15 +97,18 @@ describe('DevicesScreen (#460 SEC-6)', () => {
   it('revokes an active device and keeps revoked ones visible without a second action', async () => {
     const user = userEvent.setup();
     const revokedDevice = { ...device, revoked_at: '2026-09-01T15:00:00Z' };
-    stubFetch([
-      () => jsonResponse({ devices: [device] }),
-      (_url, init) => {
-        expect(String(_url).endsWith('/auth/devices/revoke')).toBe(true);
+    let revoked = false;
+    stubFetch((url, init) => {
+      if (url.endsWith('/auth/devices/revoke')) {
         expect(new Headers(init?.headers).get('Idempotency-Key')).toMatch(/^web:/);
+        revoked = true;
         return jsonResponse({ revoked: true });
-      },
-      () => jsonResponse({ devices: [revokedDevice] }),
-    ]);
+      }
+      if (url.endsWith('/auth/devices')) {
+        return jsonResponse({ devices: revoked ? [revokedDevice] : [device] });
+      }
+      return jsonResponse({}, 500);
+    });
 
     render(<DevicesScreen baseUrl="http://test" token="token-1" />);
 
@@ -104,7 +118,7 @@ describe('DevicesScreen (#460 SEC-6)', () => {
   });
 
   it('surfaces a load failure instead of presenting an empty directory', async () => {
-    stubFetch([() => jsonResponse({}, 500)]);
+    stubFetch(() => jsonResponse({}, 500));
     render(<DevicesScreen baseUrl="http://test" token="token-1" />);
     expect(await screen.findByText(/No se pudo cargar los dispositivos/i)).toBeTruthy();
   });

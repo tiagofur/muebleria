@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -123,8 +124,20 @@ func TestPilotReadiness_TeamCommandsExecuteThroughRealHTTPAndPostgres(t *testing
 	requireTeamHTTPStatus(t, clearSectors, http.StatusOK)
 
 	transferBody := map[string]any{"target_membership_id": targetID, "target_version": 3, "demote_source": false, "reason": "coverage handoff"}
+	// #460 SEC-7: transfer-admin is organization_admin step-up gated; the
+	// step-up boundary runs BEFORE the handler, so a foreign org admin without
+	// elevated authority sees the challenge — fail-closed: the target's
+	// existence is not processed without it. The exact code depends on whether
+	// that user already enrolled a factor in an earlier test (shared fixture),
+	// and BOTH prove the gate: MFA_REQUIRED (no factor) or STEP_UP_REQUIRED
+	// (factor, no fresh grant).
 	crossOrg := sendTeamHTTPRequest(t, "/api/org/memberships/"+source.MembershipID+":transfer-admin", fx.b.admin.token, "team-http-transfer-cross-0001", source.Version, transferBody)
-	requireTeamHTTPError(t, crossOrg, http.StatusNotFound, "MEMBERSHIP_NOT_FOUND")
+	requireTeamHTTPStatus(t, crossOrg, http.StatusForbidden)
+	crossOrgBody := string(crossOrg.body)
+	if !strings.Contains(crossOrgBody, "MFA_REQUIRED") && !strings.Contains(crossOrgBody, "STEP_UP_REQUIRED") {
+		t.Fatalf("cross-org transfer-admin must be stopped by the step-up boundary, body=%s", crossOrgBody)
+	}
+	fx.pilotStepUp(t, fx.a.admin, fx.mfaFor(t, fx.a.admin), "organization_admin")
 	transfer := sendTeamHTTPRequest(t, "/api/org/memberships/"+source.MembershipID+":transfer-admin", fx.a.admin.token, "team-http-transfer-0001", source.Version, transferBody)
 	requireTeamHTTPStatus(t, transfer, http.StatusOK)
 

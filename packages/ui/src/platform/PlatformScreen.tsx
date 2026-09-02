@@ -18,6 +18,7 @@ import {
   Search,
 } from 'lucide-react';
 import { PageHeader, Modal, PageLoading, EmptyState } from '../common';
+import { useStepUp } from '../security';
 import { WorkspaceTabs } from '../common/Tabs';
 import { roleLabelEs } from '@granete/domain';
 import {
@@ -100,6 +101,10 @@ export function PlatformScreen({
   const [searchQuery, setSearchQuery] = useState('');
 
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
+  // #460 SEC-7: support entry needs a support_access step-up; global
+  // account status is platform_admin gated — a stolen platform bearer
+  // alone can neither enter a tenant nor disable accounts.
+  const stepUp = useStepUp({ baseUrl, token });
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -154,10 +159,12 @@ export function PlatformScreen({
     setModalError(null);
     const nextStatus = accountUser.account_status === 'active' ? 'disabled' : 'active';
     try {
-      await api.setPlatformUserAccountStatus(token, accountUser.id, {
-        account_status: nextStatus,
-        reason: accountReason.trim(),
-      });
+      const done = await stepUp.run('platform_admin', 'cambiar el estado de la cuenta', (key) =>
+        api.setPlatformUserAccountStatus(token, accountUser.id, {
+          account_status: nextStatus,
+          reason: accountReason.trim(),
+        }, key));
+      if (!done) { setSubmitting(false); return; }
       showToast(nextStatus === 'active' ? '✓ Cuenta reactivada' : '✓ Cuenta deshabilitada');
       setAccountUser(null);
       setAccountReason('');
@@ -270,7 +277,9 @@ export function PlatformScreen({
     setSubmitting(true);
     setModalError(null);
     try {
-      const data = await api.startSupportSession(token, supportOrg.id, { reason: supportReason.trim() });
+      const data = await stepUp.run('support_access', 'entrar al taller en modo soporte', (key) =>
+        api.startSupportSession(token, supportOrg.id, { reason: supportReason.trim() }, key));
+      if (!data) { setSubmitting(false); return; }
       showToast(`✓ Entrando a ${supportOrg.name} en modo soporte...`);
       setSupportOrg(null);
       setSupportReason('');
@@ -305,6 +314,7 @@ export function PlatformScreen({
 
   return (
     <div className="platform-screen">
+      {stepUp.modal}
       <PageHeader
         title="Consola de Plataforma"
         subtitle="Superadmin multi-taller: gestión de organizaciones, usuarios globales y auditoría de soporte"

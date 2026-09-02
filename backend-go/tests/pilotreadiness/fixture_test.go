@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -90,6 +91,10 @@ type fixture struct {
 	adminPool   *pgxpool.Pool
 	runtimePool *pgxpool.Pool
 	mediaDir    string
+	mfaSecrets  *auth.MFASecrets
+	// mfaProviders caches one enrolled TOTP provider per user so gated
+	// helpers only walk the enrollment flow once.
+	mfaProviders map[string]*pilotTOTP
 
 	platform pilotUser // org-less platform console token
 
@@ -504,6 +509,18 @@ func buildFixture() (*fixture, error) {
 		return nil, err
 	}
 	server.MediaTokens = mediaAuthority
+	// #460 SEC-7: dedicated MFA keyring (independent of every other secret,
+	// exactly like production).
+	mfaKeyring, err := auth.NewMFAKeyring("pilot", map[string][]byte{"pilot": []byte(strings.Repeat("mfa-pilot-key-", 3))})
+	if err != nil {
+		return nil, err
+	}
+	mfaSecrets, err := auth.NewMFASecrets(mfaKeyring)
+	if err != nil {
+		return nil, err
+	}
+	server.MFASecrets = mfaSecrets
+	f.mfaSecrets = mfaSecrets
 	f.ts = httptest.NewServer(api.RegisterRoutes(server))
 	f.base = f.ts.URL
 
@@ -590,6 +607,94 @@ func mustStorageUser(f *fixture, email, name, hash string) *domain.User {
 	}
 	return u
 }
+
+// pilotTOTP mints one code per verification need, tracking the accepted
+// counter high-water mark exactly like the server does. TOTP replay rules
+// (±1 window) allow at most two fresh codes per 30s interval; when a test
+// needs a third the provider waits for the next interval instead of failing.
+type pilotTOTP struct {
+	raw  []byte
+	last int64 // highest counter handed out
+}
+
+func newPilotTOTP(raw []byte) *pilotTOTP { return &pilotTOTP{raw: raw, last: -1} }
+
+func (p *pilotTOTP) next(t *testing.T) string {
+	t.Helper()
+	for attempt := 0; attempt < 3; attempt++ {
+		current := auth.TOTPCounter(time.Now())
+		candidate := current
+		if candidate <= p.last {
+			candidate = current + 1 // the future slot of the ±1 window
+		}
+		if candidate > p.last && candidate <= current+1 {
+			p.last = candidate
+			return auth.TOTPCode(p.raw, candidate)
+		}
+		// Window exhausted: wait for the next 30s interval to open.
+		nextInterval := time.Unix((current+1)*int64(auth.TOTPPeriod.Seconds()), 0)
+		time.Sleep(time.Until(nextInterval) + 100*time.Millisecond)
+	}
+	t.Fatal("pilotTOTP: could not mint a fresh code after waiting for the next interval")
+	return ""
+}
+
+// enablePilotMFA walks the real enrollment HTTP flow for a user: begin →
+// decode the base32 secret from the one-time provisioning URI → verify with
+// the current TOTP. Returns a code provider for further step-ups.
+func (f *fixture) enablePilotMFA(t *testing.T, user pilotUser) *pilotTOTP {
+	t.Helper()
+	var begun struct {
+		FactorID        string `json:"factor_id"`
+		ProvisioningUri string `json:"provisioning_uri"`
+	}
+	if err := f.request(&begun, http.MethodPost, "/api/auth/mfa/totp:begin", user.token, map[string]string{"label": "pilot test"}, http.StatusCreated); err != nil {
+		t.Fatalf("mfa begin: %v", err)
+	}
+	parsed, err := url.Parse(begun.ProvisioningUri)
+	if err != nil {
+		t.Fatalf("provisioning uri: %v", err)
+	}
+	encodedSecret := parsed.Query().Get("secret")
+	if encodedSecret == "" {
+		t.Fatalf("provisioning uri without secret: %s", begun.ProvisioningUri)
+	}
+	rawSecret, err := base32NoPad.DecodeString(encodedSecret)
+	if err != nil {
+		t.Fatalf("provisioning secret: %v", err)
+	}
+	provider := newPilotTOTP(rawSecret)
+	var verified struct {
+		Status        string   `json:"status"`
+		RecoveryCodes []string `json:"recovery_codes"`
+	}
+	if err := f.request(&verified, http.MethodPost, "/api/auth/mfa/totp/"+begun.FactorID+":verify", user.token,
+		map[string]string{"code": provider.next(t)}, http.StatusOK); err != nil {
+		t.Fatalf("mfa verify: %v", err)
+	}
+	if verified.Status != "enabled" || len(verified.RecoveryCodes) == 0 {
+		t.Fatalf("mfa verify response: %+v", verified)
+	}
+	return provider
+}
+
+// pilotStepUp verifies a fresh TOTP for exactly one scope over HTTP.
+func (f *fixture) pilotStepUp(t *testing.T, user pilotUser, provider *pilotTOTP, scope string) {
+	t.Helper()
+	var response struct {
+		Scope     string `json:"scope"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := f.request(&response, http.MethodPost, "/api/auth/mfa/step-up", user.token,
+		map[string]string{"scope": scope, "method": "totp", "code": provider.next(t)}, http.StatusOK); err != nil {
+		t.Fatalf("step-up %s: %v", scope, err)
+	}
+	if response.Scope != scope {
+		t.Fatalf("step-up scope %q, want %q", response.Scope, scope)
+	}
+}
+
+var base32NoPad = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 // createPilotOrg runs the full documented onboarding for one organization and
 // seeds its workshop data through the public APIs.
@@ -826,16 +931,98 @@ func (f *fixture) inviteAndAccept(t *testing.T, adminToken, email string, roles 
 	return accept
 }
 
-// startSupportSession opens an audited support session into orgID.
+// startSupportSession opens an audited support session into orgID. Support
+// entry is step-up gated (#460 SEC-7): the helper enrolls MFA for the
+// platform admin on first use and retries through a fresh support_access
+// verification when challenged.
 func (f *fixture) startSupportSession(t *testing.T, orgID, reason string) (token, sessionID string) {
 	t.Helper()
 	var ss struct {
 		Token     string `json:"token"`
 		SessionID string `json:"session_id"`
 	}
-	f.decode(t, http.MethodPost, "/api/platform/organizations/"+orgID+"/support-session",
-		f.platform.token, map[string]string{"reason": reason}, http.StatusCreated, &ss)
+	status, body := f.gatedRequest(t, f.platform, "support_access", func() (int, []byte) {
+		return f.rawRequest(http.MethodPost, "/api/platform/organizations/"+orgID+"/support-session",
+			f.platform.token, map[string]string{"reason": reason})
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("start support session status=%d body=%s", status, body)
+	}
+	if err := json.Unmarshal(body, &ss); err != nil || ss.Token == "" || ss.SessionID == "" {
+		t.Fatalf("start support session body=%s err=%v", body, err)
+	}
 	return ss.Token, ss.SessionID
+}
+
+// rawRequest performs one JSON request and returns the raw status and body.
+func (f *fixture) rawRequest(method, path, token string, body any) (int, []byte) {
+	var rd io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return 0, nil
+		}
+		rd = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, f.base+path, rd)
+	if err != nil {
+		return 0, nil
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if method == http.MethodPost {
+		req.Header.Set("Idempotency-Key", fmt.Sprintf("pilot-gated-%d", time.Now().UnixNano()))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
+}
+
+// gatedRequest runs do(); when the answer is a step-up challenge for the
+// scope it enables MFA (once per user), verifies a fresh code for exactly
+// that scope and retries the SAME request once. Anything else passes through.
+func (f *fixture) gatedRequest(t *testing.T, user pilotUser, scope string, do func() (int, []byte)) (int, []byte) {
+	t.Helper()
+	status, body := do()
+	if status != http.StatusForbidden {
+		return status, body
+	}
+	var apiErr struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(body, &apiErr) != nil {
+		return status, body
+	}
+	switch apiErr.Code {
+	case "STEP_UP_REQUIRED", "STEP_UP_EXPIRED", "MFA_REQUIRED":
+	default:
+		return status, body
+	}
+	f.pilotStepUp(t, user, f.mfaFor(t, user), scope)
+	return do()
+}
+
+// mfaFor returns the user's cached TOTP provider, walking the enrollment
+// flow once per user per fixture.
+func (f *fixture) mfaFor(t *testing.T, user pilotUser) *pilotTOTP {
+	t.Helper()
+	if f.mfaProviders == nil {
+		f.mfaProviders = map[string]*pilotTOTP{}
+	}
+	provider, ok := f.mfaProviders[user.id]
+	if !ok {
+		provider = f.enablePilotMFA(t, user)
+		f.mfaProviders[user.id] = provider
+	}
+	return provider
 }
 
 func (f *fixture) endSupportSession(t *testing.T, sessionID string) {

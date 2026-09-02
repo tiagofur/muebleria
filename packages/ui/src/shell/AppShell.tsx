@@ -87,6 +87,7 @@ export type AppNavId =
   | 'optionGroups'
   | 'settings'
   | 'devices'
+  | 'security'
   | 'users'
   | 'platform';
 
@@ -325,6 +326,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     items: [
       { id: 'settings', label: 'Ajustes', icon: Settings },
       { id: 'devices', label: 'Dispositivos', icon: Smartphone },
+      { id: 'security', label: 'Seguridad', icon: ShieldCheck },
     ],
   },
 ] as const;

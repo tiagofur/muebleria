@@ -27,6 +27,17 @@ type Store interface {
 	ListAuthDevicesByUser(ctx context.Context, userID string) ([]domain.AuthDevice, error)
 	RevokeAuthDevice(ctx context.Context, cmd storage.RevokeDeviceCommand) error
 
+	// Auth MFA / step-up (#460 SEC-7)
+	CreateMFAEnrollment(ctx context.Context, cmd storage.CreateMFAEnrollmentCommand) (*domain.MFAFactor, error)
+	GetMFAFactor(ctx context.Context, userID, factorID string) (*domain.MFAFactor, error)
+	ListMFAFactors(ctx context.Context, userID string) ([]domain.MFAFactor, error)
+	CountEnabledMFAFactors(ctx context.Context, userID string) (int, error)
+	EnableMFAFactor(ctx context.Context, cmd storage.EnableMFAFactorCommand) (*storage.EnabledMFAFactor, error)
+	RevokeMFAFactor(ctx context.Context, cmd storage.RevokeMFAFactorCommand) (*domain.MFAFactor, error)
+	RegenerateMFARecoveryCodes(ctx context.Context, cmd storage.RegenerateMFARecoveryCommand) ([]string, error)
+	VerifyMFAStepUp(ctx context.Context, cmd storage.MFAStepUpCommand) (*storage.MFAStepUpResult, error)
+	GetMFAStepUpFreshness(ctx context.Context, sessionID, userID, scope string) (storage.MFAStepUpFreshness, error)
+
 	// Auth / users
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	// GetUserByID loads the user for JWT re-validation of role/active (issue #16).

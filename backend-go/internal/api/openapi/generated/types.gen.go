@@ -51,6 +51,13 @@ const (
 	ApiErrorCodeSessionNotFound                ApiErrorCode = "SESSION_NOT_FOUND"
 	ApiErrorCodeMediaAccessExpired             ApiErrorCode = "MEDIA_ACCESS_EXPIRED"
 	ApiErrorCodeMediaAccessInvalid             ApiErrorCode = "MEDIA_ACCESS_INVALID"
+	ApiErrorCodeStepUpRequired                 ApiErrorCode = "STEP_UP_REQUIRED"
+	ApiErrorCodeStepUpExpired                  ApiErrorCode = "STEP_UP_EXPIRED"
+	ApiErrorCodeMfaRequired                    ApiErrorCode = "MFA_REQUIRED"
+	ApiErrorCodeMfaInvalid                     ApiErrorCode = "MFA_INVALID"
+	ApiErrorCodeMfaEnrollmentExpired           ApiErrorCode = "MFA_ENROLLMENT_EXPIRED"
+	ApiErrorCodeMfaFactorNotFound              ApiErrorCode = "MFA_FACTOR_NOT_FOUND"
+	ApiErrorCodeMfaRecoveryInvalid             ApiErrorCode = "MFA_RECOVERY_INVALID"
 )
 
 type ApiError struct {
@@ -754,4 +761,70 @@ type DeviceRevokeRequest struct {
 
 type DeviceRevokeResponse struct {
 	Revoked bool `json:"revoked"`
+}
+
+type MFAFactorView struct {
+	ID               string  `json:"id"`
+	FactorType       string  `json:"factor_type"`
+	Status           string  `json:"status"`
+	Label            string  `json:"label"`
+	CreatedAt        string  `json:"created_at"`
+	EnabledAt        *string `json:"enabled_at,omitempty"`
+	LastUsedAt       *string `json:"last_used_at,omitempty"`
+	PendingExpiresAt *string `json:"pending_expires_at,omitempty"`
+}
+
+type MFAFactorDirectory struct {
+	Factors []MFAFactorView `json:"factors"`
+}
+
+type MFAEnrollBeginRequest struct {
+	Label *string `json:"label,omitempty"`
+}
+
+type MFAEnrollBeginResponse struct {
+	FactorID        string `json:"factor_id"`
+	ProvisioningUri string `json:"provisioning_uri"`
+	ExpiresAt       string `json:"expires_at"`
+}
+
+type MFAEnrollVerifyRequest struct {
+	Code string `json:"code"`
+}
+
+type MFAEnrollVerifiedResponse struct {
+	FactorID      string   `json:"factor_id"`
+	Status        string   `json:"status"`
+	RecoveryCodes []string `json:"recovery_codes"`
+}
+
+type MFAFactorRemovedResponse struct {
+	FactorID string `json:"factor_id"`
+	Status   string `json:"status"`
+}
+
+type MFARecoveryCodesResponse struct {
+	RecoveryCodes []string `json:"recovery_codes"`
+}
+
+type MFAStepUpScope string
+
+const (
+	MFAStepUpScopeDeviceEnrollment  MFAStepUpScope = "device_enrollment"
+	MFAStepUpScopeSupportAccess     MFAStepUpScope = "support_access"
+	MFAStepUpScopeSecurityAdmin     MFAStepUpScope = "security_admin"
+	MFAStepUpScopeOrganizationAdmin MFAStepUpScope = "organization_admin"
+	MFAStepUpScopePlatformAdmin     MFAStepUpScope = "platform_admin"
+)
+
+type MFAStepUpRequest struct {
+	Scope  MFAStepUpScope `json:"scope"`
+	Method string         `json:"method"`
+	Code   string         `json:"code"`
+}
+
+type MFAStepUpResponse struct {
+	Scope     MFAStepUpScope `json:"scope"`
+	Method    string         `json:"method"`
+	ExpiresAt string         `json:"expires_at"`
 }

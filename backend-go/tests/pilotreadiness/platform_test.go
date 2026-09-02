@@ -40,6 +40,8 @@ func TestPilotReadiness_OnlyPlatformCanChangeGlobalAccountStatus(t *testing.T) {
 	fx.want(t, http.MethodPost, path, fx.a.admin.token, map[string]string{
 		"account_status": "disabled", "reason": "org admin must not control identities",
 	}, http.StatusForbidden)
+	// Global account status is platform_admin step-up gated (#460 SEC-7).
+	fx.pilotStepUp(t, fx.platform, fx.mfaFor(t, fx.platform), "platform_admin")
 	fx.want(t, http.MethodPost, path, fx.platform.token, map[string]string{
 		"account_status": "disabled", "reason": "pilot global account proof",
 	}, http.StatusOK)

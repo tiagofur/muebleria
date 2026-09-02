@@ -148,6 +148,7 @@ import {
   LoginScreen,
   SettingsScreen,
   DevicesScreen,
+  SecurityScreen,
   UsersScreen,
   PlatformScreen,
   Modal,
@@ -1716,6 +1717,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           <DevicesScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
         ) : (
           <p className="settings-hint">Iniciá sesión para administrar tus dispositivos.</p>
+        )
+      ) : null}
+      {navId === 'security' ? (
+        authToken ? (
+          <SecurityScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
+        ) : (
+          <p className="settings-hint">Iniciá sesión para administrar tu seguridad.</p>
         )
       ) : null}
       {navId === 'showcase' ? (

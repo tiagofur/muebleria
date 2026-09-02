@@ -115,6 +115,8 @@ func TestCredentialIssuingResponsesAreNoStore(t *testing.T) {
 		Token     string `json:"token"`
 		SessionID string `json:"session_id"`
 	}
+	// #460 SEC-7: support entry is support_access step-up gated.
+	fx.pilotStepUp(t, fx.platform, fx.mfaFor(t, fx.platform), "support_access")
 	credentialResponse(t, "/api/platform/organizations/"+fx.a.id+"/support-session", fx.platform.token, map[string]string{
 		"reason": "credential cache header proof",
 	}, nil, http.StatusCreated, &support)

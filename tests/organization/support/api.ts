@@ -1,4 +1,5 @@
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import { TotpProvider, secretFromProvisioningUri } from './totp';
 
 export const GATE_MODULE_A_ID = 'a1111111-1111-4111-8111-111111111111';
 export const GATE_MODULE_B_ID = 'b2222222-2222-4222-8222-222222222222';
@@ -46,12 +47,25 @@ async function seedDistinctModule(token: string, id: string, tenant: 'A' | 'B'):
   }] });
 }
 
+/** Walks the real MFA enrollment HTTP flow and returns a code provider. */
+async function enrollMFA(client: GraneteApiClient, token: string): Promise<TotpProvider> {
+  const begun = await client.beginMFAEnrollment(token, {});
+  const provider = new TotpProvider(secretFromProvisioningUri(begun.provisioning_uri));
+  await client.verifyMFAEnrollment(token, begun.factor_id, { code: provider.next() });
+  return provider;
+}
+
 export async function prepareAuthoritativeOrganizations(): Promise<void> {
   const email = required('ORGANIZATION_GATE_EMAIL');
   const aOwner = await login(required('ORGANIZATION_GATE_A_OWNER_EMAIL'), required('ORGANIZATION_GATE_ORG_A_SLUG'));
   const bOwner = await login(required('ORGANIZATION_GATE_B_OWNER_EMAIL'), required('ORGANIZATION_GATE_ORG_B_SLUG'));
   const client = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
   if (!aOwner.organization || !bOwner.organization) throw new Error('gate owner organization is missing');
+  // #460 SEC-7: entitlement updates are platform_admin step-up gated. The
+  // platform owner enrolls MFA once here and verifies a fresh code for the
+  // scope; nothing sensitive runs on the plain session.
+  const platformTotp = await enrollMFA(client, aOwner.token);
+  await client.requestMFAStepUp(aOwner.token, { scope: 'platform_admin', method: 'totp', code: platformTotp.next() });
   for (const [token, organizationId] of [[aOwner.token, aOwner.organization.id], [aOwner.token, bOwner.organization.id]]) {
     const current = await client.getOrganizationEntitlements(token, organizationId);
     await client.updateOrganizationEntitlements(token, organizationId, current.version, {

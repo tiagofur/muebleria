@@ -632,7 +632,91 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, err := auth.GenerateLegacyWebToken(rlsUserA, "rls-a@example.test", auth.TokenContext{PlatformAdmin: true}, secret)
+	// #460 SEC-7: the lifecycle commands and support entry are step-up gated,
+	// and step-up authority binds to a ver5 registry session — a legacy ver4
+	// bearer can never be elevated. Mint the session, enroll a real TOTP
+	// factor and grant the scopes this flow exercises.
+	var session *domain.AuthSession
+	err = fx.store.WithinTenantTx(ctx, storage.TenantActor{UserID: rlsUserA}, func(txCtx context.Context) error {
+		created, err := fx.store.CreateAuthSession(txCtx, storage.CreateAuthSessionCommand{
+			UserID:            rlsUserA,
+			ClientType:        domain.SessionClientWeb,
+			AbsoluteExpiresAt: time.Now().Add(time.Hour).UTC(),
+		})
+		session = created
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring, err := auth.NewMFAKeyring("test", map[string][]byte{"test": []byte(strings.Repeat("mfa-lifecycle-", 3))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfaSecrets, err := auth.NewMFASecrets(keyring)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawTOTP, _, err := auth.GenerateTOTPSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealedTOTP, sealedKid, err := mfaSecrets.EncryptTOTPSecret(rawTOTP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := fx.store.CreateMFAEnrollment(ctx, storage.CreateMFAEnrollmentCommand{
+		UserID:           rlsUserA,
+		FactorID:         "d0000000-0000-0000-0000-0000000000a1",
+		EncryptedSecret:  sealedTOTP,
+		EncryptionKid:    sealedKid,
+		PendingExpiresAt: time.Now().Add(storage.MFAEnrollmentTTL).UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	totpCounter := auth.TOTPCounter(time.Now())
+	if _, err := fx.store.EnableMFAFactor(ctx, storage.EnableMFAFactorCommand{
+		UserID:   rlsUserA,
+		FactorID: pending.ID,
+		Code:     auth.TOTPCode(rawTOTP, totpCounter),
+		Secrets:  mfaSecrets,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []string{domain.StepUpScopeSupportAccess, domain.StepUpScopePlatformAdmin} {
+		// First non-replayed counter; the ±1 acceptance window allows at most
+		// one future slot, so a second scope in the same interval waits for
+		// the next one instead of tripping replay protection.
+		next := totpCounter + 1
+		current := auth.TOTPCounter(time.Now())
+		if next > current+1 {
+			time.Sleep(time.Until(time.Unix((next-1)*int64(auth.TOTPPeriod.Seconds()), 0)) + 100*time.Millisecond)
+		}
+		totpCounter = next
+		if _, err := fx.store.VerifyMFAStepUp(ctx, storage.MFAStepUpCommand{
+			UserID:    rlsUserA,
+			SessionID: session.ID,
+			Scope:     scope,
+			Method:    domain.StepUpMethodTOTP,
+			Code:      auth.TOTPCode(rawTOTP, totpCounter),
+			Secrets:   mfaSecrets,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	jwtKeyring, err := auth.SingleKeyKeyring(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, err := auth.NewAuthority(jwtKeyring, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := authority.IssueTransportTokenUntil(rlsUserA, "rls-a@example.test", auth.TokenContext{
+		PlatformAdmin: true,
+		SessionID:     session.ID,
+	}, "web", session.AbsoluteExpiresAt)
 	if err != nil {
 		t.Fatal(err)
 	}
