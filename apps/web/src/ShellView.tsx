@@ -336,7 +336,6 @@ export interface ShellViewCtx {
   readonly analyticsPeriod: AnalyticsPeriodDays;
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly assignableOwners: readonly AssignableOwner[];
-  readonly approveDevice: (code: string) => Promise<void>;
   readonly authToken: string | null;
   readonly sessionScope: SessionScope | null;
   /** Active organization type (factory/store/dealer) — org-type role gates. */
@@ -625,7 +624,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,
-    approveDevice,
     authToken,
     sessionScope,
     authUser,
@@ -1714,7 +1712,11 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         />
       ) : null}
       {navId === 'devices' ? (
-        <DevicesScreen onApproveDevice={approveDevice} />
+        authToken ? (
+          <DevicesScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
+        ) : (
+          <p className="settings-hint">Iniciá sesión para administrar tus dispositivos.</p>
+        )
       ) : null}
       {navId === 'showcase' ? (
         <ShowcaseScreen

@@ -498,6 +498,8 @@ class DialogControllerTest < Minitest::Test
 
     dialog.callbacks.fetch('enroll').call(nil, 'serverUrl' => 'http://taller.local:8080/api', 'displayName' => '')
 
+    # The controller owns the display-name default for the device label.
+    assert_equal [['http://taller.local:8080/api', 'SketchUp']], session.enroll_args
     # A failed enrollment must not start polling nor report login: the dialog
     # only receives the enroll result so the user can retry.
     assert_equal before + 1, dialog.executed_scripts.length

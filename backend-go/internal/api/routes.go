@@ -84,12 +84,16 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Select-org: swaps an authenticated token for one scoped to a chosen
 	// organization (multi-membership users, ADR-0004).
 
-	// Device Auth
+	// Device Auth (#460 SEC-6): anonymous enrollment is rate-limited like the
+	// other auth entry points; approve/list/revoke require the web session
+	// (approve and revoke are idempotent commands).
 	mux.Handle("POST /api/auth/devices/enroll", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceEnroll))))
 	mux.Handle("POST /api/auth/devices/enroll/poll", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceEnrollPoll))))
 	mux.Handle("POST /api/auth/devices/approve", noStoreMiddleware(authMW(server.RequireIdempotency("auth.approve-device", http.HandlerFunc(server.HandleDeviceApprove)))))
 	mux.Handle("POST /api/auth/devices/exchange", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceExchange))))
 	mux.Handle("POST /api/auth/devices/token", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleDeviceToken))))
+	mux.Handle("GET /api/auth/devices", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMyDevices)))))
+	mux.Handle("POST /api/auth/devices/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("auth.revoke-device", http.HandlerFunc(server.HandleRevokeDevice))))))
 
 	mux.Handle("POST /api/auth/select-org", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleSelectOrg))))
 	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))

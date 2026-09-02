@@ -193,18 +193,34 @@ type stubStore struct {
 	updateModuleReceived   *domain.Module
 	deleteModuleCalled     bool
 	deleteModuleReceivedID string
+	approveDeviceReceived  *storage.ApproveDeviceEnrollmentCommand
+	resolveDeviceResult    *storage.DeviceTokenResult
 }
 
-func (s *stubStore) CreateAuthDeviceEnrollment(ctx context.Context, e *domain.AuthDeviceEnrollment) error { return nil }
-func (s *stubStore) GetAuthDeviceEnrollmentByCode(ctx context.Context, code string) (*domain.AuthDeviceEnrollment, error) { return nil, nil }
-func (s *stubStore) GetAuthDeviceEnrollmentByID(ctx context.Context, id string) (*domain.AuthDeviceEnrollment, error) { return nil, nil }
-func (s *stubStore) ApproveAuthDeviceEnrollment(ctx context.Context, id, userID string) error { return nil }
-func (s *stubStore) MarkAuthDeviceEnrollmentExchanged(ctx context.Context, id string) error { return nil }
-func (s *stubStore) CreateAuthDevice(ctx context.Context, d *domain.AuthDevice) error { return nil }
-func (s *stubStore) GetAuthDevice(ctx context.Context, id string) (*domain.AuthDevice, error) { return nil, nil }
-func (s *stubStore) UpdateAuthDeviceLastSeen(ctx context.Context, id string) error { return nil }
-func (s *stubStore) RevokeAuthDevice(ctx context.Context, id string) error { return nil }
-func (s *stubStore) ListAuthDevicesByUser(ctx context.Context, userID string) ([]domain.AuthDevice, error) { return nil, nil }
+func (s *stubStore) CreateAuthDeviceEnrollment(ctx context.Context, cmd storage.DeviceEnrollmentCommand) (*domain.AuthDeviceEnrollment, error) {
+	return &domain.AuthDeviceEnrollment{ID: cmd.EnrollmentID, Code: cmd.Code, Status: domain.EnrollmentStatusPending, ExpiresAt: cmd.ExpiresAt}, nil
+}
+func (s *stubStore) GetAuthDeviceEnrollmentByID(ctx context.Context, id string) (*domain.AuthDeviceEnrollment, error) {
+	return nil, storage.ErrEnrollmentNotFound
+}
+func (s *stubStore) ApproveAuthDeviceEnrollment(ctx context.Context, cmd storage.ApproveDeviceEnrollmentCommand) (*domain.AuthDeviceEnrollment, error) {
+	captured := cmd
+	s.approveDeviceReceived = &captured
+	return &domain.AuthDeviceEnrollment{Code: cmd.Code, Status: domain.EnrollmentStatusApproved}, nil
+}
+func (s *stubStore) ExchangeAuthDeviceEnrollment(ctx context.Context, cmd storage.ExchangeDeviceCommand) (*storage.ExchangedDevice, error) {
+	return nil, storage.ErrEnrollmentConflict
+}
+func (s *stubStore) ResolveDeviceToken(ctx context.Context, cmd storage.DeviceTokenCommand, execute func(ctx context.Context, result storage.DeviceTokenResult) error) error {
+	if s.resolveDeviceResult != nil {
+		return execute(ctx, *s.resolveDeviceResult)
+	}
+	return storage.ErrDeviceNotFound
+}
+func (s *stubStore) ListAuthDevicesByUser(ctx context.Context, userID string) ([]domain.AuthDevice, error) {
+	return nil, nil
+}
+func (s *stubStore) RevokeAuthDevice(ctx context.Context, cmd storage.RevokeDeviceCommand) error { return nil }
 
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
 	if s.createCustomerErr != nil {

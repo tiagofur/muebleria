@@ -1437,26 +1437,6 @@ export function AppContent({
     [saveWorkshopSettingsAction, toast],
   );
 
-  const approveDevice = useCallback(
-    async (code: string) => {
-      const token = useWorkspaceStore.getState().getAuthToken();
-      if (!token) throw new Error('No hay sesión activa.');
-      const res = await fetch(`${DEFAULT_API_BASE}/api/auth/devices/approve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ code }),
-      });
-      if (!res.ok) {
-        if (res.status === 404) throw new Error('Código inválido o expirado.');
-        throw new Error('Error al aprobar el dispositivo.');
-      }
-    },
-    [],
-  );
-
   // F063: project handlers delegate to projectStore. App.tsx no longer owns
   // project reducer wrapper, draftToProjectMeta/resolveCustomerFromDraft helpers,
   // or workspaceRef reads for projects — they live in the store.
@@ -2813,7 +2793,6 @@ export function AppContent({
     allowedNavIds,
     ambientCategories,
     ambientMaterials,
-    approveDevice,
     materialCategories,
     analyticsPeriod,
     applyScenarioB,

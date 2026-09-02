@@ -3,10 +3,22 @@ import type {
   AcceptInvitationRequest,
   AccountStatusMutationResponse,
   AdminTransferResponse,
+  AuthDeviceDirectory,
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  DeviceApproveRequest,
+  DeviceEnrollPollRequest,
+  DeviceEnrollRequest,
+  DeviceEnrollmentResponse,
+  DeviceEnrollmentStatusResponse,
+  DeviceExchangeRequest,
+  DeviceExchangeResponse,
+  DeviceRevokeRequest,
+  DeviceRevokeResponse,
+  DeviceTokenRequest,
+  DeviceTokenResponse,
   EndSupportSessionResponse,
   FactoryOrganization,
   Invitation,
@@ -117,6 +129,13 @@ export abstract class GeneratedGraneteApiClient {
   offboardMembership(token: string, membershipId: string, version: number, body: OffboardMembershipRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<OffboardMembershipResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:offboard`, { schema: "OffboardMembershipResponse", token, ifMatch: version, bodySchema: "OffboardMembershipRequest", body, idempotencyKey: key, signal }); }
   listMySessions(token: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", "/auth/sessions", { schema: "SessionDirectory", token, signal }); }
   revokeMySession(token: string, sessionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/auth/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, idempotencyKey: key, signal }); }
+  enrollDevice(body: DeviceEnrollRequest, signal?: AbortSignal): Promise<DeviceEnrollmentResponse> { return this.request("POST", "/auth/devices/enroll", { schema: "DeviceEnrollmentResponse", bodySchema: "DeviceEnrollRequest", body, signal }); }
+  pollDeviceEnrollment(body: DeviceEnrollPollRequest, signal?: AbortSignal): Promise<DeviceEnrollmentStatusResponse> { return this.request("POST", "/auth/devices/enroll/poll", { schema: "DeviceEnrollmentStatusResponse", bodySchema: "DeviceEnrollPollRequest", body, signal }); }
+  approveDeviceEnrollment(token: string, body: DeviceApproveRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DeviceEnrollmentStatusResponse> { return this.request("POST", "/auth/devices/approve", { schema: "DeviceEnrollmentStatusResponse", token, bodySchema: "DeviceApproveRequest", body, idempotencyKey: key, signal }); }
+  exchangeDeviceEnrollment(body: DeviceExchangeRequest, signal?: AbortSignal): Promise<DeviceExchangeResponse> { return this.request("POST", "/auth/devices/exchange", { schema: "DeviceExchangeResponse", bodySchema: "DeviceExchangeRequest", body, signal }); }
+  requestDeviceToken(body: DeviceTokenRequest, signal?: AbortSignal): Promise<DeviceTokenResponse> { return this.request("POST", "/auth/devices/token", { schema: "DeviceTokenResponse", bodySchema: "DeviceTokenRequest", body, signal }); }
+  listMyDevices(token: string, signal?: AbortSignal): Promise<AuthDeviceDirectory> { return this.request("GET", "/auth/devices", { schema: "AuthDeviceDirectory", token, signal }); }
+  revokeMyDevice(token: string, body: DeviceRevokeRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DeviceRevokeResponse> { return this.request("POST", "/auth/devices/revoke", { schema: "DeviceRevokeResponse", token, bodySchema: "DeviceRevokeRequest", body, idempotencyKey: key, signal }); }
   listMembershipSessions(token: string, membershipId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/org/memberships/${encodeURIComponent(membershipId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
   revokeMembershipSession(token: string, membershipId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
   listPlatformUserSessions(token: string, userId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/platform/users/${encodeURIComponent(userId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
