@@ -178,16 +178,22 @@ func (s *Server) HandlePlatformUpdateOrganization(w http.ResponseWriter, r *http
 	}
 
 	if nameChanged {
-		s.audit(r.Context(), "organization_renamed", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+		if err := s.auditRequired(r.Context(), "organization_renamed", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 			"previous_name": previousName,
 			"name":          org.Name,
-		})
+		}); err != nil {
+			respondWithInternalError(w, err, "platform update organization audit")
+			return
+		}
 	}
 	if planChanged || expiryChanged {
-		s.audit(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
+		if err := s.auditRequired(r.Context(), "organization_license_updated", claims.UserID, org.ID, clientIP(r), map[string]interface{}{
 			"license_plan":       string(org.LicensePlan),
 			"license_expires_at": org.LicenseExpiresAt,
-		})
+		}); err != nil {
+			respondWithInternalError(w, err, "platform update organization audit")
+			return
+		}
 	}
 	members, _ := s.Store.ListOrgTeam(r.Context(), org.ID, claims.UserID)
 	w.Header().Set("ETag", FormatVersionETag(org.Version))

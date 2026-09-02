@@ -265,6 +265,8 @@ func (s *PostgresStore) SetPlatformAdmin(ctx context.Context, userID string, adm
 // Actor/target/organization are optional (e.g. failed login has no actor).
 type SecurityAuditEvent struct {
 	EventType      string
+	SchemaVersion  int
+	RequestID      string
 	ActorUserID    string
 	TargetUserID   string
 	OrganizationID string
@@ -278,23 +280,80 @@ func (s *PostgresStore) InsertSecurityAuditEvent(ctx context.Context, ev Securit
 			return s.InsertSecurityAuditEvent(txCtx, ev)
 		})
 	}
-	_, err := s.db(ctx).Exec(ctx, `
-		INSERT INTO security_audit_events (event_type, actor_user_id, target_user_id, organization_id, ip, details)
-		VALUES ($1, nullif($2, '')::uuid, nullif($3, '')::uuid, nullif($4, '')::uuid, nullif($5, ''), $6::jsonb)`,
-		ev.EventType, ev.ActorUserID, ev.TargetUserID, ev.OrganizationID, ev.IP, marshalDetails(ev.Details))
+	details, err := marshalDetails(ev.Details)
+	if err != nil {
+		return fmt.Errorf("encode security audit details: %w", err)
+	}
+	schemaVersion := ev.SchemaVersion
+	if schemaVersion == 0 {
+		schemaVersion = 1
+	}
+	requestID := ev.RequestID
+	if requestID == "" {
+		if legacyRequestID, ok := ev.Details["request_id"].(string); ok {
+			requestID = legacyRequestID
+		}
+	}
+	_, err = s.db(ctx).Exec(ctx, `
+		INSERT INTO security_audit_events (
+			event_type, schema_version, request_id, actor_user_id,
+			target_user_id, organization_id, ip, details
+		)
+		VALUES (
+			$1, $2, nullif($3, ''), nullif($4, '')::uuid,
+			nullif($5, '')::uuid, nullif($6, '')::uuid, nullif($7, ''), $8::jsonb
+		)`,
+		ev.EventType, schemaVersion, requestID, ev.ActorUserID,
+		ev.TargetUserID, ev.OrganizationID, ev.IP, details)
 	return err
 }
 
-func marshalDetails(d map[string]interface{}) string {
+func marshalDetails(d map[string]interface{}) (string, error) {
 	if len(d) == 0 {
-		return "{}"
+		return "{}", nil
 	}
-	// Best-effort JSON encode; audit must never fail a request on encoding.
 	buf, err := json.Marshal(d)
 	if err != nil {
-		return `{"encode_error": true}`
+		return "", err
 	}
-	return string(buf)
+	var normalized interface{}
+	if err := json.Unmarshal(buf, &normalized); err != nil {
+		return "", err
+	}
+	if key := forbiddenAuditDetailKey(normalized); key != "" {
+		return "", fmt.Errorf("security audit details contain forbidden secret field %q", key)
+	}
+	return string(buf), nil
+}
+
+func forbiddenAuditDetailKey(value interface{}) string {
+	forbidden := map[string]struct{}{
+		"authorization": {}, "cookie": {}, "password": {}, "password_hash": {},
+		"access_token": {}, "refresh_token": {}, "token": {}, "secret": {},
+		"totp_secret": {}, "recovery_code": {}, "pairing_code": {},
+	}
+	var visit func(interface{}) string
+	visit = func(current interface{}) string {
+		switch typed := current.(type) {
+		case map[string]interface{}:
+			for key, nested := range typed {
+				if _, blocked := forbidden[strings.ToLower(key)]; blocked {
+					return key
+				}
+				if found := visit(nested); found != "" {
+					return found
+				}
+			}
+		case []interface{}:
+			for _, nested := range typed {
+				if found := visit(nested); found != "" {
+					return found
+				}
+			}
+		}
+		return ""
+	}
+	return visit(value)
 }
 
 // ListSecurityAuditEvents returns the newest events, optionally filtered by
