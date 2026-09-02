@@ -6,30 +6,23 @@ export interface ApiClientConfig {
   baseUrl: string;
 }
 
-// Configurable base URL: Android emulator uses 10.0.2.2, iOS simulator uses localhost or physical device IP
-let currentBaseUrl = 'http://localhost:8080';
-
-export function setApiBaseUrl(url: string) {
-  currentBaseUrl = url.replace(/\/+$/, '');
-}
-
-export function getApiBaseUrl(): string {
-  return currentBaseUrl;
-}
+import { getApiBaseUrl, setApiBaseUrl } from './apiConfig';
+export { setApiBaseUrl, getApiBaseUrl };
 
 /** Generated Organization API client with shared request/response validation. */
 export function generatedApiClient(): GraneteApiClient {
-  return new GraneteApiClient(`${currentBaseUrl}/api`, globalThis.fetch);
+  return new GraneteApiClient(`${getApiBaseUrl()}/api`, globalThis.fetch);
 }
 
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
+  skipAuthRetry?: boolean;
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, headers: customHeaders, ...restOptions } = options;
 
-  let url = `${currentBaseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  let url = `${getApiBaseUrl()}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   if (params) {
     const searchParams = new URLSearchParams();
@@ -75,7 +68,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   const initialCredential = getCredential();
   let response = await executeFetch();
 
-  if (response.status === 401) {
+  if (response.status === 401 && !options.skipAuthRetry) {
     // 401 Unauthorized: Attempt to refresh session (Singleflight)
     try {
       await refreshSession();

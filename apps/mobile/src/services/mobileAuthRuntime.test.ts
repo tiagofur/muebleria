@@ -23,7 +23,7 @@ vi.mock('expo-secure-store', () => ({
   deleteItemAsync: vi.fn(),
 }));
 
-vi.mock('./apiClient', () => ({
+vi.mock('./apiConfig', () => ({
   getApiBaseUrl: vi.fn(() => 'http://localhost:8080'),
 }));
 
@@ -248,7 +248,9 @@ describe('mobileAuthRuntime', () => {
           refresh_token: 'R2',
           access_expires_at: new Date(MOCK_DATE_NOW + 15 * 60 * 1000).toISOString(),
           absolute_session_expires_at: new Date(MOCK_DATE_NOW + 18 * 3600 * 1000).toISOString(),
-          session_id: 'sess-123'
+          session_id: 'sess-123',
+          user: { id: 'usr-1' },
+          organization: { id: 'org-99' }
         }),
       });
 
@@ -287,7 +289,9 @@ describe('mobileAuthRuntime', () => {
           refresh_token: 'R2',
           access_expires_at: new Date(MOCK_DATE_NOW + 15 * 60 * 1000).toISOString(),
           absolute_session_expires_at: new Date(MOCK_DATE_NOW + 18 * 3600 * 1000).toISOString(),
-          session_id: 'sess-123'
+          session_id: 'sess-123',
+          user: { id: 'usr-1' },
+          organization: { id: 'org-99' }
         }),
       });
 
@@ -333,7 +337,9 @@ describe('mobileAuthRuntime', () => {
           refresh_token: 'R2',
           access_expires_at: new Date(MOCK_DATE_NOW + 15 * 60 * 1000).toISOString(),
           absolute_session_expires_at: new Date(MOCK_DATE_NOW + 18 * 3600 * 1000).toISOString(),
-          session_id: 'sess-123'
+          session_id: 'sess-123',
+          user: { id: 'usr-1' },
+          organization: { id: 'org-99' }
         }),
       });
 

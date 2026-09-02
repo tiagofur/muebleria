@@ -10,8 +10,24 @@ import {
   refreshSession, 
   storeRefreshSecret, 
   purgeSecureRefresh,
-  REFRESH_KEY
+  REFRESH_KEY,
+  installAuthScheduler,
+  accessExpiresInMs
 } from '../services/mobileAuthRuntime';
+import { AppState } from 'react-native';
+
+export function setupAuthListeners() {
+  installAuthScheduler(refreshSession);
+
+  AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'active') {
+      const expiresIn = accessExpiresInMs();
+      if (expiresIn !== null && expiresIn < 5000) {
+        refreshSession().catch(() => {});
+      }
+    }
+  });
+}
 
 const USER_KEY = 'granete_auth_user';
 
@@ -61,6 +77,7 @@ export interface AuthState {
   checkBiometrics: () => Promise<void>;
   loginWithBiometrics: () => Promise<boolean>;
   setSessionDirect: (token: string, user: UserSession) => Promise<void>;
+  selectOrg: (orgId: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -137,29 +154,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    set({ isLoading: true });
     try {
       const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
       if (refreshToken) {
-        await apiClient.post('/auth/logout', { refresh_token: refreshToken });
+        await apiClient.post('/auth/logout', { refresh_token: refreshToken }, { skipAuthRetry: true });
       }
+    } catch (err: any) {
+      set({ isLoading: false });
+      const isNetworkOr5xx = !err.status || err.status >= 500;
+      if (isNetworkOr5xx) {
+        // SEC-5 rule: Do not purge local session if network fails, let them retry.
+        throw err;
+      }
+    } 
+
+    await purgeSecureRefresh();
+    clearCredential();
+    try {
+      await SecureStore.deleteItemAsync(USER_KEY);
     } catch {
-      // If network fails, we still purge local data, but backend state might remain.
-      // (As per SEC-5 Rule 20, we shouldn't leave business data visible)
-    } finally {
-      await purgeSecureRefresh();
-      clearCredential();
-      try {
-        await SecureStore.deleteItemAsync(USER_KEY);
-      } catch {
-        // ignore
-      }
-      set({
-        token: null,
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
+      // ignore
     }
+    set({
+      token: null,
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
   },
 
   loadSession: async () => {
@@ -170,8 +192,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       try {
         await refreshSession();
-      } catch (err) {
-        // Refresh failed (no token, expired, revoked, or network failed permanently)
+      } catch (err: any) {
+        const isNetworkOr5xx = !err.status || err.status >= 500;
+        if (isNetworkOr5xx) {
+          set({ isLoading: false });
+          throw err; // UI offline boundary
+        }
+
+        // Refresh failed (expired, revoked)
         set({
           token: null,
           user: null,
@@ -210,13 +238,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
         });
       }
-    } catch {
+    } catch (err: any) {
       set({
-        token: null,
-        user: null,
-        isAuthenticated: false,
         isLoading: false,
       });
+      throw err;
     }
   },
 
@@ -267,6 +293,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false;
     } catch {
       return false;
+    }
+  },
+
+  selectOrg: async (orgId: string) => {
+    set({ isLoading: true });
+    try {
+      const response = await apiClient.post<any>('/auth/select-org', {
+        org_id: orgId,
+      });
+
+      if (!response.refresh_token) {
+        throw new DomainError('Respuesta de selección de organización incompleta (sin refresh token).');
+      }
+
+      await storeRefreshSecret(response.refresh_token);
+
+      applyCredential({
+        accessToken: response.token,
+        accessExpiresAt: response.access_expires_at ?? '',
+        absoluteSessionExpiresAt: response.absolute_session_expires_at ?? '',
+        sessionId: response.session_id ?? '',
+        userId: response.user.id,
+        organizationId: response.organization?.id ?? null,
+      });
+
+      const userJson = await SecureStore.getItemAsync(USER_KEY);
+      let user: UserSession;
+      if (userJson) {
+        user = {
+          ...JSON.parse(userJson),
+          roles: sanitizeSessionRoles({ roles: response.roles }),
+        };
+      } else {
+        user = {
+          userId: response.user.id,
+          name: response.user.name,
+          email: response.user.email,
+          roles: sanitizeSessionRoles({ roles: response.roles }),
+        };
+      }
+      
+      await get().setSessionDirect(response.token, user);
+    } catch (err: any) {
+      set({ isLoading: false });
+      throw err;
     }
   },
 }));

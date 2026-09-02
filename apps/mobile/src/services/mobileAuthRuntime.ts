@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { DomainError } from '@granete/domain';
-import { getApiBaseUrl } from './apiClient';
+import { getApiBaseUrl } from './apiConfig';
 
 export const REFRESH_KEY = 'granete_mobile_refresh';
 
@@ -39,11 +39,15 @@ export function credentialGeneration(): number {
 }
 
 export function applyCredential(input: MobileCredentialInput): MobileCredentialSnapshot {
+  if (!input.accessExpiresAt || !input.absoluteSessionExpiresAt || !input.sessionId) {
+    throw new DomainError('Metadatos de sesión incompletos', { input });
+  }
   const snapshot: MobileCredentialSnapshot = {
     ...input,
     generation: nextGeneration(),
   };
   active = snapshot;
+  scheduleAuthRefresh(snapshot);
   return snapshot;
 }
 
@@ -51,6 +55,7 @@ export function clearCredential(): void {
   if (active === null) return;
   active = null;
   generationCounter += 1;
+  cancelAuthRefresh();
 }
 
 export function isSameCredentialScope(scope: MobileCredentialSnapshot): boolean {
@@ -166,9 +171,49 @@ async function doRefreshSession(): Promise<void> {
     accessExpiresAt: data.access_expires_at,
     absoluteSessionExpiresAt: data.absolute_session_expires_at,
     sessionId: data.session_id,
-    userId: active?.userId ?? '', // Keep existing context if available, otherwise blank
-    organizationId: active?.organizationId ?? null,
+    userId: data.user?.id ?? active?.userId ?? '',
+    organizationId: data.organization?.id ?? null,
   });
+}
+
+// Proactive scheduler
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+type RefreshCallback = () => Promise<void>;
+let registeredRefreshCallback: RefreshCallback | null = null;
+
+export function installAuthScheduler(onRefresh: RefreshCallback) {
+  registeredRefreshCallback = onRefresh;
+  if (active) {
+    scheduleAuthRefresh(active);
+  }
+}
+
+function cancelAuthRefresh() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function scheduleAuthRefresh(snapshot: MobileCredentialSnapshot) {
+  cancelAuthRefresh();
+  
+  const expiresInMs = accessExpiresInMs();
+  if (expiresInMs === null) return;
+
+  // Refresh 2 minutes before it expires, or immediately if < 2 mins left
+  const timeoutMs = Math.max(0, expiresInMs - 120_000);
+  
+  // Cap at max 32-bit integer for setTimeout
+  const safeTimeoutMs = Math.min(timeoutMs, 2147483647);
+
+  refreshTimer = setTimeout(() => {
+    if (registeredRefreshCallback && isSameCredentialScope(snapshot)) {
+      registeredRefreshCallback().catch(() => {
+        // We do not throw to global scope on proactive background refresh failures
+      });
+    }
+  }, safeTimeoutMs);
 }
 
 export async function storeRefreshSecret(refreshToken: string): Promise<void> {
@@ -188,6 +233,8 @@ export async function purgeSecureRefresh(): Promise<void> {
 }
 
 export function __resetMobileAuthRuntimeForTests(): void {
+  cancelAuthRefresh();
+  registeredRefreshCallback = null;
   active = null;
   generationCounter = 0;
   activeRefreshPromise = null;
