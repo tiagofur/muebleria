@@ -1,11 +1,11 @@
-# Feature activa: F202 (#460) — SEC-7 implemented pending review
+# Feature activa: F202 (#460) — SEC-7 integrated; Gate A durability rescue active
 
 - Actualizado: 2026-09-02 America/Mexico_City
 - F199 (#458) cerrada (`done`); ninguna otra feature `in_progress` salvo F202.
 - F202 y #460 continúan abiertos. SEC-1, SEC-2A/B (PR #528), SEC-3 (PR #530),
   SEC-4A (PR #531), SEC-4B, SEC-5 y SEC-6 (PR #534, merge `f5d59a46`) están
-  integrados; slice **SEC-7** (MFA TOTP + step-up para acciones sensibles)
-  implementado en rama `feat/460-7-mfa-step-up`, pendiente de revisión.
+  integrados; **SEC-7** (MFA TOTP + step-up para acciones sensibles) está integrado
+  en `main` por PR #535 (merge `355be4ea`).
 - Roadmap restante: SEC-8 trusted-proxy/rate limits distribuidos/account
   hardening, SEC-9 gate final + ver4 EOL.
 
@@ -102,7 +102,16 @@
 
 ## Estado de entrega
 
-SEC-6 integrado. SEC-7 `implemented pending review`. F202 sigue
-`in_progress`, #460 sigue abierto, sin merge. Roadmap restante explícito:
+SEC-6 y SEC-7 integrados en `main`. F202 sigue `in_progress` y #460 sigue
+abierto porque SEC-8/SEC-9 están pendientes. Roadmap restante explícito:
 SEC-8 trusted-proxy/rate limits/account hardening, SEC-9 gate final + ver4
 EOL.
+
+
+## Coordinación activa — #461 mínimo para Gate A
+
+- Rama: `feat/461-gate-a-durable-audit`, base `main@355be4ea`.
+- Alcance: acoplar login/session creation, select-org y platform org patch a
+  `security_audit_events` durable en la misma transacción; versión/correlación y
+  RLS org-less mínimos; pruebas PostgreSQL de rollback.
+- Fuera de alcance: #461 completo, outbox sin consumidor, Gate B, SEC-8/9 y #385.

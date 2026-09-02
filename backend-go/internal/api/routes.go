@@ -129,7 +129,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// or disable accounts.
 	platformMW := PlatformAdminMiddleware(server.tokenAuthority(), server.Store)
 	mux.Handle("GET /api/platform/organizations", platformMW(http.HandlerFunc(server.HandlePlatformListOrganizations)))
-	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(http.HandlerFunc(server.HandlePlatformUpdateOrganization)))
+	mux.Handle("PATCH /api/platform/organizations/{id}", platformMW(server.RequireStepUp(domain.StepUpScopePlatformAdmin, server.RequireIdempotency("platform.update-organization", http.HandlerFunc(server.HandlePlatformUpdateOrganization)))))
 	mux.Handle("GET /api/platform/organizations/{id}/audit", platformMW(http.HandlerFunc(server.HandlePlatformOrgAudit)))
 	mux.Handle("GET /api/platform/users", platformMW(http.HandlerFunc(server.HandlePlatformUsers)))
 	mux.Handle("GET /api/platform/users/{userId}/sessions", noStoreMiddleware(rejectSessionQueryToken(platformMW(http.HandlerFunc(server.HandleListPlatformUserSessions)))))

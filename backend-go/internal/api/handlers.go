@@ -165,20 +165,22 @@ type issuedRefreshCredential struct {
 // credential in one transaction. SketchUp/support remain separate credential
 // classes and deliberately do not enter this SEC-2 family.
 func (s *Server) createRefreshableAuthSession(ctx context.Context, cmd storage.CreateAuthSessionCommand) (*domain.AuthSession, *issuedRefreshCredential, error) {
-	if cmd.ClientType != domain.SessionClientWeb && cmd.ClientType != domain.SessionClientMobile {
-		session, err := s.createAuthSession(ctx, cmd)
-		return session, nil, err
-	}
-	if s.RefreshCredentials == nil {
-		// Minimal embedders and pre-SEC-2 unit stubs may omit the authority;
-		// production cannot reach this branch because config.LoadConfig fails
-		// closed without REFRESH_TOKEN_PEPPER.
-		session, err := s.createAuthSession(ctx, cmd)
-		return session, nil, err
-	}
-	raw, verifier, err := s.RefreshCredentials.Generate()
-	if err != nil {
-		return nil, nil, err
+	return s.createRefreshableAuthSessionThen(ctx, cmd, nil)
+}
+
+// createRefreshableAuthSessionThen keeps creation of the authoritative session,
+// its refresh family, and any required success evidence in one transaction.
+// The callback runs before commit and must therefore fail closed.
+func (s *Server) createRefreshableAuthSessionThen(ctx context.Context, cmd storage.CreateAuthSessionCommand, then func(context.Context, *domain.AuthSession) error) (*domain.AuthSession, *issuedRefreshCredential, error) {
+	var raw string
+	var verifier []byte
+	var err error
+	refreshable := (cmd.ClientType == domain.SessionClientWeb || cmd.ClientType == domain.SessionClientMobile) && s.RefreshCredentials != nil
+	if refreshable {
+		raw, verifier, err = s.RefreshCredentials.Generate()
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	var session *domain.AuthSession
 	var refresh *storage.AuthRefreshCredential
@@ -188,10 +190,18 @@ func (s *Server) createRefreshableAuthSession(ctx context.Context, cmd storage.C
 			return err
 		}
 		session = created
-		refresh, err = s.Store.CreateAuthRefreshCredential(txCtx, storage.CreateAuthRefreshCredentialCommand{
-			SessionID: created.ID, UserID: created.UserID, Verifier: verifier,
-		})
-		return err
+		if refreshable {
+			refresh, err = s.Store.CreateAuthRefreshCredential(txCtx, storage.CreateAuthRefreshCredentialCommand{
+				SessionID: created.ID, UserID: created.UserID, Verifier: verifier,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if then != nil {
+			return then(txCtx, created)
+		}
+		return nil
 	}
 	if runner, ok := s.Store.(tenantTransactionRunner); ok {
 		err = runner.WithinTenantTx(ctx, storage.TenantActor{UserID: cmd.UserID, OrganizationID: cmd.OrganizationID}, execute)
@@ -200,6 +210,9 @@ func (s *Server) createRefreshableAuthSession(ctx context.Context, cmd storage.C
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if !refreshable {
+		return session, nil, nil
 	}
 	return session, &issuedRefreshCredential{Raw: raw, ExpiresAt: refresh.ExpiresAt}, nil
 }
@@ -471,11 +484,14 @@ func (s *Server) audit(ctx context.Context, eventType, actorUserID, organization
 	if details == nil {
 		details = map[string]interface{}{}
 	}
-	if requestID := RequestIDFromContext(ctx); requestID != "" {
+	requestID := RequestIDFromContext(ctx)
+	if requestID != "" {
 		details["request_id"] = requestID
 	}
 	if err := s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
 		EventType:      eventType,
+		SchemaVersion:  1,
+		RequestID:      requestID,
 		ActorUserID:    actorUserID,
 		OrganizationID: organizationID,
 		IP:             ip,
@@ -489,11 +505,12 @@ func (s *Server) auditRequired(ctx context.Context, eventType, actorUserID, orga
 	if details == nil {
 		details = map[string]interface{}{}
 	}
-	if requestID := RequestIDFromContext(ctx); requestID != "" {
+	requestID := RequestIDFromContext(ctx)
+	if requestID != "" {
 		details["request_id"] = requestID
 	}
 	return s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-		EventType: eventType, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip, Details: details,
+		EventType: eventType, SchemaVersion: 1, RequestID: requestID, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip, Details: details,
 	})
 }
 
@@ -562,32 +579,31 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// Multi-organization user without a hint: an org-less token is issued
 		// ONLY to complete /api/auth/select-org (it carries no business scope
 		// — the middleware denies data access to org-less non-staff tokens).
-		session, refresh, err := s.createRefreshableAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+		var orgless string
+		session, refresh, err := s.createRefreshableAuthSessionThen(r.Context(), storage.CreateAuthSessionCommand{
 			UserID:            u.ID,
 			ClientType:        sessionClientType(string(transport)),
 			AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL(string(transport))),
 			DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+		}, func(txCtx context.Context, created *domain.AuthSession) error {
+			var issueErr error
+			orgless, issueErr = s.tokenAuthority().IssueTransportTokenUntil(u.ID, u.Email, auth.TokenContext{
+				PlatformAdmin: u.PlatformAdmin, SessionID: created.ID,
+			}, string(transport), created.AbsoluteExpiresAt)
+			if issueErr != nil {
+				return issueErr
+			}
+			if err := s.Store.UpdateLastLogin(txCtx, u.ID); err != nil {
+				return err
+			}
+			return s.auditRequired(txCtx, "login_success", u.ID, "", clientIP(r), map[string]interface{}{
+				"transport": transport, "selection_required": true, "session_id": created.ID,
+			})
 		})
 		if err != nil {
-			respondWithInternalError(w, err, "login: create session")
+			respondWithInternalError(w, err, "login: create session and audit")
 			return
 		}
-		// SEC-4B: every mint that knows the registry row passes the absolute
-		// cap — mandatory for web, whose short access window rolls from now.
-		orgless, err := s.tokenAuthority().IssueTransportTokenUntil(u.ID, u.Email, auth.TokenContext{
-			PlatformAdmin: u.PlatformAdmin, SessionID: session.ID,
-		}, string(transport), session.AbsoluteExpiresAt)
-		if err != nil {
-			respondWithInternalError(w, err, "login: generate orgless token")
-			return
-		}
-		if err := s.Store.UpdateLastLogin(r.Context(), u.ID); err != nil {
-			respondWithInternalError(w, err, "login: update last login")
-			return
-		}
-		s.audit(r.Context(), "login_success", u.ID, "", clientIP(r), map[string]interface{}{
-			"transport": transport, "selection_required": true, "session_id": session.ID,
-		})
 		response := LoginResponse{
 			Token:             orgless,
 			SessionID:         &session.ID,
@@ -636,35 +652,32 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Registry row first: the ver5 token embeds its sid, and the row's
 	// absolute_expires_at is the authoritative 18h/#441 bound refresh can
 	// never extend.
-	session, refresh, err := s.createRefreshableAuthSession(r.Context(), storage.CreateAuthSessionCommand{
+	var token string
+	session, refresh, err := s.createRefreshableAuthSessionThen(r.Context(), storage.CreateAuthSessionCommand{
 		UserID:            u.ID,
 		MembershipID:      tc.MembershipID,
 		OrganizationID:    tc.OrgID,
 		ClientType:        sessionClientType(string(transport)),
 		AbsoluteExpiresAt: time.Now().Add(auth.TransportSessionTTL(string(transport))),
 		DeviceHint:        sanitizeDeviceHint(r.UserAgent()),
+	}, func(txCtx context.Context, created *domain.AuthSession) error {
+		tc.SessionID = created.ID
+		var issueErr error
+		token, issueErr = s.tokenAuthority().IssueTransportTokenUntil(u.ID, u.Email, tc, string(transport), created.AbsoluteExpiresAt)
+		if issueErr != nil {
+			return issueErr
+		}
+		if err := s.Store.UpdateLastLogin(txCtx, u.ID); err != nil {
+			return err
+		}
+		return s.auditRequired(txCtx, "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
+			"transport": transport, "session_id": created.ID,
+		})
 	})
 	if err != nil {
-		respondWithInternalError(w, err, "login: create session")
+		respondWithInternalError(w, err, "login: create session and audit")
 		return
 	}
-	tc.SessionID = session.ID
-
-	var token string
-	// SEC-4B: bounded mint for every transport — web REQUIRES the cap.
-	token, err = s.tokenAuthority().IssueTransportTokenUntil(u.ID, u.Email, tc, string(transport), session.AbsoluteExpiresAt)
-	if err != nil {
-		respondWithInternalError(w, err, "login: generate token")
-		return
-	}
-
-	if err := s.Store.UpdateLastLogin(r.Context(), u.ID); err != nil {
-		respondWithInternalError(w, err, "login: update last login")
-		return
-	}
-	s.audit(r.Context(), "login_success", u.ID, tc.OrgID, clientIP(r), map[string]interface{}{
-		"transport": transport, "session_id": session.ID,
-	})
 
 	roles := tc.Roles
 	if roles == nil {
@@ -759,8 +772,8 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 	// BEFORE the scope mutation: the user payload fetch and the token mint
 	// (and, for a ver4 exchange, the registration of the new row — an unused
 	// row that simply expires if the flow dies afterwards). The scope update
-	// itself is the LAST mutation; after it only the best-effort audit and the
-	// 200 response remain, so no non-5xx outcome can commit a half-switch (a
+	// itself is the last scope mutation; the required audit below shares the
+	// request transaction, so no success can commit a switch without evidence (a
 	// serialization failure would surface as 500 and roll the transaction back
 	// together with the scope change).
 	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
@@ -819,9 +832,12 @@ func (s *Server) HandleSelectOrg(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.audit(r.Context(), "organization_selected", claims.UserID, m.OrganizationID, clientIP(r), map[string]interface{}{
+	if err := s.auditRequired(r.Context(), "organization_selected", claims.UserID, m.OrganizationID, clientIP(r), map[string]interface{}{
 		"session_id": tc.SessionID,
-	})
+	}); err != nil {
+		respondWithInternalError(w, err, "select-org: durable audit")
+		return
+	}
 
 	org := toOrgSummaryDTO(m.Organization)
 	sessionID := tc.SessionID

@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B integrated; SEC-5 integrated; SEC-6 integrated; SEC-7 implemented pending review; SEC-8..SEC-9 in progress)
+- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B integrated; SEC-5 integrated; SEC-6 integrated; SEC-7 integrated; SEC-8..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
