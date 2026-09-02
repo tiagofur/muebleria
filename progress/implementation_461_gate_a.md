@@ -140,8 +140,11 @@ record `#385 DT-1 may start`.
 
 ## Delivery
 
-- Commit: pending final verification
-- Pull request: pending push
+- Implementation commit: `666466285c934cb9b399375589bcd32f49ab91b0`
+- Pull request: [#536](https://github.com/tiagofur/muebleria/pull/536)
+  against `main`, labeled exactly `type:feature`; not merged.
+- The PR deliberately uses `Part of #461` rather than a closing keyword: this
+  rescue slice does not complete the full #461 timeline/observability scope.
 
 ## Key Learnings:
 
