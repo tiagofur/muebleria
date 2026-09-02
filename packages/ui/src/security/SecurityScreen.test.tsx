@@ -163,4 +163,91 @@ describe('SecurityScreen (#460 SEC-7)', () => {
     expect(screen.getByText(/Teléfono personal/i)).toBeTruthy();
     expect(screen.getByText(/Configuración en curso/i)).toBeTruthy();
   });
+  it('allows adding a second authenticator with step-up enrollment', async () => {
+    const user = userEvent.setup();
+    const enabledFactor = { id: 'f-1', factor_type: 'totp', status: 'enabled', label: 'Phone', created_at: '2026-09-02T12:00:00Z', enabled_at: '2026-09-02T12:01:00Z', last_used_at: null, pending_expires_at: null };
+    let beginCalled = 0;
+    const fetchMock = stubFetch((url, init) => {
+      if (url.endsWith('/auth/mfa/factors')) {
+        return jsonResponse({ factors: [enabledFactor] });
+      }
+      if (url.endsWith('/auth/mfa/totp:begin')) {
+        beginCalled++;
+        if (beginCalled === 1) return apiError('STEP_UP_REQUIRED');
+        return jsonResponse({ factor_id: 'f-2', provisioning_uri: provisioningUri, expires_at: '2026-09-02T12:15:00Z' }, 201);
+      }
+      if (url.endsWith('/auth/mfa/step-up')) {
+        return jsonResponse({ scope: 'security_admin', method: 'totp', expires_at: '2026-09-02T12:10:00Z' });
+      }
+      if (url.endsWith('/auth/mfa/totp/f-2:verify')) {
+        return jsonResponse({ factor_id: 'f-2', status: 'enabled', recovery_codes: [] });
+      }
+      return jsonResponse({}, 500);
+    });
+
+    render(<SecurityScreen baseUrl="http://test" token="token-1" />);
+    // The button says "Agregar app de autenticación"
+    const btn = await screen.findByRole('button', { name: /Agregar app de autenticación/i });
+    await user.click(btn);
+
+    // Step-up modal appears
+    expect(await screen.findByTestId('step-up-modal')).toBeTruthy();
+    await user.type(screen.getByLabelText(/Código de autenticación/i), '123456');
+    await user.click(screen.getByRole('button', { name: /^Verificar$/i }));
+
+    // QR appears
+    expect(await screen.findByTestId('mfa-qr')).toBeTruthy();
+    
+    // Verify
+    await user.click(screen.getByRole('button', { name: /Ya lo escaneé/i }));
+    await user.type(screen.getByTestId('mfa-verify-input'), '654321');
+    await user.click(screen.getByRole('button', { name: /Verificar y activar/i }));
+    
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/mfa/totp:begin'))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/mfa/step-up'))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/mfa/totp/f-2:verify'))).toHaveLength(1);
+  });
+
+  it('retries the same pending factor if step-up expires between begin and verify', async () => {
+    const user = userEvent.setup();
+    let verifyCalled = 0;
+    const fetchMock = stubFetch((url, init) => {
+      if (url.endsWith('/auth/mfa/factors')) {
+        return jsonResponse({ factors: [] }); // No factors initially
+      }
+      if (url.endsWith('/auth/mfa/totp:begin')) {
+        return jsonResponse({ factor_id: 'f-pending', provisioning_uri: provisioningUri, expires_at: '2026-09-02T12:15:00Z' }, 201);
+      }
+      if (url.endsWith('/auth/mfa/step-up')) {
+        return jsonResponse({ scope: 'security_admin', method: 'totp', expires_at: '2026-09-02T12:10:00Z' });
+      }
+      if (url.endsWith('/auth/mfa/totp/f-pending:verify')) {
+        verifyCalled++;
+        if (verifyCalled === 1) return apiError('STEP_UP_REQUIRED');
+        return jsonResponse({ factor_id: 'f-pending', status: 'enabled', recovery_codes: [] });
+      }
+      return jsonResponse({}, 500);
+    });
+
+    render(<SecurityScreen baseUrl="http://test" token="token-1" />);
+    const btn = await screen.findByRole('button', { name: /Configurar app de autenticación/i });
+    await user.click(btn);
+
+    // QR appears
+    expect(await screen.findByTestId('mfa-qr')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Ya lo escaneé/i }));
+    
+    // First verify attempt triggers step-up
+    await user.type(screen.getByTestId('mfa-verify-input'), '123456');
+    await user.click(screen.getByRole('button', { name: /Verificar y activar/i }));
+
+    // Step-up modal appears
+    expect(await screen.findByTestId('step-up-modal')).toBeTruthy();
+    await user.type(screen.getByLabelText(/Código de autenticación/i), '999999');
+    await user.click(screen.getByRole('button', { name: /^Verificar$/i }));
+
+    // Verification succeeds without requesting a new factor
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/mfa/totp:begin'))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/mfa/totp/f-pending:verify'))).toHaveLength(2);
+  });
 });

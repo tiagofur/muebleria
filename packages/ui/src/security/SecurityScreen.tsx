@@ -268,7 +268,7 @@ export function SecurityScreen({ baseUrl, token }: SecurityScreenProps): ReactNo
             <h2 style={{ fontSize: 'var(--text-lg)', margin: 0 }}>Autenticación en dos pasos</h2>
             {!enrollment ? (
               <button type="button" className="btn btn--primary" onClick={begin} disabled={beginBusy} data-testid="mfa-begin">
-                {submitBusyLabel(beginBusy, 'Configurar app de autenticación', 'Iniciando...')}
+                {submitBusyLabel(beginBusy, hasFactors ? 'Agregar app de autenticación' : 'Configurar app de autenticación', 'Iniciando...')}
               </button>
             ) : null}
             {hasFactors ? (
