@@ -9,13 +9,19 @@
   `feat/460-4b-web-in-memory-auth`, pendiente de revisión independiente y sin
   merge.
 - Review de PR #532 (CHANGES REQUIRED, 2 blockers) corregido en la misma
-  rama: (1) fallback lock reemplazado por un mutex IndexedDB transaccional
-  real (get+put dentro de UNA transacción readwrite serializada) con FAIL
-  CLOSED cuando no existe primitiva segura; (2) session replacement/scope
-  change ya no instala S2 en el refresh: un transition owner purga S1
-  (credential + grants + business state) y SÓLO ENTONCES aplica S2 y pide
-  /auth/me autoritativo; select-org ahora corre bajo el mismo boundary
-  cross-tab (§32).
+  rama: (1) fallback lock reemplazado por exclusión mutua real; (2) session
+  replacement/scope change ya no instala S2 en el refresh: un transition
+  owner purga S1 (credential + grants + business state) y SÓLO ENTONCES
+  aplica S2 y pide /auth/me autoritativo; select-org ahora corre bajo el
+  mismo boundary cross-tab (§32).
+- SEGUNDA revisión (CHANGES REQUIRED, 1 blocker residual): el lease IndexedDB
+  con TTL seguía permitiendo takeover ante un holder congelado/suspendido
+  (dos mutaciones coexistentes ⇒ falso REFRESH_REUSED). Simplificado según
+  recomendación: `navigator.locks` es el ÚNICO mecanismo (el browser ata el
+  lock a la vida del document: congelado lo mantiene, muerto lo libera);
+  sin Web Locks ⇒ FAIL CLOSED para refresh/logout/select-org. Sin fallback
+  de lease. Negative proof: holder congelado ⇒ nadie entra (sin takeover por
+  TTL); gate real: locks off con IndexedDB disponible ⇒ cero rotaciones.
 - SEC-5/6/7/8/9 no avanzaron en este slice.
 
 ## Hechos implementados SEC-4B
@@ -55,14 +61,14 @@
   (~2 min lead) + wake visibility/focus/online con singleflight in-tab (20
   callers = 1 rotación).
 - `webSessionLock` — TODA mutación de cookie (refresh/logout/select-org)
-  serializada cross-tab con EXCLUSIÓN MUTUA REAL: `navigator.locks`
-  (acquire/release promisificado) o mutex IndexedDB transaccional (get+put
-  atómico en una transacción readwrite; registro `{holder, expiresAt}`
-  no-secreto con renewal y takeover de vencidos). Sin ninguna primitiva
-  segura ⇒ FAIL CLOSED (la mutación no se ejecuta). Proofs: DOS runtimes/tab
-  identities independientes compartiendo sólo el backend (peak = 1),
-  locks promisificado, fail closed sin locks ni IndexedDB (unit + gate real),
-  IndexedDB denegado en runtime, takeover.
+  serializada cross-tab con EXCLUSIÓN MUTUA REAL vía `navigator.locks`
+  (acquire/release promisificado; lock exclusivo
+  `granete:web-session-mutation`). Sin Web Locks ⇒ FAIL CLOSED (la mutación
+  no se ejecuta): NO existe fallback de lease — ningún TTL distingue un
+  holder muerto de uno suspendido. Proofs: DOS runtimes/tab identities
+  independientes compartiendo sólo el backend (peak = 1), locks promisificado,
+  holder congelado ⇒ nadie entra (sin takeover), fail closed sin locks
+  (unit + gate real con IndexedDB disponible y sin usarlo).
 - `webSessionChannel` — BroadcastChannel `granete-web-session` con payloads
   `{ type }` ÚNICAMENTE (session-replaced/session-ended/scope-changed);
   refresh normal no recarga pestañas; el resto purge+reload y re-deriva

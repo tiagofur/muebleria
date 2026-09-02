@@ -13,8 +13,8 @@ import {
 } from './webSessionLock';
 
 beforeEach(() => {
-  // jsdom no tiene navigator.locks ni indexedDB: sin backend inyectado, toda
-  // mutación del singleton FAIL CLOSED (lo prueban los casos dedicados).
+  // jsdom no tiene navigator.locks: sin backend inyectado, toda mutación del
+  // singleton FAIL CLOSED (lo prueban los casos dedicados).
   __setWebSessionLockBackendForTests(null);
 });
 
@@ -23,7 +23,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('webSessionLock — exclusión mutua real (SEC-4B review Blocker 1)', () => {
+describe('webSessionLock — exclusión mutua real (SEC-4B, segunda revisión)', () => {
   it('serializa dos mutaciones concurrentes del MISMO runtime (cola in-tab)', async () => {
     const backend = createInMemoryWebSessionLockBackendForTests();
     const active: string[] = [];
@@ -49,7 +49,7 @@ describe('webSessionLock — exclusión mutua real (SEC-4B review Blocker 1)', (
   });
 
   it(
-    'FALLBACK PROOF: DOS runtimes/tab identities independientes (sólo el backend compartido) ' +
+    'PROOF: DOS runtimes/tab identities independientes (sólo el backend compartido) ' +
       'serializan las network mutations con peak = 1',
     async () => {
       // Backend compartido = única interacción entre "pestañas". Cada runtime
@@ -87,6 +87,34 @@ describe('webSessionLock — exclusión mutua real (SEC-4B review Blocker 1)', (
     },
   );
 
+  it('NEGATIVE PROOF (segunda revisión): holder congelado (nunca libera) ⇒ NADIE más entra — sin takeover por TTL', async () => {
+    // Semántica Web Locks: sin TTL, sin takeover. Una pestaña suspendida
+    // MANTIENE el lock; el browser sólo lo libera cuando el document muere.
+    const backend = createInMemoryWebSessionLockBackendForTests();
+    const frozenTab = createWebSessionMutationLock({ backend, tabId: 'tab-frozen' });
+    const otherTab = createWebSessionMutationLock({ backend, tabId: 'tab-other' });
+
+    const frozenRun = frozenTab.withWebSessionMutation(
+      () => new Promise<string>(() => undefined), // "congelada": nunca resuelve
+    );
+    void frozenRun.catch(() => undefined);
+
+    let otherExecuted = false;
+    const otherRun = otherTab.withWebSessionMutation(async () => {
+      otherExecuted = true;
+      return 'entered';
+    });
+    // Ventana generosa (mucho mayor que cualquier TTL razonable): si existiera
+    // un takeover por expiración, tab-other entraría aquí.
+    const raced = await Promise.race([
+      otherRun.then(() => 'entered'),
+      new Promise<string>((resolve) => setTimeout(() => resolve('still-waiting'), 500)),
+    ]);
+
+    expect(raced).toBe('still-waiting');
+    expect(otherExecuted).toBe(false);
+  });
+
   it('navigator.locks disponible: acquire/release promisificado sobre el lock real', async () => {
     const held: string[] = [];
     const released: string[] = [];
@@ -117,59 +145,34 @@ describe('webSessionLock — exclusión mutua real (SEC-4B review Blocker 1)', (
     }
   });
 
-  it('FAIL CLOSED: sin navigator.locks ni IndexedDB la mutación NO se ejecuta', async () => {
-    // jsdom: sin locks ni indexedDB reales; sin backend inyectado.
-    expect((globalThis as { indexedDB?: unknown }).indexedDB).toBeUndefined();
-    let executed = false;
-    await expect(
-      withWebSessionMutation(async () => {
-        executed = true;
-        return 'never';
-      }),
-    ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
-    expect(executed).toBe(false);
-
-    // El singleton de producción comparte el destino fail-closed.
-    let singletonExecuted = false;
-    await expect(
-      webSessionMutationLock.withWebSessionMutation(async () => {
-        singletonExecuted = true;
-      }),
-    ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
-    expect(singletonExecuted).toBe(false);
-  });
-
-  it('IndexedDB denegado en runtime (open rechazado): mutación NO se ejecuta', async () => {
-    // indexedDB presente pero bloqueado (p.ej. contexto denegado): el acquire
-    // debe fallar cerrado, no degradar a "correr igual".
-    const factory = { open: () => { throw new Error('The user denied permission'); } };
-    Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: factory });
+  it('FAIL CLOSED: sin navigator.locks la mutación NO se ejecuta (no existe fallback de lease)', async () => {
+    // jsdom: sin Web Locks (y DA IGUAL IndexedDB: ya no se usa como fallback).
+    (globalThis as { indexedDB?: unknown }).indexedDB = {
+      open: () => {
+        throw new Error('nunca debe llamarse');
+      },
+    };
     try {
-      const lock = createWebSessionMutationLock({ tabId: 'tab-denied' });
       let executed = false;
       await expect(
-        lock.withWebSessionMutation(async () => {
+        withWebSessionMutation(async () => {
           executed = true;
+          return 'never';
         }),
       ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
       expect(executed).toBe(false);
+
+      // El singleton de producción comparte el destino fail-closed.
+      let singletonExecuted = false;
+      await expect(
+        webSessionMutationLock.withWebSessionMutation(async () => {
+          singletonExecuted = true;
+        }),
+      ).rejects.toBeInstanceOf(WebSessionLockUnavailableError);
+      expect(singletonExecuted).toBe(false);
     } finally {
       Reflect.deleteProperty(globalThis, 'indexedDB');
     }
-  });
-
-  it('un lease vencido de otra pestaña se toma over (crash-safety), sin deadlock', async () => {
-    // TTL corto para no esperar el real (15 s) en el test.
-    const backend = createInMemoryWebSessionLockBackendForTests({ ttlMs: 25 });
-    // Simula un crash: la mutación de la pestaña fantasma nunca libera.
-    const ghost = createWebSessionMutationLock({ backend, tabId: 'ghost-tab' });
-    const ghostRun = ghost.withWebSessionMutation(() => new Promise<string>(() => undefined));
-    void ghostRun.catch(() => undefined);
-    // Deja pasar el TTL del registro.
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    const survivor = createWebSessionMutationLock({ backend, tabId: 'survivor-tab' });
-    const result = await survivor.withWebSessionMutation(async () => 'recovered');
-    expect(result).toBe('recovered');
   });
 
   it('propaga el error de la mutación y libera para la siguiente', async () => {

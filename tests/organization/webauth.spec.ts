@@ -179,51 +179,13 @@ test('logout en una pestaña corta la sesión compartida: la otra termina en log
   await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveCount(0);
 });
 
-test('fallback SIN Web Locks: dos pestañas coordinan por IndexedDB y no hay replay', async ({ context }) => {
-  // Simula browsers sin Web Locks: el app debe caer al mutex IndexedDB
-  // (transacción readwrite get+put atómica) — nunca correr la rotación sin
-  // exclusión mutua real.
+test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista (sin fallback de lease)', async ({ context }) => {
+  // #460 segunda revisión: navigator.locks es el ÚNICO mecanismo de
+  // exclusión aceptado. Sin él, refresh/logout/select-org fail closed — no
+  // existe fallback de lease (TTL) cuyo takeover pudiera re-crear dos
+  // mutaciones coexistentes (falso REFRESH_REUSED).
   await context.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, 'locks', {
-      configurable: true,
-      get: () => undefined,
-    });
-  });
-
-  const tabA = await context.newPage();
-  await login(tabA);
-  await tabA.waitForTimeout(300);
-
-  const tabB = await context.newPage();
-  await tabB.goto('/');
-  await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
-  await dismissTour(tabB);
-
-  // DOS rotaciones de la MISMA cookie, casi simultáneas, a través del app
-  // (coordinatedWebRefresh sobre el mutex IndexedDB real).
-  const appRefresh = (page: Page) =>
-    page.evaluate(async () => {
-      const outcome = await (
-        window as unknown as { __graneteWebAuthTestRefresh: () => Promise<{ status: string }> }
-      ).__graneteWebAuthTestRefresh();
-      return outcome.status;
-    });
-  const [statusA, statusB] = await Promise.all([appRefresh(tabA), appRefresh(tabB)]);
-  expect([statusA, statusB].sort()).toEqual(['refreshed', 'refreshed']);
-
-  // Sesión viva: strict single-use server-side intacto (sin REFRESH_REUSED).
-  for (const page of [tabA, tabB]) {
-    expect(await rawCookieRefresh(page), 'session alive after fallback concurrent refresh').toBe(200);
-  }
-});
-
-test('FAIL CLOSED: sin Web Locks NI IndexedDB la rotación se rechaza (nunca corre sin exclusión)', async ({ context }) => {
-  await context.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, 'locks', {
-      configurable: true,
-      get: () => undefined,
-    });
-    Object.defineProperty(window, 'indexedDB', {
       configurable: true,
       get: () => undefined,
     });
@@ -247,6 +209,9 @@ test('FAIL CLOSED: sin Web Locks NI IndexedDB la rotación se rechaza (nunca cor
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
+
+  // IndexedDB está DISPONIBLE y aún así no se usa como fallback.
+  expect(await page.evaluate(() => typeof indexedDB)).toBe('object');
 
   const outcome = await page.evaluate(async () => {
     const result = await (
