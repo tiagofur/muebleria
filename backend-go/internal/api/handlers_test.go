@@ -195,6 +195,17 @@ type stubStore struct {
 	deleteModuleReceivedID string
 }
 
+func (s *stubStore) CreateAuthDeviceEnrollment(ctx context.Context, e *domain.AuthDeviceEnrollment) error { return nil }
+func (s *stubStore) GetAuthDeviceEnrollmentByCode(ctx context.Context, code string) (*domain.AuthDeviceEnrollment, error) { return nil, nil }
+func (s *stubStore) GetAuthDeviceEnrollmentByID(ctx context.Context, id string) (*domain.AuthDeviceEnrollment, error) { return nil, nil }
+func (s *stubStore) ApproveAuthDeviceEnrollment(ctx context.Context, id, userID string) error { return nil }
+func (s *stubStore) MarkAuthDeviceEnrollmentExchanged(ctx context.Context, id string) error { return nil }
+func (s *stubStore) CreateAuthDevice(ctx context.Context, d *domain.AuthDevice) error { return nil }
+func (s *stubStore) GetAuthDevice(ctx context.Context, id string) (*domain.AuthDevice, error) { return nil, nil }
+func (s *stubStore) UpdateAuthDeviceLastSeen(ctx context.Context, id string) error { return nil }
+func (s *stubStore) RevokeAuthDevice(ctx context.Context, id string) error { return nil }
+func (s *stubStore) ListAuthDevicesByUser(ctx context.Context, userID string) ([]domain.AuthDevice, error) { return nil, nil }
+
 func (s *stubStore) CreateCustomer(ctx context.Context, c *domain.Customer) error {
 	if s.createCustomerErr != nil {
 		return s.createCustomerErr

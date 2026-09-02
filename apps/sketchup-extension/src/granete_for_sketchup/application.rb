@@ -13,7 +13,7 @@ module Granete
         catalog_provider: nil
       )
         @logger = logger
-        @session = session_provider || Auth::SessionProvider.new(logger: logger)
+        @session = session_provider || Auth::DeviceProvider.new(logger: logger)
         @transport = transport || @session.transport
         @auth_provider = auth_provider || @session
         @dialog = UserInterface::DialogController.new(

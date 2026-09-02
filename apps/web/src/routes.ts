@@ -33,6 +33,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   finishes: '/finishes',
   optionGroups: '/option-groups',
   settings: '/settings',
+  devices: '/devices',
   users: '/users',
   platform: '/platform',
 } as const;

@@ -589,7 +589,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'settings',
     ]);
   }
-  const ids = new Set<string>(['home']);
+  const ids = new Set<string>(['home', 'devices']);
   // F093 — Estado de Planta: factory progress is visible to EVERY role
   // (sales answers "where is my project"); read-only board.
   ids.add('plantBoard');

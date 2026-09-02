@@ -31,6 +31,7 @@ import {
   Settings,
   Settings2,
   ShieldCheck,
+  Smartphone,
   Search,
   Store,
   ToggleLeft,
@@ -85,6 +86,7 @@ export type AppNavId =
   | 'finishes'
   | 'optionGroups'
   | 'settings'
+  | 'devices'
   | 'users'
   | 'platform';
 
@@ -322,6 +324,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     label: 'CONFIG',
     items: [
       { id: 'settings', label: 'Ajustes', icon: Settings },
+      { id: 'devices', label: 'Dispositivos', icon: Smartphone },
     ],
   },
 ] as const;

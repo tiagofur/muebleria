@@ -147,6 +147,7 @@ import {
   Dashboard,
   LoginScreen,
   SettingsScreen,
+  DevicesScreen,
   UsersScreen,
   PlatformScreen,
   Modal,
@@ -335,6 +336,7 @@ export interface ShellViewCtx {
   readonly analyticsPeriod: AnalyticsPeriodDays;
   readonly applyScenarioB: (projectId: string, role: string, choiceId: string) => void;
   readonly assignableOwners: readonly AssignableOwner[];
+  readonly approveDevice: (code: string) => Promise<void>;
   readonly authToken: string | null;
   readonly sessionScope: SessionScope | null;
   /** Active organization type (factory/store/dealer) — org-type role gates. */
@@ -623,6 +625,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     analyticsPeriod,
     applyScenarioB,
     assignableOwners,
+    approveDevice,
     authToken,
     sessionScope,
     authUser,
@@ -1709,6 +1712,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               : null
           }
         />
+      ) : null}
+      {navId === 'devices' ? (
+        <DevicesScreen onApproveDevice={approveDevice} />
       ) : null}
       {navId === 'showcase' ? (
         <ShowcaseScreen

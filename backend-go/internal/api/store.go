@@ -18,6 +18,18 @@ import (
 // AppliedVersions, admin password helpers) intentionally stay on the concrete
 // type and are called only from cmd/server.
 type Store interface {
+	// Auth Devices
+	CreateAuthDeviceEnrollment(ctx context.Context, e *domain.AuthDeviceEnrollment) error
+	GetAuthDeviceEnrollmentByCode(ctx context.Context, code string) (*domain.AuthDeviceEnrollment, error)
+	GetAuthDeviceEnrollmentByID(ctx context.Context, id string) (*domain.AuthDeviceEnrollment, error)
+	ApproveAuthDeviceEnrollment(ctx context.Context, id, userID string) error
+	MarkAuthDeviceEnrollmentExchanged(ctx context.Context, id string) error
+	CreateAuthDevice(ctx context.Context, d *domain.AuthDevice) error
+	GetAuthDevice(ctx context.Context, id string) (*domain.AuthDevice, error)
+	UpdateAuthDeviceLastSeen(ctx context.Context, id string) error
+	RevokeAuthDevice(ctx context.Context, id string) error
+	ListAuthDevicesByUser(ctx context.Context, userID string) ([]domain.AuthDevice, error)
+
 	// Auth / users
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	// GetUserByID loads the user for JWT re-validation of role/active (issue #16).
