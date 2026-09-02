@@ -1,38 +1,28 @@
-import * as SecureStore from 'expo-secure-store';
 import { DomainError } from '@granete/domain';
 import { GraneteApiClient } from '@granete/storage';
-import { ensureSecureStoreMigrated } from './secureStoreMigration';
-
-const TOKEN_KEY = 'granete_auth_token';
+import { getAccessToken, getCredential, refreshSession } from './mobileAuthRuntime';
 
 export interface ApiClientConfig {
   baseUrl: string;
 }
 
-// Configurable base URL: Android emulator uses 10.0.2.2, iOS simulator uses localhost or physical device IP
-let currentBaseUrl = 'http://localhost:8080';
-
-export function setApiBaseUrl(url: string) {
-  currentBaseUrl = url.replace(/\/+$/, '');
-}
-
-export function getApiBaseUrl(): string {
-  return currentBaseUrl;
-}
+import { getApiBaseUrl, setApiBaseUrl } from './apiConfig';
+export { setApiBaseUrl, getApiBaseUrl };
 
 /** Generated Organization API client with shared request/response validation. */
 export function generatedApiClient(): GraneteApiClient {
-  return new GraneteApiClient(`${currentBaseUrl}/api`, globalThis.fetch);
+  return new GraneteApiClient(`${getApiBaseUrl()}/api`, globalThis.fetch);
 }
 
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
+  skipAuthRetry?: boolean;
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, headers: customHeaders, ...restOptions } = options;
 
-  let url = `${currentBaseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  let url = `${getApiBaseUrl()}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   if (params) {
     const searchParams = new URLSearchParams();
@@ -47,33 +37,63 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     }
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    ...(customHeaders as Record<string, string>),
-  };
+  const buildHeaders = () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(customHeaders as Record<string, string>),
+    };
 
-  try {
-    await ensureSecureStoreMigrated();
-    const token = await SecureStore.getItemAsync(TOKEN_KEY);
+    const token = getAccessToken();
     if (token && !headers.Authorization) {
       headers.Authorization = `Bearer ${token}`;
     }
-  } catch {
-    // Non-native environments or SecureStore unavailable
-  }
+    return headers;
+  };
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...restOptions,
-      headers,
-    });
-  } catch (err: any) {
-    throw new DomainError(
-      `Error de red al conectar con el servidor: ${err?.message || 'Sin conexión'}`,
-      { url, originalError: err }
-    );
+  const executeFetch = async () => {
+    try {
+      return await fetch(url, {
+        ...restOptions,
+        headers: buildHeaders(),
+      });
+    } catch (err: any) {
+      throw new DomainError(
+        `Error de red al conectar con el servidor: ${err?.message || 'Sin conexión'}`,
+        { url, originalError: err }
+      );
+    }
+  };
+
+  const initialCredential = getCredential();
+  let response = await executeFetch();
+
+  if (response.status === 401 && !options.skipAuthRetry) {
+    // 401 Unauthorized: Attempt to refresh session (Singleflight)
+    try {
+      await refreshSession();
+      // Only retry if the new session belongs to the same org/user (cross-org check)
+      const newCredential = getCredential();
+      if (
+        initialCredential &&
+        newCredential &&
+        (initialCredential.sessionId !== newCredential.sessionId ||
+         initialCredential.userId !== newCredential.userId ||
+         initialCredential.organizationId !== newCredential.organizationId)
+      ) {
+         throw new DomainError('La sesión o la organización ha cambiado.', { status: 401 });
+      }
+      
+      // Retry once
+      response = await executeFetch();
+    } catch (refreshErr: any) {
+      // If refresh fails (e.g. no token, network error, or invalid token), we bubble up
+      // a 401 so the UI can redirect to login.
+      throw new DomainError(refreshErr.message || 'Sesión no válida', {
+        status: 401,
+        originalError: refreshErr,
+      });
+    }
   }
 
   if (!response.ok) {

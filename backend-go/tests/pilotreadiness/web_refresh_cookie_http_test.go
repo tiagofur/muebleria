@@ -78,8 +78,8 @@ func TestWebAccessTokenShortTTLAndAbsoluteCap(t *testing.T) {
 
 	mobile := fx.mobileLogin(t, fx.a.admin.email, fx.a.slug)
 	mobileIat, mobileExp := accessTokenClaims(t, mobile.Token)
-	if ttl := mobileExp.Sub(mobileIat); ttl < 18*time.Hour-time.Minute || ttl > 18*time.Hour+time.Minute {
-		t.Fatalf("mobile access TTL = %v, want ~18h (SEC-5 boundary untouched)", ttl)
+	if ttl := mobileExp.Sub(mobileIat); ttl < 14*time.Minute || ttl > 16*time.Minute {
+		t.Fatalf("mobile access TTL = %v, want ~15m (SEC-5 boundary)", ttl)
 	}
 
 	// T0+17:59 shape: shrink the live absolute bound under one rolling window
@@ -89,12 +89,12 @@ func TestWebAccessTokenShortTTLAndAbsoluteCap(t *testing.T) {
 	shrunk := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Second)
 	if _, err := fx.pool.Exec(ctx, `
 		WITH session_update AS (
-			UPDATE auth_sessions SET absolute_expires_at=$2 WHERE id=$1 RETURNING id
+			UPDATE auth_sessions SET absolute_expires_at=$2 WHERE id = ANY($1::uuid[]) RETURNING id
 		), family_update AS (
-			UPDATE auth_refresh_families SET absolute_expires_at=$2 WHERE session_id=$1 RETURNING id
+			UPDATE auth_refresh_families SET absolute_expires_at=$2 WHERE session_id = ANY($1::uuid[]) RETURNING id
 		)
-		UPDATE auth_refresh_credentials SET expires_at=$2 WHERE session_id=$1`,
-		sess.login.SessionID, shrunk); err != nil {
+		UPDATE auth_refresh_credentials SET expires_at=$2 WHERE session_id = ANY($1::uuid[])`,
+		[]string{sess.login.SessionID, mobile.SessionID}, shrunk); err != nil {
 		t.Fatal(err)
 	}
 	capped := fx.webRefresh(t, &sess)
@@ -108,6 +108,19 @@ func TestWebAccessTokenShortTTLAndAbsoluteCap(t *testing.T) {
 	}
 	if !cappedAccessExpiry.Truncate(time.Second).Equal(cappedExp.Truncate(time.Second)) {
 		t.Fatalf("capped access_expires_at %s != JWT exp %s", cappedAccessExpiry, cappedExp)
+	}
+
+	cappedMobile := fx.mobileRefresh(t, &mobile)
+	_, cappedMobileExp := accessTokenClaims(t, cappedMobile.Token)
+	if cappedMobileExp.Truncate(time.Second).After(shrunk) {
+		t.Fatalf("capped mobile refresh JWT exp %s overshoots shrunk absolute bound %s", cappedMobileExp, shrunk)
+	}
+	cappedMobileAccessExpiry, err := time.Parse(time.RFC3339Nano, cappedMobile.AccessExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cappedMobileAccessExpiry.Truncate(time.Second).Equal(cappedMobileExp.Truncate(time.Second)) {
+		t.Fatalf("capped mobile access_expires_at %s != JWT exp %s", cappedMobileAccessExpiry, cappedMobileExp)
 	}
 }
 

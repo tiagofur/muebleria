@@ -1,6 +1,6 @@
 # ADR-0007 — Bounded revocable sessions and client-specific credentials
 
-- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B implemented pending review; SEC-5..SEC-9 in progress)
+- **Status:** Accepted (SEC-1, SEC-2A and SEC-2B integrated; SEC-3 and SEC-4A integrated; SEC-4B integrated; SEC-5 implemented pending review; SEC-6..SEC-9 in progress)
 - **Date:** 2026-08-31
 - **Tracking:** #460 (tracker), #446 (program)
 - **Extends:** ADR-0005 §7, ADR-0006 §11
@@ -219,9 +219,9 @@ credential: Ruby exchanges it for per-file signed URLs and re-mints expired
 grants on demand via the `refresh_media_url` callback. SketchUp's logger
 redacts `grant=` query credentials like every other credential.
 
-Remaining roadmap: SEC-4B Web in-memory access cutover, SEC-5 Mobile credential
-migration, SEC-6 SketchUp device credentials, SEC-7 MFA/step-up, SEC-8 trusted
-proxy/rate limits/account hardening, SEC-9 final gate + ver4 EOL.
+Remaining roadmap: SEC-5 Mobile credential migration, SEC-6 SketchUp device
+credentials, SEC-7 MFA/step-up, SEC-8 trusted proxy/rate limits/account hardening,
+SEC-9 final gate + ver4 EOL.
 
 ### 9. Web refresh credential travels only in a HttpOnly cookie (SEC-4A)
 
@@ -293,10 +293,10 @@ session origin — origin-derived arithmetic would mint already-expired tokens
 after minute 15. The absolute bound is structural: every web mint path (login,
 org-less login, select-org, invitation accept, cookie refresh) goes through
 `IssueTransportTokenUntil`, and an unbounded web mint is a rejected
-programming error. Mobile keeps `MobileAccessTokenTTL = 18h` untouched until
-SEC-5; both absolute sessions stay T0+18h (`WebSessionAbsoluteTTL` /
-`MobileSessionAbsoluteTTL`), and refresh can never slide them — at the
-deadline the client purges and shows login.
+programming error. For Mobile (SEC-5), `MobileAccessTokenTTL` is also 15m,
+but the session's absolute bound stays at T0+18h (`MobileSessionAbsoluteTTL`).
+Refresh can never slide the absolute deadline — at the deadline the client purges
+and shows login.
 
 **Client architecture.** One canonical in-memory authority
 (`webAuthRuntime`: web | support | anonymous, monotonic generation for
@@ -348,6 +348,30 @@ configuration error. A failed server logout never claims success: the tab
 purges immediately (data protection) but exposes a retry affordance and
 suppresses cookie bootstrap until the server confirms, so the user's logout
 intent cannot be silently undone.
+
+### 11. Mobile refresh credential in SecureStore and short access in memory (SEC-5)
+
+Mobile adopts the same in-memory `MobileAccessTokenTTL = 15m` short-lived access
+as Web, but it has no cookie transport. The opaque refresh JSON body returned by
+login is written to the platform's encrypted keystore (`SecureStore` in Expo).
+Access credentials exist *only* in JavaScript memory.
+
+**Best-effort Logout on SecureStore failure:** If login creates a session server-side 
+but writing the refresh token to `SecureStore` fails, the client MUST perform a best-effort 
+`/auth/logout` using the in-memory access token to revoke the orphaned server-side session, 
+then throw to the UI so the user attempts login again. A local failure without revocation 
+would leave an active, untracked session in the database.
+
+**Cross-Org Boundaries on Refresh:** When `refreshSession()` fetches a new access token, 
+it asserts that the `sessionId` and `organizationId` match the original fetch scope. If 
+a request under organization A encounters a 401, but the refresh returns organization B 
+(e.g., because another tab/flow changed the family scope), the pending request is 
+aborted instead of being replayed under organization B.
+
+**Select-Org Stability:** The `select-org` endpoint swaps scopes in-place but *does not* 
+rotate the refresh family. Mobile does not ask for, nor expect, a new `refresh_token` 
+on `select-org`, maintaining alignment with Web's behavior where the `granete_web_refresh` 
+cookie remains stable across scope switches.
 
 ## Alternatives considered
 

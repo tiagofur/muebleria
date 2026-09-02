@@ -582,11 +582,11 @@ func TestIssueTransportToken_WebCapBeatsRollingTTL(t *testing.T) {
 	}
 }
 
-// TestIssueTransportToken_MobileKeepsWorkdayPolicy locks the SEC-5 boundary:
-// mobile keeps the origin-derived 18h credential until its own migration.
-func TestIssueTransportToken_MobileKeepsWorkdayPolicy(t *testing.T) {
+// TestIssueTransportToken_MobileKeepsShortAccessPolicy locks the SEC-5 boundary:
+// mobile uses the short 15m credential.
+func TestIssueTransportToken_MobileKeepsShortAccessPolicy(t *testing.T) {
 	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
-	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	started := time.Now().UTC().Add(-5 * time.Minute).Truncate(time.Second)
 	token, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
 		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
