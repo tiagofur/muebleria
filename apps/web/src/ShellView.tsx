@@ -264,16 +264,8 @@ import {
 import { organizationKeys } from './shared/query/queryKeys';
 import type { SessionScope } from './shared/query/sessionScope';
 import {
-  clearSession,
   DEFAULT_API_BASE,
   isAdminRole,
-  loginRequest,
-  readAuthToken,
-  readAuthUser,
-  readSessionMode,
-  storeAuthToken,
-  storeAuthUser,
-  writeSessionMode,
   type SessionMode,
 } from './session';
 import {

@@ -87,7 +87,7 @@ func TestVer5TokenTypeAndAudiencePerTransport(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.transport, func(t *testing.T) {
-			token, err := authority.IssueTransportToken("00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{SessionID: "sess-1"}, tc.transport)
+			token, err := issueTransportTokenCapped(authority, "00000000-0000-0000-0000-000000000001", "a@b.test", auth.TokenContext{SessionID: "sess-1"}, tc.transport)
 			if err != nil {
 				t.Fatal(err)
 			}

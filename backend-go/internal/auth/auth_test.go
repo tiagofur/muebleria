@@ -98,6 +98,13 @@ func mustTestAuthority(t *testing.T, secret string) *Authority {
 	return authority
 }
 
+// issueBoundedWebToken mints a web token the way every production path does
+// since SEC-4B: through the registry-capped variant (web mints REQUIRE the
+// absolute session bound).
+func issueBoundedWebToken(a *Authority, userID, email string, tc TokenContext) (string, error) {
+	return a.IssueTransportTokenUntil(userID, email, tc, "web", time.Now().Add(WebSessionAbsoluteTTL))
+}
+
 func TestAuthorityTokenLifecycle(t *testing.T) {
 	secret := "test-secret-key-1234567890abcdef"
 	userID := "user-uuid-123"
@@ -105,9 +112,9 @@ func TestAuthorityTokenLifecycle(t *testing.T) {
 	role := "vendedor"
 	authority := mustTestAuthority(t, secret)
 
-	token, err := authority.IssueTransportToken(userID, email, TokenContext{
+	token, err := issueBoundedWebToken(authority, userID, email, TokenContext{
 		Roles: []string{role}, SessionID: "sess-1",
-	}, "web")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,10 +151,11 @@ func TestAuthorityTokenLifecycle(t *testing.T) {
 	if claims.ExpiresAt == nil {
 		t.Fatal("expected ExpiresAt set")
 	}
-	// Access token should expire about AccessTokenTTL from now (issue #16).
+	// SEC-4B: the web access bearer is short-lived and rolls from the mint
+	// instant (exp - iat ≈ WebAccessTokenTTL), not from the session origin.
 	ttl := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
-	if ttl < AccessTokenTTL-time.Second || ttl > AccessTokenTTL+time.Second {
-		t.Errorf("token TTL = %v, want ~%v", ttl, AccessTokenTTL)
+	if ttl < WebAccessTokenTTL-time.Second || ttl > WebAccessTokenTTL+time.Second {
+		t.Errorf("web token TTL = %v, want ~%v", ttl, WebAccessTokenTTL)
 	}
 
 	// A different key must not validate the token.
@@ -172,9 +180,9 @@ func TestAuthority_KidHeaderAndRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	token, err := authority.IssueTransportToken("u1", "u@example.com", TokenContext{
+	token, err := issueBoundedWebToken(authority, "u1", "u@example.com", TokenContext{
 		Roles: []string{"admin"}, SessionID: "sess-1",
-	}, "web")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,9 +196,9 @@ func TestAuthority_KidHeaderAndRotation(t *testing.T) {
 
 	// A token signed with the previous key still validates while registered.
 	oldAuthority := authorityForKid(t, "k-old", "old-secret-key-1234567890abcdef0")
-	oldToken, err := oldAuthority.IssueTransportToken("u1", "u@example.com", TokenContext{
+	oldToken, err := issueBoundedWebToken(oldAuthority, "u1", "u@example.com", TokenContext{
 		Roles: []string{"admin"}, SessionID: "sess-1",
-	}, "web")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,9 +208,9 @@ func TestAuthority_KidHeaderAndRotation(t *testing.T) {
 
 	// An unknown kid is rejected — that is how a rotated-out key is revoked.
 	unknownAuthority := authorityForKid(t, "k-gone", "gone-secret-key-1234567890abcdef0")
-	unknownToken, err := unknownAuthority.IssueTransportToken("u1", "u@example.com", TokenContext{
+	unknownToken, err := issueBoundedWebToken(unknownAuthority, "u1", "u@example.com", TokenContext{
 		Roles: []string{"admin"}, SessionID: "sess-1",
-	}, "web")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,14 +525,15 @@ func TestIssueTransportToken_PreservesAbsoluteSessionLifetimeAndMembershipCreden
 	secret := "test-secret-key-1234567890abcdef"
 	authority := mustTestAuthority(t, secret)
 	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
-	token, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
+	minted := time.Now().UTC()
+	token, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
 		Roles:                       []string{"admin"},
 		OrgID:                       "org-1",
 		MembershipID:                "membership-1",
 		MembershipCredentialVersion: 7, OrganizationCredentialVersion: 1,
 		AuthStartedAt: started,
 		SessionID:     "sess-1",
-	}, "web")
+	}, "web", started.Add(WebSessionAbsoluteTTL))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,23 +550,88 @@ func TestIssueTransportToken_PreservesAbsoluteSessionLifetimeAndMembershipCreden
 	if got := claims.AuthStartedAt.Time; !got.Equal(started) {
 		t.Fatalf("auth_started_at = %s, want %s", got, started)
 	}
-	if want := started.Add(AccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
-		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	// SEC-4B: the web bearer rolls from the MINT instant (now+15m), never from
+	// the session origin — a session minted 2h ago still gets a full 15-minute
+	// window, which origin-derived expiry would deny.
+	if want := minted.Add(WebAccessTokenTTL); claims.ExpiresAt.Time.Before(want.Add(-2*time.Second)) || claims.ExpiresAt.Time.After(want.Add(2*time.Second)) {
+		t.Fatalf("web expiry = %s, want ~%s (mint + WebAccessTokenTTL)", claims.ExpiresAt.Time, want)
+	}
+}
+
+// TestIssueTransportToken_WebCapBeatsRollingTTL is the T+17:59 proof: when the
+// rolling 15-minute window would overshoot the session's absolute bound, exp
+// is the absolute bound — refresh can never slide the session deadline.
+func TestIssueTransportToken_WebCapBeatsRollingTTL(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	started := time.Now().UTC().Add(-WebSessionAbsoluteTTL + time.Minute).Truncate(time.Second) // T0 + 17:59
+	cap := started.Add(WebSessionAbsoluteTTL)
+	token, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+		AuthStartedAt: started, SessionID: "sess-1",
+	}, "web", cap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := authority.Validate(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !claims.ExpiresAt.Time.Equal(cap) {
+		t.Fatalf("web expiry = %s, want absolute cap %s", claims.ExpiresAt.Time, cap)
+	}
+}
+
+// TestIssueTransportToken_MobileKeepsWorkdayPolicy locks the SEC-5 boundary:
+// mobile keeps the origin-derived 18h credential until its own migration.
+func TestIssueTransportToken_MobileKeepsWorkdayPolicy(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	started := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	token, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+		AuthStartedAt: started, SessionID: "sess-1",
+	}, "mobile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := authority.Validate(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := started.Add(MobileAccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
+		t.Fatalf("mobile expiry = %s, want %s (origin + MobileAccessTokenTTL)", claims.ExpiresAt.Time, want)
+	}
+}
+
+// TestIssueTransportToken_WebRequiresAbsoluteCap makes the SEC-4B invariant
+// structural: an unbounded web mint is a programming error, not a policy choice.
+func TestIssueTransportToken_WebRequiresAbsoluteCap(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	if _, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, SessionID: "sess-1",
+	}, "web"); err == nil {
+		t.Fatal("unbounded web mint must be rejected")
+	}
+	if _, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, SessionID: "sess-1",
+	}, "web", time.Time{}); err == nil {
+		t.Fatal("web mint without the absolute cap must be rejected")
 	}
 }
 
 func TestIssueTransportToken_RejectsMissingSessionID(t *testing.T) {
 	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
-	if _, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
+	if _, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
 		Roles: []string{"admin"},
-	}, "web"); err == nil {
+	}, "web", time.Now().Add(WebSessionAbsoluteTTL)); err == nil {
 		t.Fatal("ver5 token without registry session id must be rejected")
 	}
 }
 
 func TestIssueTransportToken_RejectsOrganizationScopeWithoutMembershipCredentials(t *testing.T) {
 	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
-	_, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{OrgID: "org-1", Roles: []string{"admin"}, SessionID: "sess-1"}, "web")
+	_, err := issueBoundedWebToken(authority, "user-1", "user@example.com", TokenContext{OrgID: "org-1", Roles: []string{"admin"}, SessionID: "sess-1"})
 	if err == nil {
 		t.Fatal("organization-scoped token without membership credentials must be rejected")
 	}

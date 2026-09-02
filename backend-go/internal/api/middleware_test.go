@@ -433,13 +433,19 @@ func TestAdminMiddleware(t *testing.T) {
 	}
 }
 
-func TestAccessTokenTTLCoversAWorkday(t *testing.T) {
-	// Pre-demo hardening: 15-minute tokens kicked users out mid-design/mid-
-	// client session (audit P0-1). Product call: one login per workday; the
-	// middleware still re-validates user/membership/org from the DB on every
-	// request, so revocation stays immediate and manual logout ends the day.
-	if auth.AccessTokenTTL != 18*time.Hour {
-		t.Errorf("AccessTokenTTL = %v, want 18h", auth.AccessTokenTTL)
+func TestAccessTokenTTLSeparation(t *testing.T) {
+	// #460 SEC-4B: the transports no longer share one access policy. Web gets
+	// the short rolling bearer (renewed via the HttpOnly refresh cookie);
+	// mobile keeps the workday credential until SEC-5; both ABSOLUTE sessions
+	// stay at 18h — the short web bearer never slides that deadline.
+	if auth.WebAccessTokenTTL != 15*time.Minute {
+		t.Errorf("WebAccessTokenTTL = %v, want 15m", auth.WebAccessTokenTTL)
+	}
+	if auth.MobileAccessTokenTTL != 18*time.Hour {
+		t.Errorf("MobileAccessTokenTTL = %v, want 18h", auth.MobileAccessTokenTTL)
+	}
+	if auth.TransportSessionTTL("web") != 18*time.Hour || auth.TransportSessionTTL("mobile") != 18*time.Hour {
+		t.Errorf("absolute session TTLs = web %v / mobile %v, want 18h/18h", auth.TransportSessionTTL("web"), auth.TransportSessionTTL("mobile"))
 	}
 }
 

@@ -33,23 +33,17 @@ async function login(email: string, organizationSlug: string) {
 }
 
 async function seedDistinctModule(token: string, id: string, tenant: 'A' | 'B'): Promise<void> {
-  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: { getItem: (key: string) => key === 'granete_token' ? token : null },
+  // #460 SEC-4B: el repository recibe el access por dependencia de memoria;
+  // el mock de localStorage ya no existe (never storage).
+  const repository = new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'), {
+    getAccessToken: () => token,
   });
-  try {
-    const repository = new APIWorkspaceRepository(required('ORGANIZATION_API_BASE'));
-    const catalog = await repository.getCatalog();
-    const template = catalog.modules[0];
-    await repository.saveCatalog({ ...catalog, modules: [{
-      ...template, id, code: `GATE-${tenant}`, name: `Mueble real ${tenant}`, hardwareLines: template?.hardwareLines ?? [],
-      imageUrl: tenant === 'A' ? GATE_MEDIA_A_URL : GATE_MEDIA_B_URL,
-    }] });
-  } finally {
-    if (original) Object.defineProperty(globalThis, 'localStorage', original);
-    else Reflect.deleteProperty(globalThis, 'localStorage');
-  }
+  const catalog = await repository.getCatalog();
+  const template = catalog.modules[0];
+  await repository.saveCatalog({ ...catalog, modules: [{
+    ...template, id, code: `GATE-${tenant}`, name: `Mueble real ${tenant}`, hardwareLines: template?.hardwareLines ?? [],
+    imageUrl: tenant === 'A' ? GATE_MEDIA_A_URL : GATE_MEDIA_B_URL,
+  }] });
 }
 
 export async function prepareAuthoritativeOrganizations(): Promise<void> {

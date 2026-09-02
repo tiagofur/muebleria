@@ -162,7 +162,7 @@ func (s *stubStore) stubRevokeSession(cmd storage.RevokeAuthSessionCommand, user
 }
 
 func (s *stubStore) CreateAuthRefreshCredential(_ context.Context, cmd storage.CreateAuthRefreshCredentialCommand) (*storage.AuthRefreshCredential, error) {
-	return &storage.AuthRefreshCredential{ID: "refresh-1", FamilyID: "family-1", SessionID: cmd.SessionID, UserID: cmd.UserID, Generation: 1, ExpiresAt: time.Now().Add(auth.AccessTokenTTL)}, nil
+	return &storage.AuthRefreshCredential{ID: "refresh-1", FamilyID: "family-1", SessionID: cmd.SessionID, UserID: cmd.UserID, Generation: 1, ExpiresAt: time.Now().Add(auth.WebSessionAbsoluteTTL)}, nil
 }
 
 func (s *stubStore) RotateAuthRefreshCredential(_ context.Context, _ storage.RotateAuthRefreshCredentialCommand, _ storage.AuthRefreshRotationCallback) (*storage.AuthRefreshRotation, error) {
@@ -188,9 +188,24 @@ func mintSessionToken(t *testing.T, authority *auth.Authority, st *stubStore, us
 		t.Fatalf("create auth session: %v", err)
 	}
 	tc.SessionID = session.ID
-	token, err := authority.IssueTransportToken(userID, email, tc, transport)
+	// SEC-4B: web mints require the registry cap, exactly like production.
+	var token string
+	if transport == "web" {
+		token, err = authority.IssueTransportTokenUntil(userID, email, tc, transport, session.AbsoluteExpiresAt)
+	} else {
+		token, err = authority.IssueTransportToken(userID, email, tc, transport)
+	}
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
 	return token
+}
+
+// issueTransportTokenCapped mints like production does since SEC-4B: web
+// always carries the registry's absolute cap.
+func issueTransportTokenCapped(a *auth.Authority, userID, email string, tc auth.TokenContext, transport string) (string, error) {
+	if transport == "web" {
+		return a.IssueTransportTokenUntil(userID, email, tc, transport, time.Now().Add(auth.WebSessionAbsoluteTTL))
+	}
+	return a.IssueTransportToken(userID, email, tc, transport)
 }

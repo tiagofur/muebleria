@@ -73,7 +73,7 @@ func (s *sessionAwareUsers) addSession(id string, mutate func(*domain.AuthSessio
 
 func ver5Token(t *testing.T, sid string) string {
 	t.Helper()
-	token, err := mustAuthority(sessionRegistryTestSecret).IssueTransportToken("u-1", "u@test.com", auth.TokenContext{
+	token, err := issueTransportTokenCapped(mustAuthority(sessionRegistryTestSecret), "u-1", "u@test.com", auth.TokenContext{
 		Roles: []string{"user"}, OrgID: "org-1", MembershipID: "u-1:org-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1, SessionID: sid,
 	}, "web")

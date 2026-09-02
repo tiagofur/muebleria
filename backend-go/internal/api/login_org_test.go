@@ -370,8 +370,15 @@ func TestSelectOrg_PreservesAbsoluteAuthStart(t *testing.T) {
 	if !claims.AuthStartedAt.Time.Equal(started) {
 		t.Fatalf("auth_started_at = %s, want %s", claims.AuthStartedAt.Time, started)
 	}
-	if want := started.Add(auth.AccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
-		t.Fatalf("expiry = %s, want %s", claims.ExpiresAt.Time, want)
+	// SEC-4B: the web bearer rolls from the mint instant (≈ now+15m), still
+	// capped by the registry's absolute bound (started + 18h here).
+	minted := time.Now().UTC()
+	wantRolling := minted.Add(auth.WebAccessTokenTTL)
+	if claims.ExpiresAt.Time.Before(wantRolling.Add(-2*time.Second)) || claims.ExpiresAt.Time.After(wantRolling.Add(2*time.Second)) {
+		t.Fatalf("web expiry = %s, want ~%s (mint + WebAccessTokenTTL)", claims.ExpiresAt.Time, wantRolling)
+	}
+	if absolute := started.Add(auth.WebSessionAbsoluteTTL); claims.ExpiresAt.Time.After(absolute) {
+		t.Fatalf("web expiry = %s overshoots absolute cap %s", claims.ExpiresAt.Time, absolute)
 	}
 }
 

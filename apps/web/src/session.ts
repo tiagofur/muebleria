@@ -11,15 +11,27 @@ import {
 } from './shared/query/sessionScope';
 
 /**
- * Session gate helpers for the web shell login and invitation-first onboarding.
- * Auth token key matches APIWorkspaceRepository (`granete_token`).
- * Claves legacy `muebles_*`: las migra `migrateLegacyStorageKeys` (#366) al
- * arrancar la app (ver main.tsx).
+ * Session helpers for the web shell login and invitation-first onboarding.
+ *
+ * #460 SEC-4B: el access token Web vive SÓLO en la memoria del proceso/tab
+ * (webAuthRuntime) — este módulo ya no lee ni escribe `granete_token` en
+ * localStorage. La sesión persistente viaja exclusivamente en la cookie
+ * HttpOnly `granete_web_refresh`; el boot decide autenticado/anónimo con un
+ * cookie bootstrap, nunca con un bearer persistido.
+ *
+ * `granete_session` (sessionStorage) queda como HINT no-secreto del modo
+ * guest explícito de la pestaña; no es requisito para descubrir una cookie.
  */
 
 export const SESSION_STORAGE_KEY = 'granete_session';
-export const TOKEN_STORAGE_KEY = 'granete_token';
-export const USER_STORAGE_KEY = 'granete_user';
+
+/** Claves legacy de bearer/metadata que el boot DESTRUYE (nunca migra). */
+export const LEGACY_BEARER_STORAGE_KEYS: readonly string[] = [
+  'granete_token',
+  'muebles_token',
+  'granete_user',
+  'muebles_user',
+];
 
 /**
  * API base URL. Overridable per environment via Vite's `VITE_API_BASE` in
@@ -65,17 +77,32 @@ export type LoginSuccess = {
   readonly selectionRequired?: boolean;
   readonly support?: boolean;
   readonly sessionScope?: SessionScope;
+  /** Server-clock expiry metadata (#460 SEC-4A/4B); ver webAuthClient. */
+  readonly accessExpiresAt?: string;
+  readonly absoluteSessionExpiresAt?: string;
+  readonly sessionId?: string;
 };
 
 /**
- * Reads persisted session mode.
- * - guest → enter app without token
- * - auth → requires `granete_token`; missing token → logged out (null)
- * - missing / invalid → null (show login)
+ * Fetch adapter para los endpoints de auth que viajan con la cookie Web
+ * (login, refresh, logout, invitaciones): `credentials: 'include'` es lo que
+ * permite al browser guardar/transportar el Set-Cookie HttpOnly cross-origin
+ * bajo el CORS credentialed exacto de SEC-4A.
+ */
+export function credentialedWebFetch(
+  fetchImpl: typeof fetch = globalThis.fetch,
+): typeof fetch {
+  return (input, init) =>
+    fetchImpl(input, { ...(init ?? {}), credentials: 'include' });
+}
+
+/**
+ * Hint no-secreto del modo de la pestaña: 'guest' explícito sobrevive al
+ * reload de ESTA pestaña (sessionStorage). Un hint 'auth' o ausente no
+ * autoriza nada: el cookie bootstrap es quien decide.
  */
 export function readSessionMode(
   sessionStore: Storage | null | undefined = safeSessionStorage(),
-  localStore: Storage | null | undefined = safeLocalStorage(),
 ): SessionMode | null {
   if (!sessionStore) return null;
   let raw: string | null;
@@ -85,15 +112,7 @@ export function readSessionMode(
     return null;
   }
   if (raw === 'guest') return 'guest';
-  if (raw === 'auth') {
-    if (!localStore) return null;
-    try {
-      const token = localStore.getItem(TOKEN_STORAGE_KEY);
-      return token ? 'auth' : null;
-    } catch {
-      return null;
-    }
-  }
+  if (raw === 'auth') return 'auth';
   return null;
 }
 
@@ -109,6 +128,10 @@ export function writeSessionMode(
   }
 }
 
+/**
+ * Limpia el hint de sesión y destruye cualquier bearer/metadata legacy que
+ * hubiera quedado de la era pre-SEC-4B. Los datos guest legítimos NO se tocan.
+ */
 export function clearSession(
   sessionStore: Storage | null | undefined = safeSessionStorage(),
   localStore: Storage | null | undefined = safeLocalStorage(),
@@ -118,81 +141,12 @@ export function clearSession(
   } catch {
     // ignore
   }
-  try {
-    localStore?.removeItem(TOKEN_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-  try {
-    localStore?.removeItem(USER_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-export function storeAuthToken(
-  token: string,
-  localStore: Storage | null | undefined = safeLocalStorage(),
-): void {
-  if (!localStore) return;
-  try {
-    localStore.setItem(TOKEN_STORAGE_KEY, token);
-  } catch {
-    // ignore
-  }
-}
-
-export function storeAuthUser(
-  user: AuthUser,
-  localStore: Storage | null | undefined = safeLocalStorage(),
-): void {
-  if (!localStore) return;
-  try {
-    localStore.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-  } catch {
-    // ignore
-  }
-}
-
-export function readAuthUser(
-  localStore: Storage | null | undefined = safeLocalStorage(),
-): AuthUser | null {
-  if (!localStore) return null;
-  try {
-    const raw = localStore.getItem(USER_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<AuthUser>;
-    if (
-      typeof parsed.id !== 'string' ||
-      typeof parsed.email !== 'string' ||
-      (parsed.account_status !== 'active' && parsed.account_status !== 'disabled')
-    ) {
-      return null;
+  for (const key of LEGACY_BEARER_STORAGE_KEYS) {
+    try {
+      localStore?.removeItem(key);
+    } catch {
+      // ignore
     }
-    return {
-      id: parsed.id,
-      email: parsed.email,
-      name: typeof parsed.name === 'string' ? parsed.name : '',
-      ...(typeof parsed.role === 'string' && parsed.role !== ''
-        ? { role: parsed.role }
-        : {}),
-      account_status: parsed.account_status,
-      ...(parsed.platform_admin === true ? { platform_admin: true } : {}),
-      ...(Array.isArray(parsed.roles) ? { roles: parsed.roles } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function readAuthToken(
-  localStore: Storage | null | undefined = safeLocalStorage(),
-): string | null {
-  if (!localStore) return null;
-  try {
-    return localStore.getItem(TOKEN_STORAGE_KEY);
-  } catch {
-    return null;
   }
 }
 
@@ -201,8 +155,9 @@ export function isAdminRole(role: string | null | undefined): boolean {
 }
 
 /**
- * POST {base}/auth/login with LoginRequest body.
- * On success returns JWT token + user (role included).
+ * POST {base}/auth/login with LoginRequest body. Transport=web: la respuesta
+ * trae el access en JSON (memoria) y el refresh sólo como Set-Cookie HttpOnly
+ * (el browser lo guarda gracias al credentialed fetch).
  */
 export async function loginRequest(
   email: string,
@@ -219,7 +174,8 @@ export async function loginRequest(
   }
 
   try {
-    return parseAuthResponse(await new GraneteApiClient(baseUrl, fetchImpl).login({ email, password, transport: 'web' }));
+    const client = new GraneteApiClient(baseUrl, credentialedWebFetch(fetchImpl));
+    return parseAuthResponse(await client.login({ email, password, transport: 'web' }));
   } catch (error) {
     if (error instanceof GraneteApiError && error.status === 401) throw new Error('Email o contraseña incorrectos');
     if (error instanceof GraneteApiError && error.status === 403) throw new Error(error.message);
@@ -252,6 +208,8 @@ function safeLocalStorage(): Storage | null {
 /**
  * POST {base}/auth/select-org — exchanges the org-less selection token for
  * one scoped to the chosen organization (multi-membership users, ADR-0005).
+ * Misma sesión/familia: el backend actualiza el scope in-place y NO rota la
+ * cookie (SEC-4A); por eso no necesita credentialed fetch.
  */
 export async function selectOrgRequest(
   token: string,
@@ -363,6 +321,11 @@ export function parseAuthResponse(data: unknown): LoginSuccess {
     ...(memberships.length > 0 ? { memberships } : {}),
     ...(d.selection_required ? { selectionRequired: true } : {}),
     ...(d.support === true ? { support: true } : {}),
+    ...(d.access_expires_at ? { accessExpiresAt: d.access_expires_at } : {}),
+    ...(d.absolute_session_expires_at
+      ? { absoluteSessionExpiresAt: d.absolute_session_expires_at }
+      : {}),
+    ...(d.session_id ? { sessionId: d.session_id } : {}),
   };
 }
 
@@ -377,7 +340,8 @@ function activeOrganizationChoices(
 
 /**
  * DELETE {base}/platform/support-sessions/{id} — explicit support-session
- * logout (banner "Salir del soporte").
+ * logout (banner "Salir del soporte"). Viaja con el SUPPORT token de memoria,
+ * jamás con la cookie Web (SEC-4B §41).
  */
 export async function endSupportRequest(
   token: string,

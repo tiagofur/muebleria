@@ -18,19 +18,35 @@ import { App } from './App';
 import { ServerStateProvider } from './app/providers/ServerStateProvider';
 import { installAuth401Interceptor } from './auth401';
 import { installCrossTabRefresh } from './crossTabSync';
-import { installSessionSync } from './sessionSync';
 import { tenantTransition } from './shared/query/tenantTransition';
 import { useWorkspaceStore } from './stores/workspaceStore';
+import { clearCredential, getAccessToken } from './webAuthRuntime';
+import { coordinatedWebRefresh } from './webAuthClient';
+import { subscribeToWebSessionEvents } from './webSessionChannel';
 import './app.css';
 
-// #366 — claves legacy muebles_* → granete_* antes de que nada lea storage.
+// #366 + #460 SEC-4B: primero destruye bearers legacy (`granete_token`,
+// `muebles_token` → DELETE, NEVER SEND) y migra las claves guest.
 migrateLegacyStorageKeys();
 
-// P0-1 (pre-demo audit): 401 en endpoints de negocio ⇒ logout con el mensaje
-// de sesión expirada, nunca el toast engañoso "Error de conexión".
-installAuth401Interceptor(() => useWorkspaceStore.getState().markSessionExpired());
+// P0-1 (pre-demo audit): 401 en endpoints de negocio fuera del boundary
+// autenticado ⇒ UN refresh coordinado; si es terminal, cierre de sesión con
+// motivo. Nunca lee storage de credenciales (SEC-4B).
+installAuth401Interceptor(
+  () => useWorkspaceStore.getState().markSessionEnded('expired'),
+  {
+    readToken: () => getAccessToken(),
+    refresh: () => coordinatedWebRefresh(),
+  },
+);
 
-installSessionSync(() => {
+// #460 SEC-4B cross-tab: las demás pestañas resuelven su estado desde la
+// cookie compartida (bootstrap), nunca copiando tokens por BroadcastChannel.
+// session-replaced / session-ended / scope-changed ⇒ purge + reload con boot
+// autoritativo; refresh-completed no recarga nada (rotación normal).
+subscribeToWebSessionEvents((event) => {
+  if (event.type === 'refresh-completed') return;
+  clearCredential();
   tenantTransition.commit();
   window.location.reload();
 });
@@ -46,6 +62,15 @@ installCrossTabRefresh(async () => {
     throw new Error(after.workspaceLoadError);
   }
 });
+
+// Hook SOLO para el browser gate (#460 SEC-4B proof §58): expone el refresh
+// coordinado (lock cross-tab + singleflight) para poder ejercitar la
+// serialización real desde dos pestañas. Nunca existe en el bundle de
+// producción: import.meta.env.DEV es constante false en el build.
+if (import.meta.env.DEV) {
+  (window as unknown as { __graneteWebAuthTestRefresh?: () => Promise<{ status: string }> })
+    .__graneteWebAuthTestRefresh = () => coordinatedWebRefresh();
+}
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {

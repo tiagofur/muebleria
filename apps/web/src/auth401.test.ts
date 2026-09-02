@@ -6,32 +6,8 @@ import {
   __resetAuth401InterceptorForTests,
   installAuth401Interceptor,
 } from './auth401';
-import { createWorkspaceStore } from './stores/workspaceStore';
-import { TOKEN_STORAGE_KEY, USER_STORAGE_KEY } from './session';
-
-function memoryStorage(initial: Record<string, string> = {}): Storage {
-  const map = new Map<string, string>(Object.entries(initial));
-  return {
-    get length() {
-      return map.size;
-    },
-    clear() {
-      map.clear();
-    },
-    getItem(key: string) {
-      return map.has(key) ? map.get(key)! : null;
-    },
-    key(index: number) {
-      return [...map.keys()][index - 0] ?? null;
-    },
-    removeItem(key: string) {
-      map.delete(key);
-    },
-    setItem(key: string, value: string) {
-      map.set(key, String(value));
-    },
-  };
-}
+import { __resetWebAuthRuntimeForTests, applyWebCredential, getAccessToken } from './webAuthRuntime';
+import { __resetWebAuthClientForTests } from './webAuthClient';
 
 const jsonResponse = (status: number) =>
   new Response(JSON.stringify({ error: 'x' }), {
@@ -39,51 +15,59 @@ const jsonResponse = (status: number) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-describe('installAuth401Interceptor (P0-1 safety net)', () => {
+describe('installAuth401Interceptor (P0-1 safety net, SEC-4B rewrite)', () => {
   afterEach(() => {
     __resetAuth401InterceptorForTests();
+    __resetWebAuthRuntimeForTests();
+    __resetWebAuthClientForTests();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  function setup(token: string | null) {
-    const onExpired = vi.fn();
+  function setup(token: string | null, refreshStatus = 'terminal') {
+    const onEnded = vi.fn();
     const realFetch = vi.fn(async () => jsonResponse(200));
-    const storage = memoryStorage(token ? { granete_token: token } : {});
-    vi.stubGlobal('window', {
-      fetch: realFetch,
-      localStorage: storage,
-    });
-    installAuth401Interceptor(onExpired, { readToken: () => token });
-    return { onExpired, fetch: realFetch, setToken: (t: string | null) => { token = t; } };
+    const refresh = vi.fn(async () => ({ status: refreshStatus }));
+    vi.stubGlobal('window', { fetch: realFetch });
+    installAuth401Interceptor(onEnded, { readToken: () => token, refresh });
+    return { onEnded, fetch: realFetch, refresh };
   }
 
-  it('fires onExpired once for repeated 401s with the same token (fan-out dedup)', async () => {
-    const { onExpired, fetch } = setup('tok-1');
+  it('triggers ONE coordinated refresh for repeated 401s with the same token', async () => {
+    const { onEnded, fetch, refresh } = setup('tok-1');
     fetch.mockImplementation(async () => jsonResponse(401));
     await window.fetch('http://localhost:8080/api/catalog/materials/x');
     await window.fetch('http://localhost:8080/api/catalog/materials/y');
     await window.fetch('http://localhost:8080/api/projects');
-    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not end the session when the refresh succeeds (renewed access)', async () => {
+    const { onEnded, fetch } = setup('tok-1', 'refreshed');
+    fetch.mockImplementation(async () => jsonResponse(401));
+    await window.fetch('http://localhost:8080/api/projects');
+    await Promise.resolve();
+    expect(onEnded).not.toHaveBeenCalled();
   });
 
   it('does not fire for auth endpoints (they own their 401 UX)', async () => {
-    const { onExpired, fetch } = setup('tok-1');
+    const { onEnded, fetch } = setup('tok-1');
     fetch.mockImplementation(async () => jsonResponse(401));
     await window.fetch('http://localhost:8080/api/auth/login');
     await window.fetch('http://localhost:8080/api/auth/me');
-    expect(onExpired).not.toHaveBeenCalled();
+    expect(onEnded).not.toHaveBeenCalled();
   });
 
   it('does not fire on 200s or when no token exists (guest)', async () => {
     const a = setup('tok-1');
     await window.fetch('http://localhost:8080/api/catalog/materials/x');
-    expect(a.onExpired).not.toHaveBeenCalled();
+    expect(a.onEnded).not.toHaveBeenCalled();
 
     const b = setup(null);
     b.fetch.mockImplementation(async () => jsonResponse(401));
     await window.fetch('http://localhost:8080/api/catalog/materials/x');
-    expect(b.onExpired).not.toHaveBeenCalled();
+    expect(b.onEnded).not.toHaveBeenCalled();
   });
 
   it('passes the response through untouched', async () => {
@@ -93,58 +77,34 @@ describe('installAuth401Interceptor (P0-1 safety net)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('resets installation state and restores fetch between tests', async () => {
-    const first = setup('tok-1');
-    first.fetch.mockImplementation(async () => jsonResponse(401));
-    await window.fetch('http://localhost:8080/api/projects');
-    expect(first.onExpired).toHaveBeenCalledTimes(1);
-
-    __resetAuth401InterceptorForTests();
-
-    const second = setup('tok-1');
-    second.fetch.mockImplementation(async () => jsonResponse(401));
-    await window.fetch('http://localhost:8080/api/projects');
-    expect(second.onExpired).toHaveBeenCalledTimes(1);
-  });
-
-  it('intercepts a productive store call even when the store was created first', async () => {
-    const originalFetch = vi.fn(async () => jsonResponse(401));
-    vi.stubGlobal('fetch', originalFetch);
-    const local = memoryStorage();
-    const session = memoryStorage();
+  it('reads the token from memory (webAuthRuntime), never localStorage', async () => {
+    __resetWebAuthRuntimeForTests();
+    applyWebCredential({
+      accessToken: 'memory-token-1',
+      accessExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+      absoluteSessionExpiresAt: new Date(Date.now() + 18 * 3600_000).toISOString(),
+      sessionId: 'sess-1',
+      userId: 'user-1',
+      organizationId: 'org-1',
+    });
+    const onEnded = vi.fn();
+    const realFetch = vi.fn(async () => jsonResponse(401));
+    const refresh = vi.fn(async () => ({ status: 'terminal' }));
+    vi.stubGlobal('window', { fetch: realFetch });
+    const memory = new Map<string, string>([['granete_token', 'stale-storage-token']]);
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
-      value: local,
+      value: {
+        getItem: (k: string) => memory.get(k) ?? null,
+        setItem: (k: string, v: string) => void memory.set(k, v),
+        removeItem: (k: string) => void memory.delete(k),
+      },
     });
-    Object.defineProperty(window, 'sessionStorage', {
-      configurable: true,
-      value: session,
+    installAuth401Interceptor(onEnded, {
+      readToken: () => getAccessToken(),
+      refresh,
     });
-    const store = createWorkspaceStore({
-      deps: { baseUrl: 'http://localhost:8080/api' },
-    });
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-productivo');
-    window.localStorage.setItem(
-      USER_STORAGE_KEY,
-      JSON.stringify({
-        id: 'user-1',
-        email: 'admin@test',
-        name: 'Admin',
-        role: 'admin',
-        account_status: 'active',
-      }),
-    );
-    store.setState({ session: 'auth' });
-    const onExpired = vi.fn();
-    installAuth401Interceptor(onExpired);
-
-    await store.getState().loadAssignableOwners();
-
-    expect(originalFetch).toHaveBeenCalledWith(
-      'http://localhost:8080/api/assignable-owners',
-      expect.any(Object),
-    );
-    expect(onExpired).toHaveBeenCalledTimes(1);
-    expect(store.getState().session).toBeNull();
+    await window.fetch('http://localhost:8080/api/projects');
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });

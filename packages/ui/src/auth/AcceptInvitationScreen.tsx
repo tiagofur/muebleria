@@ -12,6 +12,12 @@ import './acceptInvitation.css';
 export interface AcceptInvitationScreenProps {
   readonly token: string;
   readonly baseUrl: string;
+  /**
+   * #460 SEC-4B: la Web inyecta un fetch con `credentials: 'include'` para
+   * que el browser guarde la cookie HttpOnly del refresh (Set-Cookie). Sin
+   * inyección usa el fetch global (compatibilidad con otros hosts).
+   */
+  readonly fetchImpl?: typeof fetch;
   readonly onAccepted: (authResult: LoginResponse) => void;
   readonly onBackToLogin?: () => void;
 }
@@ -34,6 +40,7 @@ function invitationErrorMessage(error: unknown): string {
 export function AcceptInvitationScreen({
   token,
   baseUrl,
+  fetchImpl,
   onAccepted,
   onBackToLogin,
 }: AcceptInvitationScreenProps): ReactNode {
@@ -57,7 +64,7 @@ export function AcceptInvitationScreen({
     setError(null);
 
     try {
-      const authData = await new GraneteApiClient(baseUrl).acceptInvitation({
+      const authData = await new GraneteApiClient(baseUrl, fetchImpl).acceptInvitation({
         token: token.trim(), password, ...(name.trim() ? { name: name.trim() } : {}),
       });
       onAccepted(authData);

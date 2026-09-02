@@ -44,16 +44,30 @@ test('real delayed A media cannot replace the B shell, card, action, token, or h
   await page.getByRole('tab', { name: /Catálogo de Módulos/ }).click();
   await expect(page.getByTestId(`showcase-card-${GATE_MODULE_A_ID}`)).toBeVisible();
   await aStarted;
-  const tokenA = await page.evaluate(() => localStorage.getItem('granete_token'));
+  // #460 SEC-4B: el access vive en memoria — capturamos el bearer ACTIVO
+  // (scoped-A; el primero del flujo es el org-less del select-org, que el
+  // middleware niega para negocio) del header de requests reales.
+  expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
+  const bearerOf = (authorization: string) => authorization.replace('Bearer ', '');
+  const tokenA = bearerOf(requests.map(({ authorization }) => authorization).filter(Boolean).at(-1)!);
+  expect(tokenA).toBeTruthy();
 
   await page.getByLabel('Cambiar organización').selectOption({ label: 'Browser Gate B' });
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
   await page.getByRole('tab', { name: /Catálogo de Módulos/ }).click();
   const cardB = page.getByTestId(`showcase-card-${GATE_MODULE_B_ID}`);
   await expect(cardB).toBeVisible();
-  const tokenB = await page.evaluate(() => localStorage.getItem('granete_token'));
+  // El bearer de B existe y convive con requests aún en vuelo de A: esperamos
+  // a ver un access DISTINTO al de A antes de leerlo.
+  const sawBearerB = () =>
+    requests.some(({ authorization }) => authorization && bearerOf(authorization) !== tokenA);
+  await expect.poll(sawBearerB, { timeout: 10_000 }).toBe(true);
+  const tokenB = bearerOf(
+    requests.map(({ authorization }) => authorization).filter((a) => a && bearerOf(a) !== tokenA).at(-1)!,
+  );
   expect(tokenB).toBeTruthy();
   expect(tokenB).not.toBe(tokenA);
+  expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
   const imageB = page.getByRole('img', { name: 'Mueble real B' });
   // Signed grant URL for exactly org B's file — never a session JWT in the URL.
   await expect(imageB).toHaveAttribute('src', new RegExp(`${GATE_MEDIA_B_URL.slice('/api/media/'.length)}\\?grant=`));

@@ -874,11 +874,20 @@ family with strict reuse detection, and guarded by the CSRF boundary
 exact-origin credentialed CORS. Web login/refresh/invitation responses carry
 no refresh secret in JSON; mobile keeps the body contract; SketchUp/support
 keep the bodyless bearer bridge, now transport-restricted. The React cutover
-(in-memory access, cookie bootstrap, cross-tab refresh serialization, removal
-of the `granete_token` localStorage bearer — one explicit re-login for stale
-Web sessions) is SEC-4B, together with the short Web access-token TTL.
-MFA/step-up and trusted-proxy rate limiting remain target work of the
-following #460 slices.
+is implemented (SEC-4B): the Web access bearer is a 15-minute rolling mint
+(`min(now+15m, absolute_expires_at)`, structurally registry-capped on every
+web path) that lives ONLY in tab memory behind a canonical credential runtime;
+boot discovers the cookie session via a bodyless credentialed refresh +
+`/auth/me`; every cookie mutation (refresh/logout/select-org) serializes
+cross-tab through `navigator.locks` (non-secret localStorage lease fallback)
+and cross-tab signals carry `{ type }` only — tabs re-derive state from the
+cookie, never from broadcast tokens; business 401s retry exactly once and
+only under the same session+org scope; `granete_token`/`muebles_token` are
+destroyed at boot (one explicit re-login for stale Web sessions); support is
+a distinct tab-local memory credential with cookie-bootstrap recovery on
+exit. Absolute web sessions remain T0+18h (refresh never slides them);
+mobile/sketchup lifetimes are untouched until SEC-5/SEC-6. MFA/step-up and
+trusted-proxy rate limiting remain target work of the following #460 slices.
 
 Mandatory hardening:
 

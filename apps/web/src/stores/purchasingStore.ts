@@ -183,7 +183,7 @@ export function createPurchasingStore(options: InternalOptions) {
       } catch (err) {
         // Si la sesión expiró (401), delegar a workspaceStore
         if (err instanceof Error && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
-          useWorkspaceStore.getState().markSessionExpired();
+          useWorkspaceStore.getState().markSessionEnded('expired');
         }
         // Read failure → resetear a [] para no arrastrar arrays de la sesión previa
         set({

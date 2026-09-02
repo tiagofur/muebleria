@@ -64,7 +64,9 @@ test.describe.serial('F199 real lifecycle and synchronization gates', () => {
     await expect(tab2.getByRole('link', { name: 'Usuarios' })).toHaveCount(0);
 
     const payloads = await tab1.evaluate(() => Reflect.get(window, '__organizationGateSessionMessages'));
-    expect(payloads).toEqual(['session-changed']);
+    // #460 SEC-4B: la señal cross-tab es un evento { type } no-secreto; la
+    // cookie (no el mensaje) es la fuente compartida del nuevo scope.
+    expect(payloads).toEqual([{ type: 'scope-changed' }]);
     expect(JSON.stringify(payloads)).not.toMatch(/token|credential|organization|org-|user|membership|Browser Gate|mueble|cliente/i);
   });
 
@@ -103,8 +105,15 @@ test.describe.serial('F199 real lifecycle and synchronization gates', () => {
     await page.getByRole('link', { name: 'Usuarios' }).click();
     await expect(page.getByText('Browser Gate Lifecycle')).toBeVisible();
     const routeA = page.url();
-    const tokenA = await page.evaluate(() => localStorage.getItem('granete_token'));
+    // #460 SEC-4B: el bearer vive en memoria — se captura el ACTIVO (scoped-A)
+    // del header real; el primero del flujo es el org-less del select-org,
+    // que el middleware niega para negocio.
+    const tokenA = requests
+      .map(({ authorization }) => authorization.replace('Bearer ', ''))
+      .filter(Boolean)
+      .at(-1);
     expect(tokenA).toBeTruthy();
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
     const snapshotA = await api.getSession(tokenA ?? '');
     expect(snapshotA.session_scope.organization_id).toBe(subject.organizationAId);
 
@@ -127,7 +136,7 @@ test.describe.serial('F199 real lifecycle and synchronization gates', () => {
     await expect(page).toHaveURL(routeA);
     await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
     await expect(page.getByText('Browser Gate Lifecycle')).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBe(tokenA);
+    expect(await page.evaluate(() => localStorage.getItem('granete_token'))).toBeNull();
     expect((await api.getSession(tokenA ?? '')).session_scope.organization_id).toBe(subject.organizationAId);
 
     const beforeRefresh = requests.length;

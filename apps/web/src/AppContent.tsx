@@ -314,16 +314,8 @@ import {
   type EntitySection,
 } from './routes';
 import {
-  clearSession,
   DEFAULT_API_BASE,
   isAdminRole,
-  loginRequest,
-  readAuthToken,
-  readAuthUser,
-  readSessionMode,
-  storeAuthToken,
-  storeAuthUser,
-  writeSessionMode,
   type SessionMode,
 } from './session';
 import {
