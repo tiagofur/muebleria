@@ -16,9 +16,103 @@ import (
 
 type acceptanceInvitation struct {
 	Invitation struct {
-		ID string `json:"id"`
+		ID      string `json:"id"`
+		Version int64  `json:"version"`
 	} `json:"invitation"`
 	Token string `json:"invitation_token"`
+}
+
+func TestPilotReadiness_RevokedInvitationCannotMutateIdentityOrMembership(t *testing.T) {
+	email := "accept-revoked@pilot-readiness.test"
+	invitation := createAcceptanceInvitation(t, fx.a.admin.token, email, "user")
+
+	revoke := sendInvitationCommand(t, invitation.Invitation.ID+":revoke", fx.a.admin.token,
+		"accept-revoked-revoke-0001", invitation.Invitation.Version, map[string]string{"reason": "access withdrawn"})
+	requireTeamHTTPStatus(t, revoke, http.StatusOK)
+
+	response := sendAcceptanceRequest(fx.base, "accept-revoked-attempt-0001", map[string]string{
+		"token": invitation.Token, "password": pilotPassword, "name": "Must Not Exist",
+	})
+	if response.err != nil {
+		t.Fatal(response.err)
+	}
+	requireTeamHTTPError(t, teamHTTPResult{status: response.status, header: response.header, body: response.body}, http.StatusGone, "INVITATION_REVOKED")
+
+	var identities, memberships, sessions int
+	if err := fx.pool.QueryRow(t.Context(), `SELECT count(*) FROM users WHERE normalized_email=normalize_identity_email($1)`, email).Scan(&identities); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.pool.QueryRow(t.Context(), `SELECT count(*) FROM memberships membership JOIN users app_user ON app_user.id=membership.user_id WHERE app_user.normalized_email=normalize_identity_email($1)`, email).Scan(&memberships); err != nil {
+		t.Fatal(err)
+	}
+	if err := fx.pool.QueryRow(t.Context(), `SELECT count(*) FROM auth_sessions session_row JOIN users app_user ON app_user.id=session_row.user_id WHERE app_user.normalized_email=normalize_identity_email($1)`, email).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if identities != 0 || memberships != 0 || sessions != 0 {
+		t.Fatalf("revoked acceptance leaked identities=%d memberships=%d sessions=%d", identities, memberships, sessions)
+	}
+
+	var auditDetails string
+	if err := fx.pool.QueryRow(t.Context(), `SELECT COALESCE(string_agg(details::text,' '),'') FROM security_audit_events WHERE details->>'invitation_id'=$1`, invitation.Invitation.ID).Scan(&auditDetails); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(auditDetails, "INVITATION_REVOKED") {
+		t.Fatalf("revoked acceptance failure audit missing: %s", auditDetails)
+	}
+	assertNoSecrets(t, "revoked invitation audit", []byte(auditDetails), []string{invitation.Token, email, pilotPassword})
+}
+
+func TestPilotReadiness_RegisterRouteIsUnavailableAndMutationFree(t *testing.T) {
+	counts := func() [3]int {
+		t.Helper()
+		var out [3]int
+		for index, table := range []string{"users", "memberships", "invitations"} {
+			if err := fx.pool.QueryRow(t.Context(), `SELECT count(*) FROM `+table).Scan(&out[index]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return out
+	}
+	before := counts()
+	status, body := fx.do(t, http.MethodPost, "/api/auth/register", "", map[string]string{
+		"email": "forbidden-register@pilot-readiness.test", "password": pilotPassword, "name": "Forbidden Register",
+	})
+	if status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+		t.Fatalf("register status=%d body=%s", status, body)
+	}
+	if after := counts(); after != before {
+		t.Fatalf("register route mutated foundation rows: before=%v after=%v", before, after)
+	}
+}
+
+func sendInvitationCommand(t *testing.T, command, token, key string, version int64, body any) teamHTTPResult {
+	t.Helper()
+	var payload []byte
+	if body != nil {
+		var err error
+		payload, err = json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	req, err := http.NewRequest(http.MethodPost, fx.base+"/api/org/invitations/"+command, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", key)
+	req.Header.Set("If-Match", `"v`+fmt.Sprint(version)+`"`)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return teamHTTPResult{status: resp.StatusCode, header: resp.Header.Clone(), body: raw}
 }
 
 type acceptanceHTTPResult struct {

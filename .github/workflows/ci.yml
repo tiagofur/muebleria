@@ -80,10 +80,10 @@ jobs:
       - name: Run Tests
         run: pnpm test
 
-  organization-browser:
-    name: Organization Browser Gate
+  foundation-gate-a:
+    name: Foundation Gate A
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -109,11 +109,11 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run mocked organization switch gate
-        run: pnpm exec playwright test --config=playwright.config.ts tests/smoke/organization-switch.spec.ts --workers=1 --retries=0 --trace=off
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
 
-      - name: Run real organization browser gate
-        run: pnpm test:organization:browser
+      - name: Run authoritative Foundation Gate A
+        run: pnpm gate:foundation:a
 
   sketchup-extension:
     name: SketchUp Extension (Ruby, ${{ matrix.os }})

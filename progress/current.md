@@ -115,3 +115,17 @@ EOL.
   `security_audit_events` durable en la misma transacción; versión/correlación y
   RLS org-less mínimos; pruebas PostgreSQL de rollback.
 - Fuera de alcance: #461 completo, outbox sin consumidor, Gate B, SEC-8/9 y #385.
+
+## Foundation Gate A #462 — GREEN
+
+- `pnpm gate:foundation:a`: PASS sobre PostgreSQL 16 fresh + upgrade fixtures,
+  roles migration/runtime separados (`NOBYPASSRLS`), Go HTTP/auth/MFA y
+  Chromium real.
+- Coverage final: 34/34 (`progress/gate_a_462_coverage.md`); 22 proofs
+  existentes reutilizados y sólo los 12 gaps exactos implementados.
+- Durable audit: conserva `security_audit_events` como autoridad; failure
+  injection prueba rollback de mutación crítica. No se agregó outbox sin
+  consumidor.
+- #460/F202 continúa `in_progress` por SEC-8/SEC-9; #461 completo y Gate B
+  siguen pendientes.
+- **#385 DT-1 may start.**
