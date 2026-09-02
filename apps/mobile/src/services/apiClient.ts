@@ -78,6 +78,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         initialCredential &&
         newCredential &&
         (initialCredential.sessionId !== newCredential.sessionId ||
+         initialCredential.userId !== newCredential.userId ||
          initialCredential.organizationId !== newCredential.organizationId)
       ) {
          throw new DomainError('La sesión o la organización ha cambiado.', { status: 401 });
