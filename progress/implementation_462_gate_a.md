@@ -4,6 +4,12 @@ Date: 2026-09-02
 Branch: `feat/462-gate-a-executable`
 Base: `main@02ad7cd05c0690b0632c211a883b7b38e48dcf84`
 
+## Delivery
+
+- Pull request: https://github.com/tiagofur/muebleria/pull/537
+- Target: `main`
+- Gate B and #385 implementation remain outside this PR.
+
 ## Result
 
 `Foundation Gate A = PASS` and the final matrix is **34/34** in
