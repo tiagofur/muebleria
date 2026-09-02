@@ -153,9 +153,11 @@ module Granete
               'body' => { 'id' => enrollment_id } }
           )
           body = response['body'].is_a?(Hash) ? response['body'] : {}
-          response['status'] == 200 \
-            ? { 'success' => true, 'status' => body['status'] }
-            : { 'success' => false, 'error' => "Error al consultar estado (#{response['status']})." }
+          if response['status'] == 200
+            { 'success' => true, 'status' => body['status'] }
+          else
+            { 'success' => false, 'error' => "Error al consultar estado (#{response['status']})." }
+          end
         rescue Transport::RequestError, Transport::NotConfiguredError => e
           { 'success' => false, 'error' => e.message }
         end
