@@ -521,7 +521,30 @@ func TestAuthMFA_AuditTrailWithoutSecrets(t *testing.T) {
 	ctx := context.Background()
 	session := h.createSession(t)
 
-	// Generate a failed step-up for the audit trail.
+	// Generate failed verifications for the audit trail. These run WITHOUT an
+	// ambient transaction, so the verification transaction rolls back — the
+	// failure audits must still persist (review blocker: an in-transaction
+	// insert would disappear with the rollback).
+	if _, err := h.store.EnableMFAFactor(ctx, storage.EnableMFAFactorCommand{
+		UserID: h.userID, FactorID: "30000000-0000-0000-0000-0000000000ff",
+		Code: "000000", Secrets: h.secrets,
+	}); !errors.Is(err, storage.ErrMFAFactorNotFound) {
+		t.Fatalf("unknown factor enable: %v", err)
+	}
+	pending, err := h.store.CreateMFAEnrollment(ctx, storage.CreateMFAEnrollmentCommand{
+		UserID: h.userID, FactorID: "30000000-0000-0000-0000-0000000000fe",
+		EncryptedSecret: mustSeal(t, h), EncryptionKid: "test",
+		PendingExpiresAt: time.Now().Add(storage.MFAEnrollmentTTL).UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.EnableMFAFactor(ctx, storage.EnableMFAFactorCommand{
+		UserID: h.userID, FactorID: pending.ID,
+		Code: "000000", Secrets: h.secrets,
+	}); !errors.Is(err, storage.ErrMFAInvalidCode) {
+		t.Fatalf("invalid enroll code: %v", err)
+	}
 	if _, err := h.store.VerifyMFAStepUp(ctx, storage.MFAStepUpCommand{
 		UserID: h.userID, SessionID: session.ID,
 		Scope: domain.StepUpScopeSecurityAdmin, Method: domain.StepUpMethodTOTP,
@@ -529,9 +552,17 @@ func TestAuthMFA_AuditTrailWithoutSecrets(t *testing.T) {
 	}); !errors.Is(err, storage.ErrMFAInvalidCode) {
 		t.Fatalf("invalid step-up: %v", err)
 	}
+	if _, err := h.store.VerifyMFAStepUp(ctx, storage.MFAStepUpCommand{
+		UserID: h.userID, SessionID: session.ID,
+		Scope: domain.StepUpScopeSecurityAdmin, Method: domain.StepUpMethodRecovery,
+		Code: "WRONG-CODEX", Secrets: h.secrets,
+	}); !errors.Is(err, storage.ErrMFARecoveryInvalid) {
+		t.Fatalf("invalid recovery step-up: %v", err)
+	}
 
-	// Every MFA/step-up audit row must be free of TOTP material, provisioning
-	// URIs and recovery plaintext.
+	// Both failure events survived the rolled-back transactions, and every
+	// MFA/step-up audit row is free of TOTP material, provisioning URIs and
+	// recovery plaintext.
 	rows, err := h.admin.Query(ctx, `
 		SELECT event_type, COALESCE(details::text, '') FROM security_audit_events
 		WHERE actor_user_id=$1 AND (event_type LIKE 'mfa%' OR event_type LIKE 'step_up%')`,
@@ -540,14 +571,14 @@ func TestAuthMFA_AuditTrailWithoutSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	events := 0
+	seen := map[string]bool{}
 	for rows.Next() {
 		var eventType, details string
 		if err := rows.Scan(&eventType, &details); err != nil {
 			t.Fatal(err)
 		}
-		events++
-		for _, forbidden := range []string{"otpauth://", "recovery_codes", "code\":"} {
+		seen[eventType] = true
+		for _, forbidden := range []string{"otpauth://", "recovery_codes", "code\":", "wrong-code"} {
 			if strings.Contains(details, forbidden) {
 				t.Fatalf("audit event %s leaks %q: %s", eventType, forbidden, details)
 			}
@@ -556,7 +587,20 @@ func TestAuthMFA_AuditTrailWithoutSecrets(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if events == 0 {
-		t.Fatal("expected MFA/step-up audit events")
+	if !seen["mfa_verification_failed"] {
+		t.Fatal("mfa_verification_failed audit was lost with the rolled-back transaction")
 	}
+	if !seen["step_up_failed"] {
+		t.Fatal("step_up_failed audit was lost with the rolled-back transaction")
+	}
+}
+
+// mustSeal seals a throwaway secret for failure-path tests.
+func mustSeal(t *testing.T, h *mfaHarness) []byte {
+	t.Helper()
+	sealed, _, err := h.secrets.EncryptTOTPSecret([]byte("failure-path-probe-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sealed
 }

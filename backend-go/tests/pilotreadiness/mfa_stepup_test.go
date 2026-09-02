@@ -71,7 +71,8 @@ func decodeProvisioningSecret(t *testing.T, uri string) []byte {
 }
 
 func TestPilotReadiness_MFAEnrollmentFlow(t *testing.T) {
-	user := fx.a.admin
+	accepted := fx.inviteAndAccept(t, fx.a.admin.token, "mfa-enroll@pilot-readiness.test", "user")
+	user := pilotUser{id: accepted.User.ID, email: "mfa-enroll@pilot-readiness.test", token: accepted.Token}
 	var begun struct {
 		FactorID        string `json:"factor_id"`
 		ProvisioningUri string `json:"provisioning_uri"`

@@ -292,6 +292,7 @@ func TestHandleBeginMFAEnrollment_ReturnsProvisioningOnce(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/totp:begin", strings.NewReader(`{"label":"Tel"}`))
 	req = withClaims(req, "u-step", string(domain.RoleAdmin))
+	claimsFromRequest(req).Sid = "sid-test"
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.HandleBeginMFAEnrollment(rec, req)
@@ -313,6 +314,99 @@ func TestHandleBeginMFAEnrollment_ReturnsProvisioningOnce(t *testing.T) {
 		// Handler-level: the route adds noStoreMiddleware; nothing here yet.
 		_ = cache
 	}
+}
+
+// Enrolling an ADDITIONAL factor must prove the existing one (review
+// blocker): with ≥1 enabled factor, begin and verify answer the
+// security_admin challenge unless a fresh grant exists; the FIRST factor is
+// the account's bootstrap (plain authenticated session).
+func TestMFAEnrollment_SecondFactorRequiresSecurityAdminStepUp(t *testing.T) {
+	enrollRequest := func(srv *Server, method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req = withClaims(req, "u-enroll", string(domain.RoleAdmin))
+		claims := claimsFromRequest(req)
+		claims.Sid = "sid-enroll"
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		switch method {
+		case http.MethodPost:
+			if strings.Contains(path, ":verify") {
+				srv.HandleVerifyMFAEnrollment(rec, req)
+			} else {
+				srv.HandleBeginMFAEnrollment(rec, req)
+			}
+		}
+		return rec
+	}
+
+	t.Run("bootstrap with zero factors passes with no grant", func(t *testing.T) {
+		store := &stubStore{mfaEnabledFactors: 0}
+		srv := stepUpTestServer(store)
+		store.mfaEnrollFn = func(ctx context.Context, cmd storage.CreateMFAEnrollmentCommand) (*domain.MFAFactor, error) {
+			expires := time.Now().Add(storage.MFAEnrollmentTTL).UTC()
+			return &domain.MFAFactor{ID: "f-1", Status: domain.MFAFactorStatusPending, PendingExpiresAt: &expires}, nil
+		}
+		rec := enrollRequest(srv, http.MethodPost, "/api/auth/mfa/totp:begin", `{}`)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("bootstrap begin status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("second factor is challenged without a grant", func(t *testing.T) {
+		store := &stubStore{mfaEnabledFactors: 1}
+		srv := stepUpTestServer(store)
+		rec := enrollRequest(srv, http.MethodPost, "/api/auth/mfa/totp:begin", `{}`)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("begin status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if payload := decodeStepUpError(t, rec); payload.Code != openapi.ApiErrorCodeStepUpRequired {
+			t.Fatalf("begin code = %s, want STEP_UP_REQUIRED", payload.Code)
+		} else if payload.Details["scope"] != domain.StepUpScopeSecurityAdmin {
+			t.Fatalf("begin details.scope = %v", payload.Details["scope"])
+		}
+		rec = enrollRequest(srv, http.MethodPost, "/api/auth/mfa/totp/f-1:verify", `{"code":"123456"}`)
+		if payload := decodeStepUpError(t, rec); payload.Code != openapi.ApiErrorCodeStepUpRequired {
+			t.Fatalf("verify code = %s, want STEP_UP_REQUIRED (TOCTOU re-check)", payload.Code)
+		}
+	})
+
+	t.Run("expired grant is told apart", func(t *testing.T) {
+		store := &stubStore{mfaEnabledFactors: 1, mfaStepUpFreshness: storage.MFAStepUpFreshness{Expired: true}}
+		srv := stepUpTestServer(store)
+		rec := enrollRequest(srv, http.MethodPost, "/api/auth/mfa/totp:begin", `{}`)
+		if payload := decodeStepUpError(t, rec); payload.Code != openapi.ApiErrorCodeStepUpExpired {
+			t.Fatalf("code = %s, want STEP_UP_EXPIRED", payload.Code)
+		}
+	})
+
+	t.Run("fresh grant lets the second factor through", func(t *testing.T) {
+		store := &stubStore{
+			mfaEnabledFactors:  1,
+			mfaStepUpFreshness: storage.MFAStepUpFreshness{Valid: true},
+		}
+		srv := stepUpTestServer(store)
+		store.mfaEnrollFn = func(ctx context.Context, cmd storage.CreateMFAEnrollmentCommand) (*domain.MFAFactor, error) {
+			expires := time.Now().Add(storage.MFAEnrollmentTTL).UTC()
+			return &domain.MFAFactor{ID: "f-2", Status: domain.MFAFactorStatusPending, PendingExpiresAt: &expires}, nil
+		}
+		rec := enrollRequest(srv, http.MethodPost, "/api/auth/mfa/totp:begin", `{}`)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("begin status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("ver4 session cannot enroll a second factor", func(t *testing.T) {
+		store := &stubStore{mfaEnabledFactors: 1, mfaStepUpFreshness: storage.MFAStepUpFreshness{Valid: true}}
+		srv := stepUpTestServer(store)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/totp:begin", strings.NewReader(`{}`))
+		req = withClaims(req, "u-enroll", string(domain.RoleAdmin)) // no Sid
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.HandleBeginMFAEnrollment(rec, req)
+		if payload := decodeStepUpError(t, rec); payload.Code != openapi.ApiErrorCodeStepUpRequired {
+			t.Fatalf("code = %s, want STEP_UP_REQUIRED", payload.Code)
+		}
+	})
 }
 
 func TestMFAErrors_TypedMapping(t *testing.T) {

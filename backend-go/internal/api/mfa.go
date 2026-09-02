@@ -181,6 +181,52 @@ func (s *Server) mfaSecretsRequired(w http.ResponseWriter) (*auth.MFASecrets, bo
 	return s.MFASecrets, true
 }
 
+// requireFactorEnrollmentAuthority is the anti-hijack gate on MFA
+// enrollment (review blocker): the FIRST factor is the account's deliberate
+// bootstrap (plain authenticated session), but once the user holds ≥1
+// enabled factor, adding another one must prove the EXISTING factor through
+// a fresh security_admin step-up. Without this, a stolen normal session on
+// an MFA-protected account could enroll its own authenticator, verify it and
+// then mint security_admin authority with it.
+//
+// The check re-runs on BOTH begin and verify: the step-up grant (10 min) can
+// expire before the enrollment does (15 min), and the factor count is
+// re-read at each boundary so a state change between them cannot slip a
+// factor through (TOCTOU).
+func (s *Server) requireFactorEnrollmentAuthority(w http.ResponseWriter, r *http.Request, claims *auth.Claims) bool {
+	// A ver4 bearer carries no sid and can never hold a step-up grant; a
+	// user with existing factors on such a session must re-login.
+	if claims.Sid == "" {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeStepUpRequired,
+			"Confirmá tu identidad para continuar.", map[string]any{"scope": domain.StepUpScopeSecurityAdmin})
+		return false
+	}
+	enabled, err := s.Store.CountEnabledMFAFactors(r.Context(), claims.UserID)
+	if err != nil {
+		respondWithInternalError(w, err, "mfa enrollment authority")
+		return false
+	}
+	if enabled == 0 {
+		return true // bootstrap: the first factor proves authenticator possession itself
+	}
+	freshness, err := s.Store.GetMFAStepUpFreshness(r.Context(), claims.Sid, claims.UserID, domain.StepUpScopeSecurityAdmin)
+	if err != nil {
+		respondWithInternalError(w, err, "mfa enrollment authority freshness")
+		return false
+	}
+	if freshness.Valid {
+		return true
+	}
+	if freshness.Expired {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeStepUpExpired,
+			"La confirmación de identidad expiró. Verificá tu código de nuevo.", map[string]any{"scope": domain.StepUpScopeSecurityAdmin})
+		return false
+	}
+	respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeStepUpRequired,
+		"Confirmá tu identidad para agregar otro factor.", map[string]any{"scope": domain.StepUpScopeSecurityAdmin})
+	return false
+}
+
 // GET /api/auth/mfa/factors
 func (s *Server) HandleListMFAFactors(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
@@ -210,6 +256,9 @@ func (s *Server) HandleBeginMFAEnrollment(w http.ResponseWriter, r *http.Request
 	claims := claimsFromRequest(r)
 	if claims == nil || claims.UserID == "" {
 		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if !s.requireFactorEnrollmentAuthority(w, r, claims) {
 		return
 	}
 	secrets, ok := s.mfaSecretsRequired(w)
@@ -269,10 +318,15 @@ func (s *Server) HandleBeginMFAEnrollment(w http.ResponseWriter, r *http.Request
 func mfaIssuerLabel(_ *http.Request) string { return "Granete" }
 
 // POST /api/auth/mfa/totp/{factorId}:verify — enable a pending enrollment.
+// The enrollment-authority gate re-runs here: a grant that was fresh at
+// begin may have expired (or the factor set changed) before verification.
 func (s *Server) HandleVerifyMFAEnrollment(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
 	if claims == nil || claims.UserID == "" {
 		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if !s.requireFactorEnrollmentAuthority(w, r, claims) {
 		return
 	}
 	secrets, ok := s.mfaSecretsRequired(w)

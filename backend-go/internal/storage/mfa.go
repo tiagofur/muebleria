@@ -167,6 +167,7 @@ func (s *PostgresStore) EnableMFAFactor(ctx context.Context, cmd EnableMFAFactor
 		return nil, ErrMFASecretsUnconfigured
 	}
 	var out *EnabledMFAFactor
+	var failReason string
 	err := s.WithinTenantTx(ctx, TenantActor{UserID: cmd.UserID}, func(txCtx context.Context) error {
 		factor, err := lockMFAFactor(txCtx, s, cmd.UserID, cmd.FactorID)
 		if err != nil {
@@ -185,22 +186,14 @@ func (s *PostgresStore) EnableMFAFactor(ctx context.Context, cmd EnableMFAFactor
 		}
 		verification, err := auth.VerifyTOTP(secret, cmd.Code, time.Now())
 		if err != nil {
-			// Failed attempts are audited (no code material, ids only).
-			if auditErr := s.InsertSecurityAuditEvent(txCtx, SecurityAuditEvent{
-				EventType:   "mfa_verification_failed",
-				ActorUserID: cmd.UserID,
-				IP:          cmd.IP,
-				Details: map[string]interface{}{
-					"purpose":    "enroll_verify",
-					"factor_id":  factor.ID,
-					"request_id": cmd.RequestID,
-				},
-			}); auditErr != nil {
-				return auditErr
-			}
+			failReason = "invalid_code"
 			return ErrMFAInvalidCode
 		}
 		updated, err := s.advanceFactorCounter(txCtx, factor.ID, verification.Counter, domain.MFAFactorStatusPending)
+		if errors.Is(err, ErrMFAInvalidCode) {
+			failReason = "replayed_code"
+			return err
+		}
 		if err != nil {
 			return err
 		}
@@ -224,6 +217,28 @@ func (s *PostgresStore) EnableMFAFactor(ctx context.Context, cmd EnableMFAFactor
 		out = &EnabledMFAFactor{Factor: updated, RecoveryCodes: codes}
 		return nil
 	})
+	if err != nil && failReason != "" {
+		// Failed attempts are audited (ids and reason only — never code
+		// material). The audit is written OUTSIDE the verification
+		// transaction: the error above rolled it back (or will roll the
+		// ambient one back on 5xx), so an in-transaction insert would be
+		// lost. Without an ambient transaction this opens its own scope and
+		// commits; with one it joins the caller's (the HTTP path commits 4xx
+		// responses, so the record persists either way).
+		if auditErr := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
+			EventType:   "mfa_verification_failed",
+			ActorUserID: cmd.UserID,
+			IP:          cmd.IP,
+			Details: map[string]interface{}{
+				"purpose":    "enroll_verify",
+				"reason":     failReason,
+				"factor_id":  cmd.FactorID,
+				"request_id": cmd.RequestID,
+			},
+		}); auditErr != nil {
+			return nil, auditErr
+		}
+	}
 	return out, err
 }
 
@@ -400,6 +415,7 @@ func (s *PostgresStore) VerifyMFAStepUp(ctx context.Context, cmd MFAStepUpComman
 		return nil, ErrMFASecretsUnconfigured
 	}
 	var out *MFAStepUpResult
+	var failReason string
 	err := s.WithinTenantTx(ctx, TenantActor{UserID: cmd.UserID}, func(txCtx context.Context) error {
 		// The session must be live and owned by the user: step-up authority is
 		// sid-bound and dies with the session.
@@ -419,11 +435,11 @@ func (s *PostgresStore) VerifyMFAStepUp(ctx context.Context, cmd MFAStepUpComman
 
 		switch cmd.Method {
 		case domain.StepUpMethodTOTP:
-			if err := s.stepUpWithTOTP(txCtx, cmd); err != nil {
+			if err := s.stepUpWithTOTP(txCtx, cmd, &failReason); err != nil {
 				return err
 			}
 		case domain.StepUpMethodRecovery:
-			if err := s.stepUpWithRecovery(txCtx, cmd); err != nil {
+			if err := s.stepUpWithRecovery(txCtx, cmd, &failReason); err != nil {
 				return err
 			}
 		default:
@@ -466,10 +482,31 @@ func (s *PostgresStore) VerifyMFAStepUp(ctx context.Context, cmd MFAStepUpComman
 		out = &MFAStepUpResult{Scope: cmd.Scope, Method: cmd.Method, ExpiresAt: expiresAt}
 		return nil
 	})
+	if err != nil && failReason != "" {
+		// Failure audits must SURVIVE the rolled-back verification
+		// transaction (review blocker: an in-transaction insert disappears
+		// with the rollback). Written outside the verification scope: it
+		// commits on its own or joins the caller's ambient transaction (the
+		// HTTP path commits 4xx responses).
+		if auditErr := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
+			EventType:   "step_up_failed",
+			ActorUserID: cmd.UserID,
+			IP:          cmd.IP,
+			Details: map[string]interface{}{
+				"session_id": cmd.SessionID,
+				"scope":      cmd.Scope,
+				"method":     cmd.Method,
+				"reason":     failReason,
+				"request_id": cmd.RequestID,
+			},
+		}); auditErr != nil {
+			return nil, auditErr
+		}
+	}
 	return out, err
 }
 
-func (s *PostgresStore) stepUpWithTOTP(txCtx context.Context, cmd MFAStepUpCommand) error {
+func (s *PostgresStore) stepUpWithTOTP(txCtx context.Context, cmd MFAStepUpCommand, failReason *string) error {
 	rows, err := s.db(txCtx).Query(txCtx, `
 		SELECT `+mfaFactorColumns+` FROM auth_mfa_factors
 		WHERE user_id = $1::uuid AND status = 'enabled'
@@ -515,12 +552,13 @@ func (s *PostgresStore) stepUpWithTOTP(txCtx context.Context, cmd MFAStepUpComma
 		}
 	}
 	if !matched {
-		return s.stepUpFailure(txCtx, cmd, "invalid_code")
+		*failReason = "invalid_code"
+		return ErrMFAInvalidCode
 	}
 	return nil
 }
 
-func (s *PostgresStore) stepUpWithRecovery(txCtx context.Context, cmd MFAStepUpCommand) error {
+func (s *PostgresStore) stepUpWithRecovery(txCtx context.Context, cmd MFAStepUpCommand, failReason *string) error {
 	enabled := 0
 	if err := s.db(txCtx).QueryRow(txCtx,
 		`SELECT COUNT(*) FROM auth_mfa_factors WHERE user_id = $1::uuid AND status = 'enabled'`,
@@ -532,7 +570,8 @@ func (s *PostgresStore) stepUpWithRecovery(txCtx context.Context, cmd MFAStepUpC
 	}
 	normalized := auth.NormalizeRecoveryCodeInput(cmd.Code)
 	if len(normalized) == 0 {
-		return s.stepUpFailure(txCtx, cmd, "invalid_code")
+		*failReason = "invalid_code"
+		return ErrMFARecoveryInvalid
 	}
 	rows, err := s.db(txCtx).Query(txCtx, `
 		SELECT id, user_id, verifier, encryption_kid, used_at, revoked_at, created_at
@@ -582,30 +621,8 @@ func (s *PostgresStore) stepUpWithRecovery(txCtx context.Context, cmd MFAStepUpC
 			},
 		})
 	}
-	return s.stepUpFailure(txCtx, cmd, "invalid_recovery_code")
-}
-
-// stepUpFailure writes the required audit record and returns the typed error.
-func (s *PostgresStore) stepUpFailure(txCtx context.Context, cmd MFAStepUpCommand, reason string) error {
-	auditErr := s.InsertSecurityAuditEvent(txCtx, SecurityAuditEvent{
-		EventType:   "step_up_failed",
-		ActorUserID: cmd.UserID,
-		IP:          cmd.IP,
-		Details: map[string]interface{}{
-			"session_id": cmd.SessionID,
-			"scope":      cmd.Scope,
-			"method":     cmd.Method,
-			"reason":     reason,
-			"request_id": cmd.RequestID,
-		},
-	})
-	if auditErr != nil {
-		return auditErr
-	}
-	if cmd.Method == domain.StepUpMethodRecovery {
-		return ErrMFARecoveryInvalid
-	}
-	return ErrMFAInvalidCode
+	*failReason = "invalid_recovery_code"
+	return ErrMFARecoveryInvalid
 }
 
 // advanceFactorCounter is the atomic replay guard: the UPDATE only lands when
