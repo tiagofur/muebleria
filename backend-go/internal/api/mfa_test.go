@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -433,5 +434,57 @@ func TestMFAErrors_TypedMapping(t *testing.T) {
 		if payload.Code != tc.code {
 			t.Fatalf("%v mapped to %s, want %s", tc.err, payload.Code, tc.code)
 		}
+	}
+}
+
+func TestMFAStepUp_ConcurrentRateLimit(t *testing.T) {
+	st := &stubStore{
+		mfaEnabledFactors: 1,
+		mfaStepUpFn: func(ctx context.Context, cmd storage.MFAStepUpCommand) (*storage.MFAStepUpResult, error) {
+			return nil, storage.ErrMFAInvalidCode
+		},
+	}
+	srv := stepUpTestServer(st)
+
+	bodyJSON := `{"scope":"security_admin", "method": "totp", "code": "000000"}`
+	var wg sync.WaitGroup
+	results := make(chan int, 20)
+
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/step-up", strings.NewReader(bodyJSON))
+			req.Header.Set("Content-Type", "application/json")
+			req = withClaims(req, "usr-limit", "user")
+			// Inject a Sid into the claims
+			claims := claimsFromRequest(req)
+			claims.Sid = "sid-1"
+			
+			rec := httptest.NewRecorder()
+			srv.HandleMFAStepUp(rec, req)
+			results <- rec.Code
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	var badRequestCount, tooManyRequestsCount int
+	for code := range results {
+		if code == http.StatusForbidden { // mapped from ErrMFAInvalidCode
+			badRequestCount++
+		} else if code == http.StatusTooManyRequests {
+			tooManyRequestsCount++
+		} else {
+			t.Errorf("unexpected status code: %d", code)
+		}
+	}
+
+	if badRequestCount != 5 {
+		t.Errorf("expected exactly 5 verification failures (burst limit), got %d", badRequestCount)
+	}
+	if tooManyRequestsCount != 15 {
+		t.Errorf("expected exactly 15 too many requests, got %d", tooManyRequestsCount)
 	}
 }

@@ -70,29 +70,22 @@ func (rl *userRateLimiter) get(key string) *rate.Limiter {
 	return b.limiter
 }
 
-// mfaBudgetExhausted reports whether the user's failure budget for the
-// purpose is spent (429 before attempting). It does NOT consume a token;
-// fractional refill must not leak attempts through, so at least ONE whole
-// token must be available.
-func (s *Server) mfaBudgetExhausted(userID, purpose string) bool {
+// reserveMFAAttempt consumes one failure token IMMEDIATELY to prevent concurrency gaps.
+// If the operation succeeds or fails for non-auth reasons, the returned function MUST be called to refund the token.
+func (s *Server) reserveMFAAttempt(userID, purpose string) (func(err error), bool) {
 	if s.mfaAttemptLimiter == nil {
-		// A Server built without the limiter (zero value) fails closed.
-		return true
+		return func(error) {}, false
 	}
-	return s.mfaAttemptLimiter.get(purpose+":"+userID).Tokens() < 1
-}
-
-// noteMFAFailure consumes one failure token when the error is a code
-// rejection (invalid TOTP / recovery code). Other errors (not found, expired,
-// 5xx) do not touch the brute-force budget.
-func (s *Server) noteMFAFailure(userID, purpose string, err error) {
-	if !errors.Is(err, storage.ErrMFAInvalidCode) && !errors.Is(err, storage.ErrMFARecoveryInvalid) {
-		return
+	r := s.mfaAttemptLimiter.get(purpose + ":" + userID).Reserve()
+	if !r.OK() || r.Delay() > 0 {
+		r.Cancel()
+		return func(error) {}, false
 	}
-	if s.mfaAttemptLimiter == nil {
-		return
-	}
-	s.mfaAttemptLimiter.get(purpose + ":" + userID).Allow()
+	return func(err error) {
+		if err == nil || (!errors.Is(err, storage.ErrMFAInvalidCode) && !errors.Is(err, storage.ErrMFARecoveryInvalid)) {
+			r.Cancel()
+		}
+	}, true
 }
 
 // RequireStepUp is the reusable sensitive-command boundary: it runs AFTER
@@ -265,10 +258,12 @@ func (s *Server) HandleBeginMFAEnrollment(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if s.mfaBudgetExhausted(claims.UserID, "enroll") {
+	refund, ok := s.reserveMFAAttempt(claims.UserID, "enroll")
+	if !ok {
 		respondWithError(w, http.StatusTooManyRequests, "too many requests, slow down")
 		return
 	}
+	defer refund(nil) // Always refund for begin since there is no invalid code concept here.
 	var body openapi.MFAEnrollBeginRequest
 	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
@@ -333,20 +328,25 @@ func (s *Server) HandleVerifyMFAEnrollment(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	if s.mfaBudgetExhausted(claims.UserID, "enroll-verify") {
+	refund, ok := s.reserveMFAAttempt(claims.UserID, "enroll-verify")
+	if !ok {
 		respondWithError(w, http.StatusTooManyRequests, "too many requests, slow down")
 		return
 	}
+	var err error
+	defer func() { refund(err) }()
+
 	var body openapi.MFAEnrollVerifyRequest
 	if !decodeGeneratedJSONBody(w, r, &body) {
 		return
 	}
 	factorID := strings.TrimSpace(r.PathValue("factorId"))
-	if _, err := uuid.Parse(factorID); err != nil {
+	if _, err = uuid.Parse(factorID); err != nil {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "invalid request", nil)
 		return
 	}
-	result, err := s.Store.EnableMFAFactor(r.Context(), storage.EnableMFAFactorCommand{
+	var result *storage.EnabledMFAFactor
+	result, err = s.Store.EnableMFAFactor(r.Context(), storage.EnableMFAFactorCommand{
 		UserID:    claims.UserID,
 		FactorID:  factorID,
 		Code:      auth.NormalizeTOTPCodeInput(body.Code),
@@ -355,7 +355,6 @@ func (s *Server) HandleVerifyMFAEnrollment(w http.ResponseWriter, r *http.Reques
 		RequestID: RequestIDFromContext(r.Context()),
 	})
 	if err != nil {
-		s.noteMFAFailure(claims.UserID, "enroll-verify", err)
 		respondWithMFAError(w, err, "mfa enroll verify")
 		return
 	}
@@ -404,11 +403,16 @@ func (s *Server) HandleRegenerateMFARecoveryCodes(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	if s.mfaBudgetExhausted(claims.UserID, "recovery-regenerate") {
+	refund, ok := s.reserveMFAAttempt(claims.UserID, "recovery-regenerate")
+	if !ok {
 		respondWithError(w, http.StatusTooManyRequests, "too many requests, slow down")
 		return
 	}
-	codes, err := s.Store.RegenerateMFARecoveryCodes(r.Context(), storage.RegenerateMFARecoveryCommand{
+	var err error
+	defer func() { refund(err) }()
+
+	var codes []string
+	codes, err = s.Store.RegenerateMFARecoveryCodes(r.Context(), storage.RegenerateMFARecoveryCommand{
 		UserID:    claims.UserID,
 		Secrets:   secrets,
 		IP:        clientIP(r),
@@ -453,15 +457,20 @@ func (s *Server) HandleMFAStepUp(w http.ResponseWriter, r *http.Request) {
 			"Iniciá sesión de nuevo para confirmar tu identidad.", map[string]any{"scope": scope})
 		return
 	}
-	if s.mfaBudgetExhausted(claims.UserID, "step-up") {
+	refund, ok := s.reserveMFAAttempt(claims.UserID, "step-up")
+	if !ok {
 		respondWithError(w, http.StatusTooManyRequests, "too many requests, slow down")
 		return
 	}
+	var err error
+	defer func() { refund(err) }()
+
 	code := auth.NormalizeTOTPCodeInput(body.Code)
 	if method == domain.StepUpMethodRecovery {
 		code = auth.NormalizeRecoveryCodeInput(body.Code)
 	}
-	result, err := s.Store.VerifyMFAStepUp(r.Context(), storage.MFAStepUpCommand{
+	var result *storage.MFAStepUpResult
+	result, err = s.Store.VerifyMFAStepUp(r.Context(), storage.MFAStepUpCommand{
 		UserID:    claims.UserID,
 		SessionID: claims.Sid,
 		Scope:     scope,
@@ -472,7 +481,6 @@ func (s *Server) HandleMFAStepUp(w http.ResponseWriter, r *http.Request) {
 		RequestID: RequestIDFromContext(r.Context()),
 	})
 	if err != nil {
-		s.noteMFAFailure(claims.UserID, "step-up", err)
 		if errors.Is(err, storage.ErrMFANoEnabledFactor) {
 			respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeMfaRequired,
 				"Necesitás configurar autenticación en dos pasos.", map[string]any{"scope": scope})

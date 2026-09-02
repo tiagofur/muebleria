@@ -102,9 +102,13 @@ export function SecurityScreen({ baseUrl, token }: SecurityScreenProps): ReactNo
     setManagementError(null);
     setVerifyError(null);
     try {
-      const begun = await api.beginMFAEnrollment(token, { label: 'App de autenticación' });
-      setEnrollment({ phase: 'qr', factorId: begun.factor_id, uri: begun.provisioning_uri, expiresAt: begun.expires_at });
-      setVerifyCode('');
+      const begun = await stepUp.run('security_admin', 'agregar una app de autenticación', () =>
+        api.beginMFAEnrollment(token, { label: 'App de autenticación' })
+      );
+      if (begun) {
+        setEnrollment({ phase: 'qr', factorId: begun.factor_id, uri: begun.provisioning_uri, expiresAt: begun.expires_at });
+        setVerifyCode('');
+      }
     } catch {
       setManagementError('No se pudo iniciar la configuración. Reintentá en unos segundos.');
     } finally {
@@ -123,11 +127,15 @@ export function SecurityScreen({ baseUrl, token }: SecurityScreenProps): ReactNo
     setVerifyBusy(true);
     setVerifyError(null);
     try {
-      const verified = await api.verifyMFAEnrollment(token, enrollment.factorId, { code: clean });
-      setEnrollment(null);
-      setVerifyCode('');
-      setRecoveryCodes(verified.recovery_codes);
-      await load();
+      const verified = await stepUp.run('security_admin', 'activar la app de autenticación', () =>
+        api.verifyMFAEnrollment(token, enrollment.factorId, { code: clean })
+      );
+      if (verified) {
+        setEnrollment(null);
+        setVerifyCode('');
+        setRecoveryCodes(verified.recovery_codes);
+        await load();
+      }
     } catch (err: any) {
       const code = err?.code ?? null;
       if (code === 'MFA_INVALID') {
@@ -258,7 +266,7 @@ export function SecurityScreen({ baseUrl, token }: SecurityScreenProps): ReactNo
         <div className="catalog-form__section">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: 'var(--text-lg)', margin: 0 }}>Autenticación en dos pasos</h2>
-            {!hasFactors && !enrollment ? (
+            {!enrollment ? (
               <button type="button" className="btn btn--primary" onClick={begin} disabled={beginBusy} data-testid="mfa-begin">
                 {submitBusyLabel(beginBusy, 'Configurar app de autenticación', 'Iniciando...')}
               </button>
