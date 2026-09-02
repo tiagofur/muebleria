@@ -694,3 +694,64 @@ type MediaGrant struct {
 type MediaAuthorizeResponse struct {
 	Grants []MediaGrant `json:"grants"`
 }
+
+type DeviceEnrollRequest struct {
+	ClientType  string `json:"client_type"`
+	DisplayName string `json:"display_name"`
+}
+
+type DeviceEnrollmentResponse struct {
+	ID        string `json:"id"`
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+type DeviceEnrollPollRequest struct {
+	ID string `json:"id"`
+}
+
+type DeviceEnrollmentStatusResponse struct {
+	Status string `json:"status"`
+}
+
+type DeviceApproveRequest struct {
+	Code string `json:"code"`
+}
+
+type DeviceExchangeRequest struct {
+	EnrollmentID string `json:"enrollment_id"`
+}
+
+type DeviceExchangeResponse struct {
+	DeviceSecret string `json:"device_secret"`
+}
+
+type DeviceTokenRequest struct {
+	DeviceSecret string `json:"device_secret"`
+}
+
+type DeviceTokenResponse struct {
+	AccessToken     string `json:"access_token"`
+	AccessExpiresAt string `json:"access_expires_at"`
+}
+
+type AuthDeviceView struct {
+	ID          string  `json:"id"`
+	ClientType  string  `json:"client_type"`
+	DisplayName string  `json:"display_name"`
+	CreatedAt   string  `json:"created_at"`
+	LastSeenAt  *string `json:"last_seen_at,omitempty"`
+	RevokedAt   *string `json:"revoked_at,omitempty"`
+}
+
+type AuthDeviceDirectory struct {
+	Devices []AuthDeviceView `json:"devices"`
+}
+
+type DeviceRevokeRequest struct {
+	DeviceID string `json:"device_id"`
+}
+
+type DeviceRevokeResponse struct {
+	Revoked bool `json:"revoked"`
+}

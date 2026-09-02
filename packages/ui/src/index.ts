@@ -181,6 +181,8 @@ export {
   SalesNetworkSection,
   SettingsScreen,
   type SettingsScreenProps,
+  DevicesScreen,
+  type DevicesScreenProps,
 } from './settings';
 
 export {

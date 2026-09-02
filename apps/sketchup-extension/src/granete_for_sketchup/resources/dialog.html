@@ -1788,17 +1788,21 @@
           </div>
 
           <div class="card" id="login-card">
-            <div class="card-title">Iniciar Sesión en Granete</div>
-            <p class="subhead" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
-              Iniciá sesión con tu cuenta del taller para cargar su biblioteca de muebles.
+            <div class="card-title">Vincular Dispositivo</div>
+            <p class="subhead" id="login-instructions" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
+              Ingresá la dirección de tu servidor Granete para vincular este equipo.
             </p>
-            <label class="login-label" for="login-email">Email</label>
-            <input id="login-email" class="login-field" type="text" autocomplete="off" placeholder="vos@taller.com">
-            <label class="login-label" for="login-password">Contraseña</label>
-            <input id="login-password" class="login-field" type="password" autocomplete="off">
-            <label class="login-label" for="login-server">Servidor Granete</label>
-            <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
-            <button id="btn-login" class="btn btn-primary">Iniciar sesión</button>
+            <div id="login-form-area">
+              <label class="login-label" for="login-server">Servidor Granete</label>
+              <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
+              <button id="btn-login" class="btn btn-primary">Generar código</button>
+            </div>
+            <div id="enroll-code-area" style="display: none; text-align: center;">
+              <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
+              <div id="enroll-code-display" style="font-size: 2rem; font-weight: bold; letter-spacing: 0.2em; color: var(--brand-600); margin-bottom: var(--space-3);">--</div>
+              <p style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación...</p>
+              <button id="btn-cancel-enroll" class="btn btn-secondary">Cancelar</button>
+            </div>
           </div>
 
           <div class="card" id="session-card" style="display: none;">
@@ -2010,11 +2014,15 @@
         // Session elements
         var loginCard = document.getElementById("login-card");
         var sessionCard = document.getElementById("session-card");
-        var loginEmail = document.getElementById("login-email");
-        var loginPassword = document.getElementById("login-password");
         var loginServer = document.getElementById("login-server");
         var btnLogin = document.getElementById("btn-login");
         var btnLogout = document.getElementById("btn-logout");
+        var loginFormArea = document.getElementById("login-form-area");
+        var enrollCodeArea = document.getElementById("enroll-code-area");
+        var enrollCodeDisplay = document.getElementById("enroll-code-display");
+        var btnCancelEnroll = document.getElementById("btn-cancel-enroll");
+        var currentEnrollmentId = null;
+        var enrollPollInterval = null;
         var sessionUserName = document.getElementById("session-user-name");
         var sessionUserEmail = document.getElementById("session-user-email");
         var sessionServer = document.getElementById("session-server");
@@ -3401,14 +3409,51 @@
             }
           },
 
-          onLoginResult: function (result) {
+          onEnrollResult: function (result) {
             btnLogin.disabled = false;
-            btnLogin.textContent = "Iniciar sesión";
+            btnLogin.textContent = "Generar código";
+            if (result && result.success) {
+              currentEnrollmentId = result.id || result.enrollment_id;
+              enrollCodeDisplay.textContent = result.code;
+              loginFormArea.style.display = "none";
+              enrollCodeArea.style.display = "block";
+              
+              if (enrollPollInterval) clearInterval(enrollPollInterval);
+              enrollPollInterval = setInterval(function() {
+                if (window.sketchup && window.sketchup.poll_enrollment && currentEnrollmentId) {
+                  window.sketchup.poll_enrollment(JSON.stringify({ enrollmentId: currentEnrollmentId }));
+                }
+              }, 2000);
+            } else {
+              showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar vinculación"));
+            }
+          },
+
+          onPollResult: function (result) {
+            if (result && result.success) {
+              if (result.status === 'rejected' || result.status === 'expired') {
+                if (enrollPollInterval) clearInterval(enrollPollInterval);
+                loginFormArea.style.display = "block";
+                enrollCodeArea.style.display = "none";
+                showToast("error", "La vinculación fue " + (result.status === 'rejected' ? 'rechazada' : 'expirada') + ".");
+              }
+            } else {
+              if (enrollPollInterval) clearInterval(enrollPollInterval);
+              loginFormArea.style.display = "block";
+              enrollCodeArea.style.display = "none";
+              showToast("error", "Error consultando estado: " + ((result && result.error) || "Desconocido"));
+            }
+          },
+
+          onLoginResult: function (result) {
+            if (enrollPollInterval) clearInterval(enrollPollInterval);
+            loginFormArea.style.display = "block";
+            enrollCodeArea.style.display = "none";
             if (result && result.success) {
               if (result.loggedOut) {
                 showToast("success", "Sesión cerrada.");
               } else {
-                showToast("success", "✓ Sesión iniciada. Biblioteca del taller cargada.");
+                showToast("success", "✓ Dispositivo vinculado. Biblioteca del taller cargada.");
               }
             } else {
               showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar sesión"));
@@ -4302,23 +4347,27 @@
         });
 
         btnLogin.addEventListener("click", function () {
-          var email = loginEmail.value.trim();
-          var password = loginPassword.value;
           var server = loginServer.value.trim();
-          if (!email || !password || !server) {
-            showToast("error", "Completá email, contraseña y servidor.");
+          if (!server) {
+            showToast("error", "Completá el servidor.");
             return;
           }
           btnLogin.disabled = true;
           btnLogin.textContent = "Conectando…";
-          loginPassword.value = "";
-          if (window.sketchup && window.sketchup.login) {
-            window.sketchup.login(JSON.stringify({ email: email, password: password, serverUrl: server }));
+          if (window.sketchup && window.sketchup.enroll) {
+            window.sketchup.enroll(JSON.stringify({ serverUrl: server, displayName: '' }));
           } else {
             btnLogin.disabled = false;
-            btnLogin.textContent = "Iniciar sesión";
-            showToast("error", "Login no disponible fuera de SketchUp.");
+            btnLogin.textContent = "Generar código";
+            showToast("error", "Vincular dispositivo no disponible fuera de SketchUp.");
           }
+        });
+
+        btnCancelEnroll.addEventListener("click", function () {
+          if (enrollPollInterval) clearInterval(enrollPollInterval);
+          currentEnrollmentId = null;
+          loginFormArea.style.display = "block";
+          enrollCodeArea.style.display = "none";
         });
 
         btnLogout.addEventListener("click", function () {

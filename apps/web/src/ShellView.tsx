@@ -147,6 +147,7 @@ import {
   Dashboard,
   LoginScreen,
   SettingsScreen,
+  DevicesScreen,
   UsersScreen,
   PlatformScreen,
   Modal,
@@ -1709,6 +1710,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               : null
           }
         />
+      ) : null}
+      {navId === 'devices' ? (
+        authToken ? (
+          <DevicesScreen baseUrl={DEFAULT_API_BASE} token={authToken} />
+        ) : (
+          <p className="settings-hint">Iniciá sesión para administrar tus dispositivos.</p>
+        )
       ) : null}
       {navId === 'showcase' ? (
         <ShowcaseScreen

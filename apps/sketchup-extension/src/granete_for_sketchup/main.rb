@@ -12,7 +12,7 @@ module Granete
         identity
         logging
         auth/provider
-        auth/session_provider
+        auth/device_provider
         transport/adapter
         transport/http_adapter
         metadata/store

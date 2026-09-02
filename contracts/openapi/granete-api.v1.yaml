@@ -1706,6 +1706,234 @@
         }
       }
     },
+    "/auth/devices/enroll": {
+      "post": {
+        "operationId": "enrollDevice",
+        "summary": "Start a device enrollment (SketchUp, #460 SEC-6)",
+        "description": "Anonymous, rate-limited entry point of the OAuth-device-grant-shaped flow. Returns the enrollment id (a capability shown only to the enrolling device) and the 6-character PIN the user types in the web console. Codes expire after 10 minutes.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceEnrollRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending enrollment with the user-facing code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceEnrollmentResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/devices/enroll/poll": {
+      "post": {
+        "operationId": "pollDeviceEnrollment",
+        "summary": "Poll the enrollment status by its id",
+        "description": "The enrolling device polls by the id returned by enroll. Knowing the id is the only capability: RLS scopes the read to exactly that row. Returns pending/approved/exchanged/expired; expired is derived server-side from expires_at while the row stays pending.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceEnrollPollRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Current enrollment status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceEnrollmentStatusResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/devices/approve": {
+      "post": {
+        "operationId": "approveDeviceEnrollment",
+        "summary": "Bind a pending enrollment to the authenticated user",
+        "description": "The approving user types the PIN shown on the device; the code is normalized server-side (case and separators). The claim is a single conditional UPDATE: a second presentation of the same code loses. Audited as device_enrollment_approved.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The enrollment is bound to the caller and waits for the device exchange",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceEnrollmentStatusResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/devices/exchange": {
+      "post": {
+        "operationId": "exchangeDeviceEnrollment",
+        "summary": "Consume the approved enrollment for the device secret",
+        "description": "Single-use: the approved→exchanged transition, the hash-only device credential and its registry session (client_type sketchup, 30-day absolute bound) commit in one transaction. The raw secret exists only in this response; the database stores sha256 only.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device secret in the '<uuid>:<64 hex>' shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceExchangeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/devices/token": {
+      "post": {
+        "operationId": "requestDeviceToken",
+        "summary": "Re-mint the SketchUp transport token from the device secret",
+        "description": "Wrong secret, unknown device, revoked device and inactive user all answer the same 401 (no oracle). The bearer carries the registry session id and is capped by the session's absolute expiry; revoking the device (or the session) cuts access on the next request. The session scope mirrors login's single-membership auto-selection.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registry-backed access token with server-clock expiry metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/devices": {
+      "get": {
+        "operationId": "listMyDevices",
+        "summary": "List the caller's enrolled devices",
+        "description": "Metadata only: the credential hash never leaves the storage layer. Revoked devices stay visible with their revoked_at for honest session-directory UX.",
+        "responses": {
+          "200": {
+            "description": "The caller's devices, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthDeviceDirectory"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/devices/revoke": {
+      "post": {
+        "operationId": "revokeMyDevice",
+        "summary": "Revoke the caller's own device",
+        "description": "Ownership is enforced by the UPDATE itself: another user's device id updates zero rows and answers 404. Revocation cuts the device's registry session in the same transaction and is audited as device_revoked.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRevokeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The device and its registry session are revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRevokeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/org/memberships/{membershipId}/sessions": {
       "get": {
         "operationId": "listMembershipSessions",
@@ -4318,6 +4546,237 @@
             }
           }
         }
+      },
+      "DeviceEnrollRequest": {
+        "type": "object",
+        "required": [
+          "client_type",
+          "display_name"
+        ],
+        "properties": {
+          "client_type": {
+            "type": "string",
+            "enum": [
+              "sketchup"
+            ]
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceEnrollmentResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "expires_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 6
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceEnrollPollRequest": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceEnrollmentStatusResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "exchanged",
+              "expired"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceApproveRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 32,
+            "description": "Typed PIN; separators and casing are normalized server-side"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceExchangeRequest": {
+        "type": "object",
+        "required": [
+          "enrollment_id"
+        ],
+        "properties": {
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceExchangeResponse": {
+        "type": "object",
+        "required": [
+          "device_secret"
+        ],
+        "properties": {
+          "device_secret": {
+            "type": "string",
+            "description": "'<uuid>:<64 hex>'; store in the device secure storage, present it to /auth/devices/token"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceTokenRequest": {
+        "type": "object",
+        "required": [
+          "device_secret"
+        ],
+        "properties": {
+          "device_secret": {
+            "type": "string",
+            "minLength": 66
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceTokenResponse": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "access_expires_at"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "access_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server-clock expiry (#460 SEC-4A): never decoded from the JWT client-side"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthDeviceView": {
+        "type": "object",
+        "required": [
+          "id",
+          "client_type",
+          "display_name",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "client_type": {
+            "type": "string",
+            "enum": [
+              "sketchup"
+            ]
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthDeviceDirectory": {
+        "type": "object",
+        "required": [
+          "devices"
+        ],
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthDeviceView"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceRevokeRequest": {
+        "type": "object",
+        "required": [
+          "device_id"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeviceRevokeResponse": {
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

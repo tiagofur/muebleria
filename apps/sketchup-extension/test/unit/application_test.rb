@@ -6,7 +6,7 @@ require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/logging'
 require_relative '../../src/granete_for_sketchup/auth/provider'
 require_relative '../../src/granete_for_sketchup/transport/adapter'
-require_relative '../../src/granete_for_sketchup/auth/session_provider'
+require_relative '../../src/granete_for_sketchup/auth/device_provider'
 require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/transport/http_adapter'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
@@ -121,11 +121,18 @@ class ApplicationTest < Minitest::Test
     'presets' => []
   }.freeze
 
+  # Hermetic device provider: file store under a temp dir and the secure
+  # secret storage overridden so the tests never touch the host Keychain.
+  class HermeticDeviceProvider < Granete::SketchUpExtension::Auth::DeviceProvider
+    def secure_store_secret(_secret); end
+
+    def secure_read_secret; end
+  end
+
   def setup
     SketchupStub.reset!
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
-    # Hermetic session: never touch the developer's real session file.
-    session = Granete::SketchUpExtension::Auth::SessionProvider.new(
+    session = HermeticDeviceProvider.new(
       logger: logger,
       store_path: File.join(Dir.mktmpdir('granete-app-test'), 'session.json')
     )
@@ -145,8 +152,8 @@ class ApplicationTest < Minitest::Test
     first_dialog = @application.open_dialog
 
     expected_callbacks = %w[
-      close_dialog delete_selected_furniture dialog_ready get_catalog insert_furniture login logout
-      open_material_selector refresh_media_url select_furniture update_furniture
+      close_dialog delete_selected_furniture dialog_ready enroll get_catalog insert_furniture logout
+      open_material_selector poll_enrollment refresh_media_url select_furniture update_furniture
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)
@@ -170,7 +177,7 @@ class ApplicationTest < Minitest::Test
       transport: ReadyPort.new,
       auth_provider: ReadyPort.new,
       logger: logger,
-      session_provider: Granete::SketchUpExtension::Auth::SessionProvider.new(
+      session_provider: HermeticDeviceProvider.new(
         logger: logger,
         store_path: File.join(Dir.mktmpdir('granete-app-test'), 'session.json')
       )
@@ -199,7 +206,7 @@ class ApplicationTest < Minitest::Test
 
   def test_production_wiring_writes_metadata_and_rehydrates_selection
     logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
-    session = Granete::SketchUpExtension::Auth::SessionProvider.new(
+    session = HermeticDeviceProvider.new(
       logger: logger,
       store_path: File.join(Dir.mktmpdir('granete-app-test'), 'session.json')
     )

@@ -112,8 +112,13 @@ describe('AcceptInvitationScreen lifecycle', () => {
     await screen.findByRole('alert');
 
     const back = screen.getByRole('button', { name: 'Volver al inicio de sesión' });
-    back.focus();
-    await actor.keyboard('{Enter}');
-    expect(onBackToLogin).toHaveBeenCalledOnce();
+    // En runners lentos el Enter puede dispararse antes de que el focus del
+    // botón sobreviva al re-render del estado de error: reintenta la
+    // interacción de teclado completa en lugar de relajar la aserción.
+    await vi.waitFor(async () => {
+      back.focus();
+      await actor.keyboard('{Enter}');
+      expect(onBackToLogin).toHaveBeenCalledOnce();
+    });
   });
 });

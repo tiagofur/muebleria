@@ -53,11 +53,18 @@ const SupportTokenTTL = 2 * time.Hour
 // restricted to read-only requests by AuthMiddleware.
 const ExtensionClient = "sketchup-extension"
 
-// ExtensionTokenTTL is the lifetime of tokens issued for the SketchUp
-// extension. Revocation does not wait for expiry: AuthMiddleware re-checks the
-// user and session against the DB on every request. #460 SEC-6 replaces this
-// password-login credential with a registered, revocable device credential.
+// ExtensionTokenTTL is the ABSOLUTE session bound for the SketchUp transport
+// (#460 SEC-6): the registry session behind a device credential lives 30 days
+// and refresh never extends it. It is NOT the access bearer lifetime — the
+// bearer itself is SketchUpAccessTokenTTL; the durable device secret is what
+// spans workshop sessions now. Revocation does not wait for expiry:
+// AuthMiddleware re-checks the user and session registry on every request.
 const ExtensionTokenTTL = 30 * 24 * time.Hour
+
+// SketchUpAccessTokenTTL is the short-lived access bearer minted from the
+// SEC-6 device secret (#460 SEC-6). Web/mobile-style short access: the
+// extension re-mints from the secret stored in the OS secure storage.
+const SketchUpAccessTokenTTL = 15 * time.Minute
 
 // DummyHash is a valid bcrypt hash used only to equalize login timing when the
 // user does not exist (issue #19 account enumeration).
@@ -374,7 +381,7 @@ func accessTokenTTLFor(transport string) time.Duration {
 	case "mobile":
 		return MobileAccessTokenTTL
 	case "sketchup":
-		return ExtensionTokenTTL
+		return SketchUpAccessTokenTTL
 	}
 	return 0
 }
@@ -413,9 +420,9 @@ func TransportSessionTTL(transport string) time.Duration {
 // clock behind minting, never from client-side JWT decoding). A zero
 // authStartedAt means "now", matching issueToken; a non-zero
 // absoluteExpiresAt caps the result exactly like IssueTransportTokenUntil.
-// Web bearers roll from `now` (short access); every other transport stays
-// origin-derived. Support tokens have no registry cap: their live session
-// row is the authority (GetOpenSupportSession).
+// Web and SketchUp bearers roll from `now` (short access); every other
+// transport stays origin-derived. Support tokens have no registry cap: their
+// live session row is the authority (GetOpenSupportSession).
 func AccessTokenExpiry(now, authStartedAt time.Time, transport string, absoluteExpiresAt time.Time) (time.Time, error) {
 	ttl := accessTokenTTLFor(transport)
 	if transport == "support" {
@@ -431,14 +438,14 @@ func AccessTokenExpiry(now, authStartedAt time.Time, transport string, absoluteE
 }
 
 // transportTokenExpiry is the single expiry computation shared by minting and
-// the reported metadata so the two can never drift. Web access bearers roll
-// from the MINT instant (SEC-4B short access): computing them from the
-// session origin would mint already-expired tokens after minute 15. Every
-// other transport keeps the origin-derived semantics. A known absolute
-// session bound always caps the result.
+// the reported metadata so the two can never drift. Web and SketchUp access
+// bearers roll from the MINT instant (SEC-4B / SEC-6 short access): computing
+// them from the session origin would mint already-expired tokens after minute
+// 15. Every other transport keeps the origin-derived semantics. A known
+// absolute session bound always caps the result.
 func transportTokenExpiry(now, authStartedAt time.Time, transport string, ttl time.Duration, absoluteExpiresAt time.Time) time.Time {
 	base := authStartedAt
-	if transport == "web" {
+	if transport == "web" || transport == "sketchup" {
 		base = now
 	}
 	if base.IsZero() {

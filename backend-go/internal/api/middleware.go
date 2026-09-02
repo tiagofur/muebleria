@@ -292,15 +292,16 @@ func serveAuthenticatedRequest(
 		}
 	}
 
-	// Extension tokens are read-only by default: a long-lived SketchUp
-	// session token must not be able to mutate workshop data even if
-	// leaked. Each POST path below is an EXPLICIT capability decision with
-	// its owning issue — never "POST happens to be safe" reasoning (#477
-	// coordinates this capability model with #460 session hardening).
-	if claims.Client == auth.ExtensionClient &&
-		r.Method != http.MethodGet &&
-		!(r.Method == http.MethodPost && extensionTokenMayPost(r.URL.Path)) {
-		respondWithError(w, http.StatusForbidden, "el token de la extensión es de solo lectura")
+	// #460 SEC-6 least privilege: the SketchUp extension bearer is DENIED BY
+	// DEFAULT. Its authenticated surface is exactly the plugin's read-only
+	// furniture/media contract plus the explicit stateless POST allowlist
+	// below. Team administration, session/device management, organization
+	// mutation, platform and support surfaces answer 403 for this credential
+	// class even when the owner's roles or platform flag would otherwise
+	// allow them — the extension credential is never an administration
+	// credential. #477 coordinates this capability model with #460.
+	if claims.Client == auth.ExtensionClient && !extensionClientMayAccess(r.Method, r.URL.Path) {
+		respondWithError(w, http.StatusForbidden, "el token de la extensión solo accede al catálogo y autoría de Granete")
 		return
 	}
 
@@ -504,6 +505,35 @@ func clientIP(r *http.Request) string {
 // long-lived SketchUp extension tokens. Adding an entry is a deliberate
 // capability grant that must cite its owning issue; everything else stays
 // read-only for those tokens.
+// extensionClientGetPrefixes is the ONLY read surface the SketchUp bearer
+// may reach: the furniture catalog (definitions + resolved layouts) and
+// media reads. Everything else — team, sessions, devices, projects,
+// organizations, platform — is out of the extension's contract.
+var extensionClientGetPrefixes = []string{
+	"/api/furniture/",
+	"/api/media",
+}
+
+// extensionClientMayAccess is the deny-by-default boundary for the SketchUp
+// extension credential: reads limited to the plugin surface above, writes
+// limited to the explicit POST allowlist, every other verb denied.
+func extensionClientMayAccess(method, path string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead:
+		for _, prefix := range extensionClientGetPrefixes {
+			if strings.HasPrefix(path, prefix) {
+				return true
+			}
+		}
+		return false
+	case http.MethodPost:
+		_, ok := extensionTokenMayPostPaths[path]
+		return ok
+	default:
+		return false
+	}
+}
+
 var extensionTokenMayPostPaths = map[string]struct{}{
 	// Renew the session before expiry (existing behavior).
 	"/api/auth/refresh": {},

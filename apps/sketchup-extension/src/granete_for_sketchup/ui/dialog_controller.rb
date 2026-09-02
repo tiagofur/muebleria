@@ -27,24 +27,51 @@ module Granete
       # Login/logout callback handlers, extracted to keep DialogController
       # within the class-length budget.
       module SessionBridge
-        def handle_login(dialog, payload_json)
+        def handle_enroll(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
-          result = if @session
-                     @session.login(payload['email'].to_s, payload['password'].to_s, payload['serverUrl'].to_s)
+          server_url = payload['serverUrl'].to_s
+          display_name = payload['displayName'].to_s
+          display_name = 'SketchUp' if display_name.empty?
+
+          result = if @session.respond_to?(:enroll)
+                     @session.enroll(server_url, display_name)
                    else
-                     { 'success' => false, 'error' => 'Sesión no disponible en esta compilación.' }
+                     { 'success' => false, 'error' => 'Enroll no soportado.' }
                    end
 
-          if result['success']
-            @catalog_provider.reset if @catalog_provider.respond_to?(:reset)
-            update_status(dialog)
-            send_catalog(dialog)
-          end
-          execute_bridge(dialog, 'onLoginResult', result)
-          @logger.info('session_login', success: result['success'])
+          execute_bridge(dialog, 'onEnrollResult', result)
+          @logger.info('session_enroll', success: result['success'])
         rescue StandardError => e
-          @logger.error('session_login_failed', error: e)
-          execute_bridge(dialog, 'onLoginResult', { 'success' => false, 'error' => e.message })
+          @logger.error('session_enroll_failed', error: e)
+          execute_bridge(dialog, 'onEnrollResult', { 'success' => false, 'error' => e.message })
+        end
+
+        def handle_poll_enrollment(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
+          enrollment_id = payload['enrollmentId'].to_s
+
+          result = if @session.respond_to?(:poll_enrollment)
+                     @session.poll_enrollment(enrollment_id)
+                   else
+                     { 'success' => false, 'error' => 'Poll no soportado.' }
+                   end
+
+          if result['success'] && result['status'] == 'approved'
+            exchange_res = @session.exchange_enrollment(enrollment_id)
+            if exchange_res['success']
+              @catalog_provider.reset if @catalog_provider.respond_to?(:reset)
+              update_status(dialog)
+              send_catalog(dialog)
+              execute_bridge(dialog, 'onLoginResult', { 'success' => true })
+            else
+              execute_bridge(dialog, 'onPollResult', exchange_res)
+            end
+          else
+            execute_bridge(dialog, 'onPollResult', result)
+          end
+        rescue StandardError => e
+          @logger.error('session_poll_failed', error: e)
+          execute_bridge(dialog, 'onPollResult', { 'success' => false, 'error' => e.message })
         end
 
         def handle_logout(dialog)
@@ -601,7 +628,8 @@ module Granete
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
-          dialog.add_action_callback('login') { |_c, p| handle_login(dialog, p) }
+          dialog.add_action_callback('enroll') { |_c, p| handle_enroll(dialog, p) }
+          dialog.add_action_callback('poll_enrollment') { |_c, p| handle_poll_enrollment(dialog, p) }
           dialog.add_action_callback('logout') { handle_logout(dialog) }
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.
