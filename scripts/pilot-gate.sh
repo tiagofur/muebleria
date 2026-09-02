@@ -103,10 +103,15 @@ echo "[pilot-gate] nunca toca datos productivos) con DATABASE_URL del entorno/${
 
 cd "${ROOT}/backend-go"
 echo "[pilot-gate] verificando RLS directo con credenciales runtime sin privilegios"
-DATABASE_URL="${DSN}" go test ./internal/storage -run '^TestTenantRLS_' -v -count=1
+STORAGE_PATTERN="${PILOT_GATE_STORAGE_PATTERN:-^TestTenantRLS_}"
+if [ "${PILOT_GATE_FOUNDATION_A:-}" = "1" ] && [ -z "${PILOT_GATE_STORAGE_PATTERN:-}" ]; then
+  STORAGE_PATTERN='^(TestTenantRLS_|TestGateAProvisioning|TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements|TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture|TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole|TestSecurityAuditEnvelope)'
+  echo "[pilot-gate] incluyendo fresh/upgrade y provisioning atomic de Foundation Gate A"
+fi
+DATABASE_URL="${DSN}" GOFLAGS='-p=1' go test ./internal/storage -run "${STORAGE_PATTERN}" -v -count=1
 
 if DATABASE_URL="${DSN}" PILOT_READINESS_GATE=1 \
-  go test ./tests/pilotreadiness/ -v -count=1; then
+  GOFLAGS='-p=1' go test ./tests/pilotreadiness/ -v -count=1; then
   echo ""
   echo "[pilot-gate] ✅ Pilot Readiness PASS — el aislamiento multi-org está verificado."
 else

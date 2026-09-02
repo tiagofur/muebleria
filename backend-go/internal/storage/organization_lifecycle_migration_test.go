@@ -872,4 +872,26 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 	impact, version = preview()
 	command("terminate", `{"reason":"platform termination","impact_version":"`+impact+`"}`, "platform-terminate", version)
 	load(domain.OrganizationStatusTerminated)
+
+	for _, eventType := range []string{
+		"organization_suspended",
+		"organization_reactivated",
+		"organization_offboarding_started",
+		"organization_terminated",
+	} {
+		var count int
+		if err := fx.admin.QueryRow(ctx, `
+			SELECT count(*)
+			FROM security_audit_events
+			WHERE organization_id=$1
+			  AND event_type=$2
+			  AND schema_version=1
+			  AND request_id IS NOT NULL
+			  AND request_id <> ''`, organization.ID, eventType).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("durable lifecycle audit %s count=%d want=1", eventType, count)
+		}
+	}
 }

@@ -30,6 +30,9 @@ time-travel de expiración de soporte).
 ## 2. Cómo correrla
 
 ```bash
+# Gate A completo: contratos + fresh/upgrade PostgreSQL/RLS/API + browser real
+pnpm gate:foundation:a
+
 # Forma obligatoria antes de deploy (skips prohibidos — sin DB falla):
 scripts/pilot-gate.sh                      # usa DATABASE_URL o docker compose dev (localhost:5445)
 scripts/pilot-gate.sh --dsn postgres://…   # DSN explícito (staging)
@@ -38,6 +41,11 @@ scripts/pilot-gate.sh --fresh-container    # postgres 16 efímero vía docker, c
 # Forma developer (dentro del suite normal de backend; salta si no hay DB):
 cd backend-go && go test ./tests/pilotreadiness/ -v
 ```
+
+El job CI `Foundation Gate A` usa ese único entrypoint. La matriz ejecutable
+34/34 y su mapeo a proofs reutilizados están en
+`progress/gate_a_462_coverage.md`. Gate A está verde desde 2026-09-02; **#385
+DT-1 may start**. Gate B no forma parte de este comando.
 
 - La base de test es efímera (DROP/CREATE por corrida): nunca toca datos
   productivos ni la dev `muebles`.

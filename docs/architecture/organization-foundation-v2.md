@@ -972,6 +972,10 @@ bridges have an explicit removal slice; they are not permanent fallbacks.
 Run #462 Foundation Readiness from fresh DB and upgrade fixture. No new
 persisted business family proceeds before this gate.
 
+Current executable status (2026-09-02): `pnpm gate:foundation:a` passes the
+34/34 matrix with real PostgreSQL/RLS, Go HTTP/auth/MFA and Chromium. **#385
+DT-1 may start.** This does not complete #460/#461 or authorize Gate B.
+
 ### Stage D — relationship and catalog/pricing
 
 - backfill valid parent links to explicit relationships;

@@ -67,7 +67,12 @@ func (s *Server) HandleProvisionOrganization(w http.ResponseWriter, r *http.Requ
 		ActorUserID: claims.UserID, ActorMembershipID: claims.MembershipID, Name: name, Slug: slug, Type: orgType,
 		LicensePlan: plan, LicenseExpiresAt: expiresAt, AllowEmptyCatalog: true, IP: clientIP(r), RequestID: RequestIDFromContext(r.Context()),
 	}
-	if claims.PlatformAdmin && claims.OrgID == "" {
+	// Platform authority is independent from the actor's currently selected
+	// tenant when the request uses platform-owned provisioning fields. A
+	// platform administrator may still use the deliberately narrower factory
+	// self-service contract while working inside a factory.
+	platformProvisioning := claims.PlatformAdmin && (claims.OrgID == "" || body.BootstrapAdminUserID != nil || body.Entitlements != nil || body.CloneCatalogFrom != nil)
+	if platformProvisioning {
 		if body.BootstrapAdminUserID == nil || strings.TrimSpace(*body.BootstrapAdminUserID) == "" {
 			respondWithError(w, http.StatusBadRequest, "bootstrap_admin_user_id es obligatorio")
 			return

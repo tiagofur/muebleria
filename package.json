@@ -18,6 +18,7 @@
     "visual": "playwright test --config=playwright.config.ts",
     "smoke": "playwright test --config=playwright.config.ts tests/smoke",
     "test:organization:browser": "scripts/organization-browser-gate.sh",
+    "gate:foundation:a": "scripts/foundation-gate-a.sh",
     "smoke:perf": "playwright test --config=playwright.config.ts tests/smoke/proyectar-perf.spec.ts",
     "smoke:usability": "playwright test --config=playwright.config.ts tests/smoke/proyectar-usability.spec.ts"
   },
