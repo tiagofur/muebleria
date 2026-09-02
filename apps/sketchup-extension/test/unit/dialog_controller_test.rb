@@ -31,15 +31,38 @@ class DialogControllerTest < Minitest::Test
     end
   end
 
+  # Session double for the #460 SEC-6 device enrollment flow:
+  # enroll → poll_enrollment → exchange_enrollment. Result shapes mirror
+  # Auth::DeviceProvider.
   class FakeSession
-    attr_accessor :login_result
+    attr_accessor :enroll_result, :poll_result, :exchange_result
+    attr_reader :enroll_args, :polled_enrollment_ids, :exchanged_enrollment_ids
 
     def initialize
-      @login_result = { 'success' => true, 'user' => { 'name' => 'Ana' }, 'license' => { 'plan' => 'pro' } }
+      @enroll_result = {
+        'success' => true, 'id' => 'enr-1', 'code' => 'GRAN-1234',
+        'expires_at' => '2026-09-02T05:00:00Z'
+      }
+      @poll_result = { 'success' => true, 'status' => 'approved' }
+      @exchange_result = { 'success' => true, 'user' => { 'name' => 'Ana' } }
+      @enroll_args = []
+      @polled_enrollment_ids = []
+      @exchanged_enrollment_ids = []
     end
 
-    def login(_email, _password, _server_url)
-      @login_result
+    def enroll(server_url, display_name)
+      @enroll_args << [server_url, display_name]
+      @enroll_result
+    end
+
+    def poll_enrollment(enrollment_id)
+      @polled_enrollment_ids << enrollment_id
+      @poll_result
+    end
+
+    def exchange_enrollment(enrollment_id)
+      @exchanged_enrollment_ids << enrollment_id
+      @exchange_result
     end
 
     def logout
@@ -421,7 +444,11 @@ class DialogControllerTest < Minitest::Test
     assert_equal 'kitchen-wall-standard', meta.dig('intent', 'furnitureDefinitionId')
   end
 
-  def test_login_callback_reports_result_and_refreshes_status
+  # #460 SEC-6: login por contraseña fue reemplazado por enrollment de
+  # dispositivo. El callback enroll inicia el flujo, el código corto se
+  # muestra al usuario y poll_enrollment completa el intercambio cuando la
+  # aprobación llega desde la web.
+  def test_enroll_then_poll_approval_reports_login_and_refreshes_catalog
     session = FakeSession.new
     controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
       logger: @logger,
@@ -431,25 +458,35 @@ class DialogControllerTest < Minitest::Test
     )
     dialog = controller.show
 
-    dialog.callbacks.fetch('login').call(
+    dialog.callbacks.fetch('enroll').call(
       nil,
-      'email' => 'ana@taller.com', 'password' => 'secret123', 'serverUrl' => 'http://taller.local:8080/api'
+      'serverUrl' => 'http://taller.local:8080/api', 'displayName' => 'Mac del taller'
     )
 
+    assert_equal [['http://taller.local:8080/api', 'Mac del taller']], session.enroll_args
+    scripts = dialog.executed_scripts
+    enroll_script = scripts.find { |s| s.include?('onEnrollResult') }
+    refute_nil enroll_script
+    assert_includes enroll_script, '"success":true'
+    assert_includes enroll_script, 'GRAN-1234'
+
+    dialog.callbacks.fetch('poll_enrollment').call(nil, 'enrollmentId' => 'enr-1')
+
+    assert_equal ['enr-1'], session.polled_enrollment_ids
+    assert_equal ['enr-1'], session.exchanged_enrollment_ids
     scripts = dialog.executed_scripts
     login_script = scripts.find { |s| s.include?('onLoginResult') }
     refute_nil login_script
     assert_includes login_script, '"success":true'
-    assert_includes login_script, 'Ana'
     # dialog_ready was never fired in this test, so this setCatalog is the
-    # catalog refresh pushed by the successful login.
+    # catalog refresh pushed by the completed enrollment exchange.
     catalog_scripts = scripts.select { |s| s.include?('setCatalog') }
     assert_equal 1, catalog_scripts.length
   end
 
-  def test_login_callback_failure_only_reports_result
+  def test_enroll_failure_only_reports_result
     session = FakeSession.new
-    session.login_result = { 'success' => false, 'error' => 'Email o contraseña incorrectos.' }
+    session.enroll_result = { 'success' => false, 'error' => 'El servidor rechazó el registro (503).' }
     controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
       logger: @logger,
       status_provider: StatusProvider.new,
@@ -459,11 +496,58 @@ class DialogControllerTest < Minitest::Test
     dialog = controller.show
     before = dialog.executed_scripts.length
 
-    dialog.callbacks.fetch('login').call(nil, 'email' => 'a', 'password' => 'b', 'serverUrl' => 'c')
+    dialog.callbacks.fetch('enroll').call(nil, 'serverUrl' => 'http://taller.local:8080/api', 'displayName' => '')
 
+    # A failed enrollment must not start polling nor report login: the dialog
+    # only receives the enroll result so the user can retry.
     assert_equal before + 1, dialog.executed_scripts.length
-    assert_includes dialog.executed_scripts.last, 'onLoginResult'
-    assert_includes dialog.executed_scripts.last, 'contraseña'
+    assert_includes dialog.executed_scripts.last, 'onEnrollResult'
+    assert_includes dialog.executed_scripts.last, 'rechazó el registro'
+    assert_includes dialog.executed_scripts.last, '"success":false'
+  end
+
+  def test_poll_pending_reports_poll_result_without_login_or_catalog
+    session = FakeSession.new
+    session.poll_result = { 'success' => true, 'status' => 'pending' }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      session: session
+    )
+    dialog = controller.show
+    before = dialog.executed_scripts.length
+
+    dialog.callbacks.fetch('poll_enrollment').call(nil, 'enrollmentId' => 'enr-1')
+
+    assert_empty session.exchanged_enrollment_ids
+    assert_equal before + 1, dialog.executed_scripts.length
+    assert_includes dialog.executed_scripts.last, 'onPollResult'
+    assert_includes dialog.executed_scripts.last, 'pending'
+    refute_includes dialog.executed_scripts.last, 'onLoginResult'
+  end
+
+  def test_poll_approved_but_exchange_failure_reports_poll_error
+    session = FakeSession.new
+    session.exchange_result = { 'success' => false, 'error' => 'Error al intercambiar credencial (409).' }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      session: session
+    )
+    dialog = controller.show
+    before = dialog.executed_scripts.length
+
+    dialog.callbacks.fetch('poll_enrollment').call(nil, 'enrollmentId' => 'enr-1')
+
+    assert_equal ['enr-1'], session.exchanged_enrollment_ids
+    scripts = dialog.executed_scripts
+    assert_equal before + 1, scripts.length
+    assert_includes scripts.last, 'onPollResult'
+    assert_includes scripts.last, 'intercambiar credencial'
+    assert_nil(scripts.find { |s| s.include?('onLoginResult') })
+    assert_empty(scripts.select { |s| s.include?('setCatalog') })
   end
 
   # #460 SEC-3: the dialog never receives the session credential. The media

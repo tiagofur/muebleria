@@ -517,13 +517,17 @@ describe('webLogout (§49/§50)', () => {
 
 describe('applyLoginResponse — metadata obligatoria del server (§27)', () => {
   it('aplica el credential con la metadata de expiridad sin decodificar el JWT', () => {
-    const credential = applyLoginResponse(refreshBody() as never);
+    // §27: la expiración la dicta el server. Comparar contra el propio valor
+    // del body evita recomputar "ahora + 15m" (flake de 1ms entre llamadas a
+    // Date.now) y prueba que el cliente no decodificó ni derivó el campo.
+    const body = refreshBody();
+    const credential = applyLoginResponse(body as never);
     expect(credential).toMatchObject({
       kind: 'web',
       accessToken: 'access-NEW',
       sessionId: 'sess-1',
     });
-    expect(credential.accessExpiresAt).toBe(IN_15M());
+    expect(credential.accessExpiresAt).toBe(body.access_expires_at);
   });
 
   it('rechaza un auth response sin metadata completa (fail closed)', () => {

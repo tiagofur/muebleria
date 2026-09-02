@@ -70,11 +70,20 @@ postgres_ready() {
   docker logs "${CONTAINER}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' &&
     docker exec "${CONTAINER}" pg_isready -U postgres -d granete_gate >/dev/null 2>&1
 }
+# Track the loop's own success instead of re-probing after the loop: a
+# transient docker-exec/pg_isready failure in the immediate re-check would
+# fail the gate even though the loop already observed both conditions hold
+# (observed as a ~13% CI flake). The gate still fails hard if the loop never
+# observes readiness.
+POSTGRES_READY=""
 for _ in $(seq 1 120); do
-  postgres_ready && break
+  if postgres_ready; then
+    POSTGRES_READY=yes
+    break
+  fi
   sleep 1
 done
-if ! postgres_ready; then
+if [ -z "${POSTGRES_READY}" ]; then
   echo "[organization-gate] PostgreSQL container log (diagnostics):" >&2
   docker logs "${CONTAINER}" 2>&1 | tail -20 >&2
   fail "PostgreSQL did not become ready"
