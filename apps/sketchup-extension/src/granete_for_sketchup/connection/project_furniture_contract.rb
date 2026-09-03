@@ -12,6 +12,7 @@ module Granete
 
           WorkingItem = Struct.new(:furniture_instance_id, :furniture_definition_id, :definition_version,
                                    :parameters, :material_choices, :transform, :technical_client_locator,
+                                   :room_id,
                                    keyword_init: true)
           WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
@@ -30,6 +31,7 @@ module Granete
               item['definition_version'] = definition_version if definition_version
               item['transform'] = transform if transform
               item['technical_client_locator'] = technical_client_locator if technical_client_locator
+              item['room_id'] = room_id if room_id
               item
             end
           end
@@ -126,12 +128,15 @@ module Granete
               definition_id = nil unless definition_id.is_a?(String) && !definition_id.strip.empty?
               version = entry['definition_version']
               version = nil unless version.is_a?(Integer)
+              room_id = entry['room_id']
+              room_id = nil unless room_id.is_a?(String) && !room_id.strip.empty?
 
               WorkingItem.new(
                 furniture_instance_id: entry['furniture_instance_id'],
                 furniture_definition_id: definition_id, definition_version: version,
                 parameters: parameters, material_choices: choices,
-                transform: transform, technical_client_locator: locator
+                transform: transform, technical_client_locator: locator,
+                room_id: room_id
               )
             end
 
@@ -155,6 +160,56 @@ module Granete
 
               value.map(&:to_f)
             end
+          end
+        end
+
+        # Merge rule (#389 §14 + review fix): the PUT carries the COMPLETE
+        # desired state. An EXISTING working item keeps every authoritative
+        # authoring field (definition, version, parameters, materials,
+        # room) verbatim — SketchUp updates ONLY the placement-owned
+        # transform and technical locator. A first-time item is built from
+        # the persisted placement intent metadata (what was rendered).
+        module WorkingCopyMerger
+          module_function
+
+          def merge(working, furniture_instance_id, entity, intent: {}, locator: nil)
+            existing = working.items.find { |item| item.furniture_instance_id == furniture_instance_id }
+            if existing
+              updated = existing.dup
+              updated.transform = TransformContract.from_host(entity.transformation)
+              updated.technical_client_locator = locator
+              return working.items.map do |item|
+                item.furniture_instance_id == furniture_instance_id ? updated : item
+              end
+            end
+
+            working.items + [new_working_item(furniture_instance_id, entity, intent, locator)]
+          end
+
+          def new_working_item(furniture_instance_id, entity, intent, locator)
+            parameters = intent['parameters'].is_a?(Hash) ? intent['parameters'] : {}
+            choices = intent['materialChoices'].is_a?(Hash) ? intent['materialChoices'] : {}
+            Contract::WorkingItem.new(
+              furniture_instance_id: furniture_instance_id,
+              furniture_definition_id: intent['furnitureDefinitionId'],
+              parameters: parameters, material_choices: choices,
+              transform: TransformContract.from_host(entity.transformation),
+              technical_client_locator: locator
+            )
+          end
+
+          def placement_parameters(instance, definition)
+            parameters = {}
+            (definition['parameters'] || []).each do |parameter|
+              parameters[parameter['name']] = parameter['defaultValue'] if parameter.key?('defaultValue')
+            end
+            dims = instance.display_dimensions
+            if dims
+              parameters['widthMm'] = dims[0] if dims[0]
+              parameters['heightMm'] = dims[1] if dims[1]
+              parameters['depthMm'] = dims[2] if dims[2]
+            end
+            parameters
           end
         end
       end

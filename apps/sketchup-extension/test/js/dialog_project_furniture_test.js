@@ -82,6 +82,8 @@ function buildSandbox() {
         get_model_binding: () => bridgeCalls.push({ action: 'get_model_binding' }),
         get_project_furniture: () => bridgeCalls.push({ action: 'get_project_furniture' }),
         place_furniture_instance: (p) => bridgeCalls.push({ action: 'place_furniture_instance', payload: JSON.parse(p) }),
+        confirm_placement_instance: (p) => bridgeCalls.push({ action: 'confirm_placement_instance', payload: JSON.parse(p) }),
+        cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
         select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
         enroll: () => {}, logout: () => {}, close_dialog: () => {}
       }
@@ -241,6 +243,45 @@ function runTests() {
       terminal: true, placed: false, unitIndex: 3, unitTotal: 3 });
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
     assert.equal(el(sandbox, 'pf-pending-list').children.length, 2);
+  });
+
+  test('unit with pendingConfirm renders Posicion pendiente and confirm/cancel buttons', (sandbox) => {
+    const panel = connectedPanel();
+    panel.items[0].pendingConfirm = true;
+    sandbox.window.GraneteDialog.onProjectFurniture(panel);
+
+    const pendingCard = el(sandbox, 'pf-pending-list').children[0];
+    const name = pendingCard.children[0].children[0];
+    const badges = name.children.map((c) => c.textContent);
+    assert.ok(badges.includes('Posición pendiente'), 'pendingConfirm badge must be visible');
+
+    const actions = pendingCard.children[1];
+    assert.equal(actions.children.length, 2, 'actions group must have confirm and cancel');
+    assert.equal(actions.children[0].textContent, 'Confirmar posición');
+    assert.equal(actions.children[1].textContent, 'Cancelar');
+
+    // Confirm click dispatches confirm_placement_instance
+    actions.children[0].click();
+    const confirmCall = sandbox.__bridge.find((c) => c.action === 'confirm_placement_instance');
+    assert.ok(confirmCall, 'confirm_placement_instance must be called');
+    assert.equal(confirmCall.payload.furnitureInstanceId, FI_1);
+
+    // Cancel click dispatches cancel_placement_instance
+    actions.children[1].click();
+    const cancelCall = sandbox.__bridge.find((c) => c.action === 'cancel_placement_instance');
+    assert.ok(cancelCall, 'cancel_placement_instance must be called');
+    assert.equal(cancelCall.payload.furnitureInstanceId, FI_1);
+  });
+
+  test('pending_position result from place does not claim saved state', (sandbox) => {
+    sandbox.window.GraneteDialog.onPlaceFurnitureResult({ ok: true, code: 'pending_position', instanceId: FI_1 });
+    assert.ok(true);
+  });
+
+  test('confirm and cancel result callbacks handle failure cleanly', (sandbox) => {
+    sandbox.window.GraneteDialog.onConfirmPlacementResult({ ok: false, code: 'sync_failed', instanceId: FI_1 });
+    sandbox.window.GraneteDialog.onCancelPlacementResult({ ok: true, code: 'cancelled', instanceId: FI_1 });
+    assert.ok(true);
   });
 
   return tests;

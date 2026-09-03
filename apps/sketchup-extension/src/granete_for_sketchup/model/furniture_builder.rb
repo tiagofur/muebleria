@@ -245,8 +245,14 @@ module Granete
           model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, furniture_instance_id)
-            furniture = model.active_entities.add_instance(furniture_definition,
-                                                           Geom::Transformation.new)
+            # FurnitureInstance roots are TOP-LEVEL (native entity model
+            # §5/§12 + ManagedFurniture locator): insert into model.entities
+            # regardless of any open editing context, so the unit can never
+            # land nested inside another group/component and become
+            # untraceable.
+            # rubocop:disable-next SketchupSuggestions/ModelEntities
+            furniture = model.entities.add_instance(furniture_definition,
+                                                    Geom::Transformation.new)
             furniture.name = "#{definition['name']} (#{furniture_instance_id})"
             counts = render_layout(model, furniture_definition, furniture_instance_id, definition,
                                    params, resolved_layout)
@@ -292,9 +298,12 @@ module Granete
           begin
             # Destroy the managed children first so their part definitions
             # lose the last live instance and the scoped purge below can
-            # remove them (same order update_furniture uses).
+            # remove them (same order update_furniture uses). The root is
+            # erased from the model root — where place_existing_furniture
+            # inserted it.
             furniture.definition.entities.clear! if furniture.respond_to?(:definition)
-            model.active_entities.erase_entities([furniture])
+            # rubocop:disable-next SketchupSuggestions/ModelEntities
+            model.entities.erase_entities([furniture])
             purge_orphan_generated_definitions(model)
             model.commit_operation
             true

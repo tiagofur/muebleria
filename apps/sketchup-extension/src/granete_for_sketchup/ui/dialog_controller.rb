@@ -195,6 +195,12 @@ module Granete
         def register_project_furniture_callbacks(dialog)
           dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
           dialog.add_action_callback('place_furniture_instance') { |_c, p| handle_place_furniture_instance(dialog, p) }
+          dialog.add_action_callback('confirm_placement_instance') do |_c, p|
+            handle_confirm_placement_instance(dialog, p)
+          end
+          dialog.add_action_callback('cancel_placement_instance') do |_c, p|
+            handle_cancel_placement_instance(dialog, p)
+          end
           dialog.add_action_callback('select_project_furniture') { |_c, p| handle_select_project_furniture(p) }
         end
 
@@ -219,6 +225,28 @@ module Granete
         rescue StandardError => e
           @logger.error('project_furniture_place_failed', error: e)
           execute_bridge(dialog, 'onPlaceFurnitureResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        def handle_confirm_placement_instance(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = project_furniture_placer.confirm_placement(payload['furnitureInstanceId'].to_s)
+          execute_bridge(dialog, 'onConfirmPlacementResult', result)
+          handle_get_project_furniture(dialog) if result['ok']
+        rescue StandardError => e
+          @logger.error('project_furniture_confirm_failed', error: e)
+          execute_bridge(dialog, 'onConfirmPlacementResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        def handle_cancel_placement_instance(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = project_furniture_placer.cancel_placement(payload['furnitureInstanceId'].to_s)
+          execute_bridge(dialog, 'onCancelPlacementResult', result)
+          handle_get_project_furniture(dialog) if result['ok']
+        rescue StandardError => e
+          @logger.error('project_furniture_cancel_failed', error: e)
+          execute_bridge(dialog, 'onCancelPlacementResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
         # Focus an already-placed unit: pure viewport selection state.

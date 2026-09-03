@@ -16,7 +16,8 @@ module Granete
       #   * resolution stays server-authoritative (display summary + layout);
       #   * the working copy update is a merge (GET → merge by
       #     furnitureInstanceId → PUT complete state) so other working items
-      #     survive, and a backend failure rolls back the local insertion —
+      #     survive; the sync happens only with the user's FINAL chosen
+      #     transform, and a backend failure rolls the local insertion back —
       #     no partial success is ever reported.
       module ProjectFurniture
         UUID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/
@@ -108,13 +109,21 @@ module Granete
           end
         end
 
-        # Orchestrates Place EXISTING FurnitureInstance (#389 §8/§14/§18):
+        # Orchestrates Place EXISTING FurnitureInstance (#389 §8/§14/§18) in
+        # two user-visible steps so the working copy only ever receives the
+        # FINAL chosen transform:
         #
-        #   binding → revalidate (#388) → server instance list → local
-        #   duplicate guard → server-authoritative resolve → one undoable
-        #   native placement stamped with furnitureInstanceId → merge-PUT the
-        #   working copy → on backend failure, roll the local insertion back
-        #   and fail loud.
+        #   place    → validate binding → resolve unit server-side → one
+        #              undoable TOP-LEVEL native placement stamped with the
+        #              backend furnitureInstanceId → user positions it
+        #              (Move tool) → honest `pending_position` (no success)
+        #   confirm  → read the root's CURRENT host transform → canonical
+        #              Transform3D → merge-PUT the working copy → success
+        #   cancel   → revert the not-yet-confirmed local insertion
+        #
+        # A backend PUT failure at confirm rolls the local placement back and
+        # fails loud; drifted_base/archived/auth states fail BEFORE anything is
+        # placed or synced.
         class Placer
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,
@@ -129,6 +138,11 @@ module Granete
             @logger = logger
           end
 
+          # Step 1 — authoritative context + unit scope + insertion. Does NOT
+          # touch the working copy: the unit lands at the origin and is handed
+          # to the Move tool; confirm_placement completes the sync with the
+          # final transform. `pending_position` is an honest intermediate —
+          # never success.
           def place(furniture_instance_id)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
@@ -137,10 +151,11 @@ module Granete
             return context unless context['ok']
 
             unit = resolve_unit(context['binding'], furniture_instance_id)
-            # Failures AND already_placed (focus existing) short-circuit here.
+            # Failures, already_placed (focus) and pending_confirmation
+            # (resume the confirm step) short-circuit here.
             return unit unless unit['unit']
 
-            place_and_sync(model, context['binding'], unit['unit'])
+            insert_furniture_unit(model, context['binding'], unit['unit'])
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -148,14 +163,99 @@ module Granete
           rescue Contract::ContractError => e
             failure(:bad_contract, e.message)
           rescue StandardError => e
-            warn e.backtrace.first(6).join("\n") if ENV['PF_DEBUG']
             @logger.error('project_furniture_place_failed', error: e)
             failure(:place_failed, e.message)
           end
 
-          # Phase 1 — model + binding + authoritative revalidation. Fails
-          # loud (unbound / drifted-base / archived / auth) BEFORE anything
-          # is placed (#389 §15).
+          # Step 2 — completes a pending placement with the position and
+          # orientation the user FINALIZED in the host. Reads the root's
+          # current transformation, converts it to the canonical Transform3D
+          # and merge-PUTs the working copy: existing authoritative authoring
+          # state is preserved, only transform and the technical locator are
+          # placement-owned. A backend PUT failure rolls the local placement
+          # back and fails loud — no false success (#389 §18).
+          def confirm_placement(furniture_instance_id)
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            context = placement_context(model)
+            return context unless context['ok']
+
+            located = locate_unit(model, furniture_instance_id)
+            return failure(:duplicate_detected, DUPLICATE_MESSAGE) if located['duplicates'] > 1
+            return failure(:not_placed, 'el mueble no está en el modelo; colocálo primero') unless located['entity']
+
+            entity = located['entity']
+            intent = placement_intent(entity, furniture_instance_id)
+            return failure(:intent_mismatch, 'la identidad del mueble no coincide; colocálo de nuevo') unless intent
+
+            sync_placement(model, context['binding'], furniture_instance_id, entity)
+          rescue Service::Error => e
+            failure(:service_error, e.message)
+          rescue Contract::ContractError => e
+            failure(:bad_contract, e.message)
+          rescue StandardError => e
+            @logger.error('project_furniture_confirm_failed', error: e)
+            failure(:confirm_failed, e.message)
+          end
+
+          # Explicit cancel: reverts the not-yet-confirmed local insertion
+          # (erase + scoped purge) without ever touching the working copy.
+          # No successful state, no false success.
+          def cancel_placement(furniture_instance_id)
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            located = locate_unit(model, furniture_instance_id)
+            return failure(:duplicate_detected, DUPLICATE_MESSAGE) if located['duplicates'] > 1
+
+            if located['entity']
+              builder = @furniture_builder_factory.call(model)
+              rolled = builder.rollback_placement(model, located['entity'])
+              return failure(:cancel_failed, 'no se pudo revertir la colocación local') unless rolled
+
+              @logger.info('project_furniture_placement_cancelled', furniture_instance_id: furniture_instance_id)
+            end
+            { 'ok' => true, 'code' => 'cancelled', 'instanceId' => furniture_instance_id }
+          rescue StandardError => e
+            @logger.error('project_furniture_cancel_failed', error: e)
+            failure(:cancel_failed, e.message)
+          end
+
+          # Panel payload for the dialog: binding-aware rows with
+          # pending/placed derived from the working copy. A pending unit with
+          # a local root is awaiting position confirmation — surfaced
+          # explicitly, never as success.
+          def panel
+            model = @model_provider.call
+            return { 'state' => 'no_model' } unless model
+
+            binding = @binding_store_factory.call.read
+            return { 'state' => 'unbound' } unless binding
+
+            instances = @service.list_project_furniture(binding.project_id)
+            working = @service.get_working_copy(binding.design_id)
+            state = PanelState.build(instances, working,
+                                     definition_names: PanelState.definition_names(@catalog_provider))
+            PanelState.mark_pending_confirmation(state['items']) do |id|
+              locate_unit(model, id)
+            end
+            { 'state' => 'connected', 'items' => state['items'],
+              'pending' => state['pending'], 'placed' => state['placed'] }
+          rescue Service::Error => e
+            { 'state' => PanelState.error_state(e), 'reason' => e.message }
+          rescue Contract::ContractError => e
+            { 'state' => 'bad_contract', 'reason' => e.message }
+          rescue StandardError => e
+            @logger.error('project_furniture_panel_failed', error: e)
+            { 'state' => 'error', 'reason' => e.message }
+          end
+
+          private
+
+          # Phase 1 — binding + authoritative revalidation. Fails loud
+          # (unbound / drifted-base / archived / auth) BEFORE anything is
+          # placed or synced (#389 §15).
           def placement_context(_model)
             binding = @binding_store_factory.call.read
             return failure(:unbound, 'conectá este modelo a un proyecto y diseño primero') unless binding
@@ -166,110 +266,9 @@ module Granete
             { 'ok' => true, 'binding' => binding }
           end
 
-          # Phase 2 — resolve the exact unit from the AUTHORITATIVE project
-          # list plus the local duplicate/already-placed guards. A foreign
-          # project/org unit is simply absent from the list (#389 proofs E/F).
-          def resolve_unit(binding, furniture_instance_id)
-            instances = @service.list_project_furniture(binding.project_id)
-            instance = instances.find { |candidate| candidate.id == furniture_instance_id }
-            return failure(:not_found, 'el mueble no pertenece al proyecto conectado') unless instance
-            return failure(:terminal, 'el mueble fue eliminado del proyecto') if instance.lifecycle_status != 'active'
-
-            metadata_store = @metadata_store_factory.call(@model_provider.call)
-            located = ManagedFurniture.locate(@model_provider.call, metadata_store, furniture_instance_id)
-            if located['duplicates'] > 1
-              # Two roots sharing one business ID is an invalid steady state
-              # (#391): never a third placement, never a new identity.
-              return failure(:duplicate_detected, DUPLICATE_MESSAGE)
-            end
-            if located['entity']
-              return { 'ok' => true, 'code' => 'already_placed',
-                       'instanceId' => furniture_instance_id }
-            end
-
-            { 'ok' => true, 'unit' => instance }
-          end
-
-          # Phase 3 — server-authoritative resolve, one undoable native
-          # placement, then merge-PUT the working copy; a backend failure
-          # rolls the local insertion back and fails loud (#389 §18).
-          def place_and_sync(model, binding, instance)
-            definition = @catalog_provider.find_definition(instance.furniture_definition_id)
-            unless definition
-              return failure(:definition_unavailable,
-                             'el catálogo del taller no incluye la definición de este mueble')
-            end
-
-            parameters = placement_parameters(instance, definition)
-            layout = resolve_layout(definition, parameters)
-
-            builder = @furniture_builder_factory.call(model)
-            result = builder.place_existing_furniture(
-              model, furniture_instance_id: instance.id, definition: definition,
-                     parameters: parameters, resolved_layout: layout,
-                     project_id: binding.project_id, design_id: binding.design_id
-            )
-            return failure(:placement_failed, result['error']) unless result['success']
-
-            sync_result = sync_working_copy(model, builder, binding, instance, definition,
-                                            parameters, result)
-            return sync_result unless sync_result['ok']
-
-            @logger.info('project_furniture_placed',
-                         furniture_instance_id: instance.id,
-                         project_id: binding.project_id, design_id: binding.design_id,
-                         components: result['component_count'])
-            { 'ok' => true, 'code' => 'placed', 'instanceId' => instance.id,
-              'components' => result['component_count'] }
-          end
-
-          # GET → merge by furnitureInstanceId → PUT complete state; other
-          # working items survive untouched (#389 §14).
-          def sync_working_copy(model, builder, binding, instance, definition, parameters, result)
-            working = @service.get_working_copy(binding.design_id)
-            merged = merge_working_items(working, instance, definition, parameters,
-                                         TransformContract.from_host(result['entity'].transformation),
-                                         result['entity'])
-            begin
-              @service.update_working_copy(binding.design_id, items: merged,
-                                                              base_revision_id: binding.base_revision_id)
-            rescue Service::Error => e
-              rollback_local(model, builder, result['entity'], instance.id)
-              @logger.error('project_furniture_sync_failed', error: e, furniture_instance_id: instance.id)
-              return failure(:sync_failed,
-                             "el diseño no se pudo actualizar (#{e.message}); se revirtió la colocación local")
-            end
-            { 'ok' => true }
-          end
-
-          # Panel payload for the dialog: binding-aware rows with
-          # pending/placed derived from the working copy.
-          def panel
-            model = @model_provider.call
-            return { 'state' => 'no_model' } unless model
-
-            binding = @binding_store_factory.call.read
-            return { 'state' => 'unbound' } unless binding
-
-            instances = @service.list_project_furniture(binding.project_id)
-            working = @service.get_working_copy(binding.design_id)
-            state = PanelState.build(instances, working, definition_names: definition_names)
-            { 'state' => 'connected', 'items' => state['items'],
-              'pending' => state['pending'], 'placed' => state['placed'] }
-          rescue Service::Error => e
-            { 'state' => panel_error_state(e), 'reason' => e.message }
-          rescue Contract::ContractError => e
-            { 'state' => 'bad_contract', 'reason' => e.message }
-          rescue StandardError => e
-            @logger.error('project_furniture_panel_failed', error: e)
-            { 'state' => 'error', 'reason' => e.message }
-          end
-
-          private
-
           # Fail-loud base guard (#389 §15): placement never proceeds on a
-          # drifted-base/archived/foreign binding even if the list endpoints would
-          # still answer. Uses the #388 state machine verbatim.
+          # drifted-base/archived/foreign binding even if the list endpoints
+          # would still answer. Uses the #388 state machine verbatim.
           def validate_binding_current(binding)
             validation = @model_binding_service.validate(project_id: binding.project_id,
                                                          design_id: binding.design_id,
@@ -283,18 +282,85 @@ module Granete
             failure(ModelBinding::State.derive(stored: binding, error: e), e.message)
           end
 
-          def placement_parameters(instance, definition)
-            parameters = {}
-            (definition['parameters'] || []).each do |parameter|
-              parameters[parameter['name']] = parameter['defaultValue'] if parameter.key?('defaultValue')
+          # Phase 2 — resolve the exact unit from the AUTHORITATIVE project
+          # list plus the local duplicate/already-placed guards. A foreign
+          # project/org unit is simply absent from the list (#389 proofs E/F).
+          # A local root that is NOT yet in the working copy is a placement
+          # awaiting position confirmation — resume it instead of duplicating.
+          def resolve_unit(binding, furniture_instance_id)
+            instances = @service.list_project_furniture(binding.project_id)
+            instance = instances.find { |candidate| candidate.id == furniture_instance_id }
+            return failure(:not_found, 'el mueble no pertenece al proyecto conectado') unless instance
+            return failure(:terminal, 'el mueble fue eliminado del proyecto') if instance.lifecycle_status != 'active'
+
+            model = @model_provider.call
+            located = locate_unit(model, furniture_instance_id)
+            if located['duplicates'] > 1
+              # Two roots sharing one business ID is an invalid steady state
+              # (#391): never a third placement, never a new identity.
+              return failure(:duplicate_detected, DUPLICATE_MESSAGE)
             end
-            dims = instance.display_dimensions
-            if dims
-              parameters['widthMm'] = dims[0] if dims[0]
-              parameters['heightMm'] = dims[1] if dims[1]
-              parameters['depthMm'] = dims[2] if dims[2]
+
+            if located['entity']
+              working = @service.get_working_copy(binding.design_id)
+              confirmed = working.items.any? { |item| item.furniture_instance_id == furniture_instance_id }
+              return { 'ok' => true,
+                       'code' => confirmed ? 'already_placed' : 'pending_confirmation',
+                       'instanceId' => furniture_instance_id }
             end
-            parameters
+
+            { 'ok' => true, 'unit' => instance }
+          end
+
+          # Phase 3 — server-authoritative resolve + one undoable TOP-LEVEL
+          # native placement. No working-copy write: the user still has to
+          # finalize the position (Move tool) and confirm.
+          def insert_furniture_unit(model, binding, instance)
+            definition = @catalog_provider.find_definition(instance.furniture_definition_id)
+            unless definition
+              return failure(:definition_unavailable,
+                             'el catálogo del taller no incluye la definición de este mueble')
+            end
+
+            parameters = WorkingCopyMerger.placement_parameters(instance, definition)
+            layout = resolve_layout(definition, parameters)
+
+            result = @furniture_builder_factory.call(model).place_existing_furniture(
+              model, furniture_instance_id: instance.id, definition: definition,
+                     parameters: parameters, resolved_layout: layout,
+                     project_id: binding.project_id, design_id: binding.design_id
+            )
+            return failure(:placement_failed, result['error']) unless result['success']
+
+            @logger.info('project_furniture_inserted',
+                         furniture_instance_id: instance.id, components: result['component_count'])
+            { 'ok' => true, 'code' => 'pending_position', 'instanceId' => instance.id,
+              'components' => result['component_count'] }
+          end
+
+          # Phase 4 — sync with the FINAL transform: GET → merge by
+          # furnitureInstanceId → PUT complete state (#389 §14). Existing
+          # items keep every field SketchUp does not own; a PUT failure rolls
+          # the local placement back (#389 §18).
+          def sync_placement(model, binding, furniture_instance_id, entity)
+            working = @service.get_working_copy(binding.design_id)
+            intent = placement_intent(entity, furniture_instance_id) || {}
+            locator = persistent_locator(entity)
+            merged = WorkingCopyMerger.merge(working, furniture_instance_id, entity,
+                                             intent: intent, locator: locator)
+            @service.update_working_copy(binding.design_id, items: merged,
+                                                            base_revision_id: binding.base_revision_id)
+            @logger.info('project_furniture_placed',
+                         furniture_instance_id: furniture_instance_id,
+                         project_id: binding.project_id, design_id: binding.design_id)
+            { 'ok' => true, 'code' => 'placed', 'instanceId' => furniture_instance_id }
+          rescue Service::Error => e
+            builder = @furniture_builder_factory.call(model)
+            rollback_local(model, builder, entity, furniture_instance_id)
+            @logger.error('project_furniture_sync_failed', error: e,
+                                                           furniture_instance_id: furniture_instance_id)
+            failure(:sync_failed,
+                    "el diseño no se pudo actualizar (#{e.message}); se revirtió la colocación local")
           end
 
           # Resolution is server-authoritative (#389 §9): a server that
@@ -311,54 +377,36 @@ module Granete
                   "Granete no pudo resolver la composición de este mueble (#{e.message})"
           end
 
-          # Merge rule (#389 §14): PUT carries the COMPLETE desired state —
-          # every existing working item survives untouched; an item for this
-          # unit is added (or refreshed with the placement transform when a
-          # row already existed). Parameters/materials of existing items are
-          # server state and are never overwritten by a local render.
-          def merge_working_items(working, instance, definition, parameters, transform, entity)
-            items = working.items.reject { |item| item.furniture_instance_id == instance.id }
-            items << Contract::WorkingItem.new(
-              furniture_instance_id: instance.id,
-              furniture_definition_id: instance.furniture_definition_id,
-              definition_version: definition['definition_version'],
-              parameters: parameters, material_choices: {},
-              transform: transform, technical_client_locator: persistent_locator(entity)
-            )
-            items
+          # Reads the placed entity's semantic metadata and verifies the
+          # business identity matches the unit being confirmed — a corrupt or
+          # mismatched root must never be synced. Returns nil on mismatch.
+          def placement_intent(entity, furniture_instance_id)
+            metadata = @metadata_store_factory.call(@model_provider.call).read(entity)
+            identity = metadata.is_a?(Hash) ? metadata['identity'] : nil
+            if identity&.dig('furnitureInstanceId') != furniture_instance_id
+              @logger.error('project_furniture_intent_mismatch',
+                            furniture_instance_id: furniture_instance_id,
+                            stored: identity&.dig('furnitureInstanceId'))
+              return nil
+            end
+
+            metadata['intent'].is_a?(Hash) ? metadata['intent'] : {}
+          end
+
+          def locate_unit(model, furniture_instance_id)
+            ManagedFurniture.locate(model, @metadata_store_factory.call(model), furniture_instance_id)
           end
 
           def persistent_locator(entity)
-            value = entity.respond_to?(:persistent_id) ? entity.persistent_id : nil
-            return nil unless value
+            return nil unless entity.respond_to?(:persistent_id) && entity.persistent_id
 
-            { 'kind' => 'sketchup_persistent_id', 'value' => value.to_s }
+            { 'kind' => 'sketchup_persistent_id', 'value' => entity.persistent_id.to_s }
           end
 
           def rollback_local(model, builder, entity, furniture_instance_id)
-            rolled = builder.rollback_placement(model, entity)
-            return if rolled
+            return if builder.rollback_placement(model, entity)
 
             @logger.error('project_furniture_rollback_failed', furniture_instance_id: furniture_instance_id)
-          end
-
-          def definition_names
-            names = {}
-            if @catalog_provider.respond_to?(:all_definitions)
-              (@catalog_provider.all_definitions || []).each do |definition|
-                names[definition['furniture_definition_id']] = definition['name']
-              end
-            end
-            names
-          end
-
-          def panel_error_state(error)
-            case error.kind
-            when :unauthenticated then 'unauthenticated'
-            when :unauthorized then 'unauthorized'
-            when :unreachable then 'unreachable'
-            else 'error'
-            end
           end
 
           def failure(code, reason)
