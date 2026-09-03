@@ -312,6 +312,16 @@ func RegisterRoutes(server *Server) http.Handler {
 		"remove": http.HandlerFunc(server.HandleFurnitureInstanceRemove),
 	}))))
 
+	// QuoteLine ↔ FurnitureInstance (#386 / DT-2, ADR-0003): the explicit
+	// relation answering which physical units a quote line represents, plus
+	// the idempotent :materialize command converging those units to the
+	// commercial quantity. Accepted/produced quotes reject materialization
+	// changes with a typed conflict — later changes need a new revision.
+	mux.Handle("GET /api/projects/{projectId}/quote-lines/{quoteLineId}/furniture-instances", authMW(http.HandlerFunc(server.HandleQuoteLineFurnitureInstances)))
+	mux.Handle("POST /api/projects/{projectId}/quote-lines/{quoteLineCommand...}", authMW(server.RequireIdempotency("project.materialize-quote-line-furniture", quoteLineCommandRouter(map[string]http.Handler{
+		"materialize": http.HandlerFunc(server.HandleQuoteLineMaterialize),
+	}))))
+
 	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorScan))))
 	mux.Handle("GET /api/projects/{id}/loading-status", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectLoadingStatus))))
