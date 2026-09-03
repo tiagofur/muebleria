@@ -37,7 +37,8 @@ class DuplicateResolverTest < Minitest::Test
   end
 
   class FakeService
-    attr_accessor :duplicate_calls, :duplicate_idempotency_keys, :working_copy, :duplicate_error
+    attr_accessor :duplicate_calls, :duplicate_idempotency_keys, :working_copy,
+                  :duplicate_error, :update_working_copy_error
 
     def initialize(working_copy: nil)
       @duplicate_calls = []
@@ -48,11 +49,16 @@ class DuplicateResolverTest < Minitest::Test
         items: []
       )
       @duplicate_error = nil
+      @update_working_copy_error = nil
       @instances_by_id = {}
     end
 
     def register_instance(instance)
       @instances_by_id[instance.id] = instance
+    end
+
+    def list_project_furniture(project_id)
+      @instances_by_id.values.select { |i| i.project_id == project_id }
     end
 
     def duplicate_furniture_instance(project_id, instance_id, idempotency_key: nil)
@@ -82,6 +88,8 @@ class DuplicateResolverTest < Minitest::Test
     end
 
     def update_working_copy(design_id, items:, base_revision_id:)
+      raise @update_working_copy_error if @update_working_copy_error
+
       @working_copy = PF::Contract::WorkingCopy.new(
         design_id: design_id,
         base_revision_id: base_revision_id,
@@ -118,6 +126,24 @@ class DuplicateResolverTest < Minitest::Test
 
     @metadata_store = MS.new(@model)
     @service = FakeService.new
+    @service.register_instance(
+      PF::Contract::Instance.new(
+        id: FI_1,
+        project_id: PROJECT_ID,
+        furniture_definition_id: DEFINITION_ID,
+        origin: 'design',
+        lifecycle_status: 'active'
+      )
+    )
+    @service.register_instance(
+      PF::Contract::Instance.new(
+        id: FI_2,
+        project_id: PROJECT_ID,
+        furniture_definition_id: DEFINITION_ID,
+        origin: 'design',
+        lifecycle_status: 'active'
+      )
+    )
 
     @resolver = DR.new(
       model_provider: -> { @model },
@@ -387,5 +413,105 @@ class DuplicateResolverTest < Minitest::Test
     copy_meta = @metadata_store.read(copy)
     assert_equal FI_2, copy_meta['identity']['furnitureInstanceId']
     assert_equal 'duplicate', copy_meta['identity']['origin']
+  end
+
+  # Proof 12: Syntactically valid but unknown backend UUID rejected in precheck (#391 / DT-7)
+  def test_validate_model_rejects_syntactically_valid_but_unknown_backend_uuid
+    unknown_uuid = '51000000-aaaa-bbbb-cccc-999999999999'
+    create_managed_instance(furniture_instance_id: unknown_uuid)
+
+    precheck = @resolver.validate_model(@model)
+    refute precheck['valid'], 'precheck must reject unknown backend furniture identity'
+    assert_equal 'unknown_furniture_identity', precheck['code']
+    assert precheck['unknown_ids'].include?(unknown_uuid)
+  end
+
+  # Proof 13: WorkingCopy sync failure leaves FI allocated and unsynced, retry preserves ID
+  def test_working_copy_sync_failure_leaves_fi_allocated_and_unsynced_and_retry_preserves_id
+    _original = create_managed_instance(furniture_instance_id: FI_1)
+    copy = create_managed_instance(furniture_instance_id: FI_1)
+
+    # 1. Backend duplicate succeeds (allocating FI_2), but WorkingCopy PUT fails
+    @service.update_working_copy_error = StandardError.new('WorkingCopy PUT failed: 503 Unavailable')
+
+    result = @resolver.resolve_observed_addition(@model, copy)
+    refute result['ok']
+    assert_equal 'working_copy_unsynced', result['code']
+
+    # Copy has server-authoritative FI_2 (NOT deleted, NOT recycled, NOT reverted to FI_1)
+    copy_meta = @metadata_store.read(copy)
+    assert_equal FI_2, copy_meta['identity']['furnitureInstanceId']
+    assert_equal 'duplicate', copy_meta['identity']['origin']
+    assert_equal FI_1, copy_meta['identity']['originFurnitureInstanceId']
+    assert_equal 'working_copy_unsynced', copy_meta['identity']['duplicateStatus']
+
+    # Publish precheck is BLOCKED
+    precheck = @resolver.validate_model(@model)
+    refute precheck['valid'], 'publish precheck must block working_copy_unsynced state'
+    assert_equal 'working_copy_unsynced', precheck['code']
+
+    # 2. Retry: WorkingCopy PUT recovers. Must NOT call duplicate endpoint again to mint FI_3!
+    @service.update_working_copy_error = nil
+    assert_equal 1, @service.duplicate_calls.length
+
+    retry_result = @resolver.rescan_and_resolve(@model)
+    assert retry_result['ok']
+    assert_equal 1, retry_result['resolved']
+
+    # NO second duplicate backend call:
+    assert_equal 1, @service.duplicate_calls.length, 'must NOT mint a third FI on retry'
+
+    # Unsynced marker cleared, business ID stays FI_2
+    copy_meta = @metadata_store.read(copy)
+    assert_equal FI_2, copy_meta['identity']['furnitureInstanceId']
+    assert_nil copy_meta['identity']['duplicateStatus']
+
+    # WorkingCopy contains FI_2
+    wc_items = @service.working_copy.items
+    assert(wc_items.any? { |i| i.furniture_instance_id == FI_2 })
+
+    # Model now passes precheck
+    assert @resolver.validate_model(@model)['valid']
+  end
+
+  # Proof 14: Duplicate WorkingCopy item preserves complete authoring snapshot
+  def test_duplicate_working_copy_item_preserves_complete_authoring_snapshot
+    original = create_managed_instance(furniture_instance_id: FI_1)
+
+    # Seed source WorkingCopy item with complete authoring state
+    source_params = { 'width' => 900, 'depth' => 600, 'drawers' => 4 }
+    source_materials = { 'front' => 'natural-oak', 'carcass' => 'graphite' }
+    orig_item = PF::Contract::WorkingItem.new(
+      furniture_instance_id: FI_1,
+      furniture_definition_id: 'def-kitchen-island',
+      definition_version: 7,
+      room_id: 'room-main-kitchen',
+      parameters: source_params,
+      material_choices: source_materials,
+      transform: { 'translation_mm' => [100.0, 200.0, 0.0], 'rotation_deg' => [0.0, 0.0, 0.0] },
+      technical_client_locator: PF::ManagedFurniture.persistent_locator(original)
+    )
+    @service.working_copy.items << orig_item
+
+    copy = create_managed_instance(furniture_instance_id: FI_1)
+    copy.transformation = Geom::Transformation.new
+
+    result = @resolver.rescan_and_resolve(@model)
+    assert result['ok']
+
+    # Inspect the duplicate working copy item
+    copy_item = @service.working_copy.items.find { |i| i.furniture_instance_id == FI_2 }
+    assert copy_item, 'copy item must exist in working copy'
+
+    # Preserves authoring snapshot from source
+    assert_equal 'def-kitchen-island', copy_item.furniture_definition_id
+    assert_equal 7, copy_item.definition_version
+    assert_equal 'room-main-kitchen', copy_item.room_id
+    assert_equal source_params, copy_item.parameters
+    assert_equal source_materials, copy_item.material_choices
+
+    # Identity differs
+    assert_equal FI_2, copy_item.furniture_instance_id
+    refute_equal orig_item.technical_client_locator, copy_item.technical_client_locator
   end
 end
