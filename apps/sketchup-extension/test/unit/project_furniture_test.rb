@@ -447,6 +447,55 @@ class ProjectFurnitureTest < Minitest::Test
     refute_equal 'old-locator', item['technical_client_locator']['value']
   end
 
+  def test_confirm_stamps_definition_version_for_new_working_copy_item
+    # Gap 1 proof: FurnitureDefinition version = 7 -> Place existing FI -> Confirm
+    # WorkingCopy item has furniture_definition_id = expected and definition_version = 7.
+    @catalog.definitions.first['definition_version'] = 7
+    stub_working_copy(working_copy_body([]))
+
+    assert @placer.place(FI_1)['ok']
+    result = @placer.confirm_placement(FI_1)
+    assert result['ok'], result.inspect
+
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    items = put['body']['items']
+    assert_equal 1, items.length
+    item = items.first
+    assert_equal DEFINITION_ID, item['furniture_definition_id']
+    assert_equal 7, item['definition_version']
+  end
+
+  def test_confirm_revalidates_terminal_instance_and_rolls_back_without_write
+    # Gap 2 negative proof: unit becomes terminal before confirm -> FAIL LOUD,
+    # roll back local placement, NO WorkingCopy write.
+    assert @placer.place(FI_1)['ok']
+    assert_equal 1, top_level_furniture(@model).length
+
+    # Simulate FI-001 cancelled / deleted on the server before confirm.
+    stub_project_furniture([instance_body(FI_1, 'quote', lifecycle: 'cancelled')])
+
+    result = @placer.confirm_placement(FI_1)
+    refute result['ok']
+    assert_equal 'terminal', result['code']
+    assert_empty top_level_furniture(@model), 'unconfirmed local placement must be rolled back'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_confirm_revalidates_missing_instance_and_rolls_back_without_write
+    # Gap 2 negative proof: unit removed from project entirely before confirm.
+    assert @placer.place(FI_1)['ok']
+    assert_equal 1, top_level_furniture(@model).length
+
+    # Simulate FI-001 removed from server project instances before confirm.
+    stub_project_furniture([])
+
+    result = @placer.confirm_placement(FI_1)
+    refute result['ok']
+    assert_equal 'not_found', result['code']
+    assert_empty top_level_furniture(@model), 'unconfirmed local placement must be rolled back'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
   def test_confirm_without_local_root_fails_without_write
     result = @placer.confirm_placement(FI_1)
 

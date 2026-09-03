@@ -189,6 +189,13 @@ module Granete
             intent = placement_intent(entity, furniture_instance_id)
             return failure(:intent_mismatch, 'la identidad del mueble no coincide; colocálo de nuevo') unless intent
 
+            guard = validate_instance_active(context['binding'], furniture_instance_id)
+            unless guard['ok']
+              builder = @furniture_builder_factory.call(model)
+              rollback_local(model, builder, entity, furniture_instance_id)
+              return guard
+            end
+
             sync_placement(model, context['binding'], furniture_instance_id, entity)
           rescue Service::Error => e
             failure(:service_error, e.message)
@@ -260,10 +267,7 @@ module Granete
             binding = @binding_store_factory.call.read
             return failure(:unbound, 'conectá este modelo a un proyecto y diseño primero') unless binding
 
-            guard = validate_binding_current(binding)
-            return guard if guard
-
-            { 'ok' => true, 'binding' => binding }
+            validate_binding_current(binding) || { 'ok' => true, 'binding' => binding }
           end
 
           # Fail-loud base guard (#389 §15): placement never proceeds on a
@@ -282,24 +286,26 @@ module Granete
             failure(ModelBinding::State.derive(stored: binding, error: e), e.message)
           end
 
+          def validate_instance_active(binding, furniture_instance_id)
+            instance = @service.list_project_furniture(binding.project_id).find { |c| c.id == furniture_instance_id }
+            return failure(:not_found, 'el mueble no pertenece al proyecto conectado') unless instance
+            return failure(:terminal, 'el mueble fue eliminado del proyecto') if instance.lifecycle_status != 'active'
+
+            { 'ok' => true, 'unit' => instance }
+          end
+
           # Phase 2 — resolve the exact unit from the AUTHORITATIVE project
           # list plus the local duplicate/already-placed guards. A foreign
           # project/org unit is simply absent from the list (#389 proofs E/F).
           # A local root that is NOT yet in the working copy is a placement
           # awaiting position confirmation — resume it instead of duplicating.
           def resolve_unit(binding, furniture_instance_id)
-            instances = @service.list_project_furniture(binding.project_id)
-            instance = instances.find { |candidate| candidate.id == furniture_instance_id }
-            return failure(:not_found, 'el mueble no pertenece al proyecto conectado') unless instance
-            return failure(:terminal, 'el mueble fue eliminado del proyecto') if instance.lifecycle_status != 'active'
+            guard = validate_instance_active(binding, furniture_instance_id)
+            return guard unless guard['ok']
 
             model = @model_provider.call
             located = locate_unit(model, furniture_instance_id)
-            if located['duplicates'] > 1
-              # Two roots sharing one business ID is an invalid steady state
-              # (#391): never a third placement, never a new identity.
-              return failure(:duplicate_detected, DUPLICATE_MESSAGE)
-            end
+            return failure(:duplicate_detected, DUPLICATE_MESSAGE) if located['duplicates'] > 1
 
             if located['entity']
               working = @service.get_working_copy(binding.design_id)
@@ -309,7 +315,7 @@ module Granete
                        'instanceId' => furniture_instance_id }
             end
 
-            { 'ok' => true, 'unit' => instance }
+            { 'ok' => true, 'unit' => guard['unit'] }
           end
 
           # Phase 3 — server-authoritative resolve + one undoable TOP-LEVEL
@@ -323,7 +329,7 @@ module Granete
             end
 
             parameters = WorkingCopyMerger.placement_parameters(instance, definition)
-            layout = resolve_layout(definition, parameters)
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, parameters)
 
             result = @furniture_builder_factory.call(model).place_existing_furniture(
               model, furniture_instance_id: instance.id, definition: definition,
@@ -361,20 +367,6 @@ module Granete
                                                            furniture_instance_id: furniture_instance_id)
             failure(:sync_failed,
                     "el diseño no se pudo actualizar (#{e.message}); se revirtió la colocación local")
-          end
-
-          # Resolution is server-authoritative (#389 §9): a server that
-          # rejects the composition fails the placement loudly — the unit is
-          # NOT placeable against a locally guessed geometry. nil (a local
-          # development catalog that cannot resolve layouts) keeps the
-          # builder's documented generic authoring renderer.
-          def resolve_layout(definition, parameters)
-            return nil unless @catalog_provider.respond_to?(:resolved_native_layout)
-
-            @catalog_provider.resolved_native_layout(definition['furniture_definition_id'], parameters, {})
-          rescue Library::LayoutResolutionError => e
-            raise PlacementResolutionError,
-                  "Granete no pudo resolver la composición de este mueble (#{e.message})"
           end
 
           # Reads the placed entity's semantic metadata and verifies the

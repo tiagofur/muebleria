@@ -189,9 +189,11 @@ module Granete
           def new_working_item(furniture_instance_id, entity, intent, locator)
             parameters = intent['parameters'].is_a?(Hash) ? intent['parameters'] : {}
             choices = intent['materialChoices'].is_a?(Hash) ? intent['materialChoices'] : {}
+            version = intent['definitionVersion'] || intent['definition_version']
             Contract::WorkingItem.new(
               furniture_instance_id: furniture_instance_id,
               furniture_definition_id: intent['furnitureDefinitionId'],
+              definition_version: version,
               parameters: parameters, material_choices: choices,
               transform: TransformContract.from_host(entity.transformation),
               technical_client_locator: locator
@@ -210,6 +212,15 @@ module Granete
               parameters['depthMm'] = dims[2] if dims[2]
             end
             parameters
+          end
+
+          def resolve_layout(catalog_provider, definition, parameters)
+            return nil unless catalog_provider.respond_to?(:resolved_native_layout)
+
+            catalog_provider.resolved_native_layout(definition['furniture_definition_id'], parameters, {})
+          rescue Library::LayoutResolutionError => e
+            raise PlacementResolutionError,
+                  "Granete no pudo resolver la composición de este mueble (#{e.message})"
           end
         end
       end

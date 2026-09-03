@@ -786,6 +786,8 @@ module Granete
           intent = payload['intent'].is_a?(Hash) ? payload['intent'] : {}
           intent['semanticRole'] ||= 'furniture-instance'
           intent['furnitureDefinitionId'] = definition['furniture_definition_id']
+          version = definition['definition_version'] || definition['definitionVersion'] || definition['version']
+          intent['definitionVersion'] = version unless version.nil?
           intent['parameters'] = parameters
           intent['materialChoices'] = material_choices if material_choices.is_a?(Hash) && !material_choices.empty?
           intent
