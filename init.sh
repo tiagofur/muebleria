@@ -182,6 +182,10 @@ SKETCHUP_EXTENSION_DIR="apps/sketchup-extension"
 if [ -f "$SKETCHUP_EXTENSION_DIR/Gemfile" ]; then
   if [ -x "/opt/homebrew/opt/ruby@3.2/bin/ruby" ]; then
     export PATH="/opt/homebrew/opt/ruby@3.2/bin:/opt/homebrew/lib/ruby/gems/3.2.0/bin:$PATH"
+  elif [ -x "$HOME/.rbenv/versions/3.2.11/bin/ruby" ]; then
+    export PATH="$HOME/.rbenv/versions/3.2.11/bin:$PATH"
+  elif [ -x "$HOME/.rubies/3.2.11/bin/ruby" ]; then
+    export PATH="$HOME/.rubies/3.2.11/bin:$PATH"
   fi
 
   RUBY_READY=false

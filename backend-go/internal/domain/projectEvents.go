@@ -123,8 +123,9 @@ type ProjectEvent struct {
 	CreatedAt time.Time          `json:"created_at"`
 }
 
-// DesignRevision represents a formal snapshot of design and BOM (OC-020).
-type DesignRevision struct {
+// LegacyDesignRevision represents a historical JSONB snapshot of design and BOM (OC-020).
+// Superseded by Digital Thread #387 DesignRevision.
+type LegacyDesignRevision struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"project_id"`
 	Revision       int             `json:"revision"`

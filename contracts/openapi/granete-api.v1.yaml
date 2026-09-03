@@ -2491,6 +2491,295 @@
           }
         }
       }
+    },
+    "/projects/{projectId}/designs": {
+      "get": {
+        "operationId": "listProjectDesigns",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Designs owned by the project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Design"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProjectDesign",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDesignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Design aggregate created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Design"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}": {
+      "get": {
+        "operationId": "getDesign",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Design aggregate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Design"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/working-copy": {
+      "get": {
+        "operationId": "getDesignWorkingCopy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mutable authoring working copy of the design",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignWorkingCopy"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateDesignWorkingCopy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDesignWorkingCopyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated working copy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignWorkingCopy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/working-copy:reset": {
+      "post": {
+        "operationId": "resetDesignWorkingCopy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetDesignWorkingCopyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Working copy reset to specified revision baseline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignWorkingCopy"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/revisions": {
+      "get": {
+        "operationId": "listDesignRevisions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable design revisions in ascending order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DesignRevision"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "publishDesignRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishDesignRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Design revision published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignRevision"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/revisions/{revisionId}": {
+      "get": {
+        "operationId": "getDesignRevision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Design revision snapshot with items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignRevision"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2569,6 +2858,24 @@
       },
       "QuoteLineId": {
         "name": "quoteLineId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "DesignId": {
+        "name": "designId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "RevisionId": {
+        "name": "revisionId",
         "in": "path",
         "required": true,
         "schema": {
@@ -5595,6 +5902,473 @@
               "type": "string",
               "format": "uuid"
             }
+          }
+        }
+      },
+      "DesignStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "archived"
+        ]
+      },
+      "Design": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_quote_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DesignStatus"
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateDesignRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_quote_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "DesignRevisionSourceType": {
+        "type": "string",
+        "enum": [
+          "sketchup",
+          "proyectar",
+          "import",
+          "system",
+          "manual"
+        ]
+      },
+      "DesignRevisionStatus": {
+        "type": "string",
+        "enum": [
+          "published"
+        ]
+      },
+      "Transform3D": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "translation_mm",
+          "rotation_deg"
+        ],
+        "properties": {
+          "translation_mm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "rotation_deg": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "TechnicalClientLocator": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "value"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "DesignRevisionItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "design_revision_id",
+          "furniture_instance_id",
+          "parameters",
+          "material_choices",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_revision_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "definition_version": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "material_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform3D"
+          },
+          "room_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "technical_client_locator": {
+            "$ref": "#/components/schemas/TechnicalClientLocator"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DesignRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "design_id",
+          "revision_number",
+          "source_type",
+          "status",
+          "created_at",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "parent_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/DesignRevisionSourceType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DesignRevisionStatus"
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignRevisionItem"
+            }
+          }
+        }
+      },
+      "PublishDesignRevisionItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furniture_instance_id"
+        ],
+        "properties": {
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "definition_version": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "material_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform3D"
+          },
+          "room_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "technical_client_locator": {
+            "$ref": "#/components/schemas/TechnicalClientLocator"
+          }
+        }
+      },
+      "DesignWorkingCopyItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "design_id",
+          "furniture_instance_id",
+          "parameters",
+          "material_choices",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "definition_version": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "material_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "transform": {
+            "$ref": "#/components/schemas/Transform3D"
+          },
+          "room_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "technical_client_locator": {
+            "$ref": "#/components/schemas/TechnicalClientLocator"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DesignWorkingCopy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "design_id",
+          "project_id",
+          "source_type",
+          "items",
+          "updated_at"
+        ],
+        "properties": {
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/DesignRevisionSourceType"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignWorkingCopyItem"
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_by": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateDesignWorkingCopyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/DesignRevisionSourceType"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublishDesignRevisionItem"
+            }
+          }
+        }
+      },
+      "ResetDesignWorkingCopyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision_id"
+        ],
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "PublishDesignRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_type"
+        ],
+        "properties": {
+          "source_type": {
+            "$ref": "#/components/schemas/DesignRevisionSourceType"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       }

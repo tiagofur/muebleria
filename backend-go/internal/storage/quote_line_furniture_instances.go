@@ -115,20 +115,31 @@ func (s *PostgresStore) quoteLineCommercialState(ctx context.Context, projectID,
 
 // quoteLineInstanceDurableHistory reports why a linked instance may NOT be
 // retired by a quantity decrease (digital-thread §6: identity with durable
-// history survives; it is never recycled). Today the enforceable blockers are:
+// history survives; it is never recycled). Enforceable blockers:
 //
 //   - commercial acceptance itself (rejected before this hook runs);
 //   - an instance this quote flow did not create (origin != 'quote'), e.g. a
-//     design-created unit linked by a future re-quote (#388).
-//
-// #387+ MUST extend this hook: DesignRevisionItem references, accepted quote
-// revision references and production references block retirement here — a
-// draft decrease may only retire units without durable history.
-func quoteLineInstanceDurableHistory(instance domain.FurnitureInstance) []string {
+//     design-created unit linked by a future re-quote (#388);
+//   - design revision references (#387 DT-3): any unit included in a
+//     published DesignRevisionItem has durable design history.
+func (s *PostgresStore) quoteLineInstanceDurableHistory(ctx context.Context, instance domain.FurnitureInstance) ([]string, error) {
+	var blockers []string
 	if instance.Origin != domain.FurnitureInstanceOriginQuote {
-		return []string{"origin:" + string(instance.Origin)}
+		blockers = append(blockers, "origin:"+string(instance.Origin))
 	}
-	return nil
+	var hasDesign bool
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM design_revision_items WHERE furniture_instance_id = $1
+		)
+	`, instance.ID).Scan(&hasDesign)
+	if err != nil {
+		return nil, err
+	}
+	if hasDesign {
+		blockers = append(blockers, "design_revision_item")
+	}
+	return blockers, nil
 }
 
 // MaterializeQuoteLine converges the line's linked ACTIVE physical units to
@@ -232,7 +243,11 @@ func (s *PostgresStore) MaterializeQuoteLine(ctx context.Context, cmd Materializ
 	// retirement; cancelled identities are unlinked and never re-linked.
 	for i := len(active) - 1; i >= quantity; i-- {
 		instance := active[i].FurnitureInstance
-		if blockers := quoteLineInstanceDurableHistory(instance); len(blockers) > 0 {
+		blockers, err := s.quoteLineInstanceDurableHistory(ctx, instance)
+		if err != nil {
+			return nil, err
+		}
+		if len(blockers) > 0 {
 			return nil, fmt.Errorf("%w: %s %v", domain.ErrFurnitureInstanceDurableHistory, instance.ID, blockers)
 		}
 		tag, err := s.db(ctx).Exec(ctx, `

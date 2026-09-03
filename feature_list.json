@@ -5408,6 +5408,49 @@
       ],
       "completedAt": "2026-09-02",
       "evidence": "go test ./... green against real PostgreSQL incl. TestQuoteLineFurniture_MigrationFreshAndUpgrade, TestQuoteLineFurniture_MaterializationLifecycleAndAudit, TestQuoteLineFurniture_ConcurrentMaterializationConverges, TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg, TestQuoteLineMaterializeHTTP_Postgres; pnpm openapi:check / typecheck / test green; git diff --check clean; Gate A remains green."
+    },
+    {
+      "id": "F206",
+      "title": "Add Design aggregate and immutable DesignRevision snapshots (#387 / DT-3)",
+      "description": "Third persisted Digital Thread business family after Gate A (ADR-0003, digital-thread §§7-10): designs stores client-agnostic logical design aggregates owned by a Project (0..N per project) with optional source_quote_revision_id provenance; design_revisions stores versioned, immutable snapshots with sequential revision numbers (R1, R2...) per design and concurrency-safe optimistic locking (baseRevisionId check, row-locked parent design); design_revision_items stores the authoring snapshot referencing existing Project-owned FurnitureInstance identities with composite FKs structurally enforcing same-project ownership and at most one appearance per revision. Full immutability via PostgreSQL grants and triggers rejecting UPDATE and DELETE under runtime roles. Generated OpenAPI contracts (list/create designs, get design, list/publish revisions, get revision with items snapshot) with durable idempotency receipts and transactionally-coupled audit events (design_created, design_revision_published). Extension of the durable-history hook prevents quote line decrease from retiring physical units referenced in design revisions. No SketchUp plugin/host integration (#465), no quote reconciliation (#388/#392), no production release (#390).",
+      "tags": [
+        "digital-thread",
+        "backend",
+        "postgresql",
+        "rls",
+        "openapi",
+        "audit",
+        "projects",
+        "designs",
+        "p0"
+      ],
+      "created": "2026-09-02",
+      "status": "done",
+      "acceptance": [
+        "Project can own 0..N Designs; Design is client-agnostic and project-owned",
+        "Optional sourceQuoteRevisionId is recorded as provenance; Quote does not own Design",
+        "DesignRevision is immutable once published (status = 'published'); revision numbers are sequential (R1, R2...) per Design and concurrency-safe",
+        "Subsequent publish takes baseRevisionId and rejects stale revisions with typed 409 conflict",
+        "DesignRevisionItem references existing FurnitureInstance.id belonging to the same project (structurally enforced via composite FK); cross-project reference is rejected",
+        "A FurnitureInstance can appear at most once per DesignRevision; duplicate physical units are rejected with a typed error and unique constraint",
+        "PostgreSQL triggers and REVOKE UPDATE, DELETE enforce immutability on design_revisions and design_revision_items under the app role",
+        "Draft quote decrease is blocked when a physical unit has durable history in any DesignRevisionItem",
+        "Transactionally coupled security audit events commit in the same tenant transaction (design_created, design_revision_published)",
+        "OpenAPI generated client and types with typed error mappings and Idempotency-Key retry safety; fresh migration and upgrade fixture green; no SketchUp or re-quote implemented"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/387",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "progress/implementation_387_dt3.md"
+      ],
+      "depends_on": [
+        "F204",
+        "F205"
+      ],
+      "completedAt": "2026-09-02",
+      "evidence": "go test ./... green against real PostgreSQL incl. TestDesigns_MigrationFreshAndUpgrade, TestDesigns_ProjectAggregateAndRevisions, TestDesigns_Immutability, TestDesigns_ConcurrentPublishNumbering, TestDesigns_CrossOrgRLS, TestDesigns_DurableHistoryBlocksQuoteDecrease, TestDesigns_DurableAuditRecorded; api unit tests green; pnpm openapi:check / typecheck / test green; git diff --check clean; Gate A remains green."
     }
   ]
 }

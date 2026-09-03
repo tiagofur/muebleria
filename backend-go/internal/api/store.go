@@ -278,6 +278,17 @@ type Store interface {
 	MaterializeQuoteLine(ctx context.Context, cmd storage.MaterializeQuoteLineCommand) (*domain.QuoteLineMaterialization, error)
 	ListQuoteLineFurnitureInstances(ctx context.Context, projectID, quoteLineID string) ([]domain.QuoteLineFurnitureInstance, error)
 
+	// Design aggregate and immutable DesignRevision snapshots (#387 / DT-3, ADR-0003)
+	CreateDesign(ctx context.Context, cmd storage.CreateDesignCommand) (*domain.Design, error)
+	GetDesignByID(ctx context.Context, id string) (*domain.Design, error)
+	ListDesignsByProject(ctx context.Context, projectID string) ([]domain.Design, error)
+	GetDesignWorkingCopy(ctx context.Context, designID string) (*domain.DesignWorkingCopy, error)
+	UpdateDesignWorkingCopy(ctx context.Context, cmd storage.UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
+	ResetDesignWorkingCopy(ctx context.Context, cmd storage.ResetDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
+	PublishDesignRevision(ctx context.Context, cmd storage.PublishDesignRevisionCommand) (*domain.DesignRevision, error)
+	GetDesignRevision(ctx context.Context, designID string, revisionID string) (*domain.DesignRevision, error)
+	ListDesignRevisions(ctx context.Context, designID string) ([]domain.DesignRevision, error)
+	ListDesignRevisionItems(ctx context.Context, revisionID string) ([]domain.DesignRevisionItem, error)
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)
