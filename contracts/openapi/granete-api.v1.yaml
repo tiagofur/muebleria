@@ -2327,6 +2327,104 @@
           }
         }
       }
+    },
+    "/projects/{projectId}/furniture-instances": {
+      "get": {
+        "operationId": "listProjectFurnitureInstances",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project furniture identities (all lifecycle states, stable creation order)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FurnitureInstance"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProjectFurnitureInstance",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFurnitureInstanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Furniture instance created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FurnitureInstance"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/furniture-instances/{instanceId}:remove": {
+      "post": {
+        "operationId": "removeFurnitureInstance",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FurnitureInstanceId"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Furniture instance removed (terminal lifecycle state)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FurnitureInstance"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2378,6 +2476,24 @@
       },
       "PlatformUserId": {
         "name": "userId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "ProjectId": {
+        "name": "projectId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "FurnitureInstanceId": {
+        "name": "instanceId",
         "in": "path",
         "required": true,
         "schema": {
@@ -5228,6 +5344,92 @@
           }
         },
         "additionalProperties": false
+      },
+      "FurnitureInstanceOrigin": {
+        "type": "string",
+        "enum": [
+          "quote",
+          "design",
+          "manual",
+          "import",
+          "duplicate"
+        ]
+      },
+      "FurnitureInstanceLifecycleStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "removed",
+          "cancelled"
+        ]
+      },
+      "FurnitureInstance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "project_id",
+          "origin",
+          "lifecycle_status",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/FurnitureInstanceOrigin"
+          },
+          "origin_furniture_instance_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "lifecycle_status": {
+            "$ref": "#/components/schemas/FurnitureInstanceLifecycleStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateFurnitureInstanceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "furniture_definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
       }
     }
   }

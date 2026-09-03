@@ -263,6 +263,15 @@ type Store interface {
 	InsertProjectEvent(ctx context.Context, ev domain.ProjectEvent) error
 	ListProjectEvents(ctx context.Context, projectID string) ([]domain.ProjectEvent, error)
 
+	// Project furniture identity (#385 / DT-1, ADR-0003): stable per-unit
+	// identity owned by exactly one project; lifecycle + durable audit are
+	// transactionally coupled in the storage layer.
+	CreateFurnitureInstance(ctx context.Context, cmd storage.CreateFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
+	GetFurnitureInstanceByID(ctx context.Context, id string) (*domain.FurnitureInstance, error)
+	ListFurnitureInstancesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]domain.FurnitureInstance, error)
+	RemoveFurnitureInstance(ctx context.Context, cmd storage.RemoveFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
+
+
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)
 	GetProjectTemplateByID(ctx context.Context, id string) (*domain.ProjectTemplate, error)

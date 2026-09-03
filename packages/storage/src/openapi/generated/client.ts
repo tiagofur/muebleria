@@ -6,6 +6,7 @@ import type {
   AuthDeviceDirectory,
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
+  CreateFurnitureInstanceRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
   DeviceApproveRequest,
@@ -21,6 +22,7 @@ import type {
   DeviceTokenResponse,
   EndSupportSessionResponse,
   FactoryOrganization,
+  FurnitureInstance,
   Invitation,
   LoginRequest,
   LoginResponse,
@@ -156,4 +158,7 @@ export abstract class GeneratedGraneteApiClient {
   listPlatformUserSessions(token: string, userId: string, signal?: AbortSignal): Promise<SessionDirectory> { return this.request("GET", `/platform/users/${encodeURIComponent(userId)}/sessions`, { schema: "SessionDirectory", token, signal }); }
   revokePlatformUserSession(token: string, userId: string, sessionId: string, body: RevokeSessionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<SessionRevokeResponse> { return this.request("POST", `/platform/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(sessionId)}/revoke`, { schema: "SessionRevokeResponse", token, bodySchema: "RevokeSessionRequest", body, idempotencyKey: key, signal }); }
   authorizeMedia(token: string, body: MediaAuthorizeRequest, signal?: AbortSignal): Promise<MediaAuthorizeResponse> { return this.request("POST", "/media:authorize", { schema: "MediaAuthorizeResponse", token, bodySchema: "MediaAuthorizeRequest", body, signal }); }
+  listProjectFurnitureInstances(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<FurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { arrayOf: "FurnitureInstance", token, signal }); }
+  createProjectFurnitureInstance(token: string, projectId: string, body: CreateFurnitureInstanceRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { schema: "FurnitureInstance", token, bodySchema: "CreateFurnitureInstanceRequest", body, idempotencyKey: key, signal }); }
+  removeFurnitureInstance(token: string, instanceId: string, version: number, signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/furniture-instances/${encodeURIComponent(instanceId)}:remove`, { schema: "FurnitureInstance", token, ifMatch: version, signal }); }
 }

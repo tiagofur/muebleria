@@ -5325,6 +5325,46 @@
       ],
       "completedAt": "2026-09-02",
       "evidence": "pnpm gate:foundation:a PASS: OpenAPI/typecheck/monorepo tests, smoke 31/31, fresh+upgrade PostgreSQL/RLS/API pilot with audit failure injection and no skipped proof, real Chromium 17/17; final scenario matrix 34/34. #385 DT-1 may start. F202/#460 remains in_progress; #461 complete scope and Gate B remain pending."
+    },
+    {
+      "id": "F204",
+      "title": "Persist stable Project FurnitureInstance identity (#385 / DT-1)",
+      "description": "First persisted Digital Thread business family after Gate A: furniture_instances stores one stable identity per intended physical furniture unit owned by exactly one project, with server-authoritative provenance (quote|design|manual|import|duplicate), minimal terminal lifecycle (active|removed|cancelled) and optimistic versioning. Generated OpenAPI DTOs, project-scoped create/list plus terminal :remove command, durable transactionally-coupled audit events, retry-safe creation through the existing idempotency receipts, and explicitly-shared RLS registered in the policy inventory from the first migration. No QuoteLine relation, no Design/DesignRevision, no SketchUp binding (those are #386/#387/later slices).",
+      "tags": [
+        "digital-thread",
+        "backend",
+        "postgresql",
+        "rls",
+        "openapi",
+        "audit",
+        "projects",
+        "p0"
+      ],
+      "created": "2026-09-02",
+      "status": "done",
+      "acceptance": [
+        "A Project can own a FurnitureInstance before any 3D design exists",
+        "Two identical units (same project, definition, origin) keep distinct database-allocated IDs; identity has no position/name/dimension/SketchUp input to be derived from",
+        "Cross-project provenance linking and foreign-project creation are rejected server-side; creation/removal stay with the project's owning organization",
+        "lifecycle active->removed is terminal under If-Match optimistic concurrency; IDs are never recycled",
+        "furniture_instance_created / furniture_instance_removed durable audit events commit in the same tenant transaction as the mutation",
+        "RLS policy, inventory registration, ownership trigger, organization index and runtime grants (no DELETE) exist from the first migration; fresh and upgrade fixtures pass",
+        "App-role direct-SQL negative proof: a deliberately unfiltered query cannot read or mutate another organization's identities",
+        "Same Idempotency-Key retry replays the same identity instead of creating a second one",
+        "OpenAPI generated contracts with typed errors; no manual parallel DTO; #386/#387/SketchUp explicitly not implemented"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/385",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "progress/implementation_385_dt1.md"
+      ],
+      "depends_on": [
+        "F203"
+      ],
+      "completedAt": "2026-09-02",
+      "evidence": "go test ./... green against real PostgreSQL incl. TestFurnitureInstances_MigrationFreshAndUpgrade, TestFurnitureInstances_IdentityLifecycleAndAudit, TestTenantRLS_FurnitureInstancesDirectSQLCrossOrg, TestFurnitureInstancesHTTP_Postgres; pnpm openapi:check / typecheck / test green; git diff --check clean. Gate A remains green (foundation-gate-a.sh untouched)."
     }
   ]
 }

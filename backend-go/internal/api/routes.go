@@ -303,6 +303,17 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 	mux.Handle("DELETE /api/projects/{id}", authMW(http.HandlerFunc(server.HandleProjectByID)))
 
+	// Project furniture identity (#385 / DT-1, ADR-0003): stable per-unit
+	// identity owned by exactly one project. Create is retry-safe through the
+	// durable idempotency receipt; removal is the terminal lifecycle command
+	// under optimistic concurrency.
+	mux.Handle("GET /api/projects/{projectId}/furniture-instances", authMW(http.HandlerFunc(server.HandleProjectFurnitureInstances)))
+	mux.Handle("POST /api/projects/{projectId}/furniture-instances", authMW(server.RequireIdempotency("project.create-furniture-instance", http.HandlerFunc(server.HandleProjectFurnitureInstances))))
+	mux.Handle("POST /api/furniture-instances/{instanceCommand...}", authMW(server.RequireIdempotency("project.remove-furniture-instance", furnitureInstanceCommandRouter(map[string]http.Handler{
+		"remove": http.HandlerFunc(server.HandleFurnitureInstanceRemove),
+	}))))
+
+
 	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorScan))))
 	mux.Handle("GET /api/projects/{id}/loading-status", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectLoadingStatus))))

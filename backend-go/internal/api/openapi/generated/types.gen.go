@@ -828,3 +828,37 @@ type MFAStepUpResponse struct {
 	Method    string         `json:"method"`
 	ExpiresAt string         `json:"expires_at"`
 }
+
+type FurnitureInstanceOrigin string
+
+const (
+	FurnitureInstanceOriginQuote     FurnitureInstanceOrigin = "quote"
+	FurnitureInstanceOriginDesign    FurnitureInstanceOrigin = "design"
+	FurnitureInstanceOriginManual    FurnitureInstanceOrigin = "manual"
+	FurnitureInstanceOriginImport    FurnitureInstanceOrigin = "import"
+	FurnitureInstanceOriginDuplicate FurnitureInstanceOrigin = "duplicate"
+)
+
+type FurnitureInstanceLifecycleStatus string
+
+const (
+	FurnitureInstanceLifecycleStatusActive    FurnitureInstanceLifecycleStatus = "active"
+	FurnitureInstanceLifecycleStatusRemoved   FurnitureInstanceLifecycleStatus = "removed"
+	FurnitureInstanceLifecycleStatusCancelled FurnitureInstanceLifecycleStatus = "cancelled"
+)
+
+type FurnitureInstance struct {
+	ID                        string                           `json:"id"`
+	ProjectID                 string                           `json:"project_id"`
+	FurnitureDefinitionID     *string                          `json:"furniture_definition_id,omitempty"`
+	Origin                    FurnitureInstanceOrigin          `json:"origin"`
+	OriginFurnitureInstanceID *string                          `json:"origin_furniture_instance_id,omitempty"`
+	LifecycleStatus           FurnitureInstanceLifecycleStatus `json:"lifecycle_status"`
+	Version                   int64                            `json:"version"`
+	CreatedAt                 string                           `json:"created_at"`
+	UpdatedAt                 string                           `json:"updated_at"`
+}
+
+type CreateFurnitureInstanceRequest struct {
+	FurnitureDefinitionID *string `json:"furniture_definition_id,omitempty"`
+}
