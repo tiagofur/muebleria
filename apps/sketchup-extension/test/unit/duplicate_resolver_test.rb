@@ -514,4 +514,32 @@ class DuplicateResolverTest < Minitest::Test
     assert_equal FI_2, copy_item.furniture_instance_id
     refute_equal orig_item.technical_client_locator, copy_item.technical_client_locator
   end
+
+  # Proof 15: Fail-closed precheck when service is unavailable (#391 / DT-7 hardening)
+  def test_validate_model_fail_closed_when_service_unavailable
+    create_managed_instance(furniture_instance_id: FI_1)
+
+    # Case A: When service is nil
+    resolver_without_service = DR.new(
+      model_provider: -> { @model },
+      binding_store_factory: -> { @binding_store },
+      model_binding_service: @model_binding_service,
+      service: nil,
+      metadata_store_factory: ->(m) { MS.new(m) },
+      logger: Granete::SketchUpExtension::SafeLogger.new
+    )
+    precheck = resolver_without_service.validate_model(@model)
+    refute precheck['valid'], 'precheck must be fail-closed when service is unavailable'
+    assert_equal 'backend_verification_failed', precheck['code']
+
+    # Case B: When service.list_project_furniture raises an error (e.g. backend down / 500)
+    service_with_error = Object.new
+    def service_with_error.list_project_furniture(_project_id)
+      raise StandardError, 'backend unreachable'
+    end
+
+    precheck_err = @resolver.validate_model(@model, service: service_with_error)
+    refute precheck_err['valid'], 'precheck must be fail-closed when backend query fails'
+    assert_equal 'backend_verification_failed', precheck_err['code']
+  end
 end

@@ -360,10 +360,18 @@ module Granete
         end
 
         def validate_backend_authority(model, current_binding, service)
-          return nil unless current_binding && service.respond_to?(:list_project_furniture)
+          return nil unless current_binding
 
           managed_ids = find_all_managed_ids(model)
           return nil if managed_ids.empty?
+
+          unless service.respond_to?(:list_project_furniture)
+            return {
+              'valid' => false,
+              'code' => 'backend_verification_failed',
+              'reason' => 'servicio no disponible para verificar autoridad de muebles en el servidor'
+            }
+          end
 
           begin
             instances = service.list_project_furniture(current_binding.project_id)
