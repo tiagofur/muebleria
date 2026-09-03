@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "comment": "Shared #388 model binding contract fixture. Generated from the Go handler's own HTTP responses (golden author); consumed by Go (this test) and Ruby (model_binding_contract_test.rb parses every 200 response fail-closed and pins the error rule: a non-200 response must never write binding metadata). Regenerate: UPDATE_MODEL_BINDING_GOLDEN=1 go test ./internal/api -run TestModelBindingContractFixtureGolden",
+  "endpoint": "POST /api/projects/{projectId}/designs/{designId}/binding:validate",
+  "modelDictionary": "com.granete.project",
+  "bindingKey": "granete.project-binding.v1",
+  "serverSchemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "01-first-bind-valid",
+      "request": {
+        "client_schema_version": 1
+      },
+      "responseStatus": 200,
+      "response": {
+        "capabilities": {
+          "can_edit_working_copy": true,
+          "can_publish_revision": true
+        },
+        "design": {
+          "id": "52000000-0000-0000-0000-000000000001",
+          "name": "Cocina Principal",
+          "status": "active"
+        },
+        "organization": {
+          "id": "60000000-0000-0000-0000-000000000001",
+          "name": "Carpintería García"
+        },
+        "project": {
+          "id": "41000000-0000-0000-0000-000000000001",
+          "name": "Cocina García"
+        },
+        "schema_version": 1,
+        "state": "valid",
+        "working_copy": {
+          "base_revision_id": "53000000-0000-0000-0000-000000000001",
+          "base_revision_number": 2,
+          "updated_at": "2026-09-03T12:00:00Z"
+        }
+      }
+    },
+    {
+      "id": "02-bound-base-validated",
+      "request": {
+        "client_schema_version": 1,
+        "base_revision_id": "53000000-0000-0000-0000-000000000001"
+      },
+      "responseStatus": 200,
+      "response": {
+        "capabilities": {
+          "can_edit_working_copy": true,
+          "can_publish_revision": true
+        },
+        "design": {
+          "id": "52000000-0000-0000-0000-000000000001",
+          "name": "Cocina Principal",
+          "status": "active"
+        },
+        "organization": {
+          "id": "60000000-0000-0000-0000-000000000001",
+          "name": "Carpintería García"
+        },
+        "project": {
+          "id": "41000000-0000-0000-0000-000000000001",
+          "name": "Cocina García"
+        },
+        "schema_version": 1,
+        "state": "valid",
+        "working_copy": {
+          "base_revision_id": "53000000-0000-0000-0000-000000000001",
+          "base_revision_number": 2,
+          "updated_at": "2026-09-03T12:00:00Z"
+        }
+      }
+    },
+    {
+      "id": "03-design-archived",
+      "request": {
+        "client_schema_version": 1
+      },
+      "responseStatus": 200,
+      "response": {
+        "capabilities": {
+          "can_edit_working_copy": false,
+          "can_publish_revision": false
+        },
+        "design": {
+          "id": "52000000-0000-0000-0000-000000000001",
+          "name": "Cocina Principal",
+          "status": "archived"
+        },
+        "organization": {
+          "id": "60000000-0000-0000-0000-000000000001",
+          "name": "Carpintería García"
+        },
+        "project": {
+          "id": "41000000-0000-0000-0000-000000000001",
+          "name": "Cocina García"
+        },
+        "schema_version": 1,
+        "state": "design_archived",
+        "working_copy": {
+          "base_revision_id": "53000000-0000-0000-0000-000000000001",
+          "base_revision_number": 2,
+          "updated_at": "2026-09-03T12:00:00Z"
+        }
+      }
+    },
+    {
+      "id": "04-foreign-design-uniform-404",
+      "request": {
+        "client_schema_version": 1
+      },
+      "responseStatus": 404,
+      "response": {
+        "code": "NOT_FOUND",
+        "details": {},
+        "fieldErrors": {},
+        "message": "El proyecto o el diseño no existe",
+        "requestId": "",
+        "retryable": false
+      }
+    },
+    {
+      "id": "05-no-published-revision",
+      "request": {
+        "client_schema_version": 1
+      },
+      "responseStatus": 200,
+      "response": {
+        "capabilities": {
+          "can_edit_working_copy": true,
+          "can_publish_revision": true
+        },
+        "design": {
+          "id": "52000000-0000-0000-0000-000000000001",
+          "name": "Cocina Principal",
+          "status": "active"
+        },
+        "organization": {
+          "id": "60000000-0000-0000-0000-000000000001",
+          "name": "Carpintería García"
+        },
+        "project": {
+          "id": "41000000-0000-0000-0000-000000000001",
+          "name": "Cocina García"
+        },
+        "schema_version": 1,
+        "state": "valid",
+        "working_copy": {
+          "base_revision_id": null,
+          "base_revision_number": null,
+          "updated_at": "2026-09-03T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

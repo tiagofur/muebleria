@@ -10,12 +10,22 @@ module Granete
         auth_provider: nil,
         logger: SafeLogger.new,
         session_provider: nil,
-        catalog_provider: nil
+        catalog_provider: nil,
+        model_binding_connector: nil
       )
         @logger = logger
         @session = session_provider || Auth::DeviceProvider.new(logger: logger)
         @transport = transport || @session.transport
         @auth_provider = auth_provider || @session
+        @model_binding_connector = model_binding_connector || Connection::ModelBinding::Connector.new(
+          store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
+          service: Connection::ModelBinding::Service.new(
+            transport: @transport,
+            auth_provider: @auth_provider,
+            logger: logger
+          ),
+          logger: logger
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -26,7 +36,8 @@ module Granete
             fallback_provider: Library::StaticCatalogProvider.new,
             logger: logger
           ),
-          session: @session
+          session: @session,
+          model_binding_connector: @model_binding_connector
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -66,7 +77,15 @@ module Granete
         Metadata::Store.new(model)
       end
 
+      # The model binding always resolves against whichever document is
+      # active at call time, so switching models switches binding context.
+      attr_reader :model_binding_connector
+
       private
+
+      def active_model
+        Sketchup.active_model if defined?(Sketchup) && Sketchup.respond_to?(:active_model)
+      end
 
       def connection_status
         session_status = @session.respond_to?(:status) ? @session.status : nil

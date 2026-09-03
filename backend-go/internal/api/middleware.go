@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -507,11 +508,27 @@ func clientIP(r *http.Request) string {
 // read-only for those tokens.
 // extensionClientGetPrefixes is the ONLY read surface the SketchUp bearer
 // may reach: the furniture catalog (definitions + resolved layouts) and
-// media reads. Everything else — team, sessions, devices, projects,
-// organizations, platform — is out of the extension's contract.
+// media reads, plus the exact Project/Design discovery reads the model
+// binding needs. Everything else — team, sessions, devices, organizations,
+// platform — is out of the extension's contract.
 var extensionClientGetPrefixes = []string{
 	"/api/furniture/",
 	"/api/media",
+}
+
+// #388 / DT-4 model binding: the plugin must pick the exact Project/Design
+// to bind from authoritative lists (no raw UUID paste, no filename/path
+// inference). These canonical read endpoints are the narrow discovery
+// surface for that picker — the same DTOs the web workspace consumes, never
+// a parallel read model.
+var extensionClientExactGetPaths = map[string]struct{}{
+	"/api/projects": {},
+}
+
+var extensionClientGetPatterns = []*regexp.Regexp{
+	// Project designs list only (exact project prefix is intentionally NOT
+	// granted: manufacturing/project reads stay out of the extension scope).
+	regexp.MustCompile(`^/api/projects/[^/]+/designs$`),
 }
 
 // extensionClientMayAccess is the deny-by-default boundary for the SketchUp
@@ -525,10 +542,25 @@ func extensionClientMayAccess(method, path string) bool {
 				return true
 			}
 		}
+		if _, ok := extensionClientExactGetPaths[path]; ok {
+			return true
+		}
+		for _, pattern := range extensionClientGetPatterns {
+			if pattern.MatchString(path) {
+				return true
+			}
+		}
 		return false
 	case http.MethodPost:
-		_, ok := extensionTokenMayPostPaths[path]
-		return ok
+		if _, ok := extensionTokenMayPostPaths[path]; ok {
+			return true
+		}
+		for _, pattern := range extensionTokenMayPostPatterns {
+			if pattern.MatchString(path) {
+				return true
+			}
+		}
+		return false
 	default:
 		return false
 	}
@@ -547,6 +579,17 @@ var extensionTokenMayPostPaths = map[string]struct{}{
 	// grants for files the extension token can already GET. The response
 	// contains only signed read URLs — no session credential, no mutation.
 	"/api/media:authorize": {},
+}
+
+// Parameterized POST surface for the extension credential. Same deliberate
+// capability-grant rule as extensionTokenMayPostPaths: each entry cites its
+// owning issue and must remain a stateless, business-record-free operation.
+var extensionTokenMayPostPatterns = []*regexp.Regexp{
+	// #388 / DT-4: authoritative validation of a SketchUp model binding
+	// candidate. Stateless read over the org/project/design working truth —
+	// it creates no business records and mutates nothing; binding itself
+	// stays client-side model metadata until #392/#499 publish flows.
+	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/binding:validate$`),
 }
 
 func extensionTokenMayPost(path string) bool {

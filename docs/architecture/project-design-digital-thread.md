@@ -480,6 +480,12 @@ projectId
  schemaVersion
 ```
 
+Implementación #388 (2026-09, DT-4): el binding se persiste como un único
+envelope JSON versionado (`granete.project-binding.v1`) dentro del
+dictionary `com.granete.project`, atómico en write/read, que sobrevive
+save/close/reopen y copias del archivo — nunca depende de filename, path ni
+`model.guid`.
+
 Cada mueble Nivel 1 debe conservar:
 
 ```text
@@ -491,9 +497,41 @@ furnitureDefinitionId
 parameters / authoring metadata required by current contract
 ```
 
+### Validación autoritativa del binding
+
+Antes de considerar un modelo conectado, el cliente llama a:
+
+```http
+POST /api/projects/{projectId}/designs/{designId}/binding:validate
+{ "client_schema_version": 1, "base_revision_id": "<stored | null>" }
+```
+
+El backend responde con el contexto exacto (organization/project/design
+summaries, working copy base autoritativo, capabilities derivadas de los
+mismos permisos que working-copy/publish) y con estados servidor
+`valid | design_archived`. Proyecto/diseño/revision inexistentes, cross-org
+o cross-project responden 404 uniforme e indistinguible (RLS + match de
+project). El cliente deriva `stale_base` comparando su base guardada contra
+la autoritativa, `incompatible` cuando el `schema_version` del servidor
+excede el que entiende, y `unauthenticated`/`unauthorized` de errores
+tipados 401/403. Ninguna metadata de modelo se escribe antes de que la
+validación tenga éxito; un rebind explícito conserva el binding anterior
+hasta que el nuevo valide.
+
+El token de la extensión SketchUp accede sólo a este endpoint de validación
+(POST stateless allowlisted), a `GET /api/projects` y a
+`GET /api/projects/{id}/designs` para el picker — sin abrir el resto de la
+superficie de proyectos al credential de extensión.
+
 ### `instanceRef` compatibility
 
 El `instanceRef` ya usado por el contrato de SketchUp debe converger semánticamente con la identidad estable de `FurnitureInstance`. No crear dos IDs permanentes para el mismo concepto. Durante migración, si ambos campos existen, debe documentarse explícitamente cuál es alias/legacy y cuál es autoridad.
+
+Implementación #388: `instanceRef` y `project_ref` quedan documentados como
+alias/locators locales de compatibilidad — nunca identidad de servidor. El
+lado lectura ya espera `furnitureInstanceId`/`projectId`/`designId` en la
+metadata de cada mueble; el lado escritura llega con el placement de #389,
+que escribe exactamente el `furnitureInstanceId` entregado por el backend.
 
 ### Persistent ID
 

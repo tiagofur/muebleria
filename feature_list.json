@@ -5412,7 +5412,7 @@
     {
       "id": "F206",
       "title": "Add Design aggregate and immutable DesignRevision snapshots (#387 / DT-3)",
-      "description": "Third persisted Digital Thread business family after Gate A (ADR-0003, digital-thread §§7-10): designs stores client-agnostic logical design aggregates owned by a Project (0..N per project) with optional source_quote_revision_id provenance; design_revisions stores versioned, immutable snapshots with sequential revision numbers (R1, R2...) per design and concurrency-safe optimistic locking (baseRevisionId check, row-locked parent design); design_revision_items stores the authoring snapshot referencing existing Project-owned FurnitureInstance identities with composite FKs structurally enforcing same-project ownership and at most one appearance per revision. Full immutability via PostgreSQL grants and triggers rejecting UPDATE and DELETE under runtime roles. Generated OpenAPI contracts (list/create designs, get design, list/publish revisions, get revision with items snapshot) with durable idempotency receipts and transactionally-coupled audit events (design_created, design_revision_published). Extension of the durable-history hook prevents quote line decrease from retiring physical units referenced in design revisions. No SketchUp plugin/host integration (#465), no quote reconciliation (#388/#392), no production release (#390).",
+      "description": "Third persisted Digital Thread business family after Gate A (ADR-0003, digital-thread \u00a7\u00a77-10): designs stores client-agnostic logical design aggregates owned by a Project (0..N per project) with optional source_quote_revision_id provenance; design_revisions stores versioned, immutable snapshots with sequential revision numbers (R1, R2...) per design and concurrency-safe optimistic locking (baseRevisionId check, row-locked parent design); design_revision_items stores the authoring snapshot referencing existing Project-owned FurnitureInstance identities with composite FKs structurally enforcing same-project ownership and at most one appearance per revision. Full immutability via PostgreSQL grants and triggers rejecting UPDATE and DELETE under runtime roles. Generated OpenAPI contracts (list/create designs, get design, list/publish revisions, get revision with items snapshot) with durable idempotency receipts and transactionally-coupled audit events (design_created, design_revision_published). Extension of the durable-history hook prevents quote line decrease from retiring physical units referenced in design revisions. No SketchUp plugin/host integration (#465), no quote reconciliation (#388/#392), no production release (#390).",
       "tags": [
         "digital-thread",
         "backend",
@@ -5451,6 +5451,49 @@
       ],
       "completedAt": "2026-09-02",
       "evidence": "go test ./... green against real PostgreSQL incl. TestDesigns_MigrationFreshAndUpgrade, TestDesigns_ProjectAggregateAndRevisions, TestDesigns_Immutability, TestDesigns_ConcurrentPublishNumbering, TestDesigns_CrossOrgRLS, TestDesigns_DurableHistoryBlocksQuoteDecrease, TestDesigns_DurableAuditRecorded; api unit tests green; pnpm openapi:check / typecheck / test green; git diff --check clean; Gate A remains green."
+    },
+    {
+      "id": "F207",
+      "title": "Bind SketchUp models to Project/Design identity (#388 / DT-4)",
+      "description": "Fourth Digital Thread slice after Gate A (ADR-0003, digital-thread \u00a712): one SketchUp model can be connected to one exact Project/Design working context without the .skp file, its path or SketchUp technical IDs ever becoming business identity. Backend adds the stateless authoritative validation endpoint POST /api/projects/{projectId}/designs/{designId}/binding:validate (generated OpenAPI contract) resolving the exact organization/project/design summaries, the authoritative working-copy base revision and role-derived capabilities; missing, foreign, cross-project or cross-organization objects answer a uniform 404 under RLS. The extension credential gains exactly three narrow grants: the validation POST, GET /api/projects and GET /api/projects/{id}/designs for the picker \u2014 everything else stays denied by default. The plugin stores the binding as one versioned JSON envelope (granete.project-binding.v1) in the com.granete.project dictionary, written only after validation succeeds, undoable, surviving save/close/reopen and file copies; rebind requires explicit reviewed confirmation and preserves the previous valid binding until the new one validates; stale base is detected against the authoritative working-copy base and remediated explicitly; unbound/connected/stale_base/design_archived/invalid/incompatible/unauthenticated/unauthorized/unreachable are surfaced distinctly in the dialog. instanceRef/project_ref remain documented local compatibility aliases, never promoted to server identity (convergence with furnitureInstanceId happens in #389).",
+      "tags": [
+        "digital-thread",
+        "sketchup-extension",
+        "backend",
+        "openapi",
+        "rls",
+        "projects",
+        "designs",
+        "binding",
+        "p0"
+      ],
+      "created": "2026-09-03",
+      "status": "done",
+      "acceptance": [
+        "Binding survives save/close/reopen and file copies; it never relies on filename, path or model.guid",
+        "Design is validated as belonging to the exact Project; cross-project is rejected as a uniform 404",
+        "Cross-organization/foreign Design fails indistinguishably and safely under RLS",
+        "Model metadata is written only after authoritative validation succeeds; failed validation/rebind preserves the previous valid binding",
+        "Rebind requires explicit reviewed confirmation (rebind_required) and keeps the old binding until the new one validates",
+        "Unbound, connected, stale_base, design_archived, invalid, incompatible, unauthenticated, unauthorized and unreachable states are distinct",
+        "persistent_id/GUID changes never change business identity; instanceRef/project_ref stay documented local aliases",
+        "Extension token gains only binding:validate POST plus project/design discovery GETs; deny-by-default negative proofs updated",
+        "A provided client base revision must exist and belong to the design; unknown/foreign revisions fail closed instead of re-basing",
+        "Ruby/backend contract tests plus a shared golden fixture (Go author, Ruby consumer) cover the wire shape"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/388",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "contracts/sketchupModelBinding.contract.json",
+        "progress/implementation_388_dt4.md"
+      ],
+      "depends_on": [
+        "F206"
+      ],
+      "completedAt": "2026-09-03",
+      "evidence": "go test ./internal/api ./internal/storage green against real PostgreSQL incl. TestDesigns_ModelBindingContext (valid/stale/uniform-404/cross-org/archived), TestHandleProjectDesignBindingValidate_* and updated TestExtensionTokenDenyByDefault; UPDATE_MODEL_BINDING_GOLDEN fixture pinned and drift-checked; rake verify green (rubocop, 324 unit runs, boundary, RBZ sha256 verified) incl. model_binding_test.rb, model_binding_contract_test.rb and dialog_model_binding JS harness (9 cases); pnpm openapi:check green; git diff --check clean."
     }
   ]
 }

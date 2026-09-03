@@ -152,8 +152,10 @@ class ApplicationTest < Minitest::Test
     first_dialog = @application.open_dialog
 
     expected_callbacks = %w[
-      close_dialog delete_selected_furniture dialog_ready enroll get_catalog insert_furniture logout
-      open_material_selector poll_enrollment refresh_media_url select_furniture update_furniture
+      adopt_binding_base close_dialog connect_model delete_selected_furniture dialog_ready enroll
+      get_catalog get_model_binding insert_furniture list_binding_designs list_binding_projects
+      logout open_material_selector poll_enrollment refresh_media_url refresh_model_binding
+      select_furniture update_furniture
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort
     first_dialog.callbacks.fetch('dialog_ready').call(nil)

@@ -289,6 +289,9 @@ type Store interface {
 	GetDesignRevision(ctx context.Context, designID string, revisionID string) (*domain.DesignRevision, error)
 	ListDesignRevisions(ctx context.Context, designID string) ([]domain.DesignRevision, error)
 	ListDesignRevisionItems(ctx context.Context, revisionID string) ([]domain.DesignRevisionItem, error)
+	// Authoritative Project/Design working context for SketchUp model
+	// binding validation (#388 / DT-4).
+	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)

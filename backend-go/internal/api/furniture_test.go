@@ -421,9 +421,23 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 		t.Fatal("media authorize is part of the extension POST contract")
 	}
 
+	// #388 / DT-4 model binding: project/design discovery reads and the
+	// stateless binding validation are part of the plugin contract now.
+	if got := send(http.MethodGet, "/api/projects"); got != http.StatusOK {
+		t.Fatalf("GET /api/projects with extension token = %d, want 200 (#388 discovery)", got)
+	}
+	if got := send(http.MethodGet, "/api/projects/41000000-0000-0000-0000-000000000001/designs"); got != http.StatusOK {
+		t.Fatalf("GET project designs with extension token = %d, want 200 (#388 discovery)", got)
+	}
+	if got := send(http.MethodPost, "/api/projects/41000000-0000-0000-0000-000000000001/designs/52000000-0000-0000-0000-000000000001/binding:validate"); got == http.StatusForbidden {
+		t.Fatal("binding validate is part of the extension POST contract (#388)")
+	}
+
 	// Everything else denies the credential CLASS: team admin, session and
 	// device management, org/business reads and writes, platform — even for
-	// a platform-admin owner.
+	// a platform-admin owner. Project discovery (#388) is intentionally
+	// narrow: only the project list and the per-project designs list open;
+	// every other project subresource stays denied.
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/api/org/team/summary"},
 		{http.MethodGet, "/api/org/memberships"},
@@ -432,9 +446,12 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 		{http.MethodPost, "/api/auth/sessions/sess-1/revoke"},
 		{http.MethodGet, "/api/auth/devices"},
 		{http.MethodPost, "/api/auth/devices/revoke"},
-		{http.MethodGet, "/api/projects"},
 		{http.MethodPost, "/api/projects"},
 		{http.MethodDelete, "/api/projects/1"},
+		{http.MethodGet, "/api/projects/1/furniture-instances"},
+		{http.MethodGet, "/api/projects/1/loading-status"},
+		{http.MethodGet, "/api/projects/41000000-0000-0000-0000-000000000001/designs/52000000-0000-0000-0000-000000000001/working-copy"},
+		{http.MethodPut, "/api/projects/1/designs/2/binding:validate"},
 		{http.MethodGet, "/api/customers"},
 		{http.MethodGet, "/api/platform/organizations"},
 		{http.MethodPost, "/api/platform/organizations/org-1/support-session"},

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -1192,4 +1193,126 @@ func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDes
 	}
 
 	return s.GetDesignWorkingCopy(ctx, cmd.DesignID)
+}
+
+// ModelBindingContext aggregates the authoritative Project/Design working
+// context that a SketchUp model binding candidate must be validated against
+// (#388 / DT-4, digital-thread §12). Reads are RLS-scoped: a project, design,
+// revision or organization invisible to the tenant reads as not found, so
+// foreign and cross-project objects fail indistinguishably.
+type ModelBindingContext struct {
+	OrganizationID            string
+	OrganizationName          string
+	ProjectID                 string
+	ProjectName               string
+	Design                    domain.Design
+	WorkingCopyBaseRevisionID *string
+	WorkingCopyUpdatedAt      time.Time
+	BaseRevisionNumber        *int
+}
+
+// GetModelBindingContext resolves the exact organization/project/design
+// working truth for the model-binding validation endpoint. baseRevisionID,
+// when provided, is the base the client's stored binding expects; it must
+// exist and belong to the same design or the read fails closed with
+// ErrDesignRevisionNotFound. Mismatches between the client base and the
+// authoritative working-copy base are NOT resolved here: the response carries
+// the authoritative base and the client derives the stale state (#388).
+func (s *PostgresStore) GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*ModelBindingContext, error) {
+	if !isValidUUID(projectID) || !isValidUUID(designID) {
+		return nil, domain.ErrDesignNotFound
+	}
+	if baseRevisionID != nil && *baseRevisionID != "" && !isValidUUID(*baseRevisionID) {
+		return nil, domain.ErrDesignRevisionNotFound
+	}
+
+	out := &ModelBindingContext{ProjectID: projectID}
+
+	// 1. Project + owning organization (display summary for the plugin dialog).
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT p.name, p.organization_id::text, o.name
+		FROM projects p
+		JOIN organizations o ON o.id = p.organization_id
+		WHERE p.id = $1
+	`, projectID).Scan(&out.ProjectName, &out.OrganizationID, &out.OrganizationName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, fmt.Errorf("resolve binding project: %w", err)
+	}
+
+	// 2. Design must exist AND belong to the exact path project. A design from
+	// another project (or another organization, hidden by RLS) is uniformly
+	// not-found — never a partial context (#388 negative proofs).
+	design, err := scanDesign(s.db(ctx).QueryRow(ctx, `
+		SELECT `+designColumns+`
+		FROM designs
+		WHERE id = $1 AND project_id = $2
+	`, designID, projectID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, fmt.Errorf("resolve binding design: %w", err)
+	}
+	out.Design = *design
+
+	// 3. Authoritative working-copy base (absent on a fresh design).
+	var wcBase *string
+	var wcUpdatedAt *time.Time
+	err = s.db(ctx).QueryRow(ctx, `
+		SELECT base_revision_id::text, updated_at
+		FROM design_working_copies
+		WHERE design_id = $1
+	`, designID).Scan(&wcBase, &wcUpdatedAt)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("resolve binding working copy: %w", err)
+	}
+	if wcBase != nil {
+		out.WorkingCopyBaseRevisionID = wcBase
+	}
+	if wcUpdatedAt != nil {
+		out.WorkingCopyUpdatedAt = *wcUpdatedAt
+	} else {
+		out.WorkingCopyUpdatedAt = design.UpdatedAt
+	}
+
+	// 4. Revision number of the authoritative base, when one exists.
+	if out.WorkingCopyBaseRevisionID != nil {
+		var revNum int
+		err = s.db(ctx).QueryRow(ctx, `
+			SELECT revision_number
+			FROM design_revisions
+			WHERE id = $1 AND design_id = $2
+		`, *out.WorkingCopyBaseRevisionID, designID).Scan(&revNum)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, domain.ErrDesignRevisionNotFound
+			}
+			return nil, fmt.Errorf("resolve binding base revision: %w", err)
+		}
+		out.BaseRevisionNumber = &revNum
+	}
+
+	// 5. When the client already carries a binding base, that revision must
+	// exist and belong to this design. Unknown or foreign revisions are
+	// rejected instead of silently re-based.
+	if baseRevisionID != nil && *baseRevisionID != "" {
+		var revDesignID string
+		err = s.db(ctx).QueryRow(ctx, `
+			SELECT design_id FROM design_revisions WHERE id = $1
+		`, *baseRevisionID).Scan(&revDesignID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, domain.ErrDesignRevisionNotFound
+			}
+			return nil, fmt.Errorf("validate client binding base: %w", err)
+		}
+		if revDesignID != designID {
+			return nil, domain.ErrDesignRevisionNotFound
+		}
+	}
+
+	return out, nil
 }
