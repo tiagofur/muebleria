@@ -42,6 +42,15 @@ const mediaResourcePrefix = "media/"
 
 var mediaFilenamePattern = regexp.MustCompile(`^[0-9a-f]{32}\.(jpg|png|webp)$`)
 
+// designArtifactResourcePrefix and designArtifactKeyPattern define the second
+// canonical resource class (#392 / DT-8): signed read grants for published
+// design revision artifacts. Keys are server-generated at upload time
+// ("designs/publish/<session>/(<kind>)-<sha256-12>.<ext>") — never client
+// input — and the full key is part of the signed material.
+const designArtifactResourcePrefix = "designart/"
+
+var designArtifactKeyPattern = regexp.MustCompile(`^designs/publish/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(model|manifest|preview)-[0-9a-f]{12}\.(skp|json|png|jpg)$`)
+
 // MediaResourceKey builds the canonical signed resource key for a catalog
 // media filename. Non-canonical input yields "" — callers must refuse to mint
 // or accept grants for those.
@@ -50,6 +59,36 @@ func MediaResourceKey(filename string) string {
 		return ""
 	}
 	return mediaResourcePrefix + filename
+}
+
+// DesignArtifactResourceKey builds the canonical signed resource key for a
+// design revision artifact storage key. Non-canonical input yields "".
+func DesignArtifactResourceKey(storageKey string) string {
+	if !designArtifactKeyPattern.MatchString(storageKey) {
+		return ""
+	}
+	return designArtifactResourcePrefix + storageKey
+}
+
+// DesignArtifactKeyFromResource recovers the storage key of a canonical
+// design artifact resource; anything else yields "".
+func DesignArtifactKeyFromResource(resource string) string {
+	if len(resource) <= len(designArtifactResourcePrefix) {
+		return ""
+	}
+	key := resource[len(designArtifactResourcePrefix):]
+	if DesignArtifactResourceKey(key) != resource {
+		return ""
+	}
+	return key
+}
+
+// resourceKeyBelongsToGrantClass reports whether the resource key is a
+// canonical member of any grantable resource class (media or design
+// artifacts). Grants for anything else are refused at mint and validate.
+func resourceKeyBelongsToGrantClass(resource string) bool {
+	return MediaFilenameFromResource(resource) != "" ||
+		DesignArtifactKeyFromResource(resource) != ""
 }
 
 // MediaFilenameFromResource recovers the filename of a canonical resource
@@ -126,7 +165,7 @@ func (m *MediaAuthority) Issue(req MediaIssueRequest) (string, *MediaClaims, err
 	if m == nil {
 		return "", nil, errors.New("media authority is not configured")
 	}
-	if req.ResourceKey == "" || MediaFilenameFromResource(req.ResourceKey) == "" {
+	if req.ResourceKey == "" || !resourceKeyBelongsToGrantClass(req.ResourceKey) {
 		return "", nil, errors.New("media grant requires a canonical resource key")
 	}
 	if req.OrgID == "" {
@@ -205,7 +244,7 @@ func (m *MediaAuthority) Validate(tokenStr string) (*MediaClaims, error) {
 		claims.ID == "" ||
 		claims.IssuedAt == nil || claims.NotBefore == nil || claims.ExpiresAt == nil ||
 		claims.Subject != claims.Resource ||
-		MediaFilenameFromResource(claims.Resource) == "" ||
+		!resourceKeyBelongsToGrantClass(claims.Resource) ||
 		claims.OrgID == "" {
 		return nil, errors.New("invalid media grant")
 	}

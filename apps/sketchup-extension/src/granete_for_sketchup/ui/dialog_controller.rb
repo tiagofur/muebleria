@@ -209,6 +209,9 @@ module Granete
           dialog.add_action_callback('rescan_duplicates') do
             handle_rescan_duplicates(dialog)
           end
+          dialog.add_action_callback('publish_design_revision') do
+            handle_publish_design_revision(dialog)
+          end
         end
 
         # Panel payload: binding-aware rows with pending/placed derived per
@@ -331,6 +334,31 @@ module Granete
         rescue StandardError => e
           @logger.error('rescan_duplicates_failed', error: e)
           execute_bridge(dialog, 'onRescanDuplicatesResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #392 / DT-8: publish the connected design as an immutable revision
+        # with model/manifest/preview artifacts. The dialog never builds
+        # business payloads — the publisher owns the sequence, reuses the
+        # #391 precheck, and reports honest progress steps.
+        def handle_publish_design_revision(dialog)
+          unless @design_publisher
+            execute_bridge(dialog, 'onPublishResult',
+                           { 'ok' => false, 'code' => 'publisher_unavailable',
+                             'reason' => 'la publicación de diseños no está disponible' })
+            return
+          end
+
+          on_progress = lambda do |step|
+            execute_bridge(dialog, 'onPublishProgress', { 'step' => step })
+          end
+          result = @design_publisher.publish(on_progress: on_progress)
+          execute_bridge(dialog, 'onPublishResult', result)
+          # The binding base label and capabilities follow the new revision.
+          handle_get_model_binding(dialog) if result['ok']
+        rescue StandardError => e
+          @logger.error('publish_design_revision_failed', error: e)
+          execute_bridge(dialog, 'onPublishResult',
                          { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
@@ -803,7 +831,8 @@ module Granete
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
-                       project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil)
+                       project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil,
+                       design_publisher: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -811,6 +840,7 @@ module Granete
           @project_furniture_placer = project_furniture_placer
           @duplicate_resolver = duplicate_resolver
           @entities_observer = entities_observer
+          @design_publisher = design_publisher
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store

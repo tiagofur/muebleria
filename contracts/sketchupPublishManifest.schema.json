@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://granete.app/contracts/sketchupPublishManifest.schema.json",
+  "title": "Granete SketchUp Publish Manifest v1",
+  "description": "Canonical versioned schema of the semantic manifest artifact that accompanies every SketchUp design revision publication (#392 / DT-8, ADR-0003). The manifest is an ARTIFACT COMPANION: the relational DesignRevisionItem snapshot — always derived server-side from the DesignWorkingCopy — remains the authoritative indexed truth. Published revisions keep their manifest bytes forever; a future v2 must never rewrite v1 payloads. The Go validator (internal/domain/design_publish.go ParseDesignPublishManifest) and this schema must stay in parity (fixture tests pin it).",
+  "$ref": "#/$defs/manifest",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "projectId",
+        "designId",
+        "source",
+        "items"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "integer",
+          "const": 1
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid",
+          "description": "Must equal the project that owns the design; server-validated."
+        },
+        "designId": {
+          "$ref": "#/$defs/uuid",
+          "description": "Must equal the design being published; server-validated."
+        },
+        "baseRevisionId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The exact revision the authoring client worked from. Null only for a first (R1) publication. Must equal the authoritative design_working_copies.base_revision_id at prepare AND at finalize (fail-closed optimistic concurrency)."
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/item"
+          },
+          "description": "EXCLUSIVELY Granete-managed FurnitureInstances. Unmanaged architecture/decoration geometry (walls, plants, aux tables, lights) never enters the manifest — it can never become BOM/machining input (DT-8 negative proof B). The item set must exactly equal the design working copy item set at prepare and at finalize."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client",
+        "sketchupVersion",
+        "pluginVersion"
+      ],
+      "properties": {
+        "client": {
+          "type": "string",
+          "const": "sketchup",
+          "description": "v1 manifests exist exactly for the SketchUp authoring client; a new client requires a new manifest version, never a silent widening."
+        },
+        "sketchupVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "pluginVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "furnitureInstanceId"
+      ],
+      "properties": {
+        "furnitureInstanceId": {
+          "$ref": "#/$defs/uuid",
+          "description": "Backend-owned business identity (I2). Never derived from name, GUID, persistent_id or geometry (I7). Duplicate IDs within one manifest are rejected."
+        },
+        "technicalClientLocator": {
+          "$ref": "#/$defs/technicalClientLocator"
+        }
+      }
+    },
+    "technicalClientLocator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "description": "Optional technical locator (e.g. SketchUp persistent_id). NEVER business identity (ADR-0003 §4, I7)."
+    }
+  }
+}

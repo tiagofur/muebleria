@@ -967,6 +967,7 @@ type DesignRevision struct {
 	CreatedBy        *string                  `json:"created_by,omitempty"`
 	CreatedAt        string                   `json:"created_at"`
 	Items            []DesignRevisionItem     `json:"items"`
+	Artifacts        []DesignRevisionArtifact `json:"artifacts,omitempty"`
 }
 
 type PublishDesignRevisionItem struct {
@@ -1067,4 +1068,77 @@ type ModelBindingValidation struct {
 	Design        ModelBindingDesignSummary       `json:"design"`
 	WorkingCopy   ModelBindingWorkingCopySummary  `json:"working_copy"`
 	Capabilities  ModelBindingCapabilities        `json:"capabilities"`
+}
+
+type DesignPublishArtifactKind string
+
+const (
+	DesignPublishArtifactKindModel    DesignPublishArtifactKind = "model"
+	DesignPublishArtifactKindManifest DesignPublishArtifactKind = "manifest"
+	DesignPublishArtifactKindPreview  DesignPublishArtifactKind = "preview"
+)
+
+type DesignPublishSessionStatus string
+
+const (
+	DesignPublishSessionStatusPrepared  DesignPublishSessionStatus = "prepared"
+	DesignPublishSessionStatusFinalized DesignPublishSessionStatus = "finalized"
+	DesignPublishSessionStatusAbandoned DesignPublishSessionStatus = "abandoned"
+)
+
+type DesignPublishManifestSource struct {
+	Client          string `json:"client"`
+	SketchupVersion string `json:"sketchupVersion"`
+	PluginVersion   string `json:"pluginVersion"`
+}
+
+type DesignPublishManifestItem struct {
+	FurnitureInstanceId    string                  `json:"furnitureInstanceId"`
+	TechnicalClientLocator *TechnicalClientLocator `json:"technicalClientLocator,omitempty"`
+}
+
+type DesignPublishManifest struct {
+	SchemaVersion  int64                       `json:"schemaVersion"`
+	ProjectId      string                      `json:"projectId"`
+	DesignId       string                      `json:"designId"`
+	BaseRevisionId *string                     `json:"baseRevisionId,omitempty"`
+	Source         DesignPublishManifestSource `json:"source"`
+	Items          []DesignPublishManifestItem `json:"items"`
+}
+
+type PrepareDesignPublishRequest struct {
+	Manifest DesignPublishManifest `json:"manifest"`
+}
+
+type DesignPublishSession struct {
+	ID                string                      `json:"id"`
+	DesignID          string                      `json:"design_id"`
+	Status            DesignPublishSessionStatus  `json:"status"`
+	BaseRevisionID    *string                     `json:"base_revision_id,omitempty"`
+	ExpiresAt         string                      `json:"expires_at"`
+	RequiredArtifacts []DesignPublishArtifactKind `json:"required_artifacts"`
+}
+
+type DesignPublishArtifactUploaded struct {
+	Kind        DesignPublishArtifactKind `json:"kind"`
+	Sha256      string                    `json:"sha256"`
+	SizeBytes   int64                     `json:"size_bytes"`
+	ContentType string                    `json:"content_type"`
+}
+
+type DesignRevisionArtifact struct {
+	ID               string                    `json:"id"`
+	DesignRevisionID string                    `json:"design_revision_id"`
+	Kind             DesignPublishArtifactKind `json:"kind"`
+	ContentType      string                    `json:"content_type"`
+	SizeBytes        int64                     `json:"size_bytes"`
+	Sha256           string                    `json:"sha256"`
+	UploadedBy       *string                   `json:"uploaded_by,omitempty"`
+	CreatedAt        string                    `json:"created_at"`
+}
+
+type DesignArtifactGrant struct {
+	Kind      DesignPublishArtifactKind `json:"kind"`
+	URL       string                    `json:"url"`
+	ExpiresAt string                    `json:"expires_at"`
 }

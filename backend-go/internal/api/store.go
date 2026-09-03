@@ -297,6 +297,16 @@ type Store interface {
 	// Authoritative Project/Design working context for SketchUp model
 	// binding validation (#388 / DT-4).
 	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)
+	// #392 / DT-8 staged publish flow: prepare validates the manifest v1
+	// against the working copy and pins the base revision; artifact uploads
+	// stage metadata; finalize re-validates and publishes the immutable
+	// revision with its artifacts.
+	PrepareDesignPublish(ctx context.Context, cmd storage.PrepareDesignPublishCommand) (*storage.PrepareResult, error)
+	GetDesignPublishSession(ctx context.Context, designID, sessionID string) (*storage.DesignPublishSessionDetail, error)
+	RecordDesignPublishArtifact(ctx context.Context, cmd storage.RecordDesignPublishArtifactCommand) (*domain.DesignRevisionArtifact, string, error)
+	FinalizeDesignPublish(ctx context.Context, cmd storage.FinalizeDesignPublishCommand) (*domain.DesignRevision, error)
+	ListDesignRevisionArtifacts(ctx context.Context, designID, revisionID string) ([]domain.DesignRevisionArtifact, error)
+	GetDesignRevisionArtifact(ctx context.Context, designID, revisionID string, kind domain.DesignPublishArtifactKind) (*domain.DesignRevisionArtifact, error)
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)

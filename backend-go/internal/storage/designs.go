@@ -399,99 +399,153 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		return published, err
 	}
 
-	// 1. Lock the design row FOR UPDATE to serialize publishing and revision numbering.
+	// The publish core below is shared with the #392 artifact finalize path
+	// (FinalizeDesignPublish) so revision numbering, fail-closed optimistic
+	// concurrency and the working-copy snapshot semantics have exactly one
+	// implementation (§17: reutiliza la lógica concurrency-safe de #387).
+	designOrgID, projectID, err := s.lockActiveDesignForPublish(ctx, cmd.DesignID)
+	if err != nil {
+		return nil, err
+	}
+
+	wcBaseRevID, _, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
+	if err != nil {
+		return nil, err
+	}
+
+	nextRevisionNum, effectiveParentID, err := s.resolveRevisionNumbering(ctx, cmd.DesignID, cmd.BaseRevisionID, wcBaseRevID)
+	if err != nil {
+		return nil, err
+	}
+
+	itemsToPublish, err := s.loadWorkingItemsForPublish(ctx, cmd.DesignID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateWorkingItemsForPublish(ctx, projectID, itemsToPublish); err != nil {
+		return nil, err
+	}
+
+	rev, err := s.insertDesignRevisionAndItems(ctx, designOrgID, projectID, cmd.DesignID,
+		nextRevisionNum, effectiveParentID, cmd.SourceType, cmd.ActorUserID, itemsToPublish)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.advanceWorkingCopyBaseForPublish(ctx, cmd.DesignID, designOrgID, projectID, rev, cmd.ActorUserID); err != nil {
+		return nil, err
+	}
+
+	if err := s.auditDesignRevisionPublished(ctx, rev, cmd.ActorUserID, cmd.IP, cmd.RequestID, nil); err != nil {
+		return nil, err
+	}
+
+	return rev, nil
+}
+
+// lockActiveDesignForPublish takes the design row lock that serializes every
+// publication and revision-numbering decision for one design (#387 / #392).
+func (s *PostgresStore) lockActiveDesignForPublish(ctx context.Context, designID string) (string, string, error) {
 	var designOrgID, projectID, designStatus string
 	err := s.db(ctx).QueryRow(ctx, `
 		SELECT organization_id, project_id, status
 		FROM designs
 		WHERE id = $1
 		FOR UPDATE
-	`, cmd.DesignID).Scan(&designOrgID, &projectID, &designStatus)
+	`, designID).Scan(&designOrgID, &projectID, &designStatus)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.ErrDesignNotFound
+			return "", "", domain.ErrDesignNotFound
 		}
-		return nil, err
+		return "", "", err
 	}
 	if designStatus != string(domain.DesignStatusActive) {
-		return nil, domain.ErrDesignNotActive
+		return "", "", domain.ErrDesignNotActive
 	}
 
 	actorOrg := OrgFromCtx(ctx)
 	if actorOrg != "" && actorOrg != designOrgID {
-		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+		return "", "", domain.ErrFurnitureInstanceProjectNotWritable
 	}
+	return designOrgID, projectID, nil
+}
 
-	// 2. Lock working copy row FOR UPDATE: working copy is the sole mutable authoring authority.
+// loadWorkingCopyBaseForPublish locks the working copy row: the working copy
+// is the sole mutable authoring authority and its base_revision_id is the
+// concurrency authority at publish time.
+func (s *PostgresStore) loadWorkingCopyBaseForPublish(ctx context.Context, designID string) (*string, string, error) {
 	var wcBaseRevID *string
 	var wcSourceType string
-	err = s.db(ctx).QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		SELECT base_revision_id::text, source_type
 		FROM design_working_copies
 		WHERE design_id = $1
 		FOR UPDATE
-	`, cmd.DesignID).Scan(&wcBaseRevID, &wcSourceType)
+	`, designID).Scan(&wcBaseRevID, &wcSourceType)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			wcBaseRevID = nil
-			wcSourceType = "manual"
-		} else {
-			return nil, err
+			return nil, "manual", nil
 		}
+		return nil, "", err
 	}
+	return wcBaseRevID, wcSourceType, nil
+}
 
-	// 3. Concurrency and revision numbering: fetch latest revision for the locked design.
+// resolveRevisionNumbering enforces the single fail-closed optimistic
+// concurrency rule of #387: the authoritative base is
+// design_working_copies.base_revision_id; when revisions exist the client
+// base is required and MUST equal both the working-copy base and the latest
+// revision. The parent of the next revision is always derived — no branching.
+func (s *PostgresStore) resolveRevisionNumbering(ctx context.Context, designID, clientBaseRevisionID string, wcBaseRevID *string) (int, *string, error) {
 	var latestRevID string
 	var latestRevNum int
-	err = s.db(ctx).QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		SELECT id, revision_number
 		FROM design_revisions
 		WHERE design_id = $1
 		ORDER BY revision_number DESC
 		LIMIT 1
-	`, cmd.DesignID).Scan(&latestRevID, &latestRevNum)
-
-	var nextRevisionNum int
-	var effectiveParentID *string
+	`, designID).Scan(&latestRevID, &latestRevNum)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// No previous revision exists: this will be R1.
 			// Semántica: workingCopy.baseRevisionId == null -> publish R1 allowed.
 			if wcBaseRevID != nil && *wcBaseRevID != "" {
-				return nil, fmt.Errorf("%w: working copy base revision is %s but design has no published revisions", domain.ErrDesignRevisionConflict, *wcBaseRevID)
+				return 0, nil, fmt.Errorf("%w: working copy base revision is %s but design has no published revisions", domain.ErrDesignRevisionConflict, *wcBaseRevID)
 			}
-			if cmd.BaseRevisionID != "" {
-				return nil, fmt.Errorf("%w: base revision specified (%s) but design has no previous revisions", domain.ErrDesignRevisionConflict, cmd.BaseRevisionID)
+			if clientBaseRevisionID != "" {
+				return 0, nil, fmt.Errorf("%w: base revision specified (%s) but design has no previous revisions", domain.ErrDesignRevisionConflict, clientBaseRevisionID)
 			}
-			nextRevisionNum = 1
-			effectiveParentID = nil
-		} else {
-			return nil, err
+			return 1, nil, nil
 		}
-	} else {
-		// Previous revision exists: fail-closed optimistic concurrency.
-		// Authority is design_working_copies.base_revision_id:
-		// latest = R7: workingCopy.baseRevisionId MUST equal R7.
-		if wcBaseRevID == nil || *wcBaseRevID == "" {
-			return nil, fmt.Errorf("%w: working copy base revision is missing/null when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
-		}
-		if *wcBaseRevID != latestRevID {
-			return nil, fmt.Errorf("%w: working copy base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, *wcBaseRevID, latestRevID, latestRevNum)
-		}
-		// Base revision ID is required for optimistic concurrency when revisions exist.
-		if cmd.BaseRevisionID == "" {
-			return nil, fmt.Errorf("%w: base revision is required when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
-		}
-		if cmd.BaseRevisionID != latestRevID {
-			return nil, fmt.Errorf("%w: client base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, cmd.BaseRevisionID, latestRevID, latestRevNum)
-		}
-		// Linear parent chain: parent revision is derived from latest/base revision.
-		effectiveParentID = &latestRevID
-		nextRevisionNum = latestRevNum + 1
+		return 0, nil, err
 	}
 
-	// 4. Resolve items to publish: ALWAYS from persistent working copy (single source of authoring truth).
+	// Previous revision exists: fail-closed optimistic concurrency.
+	// Authority is design_working_copies.base_revision_id:
+	// latest = R7: workingCopy.baseRevisionId MUST equal R7.
+	if wcBaseRevID == nil || *wcBaseRevID == "" {
+		return 0, nil, fmt.Errorf("%w: working copy base revision is missing/null when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
+	}
+	if *wcBaseRevID != latestRevID {
+		return 0, nil, fmt.Errorf("%w: working copy base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, *wcBaseRevID, latestRevID, latestRevNum)
+	}
+	// Base revision ID is required for optimistic concurrency when revisions exist.
+	if clientBaseRevisionID == "" {
+		return 0, nil, fmt.Errorf("%w: base revision is required when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
+	}
+	if clientBaseRevisionID != latestRevID {
+		return 0, nil, fmt.Errorf("%w: client base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, clientBaseRevisionID, latestRevID, latestRevNum)
+	}
+	// Linear parent chain: parent revision is derived from latest/base revision.
+	return latestRevNum + 1, &latestRevID, nil
+}
+
+// loadWorkingItemsForPublish resolves the items to publish ALWAYS from the
+// persistent working copy (single source of authoring truth) — never from a
+// client-supplied payload or from scanning the .skp artifact.
+func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID string) ([]PublishDesignRevisionItemCommand, error) {
 	wRows, err := s.db(ctx).Query(ctx, `
 		SELECT furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
 		       definition_version, parameters, material_choices,
@@ -499,7 +553,7 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		FROM design_working_items
 		WHERE design_id = $1
 		ORDER BY created_at ASC
-	`, cmd.DesignID)
+	`, designID)
 	if err != nil {
 		return nil, fmt.Errorf("load working items for publish: %w", err)
 	}
@@ -547,83 +601,96 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 	if err := wRows.Err(); err != nil {
 		return nil, err
 	}
+	return itemsToPublish, nil
+}
 
-	// 5. Validate items.
+// validateWorkingItemsForPublish enforces the item invariants of a snapshot:
+// unique FurnitureInstances (I11) belonging to the same project (I10) and
+// not in a terminal lifecycle state.
+func (s *PostgresStore) validateWorkingItemsForPublish(ctx context.Context, projectID string, itemsToPublish []PublishDesignRevisionItemCommand) error {
 	seenInstances := make(map[string]struct{}, len(itemsToPublish))
 	instanceIDs := make([]string, 0, len(itemsToPublish))
 	for _, item := range itemsToPublish {
 		if !isValidUUID(item.FurnitureInstanceID) {
-			return nil, domain.ErrInvalidDesignCommand
+			return domain.ErrInvalidDesignCommand
 		}
 		if _, exists := seenInstances[item.FurnitureInstanceID]; exists {
 			// Duplicate FI within one revision is rejected (I11).
-			return nil, fmt.Errorf("%w: furniture instance %s appears more than once", domain.ErrDuplicateFurnitureInstanceInRevision, item.FurnitureInstanceID)
+			return fmt.Errorf("%w: furniture instance %s appears more than once", domain.ErrDuplicateFurnitureInstanceInRevision, item.FurnitureInstanceID)
 		}
 		seenInstances[item.FurnitureInstanceID] = struct{}{}
 		instanceIDs = append(instanceIDs, item.FurnitureInstanceID)
 	}
 
-	if len(instanceIDs) > 0 {
-		// Validate that all instances belong to the SAME project and are not removed/cancelled.
-		rows, err := s.db(ctx).Query(ctx, `
-			SELECT id, project_id, lifecycle_status
-			FROM furniture_instances
-			WHERE id = ANY($1)
-		`, instanceIDs)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-
-		foundMap := make(map[string]struct {
-			projectID string
-			lifecycle string
-		})
-		for rows.Next() {
-			var id, pID, lifecycle string
-			if err := rows.Scan(&id, &pID, &lifecycle); err != nil {
-				return nil, err
-			}
-			foundMap[id] = struct {
-				projectID string
-				lifecycle string
-			}{projectID: pID, lifecycle: lifecycle}
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-
-		for _, fiID := range instanceIDs {
-			info, found := foundMap[fiID]
-			if !found {
-				return nil, fmt.Errorf("%w: instance %s not found", ErrFurnitureInstanceNotFound, fiID)
-			}
-			if info.projectID != projectID {
-				// Same-project invariant (I10).
-				return nil, fmt.Errorf("%w: instance %s belongs to project %s, not %s", domain.ErrCrossProjectFurnitureInstance, fiID, info.projectID, projectID)
-			}
-			if domain.FurnitureInstanceLifecycleTerminal(domain.FurnitureInstanceLifecycle(info.lifecycle)) {
-				return nil, fmt.Errorf("%w: instance %s is %s", domain.ErrFurnitureInstanceLifecycleConflict, fiID, info.lifecycle)
-			}
-		}
+	if len(instanceIDs) == 0 {
+		return nil
 	}
 
-	// 5. Insert design_revision row.
+	// Validate that all instances belong to the SAME project and are not removed/cancelled.
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT id, project_id, lifecycle_status
+		FROM furniture_instances
+		WHERE id = ANY($1)
+	`, instanceIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	foundMap := make(map[string]struct {
+		projectID string
+		lifecycle string
+	})
+	for rows.Next() {
+		var id, pID, lifecycle string
+		if err := rows.Scan(&id, &pID, &lifecycle); err != nil {
+			return err
+		}
+		foundMap[id] = struct {
+			projectID string
+			lifecycle string
+		}{projectID: pID, lifecycle: lifecycle}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, fiID := range instanceIDs {
+		info, found := foundMap[fiID]
+		if !found {
+			return fmt.Errorf("%w: instance %s not found", ErrFurnitureInstanceNotFound, fiID)
+		}
+		if info.projectID != projectID {
+			// Same-project invariant (I10).
+			return fmt.Errorf("%w: instance %s belongs to project %s, not %s", domain.ErrCrossProjectFurnitureInstance, fiID, info.projectID, projectID)
+		}
+		if domain.FurnitureInstanceLifecycleTerminal(domain.FurnitureInstanceLifecycle(info.lifecycle)) {
+			return fmt.Errorf("%w: instance %s is %s", domain.ErrFurnitureInstanceLifecycleConflict, fiID, info.lifecycle)
+		}
+	}
+	return nil
+}
+
+// insertDesignRevisionAndItems writes the immutable revision header and its
+// item snapshots with strict serialization checks.
+func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, designOrgID, projectID, designID string,
+	nextRevisionNum int, effectiveParentID *string, sourceType domain.DesignRevisionSourceType,
+	actorUserID string, itemsToPublish []PublishDesignRevisionItemCommand) (*domain.DesignRevision, error) {
 	var createdBy *string
-	if isValidUUID(cmd.ActorUserID) {
-		createdBy = &cmd.ActorUserID
+	if isValidUUID(actorUserID) {
+		createdBy = &actorUserID
 	}
 
 	var rev domain.DesignRevision
-	err = s.db(ctx).QueryRow(ctx, `
+	err := s.db(ctx).QueryRow(ctx, `
 		INSERT INTO design_revisions (
 			organization_id, project_id, design_id, revision_number,
 			parent_revision_id, source_type, status, created_by
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+designRevisionColumns,
-		designOrgID, projectID, cmd.DesignID, nextRevisionNum,
-		effectiveParentID, cmd.SourceType, domain.DesignRevisionStatusPublished, createdBy,
+		designOrgID, projectID, designID, nextRevisionNum,
+		effectiveParentID, sourceType, domain.DesignRevisionStatusPublished, createdBy,
 	).Scan(
 		&rev.ID, &rev.OrganizationID, &rev.ProjectID, &rev.DesignID,
 		&rev.RevisionNumber, &rev.ParentRevisionID,
@@ -634,7 +701,6 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		return nil, fmt.Errorf("insert design revision: %w", err)
 	}
 
-	// 6. Insert design_revision_items rows with strict serialization checking.
 	revItems := make([]domain.DesignRevisionItem, 0, len(itemsToPublish))
 	for _, itemCmd := range itemsToPublish {
 		var defID *string
@@ -721,10 +787,15 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		revItems = append(revItems, insertedItem)
 	}
 	rev.Items = revItems
+	return &rev, nil
+}
 
-	// 7. Advance persistent working copy base_revision_id to the newly published revision (digital-thread §8).
-	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
-	_, err = s.db(ctx).Exec(ctx, `
+// advanceWorkingCopyBaseForPublish moves the working copy base to the newly
+// published revision. Working items are NOT cleared — authoring continues
+// from the new base (digital-thread §8, DT-8 §29).
+func (s *PostgresStore) advanceWorkingCopyBaseForPublish(ctx context.Context, designID, designOrgID, projectID string, rev *domain.DesignRevision, actorUserID string) error {
+	actor := nonEmptyOrDefault(actorUserID, tenantActorUserID(ctx))
+	_, err := s.db(ctx).Exec(ctx, `
 		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
 		VALUES ($1, $2, $3, $4, $5, NOW(), $6)
 		ON CONFLICT (design_id) DO UPDATE SET
@@ -732,32 +803,40 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 			source_type = EXCLUDED.source_type,
 			updated_at = NOW(),
 			updated_by = EXCLUDED.updated_by
-	`, cmd.DesignID, designOrgID, projectID, rev.ID, rev.SourceType, actor)
+	`, designID, designOrgID, projectID, rev.ID, rev.SourceType, actor)
 	if err != nil {
-		return nil, fmt.Errorf("advance working copy base revision: %w", err)
+		return fmt.Errorf("advance working copy base revision: %w", err)
 	}
+	return nil
+}
 
-	// 8. Security audit event for publication.
+// auditDesignRevisionPublished records the durable publication event. Extra
+// details (artifact references, publish session) are merged by the #392
+// finalize path.
+func (s *PostgresStore) auditDesignRevisionPublished(ctx context.Context, rev *domain.DesignRevision, actorUserID, ip, requestID string, extra map[string]interface{}) error {
+	details := map[string]interface{}{
+		"design_revision_id": rev.ID,
+		"design_id":          rev.DesignID,
+		"project_id":         rev.ProjectID,
+		"revision_number":    rev.RevisionNumber,
+		"parent_revision_id": rev.ParentRevisionID,
+		"source_type":        string(rev.SourceType),
+		"item_count":         len(rev.Items),
+	}
+	for k, v := range extra {
+		details[k] = v
+	}
 	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
 		EventType:      "design_revision_published",
-		ActorUserID:    nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
+		ActorUserID:    nonEmptyOrDefault(actorUserID, tenantActorUserID(ctx)),
 		OrganizationID: rev.OrganizationID,
-		IP:             cmd.IP,
-		RequestID:      cmd.RequestID,
-		Details: map[string]interface{}{
-			"design_revision_id": rev.ID,
-			"design_id":          rev.DesignID,
-			"project_id":         rev.ProjectID,
-			"revision_number":    rev.RevisionNumber,
-			"parent_revision_id": rev.ParentRevisionID,
-			"source_type":        string(rev.SourceType),
-			"item_count":         len(rev.Items),
-		},
+		IP:             ip,
+		RequestID:      requestID,
+		Details:        details,
 	}); err != nil {
-		return nil, fmt.Errorf("audit design_revision_published: %w", err)
+		return fmt.Errorf("audit design_revision_published: %w", err)
 	}
-
-	return &rev, nil
+	return nil
 }
 
 func (s *PostgresStore) GetDesignRevision(ctx context.Context, designID string, revisionID string) (*domain.DesignRevision, error) {
@@ -779,6 +858,16 @@ func (s *PostgresStore) GetDesignRevision(ctx context.Context, designID string, 
 		return nil, err
 	}
 	rev.Items = items
+
+	// #392: published artifact metadata rides along on the revision detail
+	// (§31 readback). Legacy artifact-less revisions simply carry none.
+	artifacts, err := s.ListDesignRevisionArtifacts(ctx, designID, rev.ID)
+	if err != nil {
+		return nil, err
+	}
+	if artifacts != nil {
+		rev.Artifacts = artifacts
+	}
 	return rev, nil
 }
 

@@ -136,6 +136,10 @@ module Sketchup
 
   class Group
   end
+
+  def self.version
+    '24.0.145-stub'
+  end
 end
 
 module SketchupStub
@@ -557,6 +561,20 @@ module SketchupStub
     def abort_operation
       @operations << :abort
       SketchupStub.abort_undo_frame
+    end
+
+    # #392 / DT-8 host export surface: save_copy writes a byte-identical
+    # stub payload per model revision (never the user's document path), and
+    # write_image produces a non-empty marker "image" so publish flows can
+    # assert real files on disk.
+    def save_copy(path)
+      File.binwrite(path, "SKP-STUB-#{object_id}")
+      true
+    end
+
+    def write_image(path, width = 640, height = 480, antialias = false, _compression = 0.0)
+      File.binwrite(path, "PNG-STUB-#{width}x#{height}-#{antialias}")
+      true
     end
   end
 

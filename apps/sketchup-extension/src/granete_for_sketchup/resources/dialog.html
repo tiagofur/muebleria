@@ -1927,6 +1927,11 @@
               <button id="btn-binding-connect" class="btn btn-primary" style="width: 100%;">Conectar modelo</button>
               <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar de nuevo</button>
               <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
+              <!-- #392 / DT-8: staged revision publication. Visible only when
+                   the server granted can_publish_revision and the base is
+                   current; the backend stays the authority either way. -->
+              <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
+              <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
             </div>
             <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
               <label class="login-label" for="binding-project-select">Proyecto</label>
@@ -2168,6 +2173,8 @@
         var bindingConnectBtn = document.getElementById("btn-binding-connect");
         var bindingRefreshBtn = document.getElementById("btn-binding-refresh");
         var bindingAdoptBtn = document.getElementById("btn-binding-adopt");
+        var bindingPublishBtn = document.getElementById("btn-binding-publish");
+        var bindingPublishProgress = document.getElementById("binding-publish-progress");
         var bindingPicker = document.getElementById("model-binding-picker");
         var bindingProjectSelect = document.getElementById("binding-project-select");
         var bindingDesignSelect = document.getElementById("binding-design-select");
@@ -3632,6 +3639,8 @@
           // #388 model binding bridge — delegates to the binding section.
           onModelBindingStatus: function (status) { renderModelBindingStatus(status); },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
+          onPublishProgress: function (payload) { renderPublishProgress(payload); },
+          onPublishResult: function (result) { handlePublishResult(result); },
           onBindingProjects: function (result) { handleBindingProjects(result); },
           onBindingDesigns: function (result) { handleBindingDesigns(result); },
 
@@ -4620,10 +4629,92 @@
           bindingConnectBtn.style.display = status.state === "connected" ? "none" : "block";
           bindingRefreshBtn.style.display = bound ? "block" : "none";
           bindingAdoptBtn.style.display = status.state === "stale_base" ? "block" : "none";
+          renderPublishAvailability(status);
 
           bindingPicker.style.display = "none";
           bindingRebindReview.style.display = "none";
           updateLibraryInsertButton();
+        }
+
+        // ------------------------------------------------------------------
+        // Publish design revision (#392 / DT-8). The button is available only
+        // when the server granted can_publish_revision AND the binding base
+        // is current; progress/result states are surfaced distinctly and the
+        // backend remains the authority for every precondition.
+        // ------------------------------------------------------------------
+        var PUBLISH_STEP_COPY = {
+          validating: "Validando identidad de los muebles…",
+          syncing: "Sincronizando borrador de trabajo…",
+          exporting: "Guardando modelo y preview…",
+          uploading: "Subiendo archivos…",
+          publishing: "Publicando revisión…"
+        };
+        var PUBLISH_ERROR_COPY = {
+          unbound: "El modelo no está conectado a un diseño.",
+          stale_base: "La base del diseño cambió en el servidor; actualizá la base de trabajo y volvé a publicar.",
+          duplicate_furniture_identity: "Hay copias con la misma identidad física; resolvé los duplicados antes de publicar.",
+          unresolved_duplicate_identity: "Hay un mueble copiado cuya identidad no pudo resolverse.",
+          working_copy_unsynced: "Hay un mueble cuya posición todavía no se sincronizó con el taller.",
+          invalid_furniture_identity: "El modelo contiene muebles con identidades no válidas.",
+          foreign_project_identity: "El modelo contiene muebles de otro proyecto.",
+          unknown_furniture_identity: "El modelo contiene muebles que no existen en el servidor.",
+          backend_verification_failed: "No se pudo verificar la identidad autoritativa con el servidor.",
+          hash_mismatch: "El archivo subido no coincide con su verificación de integridad.",
+          artifact_too_large: "Uno de los archivos es demasiado grande.",
+          unreachable: "No se pudo contactar al servidor."
+        };
+        var publishInFlight = false;
+        var lastPublishOutcome = null;
+
+        function canPublish(status) {
+          var caps = status.capabilities || {};
+          return status.state === "connected" && caps.can_publish_revision === true;
+        }
+
+        function renderPublishAvailability(status) {
+          if (!bindingPublishBtn || !bindingPublishProgress) return;
+          var idle = !publishInFlight && lastPublishOutcome === null;
+          bindingPublishBtn.style.display = canPublish(status) ? "block" : "none";
+          bindingPublishBtn.disabled = publishInFlight || !idle;
+          bindingPublishBtn.textContent = publishInFlight ? "Publicando…" : "Publicar diseño";
+          if (!publishInFlight && lastPublishOutcome === null) {
+            bindingPublishProgress.style.display = "none";
+            bindingPublishProgress.textContent = "";
+          }
+        }
+
+        function renderPublishProgress(payload) {
+          if (!bindingPublishProgress || !payload) return;
+          publishInFlight = true;
+          lastPublishOutcome = null;
+          if (bindingPublishBtn) {
+            bindingPublishBtn.disabled = true;
+            bindingPublishBtn.textContent = "Publicando…";
+          }
+          bindingPublishProgress.style.display = "block";
+          bindingPublishProgress.textContent = PUBLISH_STEP_COPY[payload.step] || PUBLISH_STEP_COPY.validating;
+        }
+
+        function handlePublishResult(result) {
+          publishInFlight = false;
+          result = result || { ok: false, code: "error", reason: "resultado desconocido" };
+          lastPublishOutcome = result;
+          if (bindingPublishProgress) {
+            bindingPublishProgress.style.display = "block";
+            if (result.ok) {
+              bindingPublishProgress.textContent = "Diseño publicado · Revisión R" + (result.revisionNumber || "?");
+            } else {
+              var copy = PUBLISH_ERROR_COPY[result.code] || "No se pudo publicar el diseño.";
+              bindingPublishProgress.textContent = copy + (result.reason ? " (" + result.reason + ")" : "");
+            }
+          }
+          if (bindingPublishBtn) bindingPublishBtn.disabled = false;
+          if (result.ok) {
+            showToast("success", "✓ Diseño publicado como revisión inmutable R" + (result.revisionNumber || "?") + ".");
+            refreshModelBinding();
+          } else {
+            showToast("error", PUBLISH_ERROR_COPY[result.code] || "No se pudo publicar el diseño.");
+          }
         }
 
         function fillSelect(select, entries, placeholder, statusLabel) {
@@ -4770,6 +4861,18 @@
             window.sketchup.adopt_binding_base();
           }
         });
+        if (bindingPublishBtn) {
+          bindingPublishBtn.addEventListener("click", function () {
+            if (publishInFlight) return;
+            lastPublishOutcome = null;
+            renderPublishProgress({ step: "validating" });
+            if (window.sketchup && window.sketchup.publish_design_revision) {
+              window.sketchup.publish_design_revision();
+            } else {
+              handlePublishResult({ ok: false, code: "unavailable", reason: "publicación no disponible" });
+            }
+          });
+        }
         renderModelBindingStatus({ state: "unbound" });
 
         // ------------------------------------------------------------------

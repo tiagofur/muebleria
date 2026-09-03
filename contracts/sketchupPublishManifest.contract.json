@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "comment": "Shared #392 / DT-8 publish manifest v1 contract fixture. The schema authority is sketchupPublishManifest.schema.json; these scenarios pin the Go validator (internal/domain/design_publish.go ParseDesignPublishManifest) and the Ruby manifest builder to the same accept/reject line. The server additionally validates identity/context against the working copy at prepare AND finalize — schema validity alone never publishes.",
+  "artifact": "manifest.json",
+  "schema": "contracts/sketchupPublishManifest.schema.json",
+  "scenarios": [
+    {
+      "id": "01-valid-first-publish",
+      "valid": true,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "baseRevisionId": null,
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": [
+          {
+            "furnitureInstanceId": "51000000-0000-0000-0000-0000000000f1",
+            "technicalClientLocator": {
+              "kind": "sketchup_persistent_id",
+              "value": "1234"
+            }
+          },
+          {
+            "furnitureInstanceId": "51000000-0000-0000-0000-0000000000f2"
+          }
+        ]
+      }
+    },
+    {
+      "id": "02-valid-with-base",
+      "valid": true,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "baseRevisionId": "53000000-0000-0000-0000-000000000001",
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": []
+      }
+    },
+    {
+      "id": "03-invalid-schema-version",
+      "valid": false,
+      "manifest": {
+        "schemaVersion": 2,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": []
+      }
+    },
+    {
+      "id": "04-invalid-duplicate-instance-ids",
+      "valid": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "baseRevisionId": null,
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": [
+          {
+            "furnitureInstanceId": "51000000-0000-0000-0000-0000000000f1"
+          },
+          {
+            "furnitureInstanceId": "51000000-0000-0000-0000-0000000000f1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "05-invalid-unknown-field",
+      "valid": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": [],
+        "bomPreview": {
+          "boards": 12
+        }
+      }
+    },
+    {
+      "id": "06-invalid-non-uuid-instance",
+      "valid": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "baseRevisionId": null,
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": [
+          {
+            "furnitureInstanceId": "FI-001"
+          }
+        ]
+      }
+    },
+    {
+      "id": "07-invalid-client",
+      "valid": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "baseRevisionId": null,
+        "source": {
+          "client": "promob",
+          "sketchupVersion": "24.0.145",
+          "pluginVersion": "0.1.0"
+        },
+        "items": []
+      }
+    },
+    {
+      "id": "08-invalid-source-missing-plugin-version",
+      "valid": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "projectId": "41000000-0000-0000-0000-000000000001",
+        "designId": "52000000-0000-0000-0000-000000000001",
+        "baseRevisionId": null,
+        "source": {
+          "client": "sketchup",
+          "sketchupVersion": "24.0.145"
+        },
+        "items": []
+      }
+    }
+  ]
+}

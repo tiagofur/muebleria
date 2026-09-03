@@ -4,6 +4,7 @@ require 'json'
 # The SketchUp OpenSSL performance cop is disabled inline below: workshop
 # connectivity is the product requirement, the only supported host today is
 # SketchUp 2026.2 on macOS, and plain-HTTP local servers are unaffected.
+require 'digest'
 require 'net/http' # rubocop:disable SketchupPerformance/OpenSSL
 require 'uri'
 
@@ -56,6 +57,51 @@ module Granete
         rescue StandardError => e
           @logger&.error('transport_request_failed', error: e)
           raise RequestError, "No se pudo conectar con el servidor de Granete: #{e.message}"
+        end
+
+        # Multipart file upload (#392 / DT-8). The artifact streams from disk
+        # through MultipartBody — never a base64 JSON body — so publishing a
+        # large .skp stays memory-flat.
+        def upload(payload, file_path:, content_type:, authorization_header: nil)
+          raise NotConfiguredError, 'Transport is not configured' unless configured?
+
+          uri = build_uri(payload.fetch('path'))
+          http = build_http(uri)
+          # Model uploads dwarf the JSON timeout budget; give the write side
+          # its own generous bound instead of blocking the dialog thread.
+          http.write_timeout = @timeout_seconds * 8
+          http.read_timeout = @timeout_seconds * 8
+
+          boundary = "granete-#{Digest::SHA256.hexdigest("#{Time.now.to_f}-#{rand}")[0, 32]}"
+          file = File.open(file_path, 'rb')
+          body = MultipartBody.new(boundary: boundary, field: 'file',
+                                   filename: File.basename(file_path),
+                                   content_type: content_type, file: file)
+          request = Net::HTTP::Post.new(uri.request_uri)
+          request['Accept'] = 'application/json'
+          request['Content-Type'] = "multipart/form-data; boundary=#{boundary}"
+          request['Content-Length'] = body.content_length.to_s
+          request['Authorization'] = authorization_header if authorization_header
+          if payload['headers'].is_a?(Hash)
+            payload['headers'].each do |k, v|
+              request[k.to_s] = v.to_s
+            end
+          end
+          request.body = body
+
+          response = perform(http, request)
+          {
+            'status' => response.code.to_i,
+            'headers' => response.each_header.to_h,
+            'body' => parse_body(response)
+          }
+        rescue NotConfiguredError
+          raise
+        rescue StandardError => e
+          @logger&.error('transport_upload_failed', error: e)
+          raise RequestError, "No se pudo subir el archivo a Granete: #{e.message}"
+        ensure
+          file&.close
         end
 
         LOCAL_HOSTS = %w[localhost 127.0.0.1 ::1].freeze

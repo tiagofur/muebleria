@@ -50,6 +50,24 @@ module Granete
           duplicate_resolver: @duplicate_resolver,
           model_provider: method(:active_model)
         )
+        # #392 / DT-8: staged revision publication. The base advancer is the
+        # binding connector's adopt_authoritative_base — the binding base
+        # only ever advances from the server-authoritative answer.
+        @design_publish_service = Connection::DesignPublish::Service.new(
+          transport: @transport,
+          auth_provider: @auth_provider,
+          logger: logger
+        )
+        @design_publisher = Connection::DesignPublish::Publisher.new(
+          model_provider: method(:active_model),
+          binding_store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
+          duplicate_resolver: @duplicate_resolver,
+          service: @design_publish_service,
+          working_copy_service: @project_furniture_placer.service,
+          base_advancer: -> { @model_binding_connector.adopt_authoritative_base },
+          metadata_store_factory: method(:metadata_store),
+          logger: logger
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -59,7 +77,8 @@ module Granete
           model_binding_connector: @model_binding_connector,
           project_furniture_placer: @project_furniture_placer,
           duplicate_resolver: @duplicate_resolver,
-          entities_observer: @entities_observer
+          entities_observer: @entities_observer,
+          design_publisher: @design_publisher
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
