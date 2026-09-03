@@ -62,9 +62,7 @@ class DuplicateResolverTest < Minitest::Test
       raise @duplicate_error if @duplicate_error
 
       # Idempotency replay simulation
-      if idempotency_key && @instances_by_id[idempotency_key]
-        return @instances_by_id[idempotency_key]
-      end
+      return @instances_by_id[idempotency_key] if idempotency_key && @instances_by_id[idempotency_key]
 
       next_id = @duplicate_calls.length == 1 ? FI_2 : FI_3
       instance = PF::Contract::Instance.new(
@@ -106,7 +104,7 @@ class DuplicateResolverTest < Minitest::Test
 
     @binding_store = MB::Store.new(@model)
     @model_binding_service = Object.new
-    def @model_binding_service.validate(project_id:, design_id:, base_revision_id:)
+    def @model_binding_service.validate(*)
       MB::Contract::Validation.new(
         state: 'valid',
         schema_version: 1,
@@ -136,7 +134,7 @@ class DuplicateResolverTest < Minitest::Test
   end
 
   # Helper to create a placed furniture instance in the model
-  def create_managed_instance(furniture_instance_id:, persistent_id: nil, project_id: PROJECT_ID, design_id: DESIGN_ID)
+  def create_managed_instance(furniture_instance_id:, project_id: PROJECT_ID, design_id: DESIGN_ID)
     definition = @model.definitions.add("Gabinete #{furniture_instance_id}")
     transform = Geom::Transformation.new
     instance = @model.entities.add_instance(definition, transform)
@@ -211,8 +209,8 @@ class DuplicateResolverTest < Minitest::Test
     # WorkingCopy has both units
     wc_items = @service.working_copy.items
     assert_equal 2, wc_items.length
-    assert wc_items.any? { |i| i.furniture_instance_id == FI_1 }
-    assert wc_items.any? { |i| i.furniture_instance_id == FI_2 }
+    assert(wc_items.any? { |i| i.furniture_instance_id == FI_1 })
+    assert(wc_items.any? { |i| i.furniture_instance_id == FI_2 })
   end
 
   # Proof 2: Repeated callback idempotency
@@ -329,17 +327,19 @@ class DuplicateResolverTest < Minitest::Test
     inst2 = @model.entities.add_instance(definition, Geom::Transformation.new)
 
     @metadata_store.write(inst1, {
-      'namespace' => 'com.granete.sketchup_extension',
-      'metadataVersion' => 1,
-      'kind' => 'furnitureInstance',
-      'identity' => { 'instanceRef' => FI_1, 'furnitureInstanceId' => FI_1, 'projectId' => PROJECT_ID }
-    })
+                            'namespace' => 'com.granete.sketchup_extension',
+                            'metadataVersion' => 1,
+                            'kind' => 'furnitureInstance',
+                            'identity' => { 'instanceRef' => FI_1, 'furnitureInstanceId' => FI_1,
+                                            'projectId' => PROJECT_ID }
+                          })
     @metadata_store.write(inst2, {
-      'namespace' => 'com.granete.sketchup_extension',
-      'metadataVersion' => 1,
-      'kind' => 'furnitureInstance',
-      'identity' => { 'instanceRef' => FI_2, 'furnitureInstanceId' => FI_2, 'projectId' => PROJECT_ID }
-    })
+                            'namespace' => 'com.granete.sketchup_extension',
+                            'metadataVersion' => 1,
+                            'kind' => 'furnitureInstance',
+                            'identity' => { 'instanceRef' => FI_2, 'furnitureInstanceId' => FI_2,
+                                            'projectId' => PROJECT_ID }
+                          })
 
     duplicates = @resolver.scan_duplicates(@model)
     assert_empty duplicates

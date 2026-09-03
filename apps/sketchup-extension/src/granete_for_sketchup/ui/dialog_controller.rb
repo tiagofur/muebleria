@@ -191,7 +191,7 @@ module Granete
       # touches business identity — listing and Place existing go through the
       # ProjectFurniture placer, which validates the binding and derives
       # pending/placed from the design working copy.
-      module ProjectFurnitureBridge
+      module ProjectFurnitureBridge # rubocop:disable Metrics/ModuleLength
         def register_project_furniture_callbacks(dialog)
           dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
           dialog.add_action_callback('place_furniture_instance') { |_c, p| handle_place_furniture_instance(dialog, p) }
@@ -799,10 +799,12 @@ module Granete
 
         attr_reader :selection_observer, :entities_observer, :duplicate_resolver
 
+        # rubocop:disable Metrics/ParameterLists
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
                        project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil)
+          # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
           @model_binding_connector = model_binding_connector

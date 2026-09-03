@@ -17,7 +17,11 @@ module Granete
           return unless entity
           return if @duplicate_resolver.suppressed?
 
-          model = @model_provider ? @model_provider.call : (entity.respond_to?(:model) ? entity.model : nil)
+          model = if @model_provider
+                    @model_provider.call
+                  else
+                    (entity.respond_to?(:model) ? entity.model : nil)
+                  end
           return unless model
 
           @duplicate_resolver.resolve_observed_addition(model, entity)

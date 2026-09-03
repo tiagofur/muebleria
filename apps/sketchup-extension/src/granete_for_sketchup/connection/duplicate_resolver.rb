@@ -28,7 +28,7 @@ module Granete
       #     metadata rewrites to prevent cascading loops.
       #   * Offline resilience: If backend is unavailable, copies are tagged as
       #     unresolved, preserving user work without masquerading as valid.
-      class DuplicateResolver
+      class DuplicateResolver # rubocop:disable Metrics/ClassLength
         UUID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i
 
         attr_reader :service, :logger
@@ -61,7 +61,7 @@ module Granete
         # Returns a Hash: { instance_id => [entity, entity, ...] } only for
         # instance IDs that appear MORE than once.
         def scan_duplicates(model)
-          return {} unless model&.respond_to?(:entities)
+          return {} unless model.respond_to?(:entities)
 
           store = metadata_store(model)
           instances_map = {}
@@ -81,7 +81,7 @@ module Granete
 
         # Scans for entities that carry an explicit unresolved duplicate marker.
         def find_unresolved_entities(model)
-          return [] unless model&.respond_to?(:entities)
+          return [] unless model.respond_to?(:entities)
 
           store = metadata_store(model)
           unresolved = []
@@ -90,16 +90,14 @@ module Granete
             metadata = safe_read_metadata(store, entity)
             next unless metadata.is_a?(Hash) && metadata['identity'].is_a?(Hash)
 
-            if metadata['identity']['duplicateStatus'] == 'unresolved'
-              unresolved << entity
-            end
+            unresolved << entity if metadata['identity']['duplicateStatus'] == 'unresolved'
           end
           unresolved
         end
 
         # Scans for entities carrying invalid UUIDs as furnitureInstanceId.
         def find_invalid_identity_entities(model)
-          return [] unless model&.respond_to?(:entities)
+          return [] unless model.respond_to?(:entities)
 
           store = metadata_store(model)
           invalid = []
@@ -111,9 +109,7 @@ module Granete
             fid = metadata['identity']['furnitureInstanceId']
             next if fid.nil?
 
-            unless fid.is_a?(String) && fid.match?(UUID_PATTERN)
-              invalid << entity
-            end
+            invalid << entity unless fid.is_a?(String) && fid.match?(UUID_PATTERN)
           end
           invalid
         end
@@ -180,7 +176,9 @@ module Granete
             original, copies = determine_original_and_copies(source_id, entities, working_copy)
             if original.nil?
               # Ambiguous: cannot safely determine which entity was the original
-              copies.each { |e| mark_unresolved(e, source_id, 'ambigüedad: no se pudo determinar cuál es el mueble original') }
+              copies.each do |e|
+                mark_unresolved(e, source_id, 'ambigüedad: no se pudo determinar cuál es el mueble original')
+              end
               next
             end
 
@@ -200,7 +198,7 @@ module Granete
         #   - Unresolved copied identities exist.
         #   - Invalid or fake/random UUIDs exist.
         #   - Foreign project identities exist (when bound).
-        def validate_model(model, binding: nil)
+        def validate_model(model, binding: nil) # rubocop:disable Metrics/MethodLength
           return { 'valid' => false, 'code' => 'no_model', 'reason' => 'no hay un modelo activo' } unless model
 
           current_binding = binding || @binding_store_factory.call&.read
@@ -210,7 +208,8 @@ module Granete
             return {
               'valid' => false,
               'code' => 'duplicate_business_identity',
-              'reason' => "existen copias con la misma identidad física en el modelo (#{ids}); resolvé los duplicados antes de continuar",
+              'reason' => "existen copias con la misma identidad física en el modelo (#{ids}); " \
+                          'resolvé los duplicados antes de continuar',
               'duplicates' => duplicates.transform_values(&:length)
             }
           end
@@ -220,7 +219,8 @@ module Granete
             return {
               'valid' => false,
               'code' => 'unresolved_duplicate_identity',
-              'reason' => 'hay un mueble copiado cuya identidad todavía no pudo sincronizarse; conectate al taller para resolverlo'
+              'reason' => 'hay un mueble copiado cuya identidad todavía no pudo sincronizarse; ' \
+                          'conectate al taller para resolverlo'
             }
           end
 
@@ -258,9 +258,7 @@ module Granete
             next unless metadata.is_a?(Hash) && metadata['identity'].is_a?(Hash)
 
             project_id = metadata['identity']['projectId']
-            if project_id && project_id != expected_project_id
-              foreign << entity
-            end
+            foreign << entity if project_id && project_id != expected_project_id
           end
           foreign
         end
@@ -299,7 +297,7 @@ module Granete
           [original, copies]
         end
 
-        def resolve_copy(model, binding, original, copy, source_instance_id, working_copy: nil)
+        def resolve_copy(model, binding, _original, copy, source_instance_id, working_copy: nil)
           with_reentrancy_guard do
             pid = copy.respond_to?(:persistent_id) ? copy.persistent_id.to_s : 'unknown'
             idempotency_key = "dup:#{binding.project_id}:#{binding.design_id}:#{source_instance_id}:#{pid}"
@@ -346,9 +344,7 @@ module Granete
           metadata['identity'].delete('duplicateSourceInstanceId')
 
           # Update display name if entity carries old ID in name
-          if copy.respond_to?(:name) && copy.name && copy.name.include?(source_id)
-            copy.name = copy.name.sub(source_id, new_id)
-          end
+          copy.name = copy.name.sub(source_id, new_id) if copy.respond_to?(:name) && copy.name&.include?(source_id)
 
           store.write(copy, metadata)
         end
