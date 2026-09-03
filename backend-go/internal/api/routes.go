@@ -334,6 +334,9 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/designs/{designId}/revisions", authMW(http.HandlerFunc(server.HandleDesignRevisions)))
 	mux.Handle("POST /api/designs/{designId}/revisions", authMW(server.RequireIdempotency("design.publish-revision", http.HandlerFunc(server.HandleDesignRevisions))))
 	mux.Handle("GET /api/designs/{designId}/revisions/{revisionId}", authMW(http.HandlerFunc(server.HandleDesignRevision)))
+	// #388 / DT-4: stateless authoritative validation of a SketchUp model
+	// binding candidate. no-store: the answer is session- and revision-scoped.
+	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/binding:validate", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectDesignBindingValidate))))
 
 	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorScan))))

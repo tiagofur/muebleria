@@ -16,6 +16,7 @@ module Granete
         transport/adapter
         transport/http_adapter
         metadata/store
+        connection/model_binding
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract

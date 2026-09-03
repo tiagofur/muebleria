@@ -317,7 +317,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 			SourceType:     domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{
-					FurnitureInstanceID: fi1.ID, // Same physical identity!
+					FurnitureInstanceID: fi1.ID,                                              // Same physical identity!
 					Parameters:          map[string]any{"widthMm": 650.0, "heightMm": 720.0}, // modified width
 					MaterialChoices:     map[string]string{"CARCASS": "WHITE-18"},
 					Transform: domain.Transform3D{
@@ -1508,5 +1508,143 @@ func TestDesigns_AuthoritativeWorkingCopyPublishProofs(t *testing.T) {
 	var revCountAfterMissing int
 	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM design_revisions WHERE design_id = $1`, design.ID).Scan(&revCountAfterMissing); err != nil || revCountAfterMissing != 2 {
 		t.Fatalf("revisions count after missing base publish = %d, want 2", revCountAfterMissing)
+	}
+}
+
+// #388 / DT-4: GetModelBindingContext resolves the authoritative
+// Project/Design working truth for SketchUp model binding validation under
+// the runtime app role + RLS. Positive: full identity/display context and
+// the exact working-copy base. Negative: cross-project and cross-organization
+// objects read as not-found (uniform, indistinguishable), and a client base
+// revision that does not belong to the design is rejected instead of being
+// silently re-based.
+func TestDesigns_ModelBindingContext(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	actorA := fiActorA()
+	actorB := fiActorB()
+
+	var sharedDesign, privateDesign *domain.Design
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		sharedDesign, err = fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
+			ProjectID:   fiSharedProject,
+			Name:        "Cocina Principal",
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		privateDesign, err = fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
+			ProjectID:   fiProjectAOnly,
+			Name:        "Vestidor Privado",
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create designs: %v", err)
+	}
+
+	// Publish R1 on the shared design so the working copy carries a base.
+	var rev *domain.DesignRevision
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		rev, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:    sharedDesign.ID,
+			SourceType:  domain.DesignRevisionSourceSketchup,
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("publish revision: %v", err)
+	}
+
+	// 1. Valid context: exact org/project/design identity and the
+	// authoritative working-copy base (R1 after publish).
+	var bctx *storage.ModelBindingContext
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		bctx, err = fx.store.GetModelBindingContext(ctx, fiSharedProject, sharedDesign.ID, nil)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("get model binding context: %v", err)
+	}
+	if bctx.OrganizationID != rlsOrgA || bctx.OrganizationName != "RLS A" {
+		t.Fatalf("organization summary mismatch: %+v", bctx)
+	}
+	if bctx.ProjectID != fiSharedProject || bctx.ProjectName != "Shared A-B" {
+		t.Fatalf("project summary mismatch: %+v", bctx)
+	}
+	if bctx.Design.ID != sharedDesign.ID || bctx.Design.Name != "Cocina Principal" ||
+		bctx.Design.Status != domain.DesignStatusActive {
+		t.Fatalf("design summary mismatch: %+v", bctx.Design)
+	}
+	if bctx.WorkingCopyBaseRevisionID == nil || *bctx.WorkingCopyBaseRevisionID != rev.ID {
+		t.Fatalf("working copy base = %v, want published revision %s", bctx.WorkingCopyBaseRevisionID, rev.ID)
+	}
+	if bctx.BaseRevisionNumber == nil || *bctx.BaseRevisionNumber != 1 {
+		t.Fatalf("base revision number = %v, want 1", bctx.BaseRevisionNumber)
+	}
+
+	// 2. Client binding base matching the authoritative base validates.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		base := rev.ID
+		_, err := fx.store.GetModelBindingContext(ctx, fiSharedProject, sharedDesign.ID, &base)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("matching client base must validate: %v", err)
+	}
+
+	// 3. Foreign base revision (belongs to another design) fails closed.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		foreign := rev.ID // same revision id but against the private design
+		_, err := fx.store.GetModelBindingContext(ctx, fiProjectAOnly, privateDesign.ID, &foreign)
+		return err
+	})
+	if !errors.Is(err, domain.ErrDesignRevisionNotFound) {
+		t.Fatalf("foreign base revision err = %v, want ErrDesignRevisionNotFound", err)
+	}
+
+	// 4. Cross-project: org-A design asked under the org-B project path is
+	// uniformly not found — never a partial context.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.GetModelBindingContext(ctx, fiProjectB, sharedDesign.ID, nil)
+		return err
+	})
+	if !errors.Is(err, domain.ErrDesignNotFound) {
+		t.Fatalf("cross-project err = %v, want ErrDesignNotFound", err)
+	}
+
+	// 5. Cross-organization: org B cannot see the org-A-only project design.
+	err = fiTx(t, fx.store, actorB, func(ctx context.Context) error {
+		_, err := fx.store.GetModelBindingContext(ctx, fiProjectAOnly, privateDesign.ID, nil)
+		return err
+	})
+	if !errors.Is(err, domain.ErrDesignNotFound) {
+		t.Fatalf("cross-org err = %v, want ErrDesignNotFound", err)
+	}
+
+	// 6. Archived design keeps its full context but exposes its status so the
+	// handler can answer design_archived.
+	if _, err := fx.admin.Exec(context.Background(),
+		`UPDATE designs SET status='archived' WHERE id=$1`, sharedDesign.ID); err != nil {
+		t.Fatal(err)
+	}
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		bctx, err = fx.store.GetModelBindingContext(ctx, fiSharedProject, sharedDesign.ID, nil)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("archived design context: %v", err)
+	}
+	if bctx.Design.Status != domain.DesignStatusArchived {
+		t.Fatalf("archived design status = %s, want archived", bctx.Design.Status)
+	}
+	if bctx.WorkingCopyBaseRevisionID == nil || *bctx.WorkingCopyBaseRevisionID != rev.ID {
+		t.Fatalf("archived design must still expose the exact working base: %+v", bctx)
 	}
 }

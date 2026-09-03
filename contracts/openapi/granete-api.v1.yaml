@@ -2559,6 +2559,46 @@
         }
       }
     },
+    "/projects/{projectId}/designs/{designId}/binding:validate": {
+      "post": {
+        "operationId": "validateProjectDesignModelBinding",
+        "summary": "Validate a SketchUp model binding candidate against the authoritative Project/Design working context (#388)",
+        "description": "Stateless authoritative validation for the model-level binding of an authoring client. The server answers with the exact organization/project/design/working-copy truth; missing, foreign or cross-project objects answer a uniform 404. The client derives stale/incompatible states by comparing its stored binding against the returned authoritative base revision. No model metadata may be written before this validation succeeds.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateModelBindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative binding context for the exact Project/Design working state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingValidation"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}": {
       "get": {
         "operationId": "getDesign",
@@ -6369,6 +6409,175 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "ValidateModelBindingRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client_schema_version"
+        ],
+        "properties": {
+          "client_schema_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Binding contract version the authoring client understands (#388 schemaVersion)."
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The base revision the client's stored binding expects, when the model is already bound. Absent on a first binding; the server verifies existence and design ownership when present."
+          }
+        }
+      },
+      "ModelBindingState": {
+        "type": "string",
+        "enum": [
+          "valid",
+          "design_archived"
+        ]
+      },
+      "ModelBindingOrganizationSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ModelBindingProjectSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ModelBindingDesignSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DesignStatus"
+          }
+        }
+      },
+      "ModelBindingWorkingCopySummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "base_revision_id",
+          "base_revision_number",
+          "updated_at"
+        ],
+        "properties": {
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The authoritative working-copy base; the binding must match it or be explicitly refreshed."
+          },
+          "base_revision_number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Revision number of the authoritative base, when one exists."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ModelBindingCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "can_edit_working_copy",
+          "can_publish_revision"
+        ],
+        "properties": {
+          "can_edit_working_copy": {
+            "type": "boolean"
+          },
+          "can_publish_revision": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ModelBindingValidation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "schema_version",
+          "organization",
+          "project",
+          "design",
+          "working_copy",
+          "capabilities"
+        ],
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/ModelBindingState"
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Server's current binding contract version."
+          },
+          "organization": {
+            "$ref": "#/components/schemas/ModelBindingOrganizationSummary"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ModelBindingProjectSummary"
+          },
+          "design": {
+            "$ref": "#/components/schemas/ModelBindingDesignSummary"
+          },
+          "working_copy": {
+            "$ref": "#/components/schemas/ModelBindingWorkingCopySummary"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/ModelBindingCapabilities"
           }
         }
       }

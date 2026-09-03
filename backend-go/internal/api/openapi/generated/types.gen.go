@@ -1007,3 +1007,52 @@ type PublishDesignRevisionRequest struct {
 	SourceType     DesignRevisionSourceType `json:"source_type"`
 	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
 }
+
+type ValidateModelBindingRequest struct {
+	ClientSchemaVersion int64   `json:"client_schema_version"`
+	BaseRevisionID      *string `json:"base_revision_id,omitempty"`
+}
+
+type ModelBindingState string
+
+const (
+	ModelBindingStateValid          ModelBindingState = "valid"
+	ModelBindingStateDesignArchived ModelBindingState = "design_archived"
+)
+
+type ModelBindingOrganizationSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type ModelBindingProjectSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type ModelBindingDesignSummary struct {
+	ID     string       `json:"id"`
+	Name   string       `json:"name"`
+	Status DesignStatus `json:"status"`
+}
+
+type ModelBindingWorkingCopySummary struct {
+	BaseRevisionID     *string `json:"base_revision_id"`
+	BaseRevisionNumber *int64  `json:"base_revision_number"`
+	UpdatedAt          string  `json:"updated_at"`
+}
+
+type ModelBindingCapabilities struct {
+	CanEditWorkingCopy bool `json:"can_edit_working_copy"`
+	CanPublishRevision bool `json:"can_publish_revision"`
+}
+
+type ModelBindingValidation struct {
+	State         ModelBindingState               `json:"state"`
+	SchemaVersion int64                           `json:"schema_version"`
+	Organization  ModelBindingOrganizationSummary `json:"organization"`
+	Project       ModelBindingProjectSummary      `json:"project"`
+	Design        ModelBindingDesignSummary       `json:"design"`
+	WorkingCopy   ModelBindingWorkingCopySummary  `json:"working_copy"`
+	Capabilities  ModelBindingCapabilities        `json:"capabilities"`
+}

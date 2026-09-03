@@ -1814,6 +1814,40 @@
             <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>
           </div>
 
+          <!-- #388: model ↔ Project/Design binding. State, exact context and
+               explicit actions; the panel never edits business identity. -->
+          <div class="card" id="model-binding-card">
+            <div class="card-title">Modelo / Diseño</div>
+            <div id="model-binding-state-area">
+              <span id="model-binding-badge" class="status-badge pending">Sin conectar</span>
+              <p id="model-binding-detail" class="subhead" style="margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
+            </div>
+            <div id="model-binding-info" style="display: none; margin-top: var(--space-2);">
+              <div class="kv-row"><span class="k">Taller</span><span class="v" id="binding-org-name">--</span></div>
+              <div class="kv-row"><span class="k">Proyecto</span><span class="v" id="binding-project-name">--</span></div>
+              <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
+              <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
+            </div>
+            <div id="model-binding-actions" style="margin-top: var(--space-2);">
+              <button id="btn-binding-connect" class="btn btn-primary" style="width: 100%;">Conectar modelo</button>
+              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar de nuevo</button>
+              <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
+            </div>
+            <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
+              <label class="login-label" for="binding-project-select">Proyecto</label>
+              <select id="binding-project-select" class="login-field" style="width: 100%;"></select>
+              <label class="login-label" for="binding-design-select" style="margin-top: var(--space-2);">Diseño</label>
+              <select id="binding-design-select" class="login-field" style="width: 100%;"></select>
+              <button id="btn-binding-confirm" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Conectar</button>
+              <button id="btn-binding-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+            </div>
+            <div id="model-binding-rebind-review" style="display: none; margin-top: var(--space-2);">
+              <p class="subhead" style="font-size: var(--text-xs);">Este modelo ya está conectado a otro diseño. El enlace actual se conserva hasta que el nuevo diseño valide correctamente.</p>
+              <button id="btn-binding-rebind-confirm" class="btn btn-primary" style="width: 100%;">Confirmar cambio de diseño</button>
+              <button id="btn-binding-rebind-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+            </div>
+          </div>
+
           <button id="btn-close" class="btn btn-secondary">Cerrar panel</button>
         </section>
       </main>
@@ -2027,6 +2061,26 @@
         var sessionUserEmail = document.getElementById("session-user-email");
         var sessionServer = document.getElementById("session-server");
         var sessionLicense = document.getElementById("session-license");
+
+        // Model binding elements (#388)
+        var bindingBadge = document.getElementById("model-binding-badge");
+        var bindingDetail = document.getElementById("model-binding-detail");
+        var bindingInfo = document.getElementById("model-binding-info");
+        var bindingOrgName = document.getElementById("binding-org-name");
+        var bindingProjectName = document.getElementById("binding-project-name");
+        var bindingDesignName = document.getElementById("binding-design-name");
+        var bindingBaseRevision = document.getElementById("binding-base-revision");
+        var bindingConnectBtn = document.getElementById("btn-binding-connect");
+        var bindingRefreshBtn = document.getElementById("btn-binding-refresh");
+        var bindingAdoptBtn = document.getElementById("btn-binding-adopt");
+        var bindingPicker = document.getElementById("model-binding-picker");
+        var bindingProjectSelect = document.getElementById("binding-project-select");
+        var bindingDesignSelect = document.getElementById("binding-design-select");
+        var bindingConfirmBtn = document.getElementById("btn-binding-confirm");
+        var bindingCancelBtn = document.getElementById("btn-binding-cancel");
+        var bindingRebindReview = document.getElementById("model-binding-rebind-review");
+        var bindingRebindConfirmBtn = document.getElementById("btn-binding-rebind-confirm");
+        var bindingRebindCancelBtn = document.getElementById("btn-binding-rebind-cancel");
 
         // Inspector elements
         var inspectorEmpty = document.getElementById("inspector-empty-state");
@@ -3460,6 +3514,12 @@
             }
           },
 
+          // #388 model binding bridge — delegates to the binding section.
+          onModelBindingStatus: function (status) { renderModelBindingStatus(status); },
+          onModelBindingResult: function (result) { handleModelBindingResult(result); },
+          onBindingProjects: function (result) { handleBindingProjects(result); },
+          onBindingDesigns: function (result) { handleBindingDesigns(result); },
+
           setCatalog: function (payload) {
             if (Object.prototype.toString.call(payload) === "[object Array]") {
               catalog = payload || [];
@@ -4345,6 +4405,218 @@
             window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceRef: selectedContext.furnitureInstanceRef }));
           }
         });
+
+        // ------------------------------------------------------------------
+        // Model ↔ Project/Design binding (#388). Self-contained state + view:
+        // every action goes to Ruby (connector); the panel never invents or
+        // edits business identity, and states are rendered distinctly.
+        // ------------------------------------------------------------------
+        var MODEL_BINDING_COPY = {
+          unbound: { badge: "Sin conectar", cls: "pending", detail: "Conectá este modelo a un proyecto y diseño de Granete para trabajar sobre su contexto exacto." },
+          connected: { badge: "Conectado", cls: "valid", detail: "" },
+          stale_base: { badge: "Base desactualizada", cls: "pending", detail: "El diseño avanzó en el servidor. Actualizá la base de trabajo para continuar; nada se sobrescribe en silencio." },
+          design_archived: { badge: "Diseño archivado", cls: "invalid", detail: "El diseño fue archivado en Granete: no se puede editar ni publicar desde este modelo." },
+          invalid: { badge: "Enlace inválido", cls: "invalid", detail: "El enlace guardado no corresponde a un proyecto o diseño accesible. Conectá nuevamente." },
+          incompatible: { badge: "Versión incompatible", cls: "invalid", detail: "El servidor usa una versión del contrato de enlace que esta extensión no entiende. Actualizá la extensión." },
+          unauthenticated: { badge: "Sin sesión", cls: "invalid", detail: "Iniciá sesión con tu cuenta del taller arriba para validar el enlace del modelo." },
+          unauthorized: { badge: "Sin permiso", cls: "invalid", detail: "No tenés permiso para el proyecto o diseño enlazado." },
+          unreachable: { badge: "Servidor no disponible", cls: "pending", detail: "No se pudo contactar al servidor. El enlace guardado se conserva; probá de nuevo." }
+        };
+
+        var modelBindingState = { status: null, pendingTarget: null, projects: [], designs: [] };
+
+        function bindingBaseLabel(status) {
+          var binding = status.binding || {};
+          if (status.state === "stale_base") {
+            var current = binding.baseRevisionId ? String(binding.baseRevisionId).slice(0, 8) : "sin publicar";
+            var next = status.authoritativeBaseRevisionNumber
+              ? "R" + status.authoritativeBaseRevisionNumber
+              : (status.authoritativeBaseRevisionId ? String(status.authoritativeBaseRevisionId).slice(0, 8) : "sin publicar");
+            return current + " → " + next;
+          }
+          if (binding.baseRevisionId) {
+            return "R" + (status.authoritativeBaseRevisionNumber || String(binding.baseRevisionId).slice(0, 8));
+          }
+          return "Sin publicar";
+        }
+
+        function renderModelBindingStatus(status) {
+          status = status || { state: "unbound" };
+          modelBindingState.status = status;
+          modelBindingState.pendingTarget = null;
+
+          var copy = MODEL_BINDING_COPY[status.state] || MODEL_BINDING_COPY.invalid;
+          bindingBadge.textContent = copy.badge;
+          bindingBadge.className = "status-badge " + copy.cls;
+
+          var detail = copy.detail;
+          if (status.reason) detail = (detail ? detail + " " : "") + "(" + status.reason + ")";
+          bindingDetail.textContent = detail;
+
+          var bound = status.state === "connected" || status.state === "stale_base" ||
+                      status.state === "design_archived" || status.state === "unreachable";
+          bindingInfo.style.display = bound && status.binding ? "block" : "none";
+          if (bound && status.binding) {
+            var binding = status.binding;
+            bindingOrgName.textContent = binding.organizationName || "--";
+            bindingProjectName.textContent = binding.projectName || binding.projectId || "--";
+            bindingDesignName.textContent = binding.designName || binding.designId || "--";
+            bindingBaseRevision.textContent = bindingBaseLabel(status);
+          }
+
+          bindingConnectBtn.style.display = status.state === "connected" ? "none" : "block";
+          bindingRefreshBtn.style.display = bound ? "block" : "none";
+          bindingAdoptBtn.style.display = status.state === "stale_base" ? "block" : "none";
+
+          bindingPicker.style.display = "none";
+          bindingRebindReview.style.display = "none";
+        }
+
+        function fillSelect(select, entries, placeholder, statusLabel) {
+          select.innerHTML = "";
+          var placeholderOption = document.createElement("option");
+          placeholderOption.value = "";
+          placeholderOption.textContent = entries.length ? placeholder : "Sin opciones disponibles";
+          placeholderOption.disabled = true;
+          placeholderOption.selected = true;
+          select.appendChild(placeholderOption);
+          entries.forEach(function (entry) {
+            var option = document.createElement("option");
+            option.value = entry.id;
+            option.textContent = statusLabel && entry.status ? entry.name + " (" + statusLabel(entry.status) + ")" : entry.name;
+            select.appendChild(option);
+          });
+        }
+
+        function designStatusLabel(status) {
+          if (status === "archived") return "archivado";
+          if (status === "draft") return "borrador";
+          return "activo";
+        }
+
+        function openBindingPicker() {
+          bindingPicker.style.display = "block";
+          bindingRebindReview.style.display = "none";
+          bindingConfirmBtn.disabled = true;
+          bindingConfirmBtn.textContent = "Conectar";
+          fillSelect(bindingProjectSelect, [], "Cargando proyectos…");
+          fillSelect(bindingDesignSelect, [], "Elegí un proyecto");
+          if (window.sketchup && window.sketchup.list_binding_projects) {
+            window.sketchup.list_binding_projects();
+          } else {
+            showToast("error", "Conexión disponible sólo dentro de SketchUp.");
+          }
+        }
+
+        function handleBindingProjects(result) {
+          if (!result || !result.ok) {
+            fillSelect(bindingProjectSelect, [], "Cargando proyectos…");
+            showToast("error", "No se pudieron listar los proyectos: " + ((result && result.reason) || "desconocido"));
+            return;
+          }
+          modelBindingState.projects = result.entries || [];
+          fillSelect(bindingProjectSelect, modelBindingState.projects, "Elegí un proyecto");
+        }
+
+        function handleBindingDesigns(result) {
+          if (!result || !result.ok) {
+            fillSelect(bindingDesignSelect, [], "Elegí un proyecto");
+            bindingConfirmBtn.disabled = true;
+            if (result && result.code !== "unauthenticated") {
+              showToast("error", "No se pudieron listar los diseños: " + (result.reason || "desconocido"));
+            }
+            return;
+          }
+          modelBindingState.designs = result.entries || [];
+          fillSelect(bindingDesignSelect, modelBindingState.designs, "Elegí un diseño", designStatusLabel);
+          updateBindingConfirmState();
+        }
+
+        function updateBindingConfirmState() {
+          bindingConfirmBtn.disabled = !(bindingProjectSelect.value && bindingDesignSelect.value);
+        }
+
+        function connectBindingModel(confirmRebind) {
+          var projectId = modelBindingState.pendingTarget
+            ? modelBindingState.pendingTarget.projectId
+            : bindingProjectSelect.value;
+          var designId = modelBindingState.pendingTarget
+            ? modelBindingState.pendingTarget.designId
+            : bindingDesignSelect.value;
+          if (!projectId || !designId) return;
+          bindingConfirmBtn.disabled = true;
+          bindingConfirmBtn.textContent = "Validando…";
+          if (window.sketchup && window.sketchup.connect_model) {
+            window.sketchup.connect_model(JSON.stringify({
+              projectId: projectId,
+              designId: designId,
+              confirmRebind: confirmRebind === true
+            }));
+          }
+        }
+
+        function handleModelBindingResult(result) {
+          result = result || {};
+          bindingConfirmBtn.disabled = false;
+          bindingConfirmBtn.textContent = "Conectar";
+
+          if (result.ok) {
+            bindingPicker.style.display = "none";
+            bindingRebindReview.style.display = "none";
+            modelBindingState.pendingTarget = null;
+            renderModelBindingStatus(result.status);
+            showToast("success", "✓ Modelo conectado al diseño de Granete.");
+            return;
+          }
+
+          if (result.code === "rebind_required") {
+            bindingPicker.style.display = "none";
+            bindingRebindReview.style.display = "block";
+            modelBindingState.pendingTarget = result.target;
+            return;
+          }
+
+          if (result.status) renderModelBindingStatus(result.status);
+          else if (result.state) renderModelBindingStatus({ state: result.state, reason: result.reason });
+          showToast("error", "No se pudo conectar el modelo: " + (result.reason || "desconocido"));
+        }
+
+        function refreshModelBinding() {
+          if (window.sketchup && window.sketchup.get_model_binding) {
+            window.sketchup.get_model_binding();
+          }
+        }
+
+        bindingConnectBtn.addEventListener("click", openBindingPicker);
+        bindingCancelBtn.addEventListener("click", function () {
+          bindingPicker.style.display = "none";
+        });
+        bindingProjectSelect.addEventListener("change", function () {
+          modelBindingState.designs = [];
+          fillSelect(bindingDesignSelect, [], "Cargando diseños…");
+          bindingConfirmBtn.disabled = true;
+          if (bindingProjectSelect.value && window.sketchup && window.sketchup.list_binding_designs) {
+            window.sketchup.list_binding_designs(JSON.stringify({ projectId: bindingProjectSelect.value }));
+          }
+        });
+        bindingDesignSelect.addEventListener("change", updateBindingConfirmState);
+        bindingConfirmBtn.addEventListener("click", function () { connectBindingModel(false); });
+        bindingRebindConfirmBtn.addEventListener("click", function () { connectBindingModel(true); });
+        bindingRebindCancelBtn.addEventListener("click", function () {
+          bindingRebindReview.style.display = "none";
+          modelBindingState.pendingTarget = null;
+        });
+        bindingRefreshBtn.addEventListener("click", function () {
+          if (window.sketchup && window.sketchup.refresh_model_binding) {
+            window.sketchup.refresh_model_binding();
+          }
+        });
+        bindingAdoptBtn.addEventListener("click", function () {
+          if (window.sketchup && window.sketchup.adopt_binding_base) {
+            window.sketchup.adopt_binding_base();
+          }
+        });
+        renderModelBindingStatus({ state: "unbound" });
 
         btnLogin.addEventListener("click", function () {
           var server = loginServer.value.trim();

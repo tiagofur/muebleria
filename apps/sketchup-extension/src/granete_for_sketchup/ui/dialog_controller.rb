@@ -86,10 +86,124 @@ module Granete
         end
       end
 
+      # #388 / DT-4 model binding callback handlers: the dialog never touches
+      # business identity directly — every action goes through the connector,
+      # which validates against the backend before any metadata write.
+      module ModelBindingBridge
+        # Registers the binding action callbacks. Kept in the bridge so the
+        # controller class body stays within its length budget and every
+        # binding concern lives in one place.
+        def register_model_binding_callbacks(dialog)
+          # #388 / DT-4: model ↔ Project/Design binding surface. The dialog
+          # only ever sees connector results — never raw business identity.
+          dialog.add_action_callback('get_model_binding') { handle_get_model_binding(dialog) }
+          dialog.add_action_callback('list_binding_projects') { handle_list_binding_projects(dialog) }
+          dialog.add_action_callback('list_binding_designs') { |_c, p| handle_list_binding_designs(dialog, p) }
+          dialog.add_action_callback('connect_model') { |_c, p| handle_connect_model(dialog, p) }
+          dialog.add_action_callback('refresh_model_binding') { handle_refresh_model_binding(dialog) }
+          dialog.add_action_callback('adopt_binding_base') { handle_adopt_binding_base(dialog) }
+        end
+
+        def handle_get_model_binding(dialog)
+          execute_bridge(dialog, 'onModelBindingStatus', model_binding_connector.status)
+        rescue StandardError => e
+          @logger.error('model_binding_status_failed', error: e)
+          execute_bridge(dialog, 'onModelBindingStatus', { 'state' => 'invalid', 'reason' => e.message })
+        end
+
+        # Pushes the current binding status when a visible dialog exists —
+        # used at dialog ready and on active-document switches (#388: the
+        # binding follows whichever model is open).
+        def refresh_binding_status
+          handle_get_model_binding(@dialog) if @dialog&.visible?
+        end
+
+        def handle_list_binding_projects(dialog)
+          result = model_binding_service_list(:list_projects)
+          execute_bridge(dialog, 'onBindingProjects', result)
+        end
+
+        def handle_list_binding_designs(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = model_binding_service_list(:list_designs, payload['projectId'])
+          execute_bridge(dialog, 'onBindingDesigns', result)
+        rescue StandardError => e
+          @logger.error('model_binding_list_failed', error: e)
+          execute_bridge(dialog, 'onBindingDesigns', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # Connect/rebind the active model. confirmRebind rides the explicit
+        # reviewed switch flow: without it, a different target answers
+        # rebind_required and NOTHING is written.
+        def handle_connect_model(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = model_binding_connector.bind(
+            project_id: payload['projectId'].to_s,
+            design_id: payload['designId'].to_s,
+            confirm_rebind: payload['confirmRebind'] == true
+          )
+          execute_bridge(dialog, 'onModelBindingResult', result)
+        rescue StandardError => e
+          @logger.error('model_binding_connect_failed', error: e)
+          execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # Revalidate the stored binding (drift/archived/valid refresh).
+        def handle_refresh_model_binding(dialog)
+          execute_bridge(dialog, 'onModelBindingStatus', model_binding_connector.status)
+        rescue StandardError => e
+          @logger.error('model_binding_refresh_failed', error: e)
+          execute_bridge(dialog, 'onModelBindingStatus', { 'state' => 'unreachable', 'reason' => e.message })
+        end
+
+        # Explicit base-drift remediation: adopt the authoritative working base.
+        def handle_adopt_binding_base(dialog)
+          execute_bridge(dialog, 'onModelBindingResult', model_binding_connector.adopt_authoritative_base)
+        rescue StandardError => e
+          @logger.error('model_binding_adopt_failed', error: e)
+          execute_bridge(dialog, 'onModelBindingResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        private
+
+        def model_binding_service_list(method, argument = nil)
+          entries = if argument
+                      model_binding_service.public_send(method,
+                                                        argument)
+                    else
+                      model_binding_service.public_send(method)
+                    end
+          { 'ok' => true, 'entries' => entries }
+        rescue Connection::ModelBinding::Service::Error => e
+          { 'ok' => false, 'code' => e.kind.to_s, 'reason' => e.message }
+        end
+
+        def model_binding_connector
+          @model_binding_connector
+        end
+
+        def model_binding_service
+          @model_binding_connector&.service
+        end
+      end
+
       # Insert/update callback handlers, extracted to keep DialogController
       # within the class-length budget. Both resolve the furniture's real
       # composition server-side before touching the model.
       module FurnitureBridge # rubocop:disable Metrics/ModuleLength
+        # Shared texture cache for furniture builders: lives in the bridge so
+        # the controller class stays within its length budget (file pattern).
+        def texture_cache
+          return @texture_cache if @texture_cache
+
+          transport = @session&.transport
+          auth_provider = @session
+          @texture_cache = Assets::TextureCache.new(
+            transport: transport,
+            auth_provider: auth_provider
+          )
+        end
+
         def handle_insert(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : payload_json
           definition = @catalog_provider.find_definition(payload['definitionId'])
@@ -425,6 +539,7 @@ module Granete
           @observed_model&.selection&.add_observer(@selection_observer)
           @builder_model = nil
           check_current_selection(@dialog) if @dialog&.visible?
+          refresh_binding_status
           offer_migration_if_legacy(new_model)
         end
 
@@ -508,6 +623,7 @@ module Granete
 
       class DialogController
         include SessionBridge
+        include ModelBindingBridge
         include FurnitureBridge
         include OptionSelectorBridge
         include InspectorBridge
@@ -518,9 +634,10 @@ module Granete
 
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
-                       migration_review_controller: nil)
+                       migration_review_controller: nil, model_binding_connector: nil)
           @logger = logger
           @status_provider = status_provider
+          @model_binding_connector = model_binding_connector
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -569,17 +686,6 @@ module Granete
 
         def option_selector
           @option_selector ||= OptionSelectorController.new(logger: @logger)
-        end
-
-        def texture_cache
-          return @texture_cache if @texture_cache
-
-          transport = @session&.transport
-          auth_provider = @session
-          @texture_cache = Assets::TextureCache.new(
-            transport: transport,
-            auth_provider: auth_provider
-          )
         end
 
         def furniture_builder_for(model)
@@ -631,6 +737,7 @@ module Granete
           dialog.add_action_callback('enroll') { |_c, p| handle_enroll(dialog, p) }
           dialog.add_action_callback('poll_enrollment') { |_c, p| handle_poll_enrollment(dialog, p) }
           dialog.add_action_callback('logout') { handle_logout(dialog) }
+          register_model_binding_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
@@ -640,6 +747,7 @@ module Granete
           update_status(dialog)
           send_catalog(dialog)
           check_current_selection(dialog)
+          refresh_binding_status
           @logger.info('dialog_ready')
         end
 
