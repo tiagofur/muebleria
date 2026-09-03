@@ -7,6 +7,7 @@ import (
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -14,8 +15,10 @@ import (
 // #385 / DT-1: project-owned furniture identity API (ADR-0003). The endpoints
 // are deliberately minimal — create/list plus the terminal removal command.
 // Provenance (origin) is server-authoritative: the public create endpoint
-// always records origin='manual'; quote/design/duplicate origins arrive with
-// their owning server flows (#386/#388), never from a client payload.
+// records origin='manual' for web/standard callers, and origin='design'
+// when invoked by an authoring client (SketchUp extension, #390 / DT-6);
+// quote/duplicate origins arrive with their owning server flows (#386/#388),
+// never from a client payload.
 
 // furnitureInstanceCommandRouter adapts the command-oriented OpenAPI path
 // /api/furniture-instances/{instanceId}:{command} to net/http's ServeMux
@@ -160,10 +163,14 @@ func (s *Server) HandleProjectFurnitureInstances(w http.ResponseWriter, r *http.
 			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "furniture_definition_id inválido", nil)
 			return
 		}
+		origin := domain.FurnitureInstanceOriginManual
+		if claims.Client == auth.ExtensionClient {
+			origin = domain.FurnitureInstanceOriginDesign
+		}
 		instance, err := s.Store.CreateFurnitureInstance(r.Context(), storage.CreateFurnitureInstanceCommand{
 			ProjectID:             projectID,
 			FurnitureDefinitionID: definitionID,
-			Origin:                domain.FurnitureInstanceOriginManual,
+			Origin:                origin,
 			ActorUserID:           claims.UserID,
 			IP:                    clientIP(r),
 			RequestID:             RequestIDFromContext(r.Context()),

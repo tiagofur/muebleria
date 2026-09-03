@@ -918,8 +918,8 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		{"list project furniture instances", http.MethodGet, "/api/projects/" + projectID + "/furniture-instances", true},
 		{"read design working copy", http.MethodGet, "/api/designs/" + designID + "/working-copy", true},
 		{"place existing writes working copy", http.MethodPut, "/api/designs/" + designID + "/working-copy", true},
-		// #390 stays closed: no identity creation for the extension.
-		{"create furniture instance from catalog (#390)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances", false},
+		// #390 / DT-6 grant: catalog design-first identity creation.
+		{"create furniture instance from catalog (#390)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances", true},
 		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
 		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
 		// Surrounding surface stays closed.

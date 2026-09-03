@@ -604,6 +604,10 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// it creates no business records and mutates nothing; binding itself
 	// stays client-side model metadata until #392/#499 publish flows.
 	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/binding:validate$`),
+	// #390 / DT-6: catalog design-first creation of a project furniture
+	// identity. Allocates authoritative identity (origin='design') for the bound
+	// project before SketchUp places the physical component.
+	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances$`),
 }
 
 // Parameterized PUT surface for the extension credential (#389 / DT-5). This

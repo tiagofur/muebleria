@@ -2433,6 +2433,19 @@
           renderPresetChips();
 
           updateLibrarySummary();
+          updateLibraryInsertButton();
+        }
+
+        function updateLibraryInsertButton() {
+          if (!btnInsert) return;
+          var isConnected = modelBindingState.status && modelBindingState.status.state === "connected";
+          if (isConnected) {
+            btnInsert.innerHTML = icon("plus") + "<span>Agregar al diseño</span>";
+            btnInsert.title = "Crea un nuevo mueble en el proyecto y lo agrega a este diseño";
+          } else {
+            btnInsert.innerHTML = icon("plus") + "<span>Insertar en Modelo</span>";
+            btnInsert.title = "Inserta el mueble localmente en el modelo";
+          }
         }
 
         function bindLibraryParamForm() {
@@ -3618,9 +3631,10 @@
           onBindingProjects: function (result) { handleBindingProjects(result); },
           onBindingDesigns: function (result) { handleBindingDesigns(result); },
 
-          // #389 Project Furniture bridge — delegates to the project section.
+          // #389 / #390 Project Furniture bridge — delegates to the project section.
           onProjectFurniture: function (payload) { renderProjectFurniture(payload); },
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
+          onCreateProjectFurnitureResult: function (result) { handleCreateProjectFurnitureResult(result); },
           onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
           onCancelPlacementResult: function (result) { handleCancelPlacementResult(result); },
 
@@ -4423,20 +4437,34 @@
           showLibraryView();
         });
 
+        function generateIdempotencyKey() {
+          if (window.crypto && window.crypto.randomUUID) {
+            return window.crypto.randomUUID();
+          }
+          return "idem-" + Date.now() + "-" + Math.random().toString(36).substring(2, 11);
+        }
+
         btnInsert.addEventListener("click", function () {
           if (!activeLibDef) return;
           btnInsert.disabled = true;
-          btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
+
+          var isConnected = modelBindingState.status && modelBindingState.status.state === "connected";
 
           var payload = {
-            definitionId: activeLibDef.furniture_definition_id,
+            definitionId: activeLibDef.furniture_definition_id || activeLibDef.furnitureDefinitionId,
             parameters: libParams,
             materialChoices: libMaterialChoices
           };
 
-          if (window.sketchup && window.sketchup.insert_furniture) {
+          if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
+            btnInsert.innerHTML = icon("clock") + "<span>Agregando al diseño…</span>";
+            payload.idempotencyKey = generateIdempotencyKey();
+            window.sketchup.create_project_furniture(JSON.stringify(payload));
+          } else if (window.sketchup && window.sketchup.insert_furniture) {
+            btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
             window.sketchup.insert_furniture(JSON.stringify(payload));
           } else {
+            btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
             setTimeout(function () {
               window.GraneteDialog.onInsertionResult({ success: true, name: activeLibDef.name });
             }, 500);
@@ -4577,6 +4605,7 @@
 
           bindingPicker.style.display = "none";
           bindingRebindReview.style.display = "none";
+          updateLibraryInsertButton();
         }
 
         function fillSelect(select, entries, placeholder, statusLabel) {
@@ -5023,6 +5052,22 @@
           showToast("error", result.reason || "No se pudo cancelar la colocación.");
         }
 
+        function handleCreateProjectFurnitureResult(result) {
+          result = result || {};
+          btnInsert.disabled = false;
+          updateLibraryInsertButton();
+          if (result.ok) {
+            if (result.code === "pending_position") {
+              showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
+            } else {
+              showToast("success", "✓ Mueble creado y agregado al proyecto.");
+            }
+            switchTab("project");
+          } else {
+            showToast("error", pfPlaceFailureMessage(result));
+          }
+        }
+
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
             case "unbound": return "Conectá el modelo al proyecto primero.";
@@ -5035,6 +5080,9 @@
             case "intent_mismatch": return "La identidad del mueble en el modelo no coincide; colocálo de nuevo.";
             case "definition_unavailable": return "El catálogo del taller no incluye la definición de este mueble.";
             case "resolution_failed": return result.reason || "Granete no pudo resolver la composición del mueble.";
+            case "service_error": return result.reason || "Error de comunicación con el servidor.";
+            case "bad_contract": return result.reason || "Error de contrato con el servidor.";
+            case "no_model": return "No hay un modelo activo en SketchUp.";
             case "placement_failed": return result.reason || "La colocación falló.";
             case "sync_failed": return result.reason || "El diseño no se pudo actualizar.";
             default: return result.reason || "No se pudo colocar el mueble.";

@@ -195,6 +195,7 @@ module Granete
         def register_project_furniture_callbacks(dialog)
           dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
           dialog.add_action_callback('place_furniture_instance') { |_c, p| handle_place_furniture_instance(dialog, p) }
+          dialog.add_action_callback('create_project_furniture') { |_c, p| handle_create_project_furniture(dialog, p) }
           dialog.add_action_callback('confirm_placement_instance') do |_c, p|
             handle_confirm_placement_instance(dialog, p)
           end
@@ -225,6 +226,23 @@ module Granete
         rescue StandardError => e
           @logger.error('project_furniture_place_failed', error: e)
           execute_bridge(dialog, 'onPlaceFurnitureResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #390 / DT-6: Create and place from Catalog in design-first flow.
+        def handle_create_project_furniture(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = project_furniture_placer.create_and_place(
+            definition_id: payload['definitionId'].to_s,
+            parameters: payload['parameters'] || {},
+            material_choices: payload['materialChoices'] || {},
+            idempotency_key: payload['idempotencyKey']
+          )
+          execute_bridge(dialog, 'onCreateProjectFurnitureResult', result)
+          handle_get_project_furniture(dialog) if result['ok']
+        rescue StandardError => e
+          @logger.error('project_furniture_create_failed', error: e)
+          execute_bridge(dialog, 'onCreateProjectFurnitureResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
         def handle_confirm_placement_instance(dialog, payload_json)

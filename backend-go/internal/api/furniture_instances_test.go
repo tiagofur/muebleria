@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -264,3 +265,33 @@ func TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary(t *testing.T
 		t.Fatalf("fi-2 must serialize without a display block: %s", body)
 	}
 }
+
+// TestHandleProjectFurnitureInstances_CreateExtensionClientSetsOriginDesign (#390 / DT-6):
+// when created through the authoring client (SketchUp extension bearer), the
+// identity is stamped with origin='design' server-side, never trusting client payload.
+func TestHandleProjectFurnitureInstances_CreateExtensionClientSetsOriginDesign(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	req := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances",
+		`{"furniture_definition_id":"50000000-0000-0000-0000-000000000001"}`, string(domain.RoleAdmin))
+	claims := claimsFromRequest(req)
+	claims.Client = auth.ExtensionClient
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectFurnitureInstances(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.createFurnitureInstanceCmd == nil {
+		t.Fatal("store must receive the create command")
+	}
+	cmd := *store.createFurnitureInstanceCmd
+	if cmd.ProjectID != fiTestProjectID || cmd.Origin != domain.FurnitureInstanceOriginDesign {
+		t.Fatalf("command = %+v, want design origin for extension client", cmd)
+	}
+	if cmd.FurnitureDefinitionID != "50000000-0000-0000-0000-000000000001" {
+		t.Fatalf("definition provenance lost: %+v", cmd)
+	}
+}
+

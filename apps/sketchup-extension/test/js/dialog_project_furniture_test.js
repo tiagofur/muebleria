@@ -52,6 +52,10 @@ function createMockElement(id) {
   el.click = () => {
     (el.listeners.click || []).forEach((cb) => cb({ preventDefault: () => {} }));
   };
+  const attrs = {};
+  el.setAttribute = (k, v) => { attrs[k] = String(v); };
+  el.getAttribute = (k) => (k in attrs ? attrs[k] : null);
+  el.removeAttribute = (k) => { delete attrs[k]; };
   el.appendChild = (child) => { el.children.push(child); return child; };
   return el;
 }
@@ -82,6 +86,7 @@ function buildSandbox() {
         get_model_binding: () => bridgeCalls.push({ action: 'get_model_binding' }),
         get_project_furniture: () => bridgeCalls.push({ action: 'get_project_furniture' }),
         place_furniture_instance: (p) => bridgeCalls.push({ action: 'place_furniture_instance', payload: JSON.parse(p) }),
+        create_project_furniture: (p) => bridgeCalls.push({ action: 'create_project_furniture', payload: JSON.parse(p) }),
         confirm_placement_instance: (p) => bridgeCalls.push({ action: 'confirm_placement_instance', payload: JSON.parse(p) }),
         cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
         select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
@@ -282,6 +287,45 @@ function runTests() {
     sandbox.window.GraneteDialog.onConfirmPlacementResult({ ok: false, code: 'sync_failed', instanceId: FI_1 });
     sandbox.window.GraneteDialog.onCancelPlacementResult({ ok: true, code: 'cancelled', instanceId: FI_1 });
     assert.ok(true);
+  });
+
+  test('insert button in library dispatches create_project_furniture when model is connected', (sandbox) => {
+    sandbox.window.GraneteDialog.onModelBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p1', designId: 'd1', baseRevisionId: 'r1' }
+    });
+
+    const def = {
+      furniture_definition_id: 'def-1',
+      name: 'Base 600',
+      category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }]
+    };
+    sandbox.window.GraneteDialog.setCatalog([def]);
+
+    const card = el(sandbox, 'library-cards-grid').children[0];
+    assert.ok(card, 'card in library-cards-grid must exist');
+    card.click();
+
+    const btnInsert = el(sandbox, 'btn-insert');
+    assert.equal(btnInsert.disabled, false);
+
+    btnInsert.click();
+    assert.equal(btnInsert.disabled, true);
+
+    const createCall = sandbox.__bridge.find((c) => c.action === 'create_project_furniture');
+    assert.ok(createCall, 'create_project_furniture bridge call must be dispatched');
+    assert.equal(createCall.payload.definitionId, 'def-1');
+    assert.ok(createCall.payload.idempotencyKey, 'must include idempotencyKey');
+    assert.equal(typeof createCall.payload.idempotencyKey, 'string');
+
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({ ok: false, code: 'placement_failed', reason: 'mesh error' });
+    assert.equal(btnInsert.disabled, false);
+
+    btnInsert.click();
+    assert.equal(btnInsert.disabled, true);
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({ ok: true, code: 'pending_position', instanceId: 'fi-new-1' });
+    assert.equal(btnInsert.disabled, false);
   });
 
   return tests;

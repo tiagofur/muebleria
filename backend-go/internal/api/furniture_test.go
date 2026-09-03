@@ -446,13 +446,15 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 	if got := send(http.MethodPut, "/api/designs/52000000-0000-0000-0000-000000000001/working-copy"); got != http.StatusOK {
 		t.Fatalf("PUT working copy with extension token = %d, want 200 (#389 place existing)", got)
 	}
+	if got := send(http.MethodPost, "/api/projects/41000000-0000-0000-0000-000000000001/furniture-instances"); got != http.StatusOK {
+		t.Fatalf("POST project furniture instances with extension token = %d, want 200 (#390 catalog create)", got)
+	}
 
 	// Everything else denies the credential CLASS: team admin, session and
 	// device management, org/business reads and writes, platform — even for
-	// a platform-admin owner. Project discovery (#388) is intentionally
-	// narrow: only the project list and the per-project designs list open;
-	// furniture identity creation (#390) and revision publication (#392)
-	// stay out of the extension contract.
+	// a platform-admin owner. Project discovery (#388), place existing (#389)
+	// and catalog create (#390) are narrow capabilities; revision publication
+	// (#392) stays out of the extension contract.
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/api/org/team/summary"},
 		{http.MethodGet, "/api/org/memberships"},
@@ -463,10 +465,6 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 		{http.MethodPost, "/api/auth/devices/revoke"},
 		{http.MethodPost, "/api/projects"},
 		{http.MethodDelete, "/api/projects/1"},
-		// #390: catalog insertion creating a project unit must NOT be
-		// reachable by the extension credential — place existing never
-		// mints business identity.
-		{http.MethodPost, "/api/projects/1/furniture-instances"},
 		{http.MethodGet, "/api/projects/1/loading-status"},
 		{http.MethodPost, "/api/designs/52000000-0000-0000-0000-000000000001/working-copy:reset"},
 		{http.MethodPost, "/api/designs/52000000-0000-0000-0000-000000000001/revisions"},

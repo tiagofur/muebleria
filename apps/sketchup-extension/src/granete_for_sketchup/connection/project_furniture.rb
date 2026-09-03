@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'securerandom'
 
 module Granete
   module SketchUpExtension
@@ -38,9 +39,10 @@ module Granete
           value.is_a?(String) && value.match?(UUID_PATTERN)
         end
 
-        # HTTP client for the #389 surface: project furniture list (with the
-        # server-computed display summary) and the design working copy
-        # (GET + merge-PUT). Typed errors only — never message parsing.
+        # HTTP client for the #389 / #390 surface: project furniture list,
+        # design-first identity creation (POST /furniture-instances with
+        # server-authoritative origin='design' and Idempotency-Key) and the
+        # design working copy (GET + merge-PUT). Typed errors only.
         class Service
           class Error < StandardError
             attr_reader :kind, :status
@@ -63,6 +65,19 @@ module Granete
             Contract.parse_instances!(body)
           end
 
+          # #390 / DT-6: Allocates an authoritative project-owned FurnitureInstance
+          # identity on the backend before SketchUp places the physical component.
+          # The backend assigns server-authoritative origin='design' and returns 201.
+          # IdempotencyKey is sent to guarantee retry safety.
+          def create_furniture_instance(project_id, definition_id: nil, idempotency_key: nil)
+            payload = {}
+            payload['furniture_definition_id'] = definition_id if definition_id && !definition_id.to_s.strip.empty?
+            headers = {}
+            headers['Idempotency-Key'] = idempotency_key if idempotency_key && !idempotency_key.to_s.strip.empty?
+            body = request(:post, "/projects/#{project_id}/furniture-instances", payload, extra_headers: headers)
+            Contract.parse_instance!(body)
+          end
+
           def get_working_copy(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy")
             Contract::WorkingCopyContract.parse_working_copy!(body)
@@ -81,18 +96,20 @@ module Granete
 
           private
 
-          def request(method, path, body = nil)
+          def request(method, path, body = nil, extra_headers: nil)
             raise Error.new(:unauthenticated, 'sin sesión iniciada') unless @auth_provider.configured?
 
             payload = { 'method' => method.to_s.upcase, 'path' => path, 'headers' => {} }
             payload['body'] = body if body
             auth = @auth_provider.authorization_header
             payload['headers']['Authorization'] = auth if auth
+            payload['headers'].merge!(extra_headers) if extra_headers
 
             response = @transport.request(payload)
             status = response['status'].to_i
             case status
-            when 200 then response['body']
+            when 200, 201 then response['body']
+            when 400 then raise Error.new(:bad_request, error_message(response), status: status)
             when 401 then raise Error.new(:unauthenticated, 'sesión expirada o inválida', status: status)
             when 403 then raise Error.new(:unauthorized, 'no tenés permiso para este proyecto o diseño', status: status)
             when 404 then raise Error.new(:not_found, 'proyecto, diseño o mueble inexistente', status: status)
@@ -106,6 +123,10 @@ module Granete
 
           def conflict_message(response)
             response.dig('body', 'error', 'message') || 'el diseño cambió en el servidor'
+          end
+
+          def error_message(response)
+            response.dig('body', 'error', 'message') || response.dig('body', 'message') || 'solicitud inválida'
           end
         end
 
@@ -164,6 +185,62 @@ module Granete
             failure(:bad_contract, e.message)
           rescue StandardError => e
             @logger.error('project_furniture_place_failed', error: e)
+            failure(:place_failed, e.message)
+          end
+
+          # #390 / DT-6: Design-first creation and placement from catalog.
+          # Flow:
+          #   1. context guard: model active, binding connected & current.
+          #   2. definition guard: definition found in catalog.
+          #   3. normalize parameters & resolve layout server-side.
+          #   4. create authoritative identity on backend FIRST:
+          #      POST /projects/{projectId}/furniture-instances with Idempotency-Key
+          #      server mints FurnitureInstance.id with origin='design'.
+          #   5. insert into SketchUp top-level root stamped with THAT SAME id.
+          #   6. returns pending_position with instanceId.
+          # If backend fails: no local root is inserted (fails loud).
+          # If local placement fails: backend identity remains in project (pending),
+          #   never rolled back/deleted destructively from backend.
+          def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil)
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            context = placement_context(model)
+            return context unless context['ok']
+
+            binding = context['binding']
+            definition = @catalog_provider.find_definition(definition_id)
+            unless definition
+              return failure(:definition_unavailable,
+                             'el catálogo del taller no incluye la definición de este mueble')
+            end
+
+            params = WorkingCopyMerger.catalog_parameters(definition, parameters)
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, material_choices)
+
+            key = idempotency_key.to_s.strip
+            key = SecureRandom.uuid if key.empty?
+
+            created_instance = @service.create_furniture_instance(
+              binding.project_id,
+              definition_id: definition['furniture_definition_id'],
+              idempotency_key: key
+            )
+
+            insert_result = insert_created_unit(model, binding, created_instance, definition,
+                                                params, material_choices, layout)
+            return insert_result unless insert_result['ok']
+
+            { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created_instance.id,
+              'components' => insert_result['components'] }
+          rescue Service::Error => e
+            failure(:service_error, e.message)
+          rescue PlacementResolutionError => e
+            failure(:resolution_failed, e.message)
+          rescue Contract::ContractError => e
+            failure(:bad_contract, e.message)
+          rescue StandardError => e
+            @logger.error('project_furniture_create_and_place_failed', error: e)
             failure(:place_failed, e.message)
           end
 
@@ -342,6 +419,31 @@ module Granete
                          furniture_instance_id: instance.id, components: result['component_count'])
             { 'ok' => true, 'code' => 'pending_position', 'instanceId' => instance.id,
               'components' => result['component_count'] }
+          end
+
+          # #390 / DT-6: local placement of a just-created unit. On failure,
+          # logs error and returns failure without touching the backend identity.
+          def insert_created_unit(model, binding, instance, definition, parameters, material_choices, layout)
+            result = @furniture_builder_factory.call(model).place_existing_furniture(
+              model,
+              furniture_instance_id: instance.id,
+              definition: definition,
+              parameters: parameters,
+              resolved_layout: layout,
+              material_choices: material_choices,
+              project_id: binding.project_id,
+              design_id: binding.design_id
+            )
+            unless result['success']
+              @logger.error('project_furniture_insert_created_failed',
+                            furniture_instance_id: instance.id, error: result['error'])
+              return failure(:placement_failed,
+                             "el mueble se creó en el proyecto (#{instance.id}) pero falló su inserción local: #{result['error']}")
+            end
+
+            @logger.info('project_furniture_created_and_inserted',
+                         furniture_instance_id: instance.id, components: result['component_count'])
+            { 'ok' => true, 'components' => result['component_count'] }
           end
 
           # Phase 4 — sync with the FINAL transform: GET → merge by

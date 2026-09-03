@@ -102,7 +102,7 @@ class ProjectFurnitureTest < Minitest::Test
       _ = authorization_header
       method = payload['method'].to_s.upcase
       path = payload['path']
-      @requests << { 'method' => method, 'path' => path, 'body' => payload['body'] }
+      @requests << { 'method' => method, 'path' => path, 'body' => payload['body'], 'headers' => payload['headers'] }
       route = @routes[[method, path]]
       return route if route
 
@@ -678,6 +678,170 @@ class ProjectFurnitureTest < Minitest::Test
     roundtrip = PF::TransformContract.to_host(rotated)
     assert_in_delta 0.0, roundtrip.xaxis.x, 1e-6
     assert_in_delta 1.0, roundtrip.xaxis.y, 1e-6
+  end
+
+  # #390 / DT-6 tests: design-first flow from catalog creating backend FurnitureInstance first.
+  def test_service_create_furniture_instance_posts_with_idempotency_key_and_returns_instance
+    service = PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+
+    instance = service.create_furniture_instance(
+      PROJECT_ID,
+      definition_id: DEFINITION_ID,
+      idempotency_key: 'idem-key-42'
+    )
+
+    assert_equal FI_1, instance.id
+    assert_equal 'design', instance.origin
+    post_req = @transport.requests.find { |r| r['method'] == 'POST' && r['path'] == "/projects/#{PROJECT_ID}/furniture-instances" }
+    refute_nil post_req
+    assert_equal({ 'furniture_definition_id' => DEFINITION_ID }, post_req['body'])
+    assert_equal 'idem-key-42', post_req['headers']['Idempotency-Key']
+  end
+
+  def test_create_and_place_flow_creates_backend_instance_first_and_places_top_level
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+
+    result = @placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      parameters: { 'widthMm' => 800, 'shelfCount' => 2 },
+      material_choices: { 'carcase' => 'mat-white' },
+      idempotency_key: 'idem-create-1'
+    )
+
+    assert result['ok'], "expected ok, got #{result}"
+    assert_equal 'pending_position', result['code']
+    assert_equal FI_1, result['instanceId']
+
+    # Server instance was created via POST with idempotency key
+    post_req = @transport.requests.find { |r| r['method'] == 'POST' && r['path'] == "/projects/#{PROJECT_ID}/furniture-instances" }
+    refute_nil post_req
+    assert_equal 'idem-create-1', post_req['headers']['Idempotency-Key']
+
+    # Local placement stamped THAT SAME backend ID
+    furniture = top_level_furniture(@model)
+    assert_equal 1, furniture.length
+    root = furniture.first
+    metadata = MS.new(@model).read(root)
+    assert_equal FI_1, metadata['identity']['furnitureInstanceId']
+    assert_equal 800, metadata['intent']['parameters']['widthMm']
+    assert_equal 2, metadata['intent']['parameters']['shelfCount']
+    assert_equal({ 'carcase' => 'mat-white' }, metadata['intent']['materialChoices'])
+  end
+
+  def test_create_and_place_backend_failure_aborts_loudly_without_local_entity
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 400,
+                       { 'error' => { 'message' => 'catálogo inválido' } })
+
+    result = @placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      parameters: {},
+      idempotency_key: 'idem-fail'
+    )
+
+    refute result['ok']
+    assert_equal 'service_error', result['code']
+    assert_includes result['reason'], 'catálogo inválido'
+    assert_empty top_level_furniture(@model)
+  end
+
+  def test_create_and_place_local_failure_keeps_backend_id_in_project_and_fails_loud
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+
+    failing_builder = Object.new
+    def failing_builder.place_existing_furniture(*_args, **_kwargs)
+      { 'success' => false, 'error' => 'simulated local mesh error' }
+    end
+
+    placer = PF::Placer.new(
+      model_provider: -> { @model },
+      binding_store_factory: -> { MB::Store.new(@model) },
+      model_binding_service: MB::Service.new(
+        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+      ),
+      service: PF::Service.new(
+        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+      ),
+      metadata_store_factory: ->(_m) { MS.new(@model) },
+      catalog_provider: @catalog,
+      furniture_builder_factory: ->(_m) { failing_builder },
+      logger: NullLogger.new
+    )
+
+    result = placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      idempotency_key: 'idem-local-fail'
+    )
+
+    refute result['ok']
+    assert_equal 'placement_failed', result['code']
+    assert_includes result['reason'], 'simulated local mesh error'
+    # Critical invariant: NO DELETE or rollback request sent to backend
+    delete_reqs = @transport.requests.select { |r| r['method'] == 'DELETE' }
+    assert_empty delete_reqs
+  end
+
+  def test_cancel_placement_after_create_cleans_local_root_and_keeps_instance_in_project
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+
+    result = @placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      idempotency_key: 'idem-cancel-1'
+    )
+    assert result['ok']
+    assert_equal 1, top_level_furniture(@model).length
+
+    cancel_res = @placer.cancel_placement(FI_1)
+    assert cancel_res['ok']
+    assert_equal 'cancelled', cancel_res['code']
+    assert_empty top_level_furniture(@model)
+
+    # Invariant: backend instance remains untouched (no DELETE)
+    delete_reqs = @transport.requests.select { |r| r['method'] == 'DELETE' }
+    assert_empty delete_reqs
+  end
+
+  def test_confirm_placement_after_create_merges_working_copy_with_parameters_and_materials
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+    stub_project_furniture([instance_body(FI_1, 'design')])
+    stub_working_copy(working_copy_body([]))
+
+    create_res = @placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      parameters: { 'widthMm' => 900, 'shelfCount' => 3 },
+      material_choices: { 'doors' => 'mat-oak' },
+      idempotency_key: 'idem-confirm-1'
+    )
+    assert create_res['ok']
+
+    confirm_res = @placer.confirm_placement(FI_1)
+    assert confirm_res['ok']
+    assert_equal 'placed', confirm_res['code']
+
+    put_req = @transport.requests.find { |r| r['method'] == 'PUT' && r['path'] == "/designs/#{DESIGN_ID}/working-copy" }
+    refute_nil put_req
+    items = put_req['body']['items']
+    assert_equal 1, items.length
+    item = items.first
+    assert_equal FI_1, item['furniture_instance_id']
+    assert_equal 900, item['parameters']['widthMm']
+    assert_equal 3, item['parameters']['shelfCount']
+    assert_equal({ 'doors' => 'mat-oak' }, item['material_choices'])
   end
 
   private
