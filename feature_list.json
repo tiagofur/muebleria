@@ -5494,6 +5494,49 @@
       ],
       "completedAt": "2026-09-03",
       "evidence": "go test ./internal/api ./internal/storage green against real PostgreSQL incl. TestDesigns_ModelBindingContext (valid/stale/uniform-404/cross-org/archived), TestHandleProjectDesignBindingValidate_* and updated TestExtensionTokenDenyByDefault; UPDATE_MODEL_BINDING_GOLDEN fixture pinned and drift-checked; rake verify green (rubocop, 324 unit runs, boundary, RBZ sha256 verified) incl. model_binding_test.rb, model_binding_contract_test.rb and dialog_model_binding JS harness (9 cases); pnpm openapi:check green; git diff --check clean."
+    },
+    {
+      "id": "F208",
+      "title": "Project Furniture panel and place existing units in SketchUp (#389 / DT-5)",
+      "description": "Fifth Digital Thread slice (ADR-0003, digital-thread \u00a713): the quoted/project units become visible and placeable inside Granete for SketchUp without ever minting a second business object. The plugin gains a 'Proyecto' panel clearly separate from the Catalog/Library: it lists the connected project's FurnitureInstances (projectId always from the #388 ModelBinding) and derives pending/placed per furnitureInstanceId by intersecting them with the current DesignWorkingCopy \u2014 quantity > 1 stays N individually traceable rows ('Unidad n de N'). GET /api/projects/{projectId}/furniture-instances returns a new server-computed presentation block (display.name from the catalog module, display.dimensions_mm preferring the current quote line custom_dims over module defaults) so the plugin never guesses labels or dimensions. Place EXISTING resolves the composition server-side, renders the #415 native hierarchy through the existing FurnitureBuilder stamped with the backend furnitureInstanceId (identity.furnitureInstanceId is the authority; instanceRef aliases the same value as a compat locator; projectId/designId from the binding; persistent_id rides a separate technical_client_locator), then merges the item into the working copy (GET \u2192 merge by id \u2192 PUT complete state) with the canonical Transform3D contract (mm/degrees, inches converted only in TransformContract). Backend failure rolls the local insertion back and fails loud; stale base/archived binding fail before any placement; already-placed focuses the existing root without duplicating; duplicated roots block placement (#391 preview) instead of minting identity. Extension credential gains exactly three #389 grants: GET furniture-instances, GET working-copy and the credential's only PUT (working-copy) \u2014 identity creation (POST furniture-instances, #390), reset and publish stay denied.",
+      "tags": [
+        "digital-thread",
+        "sketchup-extension",
+        "backend",
+        "openapi",
+        "projects",
+        "designs",
+        "working-copy",
+        "furniture-instances",
+        "p0"
+      ],
+      "created": "2026-09-03",
+      "status": "done",
+      "acceptance": [
+        "Quote-first Design shows existing FI units as pending before placement; placed state derives from the working copy, not a global furniture status",
+        "Placing FI-001 writes furnitureInstanceId into top-level semantic metadata; no new business ID is created and no furniture-instance creation request is ever issued",
+        "qty=3 units appear as three individually traceable rows, each placeable/selectable on its own",
+        "The panel's project comes from the ModelBinding (#388), never from a parallel selection",
+        "Working copy update preserves every other item (merge by furnitureInstanceId)",
+        "Transform persists as canonical translation_mm/rotation_deg; inches/mm conversions only in TransformContract with tested roundtrips",
+        "Retry/already-placed focuses the existing root; duplicated roots block loudly instead of resolving (#391)",
+        "Backend failure on the working-copy PUT rolls the local insertion back \u2014 no false local success",
+        "Extension credential stays deny-by-default: place-existing can write the working copy but cannot create FurnitureInstances (#390), reset or publish (#392)",
+        "UI copy in Spanish; technical identifiers remain English"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/389",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "docs/architecture/sketchup-native-entity-model.md",
+        "progress/implementation_389_dt5.md"
+      ],
+      "depends_on": [
+        "F207"
+      ],
+      "completedAt": "2026-09-03",
+      "evidence": "go test ./... green against real PostgreSQL incl. TestFurnitureInstances_ListSummariesDisplay (quoted dims win, module fallback, no invented display) and TestExtensionClientBoundaryProjectFurniture + updated TestExtensionTokenDenyByDefault (PUT working-copy granted; POST furniture-instances/reset/publish denied); rake verify green (rubocop 0, 342 unit runs incl. 18 project_furniture tests covering proofs A-I, boundary, RBZ sha256 verified); dialog_project_furniture JS harness 10/10; pnpm openapi:check / typecheck / test green; pilot-gate.sh Gate A PASS; git diff --check clean; TC_ProjectFurnitureSmoke added for the installed-RBZ host (identity survives save/close/reopen, duplicates fail loud)."
     }
   ]
 }

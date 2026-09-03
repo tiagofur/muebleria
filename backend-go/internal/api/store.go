@@ -269,6 +269,9 @@ type Store interface {
 	CreateFurnitureInstance(ctx context.Context, cmd storage.CreateFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
 	GetFurnitureInstanceByID(ctx context.Context, id string) (*domain.FurnitureInstance, error)
 	ListFurnitureInstancesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]domain.FurnitureInstance, error)
+	// List with the server-computed presentation block (#389 / DT-5): catalog
+	// label + quoted-or-default dimensions for authoring-client panels.
+	ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]storage.FurnitureInstanceSummary, error)
 	RemoveFurnitureInstance(ctx context.Context, cmd storage.RemoveFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
 
 	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2, ADR-0003): the

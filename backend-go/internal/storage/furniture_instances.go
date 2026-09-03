@@ -249,6 +249,112 @@ func (s *PostgresStore) ListFurnitureInstancesByProject(ctx context.Context, pro
 	return instances, rows.Err()
 }
 
+// FurnitureInstanceSummary pairs one FurnitureInstance identity with the
+// server-computed presentation data authoring clients list (#389 / DT-5).
+// Display fields are derived from the catalog module and the current quote
+// line link; they are presentation-only and never part of identity.
+type FurnitureInstanceSummary struct {
+	Instance domain.FurnitureInstance
+	// DisplayName is the catalog module label (modules.name), empty when the
+	// instance has no catalog provenance.
+	DisplayName string
+	// DisplayDims are the quoted dimensions when the unit is currently linked
+	// to a quote line (project_items.custom_dims wins), else the module's
+	// default dimensions. nil when neither source knows any dimension.
+	DisplayDims *domain.ItemCustomDims
+}
+
+// ListFurnitureInstanceSummariesByProject lists the project's identities with
+// their presentation summary in one consistent snapshot. Quote-line custom
+// dimensions win over module defaults because they are the commercial truth
+// the physical unit was materialized from (#386); the module defaults are the
+// fallback for definition-less or unlinked units.
+func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]FurnitureInstanceSummary, error) {
+	filter := `AND lifecycle_status = 'active'`
+	if includeTerminal {
+		filter = ``
+	}
+	// Inner select mirrors furnitureInstanceColumns but aliases each output so
+	// the outer join can address fi.furniture_definition_id; the inner table
+	// stays unaliased so furnitureInstanceProjectScopeFmt keeps resolving.
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT fi.*,
+			COALESCE(m.name, ''),
+			quoted.width_mm, quoted.height_mm, quoted.depth_mm,
+			m.width_mm, m.height_mm, m.depth_mm
+		FROM (
+			SELECT id, project_id, organization_id,
+				COALESCE(furniture_definition_id::text, '') AS furniture_definition_id,
+				origin, COALESCE(origin_furniture_instance_id::text, '') AS origin_furniture_instance_id,
+				lifecycle_status, version, created_at, updated_at
+			FROM furniture_instances
+			WHERE project_id = $1 `+filter+fmt.Sprintf(furnitureInstanceProjectScopeFmt, "$2")+`
+		) fi
+		LEFT JOIN modules m ON m.id = NULLIF(fi.furniture_definition_id, '')::uuid
+		LEFT JOIN LATERAL (
+			SELECT (pi.custom_dims->>'widthMm')::int AS width_mm,
+			       (pi.custom_dims->>'heightMm')::int AS height_mm,
+			       (pi.custom_dims->>'depthMm')::int AS depth_mm
+			FROM quote_line_furniture_instances ql
+			JOIN project_items pi ON pi.id = ql.quote_line_id
+			WHERE ql.furniture_instance_id = fi.id
+			  AND ql.project_id = fi.project_id
+			  AND ql.state = 'current'
+			ORDER BY ql.created_at DESC
+			LIMIT 1
+		) quoted ON TRUE
+		ORDER BY fi.created_at, fi.id`,
+		projectID, OrgFromCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	summaries := []FurnitureInstanceSummary{}
+	for rows.Next() {
+		var summary FurnitureInstanceSummary
+		var quotedDims *domain.ItemCustomDims
+		var quotedW, quotedH, quotedD *int
+		var moduleW, moduleH, moduleD *int
+		if err := rows.Scan(
+			&summary.Instance.ID, &summary.Instance.ProjectID, &summary.Instance.OrganizationID,
+			&summary.Instance.FurnitureDefinitionID, &summary.Instance.Origin,
+			&summary.Instance.OriginFurnitureInstanceID, &summary.Instance.LifecycleStatus,
+			&summary.Instance.Version, &summary.Instance.CreatedAt, &summary.Instance.UpdatedAt,
+			&summary.DisplayName, &quotedW, &quotedH, &quotedD, &moduleW, &moduleH, &moduleD,
+		); err != nil {
+			return nil, err
+		}
+		if quotedW != nil || quotedH != nil || quotedD != nil {
+			quotedDims = &domain.ItemCustomDims{}
+			if quotedW != nil {
+				quotedDims.WidthMm = *quotedW
+			}
+			if quotedH != nil {
+				quotedDims.HeightMm = *quotedH
+			}
+			if quotedD != nil {
+				quotedDims.DepthMm = *quotedD
+			}
+		}
+		if quotedDims == nil && (moduleW != nil || moduleH != nil || moduleD != nil) {
+			quotedDims = &domain.ItemCustomDims{}
+			if moduleW != nil {
+				quotedDims.WidthMm = *moduleW
+			}
+			if moduleH != nil {
+				quotedDims.HeightMm = *moduleH
+			}
+			if moduleD != nil {
+				quotedDims.DepthMm = *moduleD
+			}
+		}
+		summary.DisplayDims = quotedDims
+		summaries = append(summaries, summary)
+	}
+	return summaries, rows.Err()
+}
+
 // RemoveFurnitureInstance applies the terminal active → removed transition
 // under optimistic concurrency. Already-terminal identities never change
 // again (IDs are not recycled), and the removal audit joins the transaction.

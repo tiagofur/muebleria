@@ -5837,6 +5837,46 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "display": {
+            "$ref": "#/components/schemas/FurnitureInstanceDisplay"
+          }
+        }
+      },
+      "FurnitureInstanceDisplay": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Presentation-only summary for authoring clients (#389 / DT-5): the catalog module label and the quoted dimensions when the unit comes from a quote line. Server-computed; never part of business identity.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "dimensions_mm": {
+            "$ref": "#/components/schemas/FurnitureInstanceDimensionsMm"
+          }
+        }
+      },
+      "FurnitureInstanceDimensionsMm": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "depth": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         }
       },

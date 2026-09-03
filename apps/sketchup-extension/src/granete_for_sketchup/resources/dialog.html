@@ -1320,6 +1320,43 @@
         color: var(--neutral-700);
       }
 
+      /* #389 Project Furniture unit cards: one card = one physical unit
+         (quantity > 1 stays individually placeable/traceable). */
+      .pf-unit-card {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3);
+      }
+
+      .pf-unit-main {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .pf-unit-name {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+
+      .pf-unit-meta {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      .pf-unit-ref {
+        font-family: monospace;
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
       .status-badge.passed {
         background: var(--success-50);
         color: var(--success-600);
@@ -1524,6 +1561,10 @@
           <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
           <span>Biblioteca</span>
         </button>
+        <button id="tab-btn-project" class="tab-button" role="tab" aria-selected="false" data-tab="project">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-6 9 6v10l-9 6-9-6z"/><path d="M3 9l9 6 9-6"/><line x1="12" y1="21" x2="12" y2="15"/></svg>
+          <span>Proyecto</span>
+        </button>
         <button id="tab-btn-inspector" class="tab-button" role="tab" aria-selected="false" data-tab="inspector">
           <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           <span>Inspector</span>
@@ -1662,7 +1703,61 @@
           </div>
         </section>
 
-        <!-- Tab 2: Contextual Inspector (capability-driven, #476) -->
+        <!-- Tab 2: Project Furniture (#389 / DT-5). A source clearly separate
+             from the Catalog/Library: units that ALREADY EXIST as physical
+             project furniture, with pending/placed derived from the design
+             working copy. The panel never edits business identity. -->
+        <section id="pane-project" class="tab-pane" role="tabpanel">
+          <div id="project-furniture-state-area">
+            <!-- State cards: every state is distinct, none collapses. -->
+            <div id="pf-unbound-state" class="card empty-state" style="display: none;">
+              <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+              <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Modelo sin conectar</h2>
+              <p style="margin-bottom: var(--space-2); font-size: var(--text-sm);">
+                Conectá este modelo al proyecto y diseño de Granete para ver y colocar sus muebles.
+              </p>
+              <button id="btn-pf-go-status" class="btn btn-secondary" style="width: auto; margin: var(--space-2) auto 0;">Ir a la pestaña Estado</button>
+            </div>
+
+            <div id="pf-loading-state" class="card empty-state" style="display: none;">
+              <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+              <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Cargando muebles…</h2>
+              <p style="margin-bottom: 0; font-size: var(--text-sm);">Obteniendo las unidades físicas del proyecto conectado.</p>
+            </div>
+
+            <div id="pf-error-state" class="card empty-state" style="display: none;">
+              <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
+              <h2 id="pf-error-title" style="font-size: var(--text-md); margin-bottom: var(--space-1);">No se pudieron cargar</h2>
+              <p id="pf-error-detail" style="margin-bottom: var(--space-2); font-size: var(--text-sm);"></p>
+              <button id="btn-pf-retry" class="btn btn-secondary" style="width: auto; margin: var(--space-2) auto 0;">Reintentar</button>
+            </div>
+
+            <div id="pf-empty-state" class="card empty-state" style="display: none;">
+              <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+              <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">El proyecto no tiene muebles</h2>
+              <p style="margin-bottom: 0; font-size: var(--text-sm);">
+                Cuando la cotización del proyecto materialice unidades físicas, aparecen acá para colocarlas.
+              </p>
+            </div>
+          </div>
+
+          <div id="pf-list-view" style="display: none;">
+            <div class="library-header-row">
+              <div class="card-title">Muebles del proyecto</div>
+              <span id="pf-count-badge" class="library-count-badge">--</span>
+            </div>
+
+            <div class="card-title" id="pf-pending-title" style="margin-top: var(--space-3);">Pendientes de colocar</div>
+            <div id="pf-pending-list" role="list" style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2);"></div>
+
+            <div class="card-title" id="pf-placed-title" style="margin-top: var(--space-4);">Colocados</div>
+            <div id="pf-placed-list" role="list" style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2);"></div>
+
+            <button id="btn-pf-refresh" class="btn btn-secondary" style="margin-top: var(--space-3);">Actualizar</button>
+          </div>
+        </section>
+
+        <!-- Tab 3: Contextual Inspector (capability-driven, #476) -->
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
           <div id="inspector-empty-state" class="card empty-state">
             <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg></div>
@@ -1776,7 +1871,7 @@
           </div>
         </section>
 
-        <!-- Tab 3: Status -->
+        <!-- Tab 4: Status -->
         <section id="pane-status" class="tab-pane" role="tabpanel">
           <div class="card">
             <div class="card-title">Conexión con Granete</div>
@@ -2279,9 +2374,12 @@
           }
           var pane = document.getElementById("pane-" + tabId);
           if (pane) pane.classList.add("active");
+          // #389: the Project Furniture rows load when the tab becomes
+          // visible (and refresh on model switches / after placing).
+          if (tabId === "project" && lastPfState === null) requestProjectFurniture();
         }
 
-        var tabOrder = ["library", "inspector", "status"];
+        var tabOrder = ["library", "project", "inspector", "status"];
 
         document.querySelectorAll(".tab-button").forEach(function (btn) {
           btn.setAttribute("aria-selected", btn.classList.contains("active") ? "true" : "false");
@@ -3520,6 +3618,10 @@
           onBindingProjects: function (result) { handleBindingProjects(result); },
           onBindingDesigns: function (result) { handleBindingDesigns(result); },
 
+          // #389 Project Furniture bridge — delegates to the project section.
+          onProjectFurniture: function (payload) { renderProjectFurniture(payload); },
+          onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
+
           setCatalog: function (payload) {
             if (Object.prototype.toString.call(payload) === "[object Array]") {
               catalog = payload || [];
@@ -4444,6 +4546,9 @@
           status = status || { state: "unbound" };
           modelBindingState.status = status;
           modelBindingState.pendingTarget = null;
+          // A binding change invalidates the Project Furniture rows: the
+          // next visit to the Proyecto tab reloads them (#389).
+          lastPfState = null;
 
           var copy = MODEL_BINDING_COPY[status.state] || MODEL_BINDING_COPY.invalid;
           bindingBadge.textContent = copy.badge;
@@ -4617,6 +4722,234 @@
           }
         });
         renderModelBindingStatus({ state: "unbound" });
+
+        // ------------------------------------------------------------------
+        // Project Furniture (#389 / DT-5). Separate source from the Catalog:
+        // units that already exist in the connected project, with
+        // pending/placed derived from the design working copy. Every action
+        // goes to Ruby (placer); the panel never invents or edits business
+        // identity.
+        // ------------------------------------------------------------------
+        var pfUnbound = document.getElementById("pf-unbound-state");
+        var pfLoading = document.getElementById("pf-loading-state");
+        var pfError = document.getElementById("pf-error-state");
+        var pfErrorTitle = document.getElementById("pf-error-title");
+        var pfErrorDetail = document.getElementById("pf-error-detail");
+        var pfEmpty = document.getElementById("pf-empty-state");
+        var pfListView = document.getElementById("pf-list-view");
+        var pfCountBadge = document.getElementById("pf-count-badge");
+        var pfPendingTitle = document.getElementById("pf-pending-title");
+        var pfPendingList = document.getElementById("pf-pending-list");
+        var pfPlacedTitle = document.getElementById("pf-placed-title");
+        var pfPlacedList = document.getElementById("pf-placed-list");
+        var btnPfRefresh = document.getElementById("btn-pf-refresh");
+        var btnPfGoStatus = document.getElementById("btn-pf-go-status");
+        var btnPfRetry = document.getElementById("btn-pf-retry");
+
+        var PF_ERROR_COPY = {
+          unauthenticated: "Iniciá sesión con tu cuenta del taller en la pestaña Estado.",
+          unauthorized: "No tenés permiso para el proyecto o diseño enlazado.",
+          unreachable: "No se pudo contactar al servidor. Probá de nuevo.",
+          stale_base: "El diseño avanzó en el servidor: actualizá la base de trabajo en la pestaña Estado.",
+          design_archived: "El diseño fue archivado en Granete y no puede editarse desde este modelo.",
+          bad_contract: "El servidor respondió datos que esta extensión no entiende. Actualizá la extensión.",
+          error: "No se pudieron cargar los muebles del proyecto."
+        };
+
+        var pfPlacing = {};
+
+        function hidePfStates() {
+          [pfUnbound, pfLoading, pfError, pfEmpty].forEach(function (el) { el.style.display = "none"; });
+          pfListView.style.display = "none";
+        }
+
+        var lastPfState = null;
+
+        function requestProjectFurniture() {
+          // Keep the rendered list while refreshing; show the loading card
+          // only when there is nothing rendered yet.
+          if (lastPfState !== "connected") {
+            hidePfStates();
+            pfLoading.style.display = "block";
+          }
+          if (window.sketchup && window.sketchup.get_project_furniture) {
+            window.sketchup.get_project_furniture();
+          } else {
+            renderProjectFurniture({ state: "unbound" });
+          }
+        }
+
+        function renderProjectFurniture(payload) {
+          payload = payload || {};
+          lastPfState = payload.state;
+          hidePfStates();
+
+          if (payload.state === "connected") {
+            var items = payload.items || [];
+            if (!items.length) {
+              pfEmpty.style.display = "block";
+              return;
+            }
+            pfListView.style.display = "block";
+            pfCountBadge.textContent = (payload.placed || 0) + " colocados · " + (payload.pending || 0) + " pendientes";
+            pfPendingTitle.textContent = "Pendientes de colocar (" + (payload.pending || 0) + ")";
+            pfPlacedTitle.textContent = "Colocados (" + (payload.placed || 0) + ")";
+            // Terminal (removed/cancelled) units are neither placeable nor
+            // placed; they are history and stay out of this authoring panel.
+            renderPfList(pfPendingList, items.filter(function (row) { return !row.placed && !row.terminal; }), true);
+            renderPfList(pfPlacedList, items.filter(function (row) { return row.placed; }), false);
+            return;
+          }
+
+          if (payload.state === "unbound") {
+            pfUnbound.style.display = "block";
+            return;
+          }
+
+          pfErrorTitle.textContent = payload.state === "stale_base" || payload.state === "design_archived"
+            ? "Diseño no editable" : "No se pudieron cargar";
+          pfErrorDetail.textContent = PF_ERROR_COPY[payload.state] || payload.reason || "Intentá de nuevo.";
+          if (payload.reason && PF_ERROR_COPY[payload.state] && payload.state !== "unreachable") {
+            pfErrorDetail.textContent += " (" + payload.reason + ")";
+          }
+          pfError.style.display = "block";
+        }
+
+        function renderPfList(container, rows, pending) {
+          container.innerHTML = "";
+          if (!rows.length) {
+            var note = document.createElement("p");
+            note.className = "subhead";
+            note.style.margin = "0";
+            note.style.fontSize = "var(--text-xs)";
+            note.textContent = pending ? "Todas las unidades están colocadas." : "Todavía no hay unidades colocadas.";
+            container.appendChild(note);
+            return;
+          }
+          rows.forEach(function (row) {
+            container.appendChild(pfUnitCard(row, pending));
+          });
+        }
+
+        function pfUnitCard(row, pending) {
+          var card = document.createElement("div");
+          card.className = "card pf-unit-card";
+
+          var main = document.createElement("div");
+          main.className = "pf-unit-main";
+
+          var name = document.createElement("div");
+          name.className = "pf-unit-name";
+          var nameText = document.createElement("span");
+          nameText.textContent = row.name || "Mueble del proyecto";
+          name.appendChild(nameText);
+          // Quantity > 1: identical units stay individually traceable.
+          if (row.unitTotal > 1) {
+            var unitBadge = document.createElement("span");
+            unitBadge.className = "status-badge pending";
+            unitBadge.textContent = "Unidad " + row.unitIndex + " de " + row.unitTotal;
+            name.appendChild(unitBadge);
+          }
+          main.appendChild(name);
+
+          if (row.dimensions_label) {
+            var dims = document.createElement("div");
+            dims.className = "pf-unit-meta";
+            dims.textContent = row.dimensions_label;
+            main.appendChild(dims);
+          }
+
+          // Granete IDs are diagnostics, not product noise: secondary line.
+          var ref = document.createElement("div");
+          ref.className = "pf-unit-ref";
+          ref.textContent = String(row.id || "").slice(0, 8);
+          main.appendChild(ref);
+
+          card.appendChild(main);
+
+          var action = document.createElement("button");
+          if (pending) {
+            action.className = "btn btn-primary";
+            action.style.width = "auto";
+            action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
+            action.disabled = !!pfPlacing[row.id];
+            action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
+          } else {
+            action.className = "btn btn-secondary";
+            action.style.width = "auto";
+            action.textContent = "Seleccionar";
+            action.addEventListener("click", function () {
+              if (window.sketchup && window.sketchup.select_project_furniture) {
+                window.sketchup.select_project_furniture(JSON.stringify({ furnitureInstanceId: row.id }));
+              }
+            });
+          }
+          card.appendChild(action);
+          return card;
+        }
+
+        function placeFurnitureInstance(furnitureInstanceId, button) {
+          if (!furnitureInstanceId || pfPlacing[furnitureInstanceId]) return;
+          pfPlacing[furnitureInstanceId] = button;
+          button.disabled = true;
+          button.textContent = "Colocando…";
+          if (window.sketchup && window.sketchup.place_furniture_instance) {
+            window.sketchup.place_furniture_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
+          } else {
+            delete pfPlacing[furnitureInstanceId];
+            button.disabled = false;
+            button.textContent = "Colocar";
+            showToast("error", "Colocar disponible sólo dentro de SketchUp.");
+          }
+        }
+
+        function handlePlaceFurnitureResult(result) {
+          result = result || {};
+          var button = pfPlacing[result.instanceId];
+          delete pfPlacing[result.instanceId];
+          if (result.ok) {
+            if (result.code === "already_placed") {
+              showToast("success", "Ese mueble ya está colocado: se seleccionó el existente.");
+            } else {
+              showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño. Quedó seleccionado: movelo a su lugar (tecla M).");
+            }
+            return;
+          }
+          // Re-arm the failed unit's button synchronously: the failure is
+          // honest, the rows keep their last server state and the user may
+          // retry (after fixing the cause) without a panel reload.
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Colocar";
+          }
+          showToast("error", pfPlaceFailureMessage(result));
+        }
+
+        function pfPlaceFailureMessage(result) {
+          switch (result.code) {
+            case "unbound": return "Conectá el modelo al proyecto primero.";
+            case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en Estado.";
+            case "not_found": return "El mueble no pertenece al proyecto conectado.";
+            case "terminal": return "El mueble fue eliminado del proyecto.";
+            case "duplicate_detected": return "Hay copias duplicadas del mismo mueble en el modelo; resolvé los duplicados antes.";
+            case "already_placed": return "El mueble ya está colocado.";
+            case "definition_unavailable": return "El catálogo del taller no incluye la definición de este mueble.";
+            case "resolution_failed": return result.reason || "Granete no pudo resolver la composición del mueble.";
+            case "placement_failed": return result.reason || "La colocación falló.";
+            case "sync_failed": return result.reason || "El diseño no se pudo actualizar.";
+            default: return result.reason || "No se pudo colocar el mueble.";
+          }
+        }
+
+        btnPfRefresh.addEventListener("click", function () {
+          btnPfRefresh.disabled = true;
+          requestProjectFurniture();
+          setTimeout(function () { btnPfRefresh.disabled = false; }, 500);
+        });
+        btnPfRetry.addEventListener("click", requestProjectFurniture);
+        btnPfGoStatus.addEventListener("click", function () { switchTab("status"); });
+        // No pre-render: the panel loads when the tab first becomes visible
+        // (all state cards start hidden in the markup).
 
         btnLogin.addEventListener("click", function () {
           var server = loginServer.value.trim();

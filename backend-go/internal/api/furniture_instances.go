@@ -57,6 +57,40 @@ func toFurnitureInstanceDTO(instance domain.FurnitureInstance) openapi.Furniture
 	return dto
 }
 
+// toFurnitureInstanceSummaryDTO composes the list DTO with the server-computed
+// presentation block (#389 / DT-5): catalog label + quoted-or-default
+// dimensions. Presentation only — the identity fields come verbatim from the
+// FurnitureInstance row.
+func toFurnitureInstanceSummaryDTO(summary storage.FurnitureInstanceSummary) openapi.FurnitureInstance {
+	dto := toFurnitureInstanceDTO(summary.Instance)
+	if summary.DisplayName == "" && summary.DisplayDims == nil {
+		return dto
+	}
+	display := openapi.FurnitureInstanceDisplay{}
+	if summary.DisplayName != "" {
+		name := summary.DisplayName
+		display.Name = &name
+	}
+	if summary.DisplayDims != nil {
+		dims := openapi.FurnitureInstanceDimensionsMm{}
+		if summary.DisplayDims.WidthMm > 0 {
+			w := int64(summary.DisplayDims.WidthMm)
+			dims.Width = &w
+		}
+		if summary.DisplayDims.HeightMm > 0 {
+			h := int64(summary.DisplayDims.HeightMm)
+			dims.Height = &h
+		}
+		if summary.DisplayDims.DepthMm > 0 {
+			d := int64(summary.DisplayDims.DepthMm)
+			dims.Depth = &d
+		}
+		display.DimensionsMm = &dims
+	}
+	dto.Display = &display
+	return dto
+}
+
 func respondWithFurnitureInstanceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, storage.ErrFurnitureInstanceNotFound):
@@ -96,14 +130,17 @@ func (s *Server) HandleProjectFurnitureInstances(w http.ResponseWriter, r *http.
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver los muebles del proyecto") {
 			return
 		}
-		instances, err := s.Store.ListFurnitureInstancesByProject(r.Context(), projectID, true)
+		// #389 / DT-5: the list carries the presentation summary so the
+		// SketchUp Project Furniture panel renders server-computed labels and
+		// dimensions — the plugin never guesses dimensions client-side.
+		summaries, err := s.Store.ListFurnitureInstanceSummariesByProject(r.Context(), projectID, true)
 		if err != nil {
 			respondWithInternalError(w, err, "list furniture instances")
 			return
 		}
-		dtos := make([]openapi.FurnitureInstance, 0, len(instances))
-		for _, instance := range instances {
-			dtos = append(dtos, toFurnitureInstanceDTO(instance))
+		dtos := make([]openapi.FurnitureInstance, 0, len(summaries))
+		for _, summary := range summaries {
+			dtos = append(dtos, toFurnitureInstanceSummaryDTO(summary))
 		}
 		respondWithJSON(w, http.StatusOK, dtos)
 

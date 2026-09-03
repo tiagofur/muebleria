@@ -222,3 +222,45 @@ func TestHandleFurnitureInstanceRemove_ReturnsTerminalState(t *testing.T) {
 		t.Fatalf("remove command = %+v, want expected version 1", store.removeFurnitureInstanceCmd)
 	}
 }
+
+// TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary (#389 / DT-5):
+// the list DTO carries the server-computed presentation block — catalog label
+// plus quoted-or-default dimensions — so authoring clients never guess labels
+// or dimensions. Identity fields stay verbatim; display is optional and absent
+// when neither source knows anything.
+func TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary(t *testing.T) {
+	definitionID := "50000000-0000-0000-0000-000000000001"
+	summaries := []storage.FurnitureInstanceSummary{
+		{
+			Instance: domain.FurnitureInstance{ID: "fi-1", ProjectID: fiTestProjectID,
+				FurnitureDefinitionID: definitionID, Origin: domain.FurnitureInstanceOriginQuote,
+				LifecycleStatus: domain.FurnitureInstanceLifecycleActive, Version: 1},
+			DisplayName: "Gabinete Base 600",
+			DisplayDims: &domain.ItemCustomDims{WidthMm: 600, HeightMm: 720, DepthMm: 560},
+		},
+		{
+			Instance: domain.FurnitureInstance{ID: "fi-2", ProjectID: fiTestProjectID,
+				Origin: domain.FurnitureInstanceOriginManual,
+				LifecycleStatus: domain.FurnitureInstanceLifecycleActive, Version: 1},
+		},
+	}
+	store := &stubStore{listFurnitureInstanceSummaries: summaries}
+	srv := &Server{Store: store}
+	req := fiRequest(http.MethodGet, "/api/projects/"+fiTestProjectID+"/furniture-instances", "", string(domain.RoleIngeniero))
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectFurnitureInstances(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"display":{"name":"Gabinete Base 600","dimensions_mm":{"width":600,"height":720,"depth":560}}`) {
+		t.Fatalf("list DTO %s missing the display summary", body)
+	}
+	// A unit without catalog or quoted presentation carries NO display object
+	// (never an invented label).
+	if strings.Contains(body, `"origin":"manual","lifecycle_status":"active","version":1,"created_at":"","updated_at":"","display"`) {
+		t.Fatalf("fi-2 must serialize without a display block: %s", body)
+	}
+}

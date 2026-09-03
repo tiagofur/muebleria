@@ -529,11 +529,18 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	// Project designs list only (exact project prefix is intentionally NOT
 	// granted: manufacturing/project reads stay out of the extension scope).
 	regexp.MustCompile(`^/api/projects/[^/]+/designs$`),
+	// #389 / DT-5 Project Furniture panel: the plugin lists the connected
+	// project's furniture instances (with the server-computed presentation
+	// block) and reads the design working copy to derive pending/placed per
+	// furnitureInstanceId. Read-only; identity creation stays #390 and is NOT
+	// granted here.
+	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances$`),
+	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
 }
 
 // extensionClientMayAccess is the deny-by-default boundary for the SketchUp
 // extension credential: reads limited to the plugin surface above, writes
-// limited to the explicit POST allowlist, every other verb denied.
+// limited to the explicit POST/PUT allowlists, every other verb denied.
 func extensionClientMayAccess(method, path string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
@@ -556,6 +563,13 @@ func extensionClientMayAccess(method, path string) bool {
 			return true
 		}
 		for _, pattern := range extensionTokenMayPostPatterns {
+			if pattern.MatchString(path) {
+				return true
+			}
+		}
+		return false
+	case http.MethodPut:
+		for _, pattern := range extensionTokenMayPutPatterns {
 			if pattern.MatchString(path) {
 				return true
 			}
@@ -590,6 +604,16 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// it creates no business records and mutates nothing; binding itself
 	// stays client-side model metadata until #392/#499 publish flows.
 	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/binding:validate$`),
+}
+
+// Parameterized PUT surface for the extension credential (#389 / DT-5). This
+// is the extension's ONLY write capability, and it is deliberately narrow:
+// placing an EXISTING Project FurnitureInstance appends/merges its working
+// item into the design working copy. It never allocates business identity —
+// POST /api/projects/{id}/furniture-instances (catalog insertion, #390) stays
+// denied for the extension credential.
+var extensionTokenMayPutPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
 }
 
 func extensionTokenMayPost(path string) bool {

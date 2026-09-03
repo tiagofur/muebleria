@@ -857,6 +857,18 @@ type FurnitureInstance struct {
 	Version                   int64                            `json:"version"`
 	CreatedAt                 string                           `json:"created_at"`
 	UpdatedAt                 string                           `json:"updated_at"`
+	Display                   *FurnitureInstanceDisplay        `json:"display,omitempty"`
+}
+
+type FurnitureInstanceDisplay struct {
+	Name         *string                        `json:"name,omitempty"`
+	DimensionsMm *FurnitureInstanceDimensionsMm `json:"dimensions_mm,omitempty"`
+}
+
+type FurnitureInstanceDimensionsMm struct {
+	Width  *int64 `json:"width,omitempty"`
+	Height *int64 `json:"height,omitempty"`
+	Depth  *int64 `json:"depth,omitempty"`
 }
 
 type CreateFurnitureInstanceRequest struct {

@@ -433,11 +433,26 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 		t.Fatal("binding validate is part of the extension POST contract (#388)")
 	}
 
+	// #389 / DT-5 Project Furniture: the plugin lists the connected
+	// project's furniture instances and reads/writes the design working
+	// copy. The PUT working-copy is the credential's ONLY write; identity
+	// creation (POST furniture-instances, #390) stays denied below.
+	if got := send(http.MethodGet, "/api/projects/41000000-0000-0000-0000-000000000001/furniture-instances"); got != http.StatusOK {
+		t.Fatalf("GET project furniture instances with extension token = %d, want 200 (#389 panel)", got)
+	}
+	if got := send(http.MethodGet, "/api/designs/52000000-0000-0000-0000-000000000001/working-copy"); got != http.StatusOK {
+		t.Fatalf("GET working copy with extension token = %d, want 200 (#389 pending/placed)", got)
+	}
+	if got := send(http.MethodPut, "/api/designs/52000000-0000-0000-0000-000000000001/working-copy"); got != http.StatusOK {
+		t.Fatalf("PUT working copy with extension token = %d, want 200 (#389 place existing)", got)
+	}
+
 	// Everything else denies the credential CLASS: team admin, session and
 	// device management, org/business reads and writes, platform — even for
 	// a platform-admin owner. Project discovery (#388) is intentionally
 	// narrow: only the project list and the per-project designs list open;
-	// every other project subresource stays denied.
+	// furniture identity creation (#390) and revision publication (#392)
+	// stay out of the extension contract.
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/api/org/team/summary"},
 		{http.MethodGet, "/api/org/memberships"},
@@ -448,9 +463,13 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 		{http.MethodPost, "/api/auth/devices/revoke"},
 		{http.MethodPost, "/api/projects"},
 		{http.MethodDelete, "/api/projects/1"},
-		{http.MethodGet, "/api/projects/1/furniture-instances"},
+		// #390: catalog insertion creating a project unit must NOT be
+		// reachable by the extension credential — place existing never
+		// mints business identity.
+		{http.MethodPost, "/api/projects/1/furniture-instances"},
 		{http.MethodGet, "/api/projects/1/loading-status"},
-		{http.MethodGet, "/api/projects/41000000-0000-0000-0000-000000000001/designs/52000000-0000-0000-0000-000000000001/working-copy"},
+		{http.MethodPost, "/api/designs/52000000-0000-0000-0000-000000000001/working-copy:reset"},
+		{http.MethodPost, "/api/designs/52000000-0000-0000-0000-000000000001/revisions"},
 		{http.MethodPut, "/api/projects/1/designs/2/binding:validate"},
 		{http.MethodGet, "/api/customers"},
 		{http.MethodGet, "/api/platform/organizations"},

@@ -11,7 +11,8 @@ module Granete
         logger: SafeLogger.new,
         session_provider: nil,
         catalog_provider: nil,
-        model_binding_connector: nil
+        model_binding_connector: nil,
+        project_furniture_placer: nil
       )
         @logger = logger
         @session = session_provider || Auth::DeviceProvider.new(logger: logger)
@@ -26,18 +27,23 @@ module Granete
           ),
           logger: logger
         )
+        resolved_catalog_provider = catalog_provider || Library::RemoteCatalogProvider.new(
+          transport: @transport,
+          auth_provider: @auth_provider,
+          fallback_provider: Library::StaticCatalogProvider.new,
+          logger: logger
+        )
+        @project_furniture_placer = project_furniture_placer || build_project_furniture_placer(
+          resolved_catalog_provider
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
           metadata_store_factory: method(:metadata_store),
-          catalog_provider: catalog_provider || Library::RemoteCatalogProvider.new(
-            transport: @transport,
-            auth_provider: @auth_provider,
-            fallback_provider: Library::StaticCatalogProvider.new,
-            logger: logger
-          ),
+          catalog_provider: resolved_catalog_provider,
           session: @session,
-          model_binding_connector: @model_binding_connector
+          model_binding_connector: @model_binding_connector,
+          project_furniture_placer: @project_furniture_placer
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -82,6 +88,34 @@ module Granete
       attr_reader :model_binding_connector
 
       private
+
+      # #389 / DT-5: Place existing project units. The placer reuses the
+      # binding connector's service for base revalidation and the same
+      # builder/metadata/catalog authorities as insertion — no parallel
+      # resolution path.
+      def build_project_furniture_placer(catalog_provider)
+        texture_cache = Assets::TextureCache.new(transport: @transport, auth_provider: @auth_provider)
+        Connection::ProjectFurniture::Placer.new(
+          model_provider: method(:active_model),
+          binding_store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
+          model_binding_service: @model_binding_connector.service,
+          service: Connection::ProjectFurniture::Service.new(
+            transport: @transport,
+            auth_provider: @auth_provider,
+            logger: @logger
+          ),
+          metadata_store_factory: method(:metadata_store),
+          catalog_provider: catalog_provider,
+          furniture_builder_factory: lambda { |model|
+            Model::FurnitureBuilder.new(
+              metadata_store: metadata_store(model),
+              asset_loader: Assets::AssetLoader.new,
+              texture_cache: texture_cache
+            )
+          },
+          logger: @logger
+        )
+      end
 
       def active_model
         Sketchup.active_model if defined?(Sketchup) && Sketchup.respond_to?(:active_model)

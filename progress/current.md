@@ -1,4 +1,13 @@
-# Feature activa: F202 (#460) — SEC-7 integrated; Gate A durability rescue active
+# Feature activa: F208 (#389 DT-5) — Project Furniture panel + Place existing en SketchUp
+
+- Actualizado: 2026-09-03 America/Mexico_City
+- F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
+  slice DT-5 en modo Demo Commercial Rescue sobre `feat/389-project-furniture-panel`.
+- F208 implementada COMPLETE (pending review/merge): panel "Proyecto" separado
+  del Catálogo, place existing identity-preserving con merge del working copy
+  y rollback local en fallo. Detalle: `progress/implementation_389_dt5.md`.
+
+## Historial previo — F202/#460 Organization Foundation P0
 
 - Actualizado: 2026-09-02 America/Mexico_City
 - F199 (#458) cerrada (`done`); ninguna otra feature `in_progress` salvo F202.

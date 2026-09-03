@@ -187,6 +187,79 @@ module Granete
         end
       end
 
+      # #389 / DT-5 Project Furniture callback handlers: the panel never
+      # touches business identity — listing and Place existing go through the
+      # ProjectFurniture placer, which validates the binding and derives
+      # pending/placed from the design working copy.
+      module ProjectFurnitureBridge
+        def register_project_furniture_callbacks(dialog)
+          dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
+          dialog.add_action_callback('place_furniture_instance') { |_c, p| handle_place_furniture_instance(dialog, p) }
+          dialog.add_action_callback('select_project_furniture') { |_c, p| handle_select_project_furniture(p) }
+        end
+
+        # Panel payload: binding-aware rows with pending/placed derived per
+        # furnitureInstanceId from the current working copy.
+        def handle_get_project_furniture(dialog)
+          result = project_furniture_placer.panel
+          execute_bridge(dialog, 'onProjectFurniture', result)
+        rescue StandardError => e
+          @logger.error('project_furniture_panel_failed', error: e)
+          execute_bridge(dialog, 'onProjectFurniture', { 'state' => 'error', 'reason' => e.message })
+        end
+
+        # Place EXISTING FurnitureInstance: identity arrives from the server
+        # list; the placer guarantees no new business object is created and
+        # the working copy keeps every other item.
+        def handle_place_furniture_instance(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          result = project_furniture_placer.place(payload['furnitureInstanceId'].to_s)
+          execute_bridge(dialog, 'onPlaceFurnitureResult', result)
+          handle_get_project_furniture(dialog) if result['ok']
+        rescue StandardError => e
+          @logger.error('project_furniture_place_failed', error: e)
+          execute_bridge(dialog, 'onPlaceFurnitureResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # Focus an already-placed unit: pure viewport selection state.
+        def handle_select_project_furniture(raw_payload = nil)
+          payload = if raw_payload.is_a?(String) && !raw_payload.strip.empty?
+                      JSON.parse(raw_payload)
+                    else
+                      raw_payload || {}
+                    end
+          fi_id = payload['furnitureInstanceId'].to_s
+          return if fi_id.empty?
+
+          model = active_model
+          located = Connection::ProjectFurniture::ManagedFurniture.locate(
+            model, @metadata_store_factory.call(model), fi_id
+          )
+          if located['entity'] && model.respond_to?(:selection)
+            model.selection.clear
+            model.selection.add(located['entity'])
+            @logger.info('project_furniture_selected', furniture_instance_id: fi_id)
+          else
+            @logger.warn('project_furniture_select_rejected', furniture_instance_id: fi_id)
+          end
+        rescue StandardError => e
+          @logger.error('project_furniture_select_failed', error: e)
+        end
+
+        # Pushes a fresh panel payload when a visible dialog exists — used at
+        # dialog ready and on active-document switches (the panel follows the
+        # binding of whichever model is open).
+        def refresh_project_furniture
+          handle_get_project_furniture(@dialog) if @dialog&.visible?
+        end
+
+        private
+
+        def project_furniture_placer
+          @project_furniture_placer
+        end
+      end
+
       # Insert/update callback handlers, extracted to keep DialogController
       # within the class-length budget. Both resolve the furniture's real
       # composition server-side before touching the model.
@@ -540,6 +613,9 @@ module Granete
           @builder_model = nil
           check_current_selection(@dialog) if @dialog&.visible?
           refresh_binding_status
+          # The Project Furniture panel follows the binding of whichever
+          # model is active (#389): switching documents refreshes its rows.
+          refresh_project_furniture
           offer_migration_if_legacy(new_model)
         end
 
@@ -624,6 +700,7 @@ module Granete
       class DialogController
         include SessionBridge
         include ModelBindingBridge
+        include ProjectFurnitureBridge
         include FurnitureBridge
         include OptionSelectorBridge
         include InspectorBridge
@@ -634,10 +711,12 @@ module Granete
 
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
-                       migration_review_controller: nil, model_binding_connector: nil)
+                       migration_review_controller: nil, model_binding_connector: nil,
+                       project_furniture_placer: nil)
           @logger = logger
           @status_provider = status_provider
           @model_binding_connector = model_binding_connector
+          @project_furniture_placer = project_furniture_placer
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store
@@ -738,6 +817,7 @@ module Granete
           dialog.add_action_callback('poll_enrollment') { |_c, p| handle_poll_enrollment(dialog, p) }
           dialog.add_action_callback('logout') { handle_logout(dialog) }
           register_model_binding_callbacks(dialog)
+          register_project_furniture_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
@@ -748,6 +828,7 @@ module Granete
           send_catalog(dialog)
           check_current_selection(dialog)
           refresh_binding_status
+          refresh_project_furniture
           @logger.info('dialog_ready')
         end
 
