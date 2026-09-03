@@ -37,6 +37,37 @@ module Granete
             }
           end
 
+          # Flags rows whose unit has a local root but no working item yet:
+          # the honest 'confirm your final position' state.
+          def mark_pending_confirmation(rows)
+            rows.each do |row|
+              next if row['placed'] || row['terminal']
+
+              located = yield(row['id'])
+              row['pendingConfirm'] = !located.fetch('entity', nil).nil?
+            end
+            rows
+          end
+
+          def definition_names(catalog_provider)
+            names = {}
+            if catalog_provider.respond_to?(:all_definitions)
+              (catalog_provider.all_definitions || []).each do |definition|
+                names[definition['furniture_definition_id']] = definition['name']
+              end
+            end
+            names
+          end
+
+          def error_state(error)
+            case error.kind
+            when :unauthenticated then 'unauthenticated'
+            when :unauthorized then 'unauthorized'
+            when :unreachable then 'unreachable'
+            else 'error'
+            end
+          end
+
           def row(instance, placed, unit_index, unit_total, definition_names)
             name = instance.display_name ||
                    definition_names[instance.furniture_definition_id] ||

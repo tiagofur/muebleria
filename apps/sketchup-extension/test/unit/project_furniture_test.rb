@@ -55,6 +55,19 @@ class ProjectFurnitureTest < Minitest::Test
     include SketchupStub::AttributeContainer
   end
 
+  # Models an OPEN nested editing context: active_entities points at another
+  # component's entities (where a naive insert would nest the furniture).
+  class NestedEditModel < PlacerModel
+    def initialize
+      super
+      @nested_entities = SketchupStub::EntitiesStub.new
+    end
+
+    def active_entities
+      @nested_entities
+    end
+  end
+
   class FakeAuth
     def configured?
       true
@@ -136,6 +149,18 @@ class ProjectFurnitureTest < Minitest::Test
     end
   end
 
+  # Moves the placed root to a FINAL user-chosen transform before confirm:
+  # 1 m along +X and 90° about Z (mm/deg at the contract level).
+  def finalize_position!(_model, fi_id, translation_mm = [1000, 0, 0])
+    root = PF::ManagedFurniture.locate(@model, MS.new(@model), fi_id)['entity']
+    root.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(translation_mm[0] / 25.4, translation_mm[1] / 25.4,
+                        (translation_mm[2] || 0) / 25.4),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(-1, 0, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+    root
+  end
+
   def setup
     @model = PlacerModel.new
     @transport = FakeTransport.new
@@ -152,8 +177,16 @@ class ProjectFurnitureTest < Minitest::Test
     result = @placer.place(FI_1)
 
     assert result['ok'], "place failed: #{result.inspect}"
-    assert_equal 'placed', result['code']
+    # Honest intermediate: inserted, awaiting the user's final position.
+    assert_equal 'pending_position', result['code']
     assert_equal FI_1, result['instanceId']
+    # No working-copy write before the position is confirmed.
+    assert_empty @transport.requests_for('PUT', %r{/working-copy}),
+                 'the sync must wait for the final chosen transform'
+
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+    assert_equal 'placed', confirmed['code']
 
     # Negative proof A: the only backend calls are reads + the working-copy
     # PUT. No POST to furniture-instances ever happens.
@@ -172,7 +205,7 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal DEFINITION_ID, metadata.dig('intent', 'furnitureDefinitionId')
   end
 
-  def test_place_writes_working_item_with_server_parameters_and_transform
+  def test_confirm_writes_working_item_with_final_transform
     @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
                        [instance_body(FI_1, 'quote', display_dims: [650, 720, 560])])
     stub_working_copy(working_copy_body([]))
@@ -180,16 +213,24 @@ class ProjectFurnitureTest < Minitest::Test
     result = @placer.place(FI_1)
     assert result['ok'], result.inspect
 
+    # The user FINALIZES the position: 1 m along +X, 90° about Z.
+    finalize_position!(@model, FI_1, [1000, 0, 0])
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+    assert_equal 'placed', confirmed['code']
+
     put = @transport.requests_for('PUT', %r{/working-copy}).first
     item = put['body']['items'].first
     assert_equal FI_1, item['furniture_instance_id']
     assert_equal DEFINITION_ID, item['furniture_definition_id']
-    # Quoted dimensions (server display) drive the placement parameters.
+    # Quoted dimensions (server display) drove the rendered parameters, and
+    # the working item carries exactly that persisted intent.
     assert_equal({ 'widthMm' => 650, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 1 },
                  item['parameters'])
-    # Identity placement serialises as the canonical zero transform (mm).
-    assert_equal({ 'translation_mm' => [0.0, 0.0, 0.0], 'rotation_deg' => [0.0, 0.0, 0.0] },
-                 item['transform'])
+    # The FINAL chosen transform reaches the working copy (mm/deg canonical).
+    assert_equal 1000.0, item['transform']['translation_mm'][0]
+    assert_in_delta 0.0, item['transform']['translation_mm'][1], 0.001
+    assert_in_delta 90.0, item['transform']['rotation_deg'][2], 0.001
     # Technical locator is separate from business identity.
     locator = item['technical_client_locator']
     assert_equal 'sketchup_persistent_id', locator['kind']
@@ -208,6 +249,8 @@ class ProjectFurnitureTest < Minitest::Test
                                         ]))
     result = @placer.place(FI_1)
     assert result['ok'], result.inspect
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
 
     put = @transport.requests_for('PUT', %r{/working-copy}).first
     ids = put['body']['items'].map { |item| item['furniture_instance_id'] }
@@ -216,15 +259,22 @@ class ProjectFurnitureTest < Minitest::Test
 
   def test_already_placed_focuses_existing_without_duplicates
     @placer.place(FI_1)
+    assert @placer.confirm_placement(FI_1)['ok']
 
+    # The server now holds the confirmed item (GET is the truth).
+    stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_1,
+                                            'parameters' => {}, 'material_choices' => {} }
+                                        ]))
     roots_before = top_level_furniture(@model).length
+    puts_before = @transport.requests_for('PUT', %r{/working-copy}).length
     result = @placer.place(FI_1)
 
     # Proof D: no duplicate root, no duplicate working item, honest success.
     assert result['ok'], result.inspect
     assert_equal 'already_placed', result['code']
     assert_equal roots_before, top_level_furniture(@model).length
-    assert_equal 1, @transport.requests_for('PUT', %r{/working-copy}).length,
+    assert_equal puts_before, @transport.requests_for('PUT', %r{/working-copy}).length,
                  'second place must not rewrite the working copy again'
   end
 
@@ -276,17 +326,19 @@ class ProjectFurnitureTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
-  def test_backend_failure_rolls_back_local_insertion
-    # Proof H: the working-copy PUT fails → the just-inserted component is
-    # erased and the failure is loud (no false local success).
+  def test_backend_failure_at_confirm_rolls_back_local_placement
+    # Proof H: the working-copy PUT fails at confirm → the placed component
+    # is erased and the failure is loud (no false local success).
     @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 409,
                        { 'error' => { 'code' => 'conflict', 'message' => 'El diseño no está activo' } })
 
-    result = @placer.place(FI_1)
+    assert @placer.place(FI_1)['ok'], 'place itself does not touch the working copy'
+    finalize_position!(@model, FI_1)
+    result = @placer.confirm_placement(FI_1)
 
     refute result['ok']
     assert_equal 'sync_failed', result['code']
-    assert_empty top_level_furniture(@model), 'failed sync must roll the local insertion back'
+    assert_empty top_level_furniture(@model), 'failed sync must roll the local placement back'
     # The rollback purges the scoped generated part definitions (ADR-0004
     # purge scope); business identity never derived from them anyway.
     assert_empty(@model.definitions.select { |d| d.name.start_with?('Granete · Parte ·') })
@@ -324,6 +376,191 @@ class ProjectFurnitureTest < Minitest::Test
     refute result['ok']
     assert_equal 'terminal', result['code']
     assert_empty top_level_furniture(@model)
+  end
+
+  def test_cancel_reverts_local_insertion_without_working_copy_write
+    assert @placer.place(FI_1)['ok']
+    finalize_position!(@model, FI_1)
+
+    result = @placer.cancel_placement(FI_1)
+
+    assert result['ok'], result.inspect
+    assert_equal 'cancelled', result['code']
+    assert_empty top_level_furniture(@model), 'cancel must revert the local insertion'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy}),
+                 'cancel must never write the working copy'
+    # Cancel is idempotent when nothing remains.
+    assert @placer.cancel_placement(FI_1)['ok']
+  end
+
+  def test_retry_place_while_pending_resumes_confirmation_without_duplicates
+    assert @placer.place(FI_1)['ok']
+    finalize_position!(@model, FI_1)
+
+    result = @placer.place(FI_1)
+
+    # Honest resume: the local root exists but was never synced — no second
+    # root, no PUT, the user just confirms.
+    assert result['ok'], result.inspect
+    assert_equal 'pending_confirmation', result['code']
+    assert_equal 1, top_level_furniture(@model).length
+
+    assert @placer.confirm_placement(FI_1)['ok']
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    ids = put['body']['items'].map { |item| item['furniture_instance_id'] }
+    assert_equal [FI_1], ids, 'a retried placement syncs exactly one item'
+  end
+
+  def test_confirm_preserves_existing_authoritative_authoring_state
+    # Gap 3 proof: the working copy ALREADY holds FI-001 with authoritative
+    # authoring state; a fresh local placement (e.g. after reopen) may only
+    # replace transform + technical locator.
+    assert @placer.place(FI_1)['ok']
+    stub_working_copy(working_copy_body([
+                                          { 'furniture_instance_id' => FI_1,
+                                            'furniture_definition_id' => DEFINITION_ID,
+                                            'definition_version' => 7,
+                                            'parameters' => { 'widthMm' => 888, 'shelfCount' => 2 },
+                                            'material_choices' => { 'BODY' => 'mat-1', 'FRONT' => 'mat-2' },
+                                            'transform' => { 'translation_mm' => [1.0, 2.0, 3.0],
+                                                             'rotation_deg' => [0.0, 0.0, 0.0] },
+                                            'room_id' => '60000000-0000-0000-0000-0000000000r1',
+                                            'technical_client_locator' => { 'kind' => 'sketchup_persistent_id',
+                                                                            'value' => 'old-locator' } }
+                                        ]))
+    finalize_position!(@model, FI_1, [1000, 0, 0])
+
+    result = @placer.confirm_placement(FI_1)
+    assert result['ok'], result.inspect
+
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    items = put['body']['items']
+    assert_equal 1, items.length, 'merge must not duplicate the working item'
+    item = items.first
+    # Authoritative authoring state preserved verbatim.
+    assert_equal 7, item['definition_version']
+    assert_equal({ 'widthMm' => 888, 'shelfCount' => 2 }, item['parameters'])
+    assert_equal({ 'BODY' => 'mat-1', 'FRONT' => 'mat-2' }, item['material_choices'])
+    assert_equal '60000000-0000-0000-0000-0000000000r1', item['room_id']
+    # Placement-owned fields updated to the FINAL host values.
+    assert_equal 1000.0, item['transform']['translation_mm'][0]
+    refute_equal 'old-locator', item['technical_client_locator']['value']
+  end
+
+  def test_confirm_stamps_definition_version_for_new_working_copy_item
+    # Gap 1 proof: FurnitureDefinition version = 7 -> Place existing FI -> Confirm
+    # WorkingCopy item has furniture_definition_id = expected and definition_version = 7.
+    @catalog.definitions.first['definition_version'] = 7
+    stub_working_copy(working_copy_body([]))
+
+    assert @placer.place(FI_1)['ok']
+    result = @placer.confirm_placement(FI_1)
+    assert result['ok'], result.inspect
+
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    items = put['body']['items']
+    assert_equal 1, items.length
+    item = items.first
+    assert_equal DEFINITION_ID, item['furniture_definition_id']
+    assert_equal 7, item['definition_version']
+  end
+
+  def test_confirm_revalidates_terminal_instance_and_rolls_back_without_write
+    # Gap 2 negative proof: unit becomes terminal before confirm -> FAIL LOUD,
+    # roll back local placement, NO WorkingCopy write.
+    assert @placer.place(FI_1)['ok']
+    assert_equal 1, top_level_furniture(@model).length
+
+    # Simulate FI-001 cancelled / deleted on the server before confirm.
+    stub_project_furniture([instance_body(FI_1, 'quote', lifecycle: 'cancelled')])
+
+    result = @placer.confirm_placement(FI_1)
+    refute result['ok']
+    assert_equal 'terminal', result['code']
+    assert_empty top_level_furniture(@model), 'unconfirmed local placement must be rolled back'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_confirm_revalidates_missing_instance_and_rolls_back_without_write
+    # Gap 2 negative proof: unit removed from project entirely before confirm.
+    assert @placer.place(FI_1)['ok']
+    assert_equal 1, top_level_furniture(@model).length
+
+    # Simulate FI-001 removed from server project instances before confirm.
+    stub_project_furniture([])
+
+    result = @placer.confirm_placement(FI_1)
+    refute result['ok']
+    assert_equal 'not_found', result['code']
+    assert_empty top_level_furniture(@model), 'unconfirmed local placement must be rolled back'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_confirm_without_local_root_fails_without_write
+    result = @placer.confirm_placement(FI_1)
+
+    refute result['ok']
+    assert_equal 'not_placed', result['code']
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_stale_base_blocks_confirm_too
+    assert @placer.place(FI_1)['ok']
+    stub_binding_validation(base: REVISION_R2)
+
+    result = @placer.confirm_placement(FI_1)
+
+    refute result['ok']
+    assert_equal 'stale_base', result['code']
+    # Pre-PUT guard: nothing synced; the positioned root is KEPT so the user
+    # can remediate the base and confirm again.
+    assert_equal 1, top_level_furniture(@model).length
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_duplicate_local_roots_block_confirmation
+    first = FBUILDER.new(metadata_store: MS.new(@model))
+                    .place_existing_furniture(
+                      @model, furniture_instance_id: FI_1,
+                              definition: @catalog.find_definition(DEFINITION_ID),
+                              parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
+                    )
+    assert first['success'], first.inspect
+    duplicate = first['entity']
+    @model.entities.add_instance(duplicate.definition, Geom::Transformation.new)
+    MS.new(@model).write(@model.entities.instances.last, MS.new(@model).read(duplicate))
+
+    assert_equal 'duplicate_detected', @placer.confirm_placement(FI_1)['code']
+    assert_equal 'duplicate_detected', @placer.cancel_placement(FI_1)['code']
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_nested_editing_context_cannot_create_an_untraceable_root
+    # Gap 2 proof: the user is INSIDE another component's editing context;
+    # the FurnitureInstance root must still land TOP-LEVEL.
+    nested_model = NestedEditModel.new
+    write_binding(nested_model)
+    placer = build_placer(model: nested_model)
+
+    result = placer.place(FI_1)
+
+    assert result['ok'], result.inspect
+    assert_equal 'pending_position', result['code']
+    roots = PF::ManagedFurniture.locate(nested_model, MS.new(nested_model), FI_1)
+    assert roots['entity'], 'ManagedFurniture must find the root after nested-context placement'
+    assert_equal 1, roots['duplicates']
+    assert_includes nested_model.entities.instances, roots['entity'],
+                    'the root must live in the model root entities'
+    refute nested_model.active_entities.instances.include?(roots['entity']),
+           'the root must NOT be nested inside the open editing context'
+
+    # Retry resumes; confirm completes with the final transform.
+    assert_equal 'pending_confirmation', placer.place(FI_1)['code']
+    root = PF::ManagedFurniture.locate(nested_model, MS.new(nested_model), FI_1)['entity']
+    root.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+    assert placer.confirm_placement(FI_1)['ok']
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    assert_equal 500.0, put['body']['items'].first['transform']['translation_mm'][0]
   end
 
   def test_duplicate_local_roots_block_placement_instead_of_minting_identity

@@ -3621,6 +3621,8 @@
           // #389 Project Furniture bridge — delegates to the project section.
           onProjectFurniture: function (payload) { renderProjectFurniture(payload); },
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
+          onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
+          onCancelPlacementResult: function (result) { handleCancelPlacementResult(result); },
 
           setCatalog: function (payload) {
             if (Object.prototype.toString.call(payload) === "[object Array]") {
@@ -4757,6 +4759,8 @@
         };
 
         var pfPlacing = {};
+        var pfConfirming = {};
+        var pfCancelling = {};
 
         function hidePfStates() {
           [pfUnbound, pfLoading, pfError, pfEmpty].forEach(function (el) { el.style.display = "none"; });
@@ -4850,6 +4854,12 @@
             unitBadge.textContent = "Unidad " + row.unitIndex + " de " + row.unitTotal;
             name.appendChild(unitBadge);
           }
+          if (row.pendingConfirm) {
+            var pendingConfirmBadge = document.createElement("span");
+            pendingConfirmBadge.className = "status-badge pending";
+            pendingConfirmBadge.textContent = "Posición pendiente";
+            name.appendChild(pendingConfirmBadge);
+          }
           main.appendChild(name);
 
           if (row.dimensions_label) {
@@ -4867,14 +4877,40 @@
 
           card.appendChild(main);
 
-          var action = document.createElement("button");
           if (pending) {
-            action.className = "btn btn-primary";
-            action.style.width = "auto";
-            action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
-            action.disabled = !!pfPlacing[row.id];
-            action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
+            if (row.pendingConfirm) {
+              var actionsGroup = document.createElement("div");
+              actionsGroup.style.display = "flex";
+              actionsGroup.style.gap = "6px";
+
+              var btnConfirm = document.createElement("button");
+              btnConfirm.className = "btn btn-primary";
+              btnConfirm.style.width = "auto";
+              btnConfirm.textContent = pfConfirming[row.id] ? "Confirmando…" : "Confirmar posición";
+              btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
+              btnConfirm.addEventListener("click", function () { confirmPlacementInstance(row.id, btnConfirm); });
+              actionsGroup.appendChild(btnConfirm);
+
+              var btnCancel = document.createElement("button");
+              btnCancel.className = "btn btn-secondary";
+              btnCancel.style.width = "auto";
+              btnCancel.textContent = pfCancelling[row.id] ? "Cancelando…" : "Cancelar";
+              btnCancel.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
+              btnCancel.addEventListener("click", function () { cancelPlacementInstance(row.id, btnCancel); });
+              actionsGroup.appendChild(btnCancel);
+
+              card.appendChild(actionsGroup);
+            } else {
+              var action = document.createElement("button");
+              action.className = "btn btn-primary";
+              action.style.width = "auto";
+              action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
+              action.disabled = !!pfPlacing[row.id];
+              action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
+              card.appendChild(action);
+            }
           } else {
+            var action = document.createElement("button");
             action.className = "btn btn-secondary";
             action.style.width = "auto";
             action.textContent = "Seleccionar";
@@ -4883,8 +4919,8 @@
                 window.sketchup.select_project_furniture(JSON.stringify({ furnitureInstanceId: row.id }));
               }
             });
+            card.appendChild(action);
           }
-          card.appendChild(action);
           return card;
         }
 
@@ -4903,6 +4939,36 @@
           }
         }
 
+        function confirmPlacementInstance(furnitureInstanceId, button) {
+          if (!furnitureInstanceId || pfConfirming[furnitureInstanceId]) return;
+          pfConfirming[furnitureInstanceId] = button;
+          button.disabled = true;
+          button.textContent = "Confirmando…";
+          if (window.sketchup && window.sketchup.confirm_placement_instance) {
+            window.sketchup.confirm_placement_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
+          } else {
+            delete pfConfirming[furnitureInstanceId];
+            button.disabled = false;
+            button.textContent = "Confirmar posición";
+            showToast("error", "Confirmar disponible sólo dentro de SketchUp.");
+          }
+        }
+
+        function cancelPlacementInstance(furnitureInstanceId, button) {
+          if (!furnitureInstanceId || pfCancelling[furnitureInstanceId]) return;
+          pfCancelling[furnitureInstanceId] = button;
+          button.disabled = true;
+          button.textContent = "Cancelando…";
+          if (window.sketchup && window.sketchup.cancel_placement_instance) {
+            window.sketchup.cancel_placement_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
+          } else {
+            delete pfCancelling[furnitureInstanceId];
+            button.disabled = false;
+            button.textContent = "Cancelar";
+            showToast("error", "Cancelar disponible sólo dentro de SketchUp.");
+          }
+        }
+
         function handlePlaceFurnitureResult(result) {
           result = result || {};
           var button = pfPlacing[result.instanceId];
@@ -4910,8 +4976,10 @@
           if (result.ok) {
             if (result.code === "already_placed") {
               showToast("success", "Ese mueble ya está colocado: se seleccionó el existente.");
+            } else if (result.code === "pending_position") {
+              showToast("info", "Mueble insertado: ubicalo con la herramienta Mover y confirmá su posición final.");
             } else {
-              showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño. Quedó seleccionado: movelo a su lugar (tecla M).");
+              showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño.");
             }
             return;
           }
@@ -4925,6 +4993,36 @@
           showToast("error", pfPlaceFailureMessage(result));
         }
 
+        function handleConfirmPlacementResult(result) {
+          result = result || {};
+          var button = pfConfirming[result.instanceId];
+          delete pfConfirming[result.instanceId];
+          if (result.ok) {
+            showToast("success", "✓ Mueble colocado y guardado en el borrador del diseño.");
+            return;
+          }
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Confirmar posición";
+          }
+          showToast("error", pfPlaceFailureMessage(result));
+        }
+
+        function handleCancelPlacementResult(result) {
+          result = result || {};
+          var button = pfCancelling[result.instanceId];
+          delete pfCancelling[result.instanceId];
+          if (result.ok) {
+            showToast("info", "Colocación cancelada.");
+            return;
+          }
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Cancelar";
+          }
+          showToast("error", result.reason || "No se pudo cancelar la colocación.");
+        }
+
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
             case "unbound": return "Conectá el modelo al proyecto primero.";
@@ -4933,6 +5031,8 @@
             case "terminal": return "El mueble fue eliminado del proyecto.";
             case "duplicate_detected": return "Hay copias duplicadas del mismo mueble en el modelo; resolvé los duplicados antes.";
             case "already_placed": return "El mueble ya está colocado.";
+            case "not_placed": return "El mueble no está en el modelo; colocálo primero.";
+            case "intent_mismatch": return "La identidad del mueble en el modelo no coincide; colocálo de nuevo.";
             case "definition_unavailable": return "El catálogo del taller no incluye la definición de este mueble.";
             case "resolution_failed": return result.reason || "Granete no pudo resolver la composición del mueble.";
             case "placement_failed": return result.reason || "La colocación falló.";

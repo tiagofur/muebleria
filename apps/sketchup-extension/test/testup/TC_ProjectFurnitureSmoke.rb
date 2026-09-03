@@ -125,6 +125,22 @@ module Granete
         assert_equal 1, located_second['duplicates']
       end
 
+      def test_placement_inside_nested_editing_context_lands_at_model_root
+        parent_group = model.entities.add_group
+        parent_group.name = 'Pared o ambiente'
+        result = builder.place_existing_furniture(
+          model, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
+        )
+        assert result['success'], result.inspect
+
+        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        refute_nil located['entity'], 'placed furniture must be found at root level'
+        assert_equal 1, located['duplicates']
+        assert_includes model.entities.to_a, located['entity'], 'entity must be in model.entities root'
+        refute_includes parent_group.entities.to_a, located['entity'], 'entity must not be nested in parent group'
+      end
+
       private
 
       def model
