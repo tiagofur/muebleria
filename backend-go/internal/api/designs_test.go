@@ -266,3 +266,86 @@ func TestHandleDesignRevision_GetReturns200WithItems(t *testing.T) {
 		t.Fatalf("body = %s, want revision 1 with ditem-1", body)
 	}
 }
+
+func TestHandleDesignWorkingCopy_GetReturns200(t *testing.T) {
+	store := &stubStore{
+		designWorkingCopiesByID: map[string]domain.DesignWorkingCopy{
+			designTestDesignID: {
+				DesignID:   designTestDesignID,
+				ProjectID:  designTestProjectID,
+				SourceType: domain.DesignRevisionSourceManual,
+				Items: []domain.DesignWorkingItem{
+					{
+						ID:                  "witem-1",
+						DesignID:            designTestDesignID,
+						FurnitureInstanceID: designTestInstanceID,
+						Parameters:          map[string]any{"width": 800},
+						MaterialChoices:     map[string]string{"carcase": "mdf-18"},
+					},
+				},
+			},
+		},
+	}
+	srv := &Server{Store: store}
+	req := designRequest(http.MethodGet, "/api/designs/"+designTestDesignID+"/working-copy", "", string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopy(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"design_id":"`+designTestDesignID+`"`) || !strings.Contains(body, `"witem-1"`) {
+		t.Fatalf("body = %s, want working copy with witem-1", body)
+	}
+}
+
+func TestHandleDesignWorkingCopy_PutReturns200(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	reqBody := `{
+		"source_type": "manual",
+		"items": [
+			{
+				"furniture_instance_id": "` + designTestInstanceID + `",
+				"parameters": {"width": 850},
+				"material_choices": {"carcase": "mdf-18"}
+			}
+		]
+	}`
+	req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy", reqBody, string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopy(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.updateDesignWorkingCopyCmd == nil {
+		t.Fatal("store must receive updateDesignWorkingCopy command")
+	}
+	if len(store.updateDesignWorkingCopyCmd.Items) != 1 {
+		t.Fatalf("items count = %d, want 1", len(store.updateDesignWorkingCopyCmd.Items))
+	}
+}
+
+func TestHandleDesignWorkingCopyReset_PostReturns200(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	reqBody := `{"revision_id":"` + designTestRevisionID + `"}`
+	req := designRequest(http.MethodPost, "/api/designs/"+designTestDesignID+"/working-copy:reset", reqBody, string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopyReset(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.resetDesignWorkingCopyCmd == nil {
+		t.Fatal("store must receive resetDesignWorkingCopy command")
+	}
+	if store.resetDesignWorkingCopyCmd.RevisionID != designTestRevisionID {
+		t.Fatalf("revision_id = %s, want %s", store.resetDesignWorkingCopyCmd.RevisionID, designTestRevisionID)
+	}
+}

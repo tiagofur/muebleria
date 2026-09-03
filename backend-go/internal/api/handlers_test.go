@@ -63,6 +63,12 @@ type stubStore struct {
 	publishDesignRevisionErr   error
 	getDesignRevisionErr       error
 	listDesignRevisionItemsErr error
+	designWorkingCopiesByID    map[string]domain.DesignWorkingCopy
+	getDesignWorkingCopyErr    error
+	updateDesignWorkingCopyCmd *storage.UpdateDesignWorkingCopyCommand
+	updateDesignWorkingCopyErr error
+	resetDesignWorkingCopyCmd  *storage.ResetDesignWorkingCopyCommand
+	resetDesignWorkingCopyErr  error
 	materialReturnedByID       *domain.MaterialBoard
 	materialGetByIDErr         error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -1529,6 +1535,79 @@ func (s *stubStore) ListDesignRevisionItems(_ context.Context, revisionID string
 		return r.Items, nil
 	}
 	return nil, nil
+}
+
+func (s *stubStore) GetDesignWorkingCopy(_ context.Context, designID string) (*domain.DesignWorkingCopy, error) {
+	if s.getDesignWorkingCopyErr != nil {
+		return nil, s.getDesignWorkingCopyErr
+	}
+	if wc, ok := s.designWorkingCopiesByID[designID]; ok {
+		c := wc
+		return &c, nil
+	}
+	return &domain.DesignWorkingCopy{
+		DesignID:   designID,
+		ProjectID:  "proj-1",
+		SourceType: domain.DesignRevisionSourceManual,
+		Items:      []domain.DesignWorkingItem{},
+		UpdatedAt:  time.Now(),
+	}, nil
+}
+
+func (s *stubStore) UpdateDesignWorkingCopy(_ context.Context, cmd storage.UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error) {
+	s.updateDesignWorkingCopyCmd = &cmd
+	if s.updateDesignWorkingCopyErr != nil {
+		return nil, s.updateDesignWorkingCopyErr
+	}
+	if s.designWorkingCopiesByID == nil {
+		s.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{}
+	}
+	wc := domain.DesignWorkingCopy{
+		DesignID:       cmd.DesignID,
+		ProjectID:      "proj-1",
+		BaseRevisionID: cmd.BaseRevisionID,
+		SourceType:     cmd.SourceType,
+		UpdatedAt:      time.Now(),
+	}
+	for i, itm := range cmd.Items {
+		itemTransform := itm.Transform
+		wc.Items = append(wc.Items, domain.DesignWorkingItem{
+			ID:                     "witem-" + string(rune('0'+i+1)),
+			DesignID:               cmd.DesignID,
+			FurnitureInstanceID:    itm.FurnitureInstanceID,
+			FurnitureDefinitionID:  itm.FurnitureDefinitionID,
+			DefinitionVersion:      itm.DefinitionVersion,
+			Parameters:             itm.Parameters,
+			MaterialChoices:        itm.MaterialChoices,
+			Transform:              &itemTransform,
+			RoomID:                 itm.RoomID,
+			TechnicalClientLocator: itm.TechnicalClientLocator,
+			CreatedAt:              time.Now(),
+			UpdatedAt:              time.Now(),
+		})
+	}
+	s.designWorkingCopiesByID[cmd.DesignID] = wc
+	return &wc, nil
+}
+
+func (s *stubStore) ResetDesignWorkingCopy(_ context.Context, cmd storage.ResetDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error) {
+	s.resetDesignWorkingCopyCmd = &cmd
+	if s.resetDesignWorkingCopyErr != nil {
+		return nil, s.resetDesignWorkingCopyErr
+	}
+	if s.designWorkingCopiesByID == nil {
+		s.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{}
+	}
+	baseRev := cmd.RevisionID
+	wc := domain.DesignWorkingCopy{
+		DesignID:       cmd.DesignID,
+		ProjectID:      "proj-1",
+		BaseRevisionID: &baseRev,
+		SourceType:     domain.DesignRevisionSourceManual,
+		UpdatedAt:      time.Now(),
+	}
+	s.designWorkingCopiesByID[cmd.DesignID] = wc
+	return &wc, nil
 }
 
 // compile-time guard: stubStore must satisfy Store.

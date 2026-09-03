@@ -32,12 +32,13 @@ const (
 	DesignRevisionSourceProyectar DesignRevisionSourceType = "proyectar"
 	DesignRevisionSourceImport    DesignRevisionSourceType = "import"
 	DesignRevisionSourceSystem    DesignRevisionSourceType = "system"
+	DesignRevisionSourceManual    DesignRevisionSourceType = "manual"
 )
 
 func IsValidDesignRevisionSourceType(st DesignRevisionSourceType) bool {
 	switch st {
 	case DesignRevisionSourceSketchup, DesignRevisionSourceProyectar,
-		DesignRevisionSourceImport, DesignRevisionSourceSystem:
+		DesignRevisionSourceImport, DesignRevisionSourceSystem, DesignRevisionSourceManual:
 		return true
 	default:
 		return false
@@ -71,6 +72,8 @@ var (
 	ErrCrossProjectFurnitureInstance        = errors.New("furniture instance does not belong to the design project")
 	ErrDesignRevisionImmutable              = errors.New("design revision is immutable")
 	ErrDesignNotActive                      = errors.New("design is not active")
+	ErrWorkingCopyNotFound                  = errors.New("design working copy not found")
+	ErrSerializationFailed                  = errors.New("snapshot serialization failed")
 )
 
 // Design represents a logical, client-agnostic design aggregate owned by a Project (ADR-0003 §3, digital-thread §7).
@@ -131,6 +134,38 @@ type DesignRevision struct {
 	CreatedBy        string                   `json:"created_by,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
 	Items            []DesignRevisionItem     `json:"items,omitempty"`
+
+	OrganizationID string `json:"-"`
+}
+
+// DesignWorkingItem represents a mutable draft item in a design's working copy.
+type DesignWorkingItem struct {
+	ID                     string                  `json:"id"`
+	ProjectID              string                  `json:"project_id"`
+	DesignID               string                  `json:"design_id"`
+	FurnitureInstanceID    string                  `json:"furniture_instance_id"`
+	FurnitureDefinitionID  string                  `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion      *int                    `json:"definition_version,omitempty"`
+	Parameters             map[string]any          `json:"parameters"`
+	MaterialChoices        map[string]string       `json:"material_choices"`
+	Transform              *Transform3D            `json:"transform,omitempty"`
+	RoomID                 string                  `json:"room_id,omitempty"`
+	TechnicalClientLocator *TechnicalClientLocator `json:"technical_client_locator,omitempty"`
+	CreatedAt              time.Time               `json:"created_at"`
+	UpdatedAt              time.Time               `json:"updated_at"`
+
+	OrganizationID string `json:"-"`
+}
+
+// DesignWorkingCopy represents the mutable authoring draft of a Design (ADR-0003, digital-thread §8).
+type DesignWorkingCopy struct {
+	DesignID       string                   `json:"design_id"`
+	ProjectID      string                   `json:"project_id"`
+	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
+	SourceType     DesignRevisionSourceType `json:"source_type"`
+	Items          []DesignWorkingItem      `json:"items"`
+	UpdatedAt      time.Time                `json:"updated_at"`
+	UpdatedBy      string                   `json:"updated_by,omitempty"`
 
 	OrganizationID string `json:"-"`
 }

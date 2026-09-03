@@ -85,7 +85,7 @@ CREATE TABLE design_revisions (
     design_id UUID NOT NULL,
     revision_number INT NOT NULL CHECK (revision_number >= 1),
     parent_revision_id UUID NULL,
-    source_type TEXT NOT NULL CHECK (source_type IN ('sketchup', 'proyectar', 'import', 'system')),
+    source_type TEXT NOT NULL CHECK (source_type IN ('sketchup', 'proyectar', 'import', 'system', 'manual')),
     status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'approved', 'superseded')),
     created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -165,7 +165,7 @@ CREATE TABLE design_revision_items (
     design_revision_id UUID NOT NULL,
     furniture_instance_id UUID NOT NULL,
     furniture_definition_id UUID NULL REFERENCES modules(id) ON DELETE SET NULL,
-    definition_version TEXT NULL,
+    definition_version INTEGER NULL,
     parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
     material_choices JSONB NOT NULL DEFAULT '{}'::jsonb,
     transform JSONB NOT NULL,
@@ -235,3 +235,157 @@ ON CONFLICT (table_name) DO UPDATE SET
 
 GRANT SELECT, INSERT ON design_revision_items TO granete_app;
 REVOKE UPDATE, DELETE ON design_revision_items FROM granete_app;
+
+-- DesignWorkingCopy: persistent mutable working state of a Design (ADR-0003, digital-thread §8).
+-- A Design has exactly one working state that tracks uncommitted authoring changes
+-- and knows which published revision it is based on (base_revision_id).
+CREATE TABLE design_working_copies (
+    design_id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    base_revision_id UUID NULL,
+    source_type TEXT NOT NULL DEFAULT 'manual' CHECK (source_type IN ('sketchup', 'proyectar', 'import', 'system', 'manual')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by TEXT NOT NULL DEFAULT '',
+    CONSTRAINT fk_design_working_copies_design_project
+        FOREIGN KEY (design_id, project_id)
+        REFERENCES designs(id, project_id)
+        ON DELETE CASCADE
+);
+
+-- base_revision_id must belong to the same design (if not null)
+ALTER TABLE design_working_copies
+    ADD CONSTRAINT fk_design_working_copies_base_revision
+    FOREIGN KEY (base_revision_id, design_id)
+    REFERENCES design_revisions(id, design_id)
+    ON DELETE SET NULL;
+
+CREATE INDEX idx_design_working_copies_project ON design_working_copies(project_id);
+CREATE INDEX idx_design_working_copies_organization ON design_working_copies(organization_id);
+
+ALTER TABLE design_working_copies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE design_working_copies FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY design_working_copies_read ON design_working_copies
+    FOR SELECT TO granete_app
+    USING (app_can_access_project(project_id));
+
+CREATE POLICY design_working_copies_insert ON design_working_copies
+    FOR INSERT TO granete_app
+    WITH CHECK (
+        app_can_access_project(project_id)
+        AND app_shared_child_matches_project(project_id, organization_id)
+        AND organization_id = app_current_organization_id()
+    );
+
+CREATE POLICY design_working_copies_update ON design_working_copies
+    FOR UPDATE TO granete_app
+    USING (
+        app_can_access_project(project_id)
+        AND organization_id = app_current_organization_id()
+    )
+    WITH CHECK (
+        app_can_access_project(project_id)
+        AND app_shared_child_matches_project(project_id, organization_id)
+        AND organization_id = app_current_organization_id()
+    );
+
+CREATE TRIGGER protect_shared_child_ownership_working_copies
+    BEFORE UPDATE OF organization_id, project_id ON design_working_copies
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_shared_child_ownership('project_id');
+
+INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
+VALUES
+ ('design_working_copies', 'explicitly-shared', 'project-organizations', 'owner-organization', 'Design working copy tracks the mutable authoring draft of a design (#387 / ADR-0003)')
+ON CONFLICT (table_name) DO UPDATE SET
+ classification = EXCLUDED.classification,
+ read_scope = EXCLUDED.read_scope,
+ write_scope = EXCLUDED.write_scope,
+ rationale = EXCLUDED.rationale,
+ policy_version = rls_policy_inventory.policy_version + 1,
+ updated_at = NOW();
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON design_working_copies TO granete_app;
+
+-- DesignWorkingItem: individual furniture instance item in the working state.
+CREATE TABLE design_working_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    design_id UUID NOT NULL,
+    furniture_instance_id UUID NOT NULL,
+    furniture_definition_id UUID NULL REFERENCES modules(id) ON DELETE SET NULL,
+    definition_version INTEGER NULL,
+    parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
+    material_choices JSONB NOT NULL DEFAULT '{}'::jsonb,
+    transform JSONB NOT NULL,
+    room_id TEXT NULL,
+    technical_client_locator JSONB NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_design_working_items_design
+        FOREIGN KEY (design_id, project_id)
+        REFERENCES designs(id, project_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_design_working_items_instance
+        FOREIGN KEY (furniture_instance_id, project_id)
+        REFERENCES furniture_instances(id, project_id)
+        ON DELETE CASCADE
+);
+
+-- Maximum 1 occurrence of any physical unit within the design working copy.
+CREATE UNIQUE INDEX uq_design_working_items_design_instance
+    ON design_working_items(design_id, furniture_instance_id);
+
+CREATE INDEX idx_design_working_items_organization ON design_working_items(organization_id);
+CREATE INDEX idx_design_working_items_project ON design_working_items(project_id);
+CREATE INDEX idx_design_working_items_design ON design_working_items(design_id);
+CREATE INDEX idx_design_working_items_instance ON design_working_items(furniture_instance_id);
+
+ALTER TABLE design_working_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE design_working_items FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY design_working_items_read ON design_working_items
+    FOR SELECT TO granete_app
+    USING (app_can_access_project(project_id));
+
+CREATE POLICY design_working_items_insert ON design_working_items
+    FOR INSERT TO granete_app
+    WITH CHECK (
+        app_can_access_project(project_id)
+        AND app_shared_child_matches_project(project_id, organization_id)
+        AND organization_id = app_current_organization_id()
+    );
+
+CREATE POLICY design_working_items_update ON design_working_items
+    FOR UPDATE TO granete_app
+    USING (
+        app_can_access_project(project_id)
+        AND organization_id = app_current_organization_id()
+    )
+    WITH CHECK (
+        app_can_access_project(project_id)
+        AND app_shared_child_matches_project(project_id, organization_id)
+        AND organization_id = app_current_organization_id()
+    );
+
+CREATE POLICY design_working_items_delete ON design_working_items
+    FOR DELETE TO granete_app
+    USING (
+        app_can_access_project(project_id)
+        AND organization_id = app_current_organization_id()
+    );
+
+INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
+VALUES
+ ('design_working_items', 'explicitly-shared', 'project-organizations', 'owner-organization', 'Design working items represent the draft furniture instance positions and parameters in the working copy (#387 / ADR-0003)')
+ON CONFLICT (table_name) DO UPDATE SET
+ classification = EXCLUDED.classification,
+ read_scope = EXCLUDED.read_scope,
+ write_scope = EXCLUDED.write_scope,
+ rationale = EXCLUDED.rationale,
+ policy_version = rls_policy_inventory.policy_version + 1,
+ updated_at = NOW();
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON design_working_items TO granete_app;

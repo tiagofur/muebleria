@@ -47,6 +47,31 @@ type PublishDesignRevisionCommand struct {
 	RequestID        string
 }
 
+type UpdateDesignWorkingCopyItemCommand struct {
+	FurnitureInstanceID    string
+	FurnitureDefinitionID  string
+	DefinitionVersion      *int
+	Parameters             map[string]any
+	MaterialChoices        map[string]string
+	Transform              domain.Transform3D
+	RoomID                 string
+	TechnicalClientLocator *domain.TechnicalClientLocator
+}
+
+type UpdateDesignWorkingCopyCommand struct {
+	DesignID       string
+	BaseRevisionID *string
+	SourceType     domain.DesignRevisionSourceType
+	Items          []UpdateDesignWorkingCopyItemCommand
+	ActorUserID    string
+}
+
+type ResetDesignWorkingCopyCommand struct {
+	DesignID    string
+	RevisionID  string
+	ActorUserID string
+}
+
 const designColumns = `
 	id, organization_id, project_id, name,
 	COALESCE(source_quote_revision_id::text, ''),
@@ -134,6 +159,16 @@ func (s *PostgresStore) CreateDesign(ctx context.Context, cmd CreateDesignComman
 	design, err := scanDesign(row)
 	if err != nil {
 		return nil, err
+	}
+
+	// Initialize persistent working copy draft for the design (ADR-0003, digital-thread §8).
+	_, err = s.db(ctx).Exec(ctx, `
+		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
+		VALUES ($1, $2, $3, NULL, 'manual', NOW(), $4)
+		ON CONFLICT (design_id) DO NOTHING
+	`, design.ID, design.OrganizationID, design.ProjectID, nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)))
+	if err != nil {
+		return nil, fmt.Errorf("initialize design working copy: %w", err)
 	}
 
 	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
@@ -246,26 +281,89 @@ func scanDesignRevisionItem(row pgx.Row) (*domain.DesignRevisionItem, error) {
 		return nil, err
 	}
 	if len(rawParams) > 0 {
-		_ = json.Unmarshal(rawParams, &item.Parameters)
+		if err := json.Unmarshal(rawParams, &item.Parameters); err != nil {
+			return nil, fmt.Errorf("%w: read back parameters: %v", domain.ErrSerializationFailed, err)
+		}
 	}
 	if item.Parameters == nil {
 		item.Parameters = make(map[string]any)
 	}
 	if len(rawMaterials) > 0 {
-		_ = json.Unmarshal(rawMaterials, &item.MaterialChoices)
+		if err := json.Unmarshal(rawMaterials, &item.MaterialChoices); err != nil {
+			return nil, fmt.Errorf("%w: read back material choices: %v", domain.ErrSerializationFailed, err)
+		}
 	}
 	if item.MaterialChoices == nil {
 		item.MaterialChoices = make(map[string]string)
 	}
 	if len(rawTransform) > 0 && string(rawTransform) != "{}" && string(rawTransform) != "null" {
 		var t domain.Transform3D
-		if err := json.Unmarshal(rawTransform, &t); err == nil {
-			item.Transform = &t
+		if err := json.Unmarshal(rawTransform, &t); err != nil {
+			return nil, fmt.Errorf("%w: read back transform: %v", domain.ErrSerializationFailed, err)
 		}
+		item.Transform = &t
 	}
 	if len(rawLocator) > 0 && string(rawLocator) != "null" {
 		var loc domain.TechnicalClientLocator
-		if err := json.Unmarshal(rawLocator, &loc); err == nil && loc.Kind != "" {
+		if err := json.Unmarshal(rawLocator, &loc); err != nil {
+			return nil, fmt.Errorf("%w: read back locator: %v", domain.ErrSerializationFailed, err)
+		}
+		if loc.Kind != "" {
+			item.TechnicalClientLocator = &loc
+		}
+	}
+	return &item, nil
+}
+
+const designWorkingItemColumns = `
+	id, organization_id, project_id, design_id,
+	furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
+	definition_version, parameters, material_choices,
+	transform, COALESCE(room_id, ''), technical_client_locator,
+	created_at, updated_at`
+
+func scanDesignWorkingItem(row pgx.Row) (*domain.DesignWorkingItem, error) {
+	var item domain.DesignWorkingItem
+	var rawParams, rawMaterials, rawTransform []byte
+	var rawLocator []byte
+	if err := row.Scan(
+		&item.ID, &item.OrganizationID, &item.ProjectID, &item.DesignID,
+		&item.FurnitureInstanceID, &item.FurnitureDefinitionID,
+		&item.DefinitionVersion, &rawParams, &rawMaterials,
+		&rawTransform, &item.RoomID, &rawLocator,
+		&item.CreatedAt, &item.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	if len(rawParams) > 0 {
+		if err := json.Unmarshal(rawParams, &item.Parameters); err != nil {
+			return nil, fmt.Errorf("%w: read back parameters: %v", domain.ErrSerializationFailed, err)
+		}
+	}
+	if item.Parameters == nil {
+		item.Parameters = make(map[string]any)
+	}
+	if len(rawMaterials) > 0 {
+		if err := json.Unmarshal(rawMaterials, &item.MaterialChoices); err != nil {
+			return nil, fmt.Errorf("%w: read back material choices: %v", domain.ErrSerializationFailed, err)
+		}
+	}
+	if item.MaterialChoices == nil {
+		item.MaterialChoices = make(map[string]string)
+	}
+	if len(rawTransform) > 0 && string(rawTransform) != "{}" && string(rawTransform) != "null" {
+		var t domain.Transform3D
+		if err := json.Unmarshal(rawTransform, &t); err != nil {
+			return nil, fmt.Errorf("%w: read back transform: %v", domain.ErrSerializationFailed, err)
+		}
+		item.Transform = &t
+	}
+	if len(rawLocator) > 0 && string(rawLocator) != "null" {
+		var loc domain.TechnicalClientLocator
+		if err := json.Unmarshal(rawLocator, &loc); err != nil {
+			return nil, fmt.Errorf("%w: read back locator: %v", domain.ErrSerializationFailed, err)
+		}
+		if loc.Kind != "" {
 			item.TechnicalClientLocator = &loc
 		}
 	}
@@ -357,32 +455,84 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 			return nil, err
 		}
 	} else {
-		// Previous revision exists: check base revision for optimistic concurrency (I18).
-		if cmd.BaseRevisionID != "" && cmd.BaseRevisionID != latestRevID {
+		// Previous revision exists: fail-closed optimistic concurrency (I18).
+		if cmd.BaseRevisionID == "" {
+			return nil, fmt.Errorf("%w: base revision is required when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
+		}
+		if cmd.BaseRevisionID != latestRevID {
 			return nil, fmt.Errorf("%w: base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, cmd.BaseRevisionID, latestRevID, latestRevNum)
 		}
-		if cmd.ParentRevisionID != "" {
-			// Verify parent revision belongs to this design.
-			var parentDesignID string
-			pErr := s.db(ctx).QueryRow(ctx, `
-				SELECT design_id FROM design_revisions WHERE id = $1
-			`, cmd.ParentRevisionID).Scan(&parentDesignID)
-			if pErr != nil || parentDesignID != cmd.DesignID {
-				return nil, domain.ErrInvalidParentRevision
-			}
-			parentID := cmd.ParentRevisionID
-			effectiveParentID = &parentID
-		} else {
-			// Default parent to latest revision.
-			effectiveParentID = &latestRevID
+		// Linear parent chain: parent revision must match latest/base revision.
+		if cmd.ParentRevisionID != "" && cmd.ParentRevisionID != latestRevID {
+			return nil, fmt.Errorf("%w: parent revision %s conflicts with latest base revision %s", domain.ErrInvalidParentRevision, cmd.ParentRevisionID, latestRevID)
 		}
+		effectiveParentID = &latestRevID
 		nextRevisionNum = latestRevNum + 1
 	}
 
-	// 3. Validate items.
-	seenInstances := make(map[string]struct{}, len(cmd.Items))
-	instanceIDs := make([]string, 0, len(cmd.Items))
-	for _, item := range cmd.Items {
+	// 3. Resolve items to publish: from cmd.Items if provided, otherwise from persistent working copy.
+	itemsToPublish := cmd.Items
+	if len(itemsToPublish) == 0 {
+		wRows, err := s.db(ctx).Query(ctx, `
+			SELECT furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
+			       definition_version, parameters, material_choices,
+			       transform, COALESCE(room_id, ''), technical_client_locator
+			FROM design_working_items
+			WHERE design_id = $1
+			ORDER BY created_at ASC
+		`, cmd.DesignID)
+		if err != nil {
+			return nil, fmt.Errorf("load working items for publish: %w", err)
+		}
+		defer wRows.Close()
+
+		for wRows.Next() {
+			var itm PublishDesignRevisionItemCommand
+			var rawP, rawM, rawT, rawL []byte
+			var defIDStr string
+			if err := wRows.Scan(
+				&itm.FurnitureInstanceID, &defIDStr,
+				&itm.DefinitionVersion, &rawP, &rawM, &rawT,
+				&itm.RoomID, &rawL,
+			); err != nil {
+				return nil, fmt.Errorf("scan working item for publish: %w", err)
+			}
+			itm.FurnitureDefinitionID = defIDStr
+			if len(rawP) > 0 {
+				if err := json.Unmarshal(rawP, &itm.Parameters); err != nil {
+					return nil, fmt.Errorf("%w: unmarshal working item parameters: %v", domain.ErrSerializationFailed, err)
+				}
+			}
+			if len(rawM) > 0 {
+				if err := json.Unmarshal(rawM, &itm.MaterialChoices); err != nil {
+					return nil, fmt.Errorf("%w: unmarshal working item material_choices: %v", domain.ErrSerializationFailed, err)
+				}
+			}
+			if len(rawT) > 0 && string(rawT) != "{}" && string(rawT) != "null" {
+				if err := json.Unmarshal(rawT, &itm.Transform); err != nil {
+					return nil, fmt.Errorf("%w: unmarshal working item transform: %v", domain.ErrSerializationFailed, err)
+				}
+			}
+			if len(rawL) > 0 && string(rawL) != "null" {
+				var loc domain.TechnicalClientLocator
+				if err := json.Unmarshal(rawL, &loc); err != nil {
+					return nil, fmt.Errorf("%w: unmarshal working item locator: %v", domain.ErrSerializationFailed, err)
+				}
+				if loc.Kind != "" {
+					itm.TechnicalClientLocator = &loc
+				}
+			}
+			itemsToPublish = append(itemsToPublish, itm)
+		}
+		if err := wRows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Validate items.
+	seenInstances := make(map[string]struct{}, len(itemsToPublish))
+	instanceIDs := make([]string, 0, len(itemsToPublish))
+	for _, item := range itemsToPublish {
 		if !isValidUUID(item.FurnitureInstanceID) {
 			return nil, domain.ErrInvalidDesignCommand
 		}
@@ -439,7 +589,7 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		}
 	}
 
-	// 4. Insert design_revision row.
+	// 5. Insert design_revision row.
 	var createdBy *string
 	if isValidUUID(cmd.ActorUserID) {
 		createdBy = &cmd.ActorUserID
@@ -465,28 +615,40 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		return nil, fmt.Errorf("insert design revision: %w", err)
 	}
 
-	// 5. Insert design_revision_items rows.
-	revItems := make([]domain.DesignRevisionItem, 0, len(cmd.Items))
-	for _, itemCmd := range cmd.Items {
+	// 6. Insert design_revision_items rows with strict serialization checking.
+	revItems := make([]domain.DesignRevisionItem, 0, len(itemsToPublish))
+	for _, itemCmd := range itemsToPublish {
 		var defID *string
 		if isValidUUID(itemCmd.FurnitureDefinitionID) {
 			defID = &itemCmd.FurnitureDefinitionID
 		}
-		paramsJSON, err := json.Marshal(itemCmd.Parameters)
-		if err != nil {
-			paramsJSON = []byte("{}")
+		var paramsJSON []byte = []byte("{}")
+		if itemCmd.Parameters != nil {
+			p, err := json.Marshal(itemCmd.Parameters)
+			if err != nil {
+				return nil, fmt.Errorf("%w: parameters serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			paramsJSON = p
 		}
-		materialsJSON, err := json.Marshal(itemCmd.MaterialChoices)
-		if err != nil {
-			materialsJSON = []byte("{}")
+		var materialsJSON []byte = []byte("{}")
+		if itemCmd.MaterialChoices != nil {
+			m, err := json.Marshal(itemCmd.MaterialChoices)
+			if err != nil {
+				return nil, fmt.Errorf("%w: material_choices serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			materialsJSON = m
 		}
 		transformJSON, err := json.Marshal(itemCmd.Transform)
 		if err != nil {
-			transformJSON = []byte(`{"translationMm":[0,0,0],"rotationDeg":[0,0,0]}`)
+			return nil, fmt.Errorf("%w: transform serialization error: %v", domain.ErrSerializationFailed, err)
 		}
 		var locatorJSON []byte
 		if itemCmd.TechnicalClientLocator != nil && itemCmd.TechnicalClientLocator.Kind != "" {
-			locatorJSON, _ = json.Marshal(itemCmd.TechnicalClientLocator)
+			l, err := json.Marshal(itemCmd.TechnicalClientLocator)
+			if err != nil {
+				return nil, fmt.Errorf("%w: technical_client_locator serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			locatorJSON = l
 		}
 
 		var insertedItem domain.DesignRevisionItem
@@ -512,20 +674,28 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 			return nil, fmt.Errorf("insert design revision item: %w", err)
 		}
 		if len(rawP) > 0 {
-			_ = json.Unmarshal(rawP, &insertedItem.Parameters)
+			if err := json.Unmarshal(rawP, &insertedItem.Parameters); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal inserted parameters: %v", domain.ErrSerializationFailed, err)
+			}
 		}
 		if len(rawM) > 0 {
-			_ = json.Unmarshal(rawM, &insertedItem.MaterialChoices)
+			if err := json.Unmarshal(rawM, &insertedItem.MaterialChoices); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal inserted material_choices: %v", domain.ErrSerializationFailed, err)
+			}
 		}
 		if len(rawT) > 0 && string(rawT) != "{}" && string(rawT) != "null" {
 			var t domain.Transform3D
-			if err := json.Unmarshal(rawT, &t); err == nil {
-				insertedItem.Transform = &t
+			if err := json.Unmarshal(rawT, &t); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal inserted transform: %v", domain.ErrSerializationFailed, err)
 			}
+			insertedItem.Transform = &t
 		}
 		if len(rawL) > 0 && string(rawL) != "null" {
 			var loc domain.TechnicalClientLocator
-			if err := json.Unmarshal(rawL, &loc); err == nil && loc.Kind != "" {
+			if err := json.Unmarshal(rawL, &loc); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal inserted locator: %v", domain.ErrSerializationFailed, err)
+			}
+			if loc.Kind != "" {
 				insertedItem.TechnicalClientLocator = &loc
 			}
 		}
@@ -533,7 +703,71 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 	}
 	rev.Items = revItems
 
-	// 6. Security audit event for publication.
+	// 7. Advance persistent working copy base_revision_id to the newly published revision (digital-thread §8).
+	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
+	_, err = s.db(ctx).Exec(ctx, `
+		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
+		VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+		ON CONFLICT (design_id) DO UPDATE SET
+			base_revision_id = EXCLUDED.base_revision_id,
+			source_type = EXCLUDED.source_type,
+			updated_at = NOW(),
+			updated_by = EXCLUDED.updated_by
+	`, cmd.DesignID, designOrgID, projectID, rev.ID, rev.SourceType, actor)
+	if err != nil {
+		return nil, fmt.Errorf("advance working copy base revision: %w", err)
+	}
+
+	// If items were explicitly provided in cmd.Items, synchronize design_working_items to match.
+	if len(cmd.Items) > 0 {
+		_, err = s.db(ctx).Exec(ctx, `DELETE FROM design_working_items WHERE design_id = $1`, cmd.DesignID)
+		if err != nil {
+			return nil, fmt.Errorf("sync working items delete: %w", err)
+		}
+		for _, item := range rev.Items {
+			var defID *string
+			if item.FurnitureDefinitionID != "" {
+				defID = &item.FurnitureDefinitionID
+			}
+			pJSON, err := json.Marshal(item.Parameters)
+			if err != nil {
+				return nil, fmt.Errorf("%w: working item parameters marshal: %v", domain.ErrSerializationFailed, err)
+			}
+			mJSON, err := json.Marshal(item.MaterialChoices)
+			if err != nil {
+				return nil, fmt.Errorf("%w: working item material_choices marshal: %v", domain.ErrSerializationFailed, err)
+			}
+			tJSON, err := json.Marshal(item.Transform)
+			if err != nil {
+				return nil, fmt.Errorf("%w: working item transform marshal: %v", domain.ErrSerializationFailed, err)
+			}
+			var lJSON []byte
+			if item.TechnicalClientLocator != nil {
+				l, err := json.Marshal(item.TechnicalClientLocator)
+				if err != nil {
+					return nil, fmt.Errorf("%w: working item locator marshal: %v", domain.ErrSerializationFailed, err)
+				}
+				lJSON = l
+			}
+			_, err = s.db(ctx).Exec(ctx, `
+				INSERT INTO design_working_items (
+					organization_id, project_id, design_id,
+					furniture_instance_id, furniture_definition_id, definition_version,
+					parameters, material_choices, transform, room_id, technical_client_locator,
+					created_at, updated_at
+				)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+			`, designOrgID, projectID, cmd.DesignID,
+				item.FurnitureInstanceID, defID, item.DefinitionVersion,
+				pJSON, mJSON, tJSON, item.RoomID, lJSON,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("sync working item insert: %w", err)
+			}
+		}
+	}
+
+	// 8. Security audit event for publication.
 	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
 		EventType:      "design_revision_published",
 		ActorUserID:    nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
@@ -637,4 +871,356 @@ func (s *PostgresStore) ListDesignRevisionItems(ctx context.Context, revisionID 
 		items = append(items, *item)
 	}
 	return items, rows.Err()
+}
+
+func (s *PostgresStore) GetDesignWorkingCopy(ctx context.Context, designID string) (*domain.DesignWorkingCopy, error) {
+	if !isValidUUID(designID) {
+		return nil, domain.ErrDesignNotFound
+	}
+
+	var wc domain.DesignWorkingCopy
+	var baseRevID *string
+	row := s.db(ctx).QueryRow(ctx, `
+		SELECT design_id, organization_id, project_id, base_revision_id::text, source_type, updated_at, updated_by
+		FROM design_working_copies
+		WHERE design_id = $1
+	`, designID)
+	err := row.Scan(&wc.DesignID, &wc.OrganizationID, &wc.ProjectID, &baseRevID, &wc.SourceType, &wc.UpdatedAt, &wc.UpdatedBy)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Check if design exists
+			var orgID, projID string
+			dErr := s.db(ctx).QueryRow(ctx, `SELECT organization_id, project_id FROM designs WHERE id = $1`, designID).Scan(&orgID, &projID)
+			if dErr != nil {
+				if errors.Is(dErr, pgx.ErrNoRows) {
+					return nil, domain.ErrDesignNotFound
+				}
+				return nil, dErr
+			}
+			wc = domain.DesignWorkingCopy{
+				DesignID:       designID,
+				OrganizationID: orgID,
+				ProjectID:      projID,
+				BaseRevisionID: nil,
+				SourceType:     domain.DesignRevisionSourceManual,
+				Items:          []domain.DesignWorkingItem{},
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		wc.BaseRevisionID = baseRevID
+	}
+
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT `+designWorkingItemColumns+`
+		FROM design_working_items
+		WHERE design_id = $1
+		ORDER BY created_at ASC
+	`, designID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []domain.DesignWorkingItem
+	for rows.Next() {
+		item, err := scanDesignWorkingItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	wc.Items = items
+	return &wc, nil
+}
+
+func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error) {
+	if !isValidUUID(cmd.DesignID) {
+		return nil, domain.ErrDesignNotFound
+	}
+	if cmd.SourceType != "" && !domain.IsValidDesignRevisionSourceType(cmd.SourceType) {
+		return nil, domain.ErrInvalidDesignCommand
+	}
+	if cmd.BaseRevisionID != nil && *cmd.BaseRevisionID != "" && !isValidUUID(*cmd.BaseRevisionID) {
+		return nil, domain.ErrInvalidDesignCommand
+	}
+
+	if transactionFromContext(ctx) == nil {
+		var res *domain.DesignWorkingCopy
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			r, err := s.UpdateDesignWorkingCopy(txCtx, cmd)
+			if err != nil {
+				return err
+			}
+			res = r
+			return nil
+		})
+		return res, err
+	}
+
+	// 1. Lock the design row FOR UPDATE
+	var designOrgID, projectID, designStatus string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT organization_id, project_id, status
+		FROM designs
+		WHERE id = $1
+		FOR UPDATE
+	`, cmd.DesignID).Scan(&designOrgID, &projectID, &designStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, err
+	}
+	if designStatus != string(domain.DesignStatusActive) {
+		return nil, domain.ErrDesignNotActive
+	}
+
+	actorOrg := OrgFromCtx(ctx)
+	if actorOrg != "" && actorOrg != designOrgID {
+		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+	}
+
+	// 2. Validate base_revision_id if provided
+	if cmd.BaseRevisionID != nil && *cmd.BaseRevisionID != "" {
+		var revDesignID string
+		err := s.db(ctx).QueryRow(ctx, `
+			SELECT design_id FROM design_revisions WHERE id = $1
+		`, *cmd.BaseRevisionID).Scan(&revDesignID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, domain.ErrDesignRevisionNotFound
+			}
+			return nil, err
+		}
+		if revDesignID != cmd.DesignID {
+			return nil, domain.ErrDesignRevisionNotFound
+		}
+	}
+
+	// 3. Validate items
+	seenFI := make(map[string]bool)
+	for _, item := range cmd.Items {
+		if !isValidUUID(item.FurnitureInstanceID) {
+			return nil, fmt.Errorf("%w: invalid furniture_instance_id: %s", domain.ErrInvalidDesignCommand, item.FurnitureInstanceID)
+		}
+		if seenFI[item.FurnitureInstanceID] {
+			return nil, domain.ErrDuplicateFurnitureInstanceInRevision
+		}
+		seenFI[item.FurnitureInstanceID] = true
+
+		var fiProjID, fiStatus string
+		err := s.db(ctx).QueryRow(ctx, `
+			SELECT project_id, lifecycle_status
+			FROM furniture_instances
+			WHERE id = $1
+		`, item.FurnitureInstanceID).Scan(&fiProjID, &fiStatus)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, fmt.Errorf("%w: furniture instance %s", ErrFurnitureInstanceNotFound, item.FurnitureInstanceID)
+			}
+			return nil, err
+		}
+		if fiProjID != projectID {
+			return nil, domain.ErrCrossProjectFurnitureInstance
+		}
+		if fiStatus != string(domain.FurnitureInstanceLifecycleActive) {
+			return nil, fmt.Errorf("%w: furniture instance %s has terminal status %s", domain.ErrFurnitureInstanceLifecycleConflict, item.FurnitureInstanceID, fiStatus)
+		}
+	}
+
+	sourceType := cmd.SourceType
+	if sourceType == "" {
+		sourceType = domain.DesignRevisionSourceManual
+	}
+
+	// 4. Delete existing working items
+	_, err = s.db(ctx).Exec(ctx, `DELETE FROM design_working_items WHERE design_id = $1`, cmd.DesignID)
+	if err != nil {
+		return nil, fmt.Errorf("delete existing working items: %w", err)
+	}
+
+	// 5. Insert new working items
+	for _, item := range cmd.Items {
+		var defID *string
+		if item.FurnitureDefinitionID != "" {
+			defID = &item.FurnitureDefinitionID
+		}
+
+		paramsJSON := []byte("{}")
+		if item.Parameters != nil {
+			p, err := json.Marshal(item.Parameters)
+			if err != nil {
+				return nil, fmt.Errorf("%w: parameters serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			paramsJSON = p
+		}
+		materialsJSON := []byte("{}")
+		if item.MaterialChoices != nil {
+			m, err := json.Marshal(item.MaterialChoices)
+			if err != nil {
+				return nil, fmt.Errorf("%w: material_choices serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			materialsJSON = m
+		}
+		transformJSON, err := json.Marshal(item.Transform)
+		if err != nil {
+			return nil, fmt.Errorf("%w: transform serialization error: %v", domain.ErrSerializationFailed, err)
+		}
+		var locatorJSON []byte
+		if item.TechnicalClientLocator != nil {
+			l, err := json.Marshal(item.TechnicalClientLocator)
+			if err != nil {
+				return nil, fmt.Errorf("%w: technical_client_locator serialization error: %v", domain.ErrSerializationFailed, err)
+			}
+			locatorJSON = l
+		}
+
+		_, err = s.db(ctx).Exec(ctx, `
+			INSERT INTO design_working_items (
+				organization_id, project_id, design_id,
+				furniture_instance_id, furniture_definition_id, definition_version,
+				parameters, material_choices, transform, room_id, technical_client_locator,
+				created_at, updated_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+		`, designOrgID, projectID, cmd.DesignID,
+			item.FurnitureInstanceID, defID, item.DefinitionVersion,
+			paramsJSON, materialsJSON, transformJSON, item.RoomID, locatorJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert working item: %w", err)
+		}
+	}
+
+	// 6. Update design_working_copies
+	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
+	var baseRevToSet *string = cmd.BaseRevisionID
+	_, err = s.db(ctx).Exec(ctx, `
+		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
+		VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+		ON CONFLICT (design_id) DO UPDATE SET
+			base_revision_id = CASE WHEN $7::boolean THEN EXCLUDED.base_revision_id ELSE design_working_copies.base_revision_id END,
+			source_type = EXCLUDED.source_type,
+			updated_at = NOW(),
+			updated_by = EXCLUDED.updated_by
+	`, cmd.DesignID, designOrgID, projectID, baseRevToSet, sourceType, actor, cmd.BaseRevisionID != nil)
+	if err != nil {
+		return nil, fmt.Errorf("update design working copy: %w", err)
+	}
+
+	return s.GetDesignWorkingCopy(ctx, cmd.DesignID)
+}
+
+func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error) {
+	if !isValidUUID(cmd.DesignID) {
+		return nil, domain.ErrDesignNotFound
+	}
+	if !isValidUUID(cmd.RevisionID) {
+		return nil, domain.ErrDesignRevisionNotFound
+	}
+
+	if transactionFromContext(ctx) == nil {
+		var res *domain.DesignWorkingCopy
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			r, err := s.ResetDesignWorkingCopy(txCtx, cmd)
+			if err != nil {
+				return err
+			}
+			res = r
+			return nil
+		})
+		return res, err
+	}
+
+	// 1. Lock designs row
+	var designOrgID, projectID, designStatus string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT organization_id, project_id, status
+		FROM designs
+		WHERE id = $1
+		FOR UPDATE
+	`, cmd.DesignID).Scan(&designOrgID, &projectID, &designStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignNotFound
+		}
+		return nil, err
+	}
+	if designStatus != string(domain.DesignStatusActive) {
+		return nil, domain.ErrDesignNotActive
+	}
+
+	actorOrg := OrgFromCtx(ctx)
+	if actorOrg != "" && actorOrg != designOrgID {
+		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+	}
+
+	// 2. Verify revision exists for this design
+	var revSourceType string
+	err = s.db(ctx).QueryRow(ctx, `
+		SELECT source_type
+		FROM design_revisions
+		WHERE id = $1 AND design_id = $2
+	`, cmd.RevisionID, cmd.DesignID).Scan(&revSourceType)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrDesignRevisionNotFound
+		}
+		return nil, err
+	}
+
+	// 3. Delete existing working items
+	_, err = s.db(ctx).Exec(ctx, `DELETE FROM design_working_items WHERE design_id = $1`, cmd.DesignID)
+	if err != nil {
+		return nil, fmt.Errorf("delete working items on reset: %w", err)
+	}
+
+	// 4. Copy from revision items into working items
+	_, err = s.db(ctx).Exec(ctx, `
+		INSERT INTO design_working_items (
+			organization_id, project_id, design_id,
+			furniture_instance_id, furniture_definition_id, definition_version,
+			parameters, material_choices, transform, room_id, technical_client_locator,
+			created_at, updated_at
+		)
+		SELECT organization_id, project_id, $1,
+		       furniture_instance_id, furniture_definition_id, definition_version,
+		       parameters, material_choices, transform, room_id, technical_client_locator,
+		       NOW(), NOW()
+		FROM design_revision_items
+		WHERE design_revision_id = $2
+	`, cmd.DesignID, cmd.RevisionID)
+	if err != nil {
+		return nil, fmt.Errorf("copy revision items to working items: %w", err)
+	}
+
+	// 5. Update working copy metadata
+	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
+	_, err = s.db(ctx).Exec(ctx, `
+		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
+		VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+		ON CONFLICT (design_id) DO UPDATE SET
+			base_revision_id = EXCLUDED.base_revision_id,
+			source_type = EXCLUDED.source_type,
+			updated_at = NOW(),
+			updated_by = EXCLUDED.updated_by
+	`, cmd.DesignID, designOrgID, projectID, cmd.RevisionID, revSourceType, actor)
+	if err != nil {
+		return nil, fmt.Errorf("update design working copy on reset: %w", err)
+	}
+
+	return s.GetDesignWorkingCopy(ctx, cmd.DesignID)
 }

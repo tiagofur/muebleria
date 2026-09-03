@@ -908,10 +908,11 @@ type CreateDesignRequest struct {
 type DesignRevisionSourceType string
 
 const (
-	DesignRevisionSourceTypeSketchup DesignRevisionSourceType = "sketchup"
-	DesignRevisionSourceTypeWeb      DesignRevisionSourceType = "web"
-	DesignRevisionSourceTypeCad      DesignRevisionSourceType = "cad"
-	DesignRevisionSourceTypeSystem   DesignRevisionSourceType = "system"
+	DesignRevisionSourceTypeSketchup  DesignRevisionSourceType = "sketchup"
+	DesignRevisionSourceTypeProyectar DesignRevisionSourceType = "proyectar"
+	DesignRevisionSourceTypeImport    DesignRevisionSourceType = "import"
+	DesignRevisionSourceTypeSystem    DesignRevisionSourceType = "system"
+	DesignRevisionSourceTypeManual    DesignRevisionSourceType = "manual"
 )
 
 type DesignRevisionStatus string
@@ -967,9 +968,44 @@ type PublishDesignRevisionItem struct {
 	TechnicalClientLocator *TechnicalClientLocator `json:"technical_client_locator,omitempty"`
 }
 
+type DesignWorkingCopyItem struct {
+	ID                     string                  `json:"id"`
+	DesignID               string                  `json:"design_id"`
+	FurnitureInstanceID    string                  `json:"furniture_instance_id"`
+	FurnitureDefinitionID  *string                 `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion      *int64                  `json:"definition_version,omitempty"`
+	Parameters             map[string]any          `json:"parameters"`
+	MaterialChoices        map[string]string       `json:"material_choices"`
+	Transform              *Transform3D            `json:"transform,omitempty"`
+	RoomID                 *string                 `json:"room_id,omitempty"`
+	TechnicalClientLocator *TechnicalClientLocator `json:"technical_client_locator,omitempty"`
+	CreatedAt              string                  `json:"created_at"`
+	UpdatedAt              string                  `json:"updated_at"`
+}
+
+type DesignWorkingCopy struct {
+	DesignID       string                   `json:"design_id"`
+	ProjectID      string                   `json:"project_id"`
+	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
+	SourceType     DesignRevisionSourceType `json:"source_type"`
+	Items          []DesignWorkingCopyItem  `json:"items"`
+	UpdatedAt      string                   `json:"updated_at"`
+	UpdatedBy      *string                  `json:"updated_by,omitempty"`
+}
+
+type UpdateDesignWorkingCopyRequest struct {
+	BaseRevisionID *string                     `json:"base_revision_id,omitempty"`
+	SourceType     *DesignRevisionSourceType   `json:"source_type,omitempty"`
+	Items          []PublishDesignRevisionItem `json:"items"`
+}
+
+type ResetDesignWorkingCopyRequest struct {
+	RevisionID string `json:"revision_id"`
+}
+
 type PublishDesignRevisionRequest struct {
 	SourceType       DesignRevisionSourceType    `json:"source_type"`
 	ParentRevisionID *string                     `json:"parent_revision_id,omitempty"`
 	BaseRevisionID   *string                     `json:"base_revision_id,omitempty"`
-	Items            []PublishDesignRevisionItem `json:"items"`
+	Items            []PublishDesignRevisionItem `json:"items,omitempty"`
 }

@@ -93,6 +93,67 @@ func toDesignRevisionDTO(rev domain.DesignRevision) openapi.DesignRevision {
 	return dto
 }
 
+func toDesignWorkingCopyItemDTO(item domain.DesignWorkingItem) openapi.DesignWorkingCopyItem {
+	dto := openapi.DesignWorkingCopyItem{
+		ID:                  item.ID,
+		DesignID:            item.DesignID,
+		FurnitureInstanceID: item.FurnitureInstanceID,
+		Parameters:          item.Parameters,
+		MaterialChoices:     item.MaterialChoices,
+		CreatedAt:           item.CreatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:           item.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if item.Parameters == nil {
+		dto.Parameters = map[string]any{}
+	}
+	if item.MaterialChoices == nil {
+		dto.MaterialChoices = map[string]string{}
+	}
+	if item.FurnitureDefinitionID != "" {
+		dto.FurnitureDefinitionID = &item.FurnitureDefinitionID
+	}
+	if item.DefinitionVersion != nil {
+		v := int64(*item.DefinitionVersion)
+		dto.DefinitionVersion = &v
+	}
+	if item.Transform != nil {
+		dto.Transform = &openapi.Transform3D{
+			TranslationMm: item.Transform.TranslationMm[:],
+			RotationDeg:   item.Transform.RotationDeg[:],
+		}
+	}
+	if item.RoomID != "" {
+		dto.RoomID = &item.RoomID
+	}
+	if item.TechnicalClientLocator != nil {
+		dto.TechnicalClientLocator = &openapi.TechnicalClientLocator{
+			Kind:  item.TechnicalClientLocator.Kind,
+			Value: item.TechnicalClientLocator.Value,
+		}
+	}
+	return dto
+}
+
+func toDesignWorkingCopyDTO(wc domain.DesignWorkingCopy) openapi.DesignWorkingCopy {
+	dto := openapi.DesignWorkingCopy{
+		DesignID:   wc.DesignID,
+		ProjectID:  wc.ProjectID,
+		SourceType: openapi.DesignRevisionSourceType(wc.SourceType),
+		UpdatedAt:  wc.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		Items:      make([]openapi.DesignWorkingCopyItem, 0, len(wc.Items)),
+	}
+	if wc.BaseRevisionID != nil && *wc.BaseRevisionID != "" {
+		dto.BaseRevisionID = wc.BaseRevisionID
+	}
+	if wc.UpdatedBy != "" {
+		dto.UpdatedBy = &wc.UpdatedBy
+	}
+	for _, item := range wc.Items {
+		dto.Items = append(dto.Items, toDesignWorkingCopyItemDTO(item))
+	}
+	return dto
+}
+
 func respondWithDesignError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrDesignNotFound):
@@ -113,6 +174,10 @@ func respondWithDesignError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El mueble referenciado ya no está activo en el proyecto", nil)
 	case errors.Is(err, storage.ErrFurnitureInstanceNotFound):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Mueble referenciado no encontrado", nil)
+	case errors.Is(err, domain.ErrWorkingCopyNotFound):
+		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El borrador de trabajo no existe", nil)
+	case errors.Is(err, domain.ErrSerializationFailed):
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Error de serialización del diseño", nil)
 	case errors.Is(err, domain.ErrFurnitureInstanceProjectNotWritable):
 		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "No tenés permiso para modificar el diseño de este proyecto", nil)
 	default:
@@ -367,4 +432,168 @@ func (s *Server) HandleDesignRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, http.StatusOK, toDesignRevisionDTO(*rev))
+}
+
+// HandleDesignWorkingCopy serves GET (read) and PUT (save/replace draft items) for /api/designs/{designId}/working-copy.
+func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	roles := actorRoles(claims)
+	designID := r.PathValue("designId")
+	if !isValidUUID(designID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "designId inválido", nil)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver el diseño") {
+			return
+		}
+		wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
+		if err != nil {
+			respondWithDesignError(w, err)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))
+
+	case http.MethodPut:
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para editar el diseño") {
+			return
+		}
+		var body openapi.UpdateDesignWorkingCopyRequest
+		if !decodeJSONBody(w, r, &body) {
+			return
+		}
+
+		var baseRevID *string
+		if body.BaseRevisionID != nil {
+			trimmed := strings.TrimSpace(*body.BaseRevisionID)
+			if trimmed != "" {
+				if !isValidUUID(trimmed) {
+					respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "base_revision_id inválido", nil)
+					return
+				}
+				baseRevID = &trimmed
+			}
+		}
+
+		var sourceType domain.DesignRevisionSourceType
+		if body.SourceType != nil {
+			sourceType = domain.DesignRevisionSourceType(*body.SourceType)
+			if !domain.IsValidDesignRevisionSourceType(sourceType) {
+				respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "source_type inválido", nil)
+				return
+			}
+		}
+
+		items := make([]storage.UpdateDesignWorkingCopyItemCommand, 0, len(body.Items))
+		for _, item := range body.Items {
+			fiID := strings.TrimSpace(item.FurnitureInstanceID)
+			if !isValidUUID(fiID) {
+				respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "furniture_instance_id inválido en uno de los items", nil)
+				return
+			}
+			cmdItem := storage.UpdateDesignWorkingCopyItemCommand{
+				FurnitureInstanceID: fiID,
+				Parameters:          item.Parameters,
+				MaterialChoices:     item.MaterialChoices,
+			}
+			if item.FurnitureDefinitionID != nil {
+				defID := strings.TrimSpace(*item.FurnitureDefinitionID)
+				if defID != "" && !isValidUUID(defID) {
+					respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "furniture_definition_id inválido en uno de los items", nil)
+					return
+				}
+				cmdItem.FurnitureDefinitionID = defID
+			}
+			if item.DefinitionVersion != nil {
+				v := int(*item.DefinitionVersion)
+				cmdItem.DefinitionVersion = &v
+			}
+			if item.Transform != nil {
+				var t3d domain.Transform3D
+				if len(item.Transform.TranslationMm) == 3 {
+					copy(t3d.TranslationMm[:], item.Transform.TranslationMm)
+				}
+				if len(item.Transform.RotationDeg) == 3 {
+					copy(t3d.RotationDeg[:], item.Transform.RotationDeg)
+				}
+				cmdItem.Transform = t3d
+			}
+			if item.RoomID != nil {
+				cmdItem.RoomID = strings.TrimSpace(*item.RoomID)
+			}
+			if item.TechnicalClientLocator != nil {
+				cmdItem.TechnicalClientLocator = &domain.TechnicalClientLocator{
+					Kind:  item.TechnicalClientLocator.Kind,
+					Value: item.TechnicalClientLocator.Value,
+				}
+			}
+			items = append(items, cmdItem)
+		}
+
+		wc, err := s.Store.UpdateDesignWorkingCopy(r.Context(), storage.UpdateDesignWorkingCopyCommand{
+			DesignID:       designID,
+			BaseRevisionID: baseRevID,
+			SourceType:     sourceType,
+			Items:          items,
+			ActorUserID:    claims.UserID,
+		})
+		if err != nil {
+			respondWithDesignError(w, err)
+			return
+		}
+		respondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))
+
+	default:
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleDesignWorkingCopyReset serves POST for /api/designs/{designId}/working-copy:reset.
+func (s *Server) HandleDesignWorkingCopyReset(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	roles := actorRoles(claims)
+	designID := r.PathValue("designId")
+	if !isValidUUID(designID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "designId inválido", nil)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para resetear el diseño") {
+		return
+	}
+
+	var body openapi.ResetDesignWorkingCopyRequest
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	revID := strings.TrimSpace(body.RevisionID)
+	if !isValidUUID(revID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "revision_id inválido", nil)
+		return
+	}
+
+	wc, err := s.Store.ResetDesignWorkingCopy(r.Context(), storage.ResetDesignWorkingCopyCommand{
+		DesignID:    designID,
+		RevisionID:  revID,
+		ActorUserID: claims.UserID,
+	})
+	if err != nil {
+		respondWithDesignError(w, err)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))
 }

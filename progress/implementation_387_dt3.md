@@ -97,10 +97,14 @@ Se implementó el agregado completo de **Design**, sus revisiones inmutables **D
 ## 5. Matriz de Pruebas y Verificación
 
 1. **Pruebas de Storage y PostgreSQL Real (`internal/storage/designs_test.go`)**:
-   - `TestDesigns_MigrationFreshAndUpgrade`: Migración limpia en fresh y upgrade sobre 000112; inventario RLS y privilegios de immutabilidad verificados.
+   - `TestDesigns_MigrationFreshAndUpgrade`: Migración limpia en fresh y upgrade sobre 000112; inventario RLS y privilegios de immutabilidad verificados para tablas inmutables y working copy.
    - `TestDesigns_ProjectAggregateAndRevisions`: Creación de diseños, procedencia de cotización, publicación secuencial R1 y R2 con parentRevisionId, preservación de FurnitureInstance ID entre revisiones (I9).
    - `TestDesigns_Immutability`: UPDATE y DELETE directo por SQL sobre `design_revisions` y `design_revision_items` fallan con error de trigger.
-   - `TestDesigns_ConcurrentPublishNumbering`: 5 publicaciones concurrentes sobre el mismo diseño serializan mediante row-lock y obtienen números R1..R5 únicos sin error.
+   - `TestDesigns_WorkingCopy_LifecycleAndDraftPersistence`: Edición repetida del borrador en working copy sin crear revisiones; publicación atómica desde working copy sin items explícitos; avance de `base_revision_id` a la nueva revisión; reseteo del working copy al baseline de una revisión previa.
+   - `TestDesigns_FailClosedOptimisticConcurrency`: Fail-closed en publicación (R1 con base no vacía -> 409; R2 sin base -> 409; R2 con base stale -> 409; R2 con base correcta -> 201).
+   - `TestDesigns_LinearParentChainCoherence`: Verificación de cadena lineal sin branching; intentos de bifurcar la revisión padre son rechazados con `ErrInvalidParentRevision`.
+   - `TestDesigns_SnapshotSerializationFailClosed`: Error de serialización en snapshots aborta la transacción y revierte sin crear revisiones huérfanas o degradadas.
+   - `TestDesigns_ConcurrentPublishNumbering`: Concurrencia sobre publicación R1 serializa por row-lock: exactamente 1 gana y las demás reciben 409 Conflict por base desactualizada.
    - `TestDesigns_CrossOrgRLS`: Org B no ve diseños ni revisiones de Org A bajo consulta deliberadamente no filtrada con rol de app.
    - `TestDesigns_DurableHistoryBlocksQuoteDecrease`: Materialización de cotización vincula FI; se publica revisión con FI; reducción de cantidad en cotización es rechazada por historia durable.
    - `TestDesigns_DurableAuditRecorded`: Se auditan `design_created` y `design_revision_published` en `security_audit_events`.
@@ -113,11 +117,13 @@ Se implementó el agregado completo de **Design**, sus revisiones inmutables **D
    - `TestHandleDesignRevisions_PublishReturns201`
    - `TestHandleDesignRevisions_TypedErrors` (404, 403, 400, 409)
    - `TestHandleDesignRevision_GetReturns200WithItems`
+   - `TestHandleDesignWorkingCopy_GetReturns200`
+   - `TestHandleDesignWorkingCopy_PutReturns200`
+   - `TestHandleDesignWorkingCopyReset_PostReturns200`
 
 3. **Verificaciones Globales**:
    - `pnpm openapi:check`: PASS (0 drift).
    - `pnpm typecheck`: PASS (0 errores en los 7 paquetes del monorepo).
-   - `pnpm test`: PASS (411 tests en web y paquetes).
-   - `go build ./...`: PASS (0 errores).
-   - `go test ./internal/storage -run TestDesigns`: PASS.
-   - `go test ./internal/api`: PASS.
+   - `pnpm test`: PASS (33 suites, 411 tests).
+   - `go test ./...` en `backend-go`: PASS (0 errores).
+   - `./init.sh`: PASS (Entorno listo, todas las verificaciones pasaron exitosamente).
