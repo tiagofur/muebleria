@@ -57,7 +57,10 @@ module Granete
           assert model.save_copy(skp_path), 'the host must export a .skp copy'
           assert File.size?(skp_path), 'the exported .skp must be non-empty'
 
-          model.write_image(png_path, 1280, 720, true)
+          view = model.active_view
+          refute_nil view, 'the host must expose an active view'
+          exported = model.active_view.write_image(filename: png_path, width: 1280, height: 720, antialias: true)
+          assert exported, 'the active view must export a preview image'
           assert File.size?(png_path), 'the exported preview must be non-empty'
 
           # Host-safe: the working document never switched to the artifact.
@@ -125,8 +128,7 @@ module Granete
                      manifest_upload['items'].map { |i| i['furnitureInstanceId'] }.sort,
                      'the manifest artifact must mirror the prepared manifest'
 
-        assert_includes progress, 'validating'
-        assert_includes progress, 'publishing'
+        assert_equal %w[validating syncing exporting uploading publishing], progress
 
         # Binding base advanced to the new revision (reopen proof follows).
         assert_equal REVISION_R2, binding.base_revision_id

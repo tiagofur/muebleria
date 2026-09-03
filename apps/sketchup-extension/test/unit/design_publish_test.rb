@@ -317,10 +317,7 @@ class DesignPublishTest < Minitest::Test
       "/designs/#{DESIGN_ID}/publish/#{SESSION_ID}/artifacts/preview"
     ], upload_paths
 
-    assert_includes progress, 'validating'
-    assert_includes progress, 'exporting'
-    assert_includes progress, 'uploading'
-    assert_includes progress, 'publishing'
+    assert_equal %w[validating syncing exporting uploading publishing], progress
 
     # The binding base advanced from the server-authoritative answer.
     assert_equal 1, @base_advancer.calls
@@ -537,5 +534,44 @@ class DesignPublishTest < Minitest::Test
       streamed << body.read(1024) while streamed.bytesize < body.content_length
       assert_equal expected, streamed
     end
+  end
+
+  # ---- ArtifactExporter: View#write_image host compatibility ----
+
+  def test_artifact_exporter_uses_active_view_write_image_and_never_model_write_image
+    refute @model.respond_to?(:write_image), 'Model must not expose write_image'
+    assert @model.respond_to?(:active_view), 'Model must expose active_view'
+    assert @model.active_view.respond_to?(:write_image), 'Active view must expose write_image'
+
+    manifest = { 'schemaVersion' => 1, 'items' => [] }
+    DP.with_temp_dir('test-export') do |dir|
+      artifacts = DP::ArtifactExporter.export(@model, manifest, dir)
+      assert_equal %w[manifest model preview].sort, artifacts.keys.sort
+
+      skp_path = artifacts['model']['path']
+      preview_path = artifacts['preview']['path']
+      manifest_path = artifacts['manifest']['path']
+
+      assert File.exist?(skp_path) && File.size?(skp_path)
+      assert File.exist?(preview_path) && File.size?(preview_path)
+      assert File.exist?(manifest_path) && File.size?(manifest_path)
+
+      assert_includes @model.active_view.images_written, preview_path
+    end
+  end
+
+  def test_artifact_exporter_fails_closed_when_no_active_view
+    @model.active_view = nil
+    manifest = { 'schemaVersion' => 1, 'items' => [] }
+    DP.with_temp_dir('test-export') do |dir|
+      err = assert_raises(RuntimeError) do
+        DP::ArtifactExporter.export(@model, manifest, dir)
+      end
+      assert_match(/vista activa/, err.message)
+    end
+  end
+
+  def test_progress_steps_constant_matches_publisher_contract
+    assert_equal %w[validating syncing exporting uploading publishing], DP::PROGRESS_STEPS
   end
 end

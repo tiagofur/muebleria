@@ -19,7 +19,7 @@ module Granete
       #     enter the productive semantic surface;
       #   * identity precheck is #391's validate_managed_furniture_identity —
       #     reused, never reimplemented;
-      #   * artifacts are exported host-safe (save_copy/write_image to a
+      #   * artifacts are exported host-safe (save_copy/active_view.write_image to a
       #     temp dir): the user's working document path is never touched;
       #   * SHA-256 is computed locally AND verified against the server's
       #     hash before finalize;
@@ -27,7 +27,7 @@ module Granete
       module DesignPublish
         MANIFEST_SCHEMA_VERSION = 1
         ARTIFACT_KINDS = %w[model manifest preview].freeze
-        PROGRESS_STEPS = %w[validating exporting uploading publishing].freeze
+        PROGRESS_STEPS = %w[validating syncing exporting uploading publishing].freeze
         PREVIEW_WIDTH = 1280
         PREVIEW_HEIGHT = 720
 
@@ -59,7 +59,7 @@ module Granete
                                          :artifacts, keyword_init: true)
           ArtifactSummary = Struct.new(:kind, :sha256, :size_bytes, :content_type, keyword_init: true)
 
-          # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+          # rubocop:disable-next Metrics/AbcSize
           def self.parse_session!(body)
             raise ArgumentError, 'publish session payload must be present' if body.nil?
 
@@ -306,7 +306,21 @@ module Granete
             raise 'el host no pudo guardar la copia del modelo' unless model.save_copy(skp_path)
             raise 'la copia del modelo está vacía' unless File.size?(skp_path)
 
-            model.write_image(preview_path, DesignPublish::PREVIEW_WIDTH, DesignPublish::PREVIEW_HEIGHT, true)
+            view = model.active_view
+            raise 'no hay una vista activa en SketchUp para exportar preview' unless view
+
+            options = {
+              filename: preview_path,
+              width: DesignPublish::PREVIEW_WIDTH,
+              height: DesignPublish::PREVIEW_HEIGHT,
+              antialias: true
+            }
+            result = begin
+              view.write_image(options)
+            rescue ArgumentError, TypeError
+              view.write_image(preview_path, true)
+            end
+            raise 'el host no pudo exportar la preview del diseño' unless result
             raise 'la preview exportada está vacía' unless File.size?(preview_path)
 
             File.binwrite(manifest_path, JSON.pretty_generate(manifest))
@@ -343,7 +357,7 @@ module Granete
 
           attr_reader :service
 
-          # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/BlockLength, Metrics/PerceivedComplexity
+          # rubocop:disable-next Metrics/AbcSize, Metrics/BlockLength, Metrics/MethodLength
           def publish(on_progress: nil)
             model = @model_provider.call
             return failure('no_model', 'no hay un modelo activo') unless model
@@ -436,7 +450,9 @@ module Granete
               )
             end
             @working_copy_service.update_working_copy(
-              binding.design_id, items: items, base_revision_id: binding.base_revision_id,
+              binding.design_id,
+              items: items,
+              base_revision_id: binding.base_revision_id,
               source_type: 'sketchup'
             )
           end

@@ -172,6 +172,10 @@ function runTests() {
   test('progress steps render distinctly', (sandbox) => {
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const progress = el(sandbox, 'binding-publish-progress');
+    sandbox.window.GraneteDialog.onPublishProgress({ step: 'validating' });
+    assert.equal(progress.textContent, 'Validando identidad de los muebles…');
+    sandbox.window.GraneteDialog.onPublishProgress({ step: 'syncing' });
+    assert.equal(progress.textContent, 'Sincronizando borrador de trabajo…');
     sandbox.window.GraneteDialog.onPublishProgress({ step: 'exporting' });
     assert.equal(progress.textContent, 'Guardando modelo y preview…');
     sandbox.window.GraneteDialog.onPublishProgress({ step: 'uploading' });

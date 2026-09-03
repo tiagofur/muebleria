@@ -62,7 +62,7 @@ module Granete
         # Multipart file upload (#392 / DT-8). The artifact streams from disk
         # through MultipartBody — never a base64 JSON body — so publishing a
         # large .skp stays memory-flat.
-        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+        # rubocop:disable-next Metrics/AbcSize
         def upload(payload, file_path:, content_type:, authorization_header: nil)
           raise NotConfiguredError, 'Transport is not configured' unless configured?
 

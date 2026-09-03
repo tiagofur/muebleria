@@ -31,7 +31,7 @@ module Granete
         end
 
         # Net::HTTP streams any body object responding to read(length[, buffer]).
-        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # rubocop:disable-next Metrics/AbcSize
         def read(length = nil, buffer = nil)
           buffer ||= +''
           buffer.clear
