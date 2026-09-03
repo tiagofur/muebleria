@@ -31,6 +31,12 @@ module Granete
             { 'entity' => matches.first, 'duplicates' => matches.length }
           end
 
+          def persistent_locator(entity)
+            return nil unless entity.respond_to?(:persistent_id) && entity.persistent_id
+
+            { 'kind' => 'sketchup_persistent_id', 'value' => entity.persistent_id.to_s }
+          end
+
           # Corrupt/unreadable metadata on one entity must not abort the
           # scan: that entity simply does not carry the identity.
           def read_metadata(store, entity)

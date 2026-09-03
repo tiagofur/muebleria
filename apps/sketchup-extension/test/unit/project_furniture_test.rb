@@ -694,7 +694,9 @@ class ProjectFurnitureTest < Minitest::Test
 
     assert_equal FI_1, instance.id
     assert_equal 'design', instance.origin
-    post_req = @transport.requests.find { |r| r['method'] == 'POST' && r['path'] == "/projects/#{PROJECT_ID}/furniture-instances" }
+    post_req = @transport.requests.find do |r|
+      r['method'] == 'POST' && r['path'] == "/projects/#{PROJECT_ID}/furniture-instances"
+    end
     refute_nil post_req
     assert_equal({ 'furniture_definition_id' => DEFINITION_ID }, post_req['body'])
     assert_equal 'idem-key-42', post_req['headers']['Idempotency-Key']
@@ -718,7 +720,9 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal FI_1, result['instanceId']
 
     # Server instance was created via POST with idempotency key
-    post_req = @transport.requests.find { |r| r['method'] == 'POST' && r['path'] == "/projects/#{PROJECT_ID}/furniture-instances" }
+    post_req = @transport.requests.find do |r|
+      r['method'] == 'POST' && r['path'] == "/projects/#{PROJECT_ID}/furniture-instances"
+    end
     refute_nil post_req
     assert_equal 'idem-create-1', post_req['headers']['Idempotency-Key']
 

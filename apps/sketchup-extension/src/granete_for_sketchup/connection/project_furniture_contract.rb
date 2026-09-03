@@ -230,7 +230,9 @@ module Granete
           def resolve_layout(catalog_provider, definition, parameters, material_choices = {})
             return nil unless catalog_provider.respond_to?(:resolved_native_layout)
 
-            catalog_provider.resolved_native_layout(definition['furniture_definition_id'], parameters, material_choices || {})
+            catalog_provider.resolved_native_layout(
+              definition['furniture_definition_id'], parameters, material_choices || {}
+            )
           rescue Library::LayoutResolutionError => e
             raise PlacementResolutionError,
                   "Granete no pudo resolver la composición de este mueble (#{e.message})"
