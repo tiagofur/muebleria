@@ -522,17 +522,19 @@ class DesignPublishTest < Minitest::Test
       payload = (0..5000).map { |i| (i % 251).chr }.join
       File.binwrite(path, payload)
 
-      body = Granete::SketchUpExtension::Transport::MultipartBody.new(
-        boundary: 'bnd', field: 'file', filename: 'blob.bin',
-        content_type: 'application/octet-stream', file: File.open(path, 'rb')
-      )
-      expected = "--bnd\r\nContent-Disposition: form-data; name=\"file\"; filename=\"blob.bin\"\r\n" \
-                 "Content-Type: application/octet-stream\r\n\r\n#{payload}\r\n--bnd--\r\n"
-      assert_equal expected.bytesize, body.content_length
+      File.open(path, 'rb') do |file|
+        body = Granete::SketchUpExtension::Transport::MultipartBody.new(
+          boundary: 'bnd', field: 'file', filename: 'blob.bin',
+          content_type: 'application/octet-stream', file: file
+        )
+        expected = "--bnd\r\nContent-Disposition: form-data; name=\"file\"; filename=\"blob.bin\"\r\n" \
+                   "Content-Type: application/octet-stream\r\n\r\n#{payload}\r\n--bnd--\r\n"
+        assert_equal expected.bytesize, body.content_length
 
-      streamed = +''
-      streamed << body.read(1024) while streamed.bytesize < body.content_length
-      assert_equal expected, streamed
+        streamed = +''
+        streamed << body.read(1024) while streamed.bytesize < body.content_length
+        assert_equal expected, streamed
+      end
     end
   end
 
