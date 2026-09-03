@@ -98,6 +98,7 @@ export function resolveStructure3DPreview(
       placementOverride: c.placementOverride
         ? (c.placementOverride as ComponentPlacement)
         : undefined,
+      overrides: c.overrides,
     })),
     agregados: draft.agregados.map((a) => ({ ...a })),
   };

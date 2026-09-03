@@ -111,4 +111,74 @@ describe('resolveStructure3DPreview with Agregados', () => {
     expect(zCoords[0]).toBeLessThan(zCoords[1]!);
     expect(zCoords[1]).toBeLessThan(zCoords[2]!);
   });
+
+  it('preserves component height override (zFormula) while keeping default placement pose', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST-PISO',
+      name: 'Estructura Piso Modificado',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      components: [
+        {
+          componentId: 'c-frente',
+          quantity: 1,
+          // Placement left as undefined/default, overriding only Z (height)
+          overrides: {
+            zFormula: '250',
+          },
+        },
+      ],
+    };
+
+    const res = resolveStructure3DPreview(draft, mockCatalogInput);
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(1);
+    const part = res.parts[0]!;
+    expect(part.z).toBe(250);
+  });
+
+  it('preserves custom placement with all spatial and dimension overrides', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST-CUSTOM',
+      name: 'Estructura Custom',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      components: [
+        {
+          componentId: 'c-frente',
+          quantity: 1,
+          placementOverride: 'custom',
+          overrides: {
+            lengthFormula: '350',
+            widthFormula: '450',
+            xFormula: '100',
+            yFormula: '150',
+            zFormula: '200',
+            rotateX: 45,
+            rotateY: 90,
+            rotateZ: 0,
+          },
+        },
+      ],
+    };
+
+    const res = resolveStructure3DPreview(draft, mockCatalogInput);
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(1);
+    const part = res.parts[0]!;
+    expect(part.lengthMm).toBe(350);
+    expect(part.widthMm).toBe(450);
+    expect(part.x).toBe(100);
+    expect(part.y).toBe(150);
+    expect(part.z).toBe(200);
+    expect(part.rotateX).toBe(45);
+    expect(part.rotateY).toBe(90);
+    expect(part.rotateZ).toBe(0);
+  });
 });
