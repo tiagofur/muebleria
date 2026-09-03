@@ -52,6 +52,10 @@ function createMockElement(id) {
   el.click = () => {
     (el.listeners.click || []).forEach((cb) => cb({ preventDefault: () => {} }));
   };
+  const attrs = {};
+  el.setAttribute = (k, v) => { attrs[k] = String(v); };
+  el.getAttribute = (k) => (k in attrs ? attrs[k] : null);
+  el.removeAttribute = (k) => { delete attrs[k]; };
   el.appendChild = (child) => { el.children.push(child); return child; };
   return el;
 }
@@ -82,6 +86,7 @@ function buildSandbox() {
         get_model_binding: () => bridgeCalls.push({ action: 'get_model_binding' }),
         get_project_furniture: () => bridgeCalls.push({ action: 'get_project_furniture' }),
         place_furniture_instance: (p) => bridgeCalls.push({ action: 'place_furniture_instance', payload: JSON.parse(p) }),
+        create_project_furniture: (p) => bridgeCalls.push({ action: 'create_project_furniture', payload: JSON.parse(p) }),
         confirm_placement_instance: (p) => bridgeCalls.push({ action: 'confirm_placement_instance', payload: JSON.parse(p) }),
         cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
         select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
@@ -282,6 +287,125 @@ function runTests() {
     sandbox.window.GraneteDialog.onConfirmPlacementResult({ ok: false, code: 'sync_failed', instanceId: FI_1 });
     sandbox.window.GraneteDialog.onCancelPlacementResult({ ok: true, code: 'cancelled', instanceId: FI_1 });
     assert.ok(true);
+  });
+
+  test('insert button in library dispatches create_project_furniture when model is connected', (sandbox) => {
+    sandbox.window.GraneteDialog.onModelBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p1', designId: 'd1', baseRevisionId: 'r1' }
+    });
+
+    const def = {
+      furniture_definition_id: 'def-1',
+      name: 'Base 600',
+      category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }]
+    };
+    sandbox.window.GraneteDialog.setCatalog([def]);
+
+    const card = el(sandbox, 'library-cards-grid').children[0];
+    assert.ok(card, 'card in library-cards-grid must exist');
+    card.click();
+
+    const btnInsert = el(sandbox, 'btn-insert');
+    assert.equal(btnInsert.disabled, false);
+
+    btnInsert.click();
+    assert.equal(btnInsert.disabled, true);
+
+    const createCall = sandbox.__bridge.find((c) => c.action === 'create_project_furniture');
+    assert.ok(createCall, 'create_project_furniture bridge call must be dispatched');
+    assert.equal(createCall.payload.definitionId, 'def-1');
+    assert.ok(createCall.payload.idempotencyKey, 'must include idempotencyKey');
+    assert.equal(typeof createCall.payload.idempotencyKey, 'string');
+
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({ ok: false, code: 'placement_failed', reason: 'mesh error' });
+    assert.equal(btnInsert.disabled, false);
+
+    btnInsert.click();
+    assert.equal(btnInsert.disabled, true);
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({ ok: true, code: 'pending_position', instanceId: 'fi-new-1' });
+    assert.equal(btnInsert.disabled, false);
+  });
+
+  test('same logical create retry reuses identical idempotencyKey across failure until success', (sandbox) => {
+    sandbox.window.GraneteDialog.onModelBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p1', designId: 'd1', baseRevisionId: 'r1' }
+    });
+
+    const def = {
+      furniture_definition_id: 'def-1',
+      name: 'Base 600',
+      category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }]
+    };
+    sandbox.window.GraneteDialog.setCatalog([def]);
+    el(sandbox, 'library-cards-grid').children[0].click();
+
+    const btnInsert = el(sandbox, 'btn-insert');
+    btnInsert.click();
+
+    const getCalls = () => sandbox.__bridge.filter((c) => c.action === 'create_project_furniture');
+    assert.equal(getCalls().length, 1);
+    const key1 = getCalls()[0].payload.idempotencyKey;
+    assert.ok(key1, 'first click must have idempotencyKey');
+
+    // Network timeout or temporary failure
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({ ok: false, code: 'service_error', reason: 'timeout' });
+    assert.equal(btnInsert.disabled, false);
+
+    // User retries the same create attempt
+    btnInsert.click();
+    assert.equal(getCalls().length, 2);
+    const key2 = getCalls()[1].payload.idempotencyKey;
+    assert.equal(key2, key1, 'retry of same create attempt must reuse identical idempotencyKey');
+
+    // Terminal success clears the intent key
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({ ok: true, code: 'pending_position', instanceId: 'fi-1' });
+
+    // Next insert attempt gets a new key
+    btnInsert.click();
+    assert.equal(getCalls().length, 3);
+    const key3 = getCalls()[2].payload.idempotencyKey;
+    assert.ok(key3 !== key1, 'new create intent must receive a new idempotencyKey');
+  });
+
+  test('created_pending routes to project tab, refreshes panel and clears intent key', (sandbox) => {
+    sandbox.window.GraneteDialog.onModelBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p1', designId: 'd1', baseRevisionId: 'r1' }
+    });
+
+    const def = {
+      furniture_definition_id: 'def-1',
+      name: 'Base 600',
+      category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }]
+    };
+    sandbox.window.GraneteDialog.setCatalog([def]);
+    el(sandbox, 'library-cards-grid').children[0].click();
+
+    const btnInsert = el(sandbox, 'btn-insert');
+    btnInsert.click();
+
+    // Backend created FI-004, but local placement failed
+    sandbox.window.GraneteDialog.onCreateProjectFurnitureResult({
+      ok: false,
+      code: 'created_pending',
+      instanceId: 'fi-004',
+      reason: 'mesh generation error'
+    });
+
+    assert.equal(btnInsert.disabled, false);
+    const refreshCall = sandbox.__bridge.find((c) => c.action === 'get_project_furniture');
+    assert.ok(refreshCall, 'must request project furniture list on created_pending');
+
+    const activePane = el(sandbox, 'pane-project');
+    assert.ok(activePane.classList.contains('active'), 'must switch to pane-project on created_pending');
+
+    assert.equal(sandbox.window.GraneteDialog.getCatalogCreateIntentKey(), null,
+                 'created_pending is terminal for catalog intent and must clear the key');
   });
 
   return tests;

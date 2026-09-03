@@ -37,6 +37,29 @@ module Granete
             }
           end
 
+          def build_panel_payload(model:, binding_store:, service:, catalog_provider:, metadata_store:, logger:)
+            return { 'state' => 'no_model' } unless model
+
+            binding = binding_store.read
+            return { 'state' => 'unbound' } unless binding
+
+            instances = service.list_project_furniture(binding.project_id)
+            working = service.get_working_copy(binding.design_id)
+            state = build(instances, working, definition_names: definition_names(catalog_provider))
+            mark_pending_confirmation(state['items']) do |id|
+              ManagedFurniture.locate(model, metadata_store, id)
+            end
+            { 'state' => 'connected', 'items' => state['items'],
+              'pending' => state['pending'], 'placed' => state['placed'] }
+          rescue Service::Error => e
+            { 'state' => error_state(e), 'reason' => e.message }
+          rescue Contract::ContractError => e
+            { 'state' => 'bad_contract', 'reason' => e.message }
+          rescue StandardError => e
+            logger.error('project_furniture_panel_failed', error: e)
+            { 'state' => 'error', 'reason' => e.message }
+          end
+
           # Flags rows whose unit has a local root but no working item yet:
           # the honest 'confirm your final position' state.
           def mark_pending_confirmation(rows)

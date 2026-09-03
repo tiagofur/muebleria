@@ -153,7 +153,7 @@ class ApplicationTest < Minitest::Test
 
     expected_callbacks = %w[
       adopt_binding_base cancel_placement_instance close_dialog confirm_placement_instance
-      connect_model delete_selected_furniture dialog_ready enroll
+      connect_model create_project_furniture delete_selected_furniture dialog_ready enroll
       get_catalog get_model_binding get_project_furniture insert_furniture
       list_binding_designs list_binding_projects logout open_material_selector
       place_furniture_instance poll_enrollment refresh_media_url refresh_model_binding

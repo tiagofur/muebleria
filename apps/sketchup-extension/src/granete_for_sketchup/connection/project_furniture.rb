@@ -38,9 +38,10 @@ module Granete
           value.is_a?(String) && value.match?(UUID_PATTERN)
         end
 
-        # HTTP client for the #389 surface: project furniture list (with the
-        # server-computed display summary) and the design working copy
-        # (GET + merge-PUT). Typed errors only — never message parsing.
+        # HTTP client for the #389 / #390 surface: project furniture list,
+        # design-first identity creation (POST /furniture-instances with
+        # server-authoritative origin='design' and Idempotency-Key) and the
+        # design working copy (GET + merge-PUT). Typed errors only.
         class Service
           class Error < StandardError
             attr_reader :kind, :status
@@ -63,6 +64,19 @@ module Granete
             Contract.parse_instances!(body)
           end
 
+          # #390 / DT-6: Allocates an authoritative project-owned FurnitureInstance
+          # identity on the backend before SketchUp places the physical component.
+          # The backend assigns server-authoritative origin='design' and returns 201.
+          # IdempotencyKey is sent to guarantee retry safety.
+          def create_furniture_instance(project_id, definition_id: nil, idempotency_key: nil)
+            payload = {}
+            payload['furniture_definition_id'] = definition_id if definition_id && !definition_id.to_s.strip.empty?
+            headers = {}
+            headers['Idempotency-Key'] = idempotency_key if idempotency_key && !idempotency_key.to_s.strip.empty?
+            body = request(:post, "/projects/#{project_id}/furniture-instances", payload, extra_headers: headers)
+            Contract.parse_instance!(body)
+          end
+
           def get_working_copy(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy")
             Contract::WorkingCopyContract.parse_working_copy!(body)
@@ -81,18 +95,20 @@ module Granete
 
           private
 
-          def request(method, path, body = nil)
+          def request(method, path, body = nil, extra_headers: nil)
             raise Error.new(:unauthenticated, 'sin sesión iniciada') unless @auth_provider.configured?
 
             payload = { 'method' => method.to_s.upcase, 'path' => path, 'headers' => {} }
             payload['body'] = body if body
             auth = @auth_provider.authorization_header
             payload['headers']['Authorization'] = auth if auth
+            payload['headers'].merge!(extra_headers) if extra_headers
 
             response = @transport.request(payload)
             status = response['status'].to_i
             case status
-            when 200 then response['body']
+            when 200, 201 then response['body']
+            when 400 then raise Error.new(:bad_request, error_message(response), status: status)
             when 401 then raise Error.new(:unauthenticated, 'sesión expirada o inválida', status: status)
             when 403 then raise Error.new(:unauthorized, 'no tenés permiso para este proyecto o diseño', status: status)
             when 404 then raise Error.new(:not_found, 'proyecto, diseño o mueble inexistente', status: status)
@@ -106,6 +122,136 @@ module Granete
 
           def conflict_message(response)
             response.dig('body', 'error', 'message') || 'el diseño cambió en el servidor'
+          end
+
+          def error_message(response)
+            response.dig('body', 'error', 'message') || response.dig('body', 'message') || 'solicitud inválida'
+          end
+        end
+
+        # Reusable placement revalidation and lifecycle guards (#389 §15).
+        module PlacementGuards
+          module_function
+
+          def placement_context(binding_store, model_binding_service)
+            binding = binding_store.read
+            unless binding
+              return { 'ok' => false, 'code' => 'unbound',
+                       'reason' => 'conectá este modelo a un proyecto y diseño primero' }
+            end
+
+            validate_binding_current(binding, model_binding_service) || { 'ok' => true, 'binding' => binding }
+          end
+
+          def validate_binding_current(binding, model_binding_service)
+            validation = model_binding_service.validate(project_id: binding.project_id,
+                                                        design_id: binding.design_id,
+                                                        base_revision_id: binding.base_revision_id)
+            state = ModelBinding::State.derive(stored: binding, validation: validation)
+            return nil if state == 'connected'
+
+            remediation = state == 'stale_base' ? 'actualizá la base de trabajo en la pestaña Estado' : nil
+            { 'ok' => false, 'code' => state,
+              'reason' => remediation || 'el enlace del modelo no permite editar este diseño' }
+          rescue ModelBinding::Service::Error => e
+            { 'ok' => false, 'code' => ModelBinding::State.derive(stored: binding, error: e), 'reason' => e.message }
+          end
+
+          def validate_instance_active(service, binding, furniture_instance_id)
+            instance = service.list_project_furniture(binding.project_id).find { |c| c.id == furniture_instance_id }
+            unless instance
+              return { 'ok' => false, 'code' => 'not_found',
+                       'reason' => 'el mueble no pertenece al proyecto conectado' }
+            end
+            if instance.lifecycle_status != 'active'
+              return { 'ok' => false, 'code' => 'terminal',
+                       'reason' => 'el mueble fue eliminado del proyecto' }
+            end
+
+            { 'ok' => true, 'unit' => instance }
+          end
+
+          def resolve_unit(service, binding, furniture_instance_id, located)
+            guard = validate_instance_active(service, binding, furniture_instance_id)
+            return guard unless guard['ok']
+            if located['duplicates'] > 1
+              return { 'ok' => false, 'code' => 'duplicate_detected', 'reason' => DUPLICATE_MESSAGE }
+            end
+
+            if located['entity']
+              working = service.get_working_copy(binding.design_id)
+              confirmed = working.items.any? { |item| item.furniture_instance_id == furniture_instance_id }
+              return { 'ok' => true,
+                       'code' => confirmed ? 'already_placed' : 'pending_confirmation',
+                       'instanceId' => furniture_instance_id }
+            end
+
+            { 'ok' => true, 'unit' => guard['unit'] }
+          end
+
+          def confirm_entity_guard(located, intent)
+            if located['duplicates'] > 1
+              return { 'ok' => false, 'code' => 'duplicate_detected', 'reason' => DUPLICATE_MESSAGE }
+            end
+            unless located['entity']
+              return { 'ok' => false, 'code' => 'not_placed',
+                       'reason' => 'el mueble no está en el modelo; colocálo primero' }
+            end
+            unless intent
+              return { 'ok' => false, 'code' => 'intent_mismatch',
+                       'reason' => 'la identidad del mueble no coincide; colocálo de nuevo' }
+            end
+
+            { 'ok' => true }
+          end
+        end
+
+        # Helpers for design-first backend instance creation (#390 DT-6).
+        module PlacementCreation
+          module_function
+
+          def prepare_unit(catalog_provider, definition_id, parameters, material_choices)
+            definition = catalog_provider.find_definition(definition_id)
+            unless definition
+              return { 'ok' => false, 'code' => 'definition_unavailable',
+                       'reason' => 'el catálogo del taller no incluye la definición de este mueble' }
+            end
+
+            params = WorkingCopyMerger.catalog_parameters(definition, parameters)
+            layout = WorkingCopyMerger.resolve_layout(catalog_provider, definition, params, material_choices)
+            { 'ok' => true, 'definition' => definition, 'params' => params, 'layout' => layout }
+          end
+
+          def fallback_idempotency_key(key)
+            stripped = key.to_s.strip
+            return stripped unless stripped.empty?
+
+            "idem-#{(Time.now.to_f * 1000).to_i}-#{rand(0xffff).to_s(16)}#{rand(0xffff).to_s(16)}"
+          end
+        end
+
+        # Retains pending catalog authoring intent across local insertion failures
+        # so recovery placement reuses the selected parameters/material choices (#390).
+        class IntentStore
+          def initialize
+            @intents = {}
+          end
+
+          def store(instance_id, parameters:, material_choices:)
+            return unless instance_id
+
+            @intents[instance_id.to_s] = {
+              'parameters' => parameters || {},
+              'material_choices' => material_choices || {}
+            }
+          end
+
+          def fetch(instance_id)
+            @intents[instance_id.to_s]
+          end
+
+          def clear(instance_id)
+            @intents.delete(instance_id.to_s)
           end
         end
 
@@ -125,9 +271,11 @@ module Granete
         # fails loud; drifted_base/archived/auth states fail BEFORE anything is
         # placed or synced.
         class Placer
+          attr_reader :intent_store
+
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,
-                         furniture_builder_factory:, logger: SafeLogger.new)
+                         furniture_builder_factory:, intent_store: IntentStore.new, logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @model_binding_service = model_binding_service
@@ -135,6 +283,7 @@ module Granete
             @metadata_store_factory = metadata_store_factory
             @catalog_provider = catalog_provider
             @furniture_builder_factory = furniture_builder_factory
+            @intent_store = intent_store
             @logger = logger
           end
 
@@ -167,6 +316,41 @@ module Granete
             failure(:place_failed, e.message)
           end
 
+          # #390 / DT-6: Design-first creation and placement from catalog.
+          # Flow:
+          #   1. context guard: model active, binding connected & current.
+          #   2. definition guard: definition found in catalog.
+          #   3. normalize parameters & resolve layout server-side.
+          #   4. create authoritative identity on backend FIRST:
+          #      POST /projects/{projectId}/furniture-instances with Idempotency-Key
+          #      server mints FurnitureInstance.id with origin='design'.
+          #   5. insert into SketchUp top-level root stamped with THAT SAME id.
+          #   6. returns pending_position with instanceId.
+          # If backend fails: no local root is inserted (fails loud).
+          # If local placement fails: backend identity remains in project (pending),
+          #   never rolled back/deleted destructively from backend.
+          def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil)
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            context = placement_context(model)
+            return context unless context['ok']
+
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
+            return prep unless prep['ok']
+
+            execute_created_placement(model, context['binding'], prep, idempotency_key, material_choices)
+          rescue Service::Error => e
+            failure(:service_error, e.message)
+          rescue PlacementResolutionError => e
+            failure(:resolution_failed, e.message)
+          rescue Contract::ContractError => e
+            failure(:bad_contract, e.message)
+          rescue StandardError => e
+            @logger.error('project_furniture_create_and_place_failed', error: e)
+            failure(:place_failed, e.message)
+          end
+
           # Step 2 — completes a pending placement with the position and
           # orientation the user FINALIZED in the host. Reads the root's
           # current transformation, converts it to the canonical Transform3D
@@ -182,18 +366,16 @@ module Granete
             return context unless context['ok']
 
             located = locate_unit(model, furniture_instance_id)
-            return failure(:duplicate_detected, DUPLICATE_MESSAGE) if located['duplicates'] > 1
-            return failure(:not_placed, 'el mueble no está en el modelo; colocálo primero') unless located['entity']
-
             entity = located['entity']
-            intent = placement_intent(entity, furniture_instance_id)
-            return failure(:intent_mismatch, 'la identidad del mueble no coincide; colocálo de nuevo') unless intent
+            intent = entity ? placement_intent(entity, furniture_instance_id) : nil
+            guard = PlacementGuards.confirm_entity_guard(located, intent)
+            return guard unless guard['ok']
 
-            guard = validate_instance_active(context['binding'], furniture_instance_id)
-            unless guard['ok']
+            active_guard = validate_instance_active(context['binding'], furniture_instance_id)
+            unless active_guard['ok']
               builder = @furniture_builder_factory.call(model)
               rollback_local(model, builder, entity, furniture_instance_id)
-              return guard
+              return active_guard
             end
 
             sync_placement(model, context['binding'], furniture_instance_id, entity)
@@ -235,63 +417,51 @@ module Granete
           # explicitly, never as success.
           def panel
             model = @model_provider.call
-            return { 'state' => 'no_model' } unless model
-
-            binding = @binding_store_factory.call.read
-            return { 'state' => 'unbound' } unless binding
-
-            instances = @service.list_project_furniture(binding.project_id)
-            working = @service.get_working_copy(binding.design_id)
-            state = PanelState.build(instances, working,
-                                     definition_names: PanelState.definition_names(@catalog_provider))
-            PanelState.mark_pending_confirmation(state['items']) do |id|
-              locate_unit(model, id)
-            end
-            { 'state' => 'connected', 'items' => state['items'],
-              'pending' => state['pending'], 'placed' => state['placed'] }
-          rescue Service::Error => e
-            { 'state' => PanelState.error_state(e), 'reason' => e.message }
-          rescue Contract::ContractError => e
-            { 'state' => 'bad_contract', 'reason' => e.message }
-          rescue StandardError => e
-            @logger.error('project_furniture_panel_failed', error: e)
-            { 'state' => 'error', 'reason' => e.message }
+            metadata_store = model ? @metadata_store_factory.call(model) : nil
+            PanelState.build_panel_payload(
+              model: model,
+              binding_store: @binding_store_factory.call,
+              service: @service,
+              catalog_provider: @catalog_provider,
+              metadata_store: metadata_store,
+              logger: @logger
+            )
           end
 
           private
+
+          def execute_created_placement(model, binding, prep, idempotency_key, material_choices)
+            key = PlacementCreation.fallback_idempotency_key(idempotency_key)
+            created = @service.create_furniture_instance(
+              binding.project_id,
+              definition_id: prep['definition']['furniture_definition_id'],
+              idempotency_key: key
+            )
+            @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices)
+
+            located = locate_unit(model, created.id)
+            return { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created.id } if located['entity']
+
+            inserted = insert_physical_unit(model, binding, created, prep['definition'],
+                                            prep['params'], material_choices, prep['layout'])
+            unless inserted['ok']
+              msg = "el mueble se creó en el proyecto (#{created.id}) pero falló su inserción local: " \
+                    "#{inserted['reason']}"
+              return { 'ok' => false, 'code' => 'created_pending', 'instanceId' => created.id, 'reason' => msg }
+            end
+
+            inserted
+          end
 
           # Phase 1 — binding + authoritative revalidation. Fails loud
           # (unbound / drifted-base / archived / auth) BEFORE anything is
           # placed or synced (#389 §15).
           def placement_context(_model)
-            binding = @binding_store_factory.call.read
-            return failure(:unbound, 'conectá este modelo a un proyecto y diseño primero') unless binding
-
-            validate_binding_current(binding) || { 'ok' => true, 'binding' => binding }
-          end
-
-          # Fail-loud base guard (#389 §15): placement never proceeds on a
-          # drifted-base/archived/foreign binding even if the list endpoints
-          # would still answer. Uses the #388 state machine verbatim.
-          def validate_binding_current(binding)
-            validation = @model_binding_service.validate(project_id: binding.project_id,
-                                                         design_id: binding.design_id,
-                                                         base_revision_id: binding.base_revision_id)
-            state = ModelBinding::State.derive(stored: binding, validation: validation)
-            return nil if state == 'connected'
-
-            remediation = state == 'stale_base' ? 'actualizá la base de trabajo en la pestaña Estado' : nil
-            failure(state, remediation || 'el enlace del modelo no permite editar este diseño')
-          rescue ModelBinding::Service::Error => e
-            failure(ModelBinding::State.derive(stored: binding, error: e), e.message)
+            PlacementGuards.placement_context(@binding_store_factory.call, @model_binding_service)
           end
 
           def validate_instance_active(binding, furniture_instance_id)
-            instance = @service.list_project_furniture(binding.project_id).find { |c| c.id == furniture_instance_id }
-            return failure(:not_found, 'el mueble no pertenece al proyecto conectado') unless instance
-            return failure(:terminal, 'el mueble fue eliminado del proyecto') if instance.lifecycle_status != 'active'
-
-            { 'ok' => true, 'unit' => instance }
+            PlacementGuards.validate_instance_active(@service, binding, furniture_instance_id)
           end
 
           # Phase 2 — resolve the exact unit from the AUTHORITATIVE project
@@ -300,22 +470,9 @@ module Granete
           # A local root that is NOT yet in the working copy is a placement
           # awaiting position confirmation — resume it instead of duplicating.
           def resolve_unit(binding, furniture_instance_id)
-            guard = validate_instance_active(binding, furniture_instance_id)
-            return guard unless guard['ok']
-
             model = @model_provider.call
             located = locate_unit(model, furniture_instance_id)
-            return failure(:duplicate_detected, DUPLICATE_MESSAGE) if located['duplicates'] > 1
-
-            if located['entity']
-              working = @service.get_working_copy(binding.design_id)
-              confirmed = working.items.any? { |item| item.furniture_instance_id == furniture_instance_id }
-              return { 'ok' => true,
-                       'code' => confirmed ? 'already_placed' : 'pending_confirmation',
-                       'instanceId' => furniture_instance_id }
-            end
-
-            { 'ok' => true, 'unit' => guard['unit'] }
+            PlacementGuards.resolve_unit(@service, binding, furniture_instance_id, located)
           end
 
           # Phase 3 — server-authoritative resolve + one undoable TOP-LEVEL
@@ -328,12 +485,17 @@ module Granete
                              'el catálogo del taller no incluye la definición de este mueble')
             end
 
-            parameters = WorkingCopyMerger.placement_parameters(instance, definition)
-            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, parameters)
+            pending = @intent_store.fetch(instance.id)
+            params = pending ? pending['parameters'] : WorkingCopyMerger.placement_parameters(instance, definition)
+            choices = pending ? pending['material_choices'] : {}
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
+            insert_physical_unit(model, binding, instance, definition, params, choices, layout)
+          end
 
+          def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout)
             result = @furniture_builder_factory.call(model).place_existing_furniture(
               model, furniture_instance_id: instance.id, definition: definition,
-                     parameters: parameters, resolved_layout: layout,
+                     parameters: parameters, resolved_layout: layout, material_choices: choices,
                      project_id: binding.project_id, design_id: binding.design_id
             )
             return failure(:placement_failed, result['error']) unless result['success']
@@ -351,11 +513,12 @@ module Granete
           def sync_placement(model, binding, furniture_instance_id, entity)
             working = @service.get_working_copy(binding.design_id)
             intent = placement_intent(entity, furniture_instance_id) || {}
-            locator = persistent_locator(entity)
+            locator = ManagedFurniture.persistent_locator(entity)
             merged = WorkingCopyMerger.merge(working, furniture_instance_id, entity,
                                              intent: intent, locator: locator)
             @service.update_working_copy(binding.design_id, items: merged,
                                                             base_revision_id: binding.base_revision_id)
+            @intent_store.clear(furniture_instance_id)
             @logger.info('project_furniture_placed',
                          furniture_instance_id: furniture_instance_id,
                          project_id: binding.project_id, design_id: binding.design_id)
@@ -387,12 +550,6 @@ module Granete
 
           def locate_unit(model, furniture_instance_id)
             ManagedFurniture.locate(model, @metadata_store_factory.call(model), furniture_instance_id)
-          end
-
-          def persistent_locator(entity)
-            return nil unless entity.respond_to?(:persistent_id) && entity.persistent_id
-
-            { 'kind' => 'sketchup_persistent_id', 'value' => entity.persistent_id.to_s }
           end
 
           def rollback_local(model, builder, entity, furniture_instance_id)

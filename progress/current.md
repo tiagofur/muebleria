@@ -1,11 +1,12 @@
-# Feature activa: F208 (#389 DT-5) — Project Furniture panel + Place existing en SketchUp
+# Feature activa: #390 DT-6 — Catalog → Backend FurnitureInstance → SketchUp → DesignWorkingCopy
 
 - Actualizado: 2026-09-03 America/Mexico_City
 - F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
-  slice DT-5 en modo Demo Commercial Rescue sobre `feat/389-project-furniture-panel`.
-- F208 implementada COMPLETE (pending review/merge): panel "Proyecto" separado
-  del Catálogo, place existing identity-preserving con merge del working copy
-  y rollback local en fallo. Detalle: `progress/implementation_389_dt5.md`.
+  slice DT-6 en modo Demo Commercial Rescue sobre `feat/390-catalog-backend-furniture-instance`.
+- #390 implementada COMPLETE: flujo Design-first desde el catálogo de SketchUp,
+  creando primero el FurnitureInstance autoritativo en Backend (origin='design'),
+  colocando esa misma entidad en el modelo y persistiendo parámetros y materiales
+  en el DesignWorkingCopy. Detalle: `progress/implementation_390_dt6.md`.
 
 ## Historial previo — F202/#460 Organization Foundation P0
 
