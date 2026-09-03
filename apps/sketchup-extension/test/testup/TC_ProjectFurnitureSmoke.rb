@@ -105,6 +105,22 @@ module Granete
         assert_equal 2, located['duplicates'], 'a copied root keeps the same business id'
       end
 
+      def test_duplicate_identity_detected_by_resolver_publish_precheck
+        first = builder.place_existing_furniture(
+          model, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
+        )
+        assert first['success'], first.inspect
+
+        model.selection.clear
+        model.selection.add(first['entity'])
+        model.active_entities.add_instance(first['entity'].definition, first['entity'].transformation)
+
+        precheck = Connection::DuplicateResolver.validate_model(model)
+        refute precheck['valid'], 'precheck must reject duplicate business identity'
+        assert_equal 'duplicate_furniture_identity', precheck['code']
+      end
+
       def test_two_units_of_same_definition_keep_distinct_identities
         first = builder.place_existing_furniture(
           model, furniture_instance_id: FI_1, definition: catalog_definition,

@@ -77,6 +77,18 @@ module Granete
             Contract.parse_instance!(body)
           end
 
+          # #391 / DT-7: Duplicates an existing project-owned FurnitureInstance
+          # on the backend. The backend assigns server-authoritative origin='duplicate'
+          # and origin_furniture_instance_id referencing the source instance, returning 201.
+          # IdempotencyKey is sent to guarantee retry safety.
+          def duplicate_furniture_instance(project_id, instance_id, idempotency_key: nil)
+            headers = {}
+            headers['Idempotency-Key'] = idempotency_key if idempotency_key && !idempotency_key.to_s.strip.empty?
+            body = request(:post, "/projects/#{project_id}/furniture-instances/#{instance_id}:duplicate", {},
+                           extra_headers: headers)
+            Contract.parse_instance!(body)
+          end
+
           def get_working_copy(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy")
             Contract::WorkingCopyContract.parse_working_copy!(body)
@@ -271,7 +283,7 @@ module Granete
         # fails loud; drifted_base/archived/auth states fail BEFORE anything is
         # placed or synced.
         class Placer
-          attr_reader :intent_store
+          attr_reader :intent_store, :service
 
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,

@@ -5,14 +5,16 @@ module Granete
     class Application
       attr_reader :auth_provider, :transport, :session
 
-      def initialize(
+      def initialize( # rubocop:disable Metrics/MethodLength
         transport: nil,
         auth_provider: nil,
         logger: SafeLogger.new,
         session_provider: nil,
         catalog_provider: nil,
         model_binding_connector: nil,
-        project_furniture_placer: nil
+        project_furniture_placer: nil,
+        duplicate_resolver: nil,
+        entities_observer: nil
       )
         @logger = logger
         @session = session_provider || Auth::DeviceProvider.new(logger: logger)
@@ -36,6 +38,18 @@ module Granete
         @project_furniture_placer = project_furniture_placer || build_project_furniture_placer(
           resolved_catalog_provider
         )
+        @duplicate_resolver = duplicate_resolver || Connection::DuplicateResolver.new(
+          model_provider: method(:active_model),
+          binding_store_factory: -> { Connection::ModelBinding::Store.new(active_model) },
+          model_binding_service: @model_binding_connector.service,
+          service: @project_furniture_placer.service,
+          metadata_store_factory: method(:metadata_store),
+          logger: @logger
+        )
+        @entities_observer = entities_observer || Observers::EntitiesObserver.new(
+          duplicate_resolver: @duplicate_resolver,
+          model_provider: method(:active_model)
+        )
         @dialog = UserInterface::DialogController.new(
           logger: logger,
           status_provider: method(:connection_status),
@@ -43,7 +57,9 @@ module Granete
           catalog_provider: resolved_catalog_provider,
           session: @session,
           model_binding_connector: @model_binding_connector,
-          project_furniture_placer: @project_furniture_placer
+          project_furniture_placer: @project_furniture_placer,
+          duplicate_resolver: @duplicate_resolver,
+          entities_observer: @entities_observer
         )
         @lifecycle = Lifecycle.new(
           open_dialog: method(:open_dialog),
@@ -85,7 +101,7 @@ module Granete
 
       # The model binding always resolves against whichever document is
       # active at call time, so switching models switches binding context.
-      attr_reader :model_binding_connector
+      attr_reader :model_binding_connector, :duplicate_resolver, :entities_observer
 
       private
 

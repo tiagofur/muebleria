@@ -273,6 +273,8 @@ type Store interface {
 	// label + quoted-or-default dimensions for authoring-client panels.
 	ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]storage.FurnitureInstanceSummary, error)
 	RemoveFurnitureInstance(ctx context.Context, cmd storage.RemoveFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
+	// #391 / DT-7: duplicate an existing project furniture instance within the same project.
+	DuplicateFurnitureInstance(ctx context.Context, cmd storage.DuplicateFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
 
 	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2, ADR-0003): the
 	// explicit link answering which physical units a quote line represents;

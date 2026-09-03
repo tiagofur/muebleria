@@ -22,6 +22,7 @@ module Granete
         connection/panel_state
         connection/project_furniture_contract
         connection/project_furniture
+        connection/duplicate_resolver
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract
@@ -39,6 +40,7 @@ module Granete
         selection/capability_policy
         selection/resolver
         observers/selection_observer
+        observers/entities_observer
         ui/option_selector_controller
         ui/migration_review_controller
         ui/dialog_controller

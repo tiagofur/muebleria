@@ -315,6 +315,10 @@ module SketchupStub
       true
     end
 
+    def model
+      SketchupStub.active_model
+    end
+
     # Host-faithful ComponentInstance#make_unique: isolate this instance from
     # any siblings that share its definition while preserving object identity
     # and transformation. The builder immediately replaces the copied contents,
@@ -433,6 +437,15 @@ module SketchupStub
       @groups = []
       @instances = []
       @faces = []
+      @observers = []
+    end
+
+    def add_observer(observer)
+      @observers << observer unless @observers.include?(observer)
+    end
+
+    def remove_observer(observer)
+      @observers.delete(observer)
     end
 
     def each(&block)
@@ -445,6 +458,7 @@ module SketchupStub
       when ComponentInstanceStub then @instances << item
       when FaceStub then @faces << item
       end
+      @observers.dup.each { |obs| obs.onElementAdded(self, item) if obs.respond_to?(:onElementAdded) }
       item
     end
 
@@ -547,9 +561,9 @@ module SketchupStub
   end
 
   class << self
-    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :active_model, :toolbars,
+    attr_reader :loaded_files, :menus, :observers, :registered_extensions, :toolbars,
                 :send_actions
-    attr_accessor :preferences
+    attr_accessor :preferences, :active_model
 
     def reset!
       @loaded_files = {}
@@ -619,6 +633,9 @@ module Sketchup
   end
 
   class SelectionObserver
+  end
+
+  class EntitiesObserver
   end
 
   def self.register_extension(extension, enabled)

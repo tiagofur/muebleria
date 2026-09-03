@@ -191,7 +191,7 @@ module Granete
       # touches business identity — listing and Place existing go through the
       # ProjectFurniture placer, which validates the binding and derives
       # pending/placed from the design working copy.
-      module ProjectFurnitureBridge
+      module ProjectFurnitureBridge # rubocop:disable Metrics/ModuleLength
         def register_project_furniture_callbacks(dialog)
           dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
           dialog.add_action_callback('place_furniture_instance') { |_c, p| handle_place_furniture_instance(dialog, p) }
@@ -203,6 +203,12 @@ module Granete
             handle_cancel_placement_instance(dialog, p)
           end
           dialog.add_action_callback('select_project_furniture') { |_c, p| handle_select_project_furniture(p) }
+          dialog.add_action_callback('validate_managed_furniture_identity') do
+            handle_validate_managed_furniture_identity(dialog)
+          end
+          dialog.add_action_callback('rescan_duplicates') do
+            handle_rescan_duplicates(dialog)
+          end
         end
 
         # Panel payload: binding-aware rows with pending/placed derived per
@@ -299,10 +305,43 @@ module Granete
           handle_get_project_furniture(@dialog) if @dialog&.visible?
         end
 
+        # #391 / DT-7: Publish precheck for managed furniture identity.
+        def handle_validate_managed_furniture_identity(dialog)
+          result = if duplicate_resolver
+                     duplicate_resolver.validate_model(active_model)
+                   else
+                     { 'valid' => true, 'code' => 'valid' }
+                   end
+          execute_bridge(dialog, 'onValidateFurnitureIdentityResult', result)
+        rescue StandardError => e
+          @logger.error('validate_managed_furniture_identity_failed', error: e)
+          execute_bridge(dialog, 'onValidateFurnitureIdentityResult',
+                         { 'valid' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #391 / DT-7: Rescan and resolve all duplicate identities in the model.
+        def handle_rescan_duplicates(dialog)
+          result = if duplicate_resolver
+                     duplicate_resolver.rescan_and_resolve(active_model)
+                   else
+                     { 'ok' => false, 'code' => 'resolver_unavailable' }
+                   end
+          execute_bridge(dialog, 'onRescanDuplicatesResult', result)
+          handle_get_project_furniture(dialog)
+        rescue StandardError => e
+          @logger.error('rescan_duplicates_failed', error: e)
+          execute_bridge(dialog, 'onRescanDuplicatesResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
         private
 
         def project_furniture_placer
           @project_furniture_placer
+        end
+
+        def duplicate_resolver
+          @duplicate_resolver
         end
       end
 
@@ -641,11 +680,13 @@ module Granete
         def attach_selection_observer
           @observed_model = active_model
           @observed_model&.selection&.add_observer(@selection_observer)
+          @observed_model&.entities&.add_observer(@entities_observer) if @entities_observer
           attach_app_observer
         end
 
         def detach_selection_observer
           @observed_model&.selection&.remove_observer(@selection_observer)
+          @observed_model&.entities&.remove_observer(@entities_observer) if @entities_observer
           @observed_model = nil
           detach_app_observer
         end
@@ -654,8 +695,10 @@ module Granete
           return if @observed_model.equal?(new_model)
 
           @observed_model&.selection&.remove_observer(@selection_observer)
+          @observed_model&.entities&.remove_observer(@entities_observer) if @entities_observer
           @observed_model = new_model
           @observed_model&.selection&.add_observer(@selection_observer)
+          @observed_model&.entities&.add_observer(@entities_observer) if @entities_observer
           @builder_model = nil
           check_current_selection(@dialog) if @dialog&.visible?
           refresh_binding_status
@@ -663,6 +706,7 @@ module Granete
           # model is active (#389): switching documents refreshes its rows.
           refresh_project_furniture
           offer_migration_if_legacy(new_model)
+          @duplicate_resolver&.rescan_and_resolve(new_model)
         end
 
         def attach_app_observer
@@ -753,16 +797,20 @@ module Granete
         include ObserverBridge
         include MigrationBridge
 
-        attr_reader :selection_observer
+        attr_reader :selection_observer, :entities_observer, :duplicate_resolver
 
+        # rubocop:disable Metrics/ParameterLists
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
                        migration_review_controller: nil, model_binding_connector: nil,
-                       project_furniture_placer: nil)
+                       project_furniture_placer: nil, duplicate_resolver: nil, entities_observer: nil)
+          # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
           @model_binding_connector = model_binding_connector
           @project_furniture_placer = project_furniture_placer
+          @duplicate_resolver = duplicate_resolver
+          @entities_observer = entities_observer
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store

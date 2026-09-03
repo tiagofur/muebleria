@@ -2395,6 +2395,47 @@
         }
       }
     },
+    "/projects/{projectId}/furniture-instances/{instanceId}:duplicate": {
+      "post": {
+        "summary": "Duplicate an existing project furniture instance (#391, idempotent)",
+        "operationId": "duplicateProjectFurnitureInstance",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/FurnitureInstanceId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Furniture instance duplicated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FurnitureInstance"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/quote-lines/{quoteLineId}/furniture-instances": {
       "get": {
         "operationId": "listQuoteLineFurnitureInstances",

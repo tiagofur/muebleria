@@ -1,12 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -339,3 +341,190 @@ func TestHandleProjectFurnitureInstances_CreateExtensionClientSetsOriginDesign(t
 	}
 }
 
+func TestHandleFurnitureInstanceDuplicate_HappyPath(t *testing.T) {
+	sourceID := "60000000-0000-0000-0000-000000000001"
+	store := &stubStore{
+		furnitureInstancesByID: map[string]domain.FurnitureInstance{
+			sourceID: {
+				ID:                    sourceID,
+				ProjectID:             fiTestProjectID,
+				FurnitureDefinitionID: "50000000-0000-0000-0000-000000000001",
+				Origin:                domain.FurnitureInstanceOriginDesign,
+				LifecycleStatus:       domain.FurnitureInstanceLifecycleActive,
+				Version:               1,
+			},
+		},
+	}
+	srv := &Server{Store: store}
+	router := projectFurnitureInstanceCommandRouter(map[string]http.Handler{
+		"duplicate": http.HandlerFunc(srv.HandleFurnitureInstanceDuplicate),
+	})
+
+	req := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances/"+sourceID+":duplicate", "", string(domain.RoleAdmin))
+	req.SetPathValue("projectId", fiTestProjectID)
+	req.SetPathValue("instanceCommand", sourceID+":duplicate")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if rr.Header().Get("ETag") == "" {
+		t.Fatal("response must set ETag")
+	}
+	if store.duplicateFurnitureInstanceCmd == nil {
+		t.Fatal("store must receive duplicate command")
+	}
+	cmd := *store.duplicateFurnitureInstanceCmd
+	if cmd.ProjectID != fiTestProjectID || cmd.SourceFurnitureInstanceID != sourceID {
+		t.Fatalf("command mismatch: %+v", cmd)
+	}
+
+	var dto openapi.FurnitureInstance
+	if err := json.Unmarshal(rr.Body.Bytes(), &dto); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if dto.ID != "fi-dup-1" || dto.ProjectID != fiTestProjectID {
+		t.Fatalf("dto mismatch: %+v", dto)
+	}
+	if dto.Origin != openapi.FurnitureInstanceOriginDuplicate {
+		t.Fatalf("origin = %s, want duplicate", dto.Origin)
+	}
+	if dto.OriginFurnitureInstanceID == nil || *dto.OriginFurnitureInstanceID != sourceID {
+		t.Fatalf("originFurnitureInstanceId = %v, want %s", dto.OriginFurnitureInstanceID, sourceID)
+	}
+	if dto.FurnitureDefinitionID == nil || *dto.FurnitureDefinitionID != "50000000-0000-0000-0000-000000000001" {
+		t.Fatalf("definition = %v, want source definition", dto.FurnitureDefinitionID)
+	}
+}
+
+func TestHandleFurnitureInstanceDuplicate_Idempotency(t *testing.T) {
+	backend := newDurableBackend(func() time.Time { return time.Now().UTC() })
+	store := &durableTestStore{backend: backend}
+	sourceID := "60000000-0000-0000-0000-000000000001"
+	store.furnitureInstancesByID = map[string]domain.FurnitureInstance{
+		sourceID: {
+			ID:                    sourceID,
+			ProjectID:             fiTestProjectID,
+			FurnitureDefinitionID: "50000000-0000-0000-0000-000000000001",
+			Origin:                domain.FurnitureInstanceOriginDesign,
+			LifecycleStatus:       domain.FurnitureInstanceLifecycleActive,
+			Version:               1,
+		},
+	}
+
+	srv := &Server{Store: store}
+	handler := srv.RequireIdempotency("project.duplicate-furniture-instance", projectFurnitureInstanceCommandRouter(map[string]http.Handler{
+		"duplicate": http.HandlerFunc(srv.HandleFurnitureInstanceDuplicate),
+	}))
+
+	// First attempt
+	req1 := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances/"+sourceID+":duplicate", "", string(domain.RoleAdmin))
+	req1.SetPathValue("projectId", fiTestProjectID)
+	req1.SetPathValue("instanceCommand", sourceID+":duplicate")
+	req1.Header.Set("Idempotency-Key", "dup-intent-key-12345")
+	rr1 := httptest.NewRecorder()
+	handler.ServeHTTP(rr1, req1)
+
+	if rr1.Code != http.StatusCreated {
+		t.Fatalf("first attempt status = %d, want 201 (body=%s)", rr1.Code, rr1.Body.String())
+	}
+	if store.duplicateFurnitureInstanceCalls != 1 {
+		t.Fatalf("expected 1 call to store, got %d", store.duplicateFurnitureInstanceCalls)
+	}
+
+	// Second attempt with exact same key (replay)
+	req2 := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances/"+sourceID+":duplicate", "", string(domain.RoleAdmin))
+	req2.SetPathValue("projectId", fiTestProjectID)
+	req2.SetPathValue("instanceCommand", sourceID+":duplicate")
+	req2.Header.Set("Idempotency-Key", "dup-intent-key-12345")
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusCreated {
+		t.Fatalf("second attempt status = %d, want 201 (body=%s)", rr2.Code, rr2.Body.String())
+	}
+	if rr2.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatal("second attempt must be marked as Idempotency-Replayed")
+	}
+	if store.duplicateFurnitureInstanceCalls != 1 {
+		t.Fatalf("idempotent replay must NOT call store again, got %d calls", store.duplicateFurnitureInstanceCalls)
+	}
+	if rr1.Body.String() != rr2.Body.String() {
+		t.Fatalf("replayed body mismatch: first=%s, second=%s", rr1.Body.String(), rr2.Body.String())
+	}
+}
+
+func TestHandleFurnitureInstanceDuplicate_RoleGuard(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	sourceID := "60000000-0000-0000-0000-000000000001"
+	req := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances/"+sourceID+":duplicate", "", string(domain.RoleProduccion))
+	req.SetPathValue("projectId", fiTestProjectID)
+	req.SetPathValue("instanceId", sourceID)
+	rr := httptest.NewRecorder()
+
+	srv.HandleFurnitureInstanceDuplicate(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.duplicateFurnitureInstanceCmd != nil {
+		t.Fatal("produccion role must not duplicate furniture instances")
+	}
+}
+
+func TestHandleFurnitureInstanceDuplicate_InvalidUUID(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+
+	// Invalid projectId
+	req1 := fiRequest(http.MethodPost, "/api/projects/not-a-uuid/furniture-instances/60000000-0000-0000-0000-000000000001:duplicate", "", string(domain.RoleAdmin))
+	req1.SetPathValue("projectId", "not-a-uuid")
+	req1.SetPathValue("instanceId", "60000000-0000-0000-0000-000000000001")
+	rr1 := httptest.NewRecorder()
+	srv.HandleFurnitureInstanceDuplicate(rr1, req1)
+	if rr1.Code != http.StatusBadRequest {
+		t.Fatalf("invalid projectId status = %d, want 400", rr1.Code)
+	}
+
+	// Invalid instanceId
+	req2 := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances/not-a-uuid:duplicate", "", string(domain.RoleAdmin))
+	req2.SetPathValue("projectId", fiTestProjectID)
+	req2.SetPathValue("instanceId", "not-a-uuid")
+	rr2 := httptest.NewRecorder()
+	srv.HandleFurnitureInstanceDuplicate(rr2, req2)
+	if rr2.Code != http.StatusBadRequest {
+		t.Fatalf("invalid instanceId status = %d, want 400", rr2.Code)
+	}
+}
+
+func TestHandleFurnitureInstanceDuplicate_Errors(t *testing.T) {
+	sourceID := "60000000-0000-0000-0000-000000000001"
+	cases := []struct {
+		name string
+		err  error
+		code int
+	}{
+		{"not found", storage.ErrFurnitureInstanceNotFound, http.StatusNotFound},
+		{"terminal conflict", domain.ErrFurnitureInstanceLifecycleConflict, http.StatusConflict},
+		{"not writable", domain.ErrFurnitureInstanceProjectNotWritable, http.StatusForbidden},
+		{"invalid command", domain.ErrInvalidFurnitureInstanceCommand, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := &Server{Store: &stubStore{duplicateFurnitureInstanceErr: tc.err}}
+			req := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances/"+sourceID+":duplicate", "", string(domain.RoleAdmin))
+			req.SetPathValue("projectId", fiTestProjectID)
+			req.SetPathValue("instanceId", sourceID)
+			rr := httptest.NewRecorder()
+
+			srv.HandleFurnitureInstanceDuplicate(rr, req)
+
+			if rr.Code != tc.code {
+				t.Fatalf("status = %d, want %d (body=%s)", rr.Code, tc.code, rr.Body.String())
+			}
+		})
+	}
+}

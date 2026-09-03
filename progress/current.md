@@ -1,12 +1,14 @@
-# Feature activa: #390 DT-6 — Catalog → Backend FurnitureInstance → SketchUp → DesignWorkingCopy
+# Feature activa: #391 DT-7 — Detect and resolve duplicated managed furniture identity in SketchUp
 
 - Actualizado: 2026-09-03 America/Mexico_City
 - F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
-  slice DT-6 en modo Demo Commercial Rescue sobre `feat/390-catalog-backend-furniture-instance`.
-- #390 implementada COMPLETE: flujo Design-first desde el catálogo de SketchUp,
-  creando primero el FurnitureInstance autoritativo en Backend (origin='design'),
-  colocando esa misma entidad en el modelo y persistiendo parámetros y materiales
-  en el DesignWorkingCopy. Detalle: `progress/implementation_390_dt6.md`.
+  slice DT-7 en modo Demo Commercial Rescue sobre `feat/391-duplicate-furniture-instance-identity`.
+- #391 implementada COMPLETE: detección de duplicación física de muebles en SketchUp
+  (Copy/Paste/Move+Copy), backend autoritativo crea nueva entidad (origin='duplicate',
+  origin_furniture_instance_id=fuente), reescritura atómica de metadatos exclusivamente
+  sobre la copia manteniendo intacto el original, sincronización con DesignWorkingCopy,
+  manejo explícito de unresolved en caso de desconexión y precheck de validación de
+  identidad antes de publicar (#391 DT-7 §21-22). Detalle: `progress/implementation_391_dt7.md`.
 
 ## Historial previo — F202/#460 Organization Foundation P0
 

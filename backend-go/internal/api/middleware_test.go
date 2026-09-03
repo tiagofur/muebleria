@@ -920,6 +920,9 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		{"place existing writes working copy", http.MethodPut, "/api/designs/" + designID + "/working-copy", true},
 		// #390 / DT-6 grant: catalog design-first identity creation.
 		{"create furniture instance from catalog (#390)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances", true},
+		// #391 / DT-7 grant: duplicate furniture instance.
+		{"duplicate furniture instance (#391)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances/" + projectID + ":duplicate", true},
+		{"remove furniture instance (#385) denied", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", false},
 		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
 		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
 		// Surrounding surface stays closed.
