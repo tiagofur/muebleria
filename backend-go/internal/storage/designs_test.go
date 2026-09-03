@@ -245,14 +245,14 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 		t.Fatalf("create furniture instances: %v", err)
 	}
 
-	// 2. Publish R1.
+	// 2. Publish R1 from working copy.
 	var rev1 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		rev1, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design1.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{
 					FurnitureInstanceID: fi1.ID,
 					Parameters:          map[string]any{"widthMm": 600.0, "heightMm": 720.0},
@@ -279,6 +279,15 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 			},
 			ActorUserID: rlsUserA,
 		})
+		if err != nil {
+			return err
+		}
+
+		rev1, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:    design1.ID,
+			SourceType:  domain.DesignRevisionSourceSketchup,
+			ActorUserID: rlsUserA,
+		})
 		return err
 	})
 	if err != nil {
@@ -302,11 +311,11 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 	var rev2 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		rev2, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:       design1.ID,
-			BaseRevisionID: rev1.ID,
+			BaseRevisionID: &rev1.ID,
 			SourceType:     domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{
 					FurnitureInstanceID: fi1.ID, // Same physical identity!
 					Parameters:          map[string]any{"widthMm": 650.0, "heightMm": 720.0}, // modified width
@@ -318,6 +327,16 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 				},
 			},
 			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+
+		rev2, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:       design1.ID,
+			BaseRevisionID: rev1.ID,
+			SourceType:     domain.DesignRevisionSourceSketchup,
+			ActorUserID:    rlsUserA,
 		})
 		return err
 	})
@@ -340,10 +359,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 			DesignID:       design1.ID,
 			BaseRevisionID: rev1.ID, // STALE! Latest is rev2.
 			SourceType:     domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
-				{FurnitureInstanceID: fi1.ID, Parameters: map[string]any{"widthMm": 600.0}},
-			},
-			ActorUserID: rlsUserA,
+			ActorUserID:    rlsUserA,
 		})
 		return err
 	})
@@ -351,28 +367,24 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 		t.Fatalf("publish with stale base error = %v, want %v", err, domain.ErrDesignRevisionConflict)
 	}
 
-	// 5. Cross-design parent rejection.
+	// 5. Cross-design base rejection on working copy.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:         design2.ID,
-			ParentRevisionID: rev1.ID, // Belongs to design1, not design2!
-			SourceType:       domain.DesignRevisionSourceSketchup,
-			Items:            []storage.PublishDesignRevisionItemCommand{},
-			ActorUserID:      rlsUserA,
+		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:       design2.ID,
+			BaseRevisionID: &rev1.ID, // Belongs to design1, not design2!
+			ActorUserID:    rlsUserA,
 		})
 		return err
 	})
-	if !errors.Is(err, domain.ErrInvalidParentRevision) {
-		t.Fatalf("publish cross-design parent error = %v, want %v", err, domain.ErrInvalidParentRevision)
+	if !errors.Is(err, domain.ErrDesignRevisionNotFound) {
+		t.Fatalf("update working copy with cross-design base error = %v, want %v", err, domain.ErrDesignRevisionNotFound)
 	}
 
-	// 6. Duplicate FurnitureInstance within one revision (Invariant §11).
+	// 6. Duplicate FurnitureInstance in working copy (Invariant §11).
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:       design1.ID,
-			BaseRevisionID: rev2.ID,
-			SourceType:     domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
+		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: design1.ID,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: fi1.ID, Parameters: map[string]any{"widthMm": 600.0}},
 				{FurnitureInstanceID: fi1.ID, Parameters: map[string]any{"widthMm": 700.0}}, // DUPLICATE!
 			},
@@ -381,7 +393,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 		return err
 	})
 	if !errors.Is(err, domain.ErrDuplicateFurnitureInstanceInRevision) {
-		t.Fatalf("publish duplicate FI error = %v, want %v", err, domain.ErrDuplicateFurnitureInstanceInRevision)
+		t.Fatalf("update working copy duplicate FI error = %v, want %v", err, domain.ErrDuplicateFurnitureInstanceInRevision)
 	}
 
 	// 7. Cross-project FurnitureInstance rejection (Invariant §10).
@@ -400,11 +412,9 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 	}
 
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:       design1.ID,
-			BaseRevisionID: rev2.ID,
-			SourceType:     domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
+		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: design1.ID,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: fiInProjectB.ID}, // FI belongs to project B!
 			},
 			ActorUserID: rlsUserA,
@@ -412,7 +422,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 		return err
 	})
 	if !errors.Is(err, domain.ErrCrossProjectFurnitureInstance) && !errors.Is(err, storage.ErrFurnitureInstanceNotFound) {
-		t.Fatalf("publish cross-project FI error = %v, want ErrCrossProjectFurnitureInstance or NotFound", err)
+		t.Fatalf("working copy cross-project FI error = %v, want ErrCrossProjectFurnitureInstance or NotFound", err)
 	}
 
 	// 8. List revisions & Get revision with items.
@@ -468,15 +478,24 @@ func TestDesigns_Immutability(t *testing.T) {
 			return err
 		}
 
-		rev, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{
 					FurnitureInstanceID: fi.ID,
 					Parameters:          map[string]any{"widthMm": 600.0},
 				},
 			},
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+
+		rev, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:    design.ID,
+			SourceType:  domain.DesignRevisionSourceSketchup,
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -558,7 +577,6 @@ func TestDesigns_ConcurrentPublishNumbering(t *testing.T) {
 				revs[idx], pErr = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
 					DesignID:   design.ID,
 					SourceType: domain.DesignRevisionSourceSystem,
-					Items:      []storage.PublishDesignRevisionItemCommand{},
 				})
 				return pErr
 			})
@@ -609,9 +627,8 @@ func TestDesigns_CrossOrgRLS(t *testing.T) {
 		}
 
 		revA, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:   designA.ID,
-			SourceType: domain.DesignRevisionSourceSystem,
-			Items:      []storage.PublishDesignRevisionItemCommand{},
+			DesignID:    designA.ID,
+			SourceType:  domain.DesignRevisionSourceSystem,
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -698,12 +715,21 @@ func TestDesigns_DurableHistoryBlocksQuoteDecrease(t *testing.T) {
 			return err
 		}
 
-		_, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
-			Items: []storage.PublishDesignRevisionItemCommand{
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: targetInstance.ID},
 			},
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:    design.ID,
+			SourceType:  domain.DesignRevisionSourceSketchup,
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -743,7 +769,6 @@ func TestDesigns_DurableAuditRecorded(t *testing.T) {
 		rev, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
 			DesignID:    design.ID,
 			SourceType:  domain.DesignRevisionSourceSystem,
-			Items:       []storage.PublishDesignRevisionItemCommand{},
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -865,14 +890,13 @@ func TestDesigns_WorkingCopy_LifecycleAndDraftPersistence(t *testing.T) {
 		t.Fatalf("revisions count after draft edits = %d, want 0 (err=%v)", revCount, err)
 	}
 
-	// 3. Publish R1 directly from working copy (omitting Items in publish command).
+	// 3. Publish R1 directly from working copy.
 	var rev1 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		rev1, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
 			DesignID:    design.ID,
 			SourceType:  domain.DesignRevisionSourceManual,
-			Items:       nil, // Publishes from current working copy!
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -960,7 +984,6 @@ func TestDesigns_WorkingCopy_LifecycleAndDraftPersistence(t *testing.T) {
 			DesignID:       design.ID,
 			BaseRevisionID: rev1.ID,
 			SourceType:     domain.DesignRevisionSourceManual,
-			Items:          nil, // Publishes from updated working copy!
 			ActorUserID:    rlsUserA,
 		})
 		return err
@@ -1113,6 +1136,7 @@ func TestDesigns_FailClosedOptimisticConcurrency(t *testing.T) {
 }
 
 // Parent revision must preserve a linear coherent chain; branching within the same design is forbidden.
+// The parent revision is strictly and automatically derived from the authoritative latest revision.
 func TestDesigns_LinearParentChainCoherence(t *testing.T) {
 	fx := setupDesignsTestFixture(t)
 	actorA := fiActorA()
@@ -1150,22 +1174,21 @@ func TestDesigns_LinearParentChainCoherence(t *testing.T) {
 		t.Fatalf("setup rev1 and rev2: %v", err)
 	}
 
-	// Branching attempt: declare ParentRevisionID = rev1.ID when latest is rev2.ID.
+	// Stale base / branch attempt: attempting to publish against rev1 when latest is rev2 fails with 409 conflict.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:         design.ID,
-			BaseRevisionID:   rev2.ID,
-			ParentRevisionID: rev1.ID, // conflicting branch attempt!
-			SourceType:       domain.DesignRevisionSourceSystem,
-			ActorUserID:      rlsUserA,
+			DesignID:       design.ID,
+			BaseRevisionID: rev1.ID, // Stale! Attempting to branch from R1 instead of latest R2.
+			SourceType:     domain.DesignRevisionSourceSystem,
+			ActorUserID:    rlsUserA,
 		})
 		return err
 	})
-	if !errors.Is(err, domain.ErrInvalidParentRevision) {
-		t.Fatalf("conflicting parent revision err = %v, want ErrInvalidParentRevision", err)
+	if !errors.Is(err, domain.ErrDesignRevisionConflict) {
+		t.Fatalf("stale base branching attempt err = %v, want ErrDesignRevisionConflict", err)
 	}
 
-	// Deriving parent automatically from latest base revision succeeds and creates linear chain.
+	// Deriving parent automatically from latest base revision succeeds and creates linear chain: R1 -> R2 -> R3.
 	var rev3 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
@@ -1188,7 +1211,7 @@ func TestDesigns_LinearParentChainCoherence(t *testing.T) {
 	}
 }
 
-// Snapshot serialization must fail closed: if snapshot parameters cannot be serialized,
+// Snapshot serialization must fail closed: if working copy parameters cannot be deserialized,
 // publication fails, transaction rolls back, and 0 revisions are created.
 func TestDesigns_SnapshotSerializationFailClosed(t *testing.T) {
 	fx := setupDesignsTestFixture(t)
@@ -1211,28 +1234,44 @@ func TestDesigns_SnapshotSerializationFailClosed(t *testing.T) {
 			Name:        "Serialization Fail-Closed Design",
 			ActorUserID: rlsUserA,
 		})
+		if err != nil {
+			return err
+		}
+
+		// Insert valid item into working copy.
+		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:   design.ID,
+			SourceType: domain.DesignRevisionSourceSystem,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{
+					FurnitureInstanceID: fi.ID,
+					Parameters:          map[string]any{"widthMm": 600.0},
+				},
+			},
+			ActorUserID: rlsUserA,
+		})
 		return err
 	})
 	if err != nil {
-		t.Fatalf("create design: %v", err)
+		t.Fatalf("create design and working copy: %v", err)
 	}
 
-	// Attempt to publish an item with an unserializable value (e.g. channel or function in parameters).
+	// Corrupt material_choices JSON in design_working_items directly in DB to simulate invalid stored schema.
+	ctx := context.Background()
+	_, err = fx.admin.Exec(ctx, `
+		UPDATE design_working_items
+		SET material_choices = '{"CARCASS": 12345}'::jsonb
+		WHERE design_id = $1
+	`, design.ID)
+	if err != nil {
+		t.Fatalf("corrupt working items material_choices: %v", err)
+	}
+
+	// Attempt to publish from the corrupted working copy: must fail-closed with ErrSerializationFailed.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:   design.ID,
-			SourceType: domain.DesignRevisionSourceSystem,
-			Items: []storage.PublishDesignRevisionItemCommand{
-				{
-					FurnitureInstanceID: fi.ID,
-					Parameters: map[string]any{
-						"invalid": make(chan int), // json.Marshal will fail on channel!
-					},
-					Transform: domain.Transform3D{
-						TranslationMm: [3]float64{0, 0, 0},
-					},
-				},
-			},
+			DesignID:    design.ID,
+			SourceType:  domain.DesignRevisionSourceSystem,
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -1242,9 +1281,232 @@ func TestDesigns_SnapshotSerializationFailClosed(t *testing.T) {
 	}
 
 	// Verify transaction rolled back: 0 revisions created!
-	ctx := context.Background()
 	var revCount int
 	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM design_revisions WHERE design_id = $1`, design.ID).Scan(&revCount); err != nil || revCount != 0 {
 		t.Fatalf("revisions count after rollback = %d, want 0 (err=%v)", revCount, err)
+	}
+}
+
+// Mandatory negative and positive proofs for working copy as the sole mutable authority of authoring:
+// 1. Direct publish cannot bypass working copy: working copy contains A. Snapshot produces A; no bypass.
+// 2. Stale working copy: working base = R1, latest = R2 -> 409 conflict, no R3.
+// 3. Missing base: latest = R1, working base = null -> 409 conflict.
+// 4. Correct publish: working base = R1, latest = R1 -> creates R2, parent=R1, snapshot equals working copy, working base advances to R2.
+// 5. R1: latest none, working base null -> creates R1, parent=null, working base advances to R1.
+func TestDesigns_AuthoritativeWorkingCopyPublishProofs(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	actorA := fiActorA()
+
+	var fiA, fiB *domain.FurnitureInstance
+	var design *domain.Design
+
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		fiA, err = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:   fiSharedProject,
+			Origin:      domain.FurnitureInstanceOriginManual,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		fiB, err = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:   fiSharedProject,
+			Origin:      domain.FurnitureInstanceOriginManual,
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		design, err = fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
+			ProjectID:   fiSharedProject,
+			Name:        "Authoritative Working Copy Design",
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("setup design and instances: %v", err)
+	}
+
+	// Proof 5 (R1): latest none, working base null -> publish creates R1 with parent=null, working base advances to R1.
+	var rev1 *domain.DesignRevision
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		// Put item A in working copy (authoring state).
+		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:   design.ID,
+			SourceType: domain.DesignRevisionSourceManual,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{
+					FurnitureInstanceID: fiA.ID,
+					Parameters:          map[string]any{"model": "A", "widthMm": 600.0},
+					MaterialChoices:     map[string]string{"CARCASS": "WHITE-18"},
+				},
+			},
+			ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+
+		rev1, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:    design.ID,
+			SourceType:  domain.DesignRevisionSourceManual,
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("proof 5 (R1 publish): %v", err)
+	}
+	if rev1.RevisionNumber != 1 {
+		t.Fatalf("rev1 revision_number = %d, want 1", rev1.RevisionNumber)
+	}
+	if rev1.ParentRevisionID != "" {
+		t.Fatalf("rev1 parent_revision_id = %q, want empty for R1", rev1.ParentRevisionID)
+	}
+	if len(rev1.Items) != 1 || rev1.Items[0].FurnitureInstanceID != fiA.ID || rev1.Items[0].Parameters["model"] != "A" {
+		t.Fatalf("rev1 snapshot mismatch: %+v", rev1.Items)
+	}
+
+	// Verify working copy base atomically advanced to rev1.ID and working items remain A.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		wc, err := fx.store.GetDesignWorkingCopy(ctx, design.ID)
+		if err != nil {
+			return err
+		}
+		if wc.BaseRevisionID == nil || *wc.BaseRevisionID != rev1.ID {
+			return fmt.Errorf("working copy base_revision_id = %v, want %s", wc.BaseRevisionID, rev1.ID)
+		}
+		if len(wc.Items) != 1 || wc.Items[0].FurnitureInstanceID != fiA.ID {
+			return fmt.Errorf("working items altered after publish: %+v", wc.Items)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Proof 1: Direct publish cannot bypass working copy.
+	// Working copy has item A. Publish does NOT take an items payload; the published snapshot is strictly item A.
+	// Now update working copy to have item B.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:       design.ID,
+			BaseRevisionID: &rev1.ID,
+			SourceType:     domain.DesignRevisionSourceManual,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{
+					FurnitureInstanceID: fiB.ID,
+					Parameters:          map[string]any{"model": "B", "widthMm": 900.0},
+					MaterialChoices:     map[string]string{"CARCASS": "OAK-18"},
+				},
+			},
+			ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("update working copy to B: %v", err)
+	}
+
+	// Proof 4: Correct publish: working base = R1, latest = R1 -> creates R2, parent=R1, snapshot equals working copy (item B), working base advances to R2.
+	var rev2 *domain.DesignRevision
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		rev2, err = fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:       design.ID,
+			BaseRevisionID: rev1.ID, // Optional client precondition matching latest and working copy base.
+			SourceType:     domain.DesignRevisionSourceManual,
+			ActorUserID:    rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("proof 4 (R2 publish): %v", err)
+	}
+	if rev2.RevisionNumber != 2 {
+		t.Fatalf("rev2 revision_number = %d, want 2", rev2.RevisionNumber)
+	}
+	if rev2.ParentRevisionID != rev1.ID {
+		t.Fatalf("rev2 parent_revision_id = %s, want %s", rev2.ParentRevisionID, rev1.ID)
+	}
+	if len(rev2.Items) != 1 || rev2.Items[0].FurnitureInstanceID != fiB.ID || rev2.Items[0].Parameters["model"] != "B" {
+		t.Fatalf("rev2 snapshot mismatch: %+v", rev2.Items)
+	}
+
+	// Verify working copy base atomically advanced to rev2.ID.
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		wc, err := fx.store.GetDesignWorkingCopy(ctx, design.ID)
+		if err != nil {
+			return err
+		}
+		if wc.BaseRevisionID == nil || *wc.BaseRevisionID != rev2.ID {
+			return fmt.Errorf("working copy base_revision_id = %v, want %s", wc.BaseRevisionID, rev2.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Proof 2 (Stale working copy): working base = R1, latest = R2 -> 409 conflict, no R3 created.
+	// Intentionally set working copy base to R1 directly in the database to simulate a stale client branch.
+	ctx := context.Background()
+	_, err = fx.admin.Exec(ctx, `
+		UPDATE design_working_copies
+		SET base_revision_id = $1
+		WHERE design_id = $2
+	`, rev1.ID, design.ID)
+	if err != nil {
+		t.Fatalf("set stale working copy base: %v", err)
+	}
+
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:       design.ID,
+			BaseRevisionID: rev2.ID, // Client requests publish against R2, but working copy base is stale (R1)!
+			SourceType:     domain.DesignRevisionSourceManual,
+			ActorUserID:    rlsUserA,
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrDesignRevisionConflict) {
+		t.Fatalf("proof 2 (stale working copy publish) err = %v, want ErrDesignRevisionConflict", err)
+	}
+
+	// Verify no R3 was created in DB.
+	var revCountAfterStale int
+	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM design_revisions WHERE design_id = $1`, design.ID).Scan(&revCountAfterStale); err != nil || revCountAfterStale != 2 {
+		t.Fatalf("revisions count after stale publish = %d, want 2", revCountAfterStale)
+	}
+
+	// Proof 3 (Missing base): latest = R2, working base = null -> 409 conflict.
+	_, err = fx.admin.Exec(ctx, `
+		UPDATE design_working_copies
+		SET base_revision_id = NULL
+		WHERE design_id = $1
+	`, design.ID)
+	if err != nil {
+		t.Fatalf("set null working copy base: %v", err)
+	}
+
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID:       design.ID,
+			BaseRevisionID: rev2.ID, // Client requests publish against R2, but working copy base is missing/null!
+			SourceType:     domain.DesignRevisionSourceManual,
+			ActorUserID:    rlsUserA,
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrDesignRevisionConflict) {
+		t.Fatalf("proof 3 (missing base publish) err = %v, want ErrDesignRevisionConflict", err)
+	}
+
+	// Verify still no R3 was created in DB.
+	var revCountAfterMissing int
+	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM design_revisions WHERE design_id = $1`, design.ID).Scan(&revCountAfterMissing); err != nil || revCountAfterMissing != 2 {
+		t.Fatalf("revisions count after missing base publish = %d, want 2", revCountAfterMissing)
 	}
 }

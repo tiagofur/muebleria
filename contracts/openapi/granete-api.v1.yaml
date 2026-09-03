@@ -6363,25 +6363,12 @@
           "source_type": {
             "$ref": "#/components/schemas/DesignRevisionSourceType"
           },
-          "parent_revision_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
           "base_revision_id": {
             "type": [
               "string",
               "null"
             ],
             "format": "uuid"
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PublishDesignRevisionItem"
-            }
           }
         }
       }

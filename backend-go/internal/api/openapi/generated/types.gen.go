@@ -1004,8 +1004,6 @@ type ResetDesignWorkingCopyRequest struct {
 }
 
 type PublishDesignRevisionRequest struct {
-	SourceType       DesignRevisionSourceType    `json:"source_type"`
-	ParentRevisionID *string                     `json:"parent_revision_id,omitempty"`
-	BaseRevisionID   *string                     `json:"base_revision_id,omitempty"`
-	Items            []PublishDesignRevisionItem `json:"items,omitempty"`
+	SourceType     DesignRevisionSourceType `json:"source_type"`
+	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
 }

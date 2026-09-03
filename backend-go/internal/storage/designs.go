@@ -37,14 +37,12 @@ type PublishDesignRevisionItemCommand struct {
 }
 
 type PublishDesignRevisionCommand struct {
-	DesignID         string
-	BaseRevisionID   string
-	ParentRevisionID string
-	SourceType       domain.DesignRevisionSourceType
-	Items            []PublishDesignRevisionItemCommand
-	ActorUserID      string
-	IP               string
-	RequestID        string
+	DesignID       string
+	BaseRevisionID string
+	SourceType     domain.DesignRevisionSourceType
+	ActorUserID    string
+	IP             string
+	RequestID      string
 }
 
 type UpdateDesignWorkingCopyItemCommand struct {
@@ -382,9 +380,6 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 	if cmd.BaseRevisionID != "" && !isValidUUID(cmd.BaseRevisionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
-	if cmd.ParentRevisionID != "" && !isValidUUID(cmd.ParentRevisionID) {
-		return nil, domain.ErrInvalidDesignCommand
-	}
 
 	if transactionFromContext(ctx) == nil {
 		var published *domain.DesignRevision
@@ -426,7 +421,25 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		return nil, domain.ErrFurnitureInstanceProjectNotWritable
 	}
 
-	// 2. Concurrency and revision numbering: fetch latest revision for the locked design.
+	// 2. Lock working copy row FOR UPDATE: working copy is the sole mutable authoring authority.
+	var wcBaseRevID *string
+	var wcSourceType string
+	err = s.db(ctx).QueryRow(ctx, `
+		SELECT base_revision_id::text, source_type
+		FROM design_working_copies
+		WHERE design_id = $1
+		FOR UPDATE
+	`, cmd.DesignID).Scan(&wcBaseRevID, &wcSourceType)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			wcBaseRevID = nil
+			wcSourceType = "manual"
+		} else {
+			return nil, err
+		}
+	}
+
+	// 3. Concurrency and revision numbering: fetch latest revision for the locked design.
 	var latestRevID string
 	var latestRevNum int
 	err = s.db(ctx).QueryRow(ctx, `
@@ -443,11 +456,12 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// No previous revision exists: this will be R1.
+			// Semántica: workingCopy.baseRevisionId == null -> publish R1 allowed.
+			if wcBaseRevID != nil && *wcBaseRevID != "" {
+				return nil, fmt.Errorf("%w: working copy base revision is %s but design has no published revisions", domain.ErrDesignRevisionConflict, *wcBaseRevID)
+			}
 			if cmd.BaseRevisionID != "" {
 				return nil, fmt.Errorf("%w: base revision specified (%s) but design has no previous revisions", domain.ErrDesignRevisionConflict, cmd.BaseRevisionID)
-			}
-			if cmd.ParentRevisionID != "" {
-				return nil, domain.ErrInvalidParentRevision
 			}
 			nextRevisionNum = 1
 			effectiveParentID = nil
@@ -455,81 +469,85 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 			return nil, err
 		}
 	} else {
-		// Previous revision exists: fail-closed optimistic concurrency (I18).
+		// Previous revision exists: fail-closed optimistic concurrency.
+		// Authority is design_working_copies.base_revision_id:
+		// latest = R7: workingCopy.baseRevisionId MUST equal R7.
+		if wcBaseRevID == nil || *wcBaseRevID == "" {
+			return nil, fmt.Errorf("%w: working copy base revision is missing/null when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
+		}
+		if *wcBaseRevID != latestRevID {
+			return nil, fmt.Errorf("%w: working copy base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, *wcBaseRevID, latestRevID, latestRevNum)
+		}
+		// Base revision ID is required for optimistic concurrency when revisions exist.
 		if cmd.BaseRevisionID == "" {
 			return nil, fmt.Errorf("%w: base revision is required when revisions already exist; latest is %s (R%d)", domain.ErrDesignRevisionConflict, latestRevID, latestRevNum)
 		}
 		if cmd.BaseRevisionID != latestRevID {
-			return nil, fmt.Errorf("%w: base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, cmd.BaseRevisionID, latestRevID, latestRevNum)
+			return nil, fmt.Errorf("%w: client base revision %s is stale; latest is %s (R%d)", domain.ErrDesignRevisionConflict, cmd.BaseRevisionID, latestRevID, latestRevNum)
 		}
-		// Linear parent chain: parent revision must match latest/base revision.
-		if cmd.ParentRevisionID != "" && cmd.ParentRevisionID != latestRevID {
-			return nil, fmt.Errorf("%w: parent revision %s conflicts with latest base revision %s", domain.ErrInvalidParentRevision, cmd.ParentRevisionID, latestRevID)
-		}
+		// Linear parent chain: parent revision is derived from latest/base revision.
 		effectiveParentID = &latestRevID
 		nextRevisionNum = latestRevNum + 1
 	}
 
-	// 3. Resolve items to publish: from cmd.Items if provided, otherwise from persistent working copy.
-	itemsToPublish := cmd.Items
-	if len(itemsToPublish) == 0 {
-		wRows, err := s.db(ctx).Query(ctx, `
-			SELECT furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-			       definition_version, parameters, material_choices,
-			       transform, COALESCE(room_id, ''), technical_client_locator
-			FROM design_working_items
-			WHERE design_id = $1
-			ORDER BY created_at ASC
-		`, cmd.DesignID)
-		if err != nil {
-			return nil, fmt.Errorf("load working items for publish: %w", err)
-		}
-		defer wRows.Close()
+	// 4. Resolve items to publish: ALWAYS from persistent working copy (single source of authoring truth).
+	wRows, err := s.db(ctx).Query(ctx, `
+		SELECT furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
+		       definition_version, parameters, material_choices,
+		       transform, COALESCE(room_id, ''), technical_client_locator
+		FROM design_working_items
+		WHERE design_id = $1
+		ORDER BY created_at ASC
+	`, cmd.DesignID)
+	if err != nil {
+		return nil, fmt.Errorf("load working items for publish: %w", err)
+	}
+	defer wRows.Close()
 
-		for wRows.Next() {
-			var itm PublishDesignRevisionItemCommand
-			var rawP, rawM, rawT, rawL []byte
-			var defIDStr string
-			if err := wRows.Scan(
-				&itm.FurnitureInstanceID, &defIDStr,
-				&itm.DefinitionVersion, &rawP, &rawM, &rawT,
-				&itm.RoomID, &rawL,
-			); err != nil {
-				return nil, fmt.Errorf("scan working item for publish: %w", err)
-			}
-			itm.FurnitureDefinitionID = defIDStr
-			if len(rawP) > 0 {
-				if err := json.Unmarshal(rawP, &itm.Parameters); err != nil {
-					return nil, fmt.Errorf("%w: unmarshal working item parameters: %v", domain.ErrSerializationFailed, err)
-				}
-			}
-			if len(rawM) > 0 {
-				if err := json.Unmarshal(rawM, &itm.MaterialChoices); err != nil {
-					return nil, fmt.Errorf("%w: unmarshal working item material_choices: %v", domain.ErrSerializationFailed, err)
-				}
-			}
-			if len(rawT) > 0 && string(rawT) != "{}" && string(rawT) != "null" {
-				if err := json.Unmarshal(rawT, &itm.Transform); err != nil {
-					return nil, fmt.Errorf("%w: unmarshal working item transform: %v", domain.ErrSerializationFailed, err)
-				}
-			}
-			if len(rawL) > 0 && string(rawL) != "null" {
-				var loc domain.TechnicalClientLocator
-				if err := json.Unmarshal(rawL, &loc); err != nil {
-					return nil, fmt.Errorf("%w: unmarshal working item locator: %v", domain.ErrSerializationFailed, err)
-				}
-				if loc.Kind != "" {
-					itm.TechnicalClientLocator = &loc
-				}
-			}
-			itemsToPublish = append(itemsToPublish, itm)
+	var itemsToPublish []PublishDesignRevisionItemCommand
+	for wRows.Next() {
+		var itm PublishDesignRevisionItemCommand
+		var rawP, rawM, rawT, rawL []byte
+		var defIDStr string
+		if err := wRows.Scan(
+			&itm.FurnitureInstanceID, &defIDStr,
+			&itm.DefinitionVersion, &rawP, &rawM, &rawT,
+			&itm.RoomID, &rawL,
+		); err != nil {
+			return nil, fmt.Errorf("scan working item for publish: %w", err)
 		}
-		if err := wRows.Err(); err != nil {
-			return nil, err
+		itm.FurnitureDefinitionID = defIDStr
+		if len(rawP) > 0 {
+			if err := json.Unmarshal(rawP, &itm.Parameters); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal working item parameters: %v", domain.ErrSerializationFailed, err)
+			}
 		}
+		if len(rawM) > 0 {
+			if err := json.Unmarshal(rawM, &itm.MaterialChoices); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal working item material_choices: %v", domain.ErrSerializationFailed, err)
+			}
+		}
+		if len(rawT) > 0 && string(rawT) != "{}" && string(rawT) != "null" {
+			if err := json.Unmarshal(rawT, &itm.Transform); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal working item transform: %v", domain.ErrSerializationFailed, err)
+			}
+		}
+		if len(rawL) > 0 && string(rawL) != "null" {
+			var loc domain.TechnicalClientLocator
+			if err := json.Unmarshal(rawL, &loc); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal working item locator: %v", domain.ErrSerializationFailed, err)
+			}
+			if loc.Kind != "" {
+				itm.TechnicalClientLocator = &loc
+			}
+		}
+		itemsToPublish = append(itemsToPublish, itm)
+	}
+	if err := wRows.Err(); err != nil {
+		return nil, err
 	}
 
-	// 4. Validate items.
+	// 5. Validate items.
 	seenInstances := make(map[string]struct{}, len(itemsToPublish))
 	instanceIDs := make([]string, 0, len(itemsToPublish))
 	for _, item := range itemsToPublish {
@@ -716,55 +734,6 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 	`, cmd.DesignID, designOrgID, projectID, rev.ID, rev.SourceType, actor)
 	if err != nil {
 		return nil, fmt.Errorf("advance working copy base revision: %w", err)
-	}
-
-	// If items were explicitly provided in cmd.Items, synchronize design_working_items to match.
-	if len(cmd.Items) > 0 {
-		_, err = s.db(ctx).Exec(ctx, `DELETE FROM design_working_items WHERE design_id = $1`, cmd.DesignID)
-		if err != nil {
-			return nil, fmt.Errorf("sync working items delete: %w", err)
-		}
-		for _, item := range rev.Items {
-			var defID *string
-			if item.FurnitureDefinitionID != "" {
-				defID = &item.FurnitureDefinitionID
-			}
-			pJSON, err := json.Marshal(item.Parameters)
-			if err != nil {
-				return nil, fmt.Errorf("%w: working item parameters marshal: %v", domain.ErrSerializationFailed, err)
-			}
-			mJSON, err := json.Marshal(item.MaterialChoices)
-			if err != nil {
-				return nil, fmt.Errorf("%w: working item material_choices marshal: %v", domain.ErrSerializationFailed, err)
-			}
-			tJSON, err := json.Marshal(item.Transform)
-			if err != nil {
-				return nil, fmt.Errorf("%w: working item transform marshal: %v", domain.ErrSerializationFailed, err)
-			}
-			var lJSON []byte
-			if item.TechnicalClientLocator != nil {
-				l, err := json.Marshal(item.TechnicalClientLocator)
-				if err != nil {
-					return nil, fmt.Errorf("%w: working item locator marshal: %v", domain.ErrSerializationFailed, err)
-				}
-				lJSON = l
-			}
-			_, err = s.db(ctx).Exec(ctx, `
-				INSERT INTO design_working_items (
-					organization_id, project_id, design_id,
-					furniture_instance_id, furniture_definition_id, definition_version,
-					parameters, material_choices, transform, room_id, technical_client_locator,
-					created_at, updated_at
-				)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
-			`, designOrgID, projectID, cmd.DesignID,
-				item.FurnitureInstanceID, defID, item.DefinitionVersion,
-				pJSON, mJSON, tJSON, item.RoomID, lJSON,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("sync working item insert: %w", err)
-			}
-		}
 	}
 
 	// 8. Security audit event for publication.

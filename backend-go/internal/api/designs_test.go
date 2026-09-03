@@ -136,6 +136,7 @@ func TestHandleDesign_GetReturns200(t *testing.T) {
 }
 
 func TestHandleDesignRevisions_PublishReturns201(t *testing.T) {
+	v := 1
 	store := &stubStore{
 		designsByID: map[string]domain.Design{
 			designTestDesignID: {
@@ -144,27 +145,35 @@ func TestHandleDesignRevisions_PublishReturns201(t *testing.T) {
 				Status:    domain.DesignStatusActive,
 			},
 		},
+		designWorkingCopiesByID: map[string]domain.DesignWorkingCopy{
+			designTestDesignID: {
+				DesignID:   designTestDesignID,
+				ProjectID:  designTestProjectID,
+				SourceType: domain.DesignRevisionSourceSketchup,
+				Items: []domain.DesignWorkingItem{
+					{
+						ID:                  "witem-1",
+						DesignID:            designTestDesignID,
+						FurnitureInstanceID: designTestInstanceID,
+						DefinitionVersion:   &v,
+						Parameters:          map[string]any{"widthMm": 600.0},
+						MaterialChoices:     map[string]string{"CARCASS": "WHITE-18"},
+						Transform: &domain.Transform3D{
+							TranslationMm: [3]float64{100, 200, 0},
+							RotationDeg:   [3]float64{0, 0, 90},
+						},
+						RoomID: "kitchen",
+						TechnicalClientLocator: &domain.TechnicalClientLocator{
+							Kind:  "sketchup_persistent_id",
+							Value: "skp-999",
+						},
+					},
+				},
+			},
+		},
 	}
 	srv := &Server{Store: store}
-	reqBody := `{
-		"source_type": "sketchup",
-		"items": [
-			{
-				"furniture_instance_id": "` + designTestInstanceID + `",
-				"parameters": {"widthMm": 600},
-				"material_choices": {"CARCASS": "WHITE-18"},
-				"transform": {
-					"translation_mm": [100, 200, 0],
-					"rotation_deg": [0, 0, 90]
-				},
-				"room_id": "kitchen",
-				"technical_client_locator": {
-					"kind": "sketchup_persistent_id",
-					"value": "skp-999"
-				}
-			}
-		]
-	}`
+	reqBody := `{"source_type":"sketchup"}`
 	req := designRequest(http.MethodPost, "/api/designs/"+designTestDesignID+"/revisions", reqBody, string(domain.RoleVendedor))
 	rr := httptest.NewRecorder()
 
@@ -179,16 +188,6 @@ func TestHandleDesignRevisions_PublishReturns201(t *testing.T) {
 	cmd := *store.publishDesignRevisionCmd
 	if cmd.DesignID != designTestDesignID || cmd.SourceType != domain.DesignRevisionSourceSketchup {
 		t.Fatalf("command mismatch: %+v", cmd)
-	}
-	if len(cmd.Items) != 1 {
-		t.Fatalf("items count = %d, want 1", len(cmd.Items))
-	}
-	item := cmd.Items[0]
-	if item.FurnitureInstanceID != designTestInstanceID {
-		t.Fatalf("item FI ID = %s, want %s", item.FurnitureInstanceID, designTestInstanceID)
-	}
-	if item.RoomID != "kitchen" || item.TechnicalClientLocator == nil || item.TechnicalClientLocator.Value != "skp-999" {
-		t.Fatalf("item properties mismatch: %+v", item)
 	}
 	body := rr.Body.String()
 	for _, key := range []string{`"revision_number":1`, `"source_type":"sketchup"`, `"status":"published"`, `"skp-999"`} {
@@ -218,7 +217,7 @@ func TestHandleDesignRevisions_TypedErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := &Server{Store: &stubStore{publishDesignRevisionErr: tc.err}}
-			reqBody := `{"source_type":"sketchup","items":[]}`
+			reqBody := `{"source_type":"sketchup"}`
 			req := designRequest(http.MethodPost, "/api/designs/"+designTestDesignID+"/revisions", reqBody, string(domain.RoleAdmin))
 			rr := httptest.NewRecorder()
 

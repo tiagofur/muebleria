@@ -321,15 +321,6 @@ func (s *Server) HandleDesignRevisions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		parentRevID := ""
-		if body.ParentRevisionID != nil {
-			parentRevID = strings.TrimSpace(*body.ParentRevisionID)
-			if parentRevID != "" && !isValidUUID(parentRevID) {
-				respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "parent_revision_id inválido", nil)
-				return
-			}
-		}
-
 		baseRevID := ""
 		if body.BaseRevisionID != nil {
 			baseRevID = strings.TrimSpace(*body.BaseRevisionID)
@@ -339,62 +330,13 @@ func (s *Server) HandleDesignRevisions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		items := make([]storage.PublishDesignRevisionItemCommand, 0, len(body.Items))
-		for _, item := range body.Items {
-			fiID := strings.TrimSpace(item.FurnitureInstanceID)
-			if !isValidUUID(fiID) {
-				respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "furniture_instance_id inválido en uno de los items", nil)
-				return
-			}
-
-			cmdItem := storage.PublishDesignRevisionItemCommand{
-				FurnitureInstanceID: fiID,
-				Parameters:          item.Parameters,
-				MaterialChoices:     item.MaterialChoices,
-			}
-			if item.FurnitureDefinitionID != nil {
-				defID := strings.TrimSpace(*item.FurnitureDefinitionID)
-				if defID != "" && !isValidUUID(defID) {
-					respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "furniture_definition_id inválido en uno de los items", nil)
-					return
-				}
-				cmdItem.FurnitureDefinitionID = defID
-			}
-			if item.DefinitionVersion != nil {
-				v := int(*item.DefinitionVersion)
-				cmdItem.DefinitionVersion = &v
-			}
-			if item.Transform != nil {
-				var t3d domain.Transform3D
-				if len(item.Transform.TranslationMm) == 3 {
-					copy(t3d.TranslationMm[:], item.Transform.TranslationMm)
-				}
-				if len(item.Transform.RotationDeg) == 3 {
-					copy(t3d.RotationDeg[:], item.Transform.RotationDeg)
-				}
-				cmdItem.Transform = t3d
-			}
-			if item.RoomID != nil {
-				cmdItem.RoomID = strings.TrimSpace(*item.RoomID)
-			}
-			if item.TechnicalClientLocator != nil {
-				cmdItem.TechnicalClientLocator = &domain.TechnicalClientLocator{
-					Kind:  item.TechnicalClientLocator.Kind,
-					Value: item.TechnicalClientLocator.Value,
-				}
-			}
-			items = append(items, cmdItem)
-		}
-
 		rev, err := s.Store.PublishDesignRevision(r.Context(), storage.PublishDesignRevisionCommand{
-			DesignID:         designID,
-			ParentRevisionID: parentRevID,
-			BaseRevisionID:   baseRevID,
-			SourceType:       domain.DesignRevisionSourceType(body.SourceType),
-			Items:            items,
-			ActorUserID:      claims.UserID,
-			IP:               clientIP(r),
-			RequestID:        RequestIDFromContext(r.Context()),
+			DesignID:       designID,
+			BaseRevisionID: baseRevID,
+			SourceType:     domain.DesignRevisionSourceType(body.SourceType),
+			ActorUserID:    claims.UserID,
+			IP:             clientIP(r),
+			RequestID:      RequestIDFromContext(r.Context()),
 		})
 		if err != nil {
 			respondWithDesignError(w, err)

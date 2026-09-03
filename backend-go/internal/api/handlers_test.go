@@ -1472,35 +1472,38 @@ func (s *stubStore) PublishDesignRevision(_ context.Context, cmd storage.Publish
 		s.designRevisionsByID = map[string]domain.DesignRevision{}
 	}
 	revNum := 1
+	var latestRevID string
 	for _, r := range s.designRevisionsByID {
 		if r.DesignID == cmd.DesignID && r.RevisionNumber >= revNum {
 			revNum = r.RevisionNumber + 1
+			latestRevID = r.ID
 		}
 	}
 	rev := &domain.DesignRevision{
 		ID:               "drev-" + string(rune('0'+revNum)),
 		DesignID:         cmd.DesignID,
 		RevisionNumber:   revNum,
-		ParentRevisionID: cmd.ParentRevisionID,
+		ParentRevisionID: latestRevID,
 		SourceType:       cmd.SourceType,
 		Status:           domain.DesignRevisionStatusPublished,
 		CreatedAt:        time.Now(),
 	}
-	for i, item := range cmd.Items {
-		itemTransform := item.Transform
-		rev.Items = append(rev.Items, domain.DesignRevisionItem{
-			ID:                     "ditem-" + string(rune('0'+i+1)),
-			DesignRevisionID:       rev.ID,
-			FurnitureInstanceID:    item.FurnitureInstanceID,
-			FurnitureDefinitionID:  item.FurnitureDefinitionID,
-			DefinitionVersion:      item.DefinitionVersion,
-			Parameters:             item.Parameters,
-			MaterialChoices:        item.MaterialChoices,
-			Transform:              &itemTransform,
-			RoomID:                 item.RoomID,
-			TechnicalClientLocator: item.TechnicalClientLocator,
-			CreatedAt:              time.Now(),
-		})
+	if wc, ok := s.designWorkingCopiesByID[cmd.DesignID]; ok {
+		for i, item := range wc.Items {
+			rev.Items = append(rev.Items, domain.DesignRevisionItem{
+				ID:                     "ditem-" + string(rune('0'+i+1)),
+				DesignRevisionID:       rev.ID,
+				FurnitureInstanceID:    item.FurnitureInstanceID,
+				FurnitureDefinitionID:  item.FurnitureDefinitionID,
+				DefinitionVersion:      item.DefinitionVersion,
+				Parameters:             item.Parameters,
+				MaterialChoices:        item.MaterialChoices,
+				Transform:              item.Transform,
+				RoomID:                 item.RoomID,
+				TechnicalClientLocator: item.TechnicalClientLocator,
+				CreatedAt:              time.Now(),
+			})
+		}
 	}
 	s.designRevisionsByID[rev.ID] = *rev
 	return rev, nil
