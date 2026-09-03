@@ -114,7 +114,7 @@ module Granete
         assert_equal 2, result['revisionNumber']
 
         # Sequence proof against the scripted backend.
-        assert_equal [:prepare, :model, :manifest, :preview, :finalize], fake.sequence
+        assert_equal %i[prepare model manifest preview finalize], fake.sequence
         assert fake.uploaded_all?, 'model, manifest and preview files must reach the backend'
         fake.uploads.each_value do |path|
           assert File.size?(path), "uploaded artifact #{path} must be a real file"

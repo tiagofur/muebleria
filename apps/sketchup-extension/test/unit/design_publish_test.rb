@@ -231,11 +231,11 @@ class DesignPublishTest < Minitest::Test
                          'id' => revision_id, 'design_id' => DESIGN_ID, 'revision_number' => revision_number,
                          'parent_revision_id' => REVISION_R1, 'source_type' => 'sketchup', 'status' => 'published',
                          'artifacts' => [
-                           { 'kind' => 'model', 'sha256' => 'sha256-' + 'ab' * 32, 'size_bytes' => 10,
+                           { 'kind' => 'model', 'sha256' => "sha256-#{'ab' * 32}", 'size_bytes' => 10,
                              'content_type' => 'application/octet-stream' },
-                           { 'kind' => 'manifest', 'sha256' => 'sha256-' + 'cd' * 32, 'size_bytes' => 4,
+                           { 'kind' => 'manifest', 'sha256' => "sha256-#{'cd' * 32}", 'size_bytes' => 4,
                              'content_type' => 'application/json' },
-                           { 'kind' => 'preview', 'sha256' => 'sha256-' + 'ef' * 32, 'size_bytes' => 6,
+                           { 'kind' => 'preview', 'sha256' => "sha256-#{'ef' * 32}", 'size_bytes' => 6,
                              'content_type' => 'image/png' }
                          ]
                        })
@@ -310,11 +310,12 @@ class DesignPublishTest < Minitest::Test
     paths = @transport.requests.map { |r| r['path'] }
     assert_equal ["/designs/#{DESIGN_ID}/publish:prepare",
                   "/designs/#{DESIGN_ID}/publish/#{SESSION_ID}:finalize"], paths
+    upload_paths = @transport.uploads.map { |u| u['path'] }
     assert_equal [
       "/designs/#{DESIGN_ID}/publish/#{SESSION_ID}/artifacts/model",
       "/designs/#{DESIGN_ID}/publish/#{SESSION_ID}/artifacts/manifest",
       "/designs/#{DESIGN_ID}/publish/#{SESSION_ID}/artifacts/preview"
-    ], @transport.uploads.map { |u| u['path'] }
+    ], upload_paths
 
     assert_includes progress, 'validating'
     assert_includes progress, 'exporting'
@@ -496,7 +497,8 @@ class DesignPublishTest < Minitest::Test
   # ---- Manifest parity with the shared contract fixture ----
 
   def test_manifest_contract_fixture_parity
-    fixture = JSON.parse(File.read(File.expand_path('../../../../contracts/sketchupPublishManifest.contract.json', __dir__)))
+    fixture_path = File.expand_path('../../../../contracts/sketchupPublishManifest.contract.json', __dir__)
+    fixture = JSON.parse(File.read(fixture_path))
     fixture['scenarios'].each do |scenario|
       # Unknown-field rejection is the Go decoder's DisallowUnknownFields rule;
       # the Ruby builder parity covers the semantic constraints both share.

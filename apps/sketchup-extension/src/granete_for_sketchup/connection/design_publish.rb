@@ -59,6 +59,7 @@ module Granete
                                          :artifacts, keyword_init: true)
           ArtifactSummary = Struct.new(:kind, :sha256, :size_bytes, :content_type, keyword_init: true)
 
+          # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
           def self.parse_session!(body)
             raise ArgumentError, 'publish session payload must be present' if body.nil?
 
@@ -197,7 +198,7 @@ module Granete
 
             auth = @auth_provider.authorization_header
             @transport.upload(payload, file_path: file_path, content_type: content_type,
-                                        authorization_header: auth)
+                                       authorization_header: auth)
           rescue ::Granete::SketchUpExtension::Transport::RequestError => e
             @logger.error('design_publish_upload_failed', error: e)
             raise Error.new(:unreachable, 'no se pudo contactar al servidor')
@@ -342,6 +343,7 @@ module Granete
 
           attr_reader :service
 
+          # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/BlockLength, Metrics/PerceivedComplexity
           def publish(on_progress: nil)
             model = @model_provider.call
             return failure('no_model', 'no hay un modelo activo') unless model
@@ -444,7 +446,8 @@ module Granete
               artifact = artifacts.fetch(kind)
               uploaded = @service.upload_artifact(
                 binding.design_id, session.id, kind,
-                file_path: artifact['path'], content_type: artifact['content_type']
+                file_path: artifact['path'],
+                content_type: artifact['content_type']
               )
               local = ArtifactExporter.local_sha256(artifact['path'])
               next if uploaded.sha256 == local

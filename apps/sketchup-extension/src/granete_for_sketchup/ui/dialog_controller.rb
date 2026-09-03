@@ -815,7 +815,7 @@ module Granete
         end
       end
 
-      class DialogController
+      class DialogController # rubocop:disable Metrics/ClassLength
         include SessionBridge
         include ModelBindingBridge
         include ProjectFurnitureBridge

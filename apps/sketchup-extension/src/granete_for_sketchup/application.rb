@@ -5,7 +5,7 @@ module Granete
     class Application
       attr_reader :auth_provider, :transport, :session
 
-      def initialize( # rubocop:disable Metrics/MethodLength
+      def initialize( # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
         transport: nil,
         auth_provider: nil,
         logger: SafeLogger.new,

@@ -12,7 +12,7 @@ module Granete
         DEFAULT_CHUNK = 64 * 1024
 
         def initialize(boundary:, field:, filename:, content_type:, file:)
-          preamble = +"--#{boundary}\r\n"
+          preamble = "--#{boundary}\r\n"
           preamble << "Content-Disposition: form-data; name=\"#{field}\"; filename=\"#{filename}\"\r\n"
           preamble << "Content-Type: #{content_type}\r\n\r\n"
           closing = "\r\n--#{boundary}--\r\n"
@@ -31,6 +31,7 @@ module Granete
         end
 
         # Net::HTTP streams any body object responding to read(length[, buffer]).
+        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
         def read(length = nil, buffer = nil)
           buffer ||= +''
           buffer.clear
