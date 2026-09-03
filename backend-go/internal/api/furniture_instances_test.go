@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -71,6 +72,49 @@ func TestHandleProjectFurnitureInstances_CreateReturns201(t *testing.T) {
 	// snapshot, transform or pricing may appear.
 	if strings.Contains(body, "position") || strings.Contains(body, "parameters") || strings.Contains(body, "price") {
 		t.Fatalf("DTO leaked non-identity fields: %s", body)
+	}
+}
+
+func TestHandleProjectFurnitureInstances_CreateIdempotencyReplay(t *testing.T) {
+	backend := newDurableBackend(func() time.Time { return time.Now().UTC() })
+	store := &durableTestStore{backend: backend}
+
+	srv := &Server{Store: store}
+	handler := srv.RequireIdempotency("project.create-furniture-instance", http.HandlerFunc(srv.HandleProjectFurnitureInstances))
+
+	body := `{"furniture_definition_id":"50000000-0000-0000-0000-000000000001"}`
+
+	// First attempt: creates identity
+	req1 := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances", body, string(domain.RoleVendedor))
+	req1.Header.Set("Idempotency-Key", "create-intent-key-12345")
+	rr1 := httptest.NewRecorder()
+	handler.ServeHTTP(rr1, req1)
+
+	if rr1.Code != http.StatusCreated {
+		t.Fatalf("first attempt status = %d, want 201 (body=%s)", rr1.Code, rr1.Body.String())
+	}
+	if store.createFurnitureInstanceCalls != 1 {
+		t.Fatalf("expected 1 call to store, got %d", store.createFurnitureInstanceCalls)
+	}
+
+	// Second attempt with the exact same Idempotency-Key (network retry / replay)
+	req2 := fiRequest(http.MethodPost, "/api/projects/"+fiTestProjectID+"/furniture-instances", body, string(domain.RoleVendedor))
+	req2.Header.Set("Idempotency-Key", "create-intent-key-12345")
+	rr2 := httptest.NewRecorder()
+	handler.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusCreated {
+		t.Fatalf("second attempt status = %d, want 201 (body=%s)", rr2.Code, rr2.Body.String())
+	}
+	if rr2.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatal("second attempt must be marked as Idempotency-Replayed")
+	}
+	// Critical invariant: exactly ONE entity created, store called only once
+	if store.createFurnitureInstanceCalls != 1 {
+		t.Fatalf("idempotent replay must NOT call store again, got %d calls", store.createFurnitureInstanceCalls)
+	}
+	if rr1.Body.String() != rr2.Body.String() {
+		t.Fatalf("replayed body mismatch: first=%s, second=%s", rr1.Body.String(), rr2.Body.String())
 	}
 }
 

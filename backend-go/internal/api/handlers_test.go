@@ -45,6 +45,7 @@ type stubStore struct {
 	listFurnitureInstanceSummaries []storage.FurnitureInstanceSummary
 	createFurnitureInstanceCmd *storage.CreateFurnitureInstanceCommand
 	createFurnitureInstanceErr error
+	createFurnitureInstanceCalls int
 	removeFurnitureInstanceCmd *storage.RemoveFurnitureInstanceCommand
 	removeFurnitureInstanceErr error
 	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2)
@@ -1352,6 +1353,7 @@ func dupErr(op string) error {
 
 // Project furniture identity (#385 / DT-1).
 func (s *stubStore) CreateFurnitureInstance(_ context.Context, cmd storage.CreateFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
+	s.createFurnitureInstanceCalls++
 	s.createFurnitureInstanceCmd = &cmd
 	if s.createFurnitureInstanceErr != nil {
 		return nil, s.createFurnitureInstanceErr

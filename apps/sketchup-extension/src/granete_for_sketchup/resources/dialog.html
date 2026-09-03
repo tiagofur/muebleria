@@ -2404,12 +2404,14 @@
         // -------------------------------------------------------------
 
         function showLibraryView() {
+          clearCatalogIntentKey();
           libBrowserView.style.display = "block";
           libConfiguratorView.style.display = "none";
           renderLibraryBrowser();
         }
 
         function showConfiguratorView(def) {
+          clearCatalogIntentKey();
           activeLibDef = def;
           libBrowserView.style.display = "none";
           libConfiguratorView.style.display = "block";
@@ -2425,6 +2427,7 @@
           bindLibraryParamForm();
           renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
             libMaterialChoices[role] = id;
+            clearCatalogIntentKey();
             if (scope === "project" || scope === "project_default") {
               projectDefaultMaterials[role] = id;
             }
@@ -2451,6 +2454,7 @@
         function bindLibraryParamForm() {
           renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
             libParams[name] = val;
+            clearCatalogIntentKey();
             updateLibrarySummary();
           });
         }
@@ -3635,6 +3639,7 @@
           onProjectFurniture: function (payload) { renderProjectFurniture(payload); },
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
           onCreateProjectFurnitureResult: function (result) { handleCreateProjectFurnitureResult(result); },
+          getCatalogCreateIntentKey: function () { return catalogCreateIntentKey; },
           onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
           onCancelPlacementResult: function (result) { handleCancelPlacementResult(result); },
 
@@ -4437,6 +4442,19 @@
           showLibraryView();
         });
 
+        var catalogCreateIntentKey = null;
+
+        function getOrCreateCatalogIntentKey() {
+          if (!catalogCreateIntentKey) {
+            catalogCreateIntentKey = generateIdempotencyKey();
+          }
+          return catalogCreateIntentKey;
+        }
+
+        function clearCatalogIntentKey() {
+          catalogCreateIntentKey = null;
+        }
+
         function generateIdempotencyKey() {
           if (window.crypto && window.crypto.randomUUID) {
             return window.crypto.randomUUID();
@@ -4458,7 +4476,7 @@
 
           if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
             btnInsert.innerHTML = icon("clock") + "<span>Agregando al diseño…</span>";
-            payload.idempotencyKey = generateIdempotencyKey();
+            payload.idempotencyKey = getOrCreateCatalogIntentKey();
             window.sketchup.create_project_furniture(JSON.stringify(payload));
           } else if (window.sketchup && window.sketchup.insert_furniture) {
             btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
@@ -5057,12 +5075,19 @@
           btnInsert.disabled = false;
           updateLibraryInsertButton();
           if (result.ok) {
+            clearCatalogIntentKey();
             if (result.code === "pending_position") {
               showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
             } else {
               showToast("success", "✓ Mueble creado y agregado al proyecto.");
             }
             switchTab("project");
+            requestProjectFurniture();
+          } else if (result.code === "created_pending") {
+            clearCatalogIntentKey();
+            showToast("warning", "El mueble fue creado en el proyecto (" + (result.instanceId || "") + ") pero falló la inserción geométrica local. Podés colocarlo desde la lista del Proyecto.");
+            switchTab("project");
+            requestProjectFurniture();
           } else {
             showToast("error", pfPlaceFailureMessage(result));
           }
@@ -5070,6 +5095,7 @@
 
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
+            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colócalo desde la pestaña Proyecto.";
             case "unbound": return "Conectá el modelo al proyecto primero.";
             case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en Estado.";
             case "not_found": return "El mueble no pertenece al proyecto conectado.";

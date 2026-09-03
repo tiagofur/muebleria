@@ -188,6 +188,22 @@ module Granete
 
             { 'ok' => true, 'unit' => guard['unit'] }
           end
+
+          def confirm_entity_guard(located, intent)
+            if located['duplicates'] > 1
+              return { 'ok' => false, 'code' => 'duplicate_detected', 'reason' => DUPLICATE_MESSAGE }
+            end
+            unless located['entity']
+              return { 'ok' => false, 'code' => 'not_placed',
+                       'reason' => 'el mueble no está en el modelo; colocálo primero' }
+            end
+            unless intent
+              return { 'ok' => false, 'code' => 'intent_mismatch',
+                       'reason' => 'la identidad del mueble no coincide; colocálo de nuevo' }
+            end
+
+            { 'ok' => true }
+          end
         end
 
         # Helpers for design-first backend instance creation (#390 DT-6).
@@ -214,6 +230,31 @@ module Granete
           end
         end
 
+        # Retains pending catalog authoring intent across local insertion failures
+        # so recovery placement reuses the selected parameters/material choices (#390).
+        class IntentStore
+          def initialize
+            @intents = {}
+          end
+
+          def store(instance_id, parameters:, material_choices:)
+            return unless instance_id
+
+            @intents[instance_id.to_s] = {
+              'parameters' => parameters || {},
+              'material_choices' => material_choices || {}
+            }
+          end
+
+          def fetch(instance_id)
+            @intents[instance_id.to_s]
+          end
+
+          def clear(instance_id)
+            @intents.delete(instance_id.to_s)
+          end
+        end
+
         # Orchestrates Place EXISTING FurnitureInstance (#389 §8/§14/§18) in
         # two user-visible steps so the working copy only ever receives the
         # FINAL chosen transform:
@@ -230,9 +271,11 @@ module Granete
         # fails loud; drifted_base/archived/auth states fail BEFORE anything is
         # placed or synced.
         class Placer
+          attr_reader :intent_store
+
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,
-                         furniture_builder_factory:, logger: SafeLogger.new)
+                         furniture_builder_factory:, intent_store: IntentStore.new, logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @model_binding_service = model_binding_service
@@ -240,6 +283,7 @@ module Granete
             @metadata_store_factory = metadata_store_factory
             @catalog_provider = catalog_provider
             @furniture_builder_factory = furniture_builder_factory
+            @intent_store = intent_store
             @logger = logger
           end
 
@@ -322,18 +366,16 @@ module Granete
             return context unless context['ok']
 
             located = locate_unit(model, furniture_instance_id)
-            return failure(:duplicate_detected, DUPLICATE_MESSAGE) if located['duplicates'] > 1
-            return failure(:not_placed, 'el mueble no está en el modelo; colocálo primero') unless located['entity']
-
             entity = located['entity']
-            intent = placement_intent(entity, furniture_instance_id)
-            return failure(:intent_mismatch, 'la identidad del mueble no coincide; colocálo de nuevo') unless intent
+            intent = entity ? placement_intent(entity, furniture_instance_id) : nil
+            guard = PlacementGuards.confirm_entity_guard(located, intent)
+            return guard unless guard['ok']
 
-            guard = validate_instance_active(context['binding'], furniture_instance_id)
-            unless guard['ok']
+            active_guard = validate_instance_active(context['binding'], furniture_instance_id)
+            unless active_guard['ok']
               builder = @furniture_builder_factory.call(model)
               rollback_local(model, builder, entity, furniture_instance_id)
-              return guard
+              return active_guard
             end
 
             sync_placement(model, context['binding'], furniture_instance_id, entity)
@@ -395,12 +437,17 @@ module Granete
               definition_id: prep['definition']['furniture_definition_id'],
               idempotency_key: key
             )
+            @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices)
+
+            located = locate_unit(model, created.id)
+            return { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created.id } if located['entity']
+
             inserted = insert_physical_unit(model, binding, created, prep['definition'],
                                             prep['params'], material_choices, prep['layout'])
             unless inserted['ok']
               msg = "el mueble se creó en el proyecto (#{created.id}) pero falló su inserción local: " \
                     "#{inserted['reason']}"
-              return failure(:placement_failed, msg)
+              return { 'ok' => false, 'code' => 'created_pending', 'instanceId' => created.id, 'reason' => msg }
             end
 
             inserted
@@ -438,9 +485,11 @@ module Granete
                              'el catálogo del taller no incluye la definición de este mueble')
             end
 
-            parameters = WorkingCopyMerger.placement_parameters(instance, definition)
-            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, parameters)
-            insert_physical_unit(model, binding, instance, definition, parameters, {}, layout)
+            pending = @intent_store.fetch(instance.id)
+            params = pending ? pending['parameters'] : WorkingCopyMerger.placement_parameters(instance, definition)
+            choices = pending ? pending['material_choices'] : {}
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
+            insert_physical_unit(model, binding, instance, definition, params, choices, layout)
           end
 
           def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout)
@@ -469,6 +518,7 @@ module Granete
                                              intent: intent, locator: locator)
             @service.update_working_copy(binding.design_id, items: merged,
                                                             base_revision_id: binding.base_revision_id)
+            @intent_store.clear(furniture_instance_id)
             @logger.info('project_furniture_placed',
                          furniture_instance_id: furniture_instance_id,
                          project_id: binding.project_id, design_id: binding.design_id)
