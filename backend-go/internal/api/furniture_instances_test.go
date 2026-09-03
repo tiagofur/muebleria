@@ -89,6 +89,23 @@ func TestHandleProjectFurnitureInstances_CreateRoleGuard(t *testing.T) {
 	}
 }
 
+func TestHandleProjectFurnitureInstances_ListRoleGuard(t *testing.T) {
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	req := fiRequest(http.MethodGet, "/api/projects/"+fiTestProjectID+"/furniture-instances", "", string(domain.RoleAlmacen))
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectFurnitureInstances(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body=%s)", rr.Code, rr.Body.String())
+	}
+	// The blocker must point at the project furniture, not at quotes.
+	if !strings.Contains(rr.Body.String(), "muebles del proyecto") {
+		t.Fatalf("permission message = %s, want it to reference the project furniture", rr.Body.String())
+	}
+}
+
 func TestHandleProjectFurnitureInstances_CreateTypedErrors(t *testing.T) {
 	cases := []struct {
 		name string

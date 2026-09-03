@@ -169,11 +169,11 @@ func TestFurnitureInstances_IdentityLifecycleAndAudit(t *testing.T) {
 	}
 
 	base := storage.CreateFurnitureInstanceCommand{
-		ProjectID:    fiSharedProject,
-		Origin:       domain.FurnitureInstanceOriginManual,
-		ActorUserID:  rlsUserA,
-		IP:           "203.0.113.10",
-		RequestID:    "fi-test-create-0001",
+		ProjectID:   fiSharedProject,
+		Origin:      domain.FurnitureInstanceOriginManual,
+		ActorUserID: rlsUserA,
+		IP:          "203.0.113.10",
+		RequestID:   "fi-test-create-0001",
 	}
 	create := func(cmd storage.CreateFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
 		var instance *domain.FurnitureInstance

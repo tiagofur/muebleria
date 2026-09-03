@@ -93,7 +93,7 @@ func (s *Server) HandleProjectFurnitureInstances(w http.ResponseWriter, r *http.
 
 	switch r.Method {
 	case http.MethodGet:
-		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver cotizaciones") {
+		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanAccessProjects), "no tenés permiso para ver los muebles del proyecto") {
 			return
 		}
 		instances, err := s.Store.ListFurnitureInstancesByProject(r.Context(), projectID, true)

@@ -41,9 +41,9 @@ type CreateFurnitureInstanceCommand struct {
 	// reference an instance of the SAME project (cross-project linking is
 	// rejected server-side).
 	OriginFurnitureInstanceID string
-	ActorUserID              string
-	IP                       string
-	RequestID                string
+	ActorUserID               string
+	IP                        string
+	RequestID                 string
 }
 
 // RemoveFurnitureInstanceCommand marks one identity removed (lifecycle
