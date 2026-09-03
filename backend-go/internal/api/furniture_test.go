@@ -449,6 +449,9 @@ func TestExtensionTokenDenyByDefault(t *testing.T) {
 	if got := send(http.MethodPost, "/api/projects/41000000-0000-0000-0000-000000000001/furniture-instances"); got != http.StatusOK {
 		t.Fatalf("POST project furniture instances with extension token = %d, want 200 (#390 catalog create)", got)
 	}
+	if got := send(http.MethodPost, "/api/projects/41000000-0000-0000-0000-000000000001/furniture-instances/41000000-0000-0000-0000-000000000002:duplicate"); got != http.StatusOK {
+		t.Fatalf("POST duplicate furniture instance with extension token = %d, want 200 (#391 duplicate)", got)
+	}
 
 	// Everything else denies the credential CLASS: team admin, session and
 	// device management, org/business reads and writes, platform — even for

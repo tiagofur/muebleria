@@ -110,6 +110,10 @@ module Granete
         write('info', event, context)
       end
 
+      def warn(event, context = {})
+        write('warn', event, context)
+      end
+
       def error(event, context = {})
         write('error', event, context)
       end

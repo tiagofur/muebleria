@@ -608,6 +608,10 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// identity. Allocates authoritative identity (origin='design') for the bound
 	// project before SketchUp places the physical component.
 	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances$`),
+	// #391 / DT-7: duplicate an existing project furniture instance from SketchUp.
+	// Allocates authoritative identity (origin='duplicate', origin_furniture_instance_id=source)
+	// for the bound project when a managed unit is copied in the host.
+	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances/[^/]+:duplicate$`),
 }
 
 // Parameterized PUT surface for the extension credential (#389 / DT-5). This

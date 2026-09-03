@@ -46,6 +46,18 @@ type CreateFurnitureInstanceCommand struct {
 	RequestID                 string
 }
 
+// DuplicateFurnitureInstanceCommand copies an existing project furniture instance (#391 / DT-7).
+// The new identity is allocated by the database with origin='duplicate' and
+// origin_furniture_instance_id referencing the source instance within the SAME project.
+// The new instance inherits the source's furniture_definition_id.
+type DuplicateFurnitureInstanceCommand struct {
+	ProjectID                 string
+	SourceFurnitureInstanceID string
+	ActorUserID               string
+	IP                        string
+	RequestID                 string
+}
+
 // RemoveFurnitureInstanceCommand marks one identity removed (lifecycle
 // active → removed, terminal). Optimistic concurrency via ExpectedVersion.
 type RemoveFurnitureInstanceCommand struct {
@@ -166,22 +178,71 @@ func (s *PostgresStore) CreateFurnitureInstance(ctx context.Context, cmd CreateF
 	if err != nil {
 		return nil, err
 	}
+	details := map[string]interface{}{
+		"furniture_instance_id": instance.ID,
+		"project_id":            instance.ProjectID,
+		"origin":                string(instance.Origin),
+		"version":               instance.Version,
+	}
+	if instance.OriginFurnitureInstanceID != "" {
+		details["origin_furniture_instance_id"] = instance.OriginFurnitureInstanceID
+	}
 	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
 		EventType:      "furniture_instance_created",
 		ActorUserID:    nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx)),
 		OrganizationID: projectOrganizationID,
 		IP:             cmd.IP,
 		RequestID:      cmd.RequestID,
-		Details: map[string]interface{}{
-			"furniture_instance_id": instance.ID,
-			"project_id":            instance.ProjectID,
-			"origin":                string(instance.Origin),
-			"version":               instance.Version,
-		},
+		Details:        details,
 	}); err != nil {
 		return nil, err
 	}
 	return instance, nil
+}
+
+// DuplicateFurnitureInstance copies one project-owned identity (#391 / DT-7).
+// The source instance must exist within the same project and must not be in a
+// terminal lifecycle status. The new instance inherits the source's catalog definition
+// provenance and records origin='duplicate' with origin_furniture_instance_id.
+func (s *PostgresStore) DuplicateFurnitureInstance(ctx context.Context, cmd DuplicateFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
+	if !isValidUUID(cmd.ProjectID) || !isValidUUID(cmd.SourceFurnitureInstanceID) {
+		return nil, ErrFurnitureInstanceNotFound
+	}
+	if transactionFromContext(ctx) == nil {
+		var duplicated *domain.FurnitureInstance
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		actor.UserID = nonEmptyOrDefault(actor.UserID, cmd.ActorUserID)
+		err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			var txErr error
+			duplicated, txErr = s.DuplicateFurnitureInstance(txCtx, cmd)
+			return txErr
+		})
+		return duplicated, err
+	}
+
+	source, err := s.GetFurnitureInstanceByID(ctx, cmd.SourceFurnitureInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	if source == nil || source.ProjectID != cmd.ProjectID {
+		return nil, ErrFurnitureInstanceNotFound
+	}
+	if domain.FurnitureInstanceLifecycleTerminal(source.LifecycleStatus) {
+		return nil, domain.ErrFurnitureInstanceLifecycleConflict
+	}
+
+	return s.CreateFurnitureInstance(ctx, CreateFurnitureInstanceCommand{
+		ProjectID:                 cmd.ProjectID,
+		FurnitureDefinitionID:     source.FurnitureDefinitionID,
+		Origin:                    domain.FurnitureInstanceOriginDuplicate,
+		OriginFurnitureInstanceID: source.ID,
+		ActorUserID:               cmd.ActorUserID,
+		IP:                        cmd.IP,
+		RequestID:                 cmd.RequestID,
+	})
 }
 
 // furnitureInstanceProjectScopeFmt mirrors the furniture_instances RLS read

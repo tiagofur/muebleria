@@ -812,3 +812,95 @@ func TestFurnitureInstances_ListSummariesDisplay(t *testing.T) {
 		t.Fatalf("bare summary = %+v, want no invented presentation", row)
 	}
 }
+
+// TestFurnitureInstances_Duplicate (#391 / DT-7): copies an existing project
+// furniture instance within the same project. The new row receives origin='duplicate'
+// and origin_furniture_instance_id referencing the source instance, inheriting
+// its catalog definition provenance. Terminal sources and cross-project sources
+// are rejected.
+func TestFurnitureInstances_Duplicate(t *testing.T) {
+	fx := newRLSFixture(t)
+
+	// Create a source instance in fiSharedProject owned by org A
+	var source *domain.FurnitureInstance
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var txErr error
+		source, txErr = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:             fiSharedProject,
+			FurnitureDefinitionID: fiModuleA,
+			Origin:                domain.FurnitureInstanceOriginDesign,
+			ActorUserID:           rlsUserA,
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	// 1. Happy path: duplicate within same project
+	var dup *domain.FurnitureInstance
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var txErr error
+		dup, txErr = fx.store.DuplicateFurnitureInstance(ctx, storage.DuplicateFurnitureInstanceCommand{
+			ProjectID:                 fiSharedProject,
+			SourceFurnitureInstanceID: source.ID,
+			ActorUserID:               rlsUserA,
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("duplicate source: %v", err)
+	}
+
+	if dup.ID == source.ID {
+		t.Fatalf("duplicated instance must receive a distinct ID, got %s", dup.ID)
+	}
+	if dup.ProjectID != fiSharedProject {
+		t.Fatalf("project_id = %s, want %s", dup.ProjectID, fiSharedProject)
+	}
+	if dup.Origin != domain.FurnitureInstanceOriginDuplicate {
+		t.Fatalf("origin = %s, want duplicate", dup.Origin)
+	}
+	if dup.OriginFurnitureInstanceID != source.ID {
+		t.Fatalf("origin_furniture_instance_id = %s, want %s", dup.OriginFurnitureInstanceID, source.ID)
+	}
+	if dup.FurnitureDefinitionID != fiModuleA {
+		t.Fatalf("definition = %s, want %s", dup.FurnitureDefinitionID, fiModuleA)
+	}
+	if dup.LifecycleStatus != domain.FurnitureInstanceLifecycleActive {
+		t.Fatalf("status = %s, want active", dup.LifecycleStatus)
+	}
+
+	// 2. Cross-project duplicate attempt: fiSharedProject source cannot be duplicated into fiProjectB
+	if err := fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+		_, txErr := fx.store.DuplicateFurnitureInstance(ctx, storage.DuplicateFurnitureInstanceCommand{
+			ProjectID:                 fiProjectB,
+			SourceFurnitureInstanceID: source.ID,
+			ActorUserID:               rlsUserB,
+		})
+		return txErr
+	}); !errors.Is(err, storage.ErrFurnitureInstanceNotFound) {
+		t.Fatalf("cross-project duplicate err = %v, want ErrFurnitureInstanceNotFound", err)
+	}
+
+	// 3. Terminal source rejection: remove source, then attempt duplicate
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.RemoveFurnitureInstance(ctx, storage.RemoveFurnitureInstanceCommand{
+			FurnitureInstanceID: source.ID,
+			ExpectedVersion:     source.Version,
+			ActorUserID:         rlsUserA,
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("remove source: %v", err)
+	}
+
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.DuplicateFurnitureInstance(ctx, storage.DuplicateFurnitureInstanceCommand{
+			ProjectID:                 fiSharedProject,
+			SourceFurnitureInstanceID: source.ID,
+			ActorUserID:               rlsUserA,
+		})
+		return txErr
+	}); !errors.Is(err, domain.ErrFurnitureInstanceLifecycleConflict) {
+		t.Fatalf("duplicate terminal source err = %v, want ErrFurnitureInstanceLifecycleConflict", err)
+	}
+}

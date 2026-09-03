@@ -41,6 +41,26 @@ func furnitureInstanceCommandRouter(commands map[string]http.Handler) http.Handl
 	})
 }
 
+// projectFurnitureInstanceCommandRouter adapts the command-oriented OpenAPI path
+// /api/projects/{projectId}/furniture-instances/{instanceId}:{command} to net/http's ServeMux.
+func projectFurnitureInstanceCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("instanceCommand")
+		instanceID, command, ok := strings.Cut(segment, ":")
+		if !ok || instanceID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("instanceId", instanceID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func toFurnitureInstanceDTO(instance domain.FurnitureInstance) openapi.FurnitureInstance {
 	dto := openapi.FurnitureInstance{
 		ID:              instance.ID,
@@ -221,4 +241,46 @@ func (s *Server) HandleFurnitureInstanceRemove(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("ETag", FormatVersionETag(instance.Version))
 	respondWithJSON(w, http.StatusOK, toFurnitureInstanceDTO(*instance))
+}
+
+// HandleFurnitureInstanceDuplicate serves POST
+// /api/projects/{projectId}/furniture-instances/{instanceId}:duplicate (#391 / DT-7).
+// Duplicates an existing project furniture instance within the same project.
+// Idempotency is enforced by the RequireIdempotency middleware wrapper.
+func (s *Server) HandleFurnitureInstanceDuplicate(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	roles := actorRoles(claims)
+	if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateProjects), "no tenés permiso para duplicar muebles del proyecto") {
+		return
+	}
+
+	projectID := r.PathValue("projectId")
+	if !isValidUUID(projectID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "projectId inválido", nil)
+		return
+	}
+	instanceID := r.PathValue("instanceId")
+	if !isValidUUID(instanceID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "instanceId inválido", nil)
+		return
+	}
+
+	instance, err := s.Store.DuplicateFurnitureInstance(r.Context(), storage.DuplicateFurnitureInstanceCommand{
+		ProjectID:                 projectID,
+		SourceFurnitureInstanceID: instanceID,
+		ActorUserID:               claims.UserID,
+		IP:                        clientIP(r),
+		RequestID:                 RequestIDFromContext(r.Context()),
+	})
+	if err != nil {
+		respondWithFurnitureInstanceError(w, err)
+		return
+	}
+
+	w.Header().Set("ETag", FormatVersionETag(instance.Version))
+	respondWithJSON(w, http.StatusCreated, toFurnitureInstanceDTO(*instance))
 }

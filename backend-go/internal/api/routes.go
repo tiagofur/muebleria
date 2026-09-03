@@ -308,6 +308,9 @@ func RegisterRoutes(server *Server) http.Handler {
 	// under optimistic concurrency.
 	mux.Handle("GET /api/projects/{projectId}/furniture-instances", authMW(http.HandlerFunc(server.HandleProjectFurnitureInstances)))
 	mux.Handle("POST /api/projects/{projectId}/furniture-instances", authMW(server.RequireIdempotency("project.create-furniture-instance", http.HandlerFunc(server.HandleProjectFurnitureInstances))))
+	mux.Handle("POST /api/projects/{projectId}/furniture-instances/{instanceCommand...}", authMW(server.RequireIdempotency("project.duplicate-furniture-instance", projectFurnitureInstanceCommandRouter(map[string]http.Handler{
+		"duplicate": http.HandlerFunc(server.HandleFurnitureInstanceDuplicate),
+	}))))
 	mux.Handle("POST /api/furniture-instances/{instanceCommand...}", authMW(server.RequireIdempotency("project.remove-furniture-instance", furnitureInstanceCommandRouter(map[string]http.Handler{
 		"remove": http.HandlerFunc(server.HandleFurnitureInstanceRemove),
 	}))))

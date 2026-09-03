@@ -48,6 +48,9 @@ type stubStore struct {
 	createFurnitureInstanceCalls int
 	removeFurnitureInstanceCmd *storage.RemoveFurnitureInstanceCommand
 	removeFurnitureInstanceErr error
+	duplicateFurnitureInstanceCmd *storage.DuplicateFurnitureInstanceCommand
+	duplicateFurnitureInstanceErr error
+	duplicateFurnitureInstanceCalls int
 	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2)
 	materializeQuoteLineCmd     *storage.MaterializeQuoteLineCommand
 	materializeQuoteLineErr     error
@@ -1416,6 +1419,34 @@ func (s *stubStore) RemoveFurnitureInstance(_ context.Context, cmd storage.Remov
 	instance.Version++
 	s.furnitureInstancesByID[cmd.FurnitureInstanceID] = instance
 	return &instance, nil
+}
+func (s *stubStore) DuplicateFurnitureInstance(_ context.Context, cmd storage.DuplicateFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
+	s.duplicateFurnitureInstanceCalls++
+	s.duplicateFurnitureInstanceCmd = &cmd
+	if s.duplicateFurnitureInstanceErr != nil {
+		return nil, s.duplicateFurnitureInstanceErr
+	}
+	if s.furnitureInstancesByID == nil {
+		s.furnitureInstancesByID = map[string]domain.FurnitureInstance{}
+	}
+	source, ok := s.furnitureInstancesByID[cmd.SourceFurnitureInstanceID]
+	if !ok || source.ProjectID != cmd.ProjectID {
+		return nil, storage.ErrFurnitureInstanceNotFound
+	}
+	if domain.FurnitureInstanceLifecycleTerminal(source.LifecycleStatus) {
+		return nil, domain.ErrFurnitureInstanceLifecycleConflict
+	}
+	instance := &domain.FurnitureInstance{
+		ID:                        "fi-dup-1",
+		ProjectID:                 cmd.ProjectID,
+		FurnitureDefinitionID:     source.FurnitureDefinitionID,
+		Origin:                    domain.FurnitureInstanceOriginDuplicate,
+		OriginFurnitureInstanceID: source.ID,
+		LifecycleStatus:           domain.FurnitureInstanceLifecycleActive,
+		Version:                   1,
+	}
+	s.furnitureInstancesByID[instance.ID] = *instance
+	return instance, nil
 }
 
 // QuoteLine ↔ FurnitureInstance relation (#386 / DT-2).
