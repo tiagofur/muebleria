@@ -129,3 +129,21 @@ EOL.
 - #460/F202 continúa `in_progress` por SEC-8/SEC-9; #461 completo y Gate B
   siguen pendientes.
 - **#385 DT-1 may start.**
+
+## F204 — #385 DT-1: identidad estable de FurnitureInstance (COMPLETE)
+
+- Primera familia persistente post-Gate A. `furniture_instances`
+  (migration 000111): una identidad estable por unidad física, project-owned,
+  con provenance server-authoritative (`quote|design|manual|import|duplicate`),
+  lifecycle terminal (`active|removed|cancelled`) y versionado optimista.
+- RLS `explicitly-shared` + inventory + trigger de ownership + grants sin
+  DELETE desde la primera migración; fresh + upgrade fixture verdes.
+- API generada: `GET/POST /api/projects/{projectId}/furniture-instances`,
+  `POST /api/furniture-instances/{instanceId}:remove`; idempotency durable en
+  create/remove; audit `furniture_instance_created/removed` en la misma
+  transacción tenant.
+- Pruebas PostgreSQL real: identidad independiente (dos comandos idénticos →
+  dos IDs), cross-project rechazado, cross-org bloqueado con rol app incluso
+  sin filtro de tenant, projectId random → 404, retry no duplica identidad.
+- Detalle: `progress/implementation_385_dt1.md`. NO implementado: #386, #387,
+  SketchUp, reconciliation, release, machining.

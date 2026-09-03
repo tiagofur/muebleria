@@ -38,8 +38,15 @@ type stubStore struct {
 	lastCreatedCustomer  *domain.Customer
 	lastCreatedProject   *domain.Project
 	lastUpdatedProject   *domain.Project
-	materialReturnedByID *domain.MaterialBoard
-	materialGetByIDErr   error
+	// Project furniture identity (#385 / DT-1)
+	furnitureInstancesByID     map[string]domain.FurnitureInstance
+	listFurnitureInstances     []domain.FurnitureInstance
+	createFurnitureInstanceCmd *storage.CreateFurnitureInstanceCommand
+	createFurnitureInstanceErr error
+	removeFurnitureInstanceCmd *storage.RemoveFurnitureInstanceCommand
+	removeFurnitureInstanceErr error
+	materialReturnedByID       *domain.MaterialBoard
+	materialGetByIDErr         error
 	// Ambient materials (presentation-only floor/wall, #4150)
 	listAmbientMaterials      []domain.AmbientMaterial
 	ambientReturnedByID       *domain.AmbientMaterial
@@ -1312,6 +1319,58 @@ func (s *stubStore) ReceivePurchaseOrder(_ context.Context, id string, lines []d
 // violation: fmt.Errorf("error creating X: %w", pgErr).
 func dupErr(op string) error {
 	return errors.New(op + ": duplicate key value violates unique constraint")
+}
+
+// Project furniture identity (#385 / DT-1).
+func (s *stubStore) CreateFurnitureInstance(_ context.Context, cmd storage.CreateFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
+	s.createFurnitureInstanceCmd = &cmd
+	if s.createFurnitureInstanceErr != nil {
+		return nil, s.createFurnitureInstanceErr
+	}
+	if s.furnitureInstancesByID == nil {
+		s.furnitureInstancesByID = map[string]domain.FurnitureInstance{}
+	}
+	instance := &domain.FurnitureInstance{
+		ID: "fi-1", ProjectID: cmd.ProjectID, Origin: cmd.Origin,
+		FurnitureDefinitionID: cmd.FurnitureDefinitionID,
+		LifecycleStatus:       domain.FurnitureInstanceLifecycleActive,
+		Version:               1,
+	}
+	s.furnitureInstancesByID[instance.ID] = *instance
+	return instance, nil
+}
+func (s *stubStore) GetFurnitureInstanceByID(_ context.Context, id string) (*domain.FurnitureInstance, error) {
+	if instance, ok := s.furnitureInstancesByID[id]; ok {
+		copy := instance
+		return &copy, nil
+	}
+	return nil, nil
+}
+func (s *stubStore) ListFurnitureInstancesByProject(_ context.Context, projectID string, includeTerminal bool) ([]domain.FurnitureInstance, error) {
+	if s.listFurnitureInstances != nil {
+		return s.listFurnitureInstances, nil
+	}
+	out := []domain.FurnitureInstance{}
+	for _, instance := range s.furnitureInstancesByID {
+		if instance.ProjectID == projectID && (includeTerminal || instance.LifecycleStatus == domain.FurnitureInstanceLifecycleActive) {
+			out = append(out, instance)
+		}
+	}
+	return out, nil
+}
+func (s *stubStore) RemoveFurnitureInstance(_ context.Context, cmd storage.RemoveFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
+	s.removeFurnitureInstanceCmd = &cmd
+	if s.removeFurnitureInstanceErr != nil {
+		return nil, s.removeFurnitureInstanceErr
+	}
+	instance, ok := s.furnitureInstancesByID[cmd.FurnitureInstanceID]
+	if !ok {
+		return nil, storage.ErrFurnitureInstanceNotFound
+	}
+	instance.LifecycleStatus = domain.FurnitureInstanceLifecycleRemoved
+	instance.Version++
+	s.furnitureInstancesByID[cmd.FurnitureInstanceID] = instance
+	return &instance, nil
 }
 
 // compile-time guard: stubStore must satisfy Store.
