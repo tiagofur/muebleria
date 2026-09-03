@@ -183,8 +183,8 @@ module Granete
           instance = parent_definition.entities.add_instance(component_definition,
                                                              LocalGeometry.translation_only(pos_mm))
           instance.name = name
-          MetadataWriter.write_part(@metadata_store, instance, comp_id, slot_id,
-                                    furniture_ref: furniture_instance_id)
+          ChildMetadataWriter.write_part(@metadata_store, instance, comp_id, slot_id,
+                                         furniture_ref: furniture_instance_id)
           instance
         end
       end
@@ -218,6 +218,90 @@ module Granete
           existing = existing_meta&.dig('intent', 'materialChoices')
           existing = {} unless existing.is_a?(Hash)
           merged_choices != existing
+        end
+      end
+
+      # #389 / DT-5 — Place EXISTING project FurnitureInstance. Extracted
+      # from FurnitureBuilder to keep the class within its length budget; it
+      # shares the builder's private helpers and metadata writer.
+      module ProjectPlacement
+        # Renders the same native hierarchy as insert_furniture but stamps
+        # the BACKEND's furnitureInstanceId as the authoritative business
+        # identity. The ID arrives from the server (project furniture list)
+        # and is never generated, derived from a definition/name/position or
+        # reused from any local ref. Returns the placed entity handle so the
+        # caller can read the final transform and sync the design working
+        # copy; on any host error the operation aborts leaving no partial
+        # hierarchy.
+        def place_existing_furniture(model, furniture_instance_id:, definition:, parameters: {},
+                                     resolved_layout: nil, material_choices: nil,
+                                     project_id: nil, design_id: nil)
+          unless furniture_instance_id.is_a?(String) && !furniture_instance_id.strip.empty?
+            return { 'success' => false,
+                     'error' => 'Se requiere la identidad (furnitureInstanceId) del mueble del proyecto' }
+          end
+
+          params = normalize_parameters(definition, parameters)
+          model.start_operation("Colocar Mueble del Proyecto #{definition['name']}", true)
+          begin
+            furniture_definition = create_furniture_definition(model, definition, furniture_instance_id)
+            furniture = model.active_entities.add_instance(furniture_definition,
+                                                           Geom::Transformation.new)
+            furniture.name = "#{definition['name']} (#{furniture_instance_id})"
+            counts = render_layout(model, furniture_definition, furniture_instance_id, definition,
+                                   params, resolved_layout)
+            MetadataWriter.write_furniture(@metadata_store, furniture, furniture_instance_id,
+                                           definition, params,
+                                           material_choices: material_choices,
+                                           identity: { server: true, project_id: project_id,
+                                                       design_id: design_id })
+            model.commit_operation
+          rescue StandardError => e
+            model.abort_operation
+            return { 'success' => false, 'error' => e.message }
+          end
+
+          prepare_placement(model, furniture)
+          { 'entity' => furniture }.merge(build_result(furniture_instance_id, definition, params, counts))
+        end
+
+        # Placement assist after commit: the furniture spawns at the
+        # workshop-frame origin, so keep it selected and hand the user the
+        # Move tool to land it where intended (interim step toward north-star
+        # drag/placement). Never fails the reported operation: selection and
+        # tool activation are UI state, not model geometry.
+        def prepare_placement(model, furniture)
+          selection = model.respond_to?(:selection) ? model.selection : nil
+          return unless selection
+
+          selection.clear
+          selection.add(furniture)
+          ::Sketchup.send_action('selectMoveTool:') if defined?(::Sketchup) && ::Sketchup.respond_to?(:send_action)
+        rescue StandardError
+          nil
+        end
+
+        # Reverts a JUST-placed furniture when the backend working-copy sync
+        # failed (#389 failure atomicity): the insertion was new and its
+        # generated definitions are isolated, so erasing the top-level entity
+        # plus purging orphan Granete definitions restores the pre-place
+        # state. Only ever call this with an entity this builder just created
+        # in this session — never with user-authored or adopted geometry.
+        def rollback_placement(model, furniture)
+          model.start_operation('Revertir Colocación', true)
+          begin
+            # Destroy the managed children first so their part definitions
+            # lose the last live instance and the scoped purge below can
+            # remove them (same order update_furniture uses).
+            furniture.definition.entities.clear! if furniture.respond_to?(:definition)
+            model.active_entities.erase_entities([furniture])
+            purge_orphan_generated_definitions(model)
+            model.commit_operation
+            true
+          rescue StandardError
+            model.abort_operation
+            false
+          end
         end
       end
 
@@ -291,14 +375,13 @@ module Granete
       # ComponentInstance whose definition holds LOCAL geometry at origin and
       # whose transform is the authoritative #414 local→furniture placement.
       #
-      # This is a pure visual adapter: ZERO manufacturing rules, zero
-      # thickness calculation, zero orientation inference (no slot/role/AABB
-      # rotation table exists), zero world-AABB baking and zero non-uniform
-      # scaling for productive dimensions. Granete IDs live in namespaced
-      # metadata and never derive from host GUID/persistent_id/name.
+      # Pure visual adapter: zero manufacturing rules/thickness calculation,
+      # zero orientation inference, zero world-AABB baking and zero
+      # non-uniform scaling. Granete IDs never derive from host IDs.
       class FurnitureBuilder
         include GenericAuthoringRenderer
         include FurnitureIntent
+        include ProjectPlacement
         include LegacyMigrationBuild
 
         MM_TO_INCHES = 1.0 / 25.4
@@ -328,9 +411,8 @@ module Granete
           model.start_operation("Insertar Mueble #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, instance_id)
-            # Host-accurate identity transform: SketchUp has no
-            # Transformation.identity constructor — Transformation.new IS the
-            # identity (caught by the real-host TestUp smoke).
+            # Transformation.new IS the identity transform on the real host
+            # (there is no Transformation.identity constructor).
             furniture = model.active_entities.add_instance(furniture_definition,
                                                            Geom::Transformation.new)
             furniture.name = "#{definition['name']} (#{instance_id})"
@@ -398,22 +480,6 @@ module Granete
         end
 
         private
-
-        # Placement assist after commit: the furniture spawns at the
-        # workshop-frame origin, so keep it selected and hand the user the
-        # Move tool to land it where intended (interim step toward north-star
-        # drag/placement). Never fails the reported insertion: selection and
-        # tool activation are UI state, not model geometry.
-        def prepare_placement(model, furniture)
-          selection = model.respond_to?(:selection) ? model.selection : nil
-          return unless selection
-
-          selection.clear
-          selection.add(furniture)
-          ::Sketchup.send_action('selectMoveTool:') if defined?(::Sketchup) && ::Sketchup.respond_to?(:send_action)
-        rescue StandardError
-          nil
-        end
 
         def generate_instance_id
           "inst-#{rand(0x1000..0xffff).to_s(16)}#{rand(0x1000..0xffff).to_s(16)}"
@@ -483,7 +549,7 @@ module Granete
           instance.name = name
 
           paint_board(model, instance, board)
-          MetadataWriter.write_part(
+          ChildMetadataWriter.write_part(
             @metadata_store, instance, board.component_instance_id, board.slot_id,
             component_definition_id: board.component_definition_id,
             catalog_component_id: board.catalog_component_id,
@@ -518,7 +584,7 @@ module Granete
 
         def attach_hardware_metadata(instance, placement, name, furniture_instance_id)
           instance.name = name
-          MetadataWriter.write_hardware(
+          ChildMetadataWriter.write_hardware(
             @metadata_store, instance, placement.placement_id,
             furniture_ref: furniture_instance_id,
             hardware_definition_id: placement.hardware_id,
@@ -559,74 +625,15 @@ module Granete
         end
       end
 
-      # Writes the semantic metadata dictionaries (furniture + component
-      # levels) through the metadata store. Granete contract IDs are
-      # namespaced authoring identity: host GUID/persistent_id/name are never
-      # stored as business identity and rename never mutates them. Piezas y
-      # herrajes keep SEPARATE occurrence namespaces (componentInstanceId vs
-      # hardwarePlacementId) that never alias each other.
-      module MetadataWriter
+      # Managed child (part/hardware) metadata writer, extracted to keep
+      # MetadataWriter within its length budget. Same store, same envelope.
+      module ChildMetadataWriter
         module_function
-
-        # #416 representation-migration provenance source: the entity was
-        # rebuilt from the legacy Group model into the native one. Marker
-        # only — never identity.
-        PROVENANCE_FROM_LEGACY_GROUP = 'legacy-group'
-
-        def write_furniture(store, furniture, instance_id, definition, parameters, material_choices: nil,
-                            existing_metadata: nil, migrated_from: nil)
-          return unless store
-
-          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
-          rev_ref = definition['revisionId'] || definition['version'] || 'rev-1'
-          metadata_payload = json_copy(existing_metadata.is_a?(Hash) ? existing_metadata : {})
-          write_envelope(metadata_payload)
-          metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref, rev_ref)
-          metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
-          metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
-          store.write(furniture, metadata_payload)
-        end
-
-        # Provenance marker retained after a successful migration (#416 step
-        # 6): documents WHERE the representation came from. It is historical
-        # fact, so later edits keep it (write_furniture's existing_metadata
-        # copy preserves the key); only the migration itself sets it.
-        def representation_migration(from)
-          { 'representationMigration' => { 'from' => from, 'markerVersion' => 1 } }
-        end
-
-        def json_copy(value)
-          JSON.parse(JSON.generate(value))
-        end
-
-        def write_envelope(payload)
-          payload['namespace'] = 'com.granete.sketchup_extension'
-          payload['metadataVersion'] = 1
-          payload['kind'] = 'furnitureInstance'
-        end
-
-        def furniture_identity(payload, instance_id, project_ref, revision_ref)
-          identity = payload['identity'].is_a?(Hash) ? payload['identity'] : {}
-          identity['instanceRef'] ||= instance_id
-          identity['projectRef'] ||= project_ref
-          identity['sourceRevisionRef'] = revision_ref
-          identity
-        end
-
-        def furniture_intent(payload, definition, parameters, material_choices)
-          intent = payload['intent'].is_a?(Hash) ? payload['intent'] : {}
-          intent['semanticRole'] ||= 'furniture-instance'
-          intent['furnitureDefinitionId'] = definition['furniture_definition_id']
-          intent['parameters'] = parameters
-          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash) && !material_choices.empty?
-          intent
-        end
 
         # write_part: managed physical part/aggregate occurrence.
         # component_definition_id is the #346 stable authoring-definition ID
-        # (Granete-owned, never the host SU definition GUID);
-        # catalog_component_id is the optional catalog reference — a separate
-        # namespace that never aliases the authoring definition.
+        # (Granete-owned); catalog_component_id is a separate optional
+        # catalog reference namespace that never aliases it.
         def write_part(store, entity, comp_id, slot_id, component_definition_id: nil,
                        catalog_component_id: nil, furniture_ref: nil, role: nil,
                        material_binding_role: nil, entity_class: 'part')
@@ -691,6 +698,88 @@ module Granete
                         'identity' => identity,
                         'intent' => intent
                       })
+        end
+      end
+
+      # Writes the semantic metadata dictionaries (furniture + component
+      # levels) through the metadata store. Granete contract IDs are
+      # namespaced authoring identity: host GUID/persistent_id/name are never
+      # stored as business identity and rename never mutates them. Piezas y
+      # herrajes keep SEPARATE occurrence namespaces (componentInstanceId vs
+      # hardwarePlacementId) that never alias each other.
+      module MetadataWriter
+        module_function
+
+        # #416 representation-migration provenance source (marker, never
+        # identity): rebuilt from the legacy Group model.
+        PROVENANCE_FROM_LEGACY_GROUP = 'legacy-group'
+
+        # identity (optional, #389): { server: true, project_id:, design_id: }
+        # marks a placement whose instance_id IS the backend
+        # furnitureInstanceId; a copied existing_metadata keeps a previously
+        # stored server identity through rebuilds with no flag.
+        def write_furniture(store, furniture, instance_id, definition, parameters,
+                            material_choices: nil, existing_metadata: nil, migrated_from: nil,
+                            identity: nil)
+          return unless store
+
+          proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
+          rev_ref = definition['revisionId'] || definition['version'] || 'rev-1'
+          metadata_payload = json_copy(existing_metadata.is_a?(Hash) ? existing_metadata : {})
+          write_envelope(metadata_payload)
+          metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref,
+                                                            rev_ref, identity: identity)
+          metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
+          metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
+          store.write(furniture, metadata_payload)
+        end
+
+        # #389 identity convergence: with a server identity the
+        # furnitureInstanceId is the authority and instanceRef aliases the
+        # SAME value — a compat locator, never a second business identity.
+        # Local insertions keep a local ref until #390; rebuilds preserve
+        # whatever the copied identity already carries.
+        def furniture_identity(payload, instance_id, project_ref, revision_ref, identity: nil)
+          identity_hash = payload['identity'].is_a?(Hash) ? payload['identity'] : {}
+          if identity.is_a?(Hash) && identity[:server]
+            identity_hash['furnitureInstanceId'] = instance_id
+            identity_hash['instanceRef'] = instance_id
+          else
+            identity_hash['instanceRef'] ||= instance_id
+          end
+          project_id = identity.is_a?(Hash) ? identity[:project_id] : nil
+          design_id = identity.is_a?(Hash) ? identity[:design_id] : nil
+          identity_hash['projectId'] = project_id if project_id && !project_id.to_s.strip.empty?
+          identity_hash['designId'] = design_id if design_id && !design_id.to_s.strip.empty?
+          identity_hash['projectRef'] ||= project_ref
+          identity_hash['sourceRevisionRef'] = revision_ref
+          identity_hash
+        end
+
+        # Provenance marker retained after a successful migration (#416 step
+        # 6): historical fact, so later edits keep it; only the migration
+        # itself sets it.
+        def representation_migration(from)
+          { 'representationMigration' => { 'from' => from, 'markerVersion' => 1 } }
+        end
+
+        def json_copy(value)
+          JSON.parse(JSON.generate(value))
+        end
+
+        def write_envelope(payload)
+          payload['namespace'] = 'com.granete.sketchup_extension'
+          payload['metadataVersion'] = 1
+          payload['kind'] = 'furnitureInstance'
+        end
+
+        def furniture_intent(payload, definition, parameters, material_choices)
+          intent = payload['intent'].is_a?(Hash) ? payload['intent'] : {}
+          intent['semanticRole'] ||= 'furniture-instance'
+          intent['furnitureDefinitionId'] = definition['furniture_definition_id']
+          intent['parameters'] = parameters
+          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash) && !material_choices.empty?
+          intent
         end
       end
     end

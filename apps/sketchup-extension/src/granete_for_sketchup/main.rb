@@ -17,6 +17,11 @@ module Granete
         transport/http_adapter
         metadata/store
         connection/model_binding
+        connection/transform_contract
+        connection/managed_furniture
+        connection/panel_state
+        connection/project_furniture_contract
+        connection/project_furniture
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract

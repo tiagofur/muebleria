@@ -898,3 +898,41 @@ func TestAuthMiddleware_RejectsMembershipIdentityCredentialAndSessionRevocationM
 		t.Fatalf("revoked-after-auth-start = %d, want 401", got)
 	}
 }
+
+// TestExtensionClientBoundaryProjectFurniture pins the #389 / DT-5 capability
+// grants for the SketchUp extension credential: the Project Furniture panel
+// reads the connected project's furniture instances and the design working
+// copy, and Place-existing is the credential's ONLY write (PUT working-copy).
+// Creating furniture identities (POST /furniture-instances, #390) stays
+// DENIED: placing an existing unit must never mint business objects.
+func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
+	projectID := "41000000-0000-0000-0000-000000000001"
+	designID := "52000000-0000-0000-0000-000000000001"
+	cases := []struct {
+		name string
+		verb string
+		path string
+		want bool
+	}{
+		// #389 grants.
+		{"list project furniture instances", http.MethodGet, "/api/projects/" + projectID + "/furniture-instances", true},
+		{"read design working copy", http.MethodGet, "/api/designs/" + designID + "/working-copy", true},
+		{"place existing writes working copy", http.MethodPut, "/api/designs/" + designID + "/working-copy", true},
+		// #390 stays closed: no identity creation for the extension.
+		{"create furniture instance from catalog (#390)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances", false},
+		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
+		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
+		// Surrounding surface stays closed.
+		{"project detail reads", http.MethodGet, "/api/projects/" + projectID, false},
+		{"quote line links", http.MethodGet, "/api/projects/" + projectID + "/quote-lines/" + projectID + "/furniture-instances", false},
+		{"put elsewhere", http.MethodPut, "/api/projects/" + projectID, false},
+		{"delete verb", http.MethodDelete, "/api/designs/" + designID + "/working-copy", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extensionClientMayAccess(tc.verb, tc.path); got != tc.want {
+				t.Fatalf("extensionClientMayAccess(%s %s) = %v, want %v", tc.verb, tc.path, got, tc.want)
+			}
+		})
+	}
+}

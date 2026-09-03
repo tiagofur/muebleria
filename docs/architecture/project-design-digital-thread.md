@@ -530,8 +530,10 @@ El `instanceRef` ya usado por el contrato de SketchUp debe converger semánticam
 Implementación #388: `instanceRef` y `project_ref` quedan documentados como
 alias/locators locales de compatibilidad — nunca identidad de servidor. El
 lado lectura ya espera `furnitureInstanceId`/`projectId`/`designId` en la
-metadata de cada mueble; el lado escritura llega con el placement de #389,
-que escribe exactamente el `furnitureInstanceId` entregado por el backend.
+metadata de cada mueble; implementación #389: el lado escritura escribe
+exactamente el `furnitureInstanceId` entregado por el backend (autoridad) y
+`instanceRef` aliasa el MISMO valor — locator técnico de compatibilidad,
+nunca una segunda identidad de negocio.
 
 ### Persistent ID
 
@@ -570,6 +572,26 @@ FI-002 · Cajonero 3 cajones · 600 × 720 × 560
 ### Place existing
 
 `Place` materializa una `FurnitureInstance` existente. No crea otro business object.
+
+Implementación #389 (2026-09, DT-5): el panel "Muebles del proyecto" es una
+fuente separada del Catálogo; su proyecto proviene siempre del binding #388.
+La lista `GET /api/projects/{projectId}/furniture-instances` incluye el
+bloque de presentación server-computed `display` (nombre del módulo y
+dimensiones que priorizan los `custom_dims` de la quote line actual sobre los
+defaults del módulo) — presentación only, jamás identidad. pending/placed se
+deriva por `furnitureInstanceId` contra el DesignWorkingCopy actual (qty > 1
+permanece N unidades individuales). `Place` revalida el binding primero
+(stale/archived fallan loud), resuelve la composición server-side (una
+resolución rechazada aborta — nunca geometría local adivinada), materializa
+la jerarquía nativa #415 estampando el `furnitureInstanceId` entregado por el
+backend (`instanceRef` aliasa el mismo valor como locator de compatibilidad;
+`persistent_id` viaja como `technical_client_locator` separado), y sincroniza
+el working copy con merge (GET → merge by id → PUT completo: los demás items
+sobreviven). Un fallo del backend revierte la inserción local y falla loud;
+ya colocada hace focus del root existente; roots duplicados bloquean (preview
+#391) sin crear identidad. El credential de extensión recibe exactamente GET
+furniture-instances, GET working-copy y su única superficie PUT
+(working-copy); la creación de unidades (POST, #390) sigue denegada.
 
 ### Insert from catalog
 

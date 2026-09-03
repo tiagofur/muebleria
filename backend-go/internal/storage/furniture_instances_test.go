@@ -703,3 +703,112 @@ func TestFurnitureInstancesHTTP_Postgres(t *testing.T) {
 		"furniture_instance_removed": 1,
 	})
 }
+
+// TestFurnitureInstances_ListSummariesDisplay (#389 / DT-5): the summary list
+// composes the server-side presentation block — catalog label from modules,
+// dimensions preferring the CURRENT quote-line custom_dims over module
+// defaults — while identity rows stay verbatim. Presentation never leaks
+// across the tenant boundary: a foreign org still sees nothing.
+func TestFurnitureInstances_ListSummariesDisplay(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+
+	const moduleWithDims = "50000000-0000-0000-0000-000000000002"
+	const quotedLine = "60000000-0000-0000-0000-000000000002"
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO modules (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+moduleWithDims+`', 'BASE-600', 'Gabinete Base 600', 600, 720, 560, '`+rlsOrgA+`')`); err != nil {
+		t.Fatal(err)
+	}
+
+	create := func(cmd storage.CreateFurnitureInstanceCommand) (*domain.FurnitureInstance, error) {
+		var instance *domain.FurnitureInstance
+		err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			var txErr error
+			instance, txErr = fx.store.CreateFurnitureInstance(ctx, cmd)
+			return txErr
+		})
+		return instance, err
+	}
+	base := storage.CreateFurnitureInstanceCommand{
+		ProjectID:   fiSharedProject,
+		Origin:      domain.FurnitureInstanceOriginQuote,
+		ActorUserID: rlsUserA,
+	}
+
+	// Quoted unit: linked to a quote line whose custom_dims win over the
+	// module defaults (quoted 650 vs module 600).
+	quoted, err := create(func() storage.CreateFurnitureInstanceCommand {
+		cmd := base
+		cmd.FurnitureDefinitionID = moduleWithDims
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create quoted: %v", err)
+	}
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO project_items (id, project_id, module_id, quantity, custom_dims, organization_id)
+		VALUES ('`+quotedLine+`', '`+fiSharedProject+`', '`+moduleWithDims+`', 1,
+			'{"widthMm":650,"heightMm":720,"depthMm":560}'::jsonb, '`+rlsOrgA+`')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+		VALUES ('`+rlsOrgA+`', '`+fiSharedProject+`', '`+quotedLine+`', '`+quoted.ID+`', 'current')`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unlinked unit on the same module: falls back to module default dims.
+	unlinked, err := create(func() storage.CreateFurnitureInstanceCommand {
+		cmd := base
+		cmd.FurnitureDefinitionID = moduleWithDims
+		return cmd
+	}())
+	if err != nil {
+		t.Fatalf("create unlinked: %v", err)
+	}
+
+	// Definition-less unit: no presentation at all.
+	bare, err := create(base)
+	if err != nil {
+		t.Fatalf("create bare: %v", err)
+	}
+
+	summaries := func(actor storage.TenantActor) []storage.FurnitureInstanceSummary {
+		t.Helper()
+		var out []storage.FurnitureInstanceSummary
+		if err := fiTx(t, fx.store, actor, func(ctx context.Context) error {
+			var txErr error
+			out, txErr = fx.store.ListFurnitureInstanceSummariesByProject(ctx, fiSharedProject, false)
+			return txErr
+		}); err != nil {
+			t.Fatalf("list summaries: %v", err)
+		}
+		return out
+	}
+
+	byID := func(rows []storage.FurnitureInstanceSummary) map[string]storage.FurnitureInstanceSummary {
+		t.Helper()
+		index := map[string]storage.FurnitureInstanceSummary{}
+		for _, row := range rows {
+			index[row.Instance.ID] = row
+		}
+		return index
+	}
+
+	got := byID(summaries(fiActorA()))
+	if len(got) != 3 {
+		t.Fatalf("summary rows = %d, want 3 (%+v)", len(got), got)
+	}
+	if row := got[quoted.ID]; row.DisplayName != "Gabinete Base 600" ||
+		row.DisplayDims == nil || row.DisplayDims.WidthMm != 650 || row.DisplayDims.HeightMm != 720 || row.DisplayDims.DepthMm != 560 {
+		t.Fatalf("quoted summary = %+v, want quoted custom dims (650×720×560) to win", row)
+	}
+	if row := got[unlinked.ID]; row.DisplayName != "Gabinete Base 600" ||
+		row.DisplayDims == nil || row.DisplayDims.WidthMm != 600 {
+		t.Fatalf("unlinked summary = %+v, want module default dims", row)
+	}
+	if row := got[bare.ID]; row.DisplayName != "" || row.DisplayDims != nil {
+		t.Fatalf("bare summary = %+v, want no invented presentation", row)
+	}
+}

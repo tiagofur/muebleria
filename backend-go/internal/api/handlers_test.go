@@ -41,6 +41,8 @@ type stubStore struct {
 	// Project furniture identity (#385 / DT-1)
 	furnitureInstancesByID     map[string]domain.FurnitureInstance
 	listFurnitureInstances     []domain.FurnitureInstance
+	// #389 / DT-5 presentation summaries (nil = derive from the plain list).
+	listFurnitureInstanceSummaries []storage.FurnitureInstanceSummary
 	createFurnitureInstanceCmd *storage.CreateFurnitureInstanceCommand
 	createFurnitureInstanceErr error
 	removeFurnitureInstanceCmd *storage.RemoveFurnitureInstanceCommand
@@ -1382,6 +1384,20 @@ func (s *stubStore) ListFurnitureInstancesByProject(_ context.Context, projectID
 		if instance.ProjectID == projectID && (includeTerminal || instance.LifecycleStatus == domain.FurnitureInstanceLifecycleActive) {
 			out = append(out, instance)
 		}
+	}
+	return out, nil
+}
+func (s *stubStore) ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]storage.FurnitureInstanceSummary, error) {
+	if s.listFurnitureInstanceSummaries != nil {
+		return s.listFurnitureInstanceSummaries, nil
+	}
+	instances, err := s.ListFurnitureInstancesByProject(ctx, projectID, includeTerminal)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]storage.FurnitureInstanceSummary, 0, len(instances))
+	for _, instance := range instances {
+		out = append(out, storage.FurnitureInstanceSummary{Instance: instance})
 	}
 	return out, nil
 }
