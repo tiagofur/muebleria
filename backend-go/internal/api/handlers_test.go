@@ -45,6 +45,12 @@ type stubStore struct {
 	createFurnitureInstanceErr error
 	removeFurnitureInstanceCmd *storage.RemoveFurnitureInstanceCommand
 	removeFurnitureInstanceErr error
+	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2)
+	materializeQuoteLineCmd     *storage.MaterializeQuoteLineCommand
+	materializeQuoteLineErr     error
+	materializeQuoteLineResult  *domain.QuoteLineMaterialization
+	listQuoteLineFurnitureErr   error
+	listQuoteLineFurnitureLinks []domain.QuoteLineFurnitureInstance
 	materialReturnedByID       *domain.MaterialBoard
 	materialGetByIDErr         error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -1371,6 +1377,29 @@ func (s *stubStore) RemoveFurnitureInstance(_ context.Context, cmd storage.Remov
 	instance.Version++
 	s.furnitureInstancesByID[cmd.FurnitureInstanceID] = instance
 	return &instance, nil
+}
+
+// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2).
+func (s *stubStore) MaterializeQuoteLine(_ context.Context, cmd storage.MaterializeQuoteLineCommand) (*domain.QuoteLineMaterialization, error) {
+	s.materializeQuoteLineCmd = &cmd
+	if s.materializeQuoteLineErr != nil {
+		return nil, s.materializeQuoteLineErr
+	}
+	if s.materializeQuoteLineResult != nil {
+		return s.materializeQuoteLineResult, nil
+	}
+	return &domain.QuoteLineMaterialization{
+		ProjectID:   cmd.ProjectID,
+		QuoteLineID: cmd.QuoteLineID,
+		Quantity:    1,
+		Instances:   s.listQuoteLineFurnitureLinks,
+	}, nil
+}
+func (s *stubStore) ListQuoteLineFurnitureInstances(_ context.Context, _, _ string) ([]domain.QuoteLineFurnitureInstance, error) {
+	if s.listQuoteLineFurnitureErr != nil {
+		return nil, s.listQuoteLineFurnitureErr
+	}
+	return s.listQuoteLineFurnitureLinks, nil
 }
 
 // compile-time guard: stubStore must satisfy Store.

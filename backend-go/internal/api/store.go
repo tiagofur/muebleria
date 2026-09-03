@@ -271,6 +271,13 @@ type Store interface {
 	ListFurnitureInstancesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]domain.FurnitureInstance, error)
 	RemoveFurnitureInstance(ctx context.Context, cmd storage.RemoveFurnitureInstanceCommand) (*domain.FurnitureInstance, error)
 
+	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2, ADR-0003): the
+	// explicit link answering which physical units a quote line represents;
+	// materialization converges those units to the line's commercial quantity
+	// (idempotent, draft-only, accepted quotes are immutable).
+	MaterializeQuoteLine(ctx context.Context, cmd storage.MaterializeQuoteLineCommand) (*domain.QuoteLineMaterialization, error)
+	ListQuoteLineFurnitureInstances(ctx context.Context, projectID, quoteLineID string) ([]domain.QuoteLineFurnitureInstance, error)
+
 
 	// Project templates (#110 / H15)
 	ListProjectTemplates(ctx context.Context) ([]domain.ProjectTemplate, error)

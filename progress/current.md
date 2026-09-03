@@ -147,3 +147,32 @@ EOL.
   sin filtro de tenant, projectId random → 404, retry no duplica identidad.
 - Detalle: `progress/implementation_385_dt1.md`. NO implementado: #386, #387,
   SketchUp, reconciliation, release, machining.
+
+## F205 — #386 DT-2: QuoteLine ↔ FurnitureInstance (COMPLETE)
+
+- Segunda familia persistente post-Gate A. `quote_line_furniture_instances`
+  (migration 000112): relación explícita línea comercial ↔ unidades físicas.
+  Representación equivalente permitida por §4 del contrato digital-thread:
+  QuoteLine = `project_items`, aceptación = `projects.status`
+  (accepted/produced); sin modelo comercial paralelo.
+- `quantity=N` materializa N identidades únicas (`origin='quote'`, reutiliza
+  `CreateFurnitureInstance` de #385); idempotente por convergencia con
+  advisory lock por línea (concurrencia exacta); increase preserva IDs y agrega
+  sólo delta; decrease en draft retira las más nuevas con lifecycle terminal
+  `cancelled` y **nunca recicla IDs** (hook de historia durable documentado
+  para #387+).
+- Inmutabilidad de aceptada en tres capas: error tipado `ErrQuoteRevisionAccepted`
+  (409) en storage/API; policies RLS INSERT/DELETE con
+  `app_project_quote_mutable` + org dueña (bloquea SQL directo); guards tipados
+  contra eliminar/dropear líneas materializadas vía PUT de proyecto (FK
+  compuesta deferible como backstop estructural; cross-project imposible).
+- API generada: `GET /api/projects/{projectId}/quote-lines/{quoteLineId}/furniture-instances`,
+  `POST .../quote-lines/{quoteLineId}:materialize` (idempotency durable, sin
+  body: identidad server-authoritative). Audit `quote_line_furniture_materialized`
+  en la misma transacción.
+- Fix contenido de deuda preexistente desbloqueado por este trabajo:
+  `loadProjectItems` bufferea items antes de las queries anidadas de choices
+  (fallaba `conn busy` dentro de la tx de tenant del middleware).
+- Detalle: `progress/implementation_386_dt2.md`. NO implementado: #387,
+  #388 re-quote, SketchUp, reconciliation (#392), release, machining.
+  **#387 DT-3 may start.**

@@ -229,6 +229,37 @@ La función/servicio deberá ser idempotente y determinista respecto al estado c
 - Después de aceptación o si una instancia ya posee historia de diseño/producción, no reutilizar ni reciclar su ID.
 - Cambios sobre una cotización aceptada generan nueva `QuoteRevision` (o futuro `ChangeOrder`).
 
+### Implementación #386 (2026-09, DT-2)
+
+La relación existe como tabla `quote_line_furniture_instances` con la
+representación equivalente permitida por §4: **QuoteLine** se ancla hoy en
+`project_items` (línea comercial persistida: module + quantity) y la
+**aceptación** en `projects.status` (`accepted`/`produced`), sin crear un
+modelo comercial paralelo. Reglas implementadas y probadas:
+
+- `quantity=N` materializa N identidades únicas `origin='quote'` mediante un
+  servicio idempotente de convergencia (advisory lock por línea); increase
+  preserva identidades y agrega sólo el delta.
+- Decrease en draft retira las unidades más nuevas con lifecycle terminal
+  `cancelled` + unlink; las identidades nunca se borran ni se re-linkean.
+  Historia durable: además de la aceptación (bloqueada), un hook explícito
+  (`quoteLineInstanceDurableHistory`) es el punto de extensión donde #387+
+  (DesignRevisionItem, revisiones aceptadas, producción) debe registrar
+  referencias que impiden el retiro.
+- Aceptada/producido es inmutable en tres capas: error tipado, policies RLS
+  de INSERT/DELETE (`app_project_quote_mutable` + organización dueña) y FKs
+  compuestas deferibles que hacen imposible el link cross-project y el
+  borrado silencioso de una línea materializada.
+- La unicidad instancia↔línea está acotada a la **representación comercial
+  viva** (`state='current'` + índice unique parcial): NO es un invariante del
+  Digital Thread sobre toda la historia. Cuando existan QuoteRevision reales,
+  el mismo FurnitureInstance puede aparecer en revisiones sucesivas
+  (Q1 aceptada Line A → FI-001 conservada como historia `superseded`;
+  Q2 vigente Line B → FI-001 `current`) — suplantar un link marca historia,
+  nunca borra una revisión aceptada.
+- Cuando la familia revisionada de SalesQuote aterrice, añade su FK de
+  revisión aquí y migra el ancla con autoridad explícita.
+
 ---
 
 ## 7. Design aggregate

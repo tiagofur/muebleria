@@ -37,6 +37,7 @@ import type {
   MFARecoveryCodesResponse,
   MFAStepUpRequest,
   MFAStepUpResponse,
+  MaterializeQuoteLineFurniture,
   MeResponse,
   MediaAuthorizeRequest,
   MediaAuthorizeResponse,
@@ -56,6 +57,7 @@ import type {
   PlatformOrganization,
   PlatformUser,
   ProvisionOrganizationRequest,
+  QuoteLineFurnitureInstance,
   RefreshRequest,
   ResendInvitationResponse,
   RevokeInvitationRequest,
@@ -160,5 +162,7 @@ export abstract class GeneratedGraneteApiClient {
   authorizeMedia(token: string, body: MediaAuthorizeRequest, signal?: AbortSignal): Promise<MediaAuthorizeResponse> { return this.request("POST", "/media:authorize", { schema: "MediaAuthorizeResponse", token, bodySchema: "MediaAuthorizeRequest", body, signal }); }
   listProjectFurnitureInstances(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<FurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { arrayOf: "FurnitureInstance", token, signal }); }
   createProjectFurnitureInstance(token: string, projectId: string, body: CreateFurnitureInstanceRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/furniture-instances`, { schema: "FurnitureInstance", token, bodySchema: "CreateFurnitureInstanceRequest", body, idempotencyKey: key, signal }); }
+  listQuoteLineFurnitureInstances(token: string, projectId: string, quoteLineId: string, signal?: AbortSignal): Promise<ReadonlyArray<QuoteLineFurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/quote-lines/${encodeURIComponent(quoteLineId)}/furniture-instances`, { arrayOf: "QuoteLineFurnitureInstance", token, signal }); }
+  materializeQuoteLineFurniture(token: string, projectId: string, quoteLineId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MaterializeQuoteLineFurniture> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-lines/${encodeURIComponent(quoteLineId)}:materialize`, { schema: "MaterializeQuoteLineFurniture", token, idempotencyKey: key, signal }); }
   removeFurnitureInstance(token: string, instanceId: string, version: number, signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/furniture-instances/${encodeURIComponent(instanceId)}:remove`, { schema: "FurnitureInstance", token, ifMatch: version, signal }); }
 }

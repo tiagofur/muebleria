@@ -598,9 +598,12 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	items := []domain.ProjectItem{}
+	// Buffer the item rows before loading per-item choices: this repository
+	// also runs inside the request-scoped tenant transaction (one
+	// connection), where an open result set makes nested queries fail with
+	// "conn busy".
 	for rows.Next() {
 		var item domain.ProjectItem
 		var measurePresetID *string
@@ -608,12 +611,14 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 		var floorStatus *string
 		var customDims []byte
 		if err := rows.Scan(&item.ID, &item.ModuleID, &item.Quantity, &measurePresetID, &structureRevisionPin, &item.BaseMode, &floorStatus, &customDims); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		// F144: custom_dims JSONB → *ItemCustomDims (NULL/{} = nil → preset).
 		if len(customDims) > 0 && string(customDims) != "null" {
 			var dims domain.ItemCustomDims
 			if err := json.Unmarshal(customDims, &dims); err != nil {
+				rows.Close()
 				return nil, fmt.Errorf("invalid custom_dims for item %s: %w", item.ID, err)
 			}
 			item.CustomDims = &dims
@@ -628,28 +633,33 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 			pin := *structureRevisionPin
 			item.StructureRevisionPin = &pin
 		}
+		items = append(items, item)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
+	for i := range items {
 		choicesQuery := `
 			SELECT option_group_code, choice_entity_id
 			FROM project_item_choices
 			WHERE project_item_id = $1;
 		`
-		cRows, err := s.db(ctx).Query(ctx, choicesQuery, item.ID)
+		cRows, err := s.db(ctx).Query(ctx, choicesQuery, items[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		func() {
 			defer cRows.Close()
-			item.OptionChoices = make(map[string]string)
+			items[i].OptionChoices = make(map[string]string)
 			for cRows.Next() {
 				var code, choiceID string
 				if err := cRows.Scan(&code, &choiceID); err == nil {
-					item.OptionChoices[code] = choiceID
+					items[i].OptionChoices[code] = choiceID
 				}
 			}
 		}()
-
-		items = append(items, item)
 	}
 	return items, nil
 }
@@ -657,6 +667,27 @@ func (s *PostgresStore) loadProjectItems(ctx context.Context, projectID string) 
 // replaceProjectItemsTx deletes existing items and inserts the payload set.
 // Uses client-provided item ids when present so FE ids stay stable.
 func replaceProjectItemsTx(ctx context.Context, tx pgx.Tx, projectID string, items []domain.ProjectItem) error {
+	// #386: a quote line that still represents materialized furniture
+	// instances may not disappear through a generic item replace — retiring
+	// the linkage is an explicit command. The deferred quote-line FK is the
+	// structural backstop; this check fails loud with a typed error first.
+	materialized, err := quoteLinesStillMaterializedTx(ctx, tx, projectID)
+	if err != nil {
+		return err
+	}
+	if len(materialized) > 0 {
+		kept := make(map[string]struct{}, len(items))
+		for i := range items {
+			if items[i].ID != "" {
+				kept[items[i].ID] = struct{}{}
+			}
+		}
+		for _, lineID := range materialized {
+			if _, ok := kept[lineID]; !ok {
+				return domain.ErrQuoteLineStillMaterialized
+			}
+		}
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM project_items WHERE project_id = $1`, projectID); err != nil {
 		return fmt.Errorf("error clearing project items: %w", err)
 	}
@@ -1073,6 +1104,19 @@ func (s *PostgresStore) RemoveProjectItem(ctx context.Context, projectID string,
 		return err
 	}
 	defer tx.Rollback(ctx)
+
+	// #386: deleting a quote line that still represents materialized
+	// furniture instances must fail loud with a typed error instead of
+	// tripping the deferred quote-line FK at COMMIT.
+	materialized, err := quoteLinesStillMaterializedTx(ctx, tx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, lineID := range materialized {
+		if lineID == itemID {
+			return domain.ErrQuoteLineStillMaterialized
+		}
+	}
 
 	_, err = tx.Exec(ctx, `DELETE FROM project_items WHERE id = $1 AND project_id = $2`, itemID, projectID)
 	if err != nil {

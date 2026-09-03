@@ -5365,6 +5365,49 @@
       ],
       "completedAt": "2026-09-02",
       "evidence": "go test ./... green against real PostgreSQL incl. TestFurnitureInstances_MigrationFreshAndUpgrade, TestFurnitureInstances_IdentityLifecycleAndAudit, TestTenantRLS_FurnitureInstancesDirectSQLCrossOrg, TestFurnitureInstancesHTTP_Postgres; pnpm openapi:check / typecheck / test green; git diff --check clean. Gate A remains green (foundation-gate-a.sh untouched)."
+    },
+    {
+      "id": "F205",
+      "title": "Link QuoteLine quantities to physical FurnitureInstances (#386 / DT-2)",
+      "description": "Explicit normalized relation between a commercial quote line and the physical units it represents (quote_line_furniture_instances, migration 000112). Equivalent representation per digital-thread \u00a74: QuoteLine maps to today's persisted commercial line (project_items) and quote acceptance to projects.status, without creating a parallel commercial model. quantity=N materializes N unique FurnitureInstances (origin='quote') through an idempotent, per-line-locked convergence service; draft increase adds only the delta preserving identities, draft decrease retires the newest surplus units terminally (cancelled, never recycled) guarded by a durable-history hook extensible for #387+; accepted/produced quotes are immutable via typed conflict + RLS policies (app_project_quote_mutable, owner-org only); composite deferred FKs make cross-project links structurally impossible and dropping a materialized line fails loud with a typed error. Generated OpenAPI endpoints (list + :materialize command) with durable idempotency receipts and transactionally-coupled audit events. No Design/DesignRevision (#387), no SketchUp, no reconciliation (#392).",
+      "tags": [
+        "digital-thread",
+        "backend",
+        "postgresql",
+        "rls",
+        "openapi",
+        "audit",
+        "projects",
+        "quotes",
+        "p0"
+      ],
+      "created": "2026-09-02",
+      "status": "done",
+      "acceptance": [
+        "quantity=N materializes N unique physical identities; a test fails if one QuoteLine id is used as the identity for quantity>1 units",
+        "Re-running materialization never duplicates units (same or different Idempotency-Key; concurrent commands converge via per-line advisory lock)",
+        "Draft quantity increase preserves existing IDs and adds only the required additional units",
+        "Draft quantity decrease retires only the newest surplus units (terminal cancelled + unlink); IDs are never reused for later units",
+        "FurnitureInstance with durable history is never recycled: acceptance blocks both directions with a typed conflict; durable-history hook documented as the extension point for DesignRevision/production references",
+        "Accepted QuoteRevision is not mutated in place: typed 409 at the API, RLS policies block link INSERT/DELETE by direct SQL under the app role",
+        "The relation answers which physical units a quote line represents (GET endpoint) and those identities are consumable by project furniture (#385) for #387/SketchUp without new IDs",
+        "Cross-project relation is structurally impossible (composite FKs); cross-org reads/mutations blocked under the real app role; instance-line uniqueness is scoped to the live representation (partial unique over state='current') so revisioned quotes can later preserve superseded history for the same instance across revisions (Q1 Line A and Q2 Line B coexisting for one FurnitureInstance) instead of becoming a digital-thread-wide invariant",
+        "Dropping a materialized quote line through the generic project edit fails loud with a typed conflict (deferred FK backstop)",
+        "OpenAPI generated contracts with typed errors and no request body on :materialize (identity stays server-authoritative)",
+        "Fresh migration and upgrade fixture green; #387/SketchUp/reconciliation explicitly not implemented"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/386",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "progress/implementation_386_dt2.md"
+      ],
+      "depends_on": [
+        "F204"
+      ],
+      "completedAt": "2026-09-02",
+      "evidence": "go test ./... green against real PostgreSQL incl. TestQuoteLineFurniture_MigrationFreshAndUpgrade, TestQuoteLineFurniture_MaterializationLifecycleAndAudit, TestQuoteLineFurniture_ConcurrentMaterializationConverges, TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg, TestQuoteLineMaterializeHTTP_Postgres; pnpm openapi:check / typecheck / test green; git diff --check clean; Gate A remains green."
     }
   ]
 }

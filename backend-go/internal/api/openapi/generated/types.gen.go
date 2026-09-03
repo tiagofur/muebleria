@@ -862,3 +862,22 @@ type FurnitureInstance struct {
 type CreateFurnitureInstanceRequest struct {
 	FurnitureDefinitionID *string `json:"furniture_definition_id,omitempty"`
 }
+
+type QuoteLineFurnitureInstance struct {
+	ID                  string            `json:"id"`
+	ProjectID           string            `json:"project_id"`
+	QuoteLineID         string            `json:"quote_line_id"`
+	FurnitureInstanceID string            `json:"furniture_instance_id"`
+	FurnitureInstance   FurnitureInstance `json:"furniture_instance"`
+	CreatedAt           string            `json:"created_at"`
+}
+
+type MaterializeQuoteLineFurniture struct {
+	ProjectID                     string                       `json:"project_id"`
+	QuoteLineID                   string                       `json:"quote_line_id"`
+	Quantity                      int64                        `json:"quantity"`
+	Instances                     []QuoteLineFurnitureInstance `json:"instances"`
+	CreatedFurnitureInstanceIds   []string                     `json:"created_furniture_instance_ids"`
+	CancelledFurnitureInstanceIds []string                     `json:"cancelled_furniture_instance_ids"`
+	UnlinkedFurnitureInstanceIds  []string                     `json:"unlinked_furniture_instance_ids"`
+}

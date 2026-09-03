@@ -2395,6 +2395,72 @@
         }
       }
     },
+    "/projects/{projectId}/quote-lines/{quoteLineId}/furniture-instances": {
+      "get": {
+        "operationId": "listQuoteLineFurnitureInstances",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/QuoteLineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Physical units the quote line represents (stable creation order)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuoteLineFurnitureInstance"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/quote-lines/{quoteLineId}:materialize": {
+      "post": {
+        "summary": "Converge the quote line's physical units to its commercial quantity (#386, idempotent)",
+        "operationId": "materializeQuoteLineFurniture",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/QuoteLineId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post-command link state of the quote line; created/cancelled/unlinked lists are empty on an idempotent no-op run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterializeQuoteLineFurniture"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/furniture-instances/{instanceId}:remove": {
       "post": {
         "operationId": "removeFurnitureInstance",
@@ -2494,6 +2560,15 @@
       },
       "FurnitureInstanceId": {
         "name": "instanceId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "QuoteLineId": {
+        "name": "quoteLineId",
         "in": "path",
         "required": true,
         "schema": {
@@ -5428,6 +5503,98 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "QuoteLineFurnitureInstance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "project_id",
+          "quote_line_id",
+          "furniture_instance_id",
+          "furniture_instance",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quote_line_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_instance_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furniture_instance": {
+            "$ref": "#/components/schemas/FurnitureInstance"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MaterializeQuoteLineFurniture": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "quote_line_id",
+          "quantity",
+          "instances",
+          "created_furniture_instance_ids",
+          "cancelled_furniture_instance_ids",
+          "unlinked_furniture_instance_ids"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quote_line_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Commercial grouping (QuoteLine.quantity); each linked unit keeps its own FurnitureInstance identity"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteLineFurnitureInstance"
+            }
+          },
+          "created_furniture_instance_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "cancelled_furniture_instance_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "unlinked_furniture_instance_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       }

@@ -72,9 +72,22 @@ if [ -n "${GATE_CONTAINER}" ]; then
     -e POSTGRES_PASSWORD=postgres -p "${CONTAINER_PORT}:5432" \
     postgres:16-alpine >/dev/null
   DSN="postgres://postgres:postgres@localhost:${CONTAINER_PORT}/postgres?sslmode=disable"
+  # Readiness must hold on BOTH the init-complete log line and a TCP
+  # pg_isready: the official image's temporary init server answers socket
+  # probes before the real server starts (and then stops), which made the
+  # old probe report "listo" and the immediate re-check fail ~60ms later
+  # (CI flake, also seen on main). Same hardening as
+  # organization-browser-gate.sh: track the loop's own success instead of
+  # re-probing after the loop.
+  postgres_ready() {
+    docker logs "${CONTAINER_NAME}" 2>&1 | grep -Fq 'PostgreSQL init process complete; ready for start up.' &&
+      docker exec "${CONTAINER_NAME}" pg_isready -U postgres -h 127.0.0.1 -p 5432 >/dev/null 2>&1
+  }
   echo -n "[pilot-gate] esperando postgres"
-  for _ in $(seq 1 30); do
-    if docker exec "${CONTAINER_NAME}" pg_isready -U postgres >/dev/null 2>&1; then
+  POSTGRES_READY=""
+  for _ in $(seq 1 60); do
+    if postgres_ready; then
+      POSTGRES_READY=yes
       echo " listo"
       break
     fi
@@ -82,10 +95,12 @@ if [ -n "${GATE_CONTAINER}" ]; then
     sleep 1
   done
   echo
-  docker exec "${CONTAINER_NAME}" pg_isready -U postgres >/dev/null 2>&1 || {
+  if [ -z "${POSTGRES_READY}" ]; then
+    echo "[pilot-gate] PostgreSQL container log (diagnostics):" >&2
+    docker logs "${CONTAINER_NAME}" 2>&1 | tail -20 >&2
     echo "[pilot-gate] el postgres efímero nunca quedó listo" >&2
     exit 1
-  }
+  fi
 fi
 
 command -v go >/dev/null 2>&1 || {
