@@ -6,9 +6,12 @@ import type {
   AuthDeviceDirectory,
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
+  CreateDesignRequest,
   CreateFurnitureInstanceRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  Design,
+  DesignRevision,
   DeviceApproveRequest,
   DeviceEnrollPollRequest,
   DeviceEnrollRequest,
@@ -57,6 +60,7 @@ import type {
   PlatformOrganization,
   PlatformUser,
   ProvisionOrganizationRequest,
+  PublishDesignRevisionRequest,
   QuoteLineFurnitureInstance,
   RefreshRequest,
   ResendInvitationResponse,
@@ -165,4 +169,10 @@ export abstract class GeneratedGraneteApiClient {
   listQuoteLineFurnitureInstances(token: string, projectId: string, quoteLineId: string, signal?: AbortSignal): Promise<ReadonlyArray<QuoteLineFurnitureInstance>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/quote-lines/${encodeURIComponent(quoteLineId)}/furniture-instances`, { arrayOf: "QuoteLineFurnitureInstance", token, signal }); }
   materializeQuoteLineFurniture(token: string, projectId: string, quoteLineId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MaterializeQuoteLineFurniture> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/quote-lines/${encodeURIComponent(quoteLineId)}:materialize`, { schema: "MaterializeQuoteLineFurniture", token, idempotencyKey: key, signal }); }
   removeFurnitureInstance(token: string, instanceId: string, version: number, signal?: AbortSignal): Promise<FurnitureInstance> { return this.request("POST", `/furniture-instances/${encodeURIComponent(instanceId)}:remove`, { schema: "FurnitureInstance", token, ifMatch: version, signal }); }
+  listProjectDesigns(token: string, projectId: string, signal?: AbortSignal): Promise<ReadonlyArray<Design>> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/designs`, { arrayOf: "Design", token, signal }); }
+  createProjectDesign(token: string, projectId: string, body: CreateDesignRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<Design> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/designs`, { schema: "Design", token, bodySchema: "CreateDesignRequest", body, idempotencyKey: key, signal }); }
+  getDesign(token: string, designId: string, signal?: AbortSignal): Promise<Design> { return this.request("GET", `/designs/${encodeURIComponent(designId)}`, { schema: "Design", token, signal }); }
+  listDesignRevisions(token: string, designId: string, signal?: AbortSignal): Promise<ReadonlyArray<DesignRevision>> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions`, { arrayOf: "DesignRevision", token, signal }); }
+  publishDesignRevision(token: string, designId: string, body: PublishDesignRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions`, { schema: "DesignRevision", token, bodySchema: "PublishDesignRevisionRequest", body, idempotencyKey: key, signal }); }
+  getDesignRevision(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<DesignRevision> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}`, { schema: "DesignRevision", token, signal }); }
 }

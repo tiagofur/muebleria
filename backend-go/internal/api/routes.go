@@ -322,6 +322,16 @@ func RegisterRoutes(server *Server) http.Handler {
 		"materialize": http.HandlerFunc(server.HandleQuoteLineMaterialize),
 	}))))
 
+	// Design aggregate and immutable DesignRevision snapshots (#387 / DT-3, ADR-0003):
+	// logical designs owned by the project, plus versioned immutable revision snapshots.
+	// Revision publication is retry-safe through the durable idempotency receipt.
+	mux.Handle("GET /api/projects/{projectId}/designs", authMW(http.HandlerFunc(server.HandleProjectDesigns)))
+	mux.Handle("POST /api/projects/{projectId}/designs", authMW(server.RequireIdempotency("project.create-design", http.HandlerFunc(server.HandleProjectDesigns))))
+	mux.Handle("GET /api/designs/{designId}", authMW(http.HandlerFunc(server.HandleDesign)))
+	mux.Handle("GET /api/designs/{designId}/revisions", authMW(http.HandlerFunc(server.HandleDesignRevisions)))
+	mux.Handle("POST /api/designs/{designId}/revisions", authMW(server.RequireIdempotency("design.publish-revision", http.HandlerFunc(server.HandleDesignRevisions))))
+	mux.Handle("GET /api/designs/{designId}/revisions/{revisionId}", authMW(http.HandlerFunc(server.HandleDesignRevision)))
+
 	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorScan))))
 	mux.Handle("GET /api/projects/{id}/loading-status", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectLoadingStatus))))

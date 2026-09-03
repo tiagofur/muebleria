@@ -669,9 +669,9 @@ type Project struct {
 	// MaterialsRelease is Almacén's "materials complete" stamp (process stage
 	// gating). Opaque JSON blob: { released_by, released_at }. NULL = the
 	// project is still in the warehouse queue.
-	MaterialsRelease  json.RawMessage       `json:"materials_release,omitempty"`
-	DesignRevisions   []DesignRevision      `json:"design_revisions,omitempty"`
-	Approvals         []Approval            `json:"approvals,omitempty"`
+	MaterialsRelease  json.RawMessage          `json:"materials_release,omitempty"`
+	DesignRevisions   []LegacyDesignRevision   `json:"design_revisions,omitempty"`
+	Approvals         []Approval               `json:"approvals,omitempty"`
 	ProductionRelease *ProductionRelease    `json:"production_release,omitempty"`
 	ChangeOrders      []ChangeOrder         `json:"change_orders,omitempty"`
 	PartInstances     []PartInstance        `json:"part_instances,omitempty"`
