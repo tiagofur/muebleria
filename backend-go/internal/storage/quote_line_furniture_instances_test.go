@@ -137,13 +137,37 @@ func assertQuoteLineFurnitureSchema(t *testing.T, pool *pgxpool.Pool) {
 	for _, index := range []string{
 		"uq_project_items_id_project",
 		"uq_furniture_instances_id_project",
-		"uq_quote_line_furniture_instances_instance",
 	} {
 		var exists bool
 		if err := pool.QueryRow(ctx,
 			`SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname=$1)`, index).Scan(&exists); err != nil || !exists {
 			t.Fatalf("index %s exists=%v err=%v", index, exists, err)
 		}
+	}
+
+	// Instance uniqueness is scoped to the LIVE representation only: it is a
+	// partial unique index over current rows, NOT a digital-thread invariant.
+	// Revisioned quotes must be able to preserve superseded history for the
+	// same instance across revisions (accepted Q1 Line A → FI-001 coexisting
+	// with current Q2 Line B → FI-001).
+	var indexDef string
+	if err := pool.QueryRow(ctx,
+		`SELECT indexdef FROM pg_indexes WHERE indexname='uq_quote_line_furniture_instances_current_instance'`,
+	).Scan(&indexDef); err != nil {
+		t.Fatalf("live-representation unique index: %v", err)
+	}
+	if !strings.Contains(indexDef, "UNIQUE INDEX") ||
+		!strings.Contains(indexDef, "(furniture_instance_id)") ||
+		!strings.Contains(indexDef, "state = 'current'") {
+		t.Fatalf("live unique index definition: %s", indexDef)
+	}
+	var stateCheck bool
+	if err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name='quote_line_furniture_instances' AND column_name='state'
+		)`).Scan(&stateCheck); err != nil || !stateCheck {
+		t.Fatalf("state column exists=%v err=%v", stateCheck, err)
 	}
 
 	var executable bool
@@ -651,7 +675,7 @@ func TestQuoteLineFurniture_ConcurrentMaterializationConverges(t *testing.T) {
 	if err := fx.admin.QueryRow(context.Background(), `
 		SELECT count(*) FROM quote_line_furniture_instances qli
 		JOIN furniture_instances fi ON fi.id = qli.furniture_instance_id
-		WHERE qli.quote_line_id = $1 AND fi.lifecycle_status = 'active'`, qlfiLineQty3).Scan(&activeLinks); err != nil {
+		WHERE qli.quote_line_id = $1 AND qli.state = 'current' AND fi.lifecycle_status = 'active'`, qlfiLineQty3).Scan(&activeLinks); err != nil {
 		t.Fatal(err)
 	}
 	if activeLinks != 3 {
@@ -680,7 +704,8 @@ func TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg(t *testing.T) {
 			('50000000-0000-0000-0000-000000000002', 'RLS-MODULE-B', 'RLS module B', '` + rlsOrgB + `')`,
 		`INSERT INTO project_items (id, project_id, module_id, quantity, organization_id) VALUES
 			('` + qlfiAcceptedLine + `', '` + qlfiAcceptedProj + `', '` + fiModuleA + `', 1, '` + rlsOrgA + `'),
-			('60000000-0000-0000-0000-000000000021', '` + qlfiProjectB + `', '50000000-0000-0000-0000-000000000002', 1, '` + rlsOrgB + `')`,
+			('60000000-0000-0000-0000-000000000021', '` + qlfiProjectB + `', '50000000-0000-0000-0000-000000000002', 1, '` + rlsOrgB + `'),
+			('60000000-0000-0000-0000-000000000031', '` + fiSharedProject + `', '` + fiModuleA + `', 1, '` + rlsOrgA + `')`,
 		`INSERT INTO furniture_instances (id, organization_id, project_id, origin) VALUES
 			('51000000-0000-0000-0000-000000000021', '` + rlsOrgA + `', '` + qlfiAcceptedProj + `', 'quote'),
 			('51000000-0000-0000-0000-000000000022', '` + rlsOrgA + `', '` + fiSharedProject + `', 'quote'),
@@ -761,6 +786,20 @@ func TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg(t *testing.T) {
 			t.Fatalf("cross-org delete: rows=%d err=%v, want 0", tag.RowsAffected(), err)
 		}
 
+		// Live-representation uniqueness: the SAME instance cannot carry a
+		// second current link, even within one project (one physical unit is
+		// quoted at most once in the live commercial view).
+		expectFail("second current link for the same instance", `
+			INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+			VALUES ($1, $2, $3, $4, 'current')`,
+			rlsOrgA, fiSharedProject, "60000000-0000-0000-0000-000000000031", "51000000-0000-0000-0000-000000000022")
+		// Superseded history is written by the future revisioned-quote family's
+		// audited command, never by a plain app-role INSERT.
+		expectFail("insert superseded link through the app role", `
+			INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+			VALUES ($1, $2, $3, $4, 'superseded')`,
+			rlsOrgA, fiSharedProject, "60000000-0000-0000-0000-000000000031", "51000000-0000-0000-0000-000000000022")
+
 		// The owner-org draft path stays open: link a freshly created
 		// instance inside the same transaction (rolled back by the fixture).
 		var fresh string
@@ -807,4 +846,28 @@ func TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	// Revision-history coexistence (review blocker on PR #539): the schema
+	// must NOT make "one link per instance" a digital-thread-wide invariant.
+	// When revisioned quotes land, accepted Q1 Line A → FI-001 stays as
+	// superseded history while current Q2 Line B → FI-001 exists — both rows
+	// coexist for the same instance; only the LIVE view keeps uniqueness.
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+		VALUES ($1, $2, $3, $4, 'superseded')`,
+		rlsOrgA, fiSharedProject, "60000000-0000-0000-0000-000000000031", "51000000-0000-0000-0000-000000000022"); err != nil {
+		t.Fatalf("superseded revision history must coexist with the current link: %v", err)
+	}
+	var perStateCounts struct {
+		current, superseded int
+	}
+	if err := fx.admin.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE state='current'), count(*) FILTER (WHERE state='superseded')
+		FROM quote_line_furniture_instances WHERE furniture_instance_id=$1`,
+		"51000000-0000-0000-0000-000000000022").Scan(&perStateCounts.current, &perStateCounts.superseded); err != nil {
+		t.Fatal(err)
+	}
+	if perStateCounts.current != 1 || perStateCounts.superseded != 1 {
+		t.Fatalf("revision coexistence: current=%d superseded=%d, want 1/1 for the same instance", perStateCounts.current, perStateCounts.superseded)
+	}
 }

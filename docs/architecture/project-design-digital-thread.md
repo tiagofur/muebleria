@@ -250,6 +250,13 @@ modelo comercial paralelo. Reglas implementadas y probadas:
   de INSERT/DELETE (`app_project_quote_mutable` + organización dueña) y FKs
   compuestas deferibles que hacen imposible el link cross-project y el
   borrado silencioso de una línea materializada.
+- La unicidad instancia↔línea está acotada a la **representación comercial
+  viva** (`state='current'` + índice unique parcial): NO es un invariante del
+  Digital Thread sobre toda la historia. Cuando existan QuoteRevision reales,
+  el mismo FurnitureInstance puede aparecer en revisiones sucesivas
+  (Q1 aceptada Line A → FI-001 conservada como historia `superseded`;
+  Q2 vigente Line B → FI-001 `current`) — suplantar un link marca historia,
+  nunca borra una revisión aceptada.
 - Cuando la familia revisionada de SalesQuote aterrice, añade su FK de
   revisión aquí y migra el ancla con autoridad explícita.
 

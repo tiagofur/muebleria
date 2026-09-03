@@ -34,6 +34,15 @@ CREATE TABLE quote_line_furniture_instances (
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     quote_line_id UUID NOT NULL,
     furniture_instance_id UUID NOT NULL,
+    -- Live-representation scope. 'current' is the link as it stands in the
+    -- project's live commercial representation; 'superseded' is preserved
+    -- history. The uniqueness below applies ONLY to current rows: it is NOT
+    -- a digital-thread-wide invariant. When revisioned quotes land, the same
+    -- FurnitureInstance may appear across revisions (accepted Q1 Line A →
+    -- FI-001 stays as history while current Q2 Line B → FI-001 exists), so
+    -- superseding a link means marking it superseded, never deleting
+    -- accepted-revision history.
+    state TEXT NOT NULL DEFAULT 'current' CHECK (state IN ('current', 'superseded')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- A quote line being edited keeps its id inside one transaction
     -- (replaceProjectItemsTx deletes and re-inserts the payload set), so this
@@ -48,12 +57,16 @@ CREATE TABLE quote_line_furniture_instances (
     CONSTRAINT fk_quote_line_furniture_instances_instance
         FOREIGN KEY (furniture_instance_id, project_id)
         REFERENCES furniture_instances(id, project_id)
-        ON DELETE CASCADE,
-    -- One physical unit is represented by at most one quote line at a time;
-    -- re-quoting an existing instance (#388) must unlink first.
-    CONSTRAINT uq_quote_line_furniture_instances_instance
-        UNIQUE (furniture_instance_id)
+        ON DELETE CASCADE
 );
+
+-- One physical unit is represented at most once INSIDE the live commercial
+-- representation (re-quoting an existing instance, #388, must unlink first).
+-- Superseded history rows are exempt by design: revision coexistence for the
+-- same instance is what preserves accepted-quote history (digital-thread §16).
+CREATE UNIQUE INDEX uq_quote_line_furniture_instances_current_instance
+    ON quote_line_furniture_instances(furniture_instance_id)
+    WHERE state = 'current';
 
 CREATE INDEX idx_quote_line_furniture_instances_organization
     ON quote_line_furniture_instances(organization_id);
@@ -92,6 +105,10 @@ CREATE POLICY quote_line_furniture_insert ON quote_line_furniture_instances
         AND app_shared_child_matches_project(project_id, organization_id)
         AND organization_id = app_current_organization_id()
         AND app_project_quote_mutable(project_id)
+        -- Only live-representation links may be created through the app role;
+        -- superseding history is an explicit audited command of the future
+        -- revisioned-quote family, never a plain INSERT.
+        AND state = 'current'
     );
 
 CREATE POLICY quote_line_furniture_delete ON quote_line_furniture_instances

@@ -5391,7 +5391,7 @@
         "FurnitureInstance with durable history is never recycled: acceptance blocks both directions with a typed conflict; durable-history hook documented as the extension point for DesignRevision/production references",
         "Accepted QuoteRevision is not mutated in place: typed 409 at the API, RLS policies block link INSERT/DELETE by direct SQL under the app role",
         "The relation answers which physical units a quote line represents (GET endpoint) and those identities are consumable by project furniture (#385) for #387/SketchUp without new IDs",
-        "Cross-project relation is structurally impossible (composite FKs); cross-org reads/mutations blocked under the real app role",
+        "Cross-project relation is structurally impossible (composite FKs); cross-org reads/mutations blocked under the real app role; instance-line uniqueness is scoped to the live representation (partial unique over state='current') so revisioned quotes can later preserve superseded history for the same instance across revisions (Q1 Line A and Q2 Line B coexisting for one FurnitureInstance) instead of becoming a digital-thread-wide invariant",
         "Dropping a materialized quote line through the generic project edit fails loud with a typed conflict (deferred FK backstop)",
         "OpenAPI generated contracts with typed errors and no request body on :materialize (identity stays server-authoritative)",
         "Fresh migration and upgrade fixture green; #387/SketchUp/reconciliation explicitly not implemented"

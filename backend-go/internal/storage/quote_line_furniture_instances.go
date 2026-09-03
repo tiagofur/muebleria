@@ -44,11 +44,16 @@ const quoteLineFurnitureColumns = `
 	fi.origin, COALESCE(fi.origin_furniture_instance_id::text, ''),
 	fi.lifecycle_status, fi.version, fi.created_at, fi.updated_at`
 
+// quoteLineFurnitureQuery reads the LIVE commercial representation
+// (state='current'). Superseded history rows — the ones revisioned quotes
+// will preserve for accepted revisions — never count towards materialization
+// or the public per-line answer.
 const quoteLineFurnitureQuery = `
 	SELECT ` + quoteLineFurnitureColumns + `
 	FROM quote_line_furniture_instances qli
 	JOIN furniture_instances fi ON fi.id = qli.furniture_instance_id
 	WHERE qli.quote_line_id = $1
+	  AND qli.state = 'current'
 	  AND EXISTS (
 		SELECT 1 FROM projects p
 		WHERE p.id = qli.project_id
@@ -214,8 +219,8 @@ func (s *PostgresStore) MaterializeQuoteLine(ctx context.Context, cmd Materializ
 			return nil, err
 		}
 		if _, err := s.db(ctx).Exec(ctx, `
-			INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id)
-			VALUES ($1, $2, $3, $4)`,
+			INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+			VALUES ($1, $2, $3, $4, 'current')`,
 			projectOrganizationID, cmd.ProjectID, cmd.QuoteLineID, instance.ID); err != nil {
 			return nil, err
 		}
@@ -309,12 +314,13 @@ func (s *PostgresStore) ListQuoteLineFurnitureInstances(ctx context.Context, pro
 }
 
 // quoteLinesStillMaterializedTx returns the quote line ids of a project that
-// still represent linked furniture instances. The repository uses it to fail
-// loud (typed) before deleting/replacing project items whose commercial ↔
-// physical linkage would otherwise dangle — the deferred FK is the backstop.
+// still represent linked furniture units in the LIVE representation. The
+// repository uses it to fail loud (typed) before deleting/replacing project
+// items whose commercial ↔ physical linkage would otherwise dangle — the
+// deferred FK is the backstop.
 func quoteLinesStillMaterializedTx(ctx context.Context, tx pgx.Tx, projectID string) ([]string, error) {
 	rows, err := tx.Query(ctx,
-		`SELECT DISTINCT quote_line_id FROM quote_line_furniture_instances WHERE project_id = $1`, projectID)
+		`SELECT DISTINCT quote_line_id FROM quote_line_furniture_instances WHERE project_id = $1 AND state = 'current'`, projectID)
 	if err != nil {
 		return nil, err
 	}

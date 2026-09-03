@@ -33,9 +33,16 @@ paralelo (anti-pattern 4):
 ### Persistencia — `db/migration/000112_quote_line_furniture_instances`
 
 - `quote_line_furniture_instances`: `organization_id` (= projects.owner),
-  `project_id`, `quote_line_id`, `furniture_instance_id` **UNIQUE** (una
-  unidad es representada por a lo sumo una línea activa; re-quote (#388) debe
-  deslinkear primero), `created_at`.
+  `project_id`, `quote_line_id`, `furniture_instance_id`, `state`
+  (`current|superseded`), `created_at`. **La unicidad instancia↔línea vive
+  sólo en la representación comercial viva**: índice unique parcial sobre
+  `furniture_instance_id WHERE state='current'` — no es un invariante del
+  Digital Thread sobre la historia. Cuando existan QuoteRevision reales, el
+  mismo FI puede coexistir en revisiones sucesivas (Q1 aceptada Line A →
+  FI-001 como historia `superseded`; Q2 vigente Line B → FI-001 `current`);
+  suplantar marca `superseded`, nunca borra historia de una revisión
+  aceptada. El rol app sólo puede INSERTar links `current` (policy RLS); el
+  supersede queda como comando audito de la familia de revisiones.
 - **Cross-project estructuralmente imposible**: FKs compuestas
   `(quote_line_id, project_id) → project_items(id, project_id)` y
   `(furniture_instance_id, project_id) → furniture_instances(id, project_id)`
@@ -123,7 +130,7 @@ paralelo (anti-pattern 4):
 | `TestQuoteLineFurniture_MigrationFreshAndUpgrade` | fresh + upgrade fixture 111→112; inventory, FORCE RLS, 3 policies, FK deferible, uniques compuestos, función mutable ejecutable, grants SELECT/INSERT/DELETE sin UPDATE |
 | `TestQuoteLineFurniture_MaterializationLifecycleAndAudit` | **negative proof central: qty 3 → exactamente 3 IDs únicos**; qty 1; idempotencia (no-op); increase 2→4 preserva IDs y agrega sólo delta; decrease 4→2 retira las más nuevas (cancelled v2, identidad sobrevive, unlink); increase post-decrease crea IDs NUEVOS (nunca recicla); unlink de instancia removida + recubre cantidad; accepted/produced → `ErrQuoteRevisionAccepted` en ambas direcciones con links intactos; línea random/wrong-project → 404 storage; manufacturing lee pero no materializa; RemoveProjectItem/PUT que dropea línea materializada → typed conflict; PUT que conserva IDs funciona; FK deferido: delete+reinsert mismo ID pasa, delete sin reinsert falla en COMMIT; cross-project imposible por FK compuesta; audit con actor/org exactos y un evento `furniture_instance_created` por unidad |
 | `TestQuoteLineFurniture_ConcurrentMaterializationConverges` | dos comandos concurrentes (keys distintas) → exactamente 3 unidades activas |
-| `TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg` | SELECT sin filtro no cruza orgs; INSERT en proyecto aceptado denegado por policy (immutabilidad estructural); DELETE en aceptado → 0 filas; INSERT cross-org / org equivocada → WITH CHECK; UPDATE sin grant; DELETE cross-org → 0 filas; manufacturing (org B) lee el proyecto compartido pero no puede delete/insert; owner en draft sí puede |
+| `TestTenantRLS_QuoteLineFurnitureDirectSQLCrossOrg` | SELECT sin filtro no cruza orgs; INSERT en proyecto aceptado denegado por policy (immutabilidad estructural); DELETE en aceptado → 0 filas; INSERT cross-org / org equivocada → WITH CHECK; UPDATE sin grant; DELETE cross-org → 0 filas; segunda link `current` para la misma instancia → unique parcial; INSERT `superseded` por rol app → WITH CHECK; **coexistencia de historia de revisiones: `superseded` + `current` para el mismo FI (escenario Q1/Q2) coexisten**; manufacturing (org B) lee el proyecto compartido pero no puede delete/insert; owner en draft sí puede |
 | `TestQuoteLineMaterializeHTTP_Postgres` | HTTP real: qty 3 → 3 únicos; misma Idempotency-Key → replay (`Idempotency-Replayed`) sin duplicar; key distinta → no-op convergente; GET lista; línea random → 404; manufacturing → 403 materialize / 200 lista; accepted → 409 CONFLICT tipado con links intactos |
 | `internal/api/quote_line_furniture_instances_test.go` | role guards, DTO generado snake_case, mapping de errores tipados (accepted → 409 CONFLICT), command router |
 
