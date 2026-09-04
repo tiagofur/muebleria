@@ -212,7 +212,7 @@ type stubStore struct {
 	materialPlanning          *domain.MaterialPlanning
 	materialStock             []domain.MaterialStock
 	purchaseOrders            []domain.PurchaseOrder
-	productionRelease         *domain.LegacyProductionRelease
+	productionRelease         *domain.ResolvedProductionRelease
 	materialsReleased         bool
 	hasMaterialsReservedEvent bool
 	materialPlanningEvents    []domain.ProjectEvent
@@ -3252,4 +3252,11 @@ func (s *stubStore) GetLatestProjectProductionRelease(_ context.Context, _ strin
 		return nil, s.latestProductionReleaseErr
 	}
 	return s.latestProductionRelease, nil
+}
+
+func (s *stubStore) ResolveProjectReleaseAuthority(_ context.Context, _ string, legacyBlob *domain.LegacyProductionRelease) (*domain.ResolvedProductionRelease, error) {
+	if s.latestProductionRelease != nil {
+		return domain.ResolvedFromCanonicalRelease(s.latestProductionRelease), nil
+	}
+	return domain.ResolveLegacyProductionRelease(legacyBlob), nil
 }

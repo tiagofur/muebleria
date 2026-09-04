@@ -421,6 +421,58 @@ func EvaluateReleaseCommercialGate(classification *ImpactClassificationResult) e
 	return nil
 }
 
+// ResolvedProductionRelease is the ONE release-authority shape the productive
+// subsystems consume (material planning, job costing, quality and the part
+// execution guards). The canonical #395 ProductionRelease maps onto it
+// directly — its ManufacturingFingerprint travels under its own name, never
+// through a legacy BOMFingerprint field. The pre-DT OC-022 blob maps onto it
+// ONLY inside ResolveLegacyProductionRelease, the single adapter where the
+// old BOMFingerprint token is accepted as the compatibility
+// ManufacturingFingerprint. Productive code beyond that adapter never reads
+// BOMFingerprint.
+type ResolvedProductionRelease struct {
+	ReleaseID                string
+	DesignRevisionID         string
+	ManufacturingFingerprint string
+	ReleasedBy               string
+	ReleasedAt               time.Time
+	// ProjectVersion survives only as a legacy-origin attribute so pre-DT
+	// costing baselines keep freezing it; the canonical authority pins
+	// identity by ReleaseID + ManufacturingFingerprint and carries 0.
+	ProjectVersion int
+}
+
+// ResolvedFromCanonicalRelease maps the canonical release onto the consumer
+// authority shape. Exact pins, exact fingerprint, no intermediate legacy
+// field.
+func ResolvedFromCanonicalRelease(canonical *ProductionRelease) *ResolvedProductionRelease {
+	return &ResolvedProductionRelease{
+		ReleaseID:                canonical.ID,
+		DesignRevisionID:         canonical.DesignRevisionID,
+		ManufacturingFingerprint: canonical.ManufacturingFingerprint,
+		ReleasedBy:               canonical.ReleasedBy,
+		ReleasedAt:               canonical.ReleasedAt,
+	}
+}
+
+// ResolveLegacyProductionRelease is the ONLY adapter in productive code that
+// reads the legacy OC-022 BOMFingerprint: for pre-DT projects (no canonical
+// release) the old client token rides the ManufacturingFingerprint slot as
+// compatibility state. The equivalence lives here and nowhere else.
+func ResolveLegacyProductionRelease(legacy *LegacyProductionRelease) *ResolvedProductionRelease {
+	if legacy == nil {
+		return nil
+	}
+	return &ResolvedProductionRelease{
+		ReleaseID:                legacy.ID,
+		DesignRevisionID:         legacy.DesignRevisionID,
+		ManufacturingFingerprint: legacy.BOMFingerprint,
+		ReleasedBy:               legacy.ReleasedBy,
+		ReleasedAt:               legacy.ReleasedAt,
+		ProjectVersion:           legacy.ProjectVersion,
+	}
+}
+
 // ProductionReleaseStaleness is the derived, read-only projection of a release
 // against current authoring state (§24): stale is information, never a
 // mutation — the release keeps pointing at its exact revisions/fingerprint.

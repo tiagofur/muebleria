@@ -165,3 +165,38 @@ solo NO bastaba (el blob seguía siendo la verdad de materials/costing/parts):
   approved_by/approved_at).
 - `pnpm test` + `pnpm typecheck` — verde (incl. paridad rbac TS
   `roleCanApproveDesignRevisions`/`roleCanReleaseProduction`).
+
+## Hardening semántico del adapter (cleanup final PR #551)
+
+El bridge canónico→legacy usaba el campo `LegacyProductionRelease.BOMFingerprint`
+como transporte del fingerprint canónico — semánticamente incorrecto
+(`ManufacturingFingerprint` y `BOMFingerprint` no son el mismo concepto).
+
+- **`domain.ResolvedProductionRelease`**: forma neutra de la autoridad de
+  release que consumen los subsistemas productivos (ReleaseID,
+  DesignRevisionID, ManufacturingFingerprint, ReleasedBy/At, ProjectVersion
+  como atributo de origen legacy). Canonical mapea directo
+  (`ResolvedFromCanonicalRelease`) — el fingerprint viaja bajo su propio
+  nombre. El blob OC-022 mapea SOLO dentro de
+  `ResolveLegacyProductionRelease`: la única equivalencia
+  `BOMFingerprint → ManufacturingFingerprint` del código vive ahí (fallback
+  pre-DT).
+- **Consumers** (solo el tipo que reciben, sin reescribir lógica):
+  `MaterialPlanningSnapshot.ProductionRelease` y
+  `JobCostingSnapshot.ProductionRelease` pasan a
+  `*ResolvedProductionRelease`; `BuildCostBaseline` idem (congela
+  `Source.ReleaseID/ProjectVersion/BOMFingerprint` — columna OC-080
+  persistida conserva su nombre histórico, ahora alimentada por el
+  fingerprint resuelto); quality y los guards de part executions usan
+  `resolved.ReleaseID`.
+- **Resultado**: la idea "canonical ManufacturingFingerprint almacenado/leído
+  como LegacyProductionRelease.BOMFingerprint" desaparece del código
+  productivo; `BOMFingerprint` queda confinado al adapter legacy (grep
+  verificado: solo el adapter lo lee del aggregate legacy; costing/materials
+  lo conservan como columna persistida PROPIA).
+- **Proofs**: `TestProductionRelease_AuthorityFeedsProductionConsumers`
+  (canonical wins P1/F3 con blob LEGACY/OLD-FP coexistente; fallback
+  LEGACY/OLD-FP sin release canónico) +
+  `TestResolvedProductionReleaseAdapters` (mapeos exactos) + guards de part
+  executions (canonical/legacy). Sin cambios de tabla, fingerprint, preflight,
+  approval ni wire contracts.

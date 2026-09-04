@@ -75,7 +75,7 @@ func (s *PostgresStore) MutateProjectQuality(
 		return nil, fmt.Errorf("error resolving release authority: %w", err)
 	}
 	if authority != nil {
-		snap.ReleasedRevision = authority.ID
+		snap.ReleasedRevision = authority.ReleaseID
 	}
 
 	rows, err := tx.Query(ctx, `

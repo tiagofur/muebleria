@@ -9,7 +9,7 @@ import (
 )
 
 // #395 / DT-11 authority integration: ONE release authority for every
-// production consumer (review blocker on PR #551).
+// production consumer (PR #551 review).
 //
 // The canonical ProductionRelease is the immutable #395 row
 // (production_releases, exact approved DesignRevision + accepted QuoteRevision
@@ -20,11 +20,12 @@ import (
 // legacy flow before any canonical release exists — it can never compete with
 // one once it does, and the project PUT handler freezes it at that point.
 //
-// Every legacy production consumer surface (material planning, job costing,
-// quality, part executions) resolves its release state THROUGH this function:
-// canonical wins unconditionally; only a project without a canonical release
-// falls back to the blob. The mapping into the legacy consumer shape is a
-// read-only projection — canonical releases are immutable history.
+// Consumers receive domain.ResolvedProductionRelease — the neutral authority
+// shape. Canonical releases map onto it directly (ManufacturingFingerprint
+// under its own name); the legacy blob maps onto it ONLY through
+// domain.ResolveLegacyProductionRelease, the single adapter where the old
+// BOMFingerprint token is accepted. No productive code beyond that adapter
+// reads BOMFingerprint.
 
 // GetLatestProjectProductionRelease returns the project's newest canonical
 // ProductionRelease (highest release_number), or nil when none exists.
@@ -48,25 +49,26 @@ func (s *PostgresStore) GetLatestProjectProductionRelease(ctx context.Context, p
 	return release, nil
 }
 
-// ResolveProjectReleaseAuthority projects the ONE release authority into the
-// legacy consumer shape: the canonical #395 release when the project has one
-// (ID + authoritative manufacturing fingerprint + exact pins), otherwise the
-// stored OC-022 blob. Production consumers never read the blob directly
-// anymore — this is the single resolution point.
-func (s *PostgresStore) ResolveProjectReleaseAuthority(ctx context.Context, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.LegacyProductionRelease, error) {
+// ResolveProjectReleaseAuthority resolves the ONE release authority for the
+// productive subsystems: the canonical #395 release when the project has one
+// (exact ID + authoritative manufacturing fingerprint + exact pins), otherwise
+// the legacy OC-022 blob through the legacy adapter (pre-DT compatibility).
+// Production consumers never read the blob directly — this is the single
+// resolution point.
+func (s *PostgresStore) ResolveProjectReleaseAuthority(ctx context.Context, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.ResolvedProductionRelease, error) {
 	canonical, err := s.GetLatestProjectProductionRelease(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 	if canonical == nil {
-		return legacyBlob, nil
+		return domain.ResolveLegacyProductionRelease(legacyBlob), nil
 	}
-	return legacyProjectionOfCanonicalRelease(canonical), nil
+	return domain.ResolvedFromCanonicalRelease(canonical), nil
 }
 
 // resolveProjectReleaseAuthorityTx is the same resolution on an explicit
 // transaction, used by the snapshot loaders that already own one.
-func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx pgx.Tx, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.LegacyProductionRelease, error) {
+func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx pgx.Tx, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.ResolvedProductionRelease, error) {
 	canonical, err := scanProductionRelease(tx.QueryRow(ctx, `
 		SELECT `+productionReleaseColumns+`
 		FROM production_releases
@@ -76,26 +78,9 @@ func (s *PostgresStore) resolveProjectReleaseAuthorityTx(ctx context.Context, tx
 	`, projectID))
 	if err != nil {
 		if errors.Is(err, domain.ErrReleaseNotFound) {
-			return legacyBlob, nil
+			return domain.ResolveLegacyProductionRelease(legacyBlob), nil
 		}
 		return nil, err
 	}
-	return legacyProjectionOfCanonicalRelease(canonical), nil
-}
-
-// legacyProjectionOfCanonicalRelease maps the canonical release into the
-// legacy consumer shape: the authoritative manufacturing fingerprint rides in
-// the BOMFingerprint slot and the exact design revision pin travels along.
-// ProjectVersion stays zero — the canonical authority pins identity by
-// ReleaseID + fingerprint, not by a client-invented version counter.
-func legacyProjectionOfCanonicalRelease(canonical *domain.ProductionRelease) *domain.LegacyProductionRelease {
-	return &domain.LegacyProductionRelease{
-		ID:               canonical.ID,
-		ProjectID:        canonical.ProjectID,
-		DesignRevisionID: canonical.DesignRevisionID,
-		BOMFingerprint:   canonical.ManufacturingFingerprint,
-		ReleasedBy:       canonical.ReleasedBy,
-		ReleasedAt:       canonical.ReleasedAt,
-		Note:             "canonical digital-thread production release (#395)",
-	}
+	return domain.ResolvedFromCanonicalRelease(canonical), nil
 }

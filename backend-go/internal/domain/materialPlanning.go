@@ -409,7 +409,9 @@ type MaterialPlanningSnapshot struct {
 	AllPlannings              []*MaterialPlanning
 	Stock                     []MaterialStock
 	PurchaseOrders            []PurchaseOrder
-	ProductionRelease         *LegacyProductionRelease
+	// ProductionRelease is the resolved release authority (#395): canonical
+	// when one exists, legacy-adapted otherwise. Never the raw blob.
+	ProductionRelease         *ResolvedProductionRelease
 	MaterialsReleased         bool
 	HasMaterialsReservedEvent bool
 }

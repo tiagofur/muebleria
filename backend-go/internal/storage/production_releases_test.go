@@ -834,9 +834,10 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 	f3 := p1.Release.ManufacturingFingerprint
 
 	// A legacy blob coexists on the project row: it must lose to the
-	// canonical authority everywhere.
+	// canonical authority everywhere (required shape: canonical P1/F3 wins
+	// over legacy LEGACY/OLD-FP).
 	if _, err := fx.admin.Exec(context.Background(), `
-		UPDATE projects SET production_release = '{"id":"rel-legacy-1","project_id":"`+fx.projectID+`","project_version":7,"bom_fingerprint":"client-token"}'::jsonb
+		UPDATE projects SET production_release = '{"id":"LEGACY","project_id":"`+fx.projectID+`","project_version":7,"bom_fingerprint":"OLD-FP"}'::jsonb
 		WHERE id = $1`, fx.projectID); err != nil {
 		t.Fatalf("seed legacy blob: %v", err)
 	}
@@ -852,11 +853,11 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("material planning snapshot: %v", err)
 	}
-	if planningSnap.ProductionRelease == nil || planningSnap.ProductionRelease.ID != p1.Release.ID {
+	if planningSnap.ProductionRelease == nil || planningSnap.ProductionRelease.ReleaseID != p1.Release.ID {
 		t.Fatalf("material planning must resolve the canonical release authority, got %+v", planningSnap.ProductionRelease)
 	}
-	if planningSnap.ProductionRelease.BOMFingerprint != f3 {
-		t.Fatalf("material planning must bind the SAME authoritative fingerprint F3, got %s", planningSnap.ProductionRelease.BOMFingerprint)
+	if planningSnap.ProductionRelease.ManufacturingFingerprint != f3 {
+		t.Fatalf("material planning must bind the SAME authoritative fingerprint F3, got %s", planningSnap.ProductionRelease.ManufacturingFingerprint)
 	}
 
 	var costingSnap *domain.JobCostingSnapshot
@@ -870,8 +871,8 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("job costing snapshot: %v", err)
 	}
-	if costingSnap.ProductionRelease == nil || costingSnap.ProductionRelease.ID != p1.Release.ID ||
-		costingSnap.ProductionRelease.BOMFingerprint != f3 {
+	if costingSnap.ProductionRelease == nil || costingSnap.ProductionRelease.ReleaseID != p1.Release.ID ||
+		costingSnap.ProductionRelease.ManufacturingFingerprint != f3 {
 		t.Fatalf("job costing must resolve the SAME canonical authority (P1/F3), got %+v", costingSnap.ProductionRelease)
 	}
 
@@ -890,10 +891,12 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 		t.Fatalf("quality must resolve the canonical release revision, got %q", qualitySnap.ReleasedRevision)
 	}
 
-	// Control: a project WITHOUT a canonical release keeps the legacy blob as
-	// its (compatibility) authority — pre-DT projects are unaffected.
+	// Control — required legacy-fallback shape: a project WITHOUT a canonical
+	// release keeps the legacy blob as its (compatibility) authority; the old
+	// BOMFingerprint token rides the ManufacturingFingerprint slot through
+	// the legacy adapter ONLY.
 	if _, err := fx.admin.Exec(context.Background(), `
-		UPDATE projects SET production_release = '{"id":"rel-legacy-only","project_version":3,"bom_fingerprint":"client-token-2"}'::jsonb
+		UPDATE projects SET production_release = '{"id":"LEGACY","project_version":3,"bom_fingerprint":"OLD-FP"}'::jsonb
 		WHERE id = $1`, fiProjectAOnly); err != nil {
 		t.Fatalf("seed control blob: %v", err)
 	}
@@ -908,7 +911,9 @@ func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("control snapshot: %v", err)
 	}
-	if controlSnap.ProductionRelease == nil || controlSnap.ProductionRelease.ID != "rel-legacy-only" {
-		t.Fatalf("without a canonical release the legacy blob keeps grounding the project, got %+v", controlSnap.ProductionRelease)
+	if controlSnap.ProductionRelease == nil ||
+		controlSnap.ProductionRelease.ReleaseID != "LEGACY" ||
+		controlSnap.ProductionRelease.ManufacturingFingerprint != "OLD-FP" {
+		t.Fatalf("legacy fallback must resolve ReleaseID=LEGACY + ManufacturingFingerprint=OLD-FP, got %+v", controlSnap.ProductionRelease)
 	}
 }

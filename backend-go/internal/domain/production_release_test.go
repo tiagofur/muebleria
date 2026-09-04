@@ -278,3 +278,32 @@ func TestManufacturingFingerprint_NilMapsAreStable(t *testing.T) {
 	}
 	_ = time.Time{}
 }
+
+// #395 final cleanup (PR #551): the release-authority adapters. The
+// canonical fingerprint travels under its own name; BOMFingerprint is read
+// ONLY inside the legacy adapter.
+func TestResolvedProductionReleaseAdapters(t *testing.T) {
+	canonical := &ProductionRelease{
+		ID:                      "P1",
+		ProjectID:               "proj",
+		DesignRevisionID:        "R3",
+		QuoteRevisionID:         "Q3",
+		ManufacturingFingerprint: "F3",
+		ReleasedBy:              "user-1",
+	}
+	resolved := ResolvedFromCanonicalRelease(canonical)
+	if resolved.ReleaseID != "P1" || resolved.DesignRevisionID != "R3" ||
+		resolved.ManufacturingFingerprint != "F3" || resolved.ReleasedBy != "user-1" {
+		t.Fatalf("canonical mapping mismatch: %+v", resolved)
+	}
+
+	legacy := ResolveLegacyProductionRelease(&LegacyProductionRelease{
+		ID: "LEGACY", BOMFingerprint: "OLD-FP", ProjectVersion: 3,
+	})
+	if legacy.ReleaseID != "LEGACY" || legacy.ManufacturingFingerprint != "OLD-FP" || legacy.ProjectVersion != 3 {
+		t.Fatalf("legacy adapter mismatch: %+v", legacy)
+	}
+	if ResolveLegacyProductionRelease(nil) != nil {
+		t.Fatalf("nil legacy blob must resolve to nil authority")
+	}
+}

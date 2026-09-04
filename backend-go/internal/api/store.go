@@ -311,6 +311,9 @@ type Store interface {
 	// GetLatestProjectProductionRelease resolves the ONE release authority:
 	// the newest canonical release of the project (nil when none exists).
 	GetLatestProjectProductionRelease(ctx context.Context, projectID string) (*domain.ProductionRelease, error)
+	// ResolveProjectReleaseAuthority resolves the consumer-facing release
+	// authority: canonical when it exists, legacy-adapted otherwise.
+	ResolveProjectReleaseAuthority(ctx context.Context, projectID string, legacyBlob *domain.LegacyProductionRelease) (*domain.ResolvedProductionRelease, error)
 	// Authoritative Project/Design working context for SketchUp model
 	// binding validation (#388 / DT-4).
 	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)

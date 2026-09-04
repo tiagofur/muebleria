@@ -145,17 +145,14 @@ func (s *Server) buildFloorEvent(r *http.Request, projectID, itemID, from, to st
 // production consumer; a lookup failure fails closed (the released revision
 // is unknown, never guessed from stale state).
 func (s *Server) releasedRevisionFor(r *http.Request, project *domain.Project) (string, error) {
-	canonical, err := s.Store.GetLatestProjectProductionRelease(r.Context(), project.ID)
+	resolved, err := s.Store.ResolveProjectReleaseAuthority(r.Context(), project.ID, project.ProductionRelease)
 	if err != nil {
 		return "", err
 	}
-	if canonical != nil {
-		return canonical.ID, nil
+	if resolved == nil {
+		return "", nil
 	}
-	if project.ProductionRelease != nil && project.ProductionRelease.ID != "" {
-		return project.ProductionRelease.ID, nil
-	}
-	return "", nil
+	return resolved.ReleaseID, nil
 }
 
 // HandleProjectPartExecutions handles GET /api/projects/{id}/part-executions —
