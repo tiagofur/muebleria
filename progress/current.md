@@ -1,14 +1,20 @@
-# Feature activa: #392 DT-8 — Publish immutable DesignRevision with manifest and 3D artifacts
+# Feature activa: #393 DT-9 — QuoteRevision ↔ DesignRevision Reconciliation by FurnitureInstance
 
 - Actualizado: 2026-09-03 America/Mexico_City
 - F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
-  slice DT-8 en modo Demo Commercial Rescue sobre `feat/392-publish-design-revision`.
-- #392 implementada COMPLETE: publicación escalonada (prepare → upload → finalize)
-  de DesignRevision inmutable con manifiesto semántico v1 y artefactos 3D (.skp,
-  manifest.json, preview.png), verificación de integridad SHA-256 local y en
-  servidor, precheck de identidad #391 reutilizado, snapshot desde DesignWorkingCopy,
-  concurrencia optimista y avance de baseRevisionId en el modelo y en el servidor.
-  Detalle: `progress/implementation_392_dt8.md`.
+  slice DT-9 en modo Demo Commercial Rescue sobre `feat/393-quote-design-reconciliation`.
+- #393 implementada COMPLETE: reconciliación pura y determinística entre QuoteRevision
+  y DesignRevision unidas estrictamente por `FurnitureInstance.id`.
+  Reporta estados canónicos: `synced`, `quoted_not_modeled`, `modeled_not_quoted`,
+  `modified`, `removed`, `conflict`. Genera diferencias estructuradas normalizadas
+  sin mutar la cotización ni el diseño (operación puramente read-only con negative proof
+  de inmutabilidad). Pruebas de dominio, API HTTP y PostgreSQL con RLS completas.
+  Detalle: `progress/implementation_393_dt9.md`.
+
+## Historial previo — #392 DT-8
+
+- #392 implementada y mergeada a main (PR #548): publicación escalonada de DesignRevision
+  inmutable con manifiesto y artefactos 3D. Detalle: `progress/implementation_392_dt8.md`.
 
 ## Historial previo — F202/#460 Organization Foundation P0
 

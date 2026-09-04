@@ -384,6 +384,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// binding candidate. no-store: the answer is session- and revision-scoped.
 	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/binding:validate", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectDesignBindingValidate))))
 
+	// #393 / DT-9: QuoteRevision ↔ DesignRevision reconciliation by FurnitureInstance.
+	// Pure deterministic comparison returning structured differences and summary counts.
+	mux.Handle("POST /api/projects/{projectId}/reconciliation", authMW(http.HandlerFunc(server.HandleProjectReconciliation)))
+
 	// #392 / DT-8: staged publication of an immutable DesignRevision with
 	// manifest + artifacts. prepare and finalize are durable commands behind
 	// the idempotency receipt (retry of a lost finalize response replays the

@@ -2640,6 +2640,52 @@
         }
       }
     },
+    "/projects/{projectId}/reconciliation": {
+      "post": {
+        "operationId": "reconcileProjectDesign",
+        "summary": "Reconcile commercial QuoteRevision with authoring DesignRevision by FurnitureInstance (#393, deterministic, read-only)",
+        "description": "Pure deterministic reconciliation comparing an exact QuoteRevision with an exact DesignRevision. Join key is strictly FurnitureInstance.id (physical unit identity). Returns unit-level statuses, structured differences and summary counts without mutating either revision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileProjectDesignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deterministic reconciliation result by FurnitureInstance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDesignReconciliationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}": {
       "get": {
         "operationId": "getDesign",
@@ -7082,6 +7128,145 @@
           "expires_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ReconcileProjectDesignRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "quoteRevisionId",
+          "designRevisionId"
+        ],
+        "properties": {
+          "quoteRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ReconciliationStatus": {
+        "type": "string",
+        "enum": [
+          "synced",
+          "quoted_not_modeled",
+          "modeled_not_quoted",
+          "modified",
+          "removed",
+          "conflict"
+        ]
+      },
+      "StructuredDifference": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "quoteValue": {},
+          "designValue": {}
+        }
+      },
+      "ReconciliationItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId",
+          "status",
+          "differences"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReconciliationStatus"
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StructuredDifference"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "ReconciliationSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "total",
+          "synced",
+          "quotedNotModeled",
+          "modeledNotQuoted",
+          "modified",
+          "removed",
+          "conflict"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "synced": {
+            "type": "integer"
+          },
+          "quotedNotModeled": {
+            "type": "integer"
+          },
+          "modeledNotQuoted": {
+            "type": "integer"
+          },
+          "modified": {
+            "type": "integer"
+          },
+          "removed": {
+            "type": "integer"
+          },
+          "conflict": {
+            "type": "integer"
+          }
+        }
+      },
+      "ProjectDesignReconciliationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "quoteRevisionId",
+          "designRevisionId",
+          "summary",
+          "items"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quoteRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReconciliationSummary"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationItem"
+            }
           }
         }
       }

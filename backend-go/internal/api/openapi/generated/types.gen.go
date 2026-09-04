@@ -1142,3 +1142,50 @@ type DesignArtifactGrant struct {
 	URL       string                    `json:"url"`
 	ExpiresAt string                    `json:"expires_at"`
 }
+
+type ReconcileProjectDesignRequest struct {
+	QuoteRevisionId  string `json:"quoteRevisionId"`
+	DesignRevisionId string `json:"designRevisionId"`
+}
+
+type ReconciliationStatus string
+
+const (
+	ReconciliationStatusSynced           ReconciliationStatus = "synced"
+	ReconciliationStatusQuotedNotModeled ReconciliationStatus = "quoted_not_modeled"
+	ReconciliationStatusModeledNotQuoted ReconciliationStatus = "modeled_not_quoted"
+	ReconciliationStatusModified         ReconciliationStatus = "modified"
+	ReconciliationStatusRemoved          ReconciliationStatus = "removed"
+	ReconciliationStatusConflict         ReconciliationStatus = "conflict"
+)
+
+type StructuredDifference struct {
+	Path        string `json:"path"`
+	QuoteValue  *any   `json:"quoteValue,omitempty"`
+	DesignValue *any   `json:"designValue,omitempty"`
+}
+
+type ReconciliationItem struct {
+	FurnitureInstanceId string                 `json:"furnitureInstanceId"`
+	Status              ReconciliationStatus   `json:"status"`
+	Differences         []StructuredDifference `json:"differences"`
+	Notes               *string                `json:"notes,omitempty"`
+}
+
+type ReconciliationSummary struct {
+	Total            int64 `json:"total"`
+	Synced           int64 `json:"synced"`
+	QuotedNotModeled int64 `json:"quotedNotModeled"`
+	ModeledNotQuoted int64 `json:"modeledNotQuoted"`
+	Modified         int64 `json:"modified"`
+	Removed          int64 `json:"removed"`
+	Conflict         int64 `json:"conflict"`
+}
+
+type ProjectDesignReconciliationResult struct {
+	ProjectId        string                `json:"projectId"`
+	QuoteRevisionId  string                `json:"quoteRevisionId"`
+	DesignRevisionId string                `json:"designRevisionId"`
+	Summary          ReconciliationSummary `json:"summary"`
+	Items            []ReconciliationItem  `json:"items"`
+}
