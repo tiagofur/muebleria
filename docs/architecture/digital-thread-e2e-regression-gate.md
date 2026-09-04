@@ -148,7 +148,7 @@ Every scenario in this gate executes under server authority, row-level security 
 | Backend / PostgreSQL E2E (RLS `granete_app` NOBYPASSRLS, tenant tx, immutability triggers) | **CI green (required)** | Job `backend-go` runs `go test -p 1 ./...` with a postgres:16 service container and a mandatory `DATABASE_URL` (anti-false-green, OC-002). Locally without `DATABASE_URL` the shared fixture **skips** — set `DATABASE_URL` to run the gate against real PostgreSQL |
 | Ruby client contract (SketchupStub) | **CI green (required)** | Job `sketchup-extension` runs `bundle exec rake verify` on 3 OS |
 | Shared contract fixture (`contracts/digitalThreadE2E.json`) | **CI green** | Pinned by the Ruby contract suite; invariants C1–C9 |
-| Real SketchUp host (TestUp) | **`REAL_HOST_REQUIRED`** | `TC_DigitalThreadE2ESmoke.rb` is the executable scenario; CI cannot run SketchUp, so this layer must NEVER be reported green from stubs. Evidence convention: run the suite in SketchUp TestUp against the installed RBZ and record `progress/host_smoke_F211_testup_ci.json` (TestUp::CIJsonReporter). Until that artifact exists, report this layer as pending |
+| Real SketchUp host (TestUp) | **PASS — evidence recorded** (`progress/host_smoke_F211_testup_ci.json` + stdout) | Executed manually on SketchUp 2026 (26.2.242, macOS 26.6.2, arm64) against the installed RBZ (sha256 `2e8765fa…`): 3/3 tests, 47 assertions, 0 failures — placement + unmanaged exclusion, REAL DuplicateResolver duplicate resolution, save/reopen identity persistence. CI cannot run SketchUp: the layer stays `REAL_HOST_REQUIRED` for CI runs and must NEVER be reported green from stubs; re-run it in TestUp via the procedure in §5 when host-touching code changes |
 
 ### Consumed from focused suites (not re-proved by this gate)
 
@@ -182,12 +182,28 @@ eval "$(rbenv init - zsh)"
 bundle exec rake verify
 ```
 
-### Host Smoke in TestUp — `REAL_HOST_REQUIRED`
+### Host Smoke in TestUp — real-host layer (CI cannot run it)
 ```bash
-# Executed in SketchUp TestUp runner against the INSTALLED RBZ
-# (not the repo checkout — the smoke fails closed if loaded from checkout):
-# Suite: Granete::SketchUpExtension::TC_DigitalThreadE2ESmoke
-# Record evidence as progress/host_smoke_F211_testup_ci.json
+# 1. Build and install the RBZ under test:
+cd apps/sketchup-extension && bundle exec rake package:build
+unzip -o dist/granete_for_sketchup.rbz -d "$HOME/Library/Application Support/SketchUp 2026/SketchUp/Plugins"
+
+# 2. Write a TestUp CI config (Path = checkout test/testup so tests run
+#    against the INSTALLED RBZ — the smoke fails closed if the extension
+#    loads from the checkout):
+#    Path: <repo>/apps/sketchup-extension/test/testup
+#    Output: <repo>/progress/host_smoke_F211_testup_ci.json
+#    Tests: [the three TC_DigitalThreadE2ESmoke test IDs]
+#    KeepOpen: false
+
+# 3. Run headless (self-quits when done):
+"/Applications/SketchUp 2026/SketchUp.app/Contents/MacOS/SketchUp" \
+  -RubyStartupArg "TestUp:CI:Config=<config.yml>" \
+  > progress/host_smoke_F211_testup_ci_stdout.txt 2>&1
+
+# Recorded closure evidence (2026-09-04): Success, 3/3 tests, 47 assertions,
+# SketchUp 26.2.242 / macOS 26.6.2 / RBZ sha256 2e8765fa… —
+# progress/host_smoke_F211_testup_ci.json
 ```
 
 ### Full Repository Verification

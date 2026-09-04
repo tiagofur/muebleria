@@ -45,13 +45,12 @@
     - ComponentDefinition vs ComponentInstance hierarchy: nested sub-parts do not produce root furniture instances.
     - Deterministic manifest serialization.
     - Fail-closed verification on corrupted or unknown server session responses.
-- **`apps/sketchup-extension/test/testup/TC_DigitalThreadE2ESmoke.rb`** — **`REAL_HOST_REQUIRED`**:
-  - TestUp host smoke test (executable scenario, NOT executed in CI — CI cannot run SketchUp and this layer must never be reported green from stubs):
-    - Authoritative backend `furnitureInstanceId` stamped in native hierarchy.
-    - Host-created duplicates detected loudly.
-    - Manifest builder excludes unmanaged walls and decoration.
+- **`apps/sketchup-extension/test/testup/TC_DigitalThreadE2ESmoke.rb`** — **EXECUTED in real host, PASS (see §4)**:
+  - TestUp host smoke proving in a real SketchUp process:
+    - Authoritative backend `furnitureInstanceId` stamped in native hierarchy; unmanaged walls/decoration excluded from the manifest.
+    - Host-created duplicates detected loudly AND resolved by the REAL `Connection::DuplicateResolver` executing inside SketchUp (server boundary via controlled doubles — no live backend network in TestUp, per host convention): original keeps FI-001, copy receives server-allocated FI-NEW with `origin: duplicate` + `originFurnitureInstanceId: FI-001`, exactly one idempotency-keyed duplicate command, collision disappears (duplicates == 1 for both identities), and both identities survive save/close/reopen.
     - Model binding and placed furniture identities survive save, close, and reopen.
-  - Pending evidence: run the suite in SketchUp TestUp against the installed RBZ and record `progress/host_smoke_F211_testup_ci.json` (TestUp::CIJsonReporter convention).
+  - Evidence: `progress/host_smoke_F211_testup_ci.json` (+ `host_smoke_F211_testup_ci_stdout.txt`).
 
 ### D. Canonical Documentation
 - **`docs/architecture/digital-thread-e2e-regression-gate.md`**:
@@ -71,11 +70,23 @@
     - Unit tests: 403 runs, 3223 assertions, 0 failures, 0 errors, 0 skips.
     - Boundary tests: 3 runs, 1599 assertions, 0 failures, 0 errors, 0 skips.
     - Deterministic RBZ package verification: Verified.
-- **Real SketchUp host (TestUp)**: **`REAL_HOST_REQUIRED` / PENDING** — `TC_DigitalThreadE2ESmoke.rb` is the executable scenario; evidence artifact `progress/host_smoke_F211_testup_ci.json` must be produced in a real SketchUp host before this layer can be reported green.
+- **Real SketchUp host (TestUp)**: **PASS** — executed 2026-09-04 on SketchUp 2026 (26.2.242, macOS 26.6.2, arm64, Ruby 3.2.2) against the installed RBZ (sha256 `2e8765fa…`): **3/3 tests, 47 assertions, 0 failures, 0 errors**. Evidence: `progress/host_smoke_F211_testup_ci.json` (TestUp::CIJsonReporter + `_context` block; paths sanitized) and `progress/host_smoke_F211_testup_ci_stdout.txt`. CI cannot reproduce this layer — it remains `REAL_HOST_REQUIRED` for CI runs.
 
 ---
 
-## 3. Review round 1 (2026-09-04) — corrections applied
+## 3. Final host closure (2026-09-04)
+
+Round 3 (final #398 host-proof closure) extended the smoke and executed it in the real host:
+
+1. **Duplicate scenario now exercises the REAL resolver**: `test_digital_thread_duplicate_detection_and_resolution_in_host` performs native host copy → collision detected (duplicates == 2) → `Connection::DuplicateResolver#rescan_and_resolve` executes inside SketchUp with controlled server doubles (`HostDuplicateServiceDouble` returns the server-allocated FI-NEW; `HostModelBindingServiceDouble` answers binding validation) → asserts original keeps FI-001, copy gets FI-NEW (`origin=duplicate`, `originFurnitureInstanceId=FI-001`), exactly one idempotency-keyed duplicate command (`dup:project:design:FI-001:<persistent_id>`), collision gone (duplicates == 1 for both), and both identities + provenance survive save/close/reopen.
+2. **The real host exposed and we fixed two latent smoke defects** (the smoke had never executed before):
+   - `catalog_definition` used `'id'`/integer `version` keys — `MetadataWriter` maps `furniture_definition_id` → `intent.furnitureDefinitionId` (bounded opaque string); adopted the host-proven shape from `TC_ProjectFurnitureSmoke`.
+   - `reopened_binding.bound?` — the real `ModelBinding::Binding` exposes `valid?`, not `bound?`.
+3. Result: **Success, 3/3 tests (47 assertions), green** — evidence recorded per the repo convention.
+
+---
+
+## 4. Review round 1 (2026-09-04) — corrections applied
 
 Independent review (`progress/review_398.md`) returned CHANGES_REQUESTED; the following fixes were applied on the same branch:
 

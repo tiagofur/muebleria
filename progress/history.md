@@ -1950,3 +1950,21 @@ no reproduce en CI del PR.
   debe producirse en TestUp contra el RBZ instalado antes de reportar esa capa verde.
 - **Verificación:** `go test ./...` verde; `rake verify` verde (403 unit + 3 boundary);
   `pnpm openapi:check`/`pnpm typecheck`/`pnpm test` verde (411).
+
+### F211 — addendum cierre host real (2026-09-04)
+
+Cierre final del host-proof de #398: el smoke TestUp `TC_DigitalThreadE2ESmoke` ahora
+ejecuta el **DuplicateResolver REAL dentro de SketchUp** (no sólo detección): copia
+nativa → colisión (duplicates=2) → `rescan_and_resolve` con doubles controlados del
+boundary de servidor (sin red en TestUp) → original conserva FI-001, copia recibe
+FI-NEW con `origin=duplicate`/`originFurnitureInstanceId=FI-001`, exactamente un
+comando duplicate con idempotency-key `dup:project:design:FI-001:<persistent_id>`,
+colisión resuelta (duplicates=1 ambas) y ambas identidades sobreviven save/reopen.
+Ejecutado en host real SketchUp 2026 (26.2.242, macOS 26.6.2, arm64, Ruby 3.2.2)
+contra RBZ instalado sha256 `2e8765fa…` vía `-RubyStartupArg TestUp:CI:Config`:
+**3/3 tests, 47 assertions, 0 fallos**, evidencia
+`progress/host_smoke_F211_testup_ci.json` (+stdout; paths sanitizados). El host real
+expuso y se corrigieron 2 defectos latentes del smoke (shape del `catalog_definition`
+— `furniture_definition_id`→`intent.furnitureDefinitionId` — y `Binding#valid?` en
+vez de `bound?`). CI no puede correr SketchUp: la capa sigue `REAL_HOST_REQUIRED`
+para CI y se re-ejecuta manualmente al tocar código host.

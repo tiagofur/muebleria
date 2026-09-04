@@ -3,20 +3,21 @@
 - Actualizado: 2026-09-04 America/Mexico_City
 - Feature: F211 — `Add end-to-end Digital Thread contract and regression suite (#398 / DT-14)`
 - Rama: `feat/398-digital-thread-e2e-regression-gate`
-- Estado: `done` (review round 1 CHANGES_REQUESTED → correcciones aplicadas; host TestUp
-  queda `REAL_HOST_REQUIRED` hasta producir evidencia en SketchUp real)
+- Estado: `done` (review round 1 corregido y APPROVED; host TestUp **ejecutado en
+  SketchUp 2026 real: 3/3, 47 assertions, evidencia
+  `progress/host_smoke_F211_testup_ci.json`** — cierre host completo)
 - Resultados y verificación:
   1. Fixture canónico unificado en `contracts/digitalThreadE2E.json` (invariantes C1–C9).
   2. Suite Go `backend-go/internal/storage/digital_thread_e2e_test.go` (9/9 tests pasando con PostgreSQL real, app-role `granete_app` RLS y triggers de inmutabilidad).
   3. Suite Ruby `apps/sketchup-extension/test/unit/digital_thread_contract_test.rb` (403 tests, 0 fallos, `rake verify` verde). Smoke host `TC_DigitalThreadE2ESmoke.rb`
-     corregido y ejecutable, pero **pendiente de ejecución en SketchUp real**
-     (`REAL_HOST_REQUIRED`; evidencia: `progress/host_smoke_F211_testup_ci.json`).
+     **ejecutado en host real** (SketchUp 26.2.242 / macOS 26.6.2 / RBZ `2e8765fa…`):
+     placement+exclusión unmanaged, **DuplicateResolver real** (original conserva FI-001,
+     copia recibe FI-NEW `origin=duplicate`, colisión resuelta, save/reopen) — 3/3 PASS.
   4. Documentación arquitectónica canónica en `docs/architecture/digital-thread-e2e-regression-gate.md`
-     (tabla de capas, boundary del path de artefactos, política de fixtures sin snapshot-blessing).
+     (tabla de capas con host PASS+evidencia, boundary del path de artefactos, política de fixtures sin snapshot-blessing).
   5. Gates completos del repositorio: `go test ./...` verde, `bundle exec rake verify` verde, `pnpm openapi:check && pnpm test` verde (411 tests pasando). Detalle: `progress/implementation_398_dt14.md`.
-  6. Review independiente (`progress/review_398.md`): 7 cambios requeridos aplicados
-     (smoke ejecutable, Scenario F tipado + sin huérfanos, Scenario C sin FI-E, docs,
-     atribución honesta, numeración G/C vs canónica I1–I14, history).
+  6. Review independiente (`progress/review_398.md`): round 1 CHANGES_REQUESTED (7 fixes
+     aplicados) + round 2 APPROVED; cierre host final con DuplicateResolver real en §3 de las notas.
 
 ## Historial previo — #395 DT-11
 
