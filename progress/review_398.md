@@ -1,10 +1,41 @@
 # Review — F211 / #398 (DT-14) End-to-End Digital Thread Contract & Regression Gate
 
-**Fecha:** 2026-09-04 · **Rama:** `feat/398-digital-thread-e2e-regression-gate` · **Commit:** `bea571c1` (pushed, PR #554 OPEN)
+**Fecha round 1:** 2026-09-04 · **Fecha round 2:** 2026-09-04 · **Rama:** `feat/398-digital-thread-e2e-regression-gate` · **PR:** #554 OPEN
 
-**Veredicto:** CHANGES_REQUESTED
+## Round 2 — Veredicto final
 
-**Resumen:** el suite Go E2E (9/9 verde contra PostgreSQL real con rol app `granete_app_test` NOBYPASSRLS), el unit contract Ruby (verde), el wiring CI (vía mecanismo canónico existente) y el ledger están bien construidos y ejecutados. Pero el smoke TestUp del host real **no es ejecutable tal como está escrito** (`Library::FurnitureBuilder` no existe; es `Model::FurnitureBuilder`, y además se instancia sin `metadata_store:`), no hay evidencia de ejecución host, y hay assertions más débiles que su propio contrato (Scenario F) y documentación que no cumple un criterio de aceptación explícito de la issue (guía de fixtures/sin snapshot-blessing). Ninguno de estos puntos invalida el trabajo de fondo; todos son corregibles sin tocar código de producción.
+**Veredicto:** APPROVED
+
+**Commit revisado:** `45b466d2` (pushed; `git log origin/feat/398...HEAD` vacío; working tree limpio salvo esta actualización del archivo de review).
+
+**Resultado de los 7 cambios requeridos (diff `bea571c1..45b466d2`):**
+
+1. **[Blocker R1] Smoke TestUp ejecutable — RESUELTO.** `TC_DigitalThreadE2ESmoke.rb:150-154` ahora usa `Model::FurnitureBuilder.new(metadata_store: metadata_store)` con comentario que explica por qué sin `metadata_store` las assertions son infalsables (`MetadataWriter` retorna temprano). Probe de resolución de constantes re-ejecutado: `PROBE OK: Granete::SketchUpExtension::Model::FurnitureBuilder`; `ruby -c` Syntax OK. La capa host se reporta `REAL_HOST_REQUIRED` de forma consistente en doc (§4 layer status), ledger F211, `progress/current.md`, `implementation_398_dt14.md` y `history.md`, con convención de evidencia definida (`progress/host_smoke_F211_testup_ci.json`, TestUp::CIJsonReporter contra RBZ instalado). Esto cumple el criterio del gate ("escenario TestUp ejecutable + reporte honesto, NUNCA PASS por stubs"); la ejecución host queda como obligación pendiente documentada (condición post-merge, ver "Pendientes post-aprobación").
+2. **Scenario F — RESUELTO.** Guarda de strings eliminada; ahora exige `errors.Is(errConflict, domain.ErrDesignRevisionConflict)` estricto post-commit (el test pasa, lo que además confirma que el storage emite el error tipado). Tx reestructurada para commitear R1+R2 y capturar el error; post-rechazo se aserta exactamente 2 revisiones con head == R2 número 2 (`ListDesignRevisions` ordena por `revision_number ASC`, `designs.go:890`, así que `revs[len-1]` es el head) y cero `design_revision_artifacts` del design vía join admin (tabla existe, migration 000114 de #392).
+3. **Scenario C — RESUELTO.** Set de FIs del project capturado antes/después del requote dentro de la misma tx (`ListFurnitureInstancesByProject`); assert de mismo cardinal + membership completo ⇒ "nunca crea FI-E" es ahora un negative proof explícito.
+4. **Docs — RESUELTO.** Nueva §4 "Proof-Layer Status & Boundaries" (tabla de capas con host=`REAL_HOST_REQUIRED`, nota de skip local sin `DATABASE_URL`, lista "Consumed from focused suites", boundary publish directo #387 vs `FinalizeDesignPublish` #392), paso 4 de Scenario G re-atribuido a #395, nueva §6 "Fixtures & Golden Policy (no snapshot blessing)" con regla explícita de que bendecir un golden sin explicación semántica es review blocker. Cumple el criterio de aceptación de la issue.
+5. **Atribución honesta — RESUELTO.** Ledger F211 (`description`/`evidence`/`acceptance`) y `implementation_398_dt14.md` (B.4/B.7 reescritos + bloque de boundaries + §3 de correcciones) ya no reclaman idempotency/estabilidad histórica/join-por-ID como proofs de este gate; Scenario D/G describen lo que los tests realmente ejercitan; host smoke = "REAL_HOST_REQUIRED executable scenario, NOT executed in CI".
+6. **Contract/headers — RESUELTO.** Línea de Scenario C eliminada del header Ruby con nota de que la cobertura vive en `project_furniture_test.rb` (#389); `contracts/digitalThreadE2E.json` renumerado I1–I9 → C1–C9 con nota `invariantsNumbering` explícita; matriz del doc → G1–G9 con aclaración canónica I1–I14; mensajes Go → C1/C7; métodos Ruby → `test_invariant_g7/g8/g9`.
+7. **history.md — RESUELTO.** Entrada de cierre F211 agregada (`progress/history.md:1930-1952`), checkpoint C5 satisfecho.
+
+**Verificación round 2 ejecutada (todo verde):**
+
+- `DATABASE_URL=postgres://...localhost:5445/... go test -p 1 -count=1 -run TestDigitalThreadE2E ./internal/storage` → **9/9 PASS** contra PostgreSQL 16 real (incluye Scenario F/C nuevos).
+- `go vet ./internal/storage/...` → exit 0.
+- `ruby -Itest -Isrc test/unit/digital_thread_contract_test.rb` → 7 runs, 38 assertions, 0 failures, 0 skips (métodos renombrados incluidos); `ruby -c` del smoke OK; probe de `Model::FurnitureBuilder` OK.
+- `pnpm typecheck` verde; `pnpm test` verde (ui 1508/1508 + web 411/411, 33 files).
+- El diff `bea571c1..45b466d2` NO toca código de producción (solo tests Ruby/Go, contract JSON, docs, ledger, progress) — sin mezcla de trabajo ajeno.
+
+**Pendientes post-aprobación (no bloquean, quedan registrados en doc/ledger):**
+
+1. **Evidencia host real:** ejecutar `TC_DigitalThreadE2ESmoke` en SketchUp TestUp contra RBZ instalado y registrar `progress/host_smoke_F211_testup_ci.json`. Hasta entonces la capa host se reporta `REAL_HOST_REQUIRED` (ya está así en todos los artefactos). Nota residual: yo verifiqué ejecutabilidad estática (constante + firma + wiring de metadata_store), no una corrida real.
+2. **Menores heredados (aceptados como deuda):** snapshot-equivalence del approval en Scenario A (sólo se asertan `ApprovedBy`/`ApprovedAt`); test explícito de permutación de orden del fingerprint (hoy estructural por sort en `production_release.go:120`); esta actualización del archivo de review debe commitearse/pushearse junto con el cierre.
+
+---
+
+## Round 1 — Registro original (CHANGES_REQUESTED)
+
+**Commit revisado:** `bea571c1` (pushed, PR #554 OPEN).
 
 ---
 
