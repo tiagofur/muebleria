@@ -15,6 +15,7 @@ module Granete
         auth/device_provider
         transport/adapter
         transport/http_adapter
+        transport/multipart_body
         metadata/store
         connection/model_binding
         connection/transform_contract
@@ -23,6 +24,7 @@ module Granete
         connection/project_furniture_contract
         connection/project_furniture
         connection/duplicate_resolver
+        connection/design_publish
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract

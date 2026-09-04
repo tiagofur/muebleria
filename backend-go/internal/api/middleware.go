@@ -514,6 +514,10 @@ func clientIP(r *http.Request) string {
 var extensionClientGetPrefixes = []string{
 	"/api/furniture/",
 	"/api/media",
+	// #392 / DT-8: published artifact bytes are served through the same
+	// signed-grant read path as catalog media; the extension may stream its
+	// own organization's artifacts (cross-org resolves as not found).
+	"/api/design-artifacts",
 }
 
 // #388 / DT-4 model binding: the plugin must pick the exact Project/Design
@@ -612,6 +616,16 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// Allocates authoritative identity (origin='duplicate', origin_furniture_instance_id=source)
 	// for the bound project when a managed unit is copied in the host.
 	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances/[^/]+:duplicate$`),
+	// #392 / DT-8 staged revision publication. prepare/finalize are durable
+	// idempotent commands (RequireIdempotency at the route); the artifact
+	// upload mints staging metadata only — a revision becomes `published`
+	// exclusively at finalize after full server-side re-validation.
+	regexp.MustCompile(`^/api/designs/[^/]+/publish:prepare$`),
+	regexp.MustCompile(`^/api/designs/[^/]+/publish/[^/]+/artifacts/(model|manifest|preview)$`),
+	regexp.MustCompile(`^/api/designs/[^/]+/publish/[^/]+:finalize$`),
+	// #392: mint short-lived read grants for artifacts the extension token
+	// can already GET — read-only, no mutation.
+	regexp.MustCompile(`^/api/designs/[^/]+/revisions/[^/]+/artifacts/(model|manifest|preview):authorize$`),
 }
 
 // Parameterized PUT surface for the extension credential (#389 / DT-5). This

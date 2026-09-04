@@ -134,6 +134,10 @@ type DesignRevision struct {
 	CreatedBy        string                   `json:"created_by,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
 	Items            []DesignRevisionItem     `json:"items,omitempty"`
+	// Artifacts carries the #392 published artifact metadata (model/manifest/
+	// preview). Nil for legacy artifact-less publishes; readers treat nil as
+	// "no artifacts".
+	Artifacts []DesignRevisionArtifact `json:"artifacts,omitempty"`
 
 	OrganizationID string `json:"-"`
 }

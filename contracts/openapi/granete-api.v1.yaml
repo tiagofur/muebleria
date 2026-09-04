@@ -2861,6 +2861,147 @@
           }
         }
       }
+    },
+    "/designs/{designId}/publish:prepare": {
+      "post": {
+        "operationId": "prepareDesignPublish",
+        "summary": "Prepare a staged design revision publication (#392 / DT-8)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareDesignPublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Publish session prepared; upload the required artifacts next",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignPublishSession"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/publish/{sessionId}:finalize": {
+      "post": {
+        "operationId": "finalizeDesignPublish",
+        "summary": "Finalize the staged publication into an immutable DesignRevision with artifacts (#392 / DT-8)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Design revision published with model, manifest and preview artifacts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignRevision"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/schemas/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/revisions/{revisionId}/artifacts": {
+      "get": {
+        "operationId": "listDesignRevisionArtifacts",
+        "summary": "List published artifact metadata of one design revision (#392 / DT-8)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artifact metadata (storage is out-of-band; bytes are read via signed grants)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DesignRevisionArtifact"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
+    },
+    "/designs/{designId}/revisions/{revisionId}/artifacts/{kind}:authorize": {
+      "post": {
+        "operationId": "authorizeDesignRevisionArtifact",
+        "summary": "Mint a short-lived signed read URL for one published artifact (#392 / DT-8)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/RevisionId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignArtifactKind"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed short-lived read grant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignArtifactGrant"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2962,6 +3103,28 @@
         "schema": {
           "type": "string",
           "format": "uuid"
+        }
+      },
+      "SessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "DesignArtifactKind": {
+        "name": "kind",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "model",
+            "manifest",
+            "preview"
+          ]
         }
       }
     },
@@ -6273,6 +6436,12 @@
             "items": {
               "$ref": "#/components/schemas/DesignRevisionItem"
             }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignRevisionArtifact"
+            }
           }
         }
       },
@@ -6659,6 +6828,260 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/ModelBindingCapabilities"
+          }
+        }
+      },
+      "DesignPublishArtifactKind": {
+        "type": "string",
+        "enum": [
+          "model",
+          "manifest",
+          "preview"
+        ]
+      },
+      "DesignPublishSessionStatus": {
+        "type": "string",
+        "enum": [
+          "prepared",
+          "finalized",
+          "abandoned"
+        ]
+      },
+      "DesignPublishManifestSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "client",
+          "sketchupVersion",
+          "pluginVersion"
+        ],
+        "properties": {
+          "client": {
+            "type": "string",
+            "enum": [
+              "sketchup"
+            ]
+          },
+          "sketchupVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "pluginVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      },
+      "DesignPublishManifestItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "technicalClientLocator": {
+            "$ref": "#/components/schemas/TechnicalClientLocator"
+          }
+        }
+      },
+      "DesignPublishManifest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "projectId",
+          "designId",
+          "source",
+          "items"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseRevisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DesignPublishManifestSource"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignPublishManifestItem"
+            }
+          }
+        }
+      },
+      "PrepareDesignPublishRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "manifest"
+        ],
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/DesignPublishManifest"
+          }
+        }
+      },
+      "DesignPublishSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "design_id",
+          "status",
+          "expires_at",
+          "required_artifacts"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DesignPublishSessionStatus"
+          },
+          "base_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "required_artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignPublishArtifactKind"
+            }
+          }
+        }
+      },
+      "DesignPublishArtifactUploaded": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "sha256",
+          "size_bytes",
+          "content_type"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DesignPublishArtifactKind"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 255
+          }
+        }
+      },
+      "DesignRevisionArtifact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "design_revision_id",
+          "kind",
+          "content_type",
+          "size_bytes",
+          "sha256",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "design_revision_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DesignPublishArtifactKind"
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 255
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "uploaded_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DesignArtifactGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "url",
+          "expires_at"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DesignPublishArtifactKind"
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

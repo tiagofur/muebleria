@@ -11,7 +11,10 @@ import type {
   CreateInvitationRequest,
   CreateInvitationResponse,
   Design,
+  DesignArtifactGrant,
+  DesignPublishSession,
   DesignRevision,
+  DesignRevisionArtifact,
   DesignWorkingCopy,
   DeviceApproveRequest,
   DeviceEnrollPollRequest,
@@ -61,6 +64,7 @@ import type {
   OrganizationRelationship,
   PlatformOrganization,
   PlatformUser,
+  PrepareDesignPublishRequest,
   ProvisionOrganizationRequest,
   PublishDesignRevisionRequest,
   QuoteLineFurnitureInstance,
@@ -185,4 +189,8 @@ export abstract class GeneratedGraneteApiClient {
   listDesignRevisions(token: string, designId: string, signal?: AbortSignal): Promise<ReadonlyArray<DesignRevision>> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions`, { arrayOf: "DesignRevision", token, signal }); }
   publishDesignRevision(token: string, designId: string, body: PublishDesignRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions`, { schema: "DesignRevision", token, bodySchema: "PublishDesignRevisionRequest", body, idempotencyKey: key, signal }); }
   getDesignRevision(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<DesignRevision> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}`, { schema: "DesignRevision", token, signal }); }
+  prepareDesignPublish(token: string, designId: string, body: PrepareDesignPublishRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignPublishSession> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/publish:prepare`, { schema: "DesignPublishSession", token, bodySchema: "PrepareDesignPublishRequest", body, idempotencyKey: key, signal }); }
+  finalizeDesignPublish(token: string, designId: string, sessionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/publish/${encodeURIComponent(sessionId)}:finalize`, { schema: "DesignRevision", token, idempotencyKey: key, signal }); }
+  listDesignRevisionArtifacts(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<ReadonlyArray<DesignRevisionArtifact>> { return this.request("GET", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/artifacts`, { arrayOf: "DesignRevisionArtifact", token, signal }); }
+  authorizeDesignRevisionArtifact(token: string, designId: string, revisionId: string, kind: "model" | "manifest" | "preview", signal?: AbortSignal): Promise<DesignArtifactGrant> { return this.request("POST", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}/artifacts/${encodeURIComponent(kind)}:authorize`, { schema: "DesignArtifactGrant", token, signal }); }
 }

@@ -1,14 +1,14 @@
-# Feature activa: #391 DT-7 — Detect and resolve duplicated managed furniture identity in SketchUp
+# Feature activa: #392 DT-8 — Publish immutable DesignRevision with manifest and 3D artifacts
 
 - Actualizado: 2026-09-03 America/Mexico_City
 - F202 (#460) sigue abierta en paralelo (SEC-8/SEC-9); esta sesión ejecutó el
-  slice DT-7 en modo Demo Commercial Rescue sobre `feat/391-duplicate-furniture-instance-identity`.
-- #391 implementada COMPLETE: detección de duplicación física de muebles en SketchUp
-  (Copy/Paste/Move+Copy), backend autoritativo crea nueva entidad (origin='duplicate',
-  origin_furniture_instance_id=fuente), reescritura atómica de metadatos exclusivamente
-  sobre la copia manteniendo intacto el original, sincronización con DesignWorkingCopy,
-  manejo explícito de unresolved en caso de desconexión y precheck de validación de
-  identidad antes de publicar (#391 DT-7 §21-22). Detalle: `progress/implementation_391_dt7.md`.
+  slice DT-8 en modo Demo Commercial Rescue sobre `feat/392-publish-design-revision`.
+- #392 implementada COMPLETE: publicación escalonada (prepare → upload → finalize)
+  de DesignRevision inmutable con manifiesto semántico v1 y artefactos 3D (.skp,
+  manifest.json, preview.png), verificación de integridad SHA-256 local y en
+  servidor, precheck de identidad #391 reutilizado, snapshot desde DesignWorkingCopy,
+  concurrencia optimista y avance de baseRevisionId en el modelo y en el servidor.
+  Detalle: `progress/implementation_392_dt8.md`.
 
 ## Historial previo — F202/#460 Organization Foundation P0
 

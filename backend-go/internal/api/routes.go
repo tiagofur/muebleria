@@ -48,6 +48,49 @@ func organizationCommandRouter(commands map[string]http.Handler) http.Handler {
 	})
 }
 
+// publishCommandRouter adapts /api/designs/{designId}/publish/{sessionId}:finalize
+// (command-oriented OpenAPI path) to net/http's ServeMux: the wildcard must
+// occupy an entire segment, so the sessionId:command segment is captured and
+// split here (#392 / DT-8).
+func publishCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("publishCommand")
+		sessionID, command, ok := strings.Cut(segment, ":")
+		if !ok || sessionID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("sessionId", sessionID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// designRevisionArtifactCommandRouter adapts
+// /api/designs/{designId}/revisions/{revisionId}/artifacts/{kind}:authorize
+// the same way (#392 / DT-8).
+func designRevisionArtifactCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("artifactCommand")
+		kind, command, ok := strings.Cut(segment, ":")
+		if !ok || kind == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("kind", kind)
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func RegisterRoutes(server *Server) http.Handler {
 	mux := http.NewServeMux()
 
@@ -340,6 +383,27 @@ func RegisterRoutes(server *Server) http.Handler {
 	// #388 / DT-4: stateless authoritative validation of a SketchUp model
 	// binding candidate. no-store: the answer is session- and revision-scoped.
 	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/binding:validate", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectDesignBindingValidate))))
+
+	// #392 / DT-8: staged publication of an immutable DesignRevision with
+	// manifest + artifacts. prepare and finalize are durable commands behind
+	// the idempotency receipt (retry of a lost finalize response replays the
+	// SAME revision, never a new one); artifact upload is a multipart upsert
+	// of staging metadata (replace semantics, inherently retry-safe). The
+	// multipart upload endpoint is intentionally outside the generated
+	// OpenAPI surface, same as catalog media upload.
+	mux.Handle("POST /api/designs/{designId}/publish:prepare", noStoreMiddleware(authMW(server.RequireIdempotency("design.publish-prepare", http.HandlerFunc(server.HandleDesignPublishPrepare)))))
+	mux.Handle("POST /api/designs/{designId}/publish/{sessionId}/artifacts/{kind}", authMW(http.HandlerFunc(server.HandleDesignPublishArtifactUpload)))
+	mux.Handle("POST /api/designs/{designId}/publish/{publishCommand...}", noStoreMiddleware(authMW(server.RequireIdempotency("design.publish-finalize", publishCommandRouter(map[string]http.Handler{
+		"finalize": http.HandlerFunc(server.HandleDesignPublishFinalize),
+	})))))
+	// Published artifact readback + signed reads (#392 §§31-32): metadata is
+	// readable by the project surface; bytes are served through the same
+	// short-lived grant mechanism as catalog media — never public URLs.
+	mux.Handle("GET /api/designs/{designId}/revisions/{revisionId}/artifacts", authMW(http.HandlerFunc(server.HandleDesignRevisionArtifacts)))
+	mux.Handle("POST /api/designs/{designId}/revisions/{revisionId}/artifacts/{artifactCommand...}", noStoreMiddleware(authMW(designRevisionArtifactCommandRouter(map[string]http.Handler{
+		"authorize": http.HandlerFunc(server.HandleDesignRevisionArtifactAuthorize),
+	}))))
+	mux.Handle("GET /api/design-artifacts/{key...}", server.designArtifactGetAuth(http.HandlerFunc(server.HandleDesignArtifactGet)))
 
 	// Floor scan & item floor status (PROD-3.1 / F089-RN / F092): mobile scan-to-advance, loading status checklist.
 	mux.Handle("POST /api/projects/{id}/floor-scan", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectFloorScan))))

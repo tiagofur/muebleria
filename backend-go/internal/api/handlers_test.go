@@ -39,17 +39,17 @@ type stubStore struct {
 	lastCreatedProject   *domain.Project
 	lastUpdatedProject   *domain.Project
 	// Project furniture identity (#385 / DT-1)
-	furnitureInstancesByID     map[string]domain.FurnitureInstance
-	listFurnitureInstances     []domain.FurnitureInstance
+	furnitureInstancesByID map[string]domain.FurnitureInstance
+	listFurnitureInstances []domain.FurnitureInstance
 	// #389 / DT-5 presentation summaries (nil = derive from the plain list).
-	listFurnitureInstanceSummaries []storage.FurnitureInstanceSummary
-	createFurnitureInstanceCmd *storage.CreateFurnitureInstanceCommand
-	createFurnitureInstanceErr error
-	createFurnitureInstanceCalls int
-	removeFurnitureInstanceCmd *storage.RemoveFurnitureInstanceCommand
-	removeFurnitureInstanceErr error
-	duplicateFurnitureInstanceCmd *storage.DuplicateFurnitureInstanceCommand
-	duplicateFurnitureInstanceErr error
+	listFurnitureInstanceSummaries  []storage.FurnitureInstanceSummary
+	createFurnitureInstanceCmd      *storage.CreateFurnitureInstanceCommand
+	createFurnitureInstanceErr      error
+	createFurnitureInstanceCalls    int
+	removeFurnitureInstanceCmd      *storage.RemoveFurnitureInstanceCommand
+	removeFurnitureInstanceErr      error
+	duplicateFurnitureInstanceCmd   *storage.DuplicateFurnitureInstanceCommand
+	duplicateFurnitureInstanceErr   error
 	duplicateFurnitureInstanceCalls int
 	// QuoteLine ↔ FurnitureInstance relation (#386 / DT-2)
 	materializeQuoteLineCmd     *storage.MaterializeQuoteLineCommand
@@ -78,8 +78,24 @@ type stubStore struct {
 	updateDesignWorkingCopyErr error
 	resetDesignWorkingCopyCmd  *storage.ResetDesignWorkingCopyCommand
 	resetDesignWorkingCopyErr  error
-	materialReturnedByID       *domain.MaterialBoard
-	materialGetByIDErr         error
+	// #392 / DT-8 staged publish flow
+	prepareDesignPublishCmd             *storage.PrepareDesignPublishCommand
+	prepareDesignPublishErr             error
+	prepareDesignPublishResult          *storage.PrepareResult
+	publishSessionDetail                *storage.DesignPublishSessionDetail
+	getPublishSessionErr                error
+	recordDesignPublishArtifactCmd      *storage.RecordDesignPublishArtifactCommand
+	recordDesignPublishArtifactErr      error
+	recordDesignPublishArtifact         *domain.DesignRevisionArtifact
+	recordDesignPublishArtifactReplaced string
+	finalizeDesignPublishCmd            *storage.FinalizeDesignPublishCommand
+	finalizeDesignPublishErr            error
+	listDesignRevisionArtifactsResult   []domain.DesignRevisionArtifact
+	listDesignRevisionArtifactsErr      error
+	getDesignRevisionArtifactResult     *domain.DesignRevisionArtifact
+	getDesignRevisionArtifactErr        error
+	materialReturnedByID                *domain.MaterialBoard
+	materialGetByIDErr                  error
 	// Ambient materials (presentation-only floor/wall, #4150)
 	listAmbientMaterials      []domain.AmbientMaterial
 	ambientReturnedByID       *domain.AmbientMaterial
@@ -1600,6 +1616,88 @@ func (s *stubStore) GetModelBindingContext(_ context.Context, projectID, designI
 		return s.modelBindingContext, nil
 	}
 	return nil, domain.ErrDesignNotFound
+}
+
+func (s *stubStore) PrepareDesignPublish(_ context.Context, cmd storage.PrepareDesignPublishCommand) (*storage.PrepareResult, error) {
+	s.prepareDesignPublishCmd = &cmd
+	if s.prepareDesignPublishErr != nil {
+		return nil, s.prepareDesignPublishErr
+	}
+	if s.prepareDesignPublishResult != nil {
+		return s.prepareDesignPublishResult, nil
+	}
+	return &storage.PrepareResult{
+		Session: &domain.DesignPublishSession{
+			ID:        "dps-1",
+			DesignID:  cmd.DesignID,
+			Status:    "prepared",
+			ExpiresAt: time.Now().Add(time.Hour),
+			Manifest:  &cmd.Manifest,
+		},
+	}, nil
+}
+
+func (s *stubStore) GetDesignPublishSession(_ context.Context, designID, sessionID string) (*storage.DesignPublishSessionDetail, error) {
+	if s.getPublishSessionErr != nil {
+		return nil, s.getPublishSessionErr
+	}
+	if s.publishSessionDetail != nil {
+		return s.publishSessionDetail, nil
+	}
+	return nil, domain.ErrPublishSessionNotFound
+}
+
+func (s *stubStore) RecordDesignPublishArtifact(_ context.Context, cmd storage.RecordDesignPublishArtifactCommand) (*domain.DesignRevisionArtifact, string, error) {
+	s.recordDesignPublishArtifactCmd = &cmd
+	if s.recordDesignPublishArtifactErr != nil {
+		return nil, "", s.recordDesignPublishArtifactErr
+	}
+	if s.recordDesignPublishArtifact != nil {
+		return s.recordDesignPublishArtifact, s.recordDesignPublishArtifactReplaced, nil
+	}
+	return &domain.DesignRevisionArtifact{
+		ID:               "dpa-1",
+		DesignRevisionID: cmd.SessionID,
+		Kind:             cmd.Kind,
+		StorageKey:       cmd.StorageKey,
+		ContentType:      cmd.ContentType,
+		SizeBytes:        cmd.SizeBytes,
+		SHA256:           cmd.SHA256,
+		CreatedAt:        time.Now(),
+	}, "", nil
+}
+
+func (s *stubStore) FinalizeDesignPublish(_ context.Context, cmd storage.FinalizeDesignPublishCommand) (*domain.DesignRevision, error) {
+	s.finalizeDesignPublishCmd = &cmd
+	if s.finalizeDesignPublishErr != nil {
+		return nil, s.finalizeDesignPublishErr
+	}
+	rev := &domain.DesignRevision{
+		ID:             "drev-pub",
+		DesignID:       cmd.DesignID,
+		RevisionNumber: 8,
+		SourceType:     domain.DesignRevisionSourceSketchup,
+		Status:         domain.DesignRevisionStatusPublished,
+		CreatedAt:      time.Now(),
+	}
+	return rev, nil
+}
+
+func (s *stubStore) ListDesignRevisionArtifacts(_ context.Context, designID, revisionID string) ([]domain.DesignRevisionArtifact, error) {
+	if s.listDesignRevisionArtifactsErr != nil {
+		return nil, s.listDesignRevisionArtifactsErr
+	}
+	return s.listDesignRevisionArtifactsResult, nil
+}
+
+func (s *stubStore) GetDesignRevisionArtifact(_ context.Context, designID, revisionID string, kind domain.DesignPublishArtifactKind) (*domain.DesignRevisionArtifact, error) {
+	if s.getDesignRevisionArtifactErr != nil {
+		return nil, s.getDesignRevisionArtifactErr
+	}
+	if s.getDesignRevisionArtifactResult != nil {
+		return s.getDesignRevisionArtifactResult, nil
+	}
+	return nil, domain.ErrDesignRevisionNotFound
 }
 
 func (s *stubStore) GetDesignWorkingCopy(_ context.Context, designID string) (*domain.DesignWorkingCopy, error) {

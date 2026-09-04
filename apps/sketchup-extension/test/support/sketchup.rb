@@ -136,6 +136,13 @@ module Sketchup
 
   class Group
   end
+
+  class View
+  end
+
+  def self.version
+    '24.0.145-stub'
+  end
 end
 
 module SketchupStub
@@ -529,8 +536,36 @@ module SketchupStub
     end
   end
 
+  class ViewStub < Sketchup::View
+    attr_reader :images_written
+
+    def initialize
+      @images_written = []
+    end
+
+    def write_image(filename_or_options, width = 640, height = 480, antialias = false, _compression = 0.0)
+      if filename_or_options.is_a?(Hash)
+        filename = filename_or_options[:filename] || filename_or_options['filename']
+        w = filename_or_options[:width] || filename_or_options['width'] || width
+        h = filename_or_options[:height] || filename_or_options['height'] || height
+        a = filename_or_options[:antialias] || filename_or_options['antialias'] || antialias
+      else
+        filename = filename_or_options
+        w = width
+        h = height
+        a = antialias
+      end
+      raise ArgumentError, 'filename required' unless filename
+
+      File.binwrite(filename, "PNG-STUB-#{w}x#{h}-#{a}")
+      @images_written << filename
+      true
+    end
+  end
+
   class ModelStub
     attr_reader :active_entities, :selection, :definitions, :materials, :operations
+    attr_accessor :active_view
 
     def initialize
       @active_entities = EntitiesStub.new
@@ -538,6 +573,7 @@ module SketchupStub
       @definitions = DefinitionListStub.new
       @materials = MaterialsStub.new
       @operations = []
+      @active_view = ViewStub.new
     end
 
     def entities
@@ -557,6 +593,14 @@ module SketchupStub
     def abort_operation
       @operations << :abort
       SketchupStub.abort_undo_frame
+    end
+
+    # #392 / DT-8 host export surface: save_copy writes a byte-identical
+    # stub payload per model revision (never the user's document path).
+    # Preview image export is performed via active_view.write_image.
+    def save_copy(path)
+      File.binwrite(path, "SKP-STUB-#{object_id}")
+      true
     end
   end
 

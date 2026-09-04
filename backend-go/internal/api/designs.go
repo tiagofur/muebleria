@@ -90,6 +90,13 @@ func toDesignRevisionDTO(rev domain.DesignRevision) openapi.DesignRevision {
 	for _, item := range rev.Items {
 		dto.Items = append(dto.Items, toDesignRevisionItemDTO(item))
 	}
+	// #392: published artifact metadata (nil = legacy artifact-less publish).
+	if rev.Artifacts != nil {
+		dto.Artifacts = make([]openapi.DesignRevisionArtifact, 0, len(rev.Artifacts))
+		for _, a := range rev.Artifacts {
+			dto.Artifacts = append(dto.Artifacts, toDesignRevisionArtifactDTO(a))
+		}
+	}
 	return dto
 }
 
