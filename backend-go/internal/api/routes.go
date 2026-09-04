@@ -91,6 +91,28 @@ func designRevisionArtifactCommandRouter(commands map[string]http.Handler) http.
 	})
 }
 
+// designRevisionCommandRouter adapts
+// /api/designs/{designId}/revisions/{revisionId}:approve the same way (#395 /
+// DT-11): the wildcard must occupy an entire segment, so the
+// revisionId:command segment is captured and split here.
+func designRevisionCommandRouter(commands map[string]http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		segment := r.PathValue("revisionCommand")
+		revisionID, command, ok := strings.Cut(segment, ":")
+		if !ok || revisionID == "" || command == "" || strings.Contains(command, ":") {
+			http.NotFound(w, r)
+			return
+		}
+		handler, ok := commands[command]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		r.SetPathValue("revisionId", revisionID)
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func RegisterRoutes(server *Server) http.Handler {
 	mux := http.NewServeMux()
 
@@ -393,6 +415,19 @@ func RegisterRoutes(server *Server) http.Handler {
 	// mints a second revision. Classification is computed server-side; the
 	// accepted source revision is never rewritten.
 	mux.Handle("POST /api/projects/{projectId}/quote-revisions:requote", authMW(server.RequireIdempotency("quote.requote", http.HandlerFunc(server.HandleProjectQuoteRequote))))
+
+	// #395 / DT-11: DesignRevision approval and ProductionRelease pinned to
+	// the exact approved revision + manufacturing fingerprint. Approval is an
+	// explicit lifecycle transition (publish never auto-approves; replay is
+	// idempotent). Release runs the whole §17 gate server-side in one
+	// transaction and inserts immutable history — a retried release replays
+	// the same row, and later revisions never mutate it.
+	mux.Handle("POST /api/designs/{designId}/revisions/{revisionCommand...}", noStoreMiddleware(authMW(server.RequireIdempotency("design.approve-revision", designRevisionCommandRouter(map[string]http.Handler{
+		"approve": http.HandlerFunc(server.HandleDesignRevisionApprove),
+	})))))
+	mux.Handle("GET /api/projects/{projectId}/production-releases", authMW(http.HandlerFunc(server.HandleProjectProductionReleases)))
+	mux.Handle("POST /api/projects/{projectId}/production-releases", noStoreMiddleware(authMW(server.RequireIdempotency("production.release", http.HandlerFunc(server.HandleProjectProductionReleases)))))
+	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}", authMW(http.HandlerFunc(server.HandleProjectProductionRelease)))
 
 	// #392 / DT-8: staged publication of an immutable DesignRevision with
 	// manifest + artifacts. prepare and finalize are durable commands behind

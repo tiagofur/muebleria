@@ -25,7 +25,7 @@ func costingFixtures() (*stubStore, *Server) {
 			LaborModular: 50, LaborFixedCost: 10, MarginFactor: 1.3, SalePrice: 400,
 		},
 	}
-	release := &domain.ProductionRelease{
+	release := &domain.LegacyProductionRelease{
 		ID: "rel-1", ProjectID: "p1", ProjectVersion: 1, DesignRevisionID: "dr-1",
 		BOMFingerprint: "fp-abc123", ReleasedBy: "ing-1", ReleasedAt: time.Date(2026, 8, 20, 11, 0, 0, 0, time.UTC),
 	}

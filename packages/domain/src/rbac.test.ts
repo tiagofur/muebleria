@@ -18,6 +18,8 @@ import {
   roleCanMutateCatalog,
   roleCanMutateModules,
   roleCanMutateProjects,
+  roleCanApproveDesignRevisions,
+  roleCanReleaseProduction,
   roleCanReopenProject,
   roleCanViewCosts,
   roleCanViewPortfolioDashboard,
@@ -115,6 +117,23 @@ describe('rbac (F035 / OC-004)', () => {
     expect(roleCanMutateCatalog('ingeniero')).toBe(true);
     expect(roleCanMutateModules('vendedor')).toBe(false);
     expect(roleCanMutateModules('ingeniero')).toBe(true);
+  });
+
+  it('splits design approval and production release from editing (#395)', () => {
+    // Publishing (editing) and approving for production are different
+    // capabilities; releasing to the floor is a plant call. Parity with Go
+    // RoleCanApproveDesignRevisions / RoleCanReleaseProduction.
+    expect(roleCanApproveDesignRevisions('vendedor')).toBe(false);
+    expect(roleCanApproveDesignRevisions('produccion')).toBe(false);
+    expect(roleCanApproveDesignRevisions('gerente_ventas')).toBe(true);
+    expect(roleCanApproveDesignRevisions('ingeniero')).toBe(true);
+    expect(roleCanApproveDesignRevisions('admin')).toBe(true);
+
+    expect(roleCanReleaseProduction('vendedor')).toBe(false);
+    expect(roleCanReleaseProduction('gerente_ventas')).toBe(false);
+    expect(roleCanReleaseProduction('gerente_produccion')).toBe(true);
+    expect(roleCanReleaseProduction('ingeniero')).toBe(true);
+    expect(roleCanReleaseProduction('admin')).toBe(true);
   });
 
   it('denies project delete to vendedor', () => {

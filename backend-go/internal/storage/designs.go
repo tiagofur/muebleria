@@ -241,7 +241,7 @@ const designRevisionColumns = `
 	id, organization_id, project_id, design_id,
 	revision_number, COALESCE(parent_revision_id::text, ''),
 	source_type, status, COALESCE(created_by::text, ''),
-	created_at`
+	created_at, COALESCE(approved_by::text, ''), approved_at`
 
 func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 	var r domain.DesignRevision
@@ -249,7 +249,7 @@ func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 		&r.ID, &r.OrganizationID, &r.ProjectID, &r.DesignID,
 		&r.RevisionNumber, &r.ParentRevisionID,
 		&r.SourceType, &r.Status, &r.CreatedBy,
-		&r.CreatedAt,
+		&r.CreatedAt, &r.ApprovedBy, &r.ApprovedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignRevisionNotFound
@@ -695,7 +695,7 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 		&rev.ID, &rev.OrganizationID, &rev.ProjectID, &rev.DesignID,
 		&rev.RevisionNumber, &rev.ParentRevisionID,
 		&rev.SourceType, &rev.Status, &rev.CreatedBy,
-		&rev.CreatedAt,
+		&rev.CreatedAt, &rev.ApprovedBy, &rev.ApprovedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert design revision: %w", err)

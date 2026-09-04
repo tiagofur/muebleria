@@ -87,6 +87,14 @@ func toDesignRevisionDTO(rev domain.DesignRevision) openapi.DesignRevision {
 	if rev.CreatedBy != "" {
 		dto.CreatedBy = &rev.CreatedBy
 	}
+	// #395: approval metadata (absent while the revision is only published).
+	if rev.ApprovedBy != "" {
+		dto.ApprovedBy = &rev.ApprovedBy
+	}
+	if rev.ApprovedAt != nil {
+		approvedAt := rev.ApprovedAt.UTC().Format(time.RFC3339Nano)
+		dto.ApprovedAt = &approvedAt
+	}
 	for _, item := range rev.Items {
 		dto.Items = append(dto.Items, toDesignRevisionItemDTO(item))
 	}

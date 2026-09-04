@@ -63,7 +63,7 @@ func (s *PostgresStore) MutateProjectQuality(
 		}
 	}
 	if len(releaseRaw) > 0 && string(releaseRaw) != "null" {
-		var release domain.ProductionRelease
+		var release domain.LegacyProductionRelease
 		if err := json.Unmarshal(releaseRaw, &release); err == nil && release.ID != "" {
 			snap.ReleasedRevision = release.ID
 		}

@@ -299,6 +299,15 @@ type Store interface {
 	// #394 / DT-10: explicit re-quote — creates the next draft QuoteRevision
 	// from an exact base quote revision and an exact design revision.
 	RequoteProjectQuote(ctx context.Context, cmd storage.RequoteProjectQuoteCommand) (*storage.RequoteProjectQuoteResult, error)
+	// #395 / DT-11: explicit DesignRevision approval (published→approved
+	// exactly once; replay is an idempotent no-op).
+	ApproveDesignRevision(ctx context.Context, cmd storage.ApproveDesignRevisionCommand) (*domain.DesignRevision, error)
+	// #395 / DT-11: immutable ProductionRelease pinned to the exact approved
+	// DesignRevision (+ optional exact accepted QuoteRevision) and the
+	// server-computed manufacturing fingerprint; readback derives staleness.
+	CreateProductionRelease(ctx context.Context, cmd storage.CreateProductionReleaseCommand) (*storage.ProductionReleaseReadback, error)
+	ListProjectProductionReleases(ctx context.Context, projectID string) ([]storage.ProductionReleaseReadback, error)
+	GetProjectProductionRelease(ctx context.Context, projectID, releaseID string) (*storage.ProductionReleaseReadback, error)
 	// Authoritative Project/Design working context for SketchUp model
 	// binding validation (#388 / DT-4).
 	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)

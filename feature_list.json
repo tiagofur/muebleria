@@ -5578,6 +5578,47 @@
       ],
       "completedAt": "2026-09-03",
       "evidence": "go test ./... green against real PostgreSQL (incl. TestRequote_AcceptedQuoteStaysIntact, TestRequote_StaleBaseRejected_FailClosed, TestRequote_PureMove_NeverCreatesCommercialRevision, TestRequote_MultiOrgRLS_OwnerOrganizationOnly, TestRequote_ProvenanceMigration_FreshAndUpgrade); domain classification + requote suites and API handler tests green; deterministic contract fixture contracts/reconciliationImpact.json pinned by TestReconciliationImpactContract; pnpm openapi:check / typecheck / test green (3524 tests); go vet clean."
+    },
+    {
+      "id": "F210",
+      "title": "DesignRevision approval and ProductionRelease pinned to exact revisions (#395 / DT-11)",
+      "description": "Closing slice of the authoring-to-production limit (ADR-0003, digital-thread \u00a7\u00a717, 21-23, 25.6, invariant I6): an explicit published\u2192approved transition authorizes an EXACT DesignRevision for production (never auto-approved by publish, never 'latest', server-authoritative actor/timestamp, idempotent replay, migration 000118 carves the single lifecycle mutation out of the #387 absolute immutability trigger with an owner-org RLS update policy), and a server-authoritative ProductionRelease machinery (migration 000119, table production_releases with composite same-project FKs to design_revisions and quote_revisions, immutable by trigger + grants) pins the release forever to the exact approved design revision, the exact accepted QuoteRevision when a commercial baseline exists, and a server-computed manufacturing fingerprint (sha256 over the revision's manufacturing-affecting items: definition/version/parameters/materialChoices; transform/room deliberately excluded so a spatial-only newer revision keeps the fingerprint and never flags stale, extending the #394 impact groups). The release transaction re-validates everything server-side: approved status, accepted commercial baseline, #393/#394 reconciliation recomputed from the exact revisions (conflicts and pending commercial changes block; no demo exception), and an authoritative manufacturing preflight over the organization catalog (parameter contract = persisted definitions + the #483 width/height/depth projection, fail-closed on unknown/invalid inputs, missing definitions, duplicate identities and empty revisions). POST /api/projects/{projectId}/production-releases (generated OpenAPI, durable Idempotency-Key, RoleCanReleaseProduction) creates immutable history: publishing newer revisions never mutates or retargets an existing release (canonical negative proof: P1 stays byte-identical after R4); readback GET endpoints derive staleness as a read-only projection comparing fingerprints, never touching the row. Approval (RoleCanApproveDesignRevisions: admin/gerente_ventas/ingeniero) and release (RoleCanReleaseProduction: admin/gerente_produccion/ingeniero) are distinct least-privilege capabilities with Go+TS parity, deliberately separated from design editing/publishing. Durable audits design_revision_approved and production_release_created land in the same transactions. The legacy client-authored OC-022 blob is renamed LegacyProductionRelease and stays untouched.",
+      "tags": [
+        "digital-thread",
+        "backend",
+        "domain",
+        "openapi",
+        "rls",
+        "projects",
+        "designs",
+        "production",
+        "release",
+        "approval",
+        "p0"
+      ],
+      "created": "2026-09-04",
+      "status": "done",
+      "acceptance": [
+        "Release cannot target implicit latest: the command must carry an exact designRevisionId and the transaction loads exactly that revision",
+        "Released designRevisionId, quoteRevisionId and manufacturing fingerprint are visible in the readback API and audited in production_release_created",
+        "Blocked manufacturing preflight or blocking reconciliation prevents the release (server-side, fail-closed)",
+        "Publishing a newer design revision leaves the existing release byte-identical with its original pins (canonical negative proof at persisted level)",
+        "A manufacturing-affecting change marks the prior release stale through the read-only staleness projection; a spatial-only newer revision does not",
+        "Approval and release permissions are server-enforced and distinct from design editing (vendedor publishes but neither approves nor releases)",
+        "Tests cover happy path, unapproved, stale commercial baseline, conflict (domain), preflight blockers, newer revision pinning and permission denial"
+      ],
+      "references": [
+        "https://github.com/tiagofur/muebleria/issues/395",
+        "https://github.com/tiagofur/muebleria/issues/384",
+        "docs/architecture/project-design-digital-thread.md",
+        "docs/adr/0003-project-owned-furniture-identity-and-versioned-design.md",
+        "progress/implementation_395_dt11.md"
+      ],
+      "depends_on": [
+        "F209"
+      ],
+      "completedAt": "2026-09-04",
+      "evidence": "go test ./... green against real PostgreSQL (incl. TestProductionRelease_CanonicalPinningNegativeProof, TestProductionRelease_SpatialOnlyRevisionIsNotManufacturingStale, TestProductionRelease_Gates, TestProductionRelease_ApprovalLifecycleAndIdempotency, TestProductionRelease_ReleaseRowsAreImmutableHistory, TestProductionRelease_MultiOrgRLS, TestProductionRelease_ConcurrentCreationNumbering, TestProductionRelease_MigrationFreshAndUpgrade); domain fingerprint/preflight/gate suites and API handler tests green (approve + release permissions, gate error mapping, idempotent replay); pnpm openapi:check / typecheck / test green; go vet clean."
     }
   ]
 }

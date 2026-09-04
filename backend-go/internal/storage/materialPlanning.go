@@ -54,7 +54,7 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 		snap.Planning = &planning
 	}
 	if len(productionReleaseRaw) > 0 && string(productionReleaseRaw) != "null" {
-		var release domain.ProductionRelease
+		var release domain.LegacyProductionRelease
 		if err := json.Unmarshal(productionReleaseRaw, &release); err == nil {
 			snap.ProductionRelease = &release
 		}

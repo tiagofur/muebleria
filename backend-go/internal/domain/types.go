@@ -672,10 +672,10 @@ type Project struct {
 	MaterialsRelease  json.RawMessage          `json:"materials_release,omitempty"`
 	DesignRevisions   []LegacyDesignRevision   `json:"design_revisions,omitempty"`
 	Approvals         []Approval               `json:"approvals,omitempty"`
-	ProductionRelease *ProductionRelease    `json:"production_release,omitempty"`
-	ChangeOrders      []ChangeOrder         `json:"change_orders,omitempty"`
-	PartInstances     []PartInstance        `json:"part_instances,omitempty"`
-	ModuleUnits       []ModuleUnitExecution `json:"module_units,omitempty"`
+	ProductionRelease *LegacyProductionRelease `json:"production_release,omitempty"`
+	ChangeOrders      []ChangeOrder            `json:"change_orders,omitempty"`
+	PartInstances     []PartInstance           `json:"part_instances,omitempty"`
+	ModuleUnits       []ModuleUnitExecution    `json:"module_units,omitempty"`
 	// Installation is the installation job (visits, field issues, punch,
 	// closeout — OC-070..OC-074). Server-authoritative: only mutated through
 	// the dedicated installation endpoints, never through the project PUT.

@@ -273,3 +273,39 @@ func TestRoleCanWorkSector_ProductionWithoutAssignmentsFailsClosed(t *testing.T)
 		t.Fatal("assigned production membership must work its station")
 	}
 }
+
+// #395 / DT-11: design approval and production release are distinct
+// capabilities — publishing (RoleCanMutateProjects) never implies either.
+// Parity with packages/domain/src/rbac.ts.
+func TestRoleCanApproveDesignRevisions(t *testing.T) {
+	t.Parallel()
+	for _, role := range []UserRole{RoleAdmin, RoleGerenteVentas, RoleIngeniero} {
+		if !RoleCanApproveDesignRevisions(role) {
+			t.Errorf("%s must approve design revisions", role)
+		}
+	}
+	for _, role := range []UserRole{RoleVendedor, RoleProduccion, RoleAlmacen, RoleUser, RoleGerenteProduccion} {
+		if RoleCanApproveDesignRevisions(role) {
+			t.Errorf("%s must not approve design revisions", role)
+		}
+	}
+}
+
+func TestRoleCanReleaseProduction(t *testing.T) {
+	t.Parallel()
+	for _, role := range []UserRole{RoleAdmin, RoleGerenteProduccion, RoleIngeniero} {
+		if !RoleCanReleaseProduction(role) {
+			t.Errorf("%s must release production", role)
+		}
+	}
+	for _, role := range []UserRole{RoleVendedor, RoleGerenteVentas, RoleProduccion, RoleAlmacen, RoleUser} {
+		if RoleCanReleaseProduction(role) {
+			t.Errorf("%s must not release production", role)
+		}
+	}
+	// The sales editor (vendedor) publishes designs but neither approves
+	// production nor releases: three separate decisions.
+	if !RoleCanMutateProjects(RoleVendedor) {
+		t.Errorf("vendedor keeps design editing/publishing")
+	}
+}

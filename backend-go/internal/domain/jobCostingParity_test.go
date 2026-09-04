@@ -69,7 +69,7 @@ func TestBuildCostBaselineFreezesSnapshotAndRelease(t *testing.T) {
 			LaborModular: 50, LaborFixedCost: 10, MarginFactor: 1.3, SalePrice: 400,
 		},
 	}
-	release := &ProductionRelease{
+	release := &LegacyProductionRelease{
 		ID: "rel-1", ProjectID: "p1", ProjectVersion: 3, DesignRevisionID: "dr-1",
 		BOMFingerprint: "fp-aaa", ReleasedBy: "ing-1", ReleasedAt: time.Date(2026, 8, 20, 11, 0, 0, 0, time.UTC),
 	}
@@ -102,7 +102,7 @@ func TestBuildCostBaselineFreezesSnapshotAndRelease(t *testing.T) {
 	if _, err := BuildCostBaseline(existing, snapshot, release, "p1", "mgr-1", time.Now().UTC()); err == nil {
 		t.Error("a baseline for the same release must not be overwritten")
 	}
-	reRelease := &ProductionRelease{ID: "rel-2", ProjectID: "p1", ProjectVersion: 4, BOMFingerprint: "fp-bbb"}
+	reRelease := &LegacyProductionRelease{ID: "rel-2", ProjectID: "p1", ProjectVersion: 4, BOMFingerprint: "fp-bbb"}
 	next, err := BuildCostBaseline(existing, snapshot, reRelease, "p1", "mgr-1", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("recapture after re-release: %v", err)

@@ -103,6 +103,19 @@ type stubStore struct {
 	requoteProjectQuoteErr    error
 	requoteProjectQuoteCalls  int
 	requoteProjectQuoteCmd    *storage.RequoteProjectQuoteCommand
+	// DesignRevision approval + ProductionRelease (#395 / DT-11)
+	approveDesignRevisionResult *domain.DesignRevision
+	approveDesignRevisionErr    error
+	approveDesignRevisionCalls  int
+	approveDesignRevisionCmd    *storage.ApproveDesignRevisionCommand
+	createProductionReleaseResult *storage.ProductionReleaseReadback
+	createProductionReleaseErr    error
+	createProductionReleaseCalls  int
+	createProductionReleaseCmd    *storage.CreateProductionReleaseCommand
+	listProductionReleasesResult  []storage.ProductionReleaseReadback
+	listProductionReleasesErr     error
+	getProductionReleaseResult    *storage.ProductionReleaseReadback
+	getProductionReleaseErr       error
 	materialReturnedByID   *domain.MaterialBoard
 	materialGetByIDErr                  error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -197,7 +210,7 @@ type stubStore struct {
 	materialPlanning          *domain.MaterialPlanning
 	materialStock             []domain.MaterialStock
 	purchaseOrders            []domain.PurchaseOrder
-	productionRelease         *domain.ProductionRelease
+	productionRelease         *domain.LegacyProductionRelease
 	materialsReleased         bool
 	hasMaterialsReservedEvent bool
 	materialPlanningEvents    []domain.ProjectEvent
@@ -3163,4 +3176,70 @@ func TestHandleComponentsEmptyRolesRejected400(t *testing.T) {
 	if msg := errorBody(t, rr); !strings.Contains(msg, "al menos un rol") {
 		t.Errorf("error message = %q, want the empty-roles hint", msg)
 	}
+}
+
+func (s *stubStore) ApproveDesignRevision(_ context.Context, cmd storage.ApproveDesignRevisionCommand) (*domain.DesignRevision, error) {
+	s.approveDesignRevisionCalls++
+	cmdCopy := cmd
+	s.approveDesignRevisionCmd = &cmdCopy
+	if s.approveDesignRevisionErr != nil {
+		return nil, s.approveDesignRevisionErr
+	}
+	if s.approveDesignRevisionResult != nil {
+		return s.approveDesignRevisionResult, nil
+	}
+	return &domain.DesignRevision{
+		ID:             cmd.DesignRevisionID,
+		DesignID:       cmd.DesignID,
+		ProjectID:      "proj-1",
+		RevisionNumber: 3,
+		SourceType:     domain.DesignRevisionSourceSketchup,
+		Status:         domain.DesignRevisionStatusApproved,
+		ApprovedBy:     cmd.ActorUserID,
+		ApprovedAt:     &[]time.Time{time.Now()}[0],
+	}, nil
+}
+
+func (s *stubStore) CreateProductionRelease(_ context.Context, cmd storage.CreateProductionReleaseCommand) (*storage.ProductionReleaseReadback, error) {
+	s.createProductionReleaseCalls++
+	cmdCopy := cmd
+	s.createProductionReleaseCmd = &cmdCopy
+	if s.createProductionReleaseErr != nil {
+		return nil, s.createProductionReleaseErr
+	}
+	if s.createProductionReleaseResult != nil {
+		return s.createProductionReleaseResult, nil
+	}
+	return &storage.ProductionReleaseReadback{
+		Release: domain.ProductionRelease{
+			ID:                      "0a1b2c3d-0000-4000-8000-000000000001",
+			ProjectID:               cmd.ProjectID,
+			DesignRevisionID:        cmd.DesignRevisionID,
+			QuoteRevisionID:         cmd.QuoteRevisionID,
+			ReleaseNumber:           1,
+			DesignRevisionNumber:    3,
+			ManufacturingFingerprint: "sha256-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+			Status:                  domain.ProductionReleaseStatusActive,
+			ReleasedBy:              cmd.ActorUserID,
+			ReleasedAt:              time.Now(),
+		},
+		Staleness: domain.ProductionReleaseStaleness{},
+	}, nil
+}
+
+func (s *stubStore) ListProjectProductionReleases(_ context.Context, _ string) ([]storage.ProductionReleaseReadback, error) {
+	if s.listProductionReleasesErr != nil {
+		return nil, s.listProductionReleasesErr
+	}
+	return s.listProductionReleasesResult, nil
+}
+
+func (s *stubStore) GetProjectProductionRelease(_ context.Context, _, _ string) (*storage.ProductionReleaseReadback, error) {
+	if s.getProductionReleaseErr != nil {
+		return nil, s.getProductionReleaseErr
+	}
+	if s.getProductionReleaseResult != nil {
+		return s.getProductionReleaseResult, nil
+	}
+	return nil, domain.ErrReleaseNotFound
 }

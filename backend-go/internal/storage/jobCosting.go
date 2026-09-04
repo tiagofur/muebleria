@@ -62,7 +62,7 @@ func (s *PostgresStore) MutateProjectCosting(
 		snap.Costing = &costing
 	}
 	if len(productionReleaseRaw) > 0 && string(productionReleaseRaw) != "null" {
-		var release domain.ProductionRelease
+		var release domain.LegacyProductionRelease
 		if err := json.Unmarshal(productionReleaseRaw, &release); err == nil {
 			snap.ProductionRelease = &release
 		}

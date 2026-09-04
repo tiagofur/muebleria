@@ -36,7 +36,7 @@ func partExecFixtures(releasedRevision string) (*stubStore, *Server) {
 		Items: []domain.ProjectItem{{ID: "i1", ModuleID: "m-gab", Quantity: 1}},
 	}
 	if releasedRevision != "" {
-		project.ProductionRelease = &domain.ProductionRelease{ID: releasedRevision, ProjectID: "p1"}
+		project.ProductionRelease = &domain.LegacyProductionRelease{ID: releasedRevision, ProjectID: "p1"}
 	}
 	project.PartInstances = []domain.PartInstance{lat}
 	project.ModuleUnits = []domain.ModuleUnitExecution{unit}

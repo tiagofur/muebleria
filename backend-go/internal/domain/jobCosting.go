@@ -438,7 +438,7 @@ func jobCostingRandomSuffix() string {
 func BuildCostBaseline(
 	costing *JobCosting,
 	snapshot *QuotePriceSnapshot,
-	release *ProductionRelease,
+	release *LegacyProductionRelease,
 	projectID string,
 	byUserID string,
 	at time.Time,
@@ -494,7 +494,7 @@ func BuildCostBaseline(
 type JobCostingSnapshot struct {
 	Costing           *JobCosting
 	PriceSnapshot     *QuotePriceSnapshot
-	ProductionRelease *ProductionRelease
+	ProductionRelease *LegacyProductionRelease
 	Quality           *QualityJob
 	Consumption       []MaterialConsumptionInput
 }

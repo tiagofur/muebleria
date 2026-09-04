@@ -148,6 +148,28 @@ export function roleCanMutateProjects(role: string | null | undefined): boolean 
   return role === 'admin' || role === 'gerente_ventas' || role === 'vendedor';
 }
 
+/**
+ * Explicit DesignRevision approval for production (#395 / digital-thread
+ * §22 `design:approve`). Publishing (roleCanMutateProjects) and approving are
+ * different capabilities: vendedor sells and publishes design history, but
+ * authorizing production is a commercial/technical sign-off — least
+ * privilege, never "editor ⇒ approver". Parity with Go
+ * RoleCanApproveDesignRevisions.
+ */
+export function roleCanApproveDesignRevisions(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_ventas' || role === 'ingeniero';
+}
+
+/**
+ * Create ProductionReleases (#395 / digital-thread §22 `production:release`).
+ * Mirrors the legacy production_released event policy: releasing to the floor
+ * is a plant call, separate from design approval. Parity with Go
+ * RoleCanReleaseProduction.
+ */
+export function roleCanReleaseProduction(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'gerente_produccion' || role === 'ingeniero';
+}
+
 export function roleCanDeleteProject(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'gerente_ventas';
 }
