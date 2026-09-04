@@ -556,10 +556,18 @@ module SketchupStub
   end
 
   class ViewStub < Sketchup::View
-    attr_reader :images_written
+    attr_reader :images_written, :invalidations
 
     def initialize
       @images_written = []
+      @invalidations = 0
+    end
+
+    # Overlay tool surface (#470): invalidations are observable so tests can
+    # prove the tool refreshes the viewport without touching the model.
+    def invalidate
+      @invalidations += 1
+      true
     end
 
     def write_image(filename_or_options, width = 640, height = 480, antialias = false, _compression = 0.0)
@@ -583,7 +591,8 @@ module SketchupStub
   end
 
   class ModelStub
-    attr_reader :active_entities, :selection, :definitions, :materials, :operations
+    attr_reader :active_entities, :selection, :definitions, :materials, :operations,
+                :selected_tools
     attr_accessor :active_view
 
     def initialize
@@ -592,11 +601,19 @@ module SketchupStub
       @definitions = DefinitionListStub.new
       @materials = MaterialsStub.new
       @operations = []
+      @selected_tools = []
       @active_view = ViewStub.new
     end
 
     def entities
       @active_entities
+    end
+
+    # #470 overlay tool lifecycle: selecting tools is recorded (never a
+    # structural mutation — no undo frame, no entity change).
+    def select_tool(tool)
+      @selected_tools << tool
+      true
     end
 
     def start_operation(name, disable_ui = true)
@@ -699,6 +716,17 @@ module Sketchup
   end
 
   class EntitiesObserver
+  end
+
+  # Minimal color for overlay drawing tests (#470).
+  class Color
+    attr_reader :red, :green, :blue
+
+    def initialize(red = 0, green = 0, blue = 0, _alpha = 255)
+      @red = red
+      @green = green
+      @blue = blue
+    end
   end
 
   def self.register_extension(extension, enabled)
@@ -831,3 +859,10 @@ module UI
     end
   end
 end
+
+# OpenGL draw-mode constants for overlay tool tests (#470): SketchUp exposes
+# these at top level; the values match the host.
+GL_POINTS = 0x0001 unless defined?(GL_POINTS)
+GL_LINES = 0x0002 unless defined?(GL_LINES)
+GL_LINE_LOOP = 0x0003 unless defined?(GL_LINE_LOOP)
+GL_LINE_STRIP = 0x0004 unless defined?(GL_LINE_STRIP)

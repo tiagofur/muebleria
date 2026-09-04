@@ -40,6 +40,15 @@ module Granete
         host/mutation_outcome
         host/mutation_command
         host/authoring_mutation_coordinator
+        overlay/manufacturing_feature_view
+        overlay/feature_projector
+        overlay/screen_picker
+        overlay/inspection_snapshot
+        overlay/inspection_resolver
+        overlay/entity_locator
+        overlay/provenance_navigation
+        overlay/inspection_tool
+        overlay/manager
         assets/asset_resolver
         assets/asset_loader
         assets/texture_cache

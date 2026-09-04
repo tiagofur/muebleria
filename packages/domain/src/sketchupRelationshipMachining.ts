@@ -249,10 +249,14 @@ function deriveRelationshipOperations(
   }
 
   // Shelf ends: bolts and dowels along the shelf's length-axis end faces.
+  // Length-axis ends are the board-local bottom/top faces (getFaceDimensions
+  // plane width×thickness; jointDrillingRules F129 uses the same pair), so
+  // xMm rides the width axis and yMm the half-thickness — left/right would
+  // place the holes outside the resolved board (#470 3D projection proof).
   const shelfEndHoles: HoleDefinition[] = [];
   const halfThickness = sourceGeometry.thicknessMm / 2;
   for (const x of positions) {
-    for (const face of ['left', 'right'] as const) {
+    for (const face of ['bottom', 'top'] as const) {
       if (minifixId !== undefined) {
         shelfEndHoles.push({
           face,

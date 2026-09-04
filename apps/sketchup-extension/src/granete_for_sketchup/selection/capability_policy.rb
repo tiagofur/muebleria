@@ -52,8 +52,12 @@ module Granete
                       reason: legacy ? CapabilityReasons::LEGACY_MIGRATION.call : nil)
           set.declare('canReviewPreflight',
                       supported: false, reason: CapabilityReasons::TECHNICAL_REVIEW.call)
+          # #470 read-only manufacturing inspection: the resolved machining
+          # overlay is available for managed furniture. Legacy group
+          # representation carries no authoritative resolve to inspect.
           set.declare('canInspectManufacturing',
-                      supported: false, reason: CapabilityReasons::INSPECT_MANUFACTURING.call)
+                      supported: !legacy,
+                      reason: legacy ? CapabilityReasons::LEGACY_MIGRATION.call : nil)
         end
 
         def aggregate_capabilities(set)
@@ -76,8 +80,10 @@ module Granete
                       supported: false, reason: CapabilityReasons::PART_REMOVE.call)
           set.declare('canChangeJoinery',
                       supported: false, reason: CapabilityReasons::PART_CHANGE_JOINERY.call)
+          # #470: board-level inspection of Granete-resolved machining is
+          # the primary read-only flow (`Ver fabricación`).
           set.declare('canInspectManufacturing',
-                      supported: false, reason: CapabilityReasons::INSPECT_MANUFACTURING.call)
+                      supported: true, reason: nil)
         end
 
         # Provenance-aware (#350, #468): manual placements are editable and

@@ -22,7 +22,8 @@
       target: null
     },
     preflight: { entries: {} },
-    degraded: null
+    degraded: null,
+    manufacturing: { mode: "off", status: "off", features: [] }
   };
 
   var listeners = [];
@@ -34,7 +35,7 @@
   }
 
   window.GraneteState = {
-    SLICES: ["session", "catalog", "selection", "mutation", "preflight", "degraded"],
+    SLICES: ["session", "catalog", "selection", "mutation", "preflight", "degraded", "manufacturing"],
 
     get: function (slice) {
       return state[slice];

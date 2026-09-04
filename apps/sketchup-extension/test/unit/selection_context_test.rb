@@ -416,8 +416,9 @@ class SelectionContextTest < Minitest::Test
     assert_equal 'cat-shelf-1', payload['catalogComponentId']
     assert_equal 'scan', payload['ownerRecovery']
     assert payload['capabilities'].is_a?(Hash)
-    assert_equal false, payload['capabilities']['canInspectManufacturing']['supported']
-    assert payload['capabilities']['canInspectManufacturing']['reason']
+    # #470: board-level manufacturing inspection is a supported read-only
+    # capability for managed parts (`Ver fabricación` overlay).
+    assert_equal true, payload['capabilities']['canInspectManufacturing']['supported']
     assert payload['hostLocator']['entityPersistentId']
   end
 
