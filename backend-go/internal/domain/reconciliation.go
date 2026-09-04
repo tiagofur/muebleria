@@ -45,6 +45,7 @@ var (
 	ErrInvalidRevisionID          = errors.New("invalid revision ID")
 	ErrMissingProjectID           = errors.New("missing project ID")
 	ErrQuoteRevisionNotFound      = errors.New("quote revision not found")
+	ErrQuoteRevisionConflict      = errors.New("quote revision conflict: base revision is stale or concurrent modification detected")
 	ErrInvalidRevisionSnapshot    = errors.New("invalid revision snapshot: corrupt or malformed payload")
 )
 

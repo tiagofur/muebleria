@@ -63,9 +63,58 @@ CREATE TRIGGER protect_shared_child_ownership
     FOR EACH ROW
     EXECUTE FUNCTION protect_shared_child_ownership('project_id');
 
+CREATE OR REPLACE FUNCTION protect_quote_revision_immutability()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'quote_revisions cannot be deleted once created';
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW.id <> OLD.id OR NEW.project_id <> OLD.project_id OR NEW.organization_id <> OLD.organization_id THEN
+            RAISE EXCEPTION 'quote_revision identity and project ownership are immutable';
+        END IF;
+        IF NEW.revision_number <> OLD.revision_number THEN
+            RAISE EXCEPTION 'quote_revision revision_number is immutable';
+        END IF;
+        IF NEW.source_type <> OLD.source_type THEN
+            RAISE EXCEPTION 'quote_revision source_type is immutable';
+        END IF;
+        IF NEW.created_at <> OLD.created_at THEN
+            RAISE EXCEPTION 'quote_revision created_at is immutable';
+        END IF;
+
+        IF NEW.status <> OLD.status THEN
+            IF OLD.status = 'superseded' THEN
+                RAISE EXCEPTION 'superseded quote_revision cannot transition to %', NEW.status;
+            END IF;
+            IF OLD.status = 'accepted' AND NEW.status <> 'superseded' THEN
+                RAISE EXCEPTION 'accepted quote_revision can only transition to superseded, not %', NEW.status;
+            END IF;
+            IF OLD.status = 'published' AND NEW.status NOT IN ('accepted', 'superseded') THEN
+                RAISE EXCEPTION 'published quote_revision can only transition to accepted or superseded, not %', NEW.status;
+            END IF;
+        END IF;
+
+        IF OLD.status IN ('published', 'accepted', 'superseded') AND NEW.notes IS DISTINCT FROM OLD.notes THEN
+            RAISE EXCEPTION '% quote_revision content cannot be modified', OLD.status;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER protect_quote_revisions_immutable
+    BEFORE UPDATE OR DELETE ON quote_revisions
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_quote_revision_immutability();
+
 INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
 VALUES
- ('quote_revisions', 'explicitly-shared', 'project-organizations', 'owner-organization', 'Project quote revisions follow the explicit project organizations; creation and updates stay with the owning organization (#393 / ADR-0003)')
+ ('quote_revisions', 'explicitly-shared', 'project-organizations', 'owner-organization', 'Project quote revisions are historical snapshots; mutations are restricted strictly to lifecycle transitions (#393 / ADR-0003)')
 ON CONFLICT (table_name) DO UPDATE SET
  classification = EXCLUDED.classification,
  read_scope = EXCLUDED.read_scope,
@@ -128,9 +177,23 @@ CREATE TRIGGER protect_shared_child_ownership
     FOR EACH ROW
     EXECUTE FUNCTION protect_shared_child_ownership('project_id');
 
+CREATE OR REPLACE FUNCTION protect_quote_revision_item_immutability()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'quote_revision_items is immutable once created';
+END;
+$$;
+
+CREATE TRIGGER protect_quote_revision_items_immutable
+    BEFORE UPDATE OR DELETE ON quote_revision_items
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_quote_revision_item_immutability();
+
 INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
 VALUES
- ('quote_revision_items', 'explicitly-shared', 'project-organizations', 'owner-organization', 'Quote revision items are immutable per-instance commercial snapshots of the project (#393 / ADR-0003)')
+ ('quote_revision_items', 'explicitly-shared', 'project-organizations', 'owner-organization-immutable', 'Quote revision items are immutable per-instance commercial snapshots of the project (#393 / ADR-0003)')
 ON CONFLICT (table_name) DO UPDATE SET
  classification = EXCLUDED.classification,
  read_scope = EXCLUDED.read_scope,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,7 @@ type CreateQuoteRevisionCommand struct {
 	ID             string
 	OrganizationID string
 	ProjectID      string
+	BaseRevisionID string
 	RevisionNumber int
 	Status         string
 	SourceType     string
@@ -37,15 +39,37 @@ type CreateQuoteRevisionItemCommand struct {
 }
 
 // CreateQuoteRevision persists an immutable historical commercial revision snapshot and its items.
+// It executes atomically within a transaction and acquires a row lock on the parent project
+// to serialize revision numbering and enforce optimistic concurrency against stale base revisions.
 func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuoteRevisionCommand) (*domain.QuoteRevision, error) {
 	if !isValidUUID(cmd.ProjectID) {
 		return nil, domain.ErrInvalidRevisionID
 	}
+	if cmd.BaseRevisionID != "" && !isValidUUID(cmd.BaseRevisionID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
+	quoteRevID := strings.TrimSpace(cmd.ID)
+	if quoteRevID != "" && !isValidUUID(quoteRevID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
 
-	var projectOrgID string
-	err := s.db(ctx).QueryRow(ctx, `
-		SELECT organization_id FROM projects WHERE id = $1
-	`, cmd.ProjectID).Scan(&projectOrgID)
+	tx, owned, err := s.beginOrUseTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+	txCtx := context.WithValue(ctx, transactionContextKey{}, tx)
+
+	// 1. Lock the parent project row to serialize revision generation and check ownership.
+	var projectOrgID, projectStatus string
+	err = s.db(txCtx).QueryRow(txCtx, `
+		SELECT organization_id, status
+		FROM projects
+		WHERE id = $1
+		FOR UPDATE
+	`, cmd.ProjectID).Scan(&projectOrgID, &projectStatus)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound
@@ -58,6 +82,47 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 		orgID = projectOrgID
 	}
 
+	// 2. Concurrency-safe revision numbering & optimistic concurrency check.
+	var latestRevID string
+	var latestRevNum int
+	err = s.db(txCtx).QueryRow(txCtx, `
+		SELECT id, revision_number
+		FROM quote_revisions
+		WHERE project_id = $1
+		ORDER BY revision_number DESC
+		LIMIT 1
+	`, cmd.ProjectID).Scan(&latestRevID, &latestRevNum)
+
+	var revNum int
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No previous revision exists
+			if cmd.BaseRevisionID != "" {
+				return nil, fmt.Errorf("%w: base revision specified (%s) but project has no previous quote revisions", domain.ErrQuoteRevisionConflict, cmd.BaseRevisionID)
+			}
+			if cmd.RevisionNumber <= 0 {
+				revNum = 1
+			} else {
+				revNum = cmd.RevisionNumber
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		// Previous revision exists
+		if cmd.BaseRevisionID != "" && cmd.BaseRevisionID != latestRevID {
+			return nil, fmt.Errorf("%w: base revision %s is stale; latest is %s (Q%d)", domain.ErrQuoteRevisionConflict, cmd.BaseRevisionID, latestRevID, latestRevNum)
+		}
+		if cmd.RevisionNumber <= 0 {
+			revNum = latestRevNum + 1
+		} else {
+			if cmd.RevisionNumber <= latestRevNum {
+				return nil, fmt.Errorf("%w: requested revision number %d conflicts with latest revision %d", domain.ErrQuoteRevisionConflict, cmd.RevisionNumber, latestRevNum)
+			}
+			revNum = cmd.RevisionNumber
+		}
+	}
+
 	status := strings.TrimSpace(cmd.Status)
 	if status == "" {
 		status = "published"
@@ -65,23 +130,6 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 	sourceType := strings.TrimSpace(cmd.SourceType)
 	if sourceType == "" {
 		sourceType = "manual"
-	}
-
-	revNum := cmd.RevisionNumber
-	if revNum <= 0 {
-		err = s.db(ctx).QueryRow(ctx, `
-			SELECT COALESCE(MAX(revision_number), 0) + 1
-			FROM quote_revisions
-			WHERE project_id = $1
-		`, cmd.ProjectID).Scan(&revNum)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	quoteRevID := strings.TrimSpace(cmd.ID)
-	if quoteRevID != "" && !isValidUUID(quoteRevID) {
-		return nil, domain.ErrInvalidRevisionID
 	}
 
 	var createdBy *string
@@ -115,7 +163,7 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 		args = []any{orgID, cmd.ProjectID, revNum, status, sourceType, cmd.Notes, createdBy}
 	}
 
-	err = s.db(ctx).QueryRow(ctx, insertQuery, args...).Scan(
+	err = s.db(txCtx).QueryRow(txCtx, insertQuery, args...).Scan(
 		&rev.ID,
 		&rev.OrganizationID,
 		&rev.ProjectID,
@@ -158,7 +206,7 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 			lifecycle = "active"
 		}
 
-		_, err = s.db(ctx).Exec(ctx, `
+		_, err = s.db(txCtx).Exec(txCtx, `
 			INSERT INTO quote_revision_items (
 				organization_id, project_id, quote_revision_id,
 				furniture_instance_id, furniture_definition_id,
@@ -167,6 +215,101 @@ func (s *PostgresStore) CreateQuoteRevision(ctx context.Context, cmd CreateQuote
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		`, orgID, cmd.ProjectID, rev.ID, item.FurnitureInstanceID, defID, item.DefinitionVersion, paramsJSON, matJSON, lifecycle)
 		if err != nil {
+			return nil, err
+		}
+	}
+
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return &rev, nil
+}
+
+// UpdateQuoteRevisionStatusCommand holds parameters for a legitimate metadata/status transition of a QuoteRevision.
+type UpdateQuoteRevisionStatusCommand struct {
+	QuoteRevisionID string
+	Status          string
+}
+
+// UpdateQuoteRevisionStatus transitions the status of a QuoteRevision.
+// Historical snapshot fields (project, revision number, items, source_type, created_at)
+// and notes of published/accepted/superseded revisions cannot be mutated.
+func (s *PostgresStore) UpdateQuoteRevisionStatus(ctx context.Context, cmd UpdateQuoteRevisionStatusCommand) (*domain.QuoteRevision, error) {
+	if !isValidUUID(cmd.QuoteRevisionID) {
+		return nil, domain.ErrInvalidRevisionID
+	}
+	targetStatus := strings.TrimSpace(cmd.Status)
+	switch targetStatus {
+	case "draft", "published", "accepted", "superseded":
+	default:
+		return nil, fmt.Errorf("%w: invalid target status %s", domain.ErrInvalidRevisionSnapshot, targetStatus)
+	}
+
+	tx, owned, err := s.beginOrUseTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+	txCtx := context.WithValue(ctx, transactionContextKey{}, tx)
+
+	var rev domain.QuoteRevision
+	err = s.db(txCtx).QueryRow(txCtx, `
+		SELECT id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+		FROM quote_revisions
+		WHERE id = $1
+		FOR UPDATE
+	`, cmd.QuoteRevisionID).Scan(
+		&rev.ID,
+		&rev.OrganizationID,
+		&rev.ProjectID,
+		&rev.RevisionNumber,
+		&rev.Status,
+		&rev.SourceType,
+		&rev.Notes,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrQuoteRevisionNotFound
+		}
+		return nil, err
+	}
+
+	// Validate status transition rules server-side before execution
+	if rev.Status == "superseded" {
+		return nil, fmt.Errorf("%w: superseded quote_revision cannot transition to %s", domain.ErrQuoteRevisionConflict, targetStatus)
+	}
+	if rev.Status == "accepted" && targetStatus != "superseded" {
+		return nil, fmt.Errorf("%w: accepted quote_revision can only transition to superseded, not %s", domain.ErrQuoteRevisionConflict, targetStatus)
+	}
+	if rev.Status == "published" && targetStatus != "accepted" && targetStatus != "superseded" {
+		return nil, fmt.Errorf("%w: published quote_revision can only transition to accepted or superseded, not %s", domain.ErrQuoteRevisionConflict, targetStatus)
+	}
+
+	err = s.db(txCtx).QueryRow(txCtx, `
+		UPDATE quote_revisions
+		SET status = $2
+		WHERE id = $1
+		RETURNING id, organization_id, project_id, revision_number, status, source_type, COALESCE(notes, '')
+	`, cmd.QuoteRevisionID, targetStatus).Scan(
+		&rev.ID,
+		&rev.OrganizationID,
+		&rev.ProjectID,
+		&rev.RevisionNumber,
+		&rev.Status,
+		&rev.SourceType,
+		&rev.Notes,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
 			return nil, err
 		}
 	}
