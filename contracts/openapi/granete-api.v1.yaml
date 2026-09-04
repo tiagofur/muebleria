@@ -2690,10 +2690,13 @@
       "post": {
         "operationId": "requoteProjectQuote",
         "summary": "Create a new draft QuoteRevision from an exact source quote revision and an exact design revision (#394, explicit user decision)",
-        "description": "Explicit re-quote workflow. The server re-runs the exact reconciliation and impact classification server-side (client classifications are never trusted), rejects conflicts fail-closed and rejects inputs without commercial changes (spatial-only moves never create a commercial revision). The new draft is written through the single #393 writer with exact base revision concurrency: a stale base returns 409. The source revision — accepted or not — is never rewritten, and the new revision keeps the same FurnitureInstance identities. Requires an Idempotency-Key: a retry replays the same created revision.",
+        "description": "Explicit re-quote workflow. The server re-runs the exact reconciliation and impact classification server-side (client classifications are never trusted), rejects conflicts fail-closed and rejects inputs without commercial changes (spatial-only moves never create a commercial revision). The new draft is written through the single #393 writer with exact base revision concurrency: a stale base returns 409. The source revision — accepted or not — is never rewritten, and the new revision keeps the same FurnitureInstance identities. Requires an Idempotency-Key: a retry replays the same created revision. Every explicitly supplied includeFurnitureInstanceIds entry must be an incorporable design-driven commercial change of this exact reconciliation (modified with commercial impact or modeled_not_quoted); unknown, synced, spatial-only, quoted_not_modeled, removed or conflict identities are rejected without creating anything. An omitted or empty includeFurnitureInstanceIds means incorporate all eligible changes.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -7483,7 +7486,7 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Optional explicit selection of the FurnitureInstances whose design-driven commercial changes are incorporated. Omitted or empty means incorporate all. Sold units are carried over regardless."
+            "description": "Optional explicit selection of the FurnitureInstances whose design-driven commercial changes are incorporated. Omitted or empty means incorporate all eligible changes. Fail-closed: every supplied ID must exist in this exact reconciliation and be an incorporable design-driven commercial change (modified with commercial impact or modeled_not_quoted); unknown, synced, spatial-only, quoted_not_modeled, removed or conflict identities reject the whole command without creating anything. Sold units are carried over regardless."
           }
         }
       },

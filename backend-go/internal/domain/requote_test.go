@@ -3,6 +3,7 @@ package domain_test
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -277,6 +278,115 @@ func TestBuildRequoteDraft_EmptySelectionRejected(t *testing.T) {
 	plan := domain.RequotePlan{Include: map[string]bool{}}
 	if _, err := domain.BuildRequoteDraft(quote, design, recon, plan); !errors.Is(err, domain.ErrRequoteNoCommercialChange) {
 		t.Errorf("a selection that incorporates nothing must reject the requote, got %v", err)
+	}
+}
+
+// Fail-closed selection (#394 review): every explicitly supplied ID must be
+// an incorporable design-driven commercial change of this exact
+// reconciliation; anything else rejects the whole command with no partial
+// application.
+
+func TestBuildRequoteDraft_SelectionUnknownIdentityRejected(t *testing.T) {
+	quote, design := demoSnapshots()
+	recon, err := domain.Reconcile(quote, design)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	// A syntactically valid UUID that belongs to no unit of this
+	// reconciliation (e.g. a FurnitureInstance of another project) must never
+	// be silently ignored.
+	plan := domain.RequotePlan{Include: map[string]bool{
+		"a0000000-0000-4000-8000-000000000002": true, // valid: modified commercial
+		"e0000000-0000-4000-8000-0000000000ff": true, // unknown
+	}}
+	_, err = domain.BuildRequoteDraft(quote, design, recon, plan)
+	if !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("unknown identity in selection must fail closed, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "not part of this reconciliation") {
+		t.Errorf("error must name the invalid identity, got %v", err)
+	}
+}
+
+func TestBuildRequoteDraft_SelectionSyncedRejected(t *testing.T) {
+	quote, design := demoSnapshots()
+	recon, err := domain.Reconcile(quote, design)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	plan := domain.RequotePlan{Include: map[string]bool{
+		"a0000000-0000-4000-8000-000000000001": true, // synced
+	}}
+	if _, err := domain.BuildRequoteDraft(quote, design, recon, plan); !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("synced identity in selection must fail closed, got %v", err)
+	}
+}
+
+func TestBuildRequoteDraft_SelectionSpatialOnlyRejected(t *testing.T) {
+	quote, design := demoSnapshots()
+	recon, err := domain.Reconcile(quote, design)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	plan := domain.RequotePlan{Include: map[string]bool{
+		"a0000000-0000-4000-8000-000000000003": true, // pure move, spatial-only
+	}}
+	if _, err := domain.BuildRequoteDraft(quote, design, recon, plan); !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("spatial-only identity in selection must fail closed, got %v", err)
+	}
+}
+
+func TestBuildRequoteDraft_SelectionConflictRejected(t *testing.T) {
+	quote := domain.QuoteRevisionSnapshot{ProjectID: requoteProjectID, QuoteRevisionID: requoteQuoteRev}
+	design := domain.DesignRevisionSnapshot{ProjectID: requoteProjectID, DesignRevisionID: requoteDesignRev}
+	recon := &domain.ReconciliationResult{
+		ProjectID:        requoteProjectID,
+		QuoteRevisionID:  requoteQuoteRev,
+		DesignRevisionID: requoteDesignRev,
+		Summary:          domain.ReconciliationSummary{Total: 1, Conflict: 1},
+		Items: []domain.ReconciliationItem{
+			{FurnitureInstanceID: "FI-X", Status: domain.ReconciliationStatusConflict, Differences: []domain.StructuredDifference{}},
+		},
+	}
+	plan := domain.RequotePlan{Include: map[string]bool{"FI-X": true}}
+	// Conflicts block the requote outright (primary fail-closed guard); the
+	// selection guard rejects the conflict identity too when reached.
+	if _, err := domain.BuildRequoteDraft(quote, design, recon, plan); !errors.Is(err, domain.ErrRequoteBlockedByConflict) {
+		t.Fatalf("conflict must block the requote, got %v", err)
+	}
+}
+
+func TestBuildRequoteDraft_SelectionQuotedNotModeledAndRemovedRejected(t *testing.T) {
+	quote := domain.QuoteRevisionSnapshot{
+		ProjectID:       requoteProjectID,
+		QuoteRevisionID: requoteQuoteRev,
+		Items: []domain.CommercialItemSnapshot{
+			{FurnitureInstanceID: "FI-SOLD", Parameters: map[string]any{"widthMm": 700}, LifecycleStatus: "active"},
+			{FurnitureInstanceID: "FI-GONE", LifecycleStatus: "cancelled"},
+		},
+	}
+	design := domain.DesignRevisionSnapshot{
+		ProjectID:        requoteProjectID,
+		DesignRevisionID: requoteDesignRev,
+		Items: []domain.DesignRevisionItem{
+			{FurnitureInstanceID: "FI-NEW", Parameters: map[string]any{"widthMm": 300}},
+		},
+	}
+	recon, err := domain.Reconcile(quote, design)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	// quoted_not_modeled: sold unit, no design truth to incorporate.
+	plan := domain.RequotePlan{Include: map[string]bool{"FI-SOLD": true}}
+	if _, err := domain.BuildRequoteDraft(quote, design, recon, plan); !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("quoted_not_modeled identity in selection must fail closed, got %v", err)
+	}
+
+	// removed: terminal lifecycle preserved, not incorporable.
+	plan = domain.RequotePlan{Include: map[string]bool{"FI-GONE": true}}
+	if _, err := domain.BuildRequoteDraft(quote, design, recon, plan); !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("removed identity in selection must fail closed, got %v", err)
 	}
 }
 

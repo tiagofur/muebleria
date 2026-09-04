@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #394 / DT-10: explicit requote HTTP surface.
@@ -140,6 +142,85 @@ func TestHandleProjectQuoteRequote_SelectionForwarded(t *testing.T) {
 	}
 }
 
+// requoteIdempotentStore wraps the stubStore with the durable idempotency
+// contract so the RequireIdempotency middleware around the requote handler
+// can be exercised end-to-end (same pattern as contract_448_test.go).
+type requoteIdempotentStore struct {
+	*stubStore
+	receipts map[string]storage.IdempotencyResponse
+}
+
+func (s *requoteIdempotentStore) ExecuteIdempotent(ctx context.Context, req storage.IdempotencyRequest, execute func(context.Context) (storage.IdempotencyResponse, error)) (storage.IdempotencyResponse, bool, error) {
+	if receipt, ok := s.receipts[req.ScopeKey]; ok {
+		return receipt, true, nil
+	}
+	response, err := execute(ctx)
+	if err != nil {
+		return storage.IdempotencyResponse{}, false, storage.ErrIdempotencyRollback
+	}
+	if response.Status >= 500 {
+		return response, false, nil
+	}
+	s.receipts[req.ScopeKey] = response
+	return response, false, nil
+}
+
+// The generated client sends Idempotency-Key (contract) and the route wraps
+// the handler in RequireIdempotency: a retry with the SAME key must replay
+// the SAME created revision — the command never executes twice, so a lost
+// response can never mint a Q5.
+func TestHandleProjectQuoteRequote_IdempotentRetryReplaysSameRevision(t *testing.T) {
+	store := &requoteIdempotentStore{stubStore: &stubStore{}, receipts: map[string]storage.IdempotencyResponse{}}
+	server := &Server{Store: store}
+	handler := server.RequireIdempotency("quote.requote", http.HandlerFunc(server.HandleProjectQuoteRequote))
+
+	body := `{"baseQuoteRevisionId":"` + requoteTestBaseRevID + `","designRevisionId":"` + requoteTestDesignID + `"}`
+	do := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/projects/"+requoteTestProjectID+"/quote-revisions:requote", bytes.NewBufferString(body))
+		req.SetPathValue("projectId", requoteTestProjectID)
+		req = withTestClaims(req, "user-1", []domain.UserRole{domain.RoleAdmin})
+		req.Header.Set("Idempotency-Key", "requote-retry-same-key-001")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+
+	first := do()
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first call: expected 201, got %d: %s", first.Code, first.Body.String())
+	}
+	second := do()
+	if second.Code != http.StatusCreated {
+		t.Fatalf("retry: expected 201 replay, got %d: %s", second.Code, second.Body.String())
+	}
+	if second.Body.String() != first.Body.String() {
+		t.Fatalf("retry must replay the byte-identical response (same QuoteRevision):\nfirst:  %s\nsecond: %s", first.Body.String(), second.Body.String())
+	}
+	if store.requoteProjectQuoteCalls != 1 {
+		t.Fatalf("the durable command must execute exactly once across retries, got %d calls", store.requoteProjectQuoteCalls)
+	}
+
+	var replayed openapi.ProjectQuoteRequoteResult
+	if err := json.NewDecoder(second.Body).Decode(&replayed); err != nil {
+		t.Fatalf("decode replayed response: %v", err)
+	}
+	if replayed.QuoteRevision.RevisionNumber != 4 {
+		t.Errorf("replayed revision = %d, want the SAME Q4", replayed.QuoteRevision.RevisionNumber)
+	}
+}
+
+func TestHandleProjectQuoteRequote_IdempotencyKeyMissing(t *testing.T) {
+	// Without the header the route rejects before executing anything.
+	server := &Server{Store: &stubStore{}}
+	req := newRequoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, `{"baseQuoteRevisionId":"`+requoteTestBaseRevID+`","designRevisionId":"`+requoteTestDesignID+`"}`)
+	req.Header.Del("Idempotency-Key")
+	w := httptest.NewRecorder()
+	server.RequireIdempotency("quote.requote", http.HandlerFunc(server.HandleProjectQuoteRequote)).ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing Idempotency-Key, got %d", w.Code)
+	}
+}
+
 func TestHandleProjectQuoteRequote_ErrorMapping(t *testing.T) {
 	cases := []struct {
 		name string
@@ -150,6 +231,7 @@ func TestHandleProjectQuoteRequote_ErrorMapping(t *testing.T) {
 		{"no commercial change", domain.ErrRequoteNoCommercialChange, http.StatusConflict},
 		{"stale base revision", domain.ErrQuoteRevisionConflict, http.StatusConflict},
 		{"corrupt snapshot", domain.ErrInvalidRevisionSnapshot, http.StatusConflict},
+		{"invalid selection", domain.ErrRequoteInvalidSelection, http.StatusBadRequest},
 		{"quote revision not found", domain.ErrQuoteRevisionNotFound, http.StatusNotFound},
 		{"design revision not found", domain.ErrDesignRevisionNotFound, http.StatusNotFound},
 		{"project not found", domain.ErrDesignNotFound, http.StatusNotFound},

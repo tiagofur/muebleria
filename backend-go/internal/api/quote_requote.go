@@ -109,6 +109,8 @@ func respondWithQuoteRequoteError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidRevisionID):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "revision ID inválido", nil)
+	case errors.Is(err, domain.ErrRequoteInvalidSelection):
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Selección inválida: cada mueble incluido debe ser un cambio comercial incorporable de esta reconciliación exacta (modificado con impacto comercial o modelado sin cotizar). No se creó ninguna cotización.", nil)
 	case errors.Is(err, domain.ErrDesignNotFound):
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "proyecto no encontrado", nil)
 	case errors.Is(err, domain.ErrDesignRevisionNotFound):

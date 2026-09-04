@@ -544,6 +544,115 @@ func TestRequote_SelectionControlsIncorporation(t *testing.T) {
 	}
 }
 
+func TestRequote_SelectionFailClosed_NoRevisionCreated(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+
+	countRevisions := func() int {
+		var n int
+		if err := fx.admin.QueryRow(ctx, `SELECT COUNT(*) FROM quote_revisions WHERE project_id=$1`, fx.projectID).Scan(&n); err != nil {
+			t.Fatalf("count revisions: %v", err)
+		}
+		return n
+	}
+	before := countRevisions()
+
+	// A syntactically valid UUID that is not part of this reconciliation
+	// (e.g. a unit of another project) must reject the whole command.
+	unknownID := "e0000000-0000-4000-8000-0000000000ff"
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID:                   fx.projectID,
+			BaseQuoteRevisionID:         fx.quoteRevID,
+			DesignRevisionID:            fx.designRevID,
+			IncludeFurnitureInstanceIDs: []string{fx.fiModified, unknownID},
+			ActorUserID:                 rlsUserA,
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("unknown identity in selection must fail closed, got %v", err)
+	}
+	if got := countRevisions(); got != before {
+		t.Fatalf("rejected selection must create nothing: revisions %d -> %d", before, got)
+	}
+
+	// The synced unit is equally non-actionable.
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID:                   fx.projectID,
+			BaseQuoteRevisionID:         fx.quoteRevID,
+			DesignRevisionID:            fx.designRevID,
+			IncludeFurnitureInstanceIDs: []string{fx.fiSynced},
+			ActorUserID:                 rlsUserA,
+		})
+		return err
+	})
+	if !errors.Is(err, domain.ErrRequoteInvalidSelection) {
+		t.Fatalf("synced identity in selection must fail closed, got %v", err)
+	}
+	if got := countRevisions(); got != before {
+		t.Fatalf("rejected selection must create nothing: revisions %d -> %d", before, got)
+	}
+
+	// A VALID selection still works afterwards and incorporates exactly the
+	// selected design truth.
+	var result *storage.RequoteProjectQuoteResult
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var err error
+		result, err = fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID:                   fx.projectID,
+			BaseQuoteRevisionID:         fx.quoteRevID,
+			DesignRevisionID:            fx.designRevID,
+			IncludeFurnitureInstanceIDs: []string{fx.fiModified},
+			ActorUserID:                 rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("valid selection must succeed after the rejections: %v", err)
+	}
+	if got := countRevisions(); got != before+1 {
+		t.Fatalf("valid selection must create exactly one revision: %d -> %d", before, got)
+	}
+	draftItems := quoteRevisionItemsJSON(t, fx.admin, result.Revision.ID)
+	if !strings.Contains(draftItems[fx.fiModified], `"widthMm": 650`) {
+		t.Errorf("selected modified unit must incorporate the design width, got %s", draftItems[fx.fiModified])
+	}
+	if _, present := draftItems[fx.fiModeledNew]; present {
+		t.Errorf("unselected modeled_not_quoted unit must remain not quoted")
+	}
+}
+
+// The contract defines an explicit empty includeFurnitureInstanceIds as
+// equivalent to omission: incorporate all eligible design-driven changes.
+func TestRequote_EmptySelectionMeansIncorporateAll(t *testing.T) {
+	fx := setupRequoteFixture(t)
+
+	var result *storage.RequoteProjectQuoteResult
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var err error
+		result, err = fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID:                   fx.projectID,
+			BaseQuoteRevisionID:         fx.quoteRevID,
+			DesignRevisionID:            fx.designRevID,
+			IncludeFurnitureInstanceIDs: []string{},
+			ActorUserID:                 rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("explicit empty selection must behave as omission (incorporate all): %v", err)
+	}
+	draftItems := quoteRevisionItemsJSON(t, fx.admin, result.Revision.ID)
+	if len(draftItems) != 3 {
+		t.Fatalf("draft items = %d, want 3 (empty selection incorporates everything eligible)", len(draftItems))
+	}
+	if _, present := draftItems[fx.fiModeledNew]; !present {
+		t.Errorf("empty selection must incorporate the modeled_not_quoted unit")
+	}
+}
+
 func TestRequote_MultiOrgRLS_OwnerOrganizationOnly(t *testing.T) {
 	fx := setupRequoteFixture(t)
 

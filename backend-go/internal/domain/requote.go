@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 // #394 / DT-10: explicit re-quote decision over an exact reconciliation
@@ -28,6 +30,12 @@ var (
 	// ErrRequoteNoCommercialChange: spatial-only or fully synced inputs do
 	// not justify a new commercial revision (#394 §34/§35).
 	ErrRequoteNoCommercialChange = errors.New("requote unnecessary: no commercial changes between quote and design revisions")
+	// ErrRequoteInvalidSelection: an explicitly supplied include ID is not an
+	// incorporable design-driven commercial change of this exact
+	// reconciliation. Fail-closed — the command is rejected whole, never
+	// partially applied (#394 review: explicit commercial decisions must not
+	// silently ignore unknown or non-actionable identities).
+	ErrRequoteInvalidSelection = errors.New("requote selection invalid: identities must be incorporable design-driven commercial changes of this exact reconciliation")
 	// ErrRequoteInconsistentInput: the reconciliation result does not belong
 	// to the provided snapshots.
 	ErrRequoteInconsistentInput = errors.New("requote input inconsistent with reconciliation result")
@@ -116,8 +124,44 @@ func BuildRequoteDraft(quote QuoteRevisionSnapshot, design DesignRevisionSnapsho
 		designItems[item.FurnitureInstanceID] = item
 	}
 	impactsByID := make(map[string]ChangeImpact, len(classification.Items))
+	statusesByID := make(map[string]ReconciliationStatus, len(classification.Items))
 	for _, item := range classification.Items {
 		impactsByID[item.FurnitureInstanceID] = item.Impact
+		statusesByID[item.FurnitureInstanceID] = item.Status
+	}
+
+	// Explicit selection is fail-closed (#394 review): every supplied ID must
+	// exist in this exact reconciliation and be an incorporable design-driven
+	// commercial change. Unknown identities (including units of other
+	// projects, which cannot appear here), synced, spatial-only modified,
+	// quoted_not_modeled, removed and conflict units are rejected — the
+	// command never applies a partial selection.
+	if plan.Include != nil {
+		invalid := make([]string, 0, len(plan.Include))
+		for id, selected := range plan.Include {
+			if !selected {
+				continue
+			}
+			status, known := statusesByID[id]
+			switch {
+			case !known:
+				invalid = append(invalid, fmt.Sprintf("%s: not part of this reconciliation", id))
+			case status == ReconciliationStatusConflict:
+				invalid = append(invalid, fmt.Sprintf("%s: conflict requires resolution", id))
+			case status == ReconciliationStatusSynced:
+				invalid = append(invalid, fmt.Sprintf("%s: synced, nothing to incorporate", id))
+			case status == ReconciliationStatusQuotedNotModeled:
+				invalid = append(invalid, fmt.Sprintf("%s: quoted_not_modeled, no design truth to incorporate", id))
+			case status == ReconciliationStatusRemoved:
+				invalid = append(invalid, fmt.Sprintf("%s: removed, terminal lifecycle preserved", id))
+			case status == ReconciliationStatusModified && !impactsByID[id].Commercial:
+				invalid = append(invalid, fmt.Sprintf("%s: spatial-only change, nothing commercial to incorporate", id))
+			}
+		}
+		if len(invalid) > 0 {
+			sort.Strings(invalid)
+			return nil, fmt.Errorf("%w: %s", ErrRequoteInvalidSelection, strings.Join(invalid, "; "))
+		}
 	}
 
 	items := make([]CommercialItemSnapshot, 0, len(recon.Items))

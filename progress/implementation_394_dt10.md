@@ -127,6 +127,34 @@ cotización aceptada sin reescribirla jamás.
 - I10: decoración/espacial no entra al snapshot comercial.
 - Identidad: FIs conservan su ID en el requote (nunca se acuña nueva).
 
+## Fixes de revisión final (pre-merge)
+
+1. **Idempotency-Key en el cliente generado**: la operación
+   `requoteProjectQuote` declara ahora el parameter canónico
+   `#/components/parameters/IdempotencyKey` (mismo patrón que el resto de
+   mutaciones durables), por lo que el TS generado expone
+   `requoteProjectQuote(token, projectId, body, key = this.createIdempotencyKey(), signal?)`
+   y envía `idempotencyKey: key`. Sin parches manuales al generated client.
+   Proof: `TestHandleProjectQuoteRequote_IdempotentRetryReplaysSameRevision`
+   (retry con la misma key repele byte-idéntica la misma Q4 y el comando
+   durable ejecuta exactamente una vez) y
+   `TestHandleProjectQuoteRequote_IdempotencyKeyMissing` (sin header → 400).
+2. **Selección explícita fail-closed** (`ErrRequoteInvalidSelection`): cada ID
+   suministrado en `includeFurnitureInstanceIds` debe existir en la
+   reconciliación exacta y ser un cambio comercial incorporable
+   (`modified` con impacto comercial o `modeled_not_quoted`). Se rechazan y
+   nombran uno a uno: identidad desconocida (incluye unidades de otro
+   proyecto, que no pueden aparecer en esta reconciliación), `conflict`,
+   `synced`, spatial-only, `quoted_not_modeled` y `removed`. El comando se
+   rechaza completo — nunca aplicación parcial — y no se crea ninguna
+   revisión. El `[]` explícito sigue siendo equivalente a omisión
+   (incorporar todo), documentado en el contrato y probado en
+   `TestRequote_EmptySelectionMeansIncorporateAll`. Proofs: dominio
+   (`TestBuildRequoteDraft_Selection*Rejected`), storage
+   (`TestRequote_SelectionFailClosed_NoRevisionCreated`: tras los rechazos el
+   contador de revisiones no cambia y una selección válida posterior crea
+   exactamente una) y API (mapping 400).
+
 ## Verificación
 
 - `go test ./internal/domain/ ./internal/api/` — verde (clasificación,
