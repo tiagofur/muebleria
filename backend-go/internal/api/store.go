@@ -308,6 +308,9 @@ type Store interface {
 	CreateProductionRelease(ctx context.Context, cmd storage.CreateProductionReleaseCommand) (*storage.ProductionReleaseReadback, error)
 	ListProjectProductionReleases(ctx context.Context, projectID string) ([]storage.ProductionReleaseReadback, error)
 	GetProjectProductionRelease(ctx context.Context, projectID, releaseID string) (*storage.ProductionReleaseReadback, error)
+	// GetLatestProjectProductionRelease resolves the ONE release authority:
+	// the newest canonical release of the project (nil when none exists).
+	GetLatestProjectProductionRelease(ctx context.Context, projectID string) (*domain.ProductionRelease, error)
 	// Authoritative Project/Design working context for SketchUp model
 	// binding validation (#388 / DT-4).
 	GetModelBindingContext(ctx context.Context, projectID, designID string, baseRevisionID *string) (*storage.ModelBindingContext, error)

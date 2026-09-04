@@ -114,7 +114,42 @@ release (I6).
 
 - `domain.ProductionRelease` (OC-022) → `domain.LegacyProductionRelease`
   (+`LegacyProductionReleaseCheck/Code`), convención `Legacy*` ya existente.
-  El blob legacy, su flujo PUT y sus consumidores quedan intactos.
+  El blob legacy y su flujo PUT quedan intactos para proyectos pre-DT.
+
+## Integración de autoridad (review PR #551)
+
+UNA autoridad de release para todos los consumidores de producción; el rename
+solo NO bastaba (el blob seguía siendo la verdad de materials/costing/parts):
+
+- **Punto único de resolución**: `storage.ResolveProjectReleaseAuthority` /
+  `GetLatestProjectProductionRelease` — el release canónico #395 gana
+  incondicionalmente cuando existe; el blob OC-022 queda SOLO como lectura de
+  compatibilidad para proyectos sin release canónico (pre-DT). Los tres
+  loaders de snapshot (material planning, job costing, quality) y el guard de
+  revisión de part executions resuelven TODOS a través de este punto — nadie
+  lee el blob directamente como verdad de release.
+- **Writer legacy congelado**: `PUT /api/projects/{id}` preserva el blob
+  almacenado cuando existe un release canónico (mismo patrón server-
+  authoritative que `p.Installation`): el cliente no puede crear ni reescribir
+  verdad de release una vez que la autoridad canónica existe.
+- **Authority proof persistido**
+  (`TestProductionRelease_AuthorityFeedsProductionConsumers`): con P1(R3/F3)
+  + blob legacy coexistente, material planning y job costing resuelven
+  exactamente `P1.ID` + `F3` (fingerprint autoritativo, no el token client) y
+  quality resuelve `P1.ID`; el control (proyecto sin release canónico)
+  mantiene el blob. En API: el guard de part executions rechaza piezas
+  estampadas con la revisión legacy y acepta las estampadas con la canónica;
+  el PUT freeze deja el blob intacto ante payloads forjados.
+- **Preflight y fingerprint — UNA autoridad cada uno** (blockers 2-3): no
+  existía preflight server-side de release (el #347 es TS sobre envelopes
+  resueltos, sin endpoint; el subset resolve es de authoring) ni fingerprint a
+  granularidad revisión (#477 es por envelope resolve no persistido; el
+  legacy es token client). `RunManufacturingPreflight` delega la semántica
+  paramétrica a `EvaluateFurnitureParameters` (única autoridad #483) y
+  existencia de definición al catálogo — sin reglas duplicadas; el estado
+  resuelto (#477/#347, reglas industriales) EXTENDERÁ este gate/baseline vía
+  schema versionado, no un namespace paralelo. Boundary documentado en el
+  código (`AUTHORITY NOTE`).
 
 ## Verificación
 

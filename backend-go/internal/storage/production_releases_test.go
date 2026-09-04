@@ -806,3 +806,109 @@ func TestProductionRelease_MigrationFreshAndUpgrade(t *testing.T) {
 	}
 	assertProductionReleaseSchema(t, upgrade)
 }
+
+// #395 authority proof (PR #551 review): the canonical ProductionRelease is
+// the ONE release authority the production pipeline consumes. Material
+// planning, job costing and quality resolve P1's exact ID and the SAME
+// manufacturing fingerprint F3 the release pinned — never the coexisting
+// legacy OC-022 blob. Without a canonical release, the legacy blob keeps
+// grounding pre-DT projects unchanged.
+func TestProductionRelease_AuthorityFeedsProductionConsumers(t *testing.T) {
+	fx := setupReleaseFixture(t)
+	actorA := fiActorA()
+
+	var p1 *storage.ProductionReleaseReadback
+	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		var err error
+		p1, err = fx.store.CreateProductionRelease(ctx, storage.CreateProductionReleaseCommand{
+			ProjectID:        fx.projectID,
+			DesignRevisionID: fx.revR3,
+			QuoteRevisionID:  fx.quoteQ3,
+			ActorUserID:      rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	f3 := p1.Release.ManufacturingFingerprint
+
+	// A legacy blob coexists on the project row: it must lose to the
+	// canonical authority everywhere.
+	if _, err := fx.admin.Exec(context.Background(), `
+		UPDATE projects SET production_release = '{"id":"rel-legacy-1","project_id":"`+fx.projectID+`","project_version":7,"bom_fingerprint":"client-token"}'::jsonb
+		WHERE id = $1`, fx.projectID); err != nil {
+		t.Fatalf("seed legacy blob: %v", err)
+	}
+
+	var planningSnap *domain.MaterialPlanningSnapshot
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.MutateProjectMaterialPlanning(ctx, fx.projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+			planningSnap = snap
+			return &domain.MaterialPlanningMutation{}, nil
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("material planning snapshot: %v", err)
+	}
+	if planningSnap.ProductionRelease == nil || planningSnap.ProductionRelease.ID != p1.Release.ID {
+		t.Fatalf("material planning must resolve the canonical release authority, got %+v", planningSnap.ProductionRelease)
+	}
+	if planningSnap.ProductionRelease.BOMFingerprint != f3 {
+		t.Fatalf("material planning must bind the SAME authoritative fingerprint F3, got %s", planningSnap.ProductionRelease.BOMFingerprint)
+	}
+
+	var costingSnap *domain.JobCostingSnapshot
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.MutateProjectCosting(ctx, fx.projectID, func(snap *domain.JobCostingSnapshot) (*domain.JobCostingMutation, error) {
+			costingSnap = snap
+			return &domain.JobCostingMutation{}, nil
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("job costing snapshot: %v", err)
+	}
+	if costingSnap.ProductionRelease == nil || costingSnap.ProductionRelease.ID != p1.Release.ID ||
+		costingSnap.ProductionRelease.BOMFingerprint != f3 {
+		t.Fatalf("job costing must resolve the SAME canonical authority (P1/F3), got %+v", costingSnap.ProductionRelease)
+	}
+
+	var qualitySnap *domain.QualitySnapshot
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.MutateProjectQuality(ctx, fx.projectID, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
+			qualitySnap = snap
+			return &domain.QualityMutation{}, nil
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("quality snapshot: %v", err)
+	}
+	if qualitySnap.ReleasedRevision != p1.Release.ID {
+		t.Fatalf("quality must resolve the canonical release revision, got %q", qualitySnap.ReleasedRevision)
+	}
+
+	// Control: a project WITHOUT a canonical release keeps the legacy blob as
+	// its (compatibility) authority — pre-DT projects are unaffected.
+	if _, err := fx.admin.Exec(context.Background(), `
+		UPDATE projects SET production_release = '{"id":"rel-legacy-only","project_version":3,"bom_fingerprint":"client-token-2"}'::jsonb
+		WHERE id = $1`, fiProjectAOnly); err != nil {
+		t.Fatalf("seed control blob: %v", err)
+	}
+	var controlSnap *domain.MaterialPlanningSnapshot
+	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.MutateProjectMaterialPlanning(ctx, fiProjectAOnly, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+			controlSnap = snap
+			return &domain.MaterialPlanningMutation{}, nil
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("control snapshot: %v", err)
+	}
+	if controlSnap.ProductionRelease == nil || controlSnap.ProductionRelease.ID != "rel-legacy-only" {
+		t.Fatalf("without a canonical release the legacy blob keeps grounding the project, got %+v", controlSnap.ProductionRelease)
+	}
+}

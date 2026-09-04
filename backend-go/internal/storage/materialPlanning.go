@@ -59,6 +59,13 @@ func (s *PostgresStore) MutateProjectMaterialPlanning(
 			snap.ProductionRelease = &release
 		}
 	}
+	// #395: ONE release authority — the canonical ProductionRelease wins over
+	// the legacy blob for every production consumer.
+	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, snap.ProductionRelease)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving release authority: %w", err)
+	}
+	snap.ProductionRelease = authority
 	snap.MaterialsReleased = len(materialsReleaseRaw) > 0 && string(materialsReleaseRaw) != "null"
 
 	// Every project's planning — availability/reservations are warehouse-wide.

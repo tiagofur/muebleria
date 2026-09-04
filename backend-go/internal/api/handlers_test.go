@@ -116,6 +116,8 @@ type stubStore struct {
 	listProductionReleasesErr     error
 	getProductionReleaseResult    *storage.ProductionReleaseReadback
 	getProductionReleaseErr       error
+	latestProductionRelease       *domain.ProductionRelease
+	latestProductionReleaseErr    error
 	materialReturnedByID   *domain.MaterialBoard
 	materialGetByIDErr                  error
 	// Ambient materials (presentation-only floor/wall, #4150)
@@ -3242,4 +3244,12 @@ func (s *stubStore) GetProjectProductionRelease(_ context.Context, _, _ string) 
 		return s.getProductionReleaseResult, nil
 	}
 	return nil, domain.ErrReleaseNotFound
+}
+
+
+func (s *stubStore) GetLatestProjectProductionRelease(_ context.Context, _ string) (*domain.ProductionRelease, error) {
+	if s.latestProductionReleaseErr != nil {
+		return nil, s.latestProductionReleaseErr
+	}
+	return s.latestProductionRelease, nil
 }

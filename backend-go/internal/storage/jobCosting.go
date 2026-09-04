@@ -67,6 +67,13 @@ func (s *PostgresStore) MutateProjectCosting(
 			snap.ProductionRelease = &release
 		}
 	}
+	// #395: ONE release authority — the canonical ProductionRelease wins over
+	// the legacy blob for every production consumer.
+	authority, err := s.resolveProjectReleaseAuthorityTx(ctx, tx, projectID, snap.ProductionRelease)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving release authority: %w", err)
+	}
+	snap.ProductionRelease = authority
 	if len(qualityRaw) > 0 && string(qualityRaw) != "null" {
 		var job domain.QualityJob
 		if err := json.Unmarshal(qualityRaw, &job); err == nil {

@@ -82,9 +82,23 @@ type manufacturingFingerprintBody struct {
 
 // ManufacturingFingerprint derives the deterministic, server-authoritative
 // fingerprint of the exact manufacturing inputs of a DesignRevision
-// ("sha256-<64hex>", same representation as the engine fingerprints). Pure:
-// identical items always produce the identical fingerprint, independent of
-// item order, transform/room placement and timestamps.
+// ("sha256-<64hex>", same representation family as the engine fingerprints).
+//
+// AUTHORITY NOTE (PR #551 review, #395 §18): this IS the canonical
+// manufacturing baseline a ProductionRelease pins, at revision granularity.
+// No revision-level fingerprint existed before #395 — the engine's
+// authoringManufacturingFingerprint (#477) covers a single furniture RESOLVE
+// envelope (occurrences/relationships never persisted per revision item), the
+// #347 relationshipBomFingerprint is TS-only over resolved placements, and
+// the legacy bomFingerprint is a client token, not a hash. #394 reserved
+// exactly this contract for the release slice (reconciliation_impact.go).
+// The payload is schema-versioned so the resolved manufacturing state those
+// outputs consume (per-item #477 fingerprints, industrial rules revision,
+// machining/features) EXTENDS this baseline in later slices instead of
+// forking a parallel hash namespace.
+//
+// Pure: identical items always produce the identical fingerprint, independent
+// of item order, transform/room placement and timestamps.
 func ManufacturingFingerprint(items []DesignRevisionItem) (string, error) {
 	bodies := make([]manufacturingFingerprintBody, 0, len(items))
 	for _, item := range items {
@@ -224,6 +238,18 @@ func ProjectFurnitureDimensionParameters() []FurnitureParameterDefinition {
 // definition and satisfy its authoritative parameter contract. Deterministic
 // and fail-closed: any issue blocks the whole release (§17: a blocked preflight
 // means zero fabricable output, not a partial release).
+//
+// AUTHORITY NOTE (PR #551 review, #395 §16): this is the ONE server-side
+// manufacturing preflight for the release gate — it does NOT re-implement
+// existing rules: parameter semantics delegate entirely to
+// EvaluateFurnitureParameters (the single #483 parameter authority) and
+// definition existence to the organization catalog. The #347 full preflight
+// owns fabrication-readiness of RESOLVED machining envelopes (capabilities,
+// drilling, machine negotiation; TS, not yet wired server-side) and the
+// authoring-resolve subset owns authoring envelopes — different inputs, no
+// overlapping blocker semantics. When resolved machining state becomes
+// persistable per revision (#397/#398/#503 path), it extends THIS gate; no
+// second release preflight may appear beside it.
 func RunManufacturingPreflight(revisionID string, items []DesignRevisionItem, definitions map[string]FurnitureDefinitionParameters) *ManufacturingPreflightResult {
 	result := &ManufacturingPreflightResult{
 		DesignRevisionID: revisionID,

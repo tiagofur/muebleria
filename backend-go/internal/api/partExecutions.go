@@ -140,12 +140,22 @@ func (s *Server) buildFloorEvent(r *http.Request, projectID, itemID, from, to st
 }
 
 // releasedRevisionFor returns the currently released production revision of a
-// project ("" when never released).
-func releasedRevisionFor(project *domain.Project) string {
-	if project != nil && project.ProductionRelease != nil && project.ProductionRelease.ID != "" {
-		return project.ProductionRelease.ID
+// project ("" when never released). #395: the canonical ProductionRelease is
+// the ONE release authority — it wins over the legacy OC-022 blob for every
+// production consumer; a lookup failure fails closed (the released revision
+// is unknown, never guessed from stale state).
+func (s *Server) releasedRevisionFor(r *http.Request, project *domain.Project) (string, error) {
+	canonical, err := s.Store.GetLatestProjectProductionRelease(r.Context(), project.ID)
+	if err != nil {
+		return "", err
 	}
-	return ""
+	if canonical != nil {
+		return canonical.ID, nil
+	}
+	if project.ProductionRelease != nil && project.ProductionRelease.ID != "" {
+		return project.ProductionRelease.ID, nil
+	}
+	return "", nil
 }
 
 // HandleProjectPartExecutions handles GET /api/projects/{id}/part-executions —
@@ -161,7 +171,11 @@ func (s *Server) HandleProjectPartExecutions(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
 		return
 	}
-	released := releasedRevisionFor(project)
+	released, err := s.releasedRevisionFor(r, project)
+	if err != nil {
+		respondWithInternalError(w, err, "resolver la revisión liberada")
+		return
+	}
 	readiness := make([]domain.AssemblyReadiness, 0, len(project.ModuleUnits))
 	for _, u := range project.ModuleUnits {
 		readiness = append(readiness, domain.CheckAssemblyReadiness(u, project.PartInstances, released))
@@ -241,6 +255,11 @@ func (s *Server) HandleAdvancePartOperation(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
 		return
 	}
+	releasedAuthorityRevision, err := s.releasedRevisionFor(r, project)
+	if err != nil {
+		respondWithInternalError(w, err, "resolver la revisión liberada")
+		return
+	}
 
 	var updatedPart *domain.PartInstance
 	var readiness *domain.AssemblyReadiness
@@ -293,7 +312,7 @@ func (s *Server) HandleAdvancePartOperation(w http.ResponseWriter, r *http.Reque
 		updatedPart = &snap.Parts[idx]
 		for _, u := range snap.Units {
 			if u.ProjectItemID == part.ProjectItemID && u.UnitIndex == part.UnitIndex {
-				check := domain.CheckAssemblyReadiness(u, snap.Parts, releasedRevisionFor(project))
+				check := domain.CheckAssemblyReadiness(u, snap.Parts, releasedAuthorityRevision)
 				readiness = &check
 				break
 			}
@@ -350,6 +369,12 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	releasedAuthorityRevision, err := s.releasedRevisionFor(r, project)
+	if err != nil {
+		respondWithInternalError(w, err, "resolver la revisión liberada")
+		return
+	}
+
 	var updatedUnit *domain.ModuleUnitExecution
 	var readiness *domain.AssemblyReadiness
 	var gateBlocked *domain.AssemblyReadiness
@@ -388,7 +413,7 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 		// required piece is ready against the released revision — or a
 		// supervisor override was recorded.
 		if target == domain.ModuleUnitStatusAssembly && unit.Status == domain.ModuleUnitStatusAwaitingParts {
-			check := domain.CheckAssemblyReadiness(unit, snap.Parts, releasedRevisionFor(project))
+			check := domain.CheckAssemblyReadiness(unit, snap.Parts, releasedAuthorityRevision)
 			if !check.IsReady {
 				blocked := check
 				gateBlocked = &blocked
@@ -431,7 +456,7 @@ func (s *Server) HandleAdvanceModuleUnit(w http.ResponseWriter, r *http.Request)
 		}
 
 		updatedUnit = &snap.Units[idx]
-		check := domain.CheckAssemblyReadiness(advanced, snap.Parts, releasedRevisionFor(project))
+		check := domain.CheckAssemblyReadiness(advanced, snap.Parts, releasedAuthorityRevision)
 		readiness = &check
 		return &domain.PartExecutionsMutation{
 			Parts:        snap.Parts,
@@ -755,7 +780,11 @@ func (s *Server) HandleGeneratePartExecutions(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusNotFound, "obra no encontrada")
 		return
 	}
-	released := releasedRevisionFor(project)
+	released, rErr := s.releasedRevisionFor(r, project)
+	if rErr != nil {
+		respondWithInternalError(w, rErr, "resolver la revisión liberada")
+		return
+	}
 
 	var result map[string]interface{}
 	_, err = s.Store.MutateProjectPartExecutions(r.Context(), projectID, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
