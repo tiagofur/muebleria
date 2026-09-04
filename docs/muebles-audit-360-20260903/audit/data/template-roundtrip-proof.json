@@ -1,0 +1,76 @@
+{
+  "id": "FM-01-PURE-PROOF",
+  "findingId": "FM-01",
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "status": "CONFIRMED_PURE_DOMAIN_REPRODUCTION",
+  "tests": 3,
+  "meaning": "Passing assertions reproduce the defect; no product fix was made.",
+  "expected": {
+    "keys": [
+      "walls",
+      "placements",
+      "baseClearanceMm",
+      "wallCabinetZMm",
+      "showCountertop",
+      "countertopMaterialId",
+      "activeSpaceId",
+      "spaces"
+    ],
+    "spaceCount": 2,
+    "placementCount": 1,
+    "baseClearanceMm": 137,
+    "wallCabinetZMm": 1520,
+    "showCountertop": false,
+    "countertopMaterialId": "ambient-countertop-audit",
+    "activeSpaceId": "space-kitchen"
+  },
+  "templateActual": {
+    "keys": [
+      "walls",
+      "placements"
+    ],
+    "spaceCount": 0,
+    "placementCount": 1,
+    "baseClearanceMm": null,
+    "wallCabinetZMm": null,
+    "showCountertop": null,
+    "countertopMaterialId": null,
+    "activeSpaceId": null
+  },
+  "roundTripActual": {
+    "keys": [
+      "walls",
+      "placements"
+    ],
+    "spaceCount": 0,
+    "placementCount": 1,
+    "baseClearanceMm": null,
+    "wallCabinetZMm": null,
+    "showCountertop": null,
+    "countertopMaterialId": null,
+    "activeSpaceId": null
+  },
+  "lostFields": [
+    "spaces",
+    "activeSpaceId",
+    "baseClearanceMm",
+    "wallCabinetZMm",
+    "showCountertop",
+    "countertopMaterialId"
+  ],
+  "retained": [
+    "two project items",
+    "active top-level wall and placement",
+    "placement item-ID remapping"
+  ],
+  "scope": "Actual production domain functions with a typed synthetic two-space fixture; no UI/store persistence/API/DB/native execution.",
+  "sourceFunctions": [
+    "projectToTemplate",
+    "createProjectFromTemplate"
+  ],
+  "evidence": [
+    "packages/domain/src/duplicate.ts:274-313",
+    "packages/domain/src/duplicate.ts:333-380"
+  ],
+  "missingProof": "UI save/create/reload and server persistence not exercised; consequences beyond returned object shape remain unverified."
+}

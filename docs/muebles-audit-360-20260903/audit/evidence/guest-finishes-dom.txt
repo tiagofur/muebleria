@@ -1,0 +1,133 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados" [active]:
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: CATÁLOGOS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Catálogo de acabados":
+    - heading "Acabados" [level=2]
+    - paragraph: Acabados y texturas visuales para superficies, herrajes y objetos 3D (solo presentación, sin costo)
+    - generic "Acciones de Acabados":
+      - button "Editar categorías":
+        - text: Editar categorías
+      - button "Nuevo acabado":
+        - text: Nuevo acabado
+    - complementary "Filtro por categorías":
+      - heading "Categorías" [level=3]
+      - button "Editar categorías":
+      - button "Todas 2":
+        - generic: Todas
+        - generic: "2"
+      - button "Sin categoría 2":
+        - generic: Sin categoría
+        - generic: "2"
+      - paragraph: Sin categorías. Usá «Editar categorías» para crear la jerarquía de acabados.
+    - generic "Buscar y filtrar acabados":
+      - searchbox "Buscar acabados"
+      - group "Filtrar por estado":
+        - button "Todos"
+        - button "Activos" [pressed]
+        - button "Inactivos"
+    - table:
+      - rowgroup:
+        - row "Detalle Color Código Nombre Categoría Estado Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Color"
+          - columnheader "Código"
+          - columnheader "Nombre"
+          - columnheader "Categoría"
+          - columnheader "Estado"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "#e5e0d8 AMB-PIS-POR Porcelanato Claro (Piso) — Activo Editar AMB-PIS-POR Desactivar AMB-PIS-POR":
+          - cell
+          - cell "#e5e0d8":
+            - img "#e5e0d8"
+          - cell "AMB-PIS-POR"
+          - cell "Porcelanato Claro (Piso)"
+          - cell "—"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar AMB-PIS-POR Desactivar AMB-PIS-POR":
+            - button "Editar AMB-PIS-POR": Editar
+            - button "Desactivar AMB-PIS-POR": Desactivar
+        - row "#f8f6f0 AMB-MUR-BLA Muro Blanco Marfil (Pared) — Activo Editar AMB-MUR-BLA Desactivar AMB-MUR-BLA":
+          - cell
+          - cell "#f8f6f0":
+            - img "#f8f6f0"
+          - cell "AMB-MUR-BLA"
+          - cell "Muro Blanco Marfil (Pared)"
+          - cell "—"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar AMB-MUR-BLA Desactivar AMB-MUR-BLA":
+            - button "Editar AMB-MUR-BLA": Editar
+            - button "Desactivar AMB-MUR-BLA": Desactivar
+- generic "Notificaciones"

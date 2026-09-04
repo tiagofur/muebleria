@@ -1,0 +1,190 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: TRABAJO
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Inicio":
+    - heading "Inicio" [level=2]
+    - paragraph: Resumen del workspace y accesos rápidos
+    - generic "Acciones de Inicio":
+      - button "Nuevo mueble":
+        - text: Nuevo mueble
+      - button "Nueva cotización":
+        - text: Nueva cotización
+    - list "Indicadores":
+      - paragraph: Cotizaciones activas
+      - paragraph: "1"
+      - paragraph: Total cotizado del mes
+      - paragraph: $13,196.50 MXN
+      - paragraph: Muebles en catálogo
+      - paragraph: "17"
+      - paragraph: Materiales activos
+      - paragraph: "3"
+    - region "Por responsable":
+      - heading "Por responsable" [level=3]
+      - paragraph: Cotizaciones del taller agrupadas por quien las lleva (mes actual en el total cotizado).
+      - table:
+        - rowgroup:
+          - row "Responsable Puesto Activas Cotizado del mes Total cotiz.":
+            - columnheader "Responsable"
+            - columnheader "Puesto"
+            - columnheader "Activas"
+            - columnheader "Cotizado del mes"
+            - columnheader "Total cotiz."
+        - rowgroup:
+          - row "Sin responsable — 1 $13,196.50 MXN 2":
+            - cell "Sin responsable"
+            - cell "—"
+            - cell "1"
+            - cell "$13,196.50 MXN"
+            - cell "2"
+    - region "Métricas del taller":
+      - heading "Métricas del taller" [level=3]
+      - paragraph: Conversión comercial y garantías post-venta (F090).
+      - toolbar "Período de análisis":
+        - button "30 días"
+        - button "90 días"
+        - button "12 meses"
+        - button "Todo"
+      - heading "Conversión comercial" [level=4]:
+        - text: Conversión comercial
+      - list "Indicadores comerciales":
+        - generic: Cotizado → ganado
+        - generic: 100%
+        - generic: De lo cotizado en el período
+        - generic: Tiempo al cierre
+        - generic: —
+        - generic: Creación → aceptación
+        - generic: Ticket promedio
+        - generic: $0.00 MXN
+        - generic: Pipeline abierto
+        - generic: "1"
+        - generic: $0.00 MXN
+        - generic: Estancadas
+        - generic: "1"
+        - generic: "Más vieja: 51 d"
+      - list "Embudo por estado":
+        - generic: Borrador
+        - generic: "1"
+        - generic: Cotizado
+        - generic: "0"
+        - generic: Aceptado
+        - generic: "1"
+        - generic: En producción
+        - generic: "0"
+      - heading "Post-venta y garantías" [level=4]:
+        - text: Post-venta y garantías
+      - list "Indicadores de garantía":
+        - generic: Reclamos
+        - generic: "0"
+        - generic: 0 abiertos · 0 resueltos
+        - generic: Obras afectadas
+        - generic: "0"
+        - generic: Refabricación
+        - generic: 0.00 m²
+        - generic: 0 piezas
+        - generic: Margen en riesgo
+        - generic: —
+        - generic: Venta − costo directo de obras con reclamo
+      - paragraph: Reclamos por categoría
+      - list "Reclamos por categoría"
+    - region "Cotizaciones recientes":
+      - heading "Cotizaciones recientes" [level=3]
+      - list "Cotizaciones recientes":
+        - button "Cocina López (Proyecto Demo L-Shaped 3D) Aceptado Cliente Demo 3 sep 2026 $13,196.50 MXN":
+          - heading "Cocina López (Proyecto Demo L-Shaped 3D)" [level=4]
+          - generic: ●
+          - text: Aceptado
+          - paragraph: Cliente Demo
+          - generic: 3 sep 2026
+          - generic: $13,196.50 MXN
+        - button "Demo plantilla Borrador Cliente Demo 14 jul 2026 $2,042.90 MXN":
+          - heading "Demo plantilla" [level=4]
+          - generic: ●
+          - text: Borrador
+          - paragraph: Cliente Demo
+          - generic: 14 jul 2026
+          - generic: $2,042.90 MXN
+- generic "Notificaciones"
+- button "Cerrar diálogo"
+- dialog "Tour de Bienvenida — Granete App":
+  - banner:
+    - heading "Tour de Bienvenida — Granete App" [level=2]
+    - button "Cerrar":
+  - generic "Progreso del tour"
+  - generic: Paso 1 de 3 · Experiencia 3D Instantánea
+  - heading "¡Bienvenido a Granete! — Tu Taller en 3D" [level=4]:
+    - text: ¡Bienvenido a Granete! — Tu Taller en 3D
+  - paragraph: "Explora el proyecto de demostración \"Cocina López\": una cocina en L completa (4 bajomesadas, 4 alacenas, isla central y despensa) con ambientación 3D de pisos y muros lista para mostrar a tus clientes."
+  - list:
+    - generic: Visualización 3D interactiva en tiempo real
+    - generic: Ambientación de muros y piso cerámico
+    - generic: Despiece y cotización automática
+  - contentinfo:
+    - button "Omitir" [active]
+    - button "Siguiente":
+      - text: Siguiente

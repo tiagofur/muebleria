@@ -1,0 +1,264 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes" [active]:
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: CATÁLOGOS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Catálogo de herrajes":
+    - heading "Herrajes" [level=2]
+    - paragraph: Bisagras, correderas y demás del catálogo
+    - generic "Acciones de Herrajes":
+      - button "Nuevo herraje":
+        - text: Nuevo herraje
+    - generic "Buscar y filtrar herrajes":
+      - searchbox "Buscar herrajes"
+      - group "Filtrar por estado":
+        - button "Todos"
+        - button "Activos" [pressed]
+        - button "Inactivos"
+    - table:
+      - rowgroup:
+        - row "Detalle Foto Código Nombre Unidad Costo unit. Estado Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Foto"
+          - columnheader "Código"
+          - columnheader "Nombre"
+          - columnheader "Unidad"
+          - columnheader "Costo unit."
+          - columnheader "Estado"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "HER-BIS-CL Bisagra Cierre Lento Pieza $35.00 MXN Activo Editar HER-BIS-CL Desactivar HER-BIS-CL":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-BIS-CL"
+          - cell "Bisagra Cierre Lento"
+          - cell "Pieza"
+          - cell "$35.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-BIS-CL Desactivar HER-BIS-CL":
+            - button "Editar HER-BIS-CL": Editar
+            - button "Desactivar HER-BIS-CL": Desactivar
+        - row "HER-JAL-INOX Jaladera Acero Inox Pieza $45.00 MXN Activo Editar HER-JAL-INOX Desactivar HER-JAL-INOX":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-JAL-INOX"
+          - cell "Jaladera Acero Inox"
+          - cell "Pieza"
+          - cell "$45.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-JAL-INOX Desactivar HER-JAL-INOX":
+            - button "Editar HER-JAL-INOX": Editar
+            - button "Desactivar HER-JAL-INOX": Desactivar
+        - row "HER-PATA-REG Pata Regulable Plastica Pieza $15.00 MXN Activo Editar HER-PATA-REG Desactivar HER-PATA-REG":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-PATA-REG"
+          - cell "Pata Regulable Plastica"
+          - cell "Pieza"
+          - cell "$15.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-PATA-REG Desactivar HER-PATA-REG":
+            - button "Editar HER-PATA-REG": Editar
+            - button "Desactivar HER-PATA-REG": Desactivar
+        - row "HER-TOR-4X50 Tornillo 4x50 mm Pieza $0.50 MXN Activo Editar HER-TOR-4X50 Desactivar HER-TOR-4X50":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-TOR-4X50"
+          - cell "Tornillo 4x50 mm"
+          - cell "Pieza"
+          - cell "$0.50 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-TOR-4X50 Desactivar HER-TOR-4X50":
+            - button "Editar HER-TOR-4X50": Editar
+            - button "Desactivar HER-TOR-4X50": Desactivar
+        - row "HER-CORR-500 Corredera Telescópica 500mm Juego $120.00 MXN Activo Editar HER-CORR-500 Desactivar HER-CORR-500":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-CORR-500"
+          - cell "Corredera Telescópica 500mm"
+          - cell "Juego"
+          - cell "$120.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-CORR-500 Desactivar HER-CORR-500":
+            - button "Editar HER-CORR-500": Editar
+            - button "Desactivar HER-CORR-500": Desactivar
+        - row "HER-SOP-ENT Soporte de Entrepaño Pieza $2.00 MXN Activo Editar HER-SOP-ENT Desactivar HER-SOP-ENT":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-SOP-ENT"
+          - cell "Soporte de Entrepaño"
+          - cell "Pieza"
+          - cell "$2.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-SOP-ENT Desactivar HER-SOP-ENT":
+            - button "Editar HER-SOP-ENT": Editar
+            - button "Desactivar HER-SOP-ENT": Desactivar
+        - row "HER-TAQ-8X30 Taquete Madera 8x30 mm Pieza $0.80 MXN Activo Editar HER-TAQ-8X30 Desactivar HER-TAQ-8X30":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-TAQ-8X30"
+          - cell "Taquete Madera 8x30 mm"
+          - cell "Pieza"
+          - cell "$0.80 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-TAQ-8X30 Desactivar HER-TAQ-8X30":
+            - button "Editar HER-TAQ-8X30": Editar
+            - button "Desactivar HER-TAQ-8X30": Desactivar
+        - row "HER-MIN-15 Minifix 15 mm (juego) Juego $4.50 MXN Activo Editar HER-MIN-15 Desactivar HER-MIN-15":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-MIN-15"
+          - cell "Minifix 15 mm (juego)"
+          - cell "Juego"
+          - cell "$4.50 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-MIN-15 Desactivar HER-MIN-15":
+            - button "Editar HER-MIN-15": Editar
+            - button "Desactivar HER-MIN-15": Desactivar
+        - row "HER-PLACA-BIS Placa Base Bisagra Pieza $6.00 MXN Activo Editar HER-PLACA-BIS Desactivar HER-PLACA-BIS":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-PLACA-BIS"
+          - cell "Placa Base Bisagra"
+          - cell "Pieza"
+          - cell "$6.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-PLACA-BIS Desactivar HER-PLACA-BIS":
+            - button "Editar HER-PLACA-BIS": Editar
+            - button "Desactivar HER-PLACA-BIS": Desactivar
+        - row "HER-ZOC-ALU Zoclo perfil aluminio natural Metro $18.00 MXN Activo Editar HER-ZOC-ALU Desactivar HER-ZOC-ALU":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-ZOC-ALU"
+          - cell "Zoclo perfil aluminio natural"
+          - cell "Metro"
+          - cell "$18.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-ZOC-ALU Desactivar HER-ZOC-ALU":
+            - button "Editar HER-ZOC-ALU": Editar
+            - button "Desactivar HER-ZOC-ALU": Desactivar
+        - row "HER-ZOC-BRO Zoclo perfil bronce Metro $22.00 MXN Activo Editar HER-ZOC-BRO Desactivar HER-ZOC-BRO":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-ZOC-BRO"
+          - cell "Zoclo perfil bronce"
+          - cell "Metro"
+          - cell "$22.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-ZOC-BRO Desactivar HER-ZOC-BRO":
+            - button "Editar HER-ZOC-BRO": Editar
+            - button "Desactivar HER-ZOC-BRO": Desactivar
+        - row "HER-ZOC-NEG Zoclo perfil negro Metro $22.00 MXN Activo Editar HER-ZOC-NEG Desactivar HER-ZOC-NEG":
+          - cell
+          - cell:
+            - text: Sin foto
+          - cell "HER-ZOC-NEG"
+          - cell "Zoclo perfil negro"
+          - cell "Metro"
+          - cell "$22.00 MXN"
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar HER-ZOC-NEG Desactivar HER-ZOC-NEG":
+            - button "Editar HER-ZOC-NEG": Editar
+            - button "Desactivar HER-ZOC-NEG": Desactivar
+- generic "Notificaciones"

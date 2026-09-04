@@ -1,0 +1,130 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: VENTAS
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Clientes":
+    - heading "Clientes" [level=2]
+    - paragraph: Personas y talleres a los que cotizás
+    - generic "Acciones de Clientes":
+      - button "Nuevo cliente" [active]:
+        - text: Nuevo cliente
+    - generic "Buscar y filtrar clientes":
+      - searchbox "Buscar clientes"
+      - group "Filtrar por estado":
+        - button "Todos"
+        - button "Activos" [pressed]
+        - button "Inactivos"
+    - table:
+      - rowgroup:
+        - row "Detalle Nombre Email Teléfono / WhatsApp Estado Acciones":
+          - columnheader "Detalle":
+            - generic: Detalle
+          - columnheader "Nombre"
+          - columnheader "Email"
+          - columnheader "Teléfono / WhatsApp"
+          - columnheader "Estado"
+          - columnheader "Acciones":
+            - generic: Acciones
+      - rowgroup:
+        - row "Cliente Plantilla — — Activo Editar Cliente Plantilla Desactivar Cliente Plantilla":
+          - cell
+          - cell "Cliente Plantilla"
+          - cell "—"
+          - cell "—":
+            - generic: —
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar Cliente Plantilla Desactivar Cliente Plantilla":
+            - button "Editar Cliente Plantilla": Editar
+            - button "Desactivar Cliente Plantilla": Desactivar
+        - row "Cliente Demo — — Activo Editar Cliente Demo Desactivar Cliente Demo":
+          - cell
+          - cell "Cliente Demo"
+          - cell "—"
+          - cell "—":
+            - generic: —
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar Cliente Demo Desactivar Cliente Demo":
+            - button "Editar Cliente Demo": Editar
+            - button "Desactivar Cliente Demo": Desactivar
+        - row "Cliente de ensayo AUDIT 360 — — Activo Editar Cliente de ensayo AUDIT 360 Desactivar Cliente de ensayo AUDIT 360":
+          - cell
+          - cell "Cliente de ensayo AUDIT 360"
+          - cell "—"
+          - cell "—":
+            - generic: —
+          - cell "Activo":
+            - generic: ●
+            - text: Activo
+          - cell "Editar Cliente de ensayo AUDIT 360 Desactivar Cliente de ensayo AUDIT 360":
+            - button "Editar Cliente de ensayo AUDIT 360": Editar
+            - button "Desactivar Cliente de ensayo AUDIT 360": Desactivar
+- generic "Notificaciones"

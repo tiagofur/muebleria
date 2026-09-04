@@ -1,0 +1,654 @@
+{
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "scope": "24 secondary production/catalog files; manual bounded semantic source review; no browser/tests/DB/product changes",
+  "fragments": [
+    {
+      "file": "packages/ui/src/catalogs/CatalogPicker.tsx",
+      "claim": "Filters active catalog entries while preserving a selected inactive entry; searches code/name/subtitle, supports arrow/Enter/Escape search navigation and listbox selection; clearing is wired onMouseDown rather than onClick.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/catalogs/CatalogPicker.tsx",
+          "startLine": 70,
+          "endLine": 116,
+          "excerpt": "  value,\n  onChange,\n  includeInactive = false,\n  placeholder = 'Seleccionar…',\n  searchPlaceholder = 'Buscar…',\n  disabled = false,\n  className,\n  'data-testid': dataTestId,\n}: CatalogPickerProps): ReactNode {\n  const autoId = useId();\n  const triggerId = id ?? autoId;\n  const listboxId = `${triggerId}-listbox`;\n  const searchId = `${triggerId}-search`;\n\n  const rootRef = useRef<HTMLDivElement>(null);\n  const searchRef = useRef<HTMLInputElement>(null);\n  const listRef = useRef<HTMLUListElement>(null);\n\n  const [open, setOpen] = useState(false);\n  const [query, setQuery] = useState('');\n  const [highlight, setHighlight] = useState(0);\n\n  const baseOptions = useMemo(() => {\n    let opts = filterActiveForPicker(items, { includeInactive });\n    if (value) {\n      const current = items.find((i) => i.id === value);\n      if (current && !opts.some((o) => o.id === value)) {\n        opts = [current, ...opts];\n      }\n    }\n    return opts;\n  }, [items, includeInactive, value]);\n\n  const filtered = useMemo(() => {\n    const q = query.trim().toLocaleLowerCase('es-UY');\n    if (!q) return baseOptions;\n    return baseOptions.filter((item) => optionMatchesQuery(item, q));\n  }, [baseOptions, query]);\n\n  const selected = useMemo(\n    () => items.find((i) => i.id === value) ?? null,\n    [items, value],\n  );\n\n  const close = useCallback(() => {\n    setOpen(false);\n    setQuery('');"
+        },
+        {
+          "file": "packages/ui/src/catalogs/CatalogPicker.tsx",
+          "startLine": 175,
+          "endLine": 208,
+          "excerpt": "\n  const onTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {\n    if (disabled) return;\n    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {\n      e.preventDefault();\n      openList();\n    }\n  };\n\n  const onSearchKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {\n    if (e.key === 'Escape') {\n      e.preventDefault();\n      e.stopPropagation();\n      close();\n      return;\n    }\n    if (e.key === 'ArrowDown') {\n      e.preventDefault();\n      if (filtered.length === 0) return;\n      setHighlight((h) => (h + 1) % filtered.length);\n      return;\n    }\n    if (e.key === 'ArrowUp') {\n      e.preventDefault();\n      if (filtered.length === 0) return;\n      setHighlight((h) => (h - 1 + filtered.length) % filtered.length);\n      return;\n    }\n    if (e.key === 'Enter') {\n      e.preventDefault();\n      const item = filtered[highlight];\n      if (item) selectId(item.id);\n    }\n  };"
+        },
+        {
+          "file": "packages/ui/src/catalogs/CatalogPicker.tsx",
+          "startLine": 270,
+          "endLine": 290,
+          "excerpt": "              aria-controls={listboxId}\n              aria-activedescendant={\n                filtered[highlight]\n                  ? `${listboxId}-opt-${filtered[highlight]!.id}`\n                  : undefined\n              }\n              autoComplete=\"off\"\n            />\n          </div>\n          <ul\n            ref={listRef}\n            id={listboxId}\n            className=\"catalog-picker__list\"\n            role=\"listbox\"\n            aria-label={label}\n          >\n            {filtered.length === 0 ? (\n              <li className=\"catalog-picker__empty\" role=\"presentation\">\n                Sin resultados\n              </li>\n            ) : ("
+        },
+        {
+          "file": "packages/ui/src/catalogs/CatalogPicker.tsx",
+          "startLine": 335,
+          "endLine": 350,
+          "excerpt": "            )}\n          </ul>\n          {value ? (\n            <button\n              type=\"button\"\n              className=\"catalog-picker__clear\"\n              onMouseDown={(e) => {\n                e.preventDefault();\n                selectId('');\n              }}\n            >\n              Quitar selección\n            </button>\n          ) : null}\n        </div>\n      ) : null}"
+        }
+      ],
+      "missingProof": "Browser keyboard activation of clear, focus restoration, popover clipping and screen-reader combobox semantics remain untested.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "0b45ec5a4c117b4a7b66c9a341844e24bdfcc260d88575094f4e2fe9c3aa07bd"
+    },
+    {
+      "file": "packages/ui/src/catalogs/ambient/AmbientCategoryTree.tsx",
+      "claim": "Recursive category filtering toggles the selected category; management rows invoke edit/delete callbacks, with deletion rendered only when canDelete permits. This component does not persist or enforce hierarchy validity.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/catalogs/ambient/AmbientCategoryTree.tsx",
+          "startLine": 20,
+          "endLine": 77,
+          "excerpt": "  setCategoryFilter,\n  counts,\n}: {\n  readonly categories: readonly AmbientCategory[];\n  readonly parentId: string | undefined;\n  readonly depth: number;\n  readonly categoryFilter: string | null;\n  readonly setCategoryFilter: Dispatch<SetStateAction<string | null>>;\n  readonly counts: ReadonlyMap<string, number>;\n}): ReactNode {\n  const nodes = childrenOf(categories, parentId);\n  if (nodes.length === 0) return null;\n  return (\n    <ul\n      className={\n        depth === 0\n          ? 'module-category-tree__list'\n          : 'module-category-tree__list module-category-tree__list--nested'\n      }\n    >\n      {nodes.map((node) => {\n        const active = categoryFilter === node.id;\n        const count = counts.get(node.id) ?? 0;\n        return (\n          <li key={node.id}>\n            <button\n              type=\"button\"\n              className={\n                active\n                  ? 'module-category-tree__item module-category-tree__item--active'\n                  : 'module-category-tree__item'\n              }\n              onClick={() =>\n                setCategoryFilter((prev) => (prev === node.id ? null : node.id))\n              }\n              data-testid={`category-filter-${node.id}`}\n            >\n              <span className=\"module-category-tree__label\">{node.name}</span>\n              <span\n                className=\"module-category-tree__count\"\n                data-testid={`category-filter-count-${node.id}`}\n              >\n                {count}\n              </span>\n            </button>\n            <CategoryTree\n              categories={categories}\n              parentId={node.id}\n              depth={depth + 1}\n              categoryFilter={categoryFilter}\n              setCategoryFilter={setCategoryFilter}\n              counts={counts}\n            />\n          </li>\n        );\n      })}\n    </ul>\n  );"
+        },
+        {
+          "file": "packages/ui/src/catalogs/ambient/AmbientCategoryTree.tsx",
+          "startLine": 84,
+          "endLine": 150,
+          "excerpt": "  onEdit,\n  onDelete,\n  canDelete,\n}: {\n  readonly categories: readonly AmbientCategory[];\n  readonly parentId: string | undefined;\n  readonly depth: number;\n  readonly onEdit: (cat: AmbientCategory) => void;\n  readonly onDelete: (id: string) => void;\n  readonly canDelete: boolean;\n}): ReactNode {\n  const nodes = childrenOf(categories, parentId);\n  if (nodes.length === 0) return null;\n  return (\n    <ul\n      className={\n        depth === 0\n          ? 'module-category-manage__list'\n          : 'module-category-manage__list module-category-manage__list--nested'\n      }\n      data-testid={depth === 0 ? 'manage-categories-list' : undefined}\n    >\n      {nodes.map((node) => (\n        <li key={node.id}>\n          <div className=\"module-category-manage__row\">\n            <div className=\"module-category-manage__row-main\">\n              <span className=\"module-category-manage__name\">{node.name}</span>\n              <span className=\"module-category-manage__meta\">\n                Nivel {depth + 1}\n              </span>\n            </div>\n            <span className=\"module-category-manage__actions\">\n              <button\n                type=\"button\"\n                className=\"btn btn--ghost btn--small\"\n                onClick={() => onEdit(node)}\n                aria-label={`Editar ${node.name}`}\n                data-testid={`manage-category-edit-${node.id}`}\n              >\n                <Pencil size={14} strokeWidth={1.5} />\n              </button>\n              {canDelete ? (\n                <button\n                  type=\"button\"\n                  className=\"btn btn--ghost btn--small btn--danger\"\n                  onClick={() => onDelete(node.id)}\n                  aria-label={`Eliminar ${node.name}`}\n                  data-testid={`manage-category-delete-${node.id}`}\n                >\n                  <Trash2 size={14} strokeWidth={1.5} />\n                </button>\n              ) : null}\n            </span>\n          </div>\n          <ManageCategoryRows\n            categories={categories}\n            parentId={node.id}\n            depth={depth + 1}\n            onEdit={onEdit}\n            onDelete={onDelete}\n            canDelete={canDelete}\n          />\n        </li>\n      ))}\n    </ul>\n  );\n}"
+        }
+      ],
+      "missingProof": "Caller permissions, cyclic category input handling, keyboard/screen-reader selected-state feedback and server persistence remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "7925af62eaf2b14cee976514317893efb88905c5714818b350eabcbea6721da3"
+    },
+    {
+      "file": "packages/ui/src/catalogs/hardware/HardwareMachiningSection.tsx",
+      "claim": "Edits hardware-owned machining parts and operations immutably; type changes retain ID/offset/face but reset kind-specific defaults. Prevents deleting the last operation, converts numeric inputs with Number, and delegates complete profile validation/persistence to the enclosing form.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/catalogs/hardware/HardwareMachiningSection.tsx",
+          "startLine": 80,
+          "endLine": 139,
+          "excerpt": "  /** Modal open flag — resets the disclosure between edit sessions (F117). */\n  readonly modalOpen: boolean;\n  readonly draft: HardwareDraft;\n  readonly setDraft: Dispatch<SetStateAction<HardwareDraft>>;\n}\n\nexport function HardwareMachiningSection({\n  modalOpen,\n  draft,\n  setDraft,\n}: HardwareMachiningSectionProps): ReactNode {\n  const [open, setOpen] = useState(false);\n  const [wasModalOpen, setWasModalOpen] = useState(false);\n  if (modalOpen && !wasModalOpen) {\n    setWasModalOpen(true);\n    setOpen(Boolean(draft.machining));\n  } else if (!modalOpen && wasModalOpen) {\n    setWasModalOpen(false);\n  }\n\n  const machining = draft.machining;\n  const parts = machining?.parts ?? [];\n\n  const setParts = (next: HardwareMachiningProfile | null) => {\n    setDraft((prev) => ({\n      ...prev,\n      machining: next && next.parts.length > 0 ? next : null,\n    }));\n  };\n\n  const updatePart = (partIndex: number, patch: Partial<{ role: string }>) => {\n    setParts({\n      parts: parts.map((part, i) =>\n        i === partIndex ? { ...part, ...patch } : part,\n      ),\n    });\n  };\n\n  const removePart = (partIndex: number) => {\n    setParts({ parts: parts.filter((_, i) => i !== partIndex) });\n  };\n\n  const updateOperation = (\n    partIndex: number,\n    opIndex: number,\n    patch: Partial<MachiningOperation>,\n  ) => {\n    setParts({\n      parts: parts.map((part, i) =>\n        i === partIndex\n          ? {\n              ...part,\n              operations: part.operations.map((op, j) =>\n                j === opIndex ? { ...op, ...patch } : op,\n              ),\n            }\n          : part,\n      ),\n    });\n  };"
+        },
+        {
+          "file": "packages/ui/src/catalogs/hardware/HardwareMachiningSection.tsx",
+          "startLine": 243,
+          "endLine": 300,
+          "excerpt": "                        <span>Tipo</span>\n                        <select\n                          value={op.kind}\n                          onChange={(e) => {\n                            const kind = e.target.value as MachiningOperationKind;\n                            updateOperation(partIndex, opIndex, {\n                              ...newOperation(kind),\n                              id: op.id,\n                              label: op.label,\n                              xMm: op.xMm,\n                              yMm: op.yMm,\n                              face: op.face,\n                            });\n                          }}\n                          data-testid={`hardware-machining-kind-${partIndex}-${opIndex}`}\n                        >\n                          {(\n                            Object.keys(OPERATION_KIND_LABELS_ES) as MachiningOperationKind[]\n                          ).map((kind) => (\n                            <option key={kind} value={kind}>\n                              {OPERATION_KIND_LABELS_ES[kind]}\n                            </option>\n                          ))}\n                        </select>\n                      </label>\n                      <label className=\"catalog-form__field\">\n                        <span>Diámetro (mm)</span>\n                        <input\n                          type=\"number\"\n                          min={0}\n                          step=\"any\"\n                          value={op.diameterMm}\n                          onChange={(e) =>\n                            updateOperation(partIndex, opIndex, {\n                              diameterMm: Number(e.target.value),\n                            })\n                          }\n                          required\n                          data-testid={`hardware-machining-diameter-${partIndex}-${opIndex}`}\n                        />\n                      </label>\n                      {op.kind !== 'through_hole' ? (\n                        <label className=\"catalog-form__field\">\n                          <span>Profundidad (mm)</span>\n                          <input\n                            type=\"number\"\n                            min={0}\n                            step=\"any\"\n                            value={op.depthMm ?? 0}\n                            onChange={(e) =>\n                              updateOperation(partIndex, opIndex, {\n                                depthMm: Number(e.target.value),\n                              })\n                            }\n                            required\n                            data-testid={`hardware-machining-depth-${partIndex}-${opIndex}`}\n                          />\n                        </label>"
+        },
+        {
+          "file": "packages/ui/src/catalogs/hardware/HardwareMachiningSection.tsx",
+          "startLine": 382,
+          "endLine": 430,
+          "excerpt": "                  </div>\n                ))}\n              </div>\n              <div className=\"hardware-machining__actions\">\n                <button\n                  type=\"button\"\n                  className=\"btn btn--small\"\n                  onClick={() =>\n                    setParts({\n                      parts: parts.map((part, i) =>\n                        i === partIndex\n                          ? {\n                              ...part,\n                              operations: [\n                                ...part.operations,\n                                newOperation('blind_hole'),\n                              ],\n                            }\n                          : part,\n                      ),\n                    })\n                  }\n                  data-testid={`hardware-machining-add-op-${partIndex}`}\n                >\n                  <Plus size={14} strokeWidth={1.5} aria-hidden />\n                  Operación\n                </button>\n              </div>\n              </div>\n            ))}\n          </div>\n          <div className=\"hardware-machining__actions\">\n            <button\n              type=\"button\"\n              className=\"btn btn--small\"\n              onClick={() =>\n                setParts({\n                  parts: [\n                    ...parts,\n                    {\n                      id: `part-${Date.now()}-${Math.floor(Math.random() * 1000)}`,\n                      role: '',\n                      operations: [newOperation('blind_hole')],\n                    },\n                  ],\n                })\n              }\n              data-testid=\"hardware-machining-add-part\"\n            >"
+        }
+      ],
+      "missingProof": "Domain validation and save rollback must be proved at parent boundary; no host placement, machining output or physical compatibility claim.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "d56cbfd8240d46e700fb150cb6e246caa65c4b12843ed5dec0bd376395f9abf5"
+    },
+    {
+      "file": "packages/ui/src/catalogs/materials/MaterialExpandedDetail.tsx",
+      "claim": "Read-only material detail resolves image and displays dimensions/grain/edge/cost/waste/status. Board price and cost per area are rendered by this child without a hideCosts gate; this alone does not establish unauthorized exposure.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/catalogs/materials/MaterialExpandedDetail.tsx",
+          "startLine": 24,
+          "endLine": 101,
+          "excerpt": "      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Foto</span>\n        <CatalogImage\n          src={resolveImageUrl(row.imageUrl)}\n          alt={row.name}\n          size=\"md\"\n        />\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Código</span>\n        <span className=\"catalog-row-detail__value catalog-row-detail__value--mono\">\n          {row.code}\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Nombre</span>\n        <span className=\"catalog-row-detail__value\">{row.name}</span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Espesor</span>\n        <span className=\"catalog-row-detail__value\">\n          {row.thicknessMm} mm\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Medidas (Largo × Ancho)</span>\n        <span className=\"catalog-row-detail__value\">\n          {row.lengthMm} mm × {row.widthMm} mm\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Veta por defecto</span>\n        <span className=\"catalog-row-detail__value\">\n          {row.grainDefault ? 'Sí' : 'No'}\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Cintilla default</span>\n        <span className=\"catalog-row-detail__value\">\n          {row.defaultEdgeBandId\n            ? (edgeNameById.get(row.defaultEdgeBandId) ??\n              row.defaultEdgeBandId)\n            : '—'}\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Precio Tablero</span>\n        <span className=\"catalog-row-detail__value\">\n          {formatMoneyDisplay(row.boardPrice)}\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Merma</span>\n        <span className=\"catalog-row-detail__value\">\n          {row.wastePercent}%\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Costo / m² (con merma)</span>\n        <span className=\"catalog-row-detail__value\">\n          {formatMoneyDisplay(row.costPerM2)}\n        </span>\n      </div>\n      <div className=\"catalog-row-detail__field\">\n        <span className=\"catalog-row-detail__label\">Estado</span>\n        <span className=\"catalog-row-detail__value\">\n          <ActiveBadge active={row.active} />\n        </span>\n      </div>\n      {row.notes ? (\n        <div className=\"catalog-row-detail__field\">\n          <span className=\"catalog-row-detail__label\">Notas</span>\n          <span className=\"catalog-row-detail__value\">{row.notes}</span>\n        </div>\n      ) : null}\n    </>\n  );\n}"
+        }
+      ],
+      "missingProof": "Caller visibility and API cost redaction, broken-image UX and responsive detail layout remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "712b5f3510e826560be1dd188c18861dadef9beb22eada39567bd33ee3a565db"
+    },
+    {
+      "file": "packages/ui/src/production/EmbarquesProjectDetail.tsx",
+      "claim": "Uses supplied labels or locally generated fallback (generation error becomes empty labels). Intercepts foreign item IDs only for loaded transitions, displays cross-project alert and blocks release while alert exists; callback Promise is not awaited.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/EmbarquesProjectDetail.tsx",
+          "startLine": 60,
+          "endLine": 112,
+          "excerpt": "  isReleasing = false,\n  onBack,\n  testId,\n}: EmbarquesProjectDetailProps): ReactNode {\n  const [crossAlert, setCrossAlert] = useState<CrossProjectAlert | null>(null);\n\n  // Resolve module labels for cross-project validation and checklist\n  const labels = useMemo(() => {\n    if (moduleLabels && moduleLabels.length > 0) return moduleLabels;\n    if (!catalog) return [];\n    try {\n      return generateModuleLabels(project, catalog, {\n        customerName,\n        revision: project.production?.revision?.toString(),\n      });\n    } catch {\n      return [];\n    }\n  }, [moduleLabels, project, catalog, customerName]);\n\n  // Wrapped onSetFloorStatus with cross-project validation\n  const handleSetFloorStatus = useCallback(\n    (itemId: string, status: ItemFloorStatus) => {\n      if (!onSetFloorStatus) return;\n\n      // Check if this itemId belongs to the current project\n      const belongsToProject = project.items.some((item) => item.id === itemId);\n      if (!belongsToProject && status === 'loaded') {\n        // Find the label to get a human-readable name\n        const label = labels.find((l) => l.itemId === itemId);\n        setCrossAlert({\n          scannedCode: label?.factoryCode ?? label?.moduleCode ?? itemId,\n          expectedProject: project.name,\n          actualProject: label?.moduleName ?? 'Otra obra',\n        });\n        return; // Block the advance\n      }\n\n      void onSetFloorStatus(itemId, status);\n    },\n    [onSetFloorStatus, project, labels],\n  );\n\n  return (\n    <section\n      className=\"embarques-detail\"\n      aria-label={`Control de carga — ${project.name}`}\n      data-testid={testId ?? 'embarques-detail'}\n    >\n      {/* Back navigation + project summary */}\n      <header className=\"embarques-detail__header\">\n        {onBack ? (\n          <button"
+        },
+        {
+          "file": "packages/ui/src/production/EmbarquesProjectDetail.tsx",
+          "startLine": 134,
+          "endLine": 168,
+          "excerpt": "          data-testid=\"embarques-cross-alert\"\n        >\n          <AlertTriangle size={20} className=\"embarques-detail__alert-icon\" />\n          <div className=\"embarques-detail__alert-content\">\n            <strong>Bulto no pertenece a esta obra</strong>\n            <p>\n              El código <code>{crossAlert.scannedCode}</code> pertenece a{' '}\n              <strong>{crossAlert.actualProject}</strong>, no a{' '}\n              <strong>{crossAlert.expectedProject}</strong>.\n            </p>\n          </div>\n          <button\n            type=\"button\"\n            className=\"btn btn--ghost btn--small\"\n            onClick={() => setCrossAlert(null)}\n            data-testid=\"embarques-dismiss-alert\"\n          >\n            <X size={16} />\n          </button>\n        </div>\n      ) : null}\n\n      {/* Dispatch panel (scanner, checklist, release gate) */}\n      <ProductionOrderDispatchPanel\n        project={project}\n        modules={modules}\n        moduleLabels={labels}\n        customerName={customerName}\n        onSetFloorStatus={handleSetFloorStatus}\n        canSetFloorStatus={canSetFloorStatus}\n        onReleaseToDelivery={onReleaseToDelivery}\n        canReleaseToDelivery={canReleaseToDelivery && !crossAlert}\n        isReleasing={isReleasing}\n      />\n    </section>"
+        }
+      ],
+      "missingProof": "Rejected save feedback, exact physical package identity, refreshed authoritative progress and release command integration remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "42e7ab8a240e7ee27e18878accc0e0d25fa1b82479ef66e6756e38c3adc1ee59"
+    },
+    {
+      "file": "packages/ui/src/production/InstalacionesProjectDetail.tsx",
+      "claim": "Shows installation summary and customer contact links; loaded project item lines appear En camino, and permitted advance invokes installed using project/item identity. Quantity is displayed but command remains item-line scoped. Job panel receives separate manage and closeout flags.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/InstalacionesProjectDetail.tsx",
+          "startLine": 47,
+          "endLine": 70,
+          "excerpt": "  onAdvance,\n  canManageJob = false,\n  canCloseout = false,\n  jobHandlers,\n  onBack,\n  testId,\n}: InstalacionesProjectDetailProps): ReactNode {\n  const view = installationJobCardView(project);\n  const toInstall = project.items.filter(\n    (item) => normalizeItemFloorStatus(item.floorStatus) === 'loaded',\n  );\n\n  return (\n    <section\n      className=\"instalaciones-detail\"\n      aria-label={`Instalación — ${project.name}`}\n      data-testid={testId ?? 'instalaciones-detail'}\n    >\n      <header className=\"instalaciones-detail__header\">\n        {onBack ? (\n          <button\n            type=\"button\"\n            className=\"btn btn--ghost instalaciones-detail__back\"\n            onClick={onBack}"
+        },
+        {
+          "file": "packages/ui/src/production/InstalacionesProjectDetail.tsx",
+          "startLine": 133,
+          "endLine": 184,
+          "excerpt": "      {toInstall.length > 0 ? (\n        <div className=\"ship-board__section\">\n          <h3 className=\"ship-board__section-title\">\n            <Hammer size={14} strokeWidth={1.5} aria-hidden />\n            En camino\n            <span className=\"ship-board__section-count\">{toInstall.length}</span>\n          </h3>\n          <ul className=\"ship-board__list\">\n            {toInstall.map((item) => (\n              <li\n                key={item.id}\n                className=\"ship-board__row\"\n                data-testid={`instalaciones-install-${item.id}`}\n              >\n                <div className=\"ship-board__row-main\">\n                  <span className=\"ship-board__row-module\">{item.moduleId}</span>\n                  <span className=\"ship-board__row-meta\">\n                    {item.quantity} {item.quantity === 1 ? 'mueble' : 'muebles'} · está en{' '}\n                    {ITEM_FLOOR_STATUS_LABELS_ES[\n                      normalizeItemFloorStatus(item.floorStatus)\n                    ]}\n                  </span>\n                </div>\n                {canAdvance && onAdvance ? (\n                  <button\n                    type=\"button\"\n                    className=\"btn btn--primary\"\n                    onClick={() => onAdvance(project.id, item.id, 'installed')}\n                    data-testid={`instalaciones-advance-${item.id}`}\n                  >\n                    <Hammer size={16} strokeWidth={1.5} aria-hidden />\n                    Marcar {ITEM_FLOOR_STATUS_LABELS_ES.installed}\n                  </button>\n                ) : (\n                  <span className=\"ship-board__row-waiting\">\n                    {ITEM_FLOOR_STATUS_LABELS_ES.installed}\n                  </span>\n                )}\n              </li>\n            ))}\n          </ul>\n        </div>\n      ) : null}\n\n      {jobHandlers ? (\n        <InstallationJobPanel\n          project={project}\n          canManage={canManageJob}\n          canCloseout={canCloseout}\n          handlers={jobHandlers}\n        />\n      ) : null}"
+        }
+      ],
+      "missingProof": "Quantity>1 per-unit behavior, rejected transitions, visit integration and authoritative closeout require runtime proof.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "f08f56f3bfb0444474453b61619fdcb4c74da6174b54b7cbc9ccc31b1d7bc7c5"
+    },
+    {
+      "file": "packages/ui/src/production/InstallationJobPanel.tsx",
+      "claim": "Derives visit/issue/punch/closeout views; gates actions by canManage/canCloseout and domain-derived checks, requires resolution notes/signoff name. Void optional callbacks are followed immediately by clearing local drafts/forms; no child pending/commit acknowledgement is represented.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/InstallationJobPanel.tsx",
+          "startLine": 59,
+          "endLine": 86,
+          "excerpt": "export type InstallationJobPanelHandlers = {\n  readonly onScheduleVisit?: (\n    projectId: string,\n    params: { date: string; crew: readonly string[]; notes?: string },\n  ) => void;\n  readonly onStartVisit?: (projectId: string, visitId: string) => void;\n  readonly onCompleteVisit?: (\n    projectId: string,\n    visitId: string,\n    params: { result: InstallationVisitResult; resultNotes?: string },\n  ) => void;\n  readonly onCancelVisit?: (projectId: string, visitId: string) => void;\n  readonly onReportIssue?: (projectId: string, params: { description: string }) => void;\n  readonly onTransitionIssue?: (projectId: string, issueId: string, to: FieldIssueStatus) => void;\n  readonly onOpenPunch?: (\n    projectId: string,\n    params: {\n      description: string;\n      owner: string;\n      dueDate?: string;\n      severity: PunchSeverity;\n      isBlocker: boolean;\n    },\n  ) => void;\n  readonly onClosePunch?: (projectId: string, punchItemId: string, params: { resolutionNotes: string }) => void;\n  readonly onCompleteInstallation?: (projectId: string) => void;\n  readonly onSignOff?: (projectId: string, params: { signedOffBy: string }) => void;\n  readonly onCloseProject?: (projectId: string) => void;"
+        },
+        {
+          "file": "packages/ui/src/production/InstallationJobPanel.tsx",
+          "startLine": 282,
+          "endLine": 297,
+          "excerpt": "              <button\n                type=\"button\"\n                className=\"btn btn--small btn--primary\"\n                disabled={!visitDate || !visitCrew.trim()}\n                onClick={() => {\n                  handlers.onScheduleVisit?.(projectId, {\n                    date: visitDate,\n                    crew: visitCrew\n                      .split(',')\n                      .map((n) => n.trim())\n                      .filter(Boolean),\n                  });\n                  setVisitFormOpen(false);\n                  setVisitDate('');\n                  setVisitCrew('');\n                }}"
+        },
+        {
+          "file": "packages/ui/src/production/InstallationJobPanel.tsx",
+          "startLine": 431,
+          "endLine": 441,
+          "excerpt": "                    <button\n                      type=\"button\"\n                      className=\"btn btn--small btn--primary\"\n                      disabled={!closePunchNotes.trim()}\n                      onClick={() => {\n                        handlers.onClosePunch?.(projectId, punch.id, {\n                          resolutionNotes: closePunchNotes,\n                        });\n                        setClosingPunchId(null);\n                        setClosePunchNotes('');\n                      }}"
+        },
+        {
+          "file": "packages/ui/src/production/InstallationJobPanel.tsx",
+          "startLine": 547,
+          "endLine": 560,
+          "excerpt": "        <ul className=\"ship-board__gate-list\">\n          {view.closeoutChecks.map((check) => (\n            <li\n              key={check.code}\n              className=\"ship-board__gate\"\n              data-testid={`installation-gate-${check.code}`}\n            >\n              <span className={check.passed ? 'ship-board__gate-dot--ok' : 'ship-board__gate-dot--fail'}>\n                {check.passed ? '✓' : '✗'}\n              </span>\n              <span className=\"ship-board__gate-label\">{check.label}</span>\n              <span className=\"ship-board__gate-details\">{check.details}</span>\n            </li>\n          ))}"
+        },
+        {
+          "file": "packages/ui/src/production/InstallationJobPanel.tsx",
+          "startLine": 582,
+          "endLine": 621,
+          "excerpt": "            {canCloseout && !view.closeoutSigned ? (\n              <div className=\"ship-board__inline-form\">\n                <input\n                  aria-label=\"Nombre de quien firma la conformidad\"\n                  type=\"text\"\n                  placeholder=\"Firma la conformidad (nombre del cliente)…\"\n                  value={signOffBy}\n                  onChange={(e) => setSignOffBy(e.target.value)}\n                />\n                <button\n                  type=\"button\"\n                  className=\"btn btn--small btn--primary\"\n                  disabled={!view.closeoutReady || !signOffBy.trim()}\n                  title={\n                    view.closeoutReady\n                      ? undefined\n                      : view.closeoutChecks\n                          .filter((c) => !c.passed)\n                          .map((c) => c.details)\n                          .join(' · ')\n                  }\n                  onClick={() => {\n                    handlers.onSignOff?.(projectId, { signedOffBy: signOffBy });\n                    setSignOffBy('');\n                  }}\n                  data-testid={`installation-signoff-${projectId}`}\n                >\n                  Registrar conformidad\n                </button>\n              </div>\n            ) : null}\n            {canCloseout && view.closeoutSigned && !view.closed ? (\n              <button\n                type=\"button\"\n                className=\"btn btn--small btn--danger\"\n                onClick={() => handlers.onCloseProject?.(projectId)}\n                data-testid={`installation-close-${projectId}`}\n              >\n                Cerrar proyecto\n              </button>"
+        }
+      ],
+      "missingProof": "Deferred/rejected callback tests must establish draft retention and feedback; authoritative transitions/audit and concurrency are not proved by child gates.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "784250d91e6ca7d3ad6880f4d9e202c298fda8431d24b4de153e9e82f14ffc34"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionBoardView.tsx",
+      "claim": "Separates supplied exact CutPlanSheet from legacy simplePack preview; cnc-nesting suppresses guillotine decorations. Exact metrics use sheet yield; optional estimated fill sums source areas and caps at100. Legacy approximation remains linked to existing FM-04, not a machine plan.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionBoardView.tsx",
+          "startLine": 51,
+          "endLine": 91,
+          "excerpt": "  const lengthMm = sheet\n    ? sheet.sheetLengthMm\n    : (sheetHeightMm ?? DEFAULT_SHEET_L);\n  const widthMm = sheet\n    ? sheet.sheetWidthMm\n    : (sheetWidthMm ?? DEFAULT_SHEET_W);\n\n  const isExactPlan = Boolean(sheet && sheet.pieces);\n  // Nesting sheets (F124) have no guillotine structure: strip rip lines, cross\n  // cuts and the 1st-cut marker are saw-only decorations.\n  const isNestingSheet = isExactPlan && sheet?.strategy === 'cnc-nesting';\n\n  const legacyPlaced = useMemo(() => {\n    if (isExactPlan || !rows) return [];\n    return simplePack(rows, lengthMm, widthMm);\n  }, [rows, lengthMm, widthMm, isExactPlan]);\n\n  const scale = 720 / lengthMm;\n  const svgW = lengthMm * scale;\n  const svgH = widthMm * scale;\n\n  // Analysis of Guillotine cuts, strips, and waste gaps (saw sheets only)\n  const layout = useMemo(\n    () =>\n      isNestingSheet\n        ? EMPTY_BOARD_CUT_LAYOUT\n        : computeBoardCutLayout(sheet, lengthMm, widthMm),\n    [sheet, lengthMm, widthMm, isNestingSheet],\n  );\n\n  const fillPct = useMemo(() => {\n    if (sheet) return sheet.yieldPercent;\n    if (!showEstimateMetrics || !rows || rows.length === 0) return null;\n    const sheetArea = lengthMm * widthMm;\n    if (!(sheetArea > 0)) return null;\n    let pieceArea = 0;\n    for (const r of rows) {\n      pieceArea += r.lengthMm * r.widthMm * Math.max(1, r.quantity);\n    }\n    return Math.min(100, Math.round((pieceArea / sheetArea) * 1000) / 10);\n  }, [sheet, rows, lengthMm, widthMm, showEstimateMetrics]);"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionBoardView.tsx",
+          "startLine": 95,
+          "endLine": 117,
+          "excerpt": "      <div className=\"production-board__header\">\n        <span className=\"production-board__label\">\n          {sheet\n            ? `Tablero #${sheet.sheetIndex + 1} (${sheet.materialName}) · `\n            : ''}\n          {lengthMm} × {widthMm} mm\n          {isExactPlan\n            ? isNestingSheet\n              ? ' · CNC Nesting'\n              : ` · Guillotina 2D (${layout.layoutDirection === 'horizontal' ? 'Franjas Horizontales' : 'Columnas Verticales'})`\n            : showEstimateMetrics\n              ? ' · preview estimada'\n              : ''}\n        </span>\n        <span className=\"production-board__count\">\n          {isExactPlan\n            ? `${sheet!.pieces.length} piezas`\n            : `${legacyPlaced.length} piezas`}\n          {fillPct != null ? ` · ${fillPct}% aprovechamiento` : ''}\n          {sheet && sheet.wastePercent > 0\n            ? ` (${sheet.wastePercent}% merma)`\n            : ''}\n        </span>"
+        }
+      ],
+      "missingProof": "FM-04 remains existing finding; nesting/guillotine golden rendering, invalid dimensions and actual machine import/readback remain unproved.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "96affe32915d5b701a0d02f53cbae5ae25859693276d1c4abd811ec2e1f550fa"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionElevationPreview.tsx",
+      "claim": "Draws wall elevation from supplied units using offset/bottomZ/dimensions, labels wall and width, distinguishes wall/floor fills and empty wall. Unit key is itemId plus instanceIndex; no editing or persistence.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionElevationPreview.tsx",
+          "startLine": 15,
+          "endLine": 40,
+          "excerpt": "  const pad = 40;\n  const maxZ = Math.max(\n    2200,\n    ...wall.units.map((u) => u.bottomZMm + u.heightMm + 80),\n  );\n  const scale = Math.min(0.12, 720 / Math.max(wall.wallLengthMm, 1));\n  const svgW = Math.max(320, wall.wallLengthMm * scale + pad * 2);\n  const svgH = Math.max(200, maxZ * scale + pad * 2);\n  const floorY = svgH - pad;\n\n  return (\n    <div\n      className=\"prod-elev-preview\"\n      data-testid={`prod-elev-preview-${wall.wallId}`}\n    >\n      <h4 className=\"prod-elev-preview__title\">\n        {wall.wallName}{' '}\n        <span className=\"prod-modulos__muted\">({wall.wallLengthMm} mm)</span>\n      </h4>\n      <svg\n        width={svgW}\n        height={svgH}\n        viewBox={`0 0 ${svgW} ${svgH}`}\n        className=\"prod-elev-preview__svg\"\n        role=\"img\"\n        aria-label={`Elevación ${wall.wallName}`}"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionElevationPreview.tsx",
+          "startLine": 66,
+          "endLine": 104,
+          "excerpt": "        {wall.units.map((u) => {\n          const x = pad + u.offsetMm * scale;\n          const w = Math.max(u.widthMm * scale, 4);\n          const h = Math.max(u.heightMm * scale, 4);\n          const y = floorY - (u.bottomZMm + u.heightMm) * scale;\n          return (\n            <g key={`${u.itemId}-${u.instanceIndex}`}>\n              <rect\n                x={x}\n                y={y}\n                width={w}\n                height={h}\n                fill={\n                  u.elevation === 'wall'\n                    ? 'hsl(210 40% 88%)'\n                    : 'hsl(35 30% 88%)'\n                }\n                stroke=\"var(--text-primary)\"\n                strokeWidth={1}\n              />\n              {w > 36 ? (\n                <text\n                  x={x + 3}\n                  y={y + h / 2 + 3}\n                  fontSize={9}\n                  fill=\"var(--text-primary)\"\n                >\n                  {u.label}\n                </text>\n              ) : null}\n              <text\n                x={x + w / 2}\n                y={floorY - u.bottomZMm * scale + 10}\n                fontSize={8}\n                fill=\"var(--text-muted)\"\n                textAnchor=\"middle\"\n              >\n                {u.widthMm}\n              </text>"
+        }
+      ],
+      "missingProof": "SVG legibility at narrow widths, accessible unit detail and parity with exported elevations remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "0714f8f4a97e087a927ad03bd04020ea27e96fde289a690c3f69efe1a5c3a3f0"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionIslandPreview.tsx",
+      "claim": "Draws separate free-placement island elevation with category theme, floor/base clearance, dimensions and space label; includes X/Y/yaw metadata without attempting wall projection.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionIslandPreview.tsx",
+          "startLine": 24,
+          "endLine": 55,
+          "excerpt": "  // Mismo tema 'isla' que la planta 2D — color de categoría, no inventado.\n  const theme = getCategoryTheme('isla');\n  const pad = 40;\n  const maxZ = Math.max(1600, island.bottomZMm + island.heightMm + 160);\n  const scale = Math.min(0.14, 520 / Math.max(island.widthMm, 1));\n  const svgW = Math.max(280, island.widthMm * scale + pad * 2 + 70);\n  const svgH = Math.max(220, maxZ * scale + pad * 2);\n  const floorY = svgH - pad;\n  const x = pad;\n  const w = Math.max(island.widthMm * scale, 10);\n  const h = Math.max(island.heightMm * scale, 10);\n  const y = floorY - (island.bottomZMm + island.heightMm) * scale;\n  const axisX = Math.min(svgW - 10, x + w + 34);\n\n  return (\n    <div\n      className=\"prod-island-preview\"\n      data-testid={`prod-island-sheet-${island.itemId}-${island.instanceIndex}`}\n    >\n      <h4 className=\"prod-elev-preview__title\">\n        Isla {island.label}{' '}\n        {showSpace ? (\n          <span className=\"prod-modulos__muted\">· {island.spaceName}</span>\n        ) : null}\n      </h4>\n      <svg\n        width={svgW}\n        height={svgH}\n        viewBox={`0 0 ${svgW} ${svgH}`}\n        className=\"prod-island-preview__svg\"\n        role=\"img\"\n        aria-label={`Ficha de isla ${island.label}: ${island.widthMm} de ancho por ${island.heightMm} de alto por ${island.depthMm} de fondo, en ${island.spaceName}`}"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionIslandPreview.tsx",
+          "startLine": 114,
+          "endLine": 129,
+          "excerpt": "        {/* Zócalo / patas */}\n        {island.bottomZMm > 0 ? (\n          <text\n            x={x + 3}\n            y={floorY - (island.bottomZMm * scale) / 2 + 3}\n            fontSize={8}\n            fill=\"var(--text-muted)\"\n          >\n            zócalo {island.baseClearanceMm}\n          </text>\n        ) : null}\n      </svg>\n      <p className=\"prod-island-preview__meta\">\n        {island.moduleName} · {island.widthMm} × {island.heightMm} ×{' '}\n        {island.depthMm} mm · planta: X {island.freeXMm} · Y {island.freeYMm} ·\n        rotación {island.freeYawDeg}°"
+        }
+      ],
+      "missingProof": "Preview/PDF parity, accurate elevations for physical assembly, zoom/contrast and screen-reader output remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "fdc62bd40bfbed215cbc457d6ccdc5e1c234407ae226bec91ca0acfefda54df8"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionOrderDispatchPanel.tsx",
+      "claim": "Scan resolves a module payload itemId or first code/name label match; invokes loaded or packaged transition and immediately emits success text/sound without awaiting callback. Disabling auto-loaded still writes packaged. Cards and load/release summary are item-floor-status based, not independent package mutation.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionOrderDispatchPanel.tsx",
+          "startLine": 112,
+          "endLine": 199,
+          "excerpt": "      let targetItemId: string | null = null;\n      let matchedLabel: ModuleLabel | undefined;\n\n      if (parsed?.kind === 'modulePayload' && parsed.fields.itemId) {\n        targetItemId = parsed.fields.itemId;\n        matchedLabel = labels.find((l) => l.itemId === targetItemId);\n      } else {\n        // Fallback match by factory code or module code\n        const needle = (\n          parsed?.kind === 'payload'\n            ? parsed.fields.moduleCode\n            : parsed?.kind === 'modulePayload'\n              ? parsed.fields.factoryCode || parsed.fields.moduleCode\n              : parsed?.code || text\n        ).toLowerCase();\n\n        matchedLabel = labels.find(\n          (l) =>\n            l.factoryCode.toLowerCase() === needle ||\n            l.moduleCode.toLowerCase() === needle ||\n            l.moduleName.toLowerCase().includes(needle),\n        );\n        if (matchedLabel) {\n          targetItemId = matchedLabel.itemId;\n        }\n      }\n\n      if (targetItemId && onSetFloorStatus && canSetFloorStatus) {\n        const now = Date.now();\n        const last = lastScanAtRef.current;\n        const debounced =\n          last?.itemId === targetItemId && now - last.at < scanDebounceMs;\n        if (debounced) {\n          playScanFeedback('hit');\n          return;\n        }\n        lastScanAtRef.current = { itemId: targetItemId, at: now };\n\n        const targetStatus: ItemFloorStatus = autoMarkLoaded\n          ? 'loaded'\n          : 'packaged';\n        void onSetFloorStatus(targetItemId, targetStatus);\n        setScanMiss(false);\n        playScanFeedback('advance');\n\n        const labelText = matchedLabel\n          ? `Bulto ${matchedLabel.packageIndex} de ${matchedLabel.totalPackages} (${matchedLabel.factoryCode})`\n          : targetItemId;\n        setLastScannedMessage(\n          `✓ ${labelText} marcado como ${ITEM_FLOOR_STATUS_LABELS_ES[targetStatus].toUpperCase()}`,\n        );\n      } else {\n        setScanMiss(true);\n        setLastScannedMessage(null);\n        playScanFeedback('miss');\n      }\n    },\n    [labels, onSetFloorStatus, canSetFloorStatus, autoMarkLoaded, scanDebounceMs],\n  );\n\n  useHidScanner({ onScan: handleScanText, enabled: !cameraOpen });\n\n  const handleScanSubmit = (e: FormEvent) => {\n    e.preventDefault();\n    if (!scanInput.trim()) return;\n    handleScanText(scanInput);\n    setScanInput('');\n  };\n\n  // Find live item status for each label\n  const itemsMap = useMemo(() => {\n    const map = new Map<string, ItemFloorStatus>();\n    for (const item of project.items) {\n      map.set(item.id, item.floorStatus ?? 'pending');\n    }\n    return map;\n  }, [project.items]);\n\n  // Filtered labels\n  const filteredLabels = useMemo(() => {\n    const q = search.trim().toLowerCase();\n    return labels.filter((lbl) => {\n      const status = itemsMap.get(lbl.itemId) ?? lbl.floorStatus;\n      const isLoaded = status === 'loaded' || status === 'installed';\n\n      if (filter === 'pending_load' && isLoaded) return false;\n      if (filter === 'loaded' && !isLoaded) return false;\n"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionOrderDispatchPanel.tsx",
+          "startLine": 260,
+          "endLine": 301,
+          "excerpt": "        {/* Release to Delivery Gate */}\n        <div\n          className={`prod-dispatch__gate ${\n            isComplete\n              ? 'prod-dispatch__gate--ready'\n              : 'prod-dispatch__gate--blocked'\n          }`}\n          data-testid=\"prod-dispatch-gate\"\n        >\n          {isComplete ? (\n            <>\n              <div className=\"prod-dispatch__gate-info\">\n                <CheckCircle2\n                  className=\"prod-dispatch__gate-icon prod-dispatch__gate-icon--ready\"\n                  size={24}\n                />\n                <div>\n                  <h4 className=\"prod-dispatch__gate-title\">\n                    ¡Carga 100% Completa y Verificada!\n                  </h4>\n                  <p className=\"prod-dispatch__gate-desc\">\n                    Todos los {totalPkgs} bultos están a bordo. La orden está\n                    lista para salida de fábrica.\n                  </p>\n                </div>\n              </div>\n              <button\n                type=\"button\"\n                className=\"btn btn--success prod-dispatch__gate-btn\"\n                onClick={onReleaseToDelivery}\n                disabled={!canReleaseToDelivery || isReleasing}\n                data-testid=\"prod-dispatch-release-btn\"\n              >\n                {isReleasing ? (\n                  <>\n                    <RefreshCw className=\"spin\" size={16} /> Liberando…\n                  </>\n                ) : (\n                  <>\n                    <Truck size={16} /> Liberar Salida a Entrega\n                  </>\n                )}"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionOrderDispatchPanel.tsx",
+          "startLine": 448,
+          "endLine": 475,
+          "excerpt": "        {filteredLabels.map((lbl, idx) => {\n          const status = itemsMap.get(lbl.itemId) ?? lbl.floorStatus;\n          const isLoaded = status === 'loaded' || status === 'installed';\n          const isPackaged = status === 'packaged';\n\n          return (\n            <div\n              key={`${lbl.itemId}-${lbl.packageIndex}-${idx}`}\n              className={`prod-dispatch__card ${\n                isLoaded ? 'prod-dispatch__card--loaded' : ''\n              }`}\n              data-testid={`prod-dispatch-card-${lbl.itemId}`}\n            >\n              <div className=\"prod-dispatch__card-header\">\n                <span className=\"prod-dispatch__bulto-badge\">\n                  BULTO {lbl.packageIndex} DE {lbl.totalPackages}\n                </span>\n                <span\n                  className={`badge ${\n                    isLoaded\n                      ? 'badge--success'\n                      : isPackaged\n                        ? 'badge--primary'\n                        : 'badge--neutral'\n                  }`}\n                  data-testid={`prod-dispatch-status-${lbl.itemId}`}\n                >\n                  {ITEM_FLOOR_STATUS_LABELS_ES[status as ItemFloorStatus]}"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionOrderDispatchPanel.tsx",
+          "startLine": 500,
+          "endLine": 544,
+          "excerpt": "              <div className=\"prod-dispatch__card-actions\">\n                {isLoaded ? (\n                  <div className=\"prod-dispatch__card-loaded-row\">\n                    <span className=\"prod-dispatch__loaded-tag\">\n                      <CheckCircle2 size={16} /> Cargado en Transporte\n                    </span>\n                    {canSetFloorStatus && onSetFloorStatus ? (\n                      <button\n                        type=\"button\"\n                        className=\"btn btn--small btn--ghost\"\n                        onClick={() =>\n                          void onSetFloorStatus(lbl.itemId, 'packaged')\n                        }\n                        title=\"Deshacer carga (volver a Embalado)\"\n                        data-testid={`prod-dispatch-undo-${lbl.itemId}`}\n                      >\n                        <Undo2 size={14} /> Deshacer\n                      </button>\n                    ) : null}\n                  </div>\n                ) : (\n                  <div className=\"prod-dispatch__card-action-buttons\">\n                    {canSetFloorStatus && onSetFloorStatus ? (\n                      <>\n                        <button\n                          type=\"button\"\n                          className=\"btn btn--small btn--success\"\n                          onClick={() =>\n                            void onSetFloorStatus(lbl.itemId, 'loaded')\n                          }\n                          data-testid={`prod-dispatch-mark-loaded-${lbl.itemId}`}\n                        >\n                          <Truck size={14} /> Marcar Cargado ✓\n                        </button>\n                        {!isPackaged ? (\n                          <button\n                            type=\"button\"\n                            className=\"btn btn--small btn--secondary\"\n                            onClick={() =>\n                              void onSetFloorStatus(lbl.itemId, 'packaged')\n                            }\n                            data-testid={`prod-dispatch-mark-packaged-${lbl.itemId}`}\n                          >\n                            <PackageCheck size={14} /> Embalado\n                          </button>"
+        }
+      ],
+      "missingProof": "Static optimistic-success gap needs deferred/rejected callback proof; duplicate QR, wrong-project wrapper behavior and per-package authoritative load/release remain unproved.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "64b1f11cca6a455c76f10cfa1143a04b60e41b79eb9fbb59791f3f97385edd9a"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionOrderDocumentsPanel.tsx",
+      "claim": "Renders document catalog availability/reason/action text; disables downloads while busy, unavailable or lacking callback and invokes supplied handler. Pack can become the primary action; component does not generate or authorize documents.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionOrderDocumentsPanel.tsx",
+          "startLine": 20,
+          "endLine": 118,
+          "excerpt": "  | 'labels'\n  | 'labels-zpl'\n  | 'module-labels'\n  | 'elevations'\n  | 'despiece'\n  | 'drilling'\n  | 'cnc-pilot'\n  | 'assembly';\n\nexport type ProductionDocumentItem = {\n  readonly id: ProductionDocumentId;\n  readonly label: string;\n  readonly hint: string;\n  readonly available: boolean;\n  readonly reason?: string;\n  /** Honest CTA — \"Configurar\"/\"Ver tab\" when the action is not a download. */\n  readonly actionLabel?: string;\n  readonly onDownload?: () => void | Promise<void>;\n};\n\nexport type ProductionOrderDocumentsPanelProps = {\n  readonly documents: readonly ProductionDocumentItem[];\n  readonly exportBusy?: boolean;\n  /**\n   * Pack as the tab's primary action. The hub chrome already owns the primary\n   * when a pack button exists there — pass false then (design.md §8: one\n   * primary per context level, chrome OR tab, never both).\n   */\n  readonly packAsPrimary?: boolean;\n};\n\nconst ICONS: Record<ProductionDocumentId, typeof FileText> = {\n  pack: Package,\n  optimizer: FileSpreadsheet,\n  'cutlist-csv': FileSpreadsheet,\n  'cutlist-csv-config': FileSpreadsheet,\n  hardware: Wrench,\n  labels: Tags,\n  'labels-zpl': Tags,\n  'module-labels': Tags,\n  elevations: FileText,\n  despiece: FileText,\n  drilling: FileText,\n  'cnc-pilot': FileText,\n  assembly: FileText,\n};\n\nexport function ProductionOrderDocumentsPanel({\n  documents,\n  exportBusy = false,\n  packAsPrimary = true,\n}: ProductionOrderDocumentsPanelProps): ReactNode {\n  return (\n    <div className=\"prod-docs\" data-testid=\"prod-hub-documentos\">\n      <h3 className=\"prod-hub__section-title\">Documentos de taller</h3>\n      <p className=\"prod-hub__exports-hint\">\n        Pack, Optimizer, herrajes, etiquetas y PDFs — misma resolución de BOM\n        de esta orden. No cambia el diseño.\n      </p>\n      <ul className=\"prod-docs__list\">\n        {documents.map((doc) => {\n          const Icon = ICONS[doc.id];\n          return (\n            <li key={doc.id} className=\"prod-docs__item\">\n              <div className=\"prod-docs__meta\">\n                <Icon size={18} strokeWidth={1.5} aria-hidden />\n                <div>\n                  <p className=\"prod-docs__label\">{doc.label}</p>\n                  <p className=\"prod-docs__hint\">\n                    {doc.available\n                      ? doc.hint\n                      : (doc.reason ?? 'No disponible')}\n                  </p>\n                </div>\n              </div>\n              <button\n                type=\"button\"\n                className={\n                  packAsPrimary && doc.id === 'pack'\n                    ? 'btn btn--primary'\n                    : 'btn'\n                }\n                disabled={exportBusy || !doc.available || !doc.onDownload}\n                onClick={() => {\n                  if (doc.onDownload) void doc.onDownload();\n                }}\n                data-testid={`prod-doc-${doc.id}`}\n              >\n                {exportBusy\n                  ? 'Generando…'\n                  : (doc.actionLabel ?? 'Descargar')}\n              </button>\n            </li>\n          );\n        })}\n      </ul>\n    </div>\n  );\n}"
+        }
+      ],
+      "missingProof": "Exact release/revision ownership, download failure, duplicate-click recovery, PDF/DXF/CNC/assembly artifact content remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "efc0cc73b2b15378ee0e9e1aeb19e091d00b11e9b162784348741a6d945ebd0f"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionOrderHardwarePanel.tsx",
+      "claim": "Distinguishes failed hardware rows (null) from empty list, gates export by data/busy, renders quantity and optional cost column controlled by hideCosts. This is read-only requirements display, not picking or stock mutation.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionOrderHardwarePanel.tsx",
+          "startLine": 20,
+          "endLine": 120,
+          "excerpt": "   * Export as the tab's primary action. The hub chrome owns the primary when\n   * it renders a pack button — pass false then (design.md §8).\n   */\n  readonly exportAsPrimary?: boolean;\n};\n\nfunction formatQty(n: number): string {\n  if (Number.isInteger(n)) return String(n);\n  return n.toFixed(2);\n}\n\nexport function ProductionOrderHardwarePanel({\n  rows,\n  error,\n  onExportHardware,\n  exportBusy = false,\n  hideCosts = false,\n  currency = 'MXN',\n  exportAsPrimary = true,\n}: ProductionOrderHardwarePanelProps): ReactNode {\n  return (\n    <div className=\"prod-herrajes\" data-testid=\"prod-hub-herrajes\">\n      <div className=\"prod-modulos__toolbar\">\n        <p className=\"prod-modulos__count\" data-testid=\"prod-herrajes-count\">\n          {rows ? `${rows.length} línea${rows.length === 1 ? '' : 's'}` : '—'}\n        </p>\n        {onExportHardware ? (\n          <button\n            type=\"button\"\n            className={exportAsPrimary ? 'btn btn--primary' : 'btn'}\n            disabled={exportBusy || !rows || rows.length === 0}\n            onClick={() => {\n              void onExportHardware();\n            }}\n            data-testid=\"prod-herrajes-export\"\n          >\n            <Wrench size={16} strokeWidth={1.5} aria-hidden />\n            Exportar herrajes\n          </button>\n        ) : null}\n      </div>\n\n      {rows === null ? (\n        <p className=\"prod-hub__ready-banner prod-hub__ready-banner--blocked\">\n          {error || 'No se pudo resolver la lista de herrajes.'}\n        </p>\n      ) : rows.length === 0 ? (\n        <p className=\"prod-hub__placeholder-body\">\n          No hay herrajes en esta orden.\n        </p>\n      ) : (\n        <div className=\"data-table-wrap\">\n          <table className=\"data-table\" data-testid=\"prod-herrajes-table\">\n            <thead>\n              <tr>\n                <th scope=\"col\">Código</th>\n                <th scope=\"col\">Descripción</th>\n                <th scope=\"col\" className=\"prod-herrajes__num\">\n                  Cant.\n                </th>\n                <th scope=\"col\" className=\"prod-herrajes__num\">\n                  Compra\n                </th>\n                <th scope=\"col\">Unidad</th>\n                {!hideCosts ? (\n                  <th scope=\"col\" className=\"prod-herrajes__num\">\n                    Costo línea\n                  </th>\n                ) : null}\n              </tr>\n            </thead>\n            <tbody>\n              {rows.map((row) => (\n                <tr key={row.hardwareId}>\n                  <td>\n                    <code className=\"prod-modulos__code\">{row.code}</code>\n                  </td>\n                  <td>{row.description}</td>\n                  <td className=\"prod-herrajes__num\">{formatQty(row.quantity)}</td>\n                  <td className=\"prod-herrajes__num\">\n                    {formatQty(row.purchaseQuantity)}\n                  </td>\n                  <td>{row.unit}</td>\n                  {!hideCosts ? (\n                    <td className=\"prod-herrajes__num\">\n                      {formatMoneyDisplay(row.lineCost, { currency })}\n                    </td>\n                  ) : null}\n                </tr>\n              ))}\n            </tbody>\n          </table>\n        </div>\n      )}\n\n      <p className=\"prod-modulos__footnote\">\n        Lista de picking / compras. Solo lectura del diseño.\n      </p>\n    </div>\n  );\n}"
+        }
+      ],
+      "missingProof": "Cost authorization upstream, requirements-to-stock reconciliation, export parity and failure recovery remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "1b18bf56d21e9ea87538dda54c0436284b6143c18fc161c1ec51973dff91c55f"
+    },
+    {
+      "file": "packages/ui/src/production/ProductionOrderModulesPanel.tsx",
+      "claim": "Builds read-only module rows and searches identifiers/placement; line-keyed floor-status dropdown is shown only with capability and callback, but exposes every ITEM_FLOOR_STATUS rather than locally constrained next transitions.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProductionOrderModulesPanel.tsx",
+          "startLine": 39,
+          "endLine": 55,
+          "excerpt": "  const [query, setQuery] = useState('');\n  const rows = useMemo(\n    () => buildProductionModuleRows(project, modules, cutRows),\n    [project, modules, cutRows],\n  );\n\n  const filtered = useMemo(() => {\n    const q = query.trim().toLowerCase();\n    if (!q) return rows;\n    return rows.filter(\n      (r) =>\n        r.factoryCode.toLowerCase().includes(q) ||\n        r.moduleName.toLowerCase().includes(q) ||\n        r.moduleCode.toLowerCase().includes(q) ||\n        (r.placementLabel?.toLowerCase().includes(q) ?? false),\n    );\n  }, [rows, query]);"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionOrderModulesPanel.tsx",
+          "startLine": 108,
+          "endLine": 125,
+          "excerpt": "              {filtered.map((row) => (\n                <tr\n                  key={row.itemId}\n                  data-testid={`prod-modulo-row-${row.itemId}`}\n                  className={\n                    row.unplaced ? 'prod-modulos__row--unplaced' : undefined\n                  }\n                >\n                  <td>\n                    <code className=\"prod-modulos__code\">{row.factoryCode}</code>\n                  </td>\n                  <td>\n                    <span className=\"prod-modulos__name\">{row.moduleName}</span>\n                    <span className=\"prod-modulos__code-sub\">{row.moduleCode}</span>\n                  </td>\n                  <td data-testid={`prod-modulo-qty-${row.itemId}`}>\n                    {row.quantity}\n                  </td>"
+        },
+        {
+          "file": "packages/ui/src/production/ProductionOrderModulesPanel.tsx",
+          "startLine": 143,
+          "endLine": 166,
+          "excerpt": "                  <td>\n                    {canSetFloorStatus && onSetFloorStatus ? (\n                      <select\n                        className=\"prod-modulos__floor-select\"\n                        value={row.floorStatus}\n                        aria-label={`Estado de piso ${row.factoryCode}`}\n                        data-testid={`prod-floor-status-${row.itemId}`}\n                        onChange={(e) => {\n                          onSetFloorStatus(\n                            row.itemId,\n                            e.target.value as ItemFloorStatus,\n                          );\n                        }}\n                      >\n                        {ITEM_FLOOR_STATUSES.map((s) => (\n                          <option key={s} value={s}>\n                            {ITEM_FLOOR_STATUS_LABELS_ES[s]}\n                          </option>\n                        ))}\n                      </select>\n                    ) : (\n                      <span data-testid={`prod-floor-label-${row.itemId}`}>\n                        {ITEM_FLOOR_STATUS_LABELS_ES[row.floorStatus]}\n                      </span>"
+        }
+      ],
+      "missingProof": "Server rejection/rollback, pending-state feedback and qty>1 physical unit status cannot be inferred from this line-level dropdown.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "7d0d86f4fb931fe11f60c23cca1e59d83081d21d32ec05da6da2a9760dc38422"
+    },
+    {
+      "file": "packages/ui/src/production/ProjectFloorProgressStrip.tsx",
+      "claim": "Delegates progress to buildProjectFloorSummary; no-items returns null, strip has summarized accessible label and decorative stage list, chip reports active sector or installed. No progress mutations or independent metrics computation.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/ProjectFloorProgressStrip.tsx",
+          "startLine": 24,
+          "endLine": 40,
+          "excerpt": "  const summary = useMemo(() => buildProjectFloorSummary(project), [project]);\n  if (summary.totalItems === 0) return null;\n\n  return (\n    <div\n      className=\"floor-strip\"\n      data-testid={testId ?? 'project-floor-strip'}\n      role=\"img\"\n      aria-label={stripAriaLabel(summary)}\n    >\n      <span className=\"floor-strip__pct\">{summary.percentage}%</span>\n      <ol className=\"floor-strip__stages\" aria-hidden>\n        {summary.stages.map((stage) => (\n          <FloorStripStage key={stage.sector} stage={stage} summary={summary} />\n        ))}\n      </ol>\n    </div>"
+        },
+        {
+          "file": "packages/ui/src/production/ProjectFloorProgressStrip.tsx",
+          "startLine": 70,
+          "endLine": 106,
+          "excerpt": "function stripAriaLabel(summary: ProjectFloorSummary): string {\n  const active = summary.activeSector\n    ? `Proceso actual: ${PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]}`\n    : 'Instalación completa';\n  const detail = summary.stages\n    .map(\n      (s) =>\n        `${PRODUCTION_SECTOR_LABELS_ES[s.sector]} ${s.done} de ${s.total}`,\n    )\n    .join(', ');\n  return `${active}. Avance ${summary.percentage}%. ${detail}.`;\n}\n\n/**\n * One-line sector chip for queue cards: bottleneck sector + percentage.\n * Same derivation as the strip, tuned for dense lists.\n */\nexport function ProjectFloorStageChip({\n  project,\n  testId,\n}: {\n  readonly project: Project;\n  readonly testId?: string;\n}) {\n  const summary = useMemo(() => buildProjectFloorSummary(project), [project]);\n  if (summary.totalItems === 0) return null;\n  const label = summary.activeSector\n    ? PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]\n    : 'Instalado';\n\n  return (\n    <span\n      className=\"floor-chip\"\n      data-testid={testId ?? `prod-stage-chip-${project.id}`}\n    >\n      <span className=\"floor-chip__label\">{label}</span>\n      <span className=\"floor-chip__pct\">{summary.percentage}%</span>"
+        }
+      ],
+      "missingProof": "Underlying event/quantity truth and browser assistive output are not proved by presentation source.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "0c17a28bd65a5f5c431e919b182aadc5437b62980ec6dca1a4a6f62af8fd2072"
+    },
+    {
+      "file": "packages/ui/src/production/board/ProductionBoardHoverCard.tsx",
+      "claim": "Null piece hides card; otherwise read-only hover details distinguish saw-cut versus original final measures, grain/rotation and edge sides. Card is absolutely positioned with pointerEvents none and no independent keyboard trigger.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/board/ProductionBoardHoverCard.tsx",
+          "startLine": 12,
+          "endLine": 54,
+          "excerpt": "export function ProductionBoardHoverCard({\n  piece,\n}: ProductionBoardHoverCardProps): ReactNode {\n  if (!piece) return null;\n\n  return (\n    <div\n      style={{\n        position: 'absolute',\n        top: 8,\n        right: 8,\n        background: 'rgba(15, 23, 42, 0.95)',\n        color: '#fff',\n        padding: '8px 12px',\n        borderRadius: 6,\n        fontSize: 11,\n        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',\n        pointerEvents: 'none',\n        zIndex: 10,\n        lineHeight: 1.4,\n      }}\n    >\n      <div style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 2 }}>\n        [{piece.partCode}] {piece.partName}\n      </div>\n      <div>Módulo: {piece.moduleCode || '—'}</div>\n      <div>\n        Corte sierra:{' '}\n        <strong>\n          {piece.lengthMm} × {piece.widthMm} mm\n        </strong>\n      </div>\n      <div>\n        Medida final: {piece.originalLengthMm} × {piece.originalWidthMm} mm\n      </div>\n      <div>\n        Veta: {piece.grain === 1 ? 'Longitudinal' : 'Sin veta'}{' '}\n        {piece.rotated ? '(Rotada 90°)' : ''}\n      </div>\n      <div>\n        Cantos: L1={piece.L1 ? '✓' : '-'} L2={piece.L2 ? '✓' : '-'} W1=\n        {piece.W1 ? '✓' : '-'} W2={piece.W2 ? '✓' : '-'}\n        {piece.edgeBandThicknessMm ? ` (${piece.edgeBandThicknessMm}mm)` : ''}"
+        }
+      ],
+      "missingProof": "Accessible alternative and viewport collision on small boards need browser review; numeric values are trusted supplied cut-plan fields.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "2ce0d859fd8fb7b573cc4ba7abe816c84703ce886b4be75545f4dc41fa9a6e1d"
+    },
+    {
+      "file": "packages/ui/src/production/board/ProductionBoardSvg.tsx",
+      "claim": "Renders supplied exact piece positions, cut/remnant decorations and separate legacy geometry. Useful remnants require isUseful and area>=0.24. Exact-piece groups wire mouse hover/click but no tabindex or keyboard handler; this is a static keyboard-accessibility gap, not runtime certification.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/board/ProductionBoardSvg.tsx",
+          "startLine": 59,
+          "endLine": 105,
+          "excerpt": "      {/* Useful Remnants (Green boxes ONLY if truly large and useful) */}\n      {isExactPlan &&\n        sheet!.remnants\n          .filter((rem) => rem.isUseful && rem.areaM2 >= 0.24)\n          .map((rem) => {\n            const rx = rem.xMm * scale;\n            const ry = rem.yMm * scale;\n            const rw = rem.lengthMm * scale;\n            const rh = rem.widthMm * scale;\n            return (\n              <g key={rem.id}>\n                <rect\n                  x={rx}\n                  y={ry}\n                  width={rw}\n                  height={rh}\n                  fill=\"rgba(34, 197, 94, 0.14)\"\n                  stroke=\"#16a34a\"\n                  strokeWidth={1.5}\n                  strokeDasharray=\"5 3\"\n                />\n                {rw > 45 && rh > 18 ? (\n                  <text\n                    x={rx + 6}\n                    y={ry + 14}\n                    fontSize={8.5}\n                    fontWeight=\"bold\"\n                    fill=\"#15803d\"\n                  >\n                    RETAZO {Math.round(rem.lengthMm)}×{Math.round(rem.widthMm)}{' '}\n                    mm ({rem.areaM2.toFixed(2)} m²)\n                  </text>\n                ) : null}\n              </g>\n            );\n          })}\n\n      {/* Small Scraps / Offcuts (subtle grey descarte) */}\n      {isExactPlan &&\n        sheet!.remnants\n          .filter((rem) => !rem.isUseful || rem.areaM2 < 0.24)\n          .map((rem) => {\n            const rx = rem.xMm * scale;\n            const ry = rem.yMm * scale;\n            const rw = rem.lengthMm * scale;\n            const rh = rem.widthMm * scale;\n            if (rw < 5 || rh < 5) return null;"
+        },
+        {
+          "file": "packages/ui/src/production/board/ProductionBoardSvg.tsx",
+          "startLine": 267,
+          "endLine": 294,
+          "excerpt": "      {/* Exact CutPlan Pieces */}\n      {isExactPlan &&\n        sheet!.pieces.map((p, i) => {\n          const px = p.xMm * scale;\n          const py = p.yMm * scale;\n          const pw = p.lengthMm * scale;\n          const ph = p.widthMm * scale;\n          const isHovered = hoveredPiece?.id === p.id;\n\n          return (\n            <g\n              key={p.id || i}\n              style={{ cursor: onSelectPiece ? 'pointer' : 'default' }}\n              onMouseEnter={() => onHoverPiece(p)}\n              onMouseLeave={() => onHoverPiece(null)}\n              onClick={() => onSelectPiece?.(p)}\n            >\n              {/* Piece Body: Crisp white background with clean slate border */}\n              <rect\n                x={px}\n                y={py}\n                width={pw}\n                height={ph}\n                fill={isHovered ? '#fef08a' : '#ffffff'}\n                stroke=\"#334155\"\n                strokeWidth={isHovered ? 2 : 1}\n                data-testid={`production-piece-${i}`}\n              />"
+        },
+        {
+          "file": "packages/ui/src/production/board/ProductionBoardSvg.tsx",
+          "startLine": 374,
+          "endLine": 401,
+          "excerpt": "      {/* Legacy Pieces fallback */}\n      {!isExactPlan &&\n        legacyPlaced.map((p, i) => {\n          const px = p.x * scale;\n          const py = p.y * scale;\n          const pw = p.w * scale;\n          const ph = p.h * scale;\n\n          return (\n            <g key={i}>\n              <rect\n                x={px}\n                y={py}\n                width={pw}\n                height={ph}\n                fill=\"#ffffff\"\n                stroke=\"#334155\"\n                strokeWidth={1}\n                data-testid={`production-piece-${i}`}\n              />\n              {pw > 40 && ph > 20 ? (\n                <text x={px + 4} y={py + 12} fontSize={9} fill=\"#0f172a\">\n                  {(p.row.partCode || p.row.description || '').slice(0, 12)}\n                </text>\n              ) : null}\n            </g>\n          );\n        })}"
+        }
+      ],
+      "missingProof": "Keyboard-equivalent piece selection, accessible SVG naming, golden edge orientation and machine accuracy remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "accf536a6ee0f4fb5ca9d808466925a1f73184568b3b832c26eda23fd6a26bcc"
+    },
+    {
+      "file": "packages/ui/src/production/hub/ProductionHubResumenTab.tsx",
+      "claim": "Displays readiness and domain-summarized material areas/edge lengths; missing cut data shows dashes. Ready-to-cut banner trusts readiness.readyToCut while pack export gates packGenerable/busy/callback; no release authority is established here.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/hub/ProductionHubResumenTab.tsx",
+          "startLine": 118,
+          "endLine": 154,
+          "excerpt": "  const totals =\n    cutRows && cutRows.length > 0 ? summarizeProductionTotals(cutRows) : null;\n\n  return (\n    <div className=\"prod-hub__resumen\">\n      <div\n        className=\"prod-hub__stats-grid\"\n        aria-label=\"Totales de la orden de producción\"\n      >\n        <div className=\"stat-card\" data-testid=\"prod-hub-stat-modules\">\n          <span className=\"stat-card__icon\" aria-hidden>\n            <LayoutGrid size={18} strokeWidth={1.5} />\n          </span>\n          <div className=\"stat-card__body\">\n            <span className=\"stat-card__value\" data-testid=\"prod-hub-modules\">\n              {readiness.moduleUnitCount}\n            </span>\n            <span className=\"stat-card__label\">\n              {readiness.moduleUnitCount === 1 ? 'módulo' : 'módulos'}\n              <span className=\"prod-hub__stat-sub\">\n                {' '}\n                ({readiness.moduleLineCount} líneas)\n              </span>\n            </span>\n          </div>\n        </div>\n\n        <div className=\"stat-card\" data-testid=\"prod-hub-stat-cut-rows\">\n          <span className=\"stat-card__icon\" aria-hidden>\n            <FileSpreadsheet size={18} strokeWidth={1.5} />\n          </span>\n          <div className=\"stat-card__body\">\n            <span className=\"stat-card__value\" data-testid=\"prod-hub-pieces\">\n              {cutRows && cutRows.length > 0 ? readiness.cutRowCount : '—'}\n            </span>\n            <span className=\"stat-card__label\">piezas de tablero</span>\n          </div>"
+        },
+        {
+          "file": "packages/ui/src/production/hub/ProductionHubResumenTab.tsx",
+          "startLine": 186,
+          "endLine": 240,
+          "excerpt": "      <div className=\"prod-hub__readiness-card\">\n        <h3 className=\"prod-hub__section-title\">Listo para cortar</h3>\n        <ul className=\"prod-hub__checklist\" data-testid=\"prod-hub-checklist\">\n          <CheckRow\n            ok={readiness.cutListOk}\n            label=\"BOM / cut-list válido\"\n            detail={\n              readiness.cutListOk\n                ? undefined\n                : (readiness.cutListError ?? undefined)\n            }\n          />\n          <CheckRow\n            ok={readiness.materialsResolved}\n            label=\"Materiales resueltos\"\n            detail={\n              readiness.materialsResolved\n                ? `${readiness.cutRowCount} piezas de tablero para corte`\n                : 'Sin piezas de tablero para exportar'\n            }\n          />\n          <CheckRow\n            ok={readiness.hasKitchenLayout ? readiness.hasPlacements : true}\n            warn={readiness.hasUnplacedItems}\n            label={\n              readiness.hasKitchenLayout\n                ? 'Layout de cocina'\n                : 'Layout de cocina (opcional)'\n            }\n            detail={\n              !readiness.hasKitchenLayout\n                ? 'Sin muros — obra lineal o solo despiece'\n                : readiness.hasUnplacedItems\n                  ? 'Hay muebles sin colocar en el layout'\n                  : `${readiness.hasPlacements ? 'Con placements' : 'Sin placements'}`\n            }\n          />\n          <CheckRow\n            ok={readiness.optimizerGenerable}\n            label=\"Optimizer generable\"\n            detail={\n              readiness.optimizerGenerable\n                ? 'Plantilla_Optimizer.xlsx listo'\n                : 'Bloqueado hasta tener despiece válido'\n            }\n          />\n          <CheckRow\n            ok={readiness.packGenerable}\n            label=\"Pack descargable\"\n            detail={\n              readiness.packGenerable\n                ? 'Núcleo Optimizer disponible'\n                : 'Requiere despiece de corte'\n            }\n          />"
+        },
+        {
+          "file": "packages/ui/src/production/hub/ProductionHubResumenTab.tsx",
+          "startLine": 243,
+          "endLine": 299,
+          "excerpt": "        {readiness.readyToCut ? (\n          <div\n            className=\"prod-hub__ready-banner prod-hub__ready-banner--ready\"\n            data-testid=\"prod-hub-ready\"\n          >\n            <CheckCircle2 size={20} strokeWidth={1.5} aria-hidden />\n            <div>\n              <p className=\"prod-hub__ready-title\">\n                Listo para generar pack y mandar a corte.\n              </p>\n              <p className=\"prod-hub__ready-sub\">\n                Los materiales, dimensiones y reglas de taller son válidos.\n              </p>\n            </div>\n          </div>\n        ) : (\n          <div\n            className=\"prod-hub__ready-banner prod-hub__ready-banner--blocked\"\n            data-testid=\"prod-hub-not-ready\"\n          >\n            <div>\n              <p className=\"prod-hub__ready-title\">\n                Falta resolver el despiece antes de cortar.\n              </p>\n              <p className=\"prod-hub__ready-sub\">\n                Revisá los errores de BOM en Proyectos o cambiá a la pestaña\n                Despiece.\n              </p>\n            </div>\n            <button\n              type=\"button\"\n              className=\"btn btn--secondary btn--small\"\n              onClick={onOpenDesign}\n            >\n              Abrir en Proyectos\n            </button>\n          </div>\n        )}\n      </div>\n\n      <div className=\"prod-hub__cta-row\">\n        <button\n          type=\"button\"\n          className=\"btn btn--primary\"\n          disabled={\n            !readiness.packGenerable || exportBusy || !onExportProductionPack\n          }\n          onClick={onExportProductionPack}\n          data-testid=\"prod-hub-export-pack\"\n          title={\n            readiness.packGenerable\n              ? 'Descargar ZIP con Optimizer + herrajes + etiquetas + despiece'\n              : 'Requiere despiece de corte válido'\n          }\n        >\n          <Package size={16} strokeWidth={1.5} aria-hidden />\n          {exportBusy ? 'Generando pack…' : 'Descargar pack de producción'}"
+        }
+      ],
+      "missingProof": "Readiness versus exact released revision/machine profile and approved output needs upstream integration proof; this display cannot certify safe cutting.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "93482dcfa24be3d3cb0ba3e603df24b33df0aff32dc26201d458b872974f9d55"
+    },
+    {
+      "file": "packages/ui/src/production/labels/LabelPrinterConfigSection.tsx",
+      "claim": "Controlled printer settings expose allowed size presets,203/300DPI,border and JSON versus URL QR format; host field appears for URL, printer name only with raw bridge. Local setting callbacks do not validate device compatibility.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/labels/LabelPrinterConfigSection.tsx",
+          "startLine": 51,
+          "endLine": 93,
+          "excerpt": "      <label className=\"prod-labels__filter\">\n        <span className=\"prod-labels__filter-label\">Tamaño</span>\n        <select\n          className=\"prod-modulos__floor-select\"\n          value={printer.preset}\n          onChange={(e) =>\n            onPrinterChange((p) => ({\n              ...p,\n              preset: e.target.value as ZplSizePreset,\n            }))\n          }\n          data-testid={presetTestId}\n        >\n          {availablePresets.includes('100x150') && (\n            <option value=\"100x150\">\n              100 × 150 mm\n              {availablePresets.length === 2 ? ' (Recomendado)' : ''}\n            </option>\n          )}\n          {availablePresets.includes('100x50') && (\n            <option value=\"100x50\">100 × 50 mm</option>\n          )}\n          {availablePresets.includes('50x25') && (\n            <option value=\"50x25\">50 × 25 mm</option>\n          )}\n        </select>\n      </label>\n      <label className=\"prod-labels__filter\">\n        <span className=\"prod-labels__filter-label\">Resolución</span>\n        <select\n          className=\"prod-modulos__floor-select\"\n          value={printer.dpi}\n          onChange={(e) =>\n            onPrinterChange((p) => ({\n              ...p,\n              dpi: Number(e.target.value) as ZplDpi,\n            }))\n          }\n          data-testid={dpiTestId}\n        >\n          <option value={203}>203 DPI</option>\n          <option value={300}>300 DPI</option>\n        </select>"
+        },
+        {
+          "file": "packages/ui/src/production/labels/LabelPrinterConfigSection.tsx",
+          "startLine": 109,
+          "endLine": 159,
+          "excerpt": "      <label className=\"prod-labels__filter\">\n        <span className=\"prod-labels__filter-label\">QR</span>\n        <select\n          className=\"prod-modulos__floor-select\"\n          value={printer.qrFormat ?? 'json'}\n          onChange={(e) =>\n            onPrinterChange((p) => ({\n              ...p,\n              qrFormat: e.target.value as 'json' | 'url',\n            }))\n          }\n          data-testid={qrFormatTestId}\n        >\n          <option value=\"json\">JSON (offline, recomendado)</option>\n          <option value=\"url\">Deep link (abre la app móvil)</option>\n        </select>\n      </label>\n      {printer.qrFormat === 'url' ? (\n        <label className=\"prod-labels__filter\">\n          <span className=\"prod-labels__filter-label\">Dominio del link</span>\n          <input\n            type=\"text\"\n            className=\"prod-modulos__floor-select\"\n            value={printer.qrHost ?? ''}\n            onChange={(e) =>\n              onPrinterChange((p) => ({ ...p, qrHost: e.target.value }))\n            }\n            placeholder=\"taller.tudominio.com (vacío = muebles://)\"\n            data-testid={qrHostTestId}\n          />\n        </label>\n      ) : null}\n      {hasRawPrint ? (\n        <label className=\"prod-labels__filter\">\n          <span className=\"prod-labels__filter-label\">Impresora (nombre)</span>\n          <input\n            type=\"text\"\n            className=\"prod-modulos__floor-select prod-labels__printer-input\"\n            value={printer.printerName ?? ''}\n            onChange={(e) =>\n              onPrinterChange((p) => ({ ...p, printerName: e.target.value }))\n            }\n            placeholder=\"Zebra-GK420\"\n            data-testid={printerNameTestId}\n          />\n        </label>\n      ) : null}\n      <p className=\"prod-labels__printer-hint\">\n        {hasRawPrint\n          ? 'Imprimí directo a la Zebra (raw). En navegador, descargá el .zpl y enviálo con el driver en modo raw.'\n          : 'Para imprimir directo a la Zebra usá la app de escritorio. En navegador, descargá el .zpl y enviálo con el driver en modo raw (o Zebra Browser Print) — no lo imprimas como documento.'}"
+        }
+      ],
+      "missingProof": "Persistence, malformed host handling, raw desktop bridge availability and exact printer calibration/readback remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "337c91beb22864f4710f3774348b6011ce7c8584adf5ee93beafa60f58614040"
+    },
+    {
+      "file": "packages/ui/src/production/labels/ModuleLabelsTabContent.tsx",
+      "claim": "Filters bulto labels and builds QR using unit/package fields and production revision override; cancellation suppresses stale QR completion. ZPL uses filtered labels. Raw print awaits bridge result and reports sent versus error, but has no in-flight button lock. Preview rows are mouse-click only.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/labels/ModuleLabelsTabContent.tsx",
+          "startLine": 81,
+          "endLine": 130,
+          "excerpt": "  const activeMod =\n    filteredModuleLabels[\n      Math.min(activeModIdx, Math.max(0, filteredModuleLabels.length - 1))\n    ];\n  const revision = project.production?.revision?.toString();\n  const dims = ZPL_SIZE_PRESETS[printer.preset];\n\n  // Real QR for Module Label preview\n  useEffect(() => {\n    if (!activeMod) {\n      setModQrDataUrl(null);\n      return;\n    }\n    let cancelled = false;\n    const qrFields = {\n      projectId: activeMod.projectId,\n      itemId: activeMod.itemId,\n      factoryCode: activeMod.factoryCode,\n      moduleCode: activeMod.moduleCode,\n      moduleName: activeMod.moduleName,\n      packageIndex: activeMod.packageIndex,\n      totalPackages: activeMod.totalPackages,\n      unitIndex: activeMod.unitIndex,\n      unitQuantity: activeMod.unitQuantity,\n      widthMm: activeMod.widthMm,\n      heightMm: activeMod.heightMm,\n      depthMm: activeMod.depthMm,\n      revision: revision ?? activeMod.revision,\n    };\n    const payload = (\n      printer.qrFormat === 'url'\n        ? moduleLabelQrPayloadUrl\n        : moduleLabelQrPayload\n    )(\n      qrFields,\n      printer.qrFormat === 'url'\n        ? { host: printer.qrHost || undefined }\n        : undefined,\n    );\n    QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 1 })\n      .then((url) => {\n        if (!cancelled) setModQrDataUrl(url);\n      })\n      .catch(() => {\n        if (!cancelled) setModQrDataUrl(null);\n      });\n    return () => {\n      cancelled = true;\n    };\n  }, [activeMod, revision, printer.qrFormat, printer.qrHost]);"
+        },
+        {
+          "file": "packages/ui/src/production/labels/ModuleLabelsTabContent.tsx",
+          "startLine": 132,
+          "endLine": 154,
+          "excerpt": "  const handleDownloadZpl = () => {\n    if (filteredModuleLabels.length === 0) return;\n    const content = moduleBatchToZpl(filteredModuleLabels, printer.preset, {\n      dpi: printer.dpi,\n      includeBorder: printer.includeBorder,\n      projectId: project.id,\n      revision,\n      qrFormat: printer.qrFormat,\n      qrHost: printer.qrHost,\n    });\n    const filename = `etiquetas_muebles_${slugify(project.name)}_${printer.preset}.zpl`;\n    if (onDownloadZpl) {\n      onDownloadZpl(content, filename);\n      return;\n    }\n    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });\n    const url = URL.createObjectURL(blob);\n    const a = document.createElement('a');\n    a.href = url;\n    a.download = filename;\n    a.click();\n    URL.revokeObjectURL(url);\n  };"
+        },
+        {
+          "file": "packages/ui/src/production/labels/ModuleLabelsTabContent.tsx",
+          "startLine": 156,
+          "endLine": 205,
+          "excerpt": "  const handlePrintRaw = async () => {\n    if (!printRaw) return;\n    const targetName = (printer.printerName ?? '').trim();\n    if (!targetName) {\n      setPrintFeedback({\n        ok: false,\n        message: 'Configurá el nombre de la impresora térmica primero.',\n      });\n      return;\n    }\n    if (filteredModuleLabels.length === 0) {\n      setPrintFeedback({\n        ok: false,\n        message: 'No hay etiquetas para enviar a la impresora.',\n      });\n      return;\n    }\n    setPrintFeedback(null);\n    try {\n      const zpl = moduleBatchToZpl(filteredModuleLabels, printer.preset, {\n        dpi: printer.dpi,\n        includeBorder: printer.includeBorder,\n        projectId: project.id,\n        revision,\n        qrFormat: printer.qrFormat,\n        qrHost: printer.qrHost,\n      });\n      const res = await printRaw(targetName, zpl);\n      if (res.ok) {\n        setPrintFeedback({\n          ok: true,\n          message: `Enviadas ${filteredModuleLabels.length} etiqueta${\n            filteredModuleLabels.length === 1 ? '' : 's'\n          } a ${targetName}.`,\n        });\n      } else {\n        setPrintFeedback({\n          ok: false,\n          message: res.error || `Error al imprimir en ${targetName}.`,\n        });\n      }\n    } catch (err) {\n      setPrintFeedback({\n        ok: false,\n        message:\n          err instanceof Error\n            ? err.message\n            : 'Error al comunicar con la impresora.',\n      });\n    }"
+        },
+        {
+          "file": "packages/ui/src/production/labels/ModuleLabelsTabContent.tsx",
+          "startLine": 341,
+          "endLine": 385,
+          "excerpt": "          <div className=\"prod-labels__actions\">\n            {printRaw ? (\n              <button\n                type=\"button\"\n                className=\"btn\"\n                disabled={\n                  filteredModuleLabels.length === 0 ||\n                  !(printer.printerName ?? '').trim()\n                }\n                onClick={() => {\n                  void handlePrintRaw();\n                }}\n                data-testid=\"prod-module-labels-print-raw\"\n              >\n                <Printer size={16} strokeWidth={1.5} aria-hidden />\n                Imprimir en {(printer.printerName || 'Zebra').trim()}\n              </button>\n            ) : null}\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              disabled={exportBusy || filteredModuleLabels.length === 0}\n              onClick={handleDownloadZpl}\n              data-testid=\"prod-module-labels-download-zpl\"\n            >\n              <Tags size={16} strokeWidth={1.5} aria-hidden />\n              Descargar ZPL Bultos ({filteredModuleLabels.length})\n            </button>\n            <button\n              type=\"button\"\n              className=\"btn\"\n              disabled={\n                exportBusy ||\n                filteredModuleLabels.length === 0 ||\n                !onExportModulePdf\n              }\n              onClick={() => {\n                if (onExportModulePdf)\n                  void onExportModulePdf(filteredModuleLabels);\n              }}\n              data-testid=\"prod-module-labels-download-pdf\"\n            >\n              <FileDown size={16} strokeWidth={1.5} aria-hidden />\n              {exportBusy ? 'Generando…' : 'Descargar PDF Bultos'}\n            </button>"
+        },
+        {
+          "file": "packages/ui/src/production/labels/ModuleLabelsTabContent.tsx",
+          "startLine": 410,
+          "endLine": 420,
+          "excerpt": "                  {filteredModuleLabels.map((m, idx) => (\n                    <tr\n                      key={`${m.itemId}-${m.packageIndex}-${idx}`}\n                      className={\n                        idx ===\n                        Math.min(activeModIdx, filteredModuleLabels.length - 1)\n                          ? 'prod-labels__row--active'\n                          : undefined\n                      }\n                      onClick={() => setActiveModIdx(idx)}\n                      data-testid={`prod-module-labels-row-${idx}`}"
+        }
+      ],
+      "missingProof": "Repeated raw-print clicks, keyboard row selection, QR failure visibility and actual printed label/readback are unverified; bridge acceptance is not physical print proof.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "b9ad3747b09d811070c442f127c2922149fd3c735c29306fae47f787b8ac242c"
+    },
+    {
+      "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+      "claim": "Filters piece labels by text/module/material, optionally expands quantity into copies (minimum1,floor quantity), generates cancellable QR preview and ZPL. Raw print awaits result with status/alert; buttons lack print-in-flight lock and preview rows wire only mouse clicks.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+          "startLine": 50,
+          "endLine": 54,
+          "excerpt": "function expandPerUnit(labels: readonly PieceLabel[]): PieceLabel[] {\n  return labels.flatMap((label) => {\n    const copies = Math.max(1, Math.floor(label.quantity));\n    return Array.from({ length: copies }, () => ({ ...label, quantity: 1 }));\n  });"
+        },
+        {
+          "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+          "startLine": 89,
+          "endLine": 112,
+          "excerpt": "  const filtered = useMemo(() => {\n    const q = query.trim().toLowerCase();\n    return labels.filter((l) => {\n      if (moduleFilter !== 'all' && l.moduleCode !== moduleFilter) return false;\n      if (materialFilter !== 'all' && l.materialName !== materialFilter) {\n        return false;\n      }\n      if (!q) return true;\n      return [l.partCode, l.description, l.moduleCode, l.materialCode]\n        .filter(Boolean)\n        .join(' ')\n        .toLowerCase()\n        .includes(q);\n    });\n  }, [labels, query, moduleFilter, materialFilter]);\n\n  const printLabels = useMemo(\n    () => (perUnit ? expandPerUnit(filtered) : [...filtered]),\n    [filtered, perUnit],\n  );\n\n  const active =\n    printLabels[Math.min(activeIdx, Math.max(0, printLabels.length - 1))];\n  const revision = project.production?.revision?.toString();"
+        },
+        {
+          "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+          "startLine": 115,
+          "endLine": 152,
+          "excerpt": "  // Real QR for Piece Label preview\n  useEffect(() => {\n    if (!active) {\n      setQrDataUrl(null);\n      return;\n    }\n    let cancelled = false;\n    const payload = (\n      printer.qrFormat === 'url' ? pieceLabelQrPayloadUrl : pieceLabelQrPayload\n    )(\n      {\n        projectId: project.id,\n        moduleCode: active.moduleCode,\n        partCode: active.partCode,\n        description: active.description,\n        materialCode: active.materialCode,\n        lengthMm: active.lengthMm,\n        widthMm: active.widthMm,\n        quantity: active.quantity,\n        edgeSides: pieceLabelEdgeSides(active),\n        edgeCode: active.edgeBandCode,\n        revision,\n      },\n      printer.qrFormat === 'url'\n        ? { host: printer.qrHost || undefined }\n        : undefined,\n    );\n    QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 1 })\n      .then((url) => {\n        if (!cancelled) setQrDataUrl(url);\n      })\n      .catch(() => {\n        if (!cancelled) setQrDataUrl(null);\n      });\n    return () => {\n      cancelled = true;\n    };\n  }, [active, project.id, revision, printer.qrFormat, printer.qrHost]);"
+        },
+        {
+          "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+          "startLine": 180,
+          "endLine": 220,
+          "excerpt": "  const handlePrintRaw = async () => {\n    if (!printRaw) return;\n    const targetName = (printer.printerName ?? '').trim();\n    if (!targetName) {\n      setPrintFeedback({\n        ok: false,\n        message: 'Configurá el nombre de la impresora térmica primero.',\n      });\n      return;\n    }\n    if (printLabels.length === 0) {\n      setPrintFeedback({\n        ok: false,\n        message: 'No hay etiquetas para enviar a la impresora.',\n      });\n      return;\n    }\n    setPrintFeedback(null);\n    try {\n      const zpl = pieceBatchToZpl(printLabels, printer.preset, {\n        dpi: printer.dpi,\n        includeBorder: printer.includeBorder,\n        projectId: project.id,\n        revision,\n        qrFormat: printer.qrFormat,\n        qrHost: printer.qrHost,\n      });\n      const res = await printRaw(targetName, zpl);\n      if (res.ok) {\n        setPrintFeedback({\n          ok: true,\n          message: `Enviadas ${printLabels.length} etiqueta${\n            printLabels.length === 1 ? '' : 's'\n          } a ${targetName}.`,\n        });\n      } else {\n        setPrintFeedback({\n          ok: false,\n          message: res.error || `Error al imprimir en ${targetName}.`,\n        });\n      }"
+        },
+        {
+          "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+          "startLine": 436,
+          "endLine": 475,
+          "excerpt": "          <div className=\"prod-labels__actions\">\n            {printRaw ? (\n              <button\n                type=\"button\"\n                className=\"btn\"\n                disabled={\n                  printLabels.length === 0 ||\n                  !(printer.printerName ?? '').trim()\n                }\n                onClick={() => {\n                  void handlePrintRaw();\n                }}\n                data-testid=\"prod-labels-print-raw\"\n              >\n                <Printer size={16} strokeWidth={1.5} aria-hidden />\n                Imprimir en {(printer.printerName || 'Zebra').trim()}\n              </button>\n            ) : null}\n            <button\n              type=\"button\"\n              className=\"btn btn--primary\"\n              disabled={exportBusy || printLabels.length === 0}\n              onClick={handleDownloadZpl}\n              data-testid=\"prod-labels-download-zpl\"\n            >\n              <Tags size={16} strokeWidth={1.5} aria-hidden />\n              Descargar .zpl ({printLabels.length})\n            </button>\n            <button\n              type=\"button\"\n              className=\"btn\"\n              disabled={exportBusy || filtered.length === 0 || !onExportPdf}\n              onClick={() => {\n                if (onExportPdf) void onExportPdf(filtered, perUnit);\n              }}\n              data-testid=\"prod-labels-download-pdf\"\n            >\n              <FileDown size={16} strokeWidth={1.5} aria-hidden />\n              {exportBusy ? 'Generando…' : 'Descargar PDF (oficina)'}\n            </button>"
+        },
+        {
+          "file": "packages/ui/src/production/labels/PieceLabelsTabContent.tsx",
+          "startLine": 500,
+          "endLine": 510,
+          "excerpt": "                <tbody>\n                  {printLabels.map((l, idx) => (\n                    <tr\n                      key={`${l.moduleCode}-${l.partCode ?? l.description}-${idx}`}\n                      className={\n                        idx === Math.min(activeIdx, printLabels.length - 1)\n                          ? 'prod-labels__row--active'\n                          : undefined\n                      }\n                      onClick={() => setActiveIdx(idx)}\n                      data-testid={`prod-labels-row-${idx}`}"
+        }
+      ],
+      "missingProof": "Quantity normalization/identity, double print, keyboard preview selection and exact QR/PDF/ZPL/printer parity need tests; existing FM-03 drilling proof does not prove labels.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "e4338ba6c77066aa61b144e900205efec5105feba8f6f4f11d7bc9a142e83051"
+    },
+    {
+      "file": "packages/ui/src/production/manager/ProductionManagerActiveJobs.tsx",
+      "claim": "Read-only activity rows display operator/project/module/machine and formatted supplied duration. Empty jobs hide the section; despite real-time header comment this component owns no refresh clock/subscription.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerActiveJobs.tsx",
+          "startLine": 9,
+          "endLine": 40,
+          "excerpt": "function formatDuration(minutes: number): string {\n  if (minutes < 60) return `${Math.round(minutes)}min`;\n  const h = Math.floor(minutes / 60);\n  const m = Math.round(minutes % 60);\n  return `${h}h ${m}min`;\n}\n\nexport function ActiveJobRow({ job }: { readonly job: ActiveJob }): ReactNode {\n  return (\n    <div\n      className=\"pm-dashboard__job-row\"\n      data-testid={`pm-active-job-${job.activityId}`}\n    >\n      <div className=\"pm-dashboard__job-info\">\n        <span className=\"pm-dashboard__job-operator\">\n          <Users size={14} strokeWidth={1.5} aria-hidden />\n          {job.operatorName}\n        </span>\n        <span className=\"pm-dashboard__job-project\">{job.projectName}</span>\n        <span className=\"pm-dashboard__job-module\">{job.moduleCode}</span>\n        {job.machineName && (\n          <span className=\"pm-dashboard__job-machine\">\n            <Settings size={12} strokeWidth={1.5} aria-hidden />\n            {job.machineName}\n          </span>\n        )}\n      </div>\n      <div className=\"pm-dashboard__job-time\">\n        <Clock size={14} strokeWidth={1.5} aria-hidden />\n        <span>{formatDuration(job.durationMin)}</span>\n      </div>\n    </div>"
+        },
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerActiveJobs.tsx",
+          "startLine": 48,
+          "endLine": 60,
+          "excerpt": "export function ProductionManagerActiveJobs({\n  jobs,\n}: ProductionManagerActiveJobsProps): ReactNode {\n  if (jobs.length === 0) return null;\n\n  return (\n    <div className=\"pm-dashboard__jobs\">\n      <h3 className=\"pm-dashboard__section-title\">Trabajos Activos</h3>\n      <div className=\"pm-dashboard__job-list\">\n        {jobs.map((job) => (\n          <ActiveJobRow key={job.activityId} job={job} />\n        ))}\n      </div>"
+        }
+      ],
+      "missingProof": "Upstream refresh cadence, stale/failed fetch distinction and duration correctness remain unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "f5c859200f63fef1753d1ee8b639f8c0d493bb5e9128a4fa210d6cc85d769dbb"
+    },
+    {
+      "file": "packages/ui/src/production/manager/ProductionManagerProjectsTable.tsx",
+      "claim": "Displays supplied project summaries, prioritizes open-order callback over open-project, renders named progressbar and sector counts. Empty list presents no-project state; no local loading/error distinction or business mutation.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerProjectsTable.tsx",
+          "startLine": 30,
+          "endLine": 65,
+          "excerpt": "  const hasItems = summary.totalItems > 0;\n  const activeSectorLabel = !hasItems\n    ? 'Sin módulos cargados'\n    : summary.activeSector\n      ? PRODUCTION_SECTOR_LABELS_ES[summary.activeSector]\n      : 'Completado';\n\n  return (\n    <div\n      className=\"pm-dashboard__project-row\"\n      data-testid={`pm-project-row-${project.id}`}\n    >\n      <div className=\"pm-dashboard__project-info\">\n        <div className=\"pm-dashboard__project-name\">\n          {onOpenOrder ? (\n            <button\n              type=\"button\"\n              className=\"pm-dashboard__project-link\"\n              onClick={() => onOpenOrder(project.id)}\n            >\n              {project.name}\n            </button>\n          ) : onOpenProject ? (\n            <button\n              type=\"button\"\n              className=\"pm-dashboard__project-link\"\n              onClick={() => onOpenProject(project.id)}\n            >\n              {project.name}\n            </button>\n          ) : (\n            <span>{project.name}</span>\n          )}\n          <span className=\"pm-dashboard__project-customer\">\n            {customerLabelFor?.(project.customerId) || '—'}\n          </span>"
+        },
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerProjectsTable.tsx",
+          "startLine": 76,
+          "endLine": 116,
+          "excerpt": "      <div className=\"pm-dashboard__project-progress\">\n        <div className=\"pm-dashboard__progress-bar\">\n          <div\n            className=\"pm-dashboard__progress-fill\"\n            style={{ width: `${summary.percentage}%` }}\n            role=\"progressbar\"\n            aria-label={`Avance de ${project.name}`}\n            aria-valuemin={0}\n            aria-valuemax={100}\n            aria-valuenow={summary.percentage}\n          />\n        </div>\n        <span className=\"pm-dashboard__progress-text\">\n          {hasItems ? `${summary.percentage.toFixed(2)}%` : '—'}\n        </span>\n      </div>\n\n      {hasItems ? (\n        <div className=\"pm-dashboard__project-stages\">\n          {summary.stages.map((stage) => {\n            const done = stage.done >= stage.total;\n            const active = summary.activeSector === stage.sector;\n            return (\n              <div\n                key={stage.sector}\n                className={`pm-dashboard__stage ${\n                  done\n                    ? 'pm-dashboard__stage--done'\n                    : active\n                      ? 'pm-dashboard__stage--active'\n                      : ''\n                }`}\n                aria-label={`${PRODUCTION_SECTOR_LABELS_ES[stage.sector]}: ${stage.done}/${stage.total}`}\n              >\n                <span className=\"pm-dashboard__stage-icon\">\n                  <SectorIcon sector={stage.sector} size={14} />\n                </span>\n                <span className=\"pm-dashboard__stage-count\">\n                  {stage.done}/{stage.total}\n                </span>\n              </div>"
+        },
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerProjectsTable.tsx",
+          "startLine": 146,
+          "endLine": 166,
+          "excerpt": "  return (\n    <div className=\"pm-dashboard__projects\">\n      <h3 className=\"pm-dashboard__section-title\">Proyectos en Producción</h3>\n\n      {productionProjects.length === 0 ? (\n        <EmptyState\n          title=\"Sin proyectos en planta\"\n          description=\"Cuando se apruebe una cotización, aparecerá acá con su estado completo.\"\n        />\n      ) : (\n        <div className=\"pm-dashboard__project-list\">\n          {productionProjects.map(({ project, summary }) => (\n            <ProjectDashboardRow\n              key={project.id}\n              project={project}\n              summary={summary}\n              customerLabelFor={customerLabelFor}\n              onOpenProject={onOpenProject}\n              onOpenOrder={onOpenOrder}\n            />\n          ))}"
+        }
+      ],
+      "missingProof": "Upstream permission filtering, empty-versus-error distinction, totalItems truth and navigation integration need proof.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "2e3195cc0d2c7b5f03ffef928a1730f44cd8813003e6febeee1d34feae0ecc65"
+    },
+    {
+      "file": "packages/ui/src/production/manager/ProductionManagerSectorsGrid.tsx",
+      "claim": "Sector buttons report aria-pressed selection and callback, active-operator/queue counts; optional metric panel displays supplied completed/damaged daily totals. Icon fallback covers unknown sector without creating a workflow state.",
+      "scope": "Static component behavior; no runtime/UI acceptance certification",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW",
+      "evidence": [
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerSectorsGrid.tsx",
+          "startLine": 22,
+          "endLine": 38,
+          "excerpt": "export function SectorIcon({\n  sector,\n  size = 16,\n}: {\n  readonly sector: string;\n  readonly size?: number;\n}): ReactNode {\n  const Icon =\n    {\n      cutting: Scissors,\n      edge_banding: Wand2,\n      assembly: Armchair,\n      packaging: Package,\n      shipping: Truck,\n      installation: House,\n    }[sector] ?? Settings2;\n  return <Icon size={size} strokeWidth={1.5} aria-hidden />;"
+        },
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerSectorsGrid.tsx",
+          "startLine": 64,
+          "endLine": 91,
+          "excerpt": "          {sectorStatuses.map((status) => (\n            <button\n              key={status.sector}\n              type=\"button\"\n              className={`pm-dashboard__sector-btn ${\n                selectedSector === status.sector\n                  ? 'pm-dashboard__sector-btn--active'\n                  : ''\n              }`}\n              onClick={() => onSelectSector(status.sector as PipelineSector)}\n              aria-pressed={selectedSector === status.sector}\n            >\n              <span className=\"pm-dashboard__sector-icon\">\n                <SectorIcon sector={status.sector} size={20} />\n              </span>\n              <span className=\"pm-dashboard__sector-name\">\n                {PRODUCTION_SECTOR_LABELS_ES[\n                  status.sector as ProductionSector\n                ] ?? status.label}\n              </span>\n              <span className=\"pm-dashboard__sector-count\">\n                {status.activeOperators} activos\n              </span>\n              <span className=\"pm-dashboard__sector-count\">\n                {status.queueLength} en cola\n              </span>\n            </button>\n          ))}"
+        },
+        {
+          "file": "packages/ui/src/production/manager/ProductionManagerSectorsGrid.tsx",
+          "startLine": 95,
+          "endLine": 124,
+          "excerpt": "      {/* Metrics Panel (collapsible) */}\n      {showMetrics && (\n        <div className=\"pm-dashboard__metrics\">\n          <h3 className=\"pm-dashboard__section-title\">Métricas de Producción</h3>\n          <div className=\"pm-dashboard__metrics-grid\">\n            <div className=\"pm-dashboard__metric\">\n              <span className=\"pm-dashboard__metric-label\">\n                Piezas Completadas Hoy\n              </span>\n              <span className=\"pm-dashboard__metric-value\">\n                {todayCompleted}\n              </span>\n            </div>\n            <div className=\"pm-dashboard__metric\">\n              <span className=\"pm-dashboard__metric-label\">\n                Piezas Dañadas Hoy\n              </span>\n              <span className=\"pm-dashboard__metric-value\">{todayDamages}</span>\n            </div>\n            {sectorStatuses.map((sector) => (\n              <div key={sector.sector} className=\"pm-dashboard__metric\">\n                <span className=\"pm-dashboard__metric-label\">\n                  {sector.label}\n                </span>\n                <span className=\"pm-dashboard__metric-value\">\n                  {sector.itemsCompletedToday} completados\n                </span>\n              </div>\n            ))}\n          </div>"
+        }
+      ],
+      "missingProof": "Metrics actual-versus-proxy provenance, day timezone boundaries and refresh/error behavior remain upstream and unverified.",
+      "runtimeStatus": "NOT_EXECUTED",
+      "sourceSha256": "1fa7fcd2b066ff095f94adbbb7a2f67923ae45400658a731b82c8622eb6844c4"
+    }
+  ]
+}

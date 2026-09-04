@@ -1,0 +1,1196 @@
+{
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "features": [
+    {
+      "id": "F161",
+      "title": "#346 Semantic metadata y round-trip SketchUp ↔ Granete",
+      "scope": "Contrato puro de intercambio, no sincronización host persistente",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Renombrar un componente no cambia su stable ID (rename = update con mismo assemblyId/componentInstanceId)",
+        "Dos entrepaños comparten componentDefinitionId y conservan componentInstanceId, relationships y machining independientes",
+        "Anchors y hardware hosts referencian siempre componentInstanceId; definiciones nunca son anchor",
+        "assemblyId/componentInstanceId únicos en projectId, sobreviven round-trip y no se reutilizan tras delete (STABLE_ID_REUSE)",
+        "mm y transforms conservan precisión (rounding de transporte precisionMm, fingerprint invariante al ruido)",
+        "Authoring intent separado por construcción de ResolvedBoardPart/drilling/machine output",
+        "Referencias de catálogo desconocidas producen ContractIssue estructurados (CATALOG_REFERENCE_MISSING/REVISION_STALE/JOINERY_SYSTEM_UNSUPPORTED)",
+        "Reimportar el mismo envelope es idempotente (mismo responseMessageId y receipt)",
+        "Response correlaciona responseMessageId/inReplyToMessageId/idempotencyKey/projectId/sourceRevisionId",
+        "Create/update/delete atómicos; base stale → conflict sin mutación parcial; omisión sin tombstone nunca borra",
+        "schemaId = schemaName + major(schemaVersion); mismatch o versión sin migration registrada falla antes de mutar",
+        "Fixture golden: SketchUp → Granete → SketchUp sin pérdida semántica ni confusión definition/instance"
+      ],
+      "actualVsAcceptance": "applyAuthoringEnvelope valida migration/schema, replay por fingerprint, base stale, completeness con tombstones y aplica sobre copia. Tests comprueban identidad estable, omisión sin delete y round-trip semántico. El state Map no es receipt durable ni prueba SketchUp real.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Ejecutar suite exacta y round-trip con build host pinneado, no confundir fixture TS con integración de dispositivo.",
+      "nextProof": "Ejecutar suite exacta y round-trip con build host pinneado, no confundir fixture TS con integración de dispositivo.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/sketchupAuthoringExchange.ts",
+          "line": 69,
+          "excerpt": "export function applyAuthoringEnvelope(\n  state: Readonly<AuthoringExchangeState>,\n  envelope: AuthoringEnvelopeV1,\n  catalog: AuthoringCatalogIndex,\n  joineryCatalog?: SketchUpJoineryCatalog,\n): { readonly state: Readonly<AuthoringExchangeState>; readonly response: AuthoringRoundTripResponseV1 } {\n  // 1. Schema identity and migrations decide before anything mutates.\n  const migration = applyRegisteredMigrations(envelope);\n  if (migration === 'unsupported') {\n    return rejected(state, envelope, [\n      {\n        code: 'SCHEMA_VERSION_UNSUPPORTED',",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupAuthoringExchange.test.ts",
+          "line": 176,
+          "excerpt": "  it('conflicts on a stale base without partial mutation', () => {\n    const { state } = seedState();\n    const stale = nextEnvelope(cabinetEnvelope, (e) => {\n      e.messageId = 'msg-stale-1';\n      e.idempotencyKey = 'project-42:source-rev-9';\n      e.baseSourceRevisionId = 'source-rev-3';\n      e.sourceRevisionId = 'source-rev-9';\n      e.assemblies = [];\n      e.tombstones = [\n        { entityType: 'assembly', entityId: 'assembly-base-01', deletedAt: '2026-08-24T06:00:00Z' },\n      ];\n    });",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupAuthoringExchange.test.ts",
+          "line": 225,
+          "excerpt": "  it('SketchUp → Granete → SketchUp loses no authoring semantics', () => {\n    const { response } = seedState();\n    const snapshot = response.authoringSnapshot!;\n    expect(snapshot).toBeDefined();\n\n    const back = envelopeFromSnapshot(snapshot, cabinetEnvelope.source);\n    const result = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, back, cabinetCatalog);\n    expect(result.response.status).toBe('accepted');\n\n    const original = cabinetEnvelope.assemblies[0]!;\n    const roundTripped = result.response.authoringSnapshot!.assemblies[0]!;\n    expect(fingerprintOfAssemblies(roundTripped)).toBe(fingerprintOfAssemblies(original));",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F162",
+      "title": "#356 Parametric part relationships and joint-driven machining",
+      "scope": "Derivación de relaciones shelf-support/manual hardware",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Existe modelo explícito para relaciones/joints con stable IDs y catálogo de uniones (SketchUpJoineryCatalog)",
+        "Anchors semánticos ligados siempre a componentInstanceId, nunca a componentDefinitionId",
+        "Mover un entrepaño desplaza correctamente el machining derivado en piezas relacionadas",
+        "Agregar un segundo entrepaño con definición compartida genera nuevas operaciones determinísticas sin duplicados",
+        "Eliminar un entrepaño remueve únicamente sus operaciones derivadas sin dejar operaciones huérfanas",
+        "Cambiar joinery system (minifix-dowel -> dowel-only) recalcula machining desde reglas/catálogo",
+        "Mover un herraje manual (bisagra) modifica únicamente su machining dependiente sin alterar el del entrepaño",
+        "Operaciones derivadas conservan exactamente una provenance válida; combinaciones ambiguas son inválidas",
+        "Relaciones inválidas o huérfanas fallan con error estructurado (RELATIONSHIP_INVALID / RELATIONSHIP_ORPHANED)",
+        "Cambios paramétricos alteran bomFingerprint determinístico e invalidan revisiones liberadas previas (isFingerprintStale)",
+        "Integración con applyAuthoringEnvelope para devolver resolvedFeedback read-only cuando se suministra el catálogo de ensambles",
+        "Domain tests determinísticos pasan al 100% y tsc --noEmit pasa con 0 errores"
+      ],
+      "actualVsAcceptance": "deriveRelationshipMachining recorre relationships y hardware placements, conserva provenance y fingerprint. Rechaza kinds fuera de shelf-support; tests aíslan mover/quitar entrepaño y cambiar joinery. No es catálogo universal de uniones ni interacción nativa.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Validar catálogo concreto requerido por demo y movimiento en host conectado; máquina no evaluada.",
+      "nextProof": "Validar catálogo concreto requerido por demo y movimiento en host conectado; máquina no evaluada.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/sketchupRelationshipMachining.ts",
+          "line": 60,
+          "excerpt": "export function deriveRelationshipMachining(\n  snapshot: ReadonlyAuthoringSnapshot,\n  catalog: SketchUpJoineryCatalog,\n): RelationshipMachiningResult {\n  const issues: ContractIssue[] = [];\n  const operations: ResolvedRelationshipOperation[] = [];\n  const placements: DerivedHardwarePlacement[] = [];\n\n  for (const assembly of snapshot.assemblies) {\n    const components = indexComponents(assembly);\n    for (const relationship of assembly.relationships ?? []) {\n      deriveRelationshipOperations(assembly, relationship, components, catalog, placements, operations, issues);",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupRelationshipMachining.test.ts",
+          "line": 93,
+          "excerpt": "  it('moves only the moved relationship machining; unrelated stays structurally identical', () => {\n    const before = deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog);\n    const after = resolveFrom((envelope) => {\n      const shelf = envelope.assemblies[0]!.components!.find((c) => c.componentInstanceId === 'shelf-02')!;\n      shelf.transform = { ...shelf.transform, translationMm: [18, 0, 620] };\n    });\n\n    const diff = diffRelationshipMachining(before, after);\n    expect(diff.recomputedProvenanceKeys).toEqual(['relationship:rel-shelf-02']);\n    expect(diff.unchangedProvenanceKeys).toContain('relationship:rel-shelf-01');\n    expect(diff.unchangedProvenanceKeys).toContain('manualHardwarePlacement:hp-hinge-door-01');\n    expect(diff.addedProvenanceKeys).toEqual([]);",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupRelationshipMachining.test.ts",
+          "line": 153,
+          "excerpt": "  it('removes only its relationships and derived machining; no orphans', () => {\n    const before = deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog);\n    const after = resolveFrom((envelope) => {\n      const assembly = envelope.assemblies[0]!;\n      assembly.components = assembly.components!.filter((c) => c.componentInstanceId !== 'shelf-02');\n      assembly.relationships = assembly.relationships!.filter((r) => r.relationshipId !== 'rel-shelf-02');\n    });\n\n    const diff = diffRelationshipMachining(before, after);\n    expect(diff.removedProvenanceKeys).toEqual(['relationship:rel-shelf-02']);\n    expect(diff.unchangedProvenanceKeys).toContain('relationship:rel-shelf-01');\n    expect(diff.unchangedProvenanceKeys).toContain('manualHardwarePlacement:hp-hinge-door-01');",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F163",
+      "title": "#347 Milestone minimum authoritative preflight",
+      "scope": "Gate mínimo de manufactura puro",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Happy path del fixture de gabinete: status ready, issues vacíos, bomFingerprint FNV-1a determinístico",
+        "Prueba negativa: colisión bisagra/entrepaño bloquea con cero output fabricable",
+        "Relación fuera de cotas, profundidad > espesor, componente faltante y ancla huérfana bloquean",
+        "El resultado identifica projectId, designRevisionId y bomFingerprint",
+        "Tests del preflight en verde + typecheck limpio"
+      ],
+      "actualVsAcceptance": "runManufacturingPreflight acumula issues y vacía hardware/machining si blocked; tests cubren colisión, out-of-bounds, profundidad y referencias faltantes. Presencia del gate no implica que todos los exports existentes lo consuman.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Trazar export demo hasta este gate; defectos de drilling legacy impiden extender ready del helper a DXF.",
+      "nextProof": "Trazar export demo hasta este gate; defectos de drilling legacy impiden extender ready del helper a DXF.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/sketchupPreflight.ts",
+          "line": 266,
+          "excerpt": "  const status: \"ready\" | \"blocked\" | \"warning\" = isBlocked\n    ? \"blocked\"\n    : effectiveIssues.some((i) => i.severity === \"warning\")\n      ? \"warning\"\n      : \"ready\";\n\n  // Critical rule: If blocked, ZERO fabricable output is produced\n  const derivedHardwarePlacements = isBlocked ? [] : machining.derivedHardwarePlacements;\n  const derivedMachiningOperations = isBlocked ? [] : machining.derivedMachiningOperations;\n\n  return {\n    identity: {",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupPreflight.test.ts",
+          "line": 36,
+          "excerpt": "  it(\"detects critical drilling collisions and BLOCKS manufacturing with zero output\", () => {\n    // Position a manual hardware item on the left side panel exactly where shelf-01 holes are located (Y=350, face=front/inside)\n    const collidingEnvelope = mutateCabinetEnvelope((e) => {\n      e.assemblies[0]!.hardwarePlacements!.push({\n        hardwarePlacementId: \"hp-conflict-01\",\n        catalogHardwareId: \"hinge-softclose-110\",\n        hostComponentInstanceId: \"side-left-01\",\n        anchorFace: \"inside\",\n        offsetMm: [50, 350], // collides with minifix at x=50, y=350\n        rotationDeg: 0,\n      });\n    });",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupPreflight.test.ts",
+          "line": 81,
+          "excerpt": "  it(\"blocks manufacturing when drilling depth exceeds panel thickness\", () => {\n    const invalidJoineryCatalog: SketchUpJoineryCatalog = {\n      ...cabinetJoineryCatalog,\n      joinerySystems: {\n        ...cabinetJoineryCatalog.joinerySystems,\n        \"minifix-dowel\": {\n          ...cabinetJoineryCatalog.joinerySystems[\"minifix-dowel\"]!,\n          camDepthMm: 22, // exceeds 18mm thickness\n        },\n      },\n    };\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F164",
+      "title": "#349 Smart Parametric Furniture Library MVP",
+      "scope": "Instanciación paramétrica de dominio",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "FurnitureDefinition no contiene campos fijos atados a Cabinet ni categorías cerradas",
+        "Define formalmente las 7 entidades: FurnitureDefinition, FurnitureInstance, ComponentDefinition, MaterialDefinition, MaterialAssignment, HardwareDefinition, Asset",
+        "instantiateFurniture evalúa parámetros contra el contrato y calcula cotas exactas",
+        "Genera DesignComponent independientes y PartRelationshipIntent semánticos",
+        "Múltiples entrepaños pueden compartir componentDefinitionId con componentInstanceId y mecanizados independientes",
+        "Todo ensamble generado pasa runManufacturingPreflight antes de ser manufacturable",
+        "Soporta múltiples tipologías (Cocina Base, Cocina Alta, Closet, Escritorio)",
+        "Parámetros fuera de rango devuelven error estructurado PARAMETER_OUT_OF_RANGE",
+        "100% de tests pasando en domain y typecheck limpio"
+      ],
+      "actualVsAcceptance": "instantiateFurniture valida contrato/parámetros antes de geometría; tests generan gabinete, múltiples entrepaños, closet y escritorio y llaman preflight explícitamente. Alcance de test no prueba disponibilidad de todos esos muebles en catálogo real del taller.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Ejecutar casos contra catálogo comercial seleccionado; confirmar caller aplica preflight antes de output físico.",
+      "nextProof": "Ejecutar casos contra catálogo comercial seleccionado; confirmar caller aplica preflight antes de output físico.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/furnitureCompositionEngine.ts",
+          "line": 213,
+          "excerpt": "export function instantiateFurniture(\n  definition: FurnitureDefinition,\n  rawParams: Record<string, string | number | boolean>,\n  componentCatalog: Record<string, ComponentDefinition>,\n  materialCatalog: Record<string, MaterialDefinition>,\n  hardwareCatalog: Record<string, HardwareDefinition>,\n  options: InstantiationOptions,\n): InstantiationResult {\n  const issues: ContractIssue[] = [];\n\n  // 1. Validate & evaluate parameters against the canonical strict contract.\n  let evaluatedParams: Readonly<Record<string, number | string | boolean>> = {};",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupParametricLibrary.test.ts",
+          "line": 19,
+          "excerpt": "  it(\"instantiates a standard kitchen base cabinet and passes preflight cleanly\", () => {\n    const result = instantiateFurniture(\n      kitchenBaseDefinition,\n      { widthMm: 600, heightMm: 720, depthMm: 590, shelfCount: 1, doorCount: 1 },\n      sampleComponents,\n      sampleMaterials,\n      sampleHardware,\n      { projectId: \"project-42\", sourceRevisionId: \"rev-1\" },\n    );\n\n    expect(result.success).toBe(true);\n    expect(result.envelope).toBeDefined();",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupParametricLibrary.test.ts",
+          "line": 113,
+          "excerpt": "  it(\"supports diverse typologies (closet tower and desk workstation) without hardcoded cabinet assumptions\", () => {\n    const closetRes = instantiateFurniture(\n      closetTowerDefinition,\n      { widthMm: 900, heightMm: 2200, depthMm: 550, shelfCount: 5 },\n      sampleComponents,\n      sampleMaterials,\n      sampleHardware,\n      { projectId: \"project-42\" },\n    );\n    expect(closetRes.success).toBe(true);\n    expect(closetRes.envelope!.assemblies[0]!.components!.length).toBe(7); // 2 sides + 5 shelves\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F165",
+      "title": "#350 Sincronización de HardwarePlacement y mecanizado",
+      "scope": "Reposición pura de HardwarePlacement",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "repositionHardwarePlacement actualiza la intención de posición del herraje",
+        "Mover una bisagra actualiza únicamente sus perforaciones directas y preserva las perforaciones de entrepaños y otros herrajes",
+        "Permite resolver colisiones críticas detectadas por runManufacturingPreflight pasando de blocked a ready",
+        "Toda operación derivada de herraje manual conserva provenance estricta sourceKind: manualHardwarePlacement con hardwarePlacementId",
+        "Entidades inexistentes devuelven errores estructurados (ASSEMBLY_NOT_FOUND, HARDWARE_PLACEMENT_NOT_FOUND)",
+        "Tests unitarios pasando al 100% en vitest y typecheck limpio"
+      ],
+      "actualVsAcceptance": "repositionHardwarePlacement clona envelope, busca identidad exacta, actualiza offset/rotación/cara y recalcula preflight; éxito depende ready/warning. Tests comprueban aislación y solución de colisión. No existe demostración de herramienta interactiva por esta función.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Conectar y probar gesto real de mover herraje en host; capability/UI puede seguir deshabilitada.",
+      "nextProof": "Conectar y probar gesto real de mover herraje en host; capability/UI puede seguir deshabilitada.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/sketchupHardwareSync.ts",
+          "line": 38,
+          "excerpt": "export function repositionHardwarePlacement(\n  envelope: AuthoringEnvelopeV1,\n  options: RepositionHardwareOptions,\n  catalog: AuthoringCatalogIndex,\n  joineryCatalog: SketchUpJoineryCatalog,\n): SyncHardwareResult {\n  const issues: ContractIssue[] = [];\n\n  // Deep clone envelope to ensure immutability\n  const updatedEnvelope: AuthoringEnvelopeV1 = JSON.parse(JSON.stringify(envelope));\n\n  const assembly = updatedEnvelope.assemblies.find((a) => a.assemblyId === options.assemblyId);",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupHardwareSync.test.ts",
+          "line": 15,
+          "excerpt": "  it(\"isolates machining changes: moving a hinge updates only its derived hole and leaves shelf machining untouched\", () => {\n    const inst = instantiateFurniture(\n      kitchenBaseDefinition,\n      { widthMm: 600, heightMm: 720, depthMm: 590, shelfCount: 1, doorCount: 1 },\n      sampleComponents,\n      sampleMaterials,\n      sampleHardware,\n      { projectId: \"project-42\", assemblyId: \"asm-base-01\" },\n    );\n    expect(inst.success).toBe(true);\n\n    // Initial preflight",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupHardwareSync.test.ts",
+          "line": 75,
+          "excerpt": "  it(\"resolves drilling collisions interactively by repositioning conflicting hardware\", () => {\n    const inst = instantiateFurniture(\n      kitchenBaseDefinition,\n      { widthMm: 600, heightMm: 720, depthMm: 590, shelfCount: 1, doorCount: 1 },\n      sampleComponents,\n      sampleMaterials,\n      sampleHardware,\n      { projectId: \"project-42\", assemblyId: \"asm-base-01\" },\n    );\n\n    // Place bottom hinge at Y=360 (colliding with shelf-01 at Z=360)\n    const collidingSync = repositionHardwarePlacement(",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F166",
+      "title": "Login de taller, biblioteca remota y licencia en la extensión de SketchUp",
+      "scope": "Sesión y catálogo remoto de SketchUp: ledger histórico",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Login desde la pestaña Estado con email/contraseña/URL del servidor",
+        "Token de extensión 30d con claim client; middleware rechaza mutaciones no-GET",
+        "GET /api/furniture/definitions sirve el contrato piloto verbatim (4 definiciones, 10 presets) con ETag por revisionId",
+        "Sin licencia activa: 403 con explicación y la extensión sirve el catálogo local con bloqueador visible",
+        "Sesión persistida en ~/Library/Application Support/Granete (no en preferencias de SketchUp)",
+        "Test de paridad TS (golden) y Go (embed == contracts) del catálogo compartido"
+      ],
+      "actualVsAcceptance": "Application usa DeviceProvider y RemoteCatalogProvider principal con StaticCatalogProvider de fallback. Por tanto AC histórico email/password + token de 30 días + licencia por usuario no describe runtime actual; SEC-6 y licencia org lo sustituyeron.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Smoke de dispositivo enrolado contra build exacto; fallback no debe presentarse como catálogo remoto autoritativo.",
+      "nextProof": "Smoke de dispositivo enrolado contra build exacto; fallback no debe presentarse como catálogo remoto autoritativo.",
+      "evidence": [
+        {
+          "file": "apps/sketchup-extension/src/granete_for_sketchup/application.rb",
+          "line": 20,
+          "excerpt": "        @session = session_provider || Auth::DeviceProvider.new(logger: logger)\n        @transport = transport || @session.transport\n        @auth_provider = auth_provider || @session\n        @model_binding_connector = model_binding_connector || Connection::ModelBinding::Connector.new(\n          store_factory: -> { Connection::ModelBinding::Store.new(active_model) },\n          service: Connection::ModelBinding::Service.new(\n            transport: @transport,\n            auth_provider: @auth_provider,\n            logger: logger\n          ),\n          logger: logger\n        )",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/authoring_resolve.go",
+          "line": 68,
+          "excerpt": "\t// Same workshop-license gate as the catalog/layout family.\n\torg, err := s.Store.GetOrganizationByID(r.Context(), storage.OrgFromCtx(r.Context()))\n\tif err != nil {\n\t\trespondWithInternalError(w, err, \"load organization license\")\n\t\treturn\n\t}\n\tif org == nil || domain.LicenseStatusAt(org.LicensePlan, org.LicenseExpiresAt, time.Now()) != domain.LicenseStatusActive {\n\t\ts.writeAuthoringResolveEnvelope(w, http.StatusForbidden, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{\n\t\t\tCode:     \"ACCESS_FORBIDDEN\",\n\t\t\tMessage:  \"la licencia del taller no está activa. Pedile al administrador del taller que la renueve (plan y vencimiento) para usar la biblioteca de Granete.\",\n\t\t\tSeverity: domain.IssueSeverityError, Path: \"authorization\",\n\t\t}})",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F168",
+      "title": "#347 Manufacturing preflight autoritativo — Definition of Done completo",
+      "scope": "Negociación y stale dentro de preflight",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "requiredCapabilities determinísticas derivadas de agujeros y geometría resueltos, no de claims de authoring",
+        "Máquina/perfil incompatible bloquea antes de exportar con MACHINE_CAPABILITY_UNSUPPORTED y cero output",
+        "Capability ausente, versión distinta, constraint omitido o límite insuficiente bloquean (no inferencia)",
+        "Cambio post-release marca outputs stale vía REVISION_STALE con fingerprints en details",
+        "Override auditable degrada sólo stale/capability a warning; nunca colisiones ni ambigüedad crítica",
+        "Todo error lleva code, message, entityId, path, severity y remediation",
+        "Mismos fixtures producen mismo fingerprint y capabilities (test de determinismo)",
+        "19 tests del preflight + suite domain completa en verde, typecheck de workspaces limpio"
+      ],
+      "actualVsAcceptance": "Gate deriva requirements y marca REVISION_STALE; override solo degrada MACHINE_CAPABILITY_UNSUPPORTED/REVISION_STALE, no colisiones. Tests negativos capability/version/constraint soportan lógica local. Input server-policy no demuestra durable audit real por sí mismo.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Proof de caller server, persistencia audit y perfil/adaptador/version exactos con readback de máquina.",
+      "nextProof": "Proof de caller server, persistencia audit y perfil/adaptador/version exactos con readback de máquina.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/sketchupPreflight.ts",
+          "line": 232,
+          "excerpt": "      code: \"REVISION_STALE\",\n      message: `Released bomFingerprint ${policy.release.releasedBomFingerprint} no longer matches current ${machining.bomFingerprint}; released artifacts are stale`,\n      severity: \"error\",\n      entityId: envelope.projectId,\n      path: `release[designRevisionId=${policy.release.releasedDesignRevisionId}]`,\n      remediation:\n        \"Create a new ProductionRelease for the current revision or apply an audited server-side override; released artifacts are never overwritten silently.\",\n      details: {\n        releasedBomFingerprint: policy.release.releasedBomFingerprint,\n        currentBomFingerprint: machining.bomFingerprint,\n        releasedAt: policy.release.releasedAt,\n        releasedDesignRevisionId: policy.release.releasedDesignRevisionId,",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupPreflight.ts",
+          "line": 455,
+          "excerpt": "  overrides: readonly PreflightOverride[],\n): readonly ContractIssue[] {\n  if (overrides.length === 0) return issues;\n  return issues.map((issue) => {\n    if (issue.severity !== \"error\") return issue;\n    if (issue.code !== \"MACHINE_CAPABILITY_UNSUPPORTED\" && issue.code !== \"REVISION_STALE\") {\n      return issue;\n    }\n    const matching = overrides.find((override) => {\n      if (override.code !== issue.code) return false;\n      if (override.capabilityId === undefined) return true;\n      return issue.details?.capabilityId === override.capabilityId;",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupPreflight.test.ts",
+          "line": 205,
+          "excerpt": "  it(\"blocks before export when the machine does not declare a required capability\", () => {\n    const machineWithoutDrilling: MachineProfile = {\n      ...capableMachine,\n      supported: capableMachine.supported.filter(\n        (c) => c.capabilityId !== DRILLING_CAPABILITY_ID,\n      ),\n    };\n\n    const result = runManufacturingPreflight(cabinetEnvelope, cabinetCatalog, cabinetJoineryCatalog, {\n      machineProfile: machineWithoutDrilling,\n    });\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F169",
+      "title": "#325 Multi-org core — organizations, memberships, invitations, auditoría de seguridad y scoping del schema",
+      "scope": "Esquema y backfill multi-org",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Migraciones up/down crean organizations/memberships/invitations/security_audit_events sin romper el arranque del server con datos existentes",
+        "Backfill: toda fila de negocio existente queda con organization_id NOT NULL apuntando a la organización inicial; membresía por usuario preservando rol; licencia en org; workshop_settings por org",
+        "memberships.roles validado contra los roles canónicos (CHECK <@), multi-rol permitido; códigos de catálogo únicos por (organization_id, code)",
+        "DEFAULT transitional a la org inicial en organization_id hasta que F170 scope las escrituras explícitamente y lo quite (documentado en las migraciones)",
+        "go test ./... verde incluyendo tests de migración/backfill sobre DB fresca con schema legacy (000001-000079) + verificación de down migrations + re-aplicación tras rollback"
+      ],
+      "actualVsAcceptance": "Migraciones080–084 introducen org/membership/scope; metadata final confirma roles en memberships y organization_id. Defaults transitorios y active del AC fueron reemplazados por088/lifecycle; no deben restaurarse.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "No reejecutado downgrade del chain histórico; consultar pruebas existentes para cada transición exacta.",
+      "nextProof": "No reejecutado downgrade del chain histórico; consultar pruebas existentes para cada transición exacta.",
+      "evidence": [
+        {
+          "file": "backend-go/db/migration/000080_multi_org_core.up.sql",
+          "line": 1,
+          "excerpt": "-- ADR-0004 / #325: multi-organization core identity tables.\n-- Organizations own business data (row-level tenancy); users belong to N\n-- organizations through memberships whose roles[] reference the canonical\n-- roles (contracts/roles.json). Invitations and the append-only security\n-- audit trail support administration (#326).\n\nCREATE TABLE IF NOT EXISTS organizations (\n    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n    name TEXT NOT NULL,\n    slug TEXT NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$'),\n    type TEXT NOT NULL DEFAULT 'factory' CHECK (type IN ('factory', 'store', 'dealer')),\n    license_plan TEXT NOT NULL DEFAULT 'none' CHECK (license_plan IN ('none', 'trial', 'pro')),",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/db/migration/000088_drop_org_defaults.up.sql",
+          "line": 1,
+          "excerpt": "-- #327 hardening: drop the TRANSITIONAL organization_id DEFAULTs from\n-- 000082/000083/000084. Every write path now passes the organization\n-- explicitly (org-scoped auth context) and the middleware rejects\n-- org-less tokens on business routes — an unscoped INSERT must fail\n-- loudly instead of silently landing in the initial organization.\n\nALTER TABLE agregados ALTER COLUMN organization_id DROP DEFAULT;\nALTER TABLE ambient_categories ALTER COLUMN organization_id DROP DEFAULT;\nALTER TABLE ambient_materials ALTER COLUMN organization_id DROP DEFAULT;\nALTER TABLE board_parts ALTER COLUMN organization_id DROP DEFAULT;\nALTER TABLE components ALTER COLUMN organization_id DROP DEFAULT;\nALTER TABLE customers ALTER COLUMN organization_id DROP DEFAULT;",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/multi_org_migration_test.go",
+          "line": 157,
+          "excerpt": "func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {\n\tpool := multiOrgFreshDB(t)\n\tmultiOrgApplyLegacySchema(t, pool)\n\tmultiOrgSeedLegacyRows(t, pool)\n\n\tstore := &storage.PostgresStore{Pool: pool}\n\tctx := context.Background()\n\tif err := store.RunMigrations(ctx); err != nil {\n\t\tt.Fatalf(\"RunMigrations (multi-org chain): %v\", err)\n\t}\n\n\t// Initial organization exists with the deterministic id and the strongest",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F170",
+      "title": "#325 Auth con contexto de organización — JWT v2, select-org, middleware OrgContext y scoping ruta por ruta",
+      "scope": "Contexto auth vivo y roles por membership",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Login/select-org/refresh emiten y aceptan JWT v2 con contexto org; tokens v1 rechazados",
+        "OrgContext re-valida membership por request; membresía revocada u org inactiva cortan el acceso",
+        "Endpoints de datos filtran por organization_id del scope; cross-org responde 404",
+        "rbac TS/Go con roles[] (unión) y paridad via contracts/roles.json rota CI al divergir",
+        "Extensión SketchUp opera scoped a la org del usuario y la licencia se verifica contra organizations",
+        "cmd/admin permite crear platform_admin, organización y asignar membresías",
+        "pnpm test + pnpm typecheck + go test ./... verdes",
+        "Media particionada en MEDIA_DIR/<org_id>/ (URLs almacenadas no cambian; archivos existentes se mueven a la org inicial)"
+      ],
+      "actualVsAcceptance": "Middleware reconsulta status canónico de membership/org y roles; storage no depende de users.role. JWT v2 / extensión de 30 días de AC son históricos ante registry y DeviceProvider actuales.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Smoke actual de CLI y device de este baseline; no asumir semántica token antiguo a partir de ledger.",
+      "nextProof": "Smoke actual de CLI y device de este baseline; no asumir semántica token antiguo a partir de ledger.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/api/middleware.go",
+          "line": 236,
+          "excerpt": "\t\t// but membership roles and the organization's active flag are\n\t\t// re-read from the DB — a revoked membership or a suspended\n\t\t// organization cuts access on the next request, not at expiry.\n\t\tif claims.Support != nil {\n\t\t\t// Support session: platform staff acting as admin of one\n\t\t\t// organization. The session row is re-validated per\n\t\t\t// request — logout/expiry cut access immediately. The\n\t\t\t// actor stays the platform admin (UserID/Email claims).\n\t\t\tif !claims.PlatformAdmin {\n\t\t\t\trespondWithError(w, http.StatusUnauthorized, \"invalid token\")\n\t\t\t\treturn\n\t\t\t}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/organizations.go",
+          "line": 232,
+          "excerpt": "\t\tJOIN organizations o ON o.id = m.organization_id\n\t\tWHERE m.user_id = $1 AND m.organization_id = $2 AND m.status = 'active'`, userID, organizationID))\n}\n\n// EnsureMembership inserts a membership if the user has none in the\n// organization yet. Used by approval bridging and the admin CLI.\nfunc (s *PostgresStore) EnsureMembership(ctx context.Context, organizationID, userID string, roles []domain.UserRole) error {\n\tif !domain.IsValidRoleSet(roles) {\n\t\treturn fmt.Errorf(\"invalid role set\")\n\t}\n\t_, err := s.db(ctx).Exec(ctx, `\n\t\tINSERT INTO memberships (organization_id, user_id, roles, status)",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/middleware_test.go",
+          "line": 613,
+          "excerpt": "func TestAuthMiddleware_OrgTokenUsesLiveMembershipRoles(t *testing.T) {\n\tsecret := \"super-secret-test-key-0123456789\"\n\tusers := &staticUsers{\n\t\tbyID: map[string]*domain.User{\n\t\t\t\"a-1\": {ID: \"a-1\", Email: \"was-admin@test.com\", AccountStatus: domain.AccountStatusActive},\n\t\t},\n\t\tmemberships: map[string]*domain.MembershipWithOrg{\n\t\t\t// Token says admin, membership now says vendedor.\n\t\t\t\"a-1:org-1\": memEntry(\"a-1\", \"org-1\", []domain.UserRole{domain.RoleVendedor}, true),\n\t\t},\n\t}\n\thandler := AdminMiddleware(mustAuthority(secret), users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F171",
+      "title": "#325 Tests de aislamiento cross-org y paridad de roles múltiples",
+      "scope": "Aislamiento multi-org y unión roles",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Suite cross-org: lecturas y escrituras entre dos organizaciones fallan 404 en todos los endpoints de datos tocados",
+        "Revocación de membresía y suspensión de org cortan acceso en el request siguiente",
+        "Token de extensión scoped a org del miembro",
+        "Backfill verificado sobre DB seed",
+        "Paridad TS↔Go roles[] con fixtures compartidos en CI"
+      ],
+      "actualVsAcceptance": "Tests fuente verifican customers/projects/catalog/settings y directorio por organización; fixtures TS ejercitan unión. Son pruebas concretas no sólo claims de middleware.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "Related root pilot gate PASS; individual acceptance not independently rerun here",
+      "preciseUnknown": "Correlacionar cada endpoint adicional con prueba propia; no generalizar todos los265 endpoints desde cinco familias.",
+      "nextProof": "Correlacionar cada endpoint adicional con prueba propia; no generalizar todos los265 endpoints desde cinco familias.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/storage/multi_org_isolation_test.go",
+          "line": 61,
+          "excerpt": "func TestIsolation_Customers(t *testing.T) {\n\tstore, orgA, orgB := isolationSetup(t)\n\tctx := context.Background()\n\n\tconst idA = \"c1000000-0000-0000-0000-00000000000a\"\n\tconst idB = \"c1000000-0000-0000-0000-00000000000b\"\n\n\t// Lists only see their own organization.\n\tlistA, err := store.ListCustomers(scoped(ctx, orgA))\n\tif err != nil {\n\t\tt.Fatalf(\"list A: %v\", err)\n\t}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/multi_org_isolation_test.go",
+          "line": 194,
+          "excerpt": "func TestIsolation_UserDirectoryByOrganization(t *testing.T) {\n\tstore, orgA, orgB := isolationSetup(t)\n\tctx := context.Background()\n\n\t// Two users: u-a belongs only to org A, u-both belongs to A and B.\n\tseed := []string{\n\t\t`INSERT INTO users (id, email, normalized_email, name, account_status, password_hash) VALUES\n\t\t ('a1000000-0000-0000-0000-0000000000aa', 'a@test.com', 'a@test.com', 'Usuario A', 'active', 'x'),\n\t\t ('a1000000-0000-0000-0000-0000000000bb', 'both@test.com', 'both@test.com', 'Usuario AB', 'active', 'x')`,\n\t\t`INSERT INTO memberships (organization_id, user_id, roles) VALUES\n\t\t ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000aa', '{admin}'),\n\t\t ('` + orgA + `', 'a1000000-0000-0000-0000-0000000000bb', '{vendedor}'),",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/rbacUnion.test.ts",
+          "line": 30,
+          "excerpt": "  it('hereda permisos de ambos lados', () => {\n    expect(anyRole(haceTodo, roleCanMutateCatalog)).toBe(true);\n    expect(anyRole(haceTodo, roleCanAccessCustomers)).toBe(true);\n  });\n\n  it('no otorga lo que ningún rol tiene', () => {\n    expect(anyRole(['vendedor'], roleCanMutateCatalog)).toBe(false);\n    expect(anyRole([], roleCanMutateCatalog)).toBe(false);\n    expect(anyRole([null, undefined], roleCanMutateCatalog)).toBe(false);\n  });\n});\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F172",
+      "title": "#326 Administración — consola de plataforma, equipo del taller, invitaciones auditables y sesión de soporte",
+      "scope": "Platform/Team reemplazados por lifecycle moderno",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Platform admin crea/suspende organizaciones, gestiona licencias y ve auditoría; no ve datos de negocio sin sesión de soporte",
+        "Sesión de soporte: razón obligatoria, token corto, banner persistente en toda la UI, eventos start/end auditados, actor real registrado",
+        "Admin del taller invita por link/código, asigna roles múltiples y sectores, desactiva usuarios; invitaciones y memberships quedan auditadas",
+        "Roles de tienda/dealer restringidos a los permitidos por tipo de organización",
+        "Selector de org para usuarios multi-membresía en login",
+        "pnpm test + pnpm typecheck + go test ./... verdes"
+      ],
+      "actualVsAcceptance": "Provisioning y Team tienen commands, bootstrap explícito, audit y soporte separado; AC desactivar usuarios mezcla términos históricos con membership lifecycle moderno. Cancelación step-up con falso success en Team permanece hallazgo independiente.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "UX completa de roles/revoke/offboard con cancelación y fracaso real; no declarar éxito administrativo por toast.",
+      "nextProof": "UX completa de roles/revoke/offboard con cancelación y fracaso real; no declarar éxito administrativo por toast.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/api/organization_lifecycle.go",
+          "line": 23,
+          "excerpt": "func (s *Server) HandleProvisionOrganization(w http.ResponseWriter, r *http.Request) {\n\tclaims := claimsFromRequest(r)\n\tif claims == nil {\n\t\trespondWithError(w, http.StatusUnauthorized, \"invalid token\")\n\t\treturn\n\t}\n\tvar body openapi.ProvisionOrganizationRequest\n\tif !decodeGeneratedJSONBody(w, r, &body) {\n\t\treturn\n\t}\n\tname := strings.TrimSpace(body.Name)\n\tif name == \"\" || len([]rune(name)) > 120 {",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/application/organizations.go",
+          "line": 168,
+          "excerpt": "func (s *OrganizationService) ProvisionOrganization(ctx context.Context, cmd ProvisionOrganizationCommand) (*ProvisionOrganizationResult, error) {\n\tcmd.Name = strings.TrimSpace(cmd.Name)\n\tcmd.Slug = strings.TrimSpace(cmd.Slug)\n\tif cmd.ActorUserID == \"\" || cmd.Name == \"\" || cmd.Slug == \"\" || cmd.BootstrapAdminUserID == \"\" {\n\t\treturn nil, fmt.Errorf(\"%w: actor, name, slug and bootstrap admin are required\", ErrInvalidOrganizationCommand)\n\t}\n\tif !domain.IsValidOrganizationType(cmd.Type) || !domain.IsValidLicensePlan(cmd.LicensePlan) {\n\t\treturn nil, fmt.Errorf(\"%w: invalid organization type or license plan\", ErrInvalidOrganizationCommand)\n\t}\n\tentitlements := DefaultOrganizationEntitlements(cmd.Type, cmd.LicensePlan)\n\tif cmd.Entitlements != nil {\n\t\tentitlements = *cmd.Entitlements",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/orgteam_capabilities_test.go",
+          "line": 247,
+          "excerpt": "func TestOrgTeamSupportSessionIsReadOnly(t *testing.T) {\n\ttarget := storage.OrgTeamMember{MembershipID: \"target-membership\", UserID: \"target\", Roles: []domain.UserRole{domain.RoleVendedor}}\n\tsrv, store := teamCapabilityServer(domain.OrganizationTypeFactory, []storage.OrgTeamMember{target})\n\n\treadRequest := teamCapabilityRequest(http.MethodGet, \"/api/org/memberships\", \"support-actor\", []string{string(domain.RoleAdmin)}, \"\")\n\tclaimsFromRequest(readRequest).Support = &auth.SupportClaims{OrgID: \"org-1\", SessionID: \"support-session\"}\n\treadResponse := httptest.NewRecorder()\n\tsrv.HandleOrgTeam(readResponse, readRequest)\n\tif readResponse.Code != http.StatusOK {\n\t\tt.Fatalf(\"support read status = %d, want %d: %s\", readResponse.Code, http.StatusOK, readResponse.Body.String())\n\t}\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F174",
+      "title": "Deployment VPS de producción + distribución del plugin SketchUp a talleres piloto",
+      "scope": "Infraestructura deployment, no VPS certificado",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "docker-compose.prod.yml levanta postgres + backend + caddy con TLS y la web servida",
+        "docs/deployment.md permite reproducir el deployment en un VPS limpio (incluye backups/restore)",
+        "docs/pilot-onboarding.md describe el alta completa de un taller piloto end-to-end",
+        "La extensión SketchUp se conecta contra el VPS por HTTPS con URL configurable existente",
+        "Smoke de producción documentado (login, org, catálogo, furniture endpoint)"
+      ],
+      "actualVsAcceptance": "Docker/Caddy/runbooks presentes y smoke estructural root pasa. Suite backup round-trip usa base scratch; no equivale restaurar despliegue real. Operations audit registra toolchain drift y restore que tolera errores.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Build imágenes y deploy/restore en VPS limpio con dominio/TLS reales; no ejecutados en esta auditoría.",
+      "nextProof": "Build imágenes y deploy/restore en VPS limpio con dominio/TLS reales; no ejecutados en esta auditoría.",
+      "evidence": [
+        {
+          "file": "docker-compose.prod.yml",
+          "line": 1,
+          "excerpt": "name: granete-prod\n\nservices:\n  postgres:\n    image: postgres:16-alpine\n    container_name: granete-postgres\n    restart: unless-stopped\n    environment:\n      POSTGRES_USER: ${POSTGRES_USER:-granete_prod}\n      # Required: compose refuses to start without it.\n      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}\n      POSTGRES_DB: ${POSTGRES_DB:-granete_prod}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "scripts/smoke-deploy.sh",
+          "line": 1,
+          "excerpt": "#!/usr/bin/env bash\n# =============================================================================\n# Granete — Deployment Smoke Test\n# =============================================================================\n# Validates that compose, env template, scripts, and docs are structurally\n# consistent. Run this after any infrastructure change to catch drift.\n#\n# Usage:\n#   scripts/smoke-deploy.sh\n#\n# Exit code 0 = all checks pass. Non-zero = something is broken.\n# =============================================================================",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/tests/pilotreadiness/backup_test.go",
+          "line": 31,
+          "excerpt": "func TestPilotReadiness_BackupRestore(t *testing.T) {\n\tpgDump, err := exec.LookPath(\"pg_dump\")\n\tif err != nil {\n\t\tt.Skipf(\"pg_dump not in PATH — install postgresql-client to run the backup/restore leg of the pilot gate: %v\", err)\n\t}\n\tpgRestore, err := exec.LookPath(\"pg_restore\")\n\tif err != nil {\n\t\tt.Skipf(\"pg_restore not in PATH — install postgresql-client to run the backup/restore leg of the pilot gate: %v\", err)\n\t}\n\n\t// --- 1. Dump the live pilot database (custom format, like backup.sh) ---\n\tdumpFile := filepath.Join(t.TempDir(), \"pilot-readiness.dump\")",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F175",
+      "title": "Hardening #325/#326/#327 — enforcement server-side de ownership, fail-closed org-less y redacción sales/manufactura",
+      "scope": "Ownership y redacción Project",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Create de proyecto rechaza orgs sin membresía activa del caller y manufacturing no-factory (403)",
+        "Update de proyecto no reasigna ownership y un PUT de la org sales no borra payload manufacturero",
+        "GET list/detail redacta campos manufactureros para orgs != manufacturing org (test API incluido)",
+        "Token sin org: rutas de negocio 403, consola plataforma y auth permitidas, sin roles heredados",
+        "Migración 000088 up/down: DEFAULTs eliminados; INSERT sin organization_id viola NOT NULL (fail-loud)",
+        "ListUsersByOrganization aísla el directorio por org (test de aislamiento cross-org)",
+        "Hidratación web preserva roles multi-rol tras reload (tests vitest)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "actualVsAcceptance": "manufacturingOnly devuelve notfound fuera de organización fabricante. Tests comprueban create con org ajena y update que conserva ownership/manufacturing. UPDATE actual excluye reasignación org. Esto no resuelve OP-01/02 del contenido editable por fabricante.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Ejercitar mezcla sales/manufacturing real y generic PUT sensible; no confundir redacción cross-org con autoridad de release.",
+      "nextProof": "Ejercitar mezcla sales/manufacturing real y generic PUT sensible; no confundir redacción cross-org con autoridad de release.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/api/ownership.go",
+          "line": 151,
+          "excerpt": "func (s *Server) manufacturingOnly(next http.HandlerFunc) http.HandlerFunc {\n\treturn func(w http.ResponseWriter, r *http.Request) {\n\t\tclaims := claimsFromRequest(r)\n\t\tif claims != nil && claims.OrgID != \"\" {\n\t\t\tp, err := s.Store.GetProjectByID(r.Context(), r.PathValue(\"id\"))\n\t\t\tif err != nil || p == nil {\n\t\t\t\trespondWithError(w, http.StatusNotFound, \"obra no encontrada\")\n\t\t\t\treturn\n\t\t\t}\n\t\t\tif !orgSeesManufacturing(claims, p) {\n\t\t\t\trespondWithError(w, http.StatusNotFound, \"obra no encontrada\")\n\t\t\t\treturn",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/projectOwnership_test.go",
+          "line": 201,
+          "excerpt": "func TestProjectOrgOwnership_UpdatePreservesOwnershipAndManufacturing(t *testing.T) {\n\tconst orgSales, orgFactory, orgEvil = \"org-sales\", \"org-factory\", \"org-evil\"\n\texisting := &domain.Project{\n\t\tID:                          \"p1\",\n\t\tName:                        \"Cocina compartida\",\n\t\tStatus:                      domain.StatusDraft,\n\t\tOwnerUserID:                 \"u1\",\n\t\tSalesOrganizationID:         orgSales,\n\t\tManufacturingOrganizationID: orgFactory,\n\t\tCutPlan:                     json.RawMessage(`{\"sheets\":1}`),\n\t\tEngineeringLog:              json.RawMessage(`[{\"e\":\"cut\"}]`),\n\t}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/projects.go",
+          "line": 1157,
+          "excerpt": "\t\tUPDATE projects\n\t\tSET name = $1, customer_id = $2, currency = $3, margin_factor = $4, labor_fixed_cost = $5, status = $6, commercial_status = $7, notes = $8,\n\t\t    owner_user_id = $9, assigned_engineer_id = $10, technical_status = $11, survey_completed_at = $12, installation_scheduled_date = $13,\n\t\t    kitchen_layout = $14, plan_edit_session = $15, installation_checklist = $16, nesting_import = $17, measure_defaults = $18, engineering_log = $19, cut_plan = $20,\n\t\t    design_revisions = $21, approvals = $22, production_release = $23, change_orders = $24, part_instances = $25, module_units = $26,\n\t\t    updated_at = CURRENT_TIMESTAMP\n\t\tWHERE id = $27 AND (organization_id = $28 OR sales_organization_id = $28 OR manufacturing_organization_id = $28);\n\t`\n\ttag, err := tx.Exec(ctx, query, p.Name, p.CustomerID, p.Currency, p.MarginFactor, p.LaborFixedCost, p.Status, commercialStatusArg(p.CommercialStatus), p.Notes, owner, engineer, techStatus, p.SurveyCompletedAt, p.InstallationScheduledDate, nullKitchenLayout(p.KitchenLayout), nullKitchenLayout(p.PlanEditSession), nullKitchenLayout(p.InstallationChecklist), nullKitchenLayout(p.NestingImport), nullKitchenLayout(p.MeasureDefaults), nullKitchenLayout(p.EngineeringLog), nullKitchenLayout(p.CutPlan), jsonbSliceArg(p.DesignRevisions), jsonbSliceArg(p.Approvals), jsonbStructArg(p.ProductionRelease), jsonbSliceArg(p.ChangeOrders), jsonbSliceArg(p.PartInstances), jsonbSliceArg(p.ModuleUnits), id, OrgFromCtx(ctx))\n\tif err != nil {\n\t\treturn err\n\t}",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F176",
+      "title": "Segunda ola de hardening multi-org — paridad RBAC, retiro del puente users.role y red de ventas de fábrica (#326)",
+      "scope": "Unión roles/tipo org y red conectada legacy",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "RoleCanViewCosts/almacen idéntico TS↔Go (pins en rbac_test.go y rbac.test.ts)",
+        "ownership multi-role espejado TS↔Go (rbacUnion.test replica TestOwnershipUnion_MultiRole)",
+        "rolesByOrganizationType en contracts/roles.json pineado desde ambos lados",
+        "UsersScreen filtra roles asignables por tipo de org (store/dealer comerciales)",
+        "/api/staff/* eliminado; cambios de roles scoped por membresía sin efecto cross-org",
+        "licencia por usuario eliminada (BE+FE); sólo org license",
+        "factory crea tiendas/distribuidores conectados con catálogo clonado y audit (tests api 6 + storage)",
+        "Red de Ventas operativa en Ajustes (tests render con fetch stubbed)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "actualVsAcceptance": "Domain tests pinnean roles por factory/store/dealer y unión; usuarios ya no llevan licencia/rol global. parent_organization_id existe, pero red basada en relaciones/capabilities sigue programa Gate B y no se puede inferir operabilidad comercial completa.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Validar caso network vigente bajo ADR0006 / Gate B, no promocionar antigua tab como red completa.",
+      "nextProof": "Validar caso network vigente bajo ADR0006 / Gate B, no promocionar antigua tab como red completa.",
+      "evidence": [
+        {
+          "file": "packages/domain/src/organization.test.ts",
+          "line": 34,
+          "excerpt": "  it('factory assigns the full canonical set (contract parity)', () => {\n    expect([...allowedRolesForOrgType('factory')].sort()).toEqual(\n      [...contractByType.factory].sort(),\n    );\n  });\n\n  it('store/dealer are commercial-only (contract parity)', () => {\n    for (const type of ['store', 'dealer'] as const) {\n      const allowed = allowedRolesForOrgType(type);\n      expect([...allowed].sort()).toEqual([...contractByType[type]].sort());\n      // No engineering/production operators leak into sales organizations.\n      expect(allowed).not.toContain('ingeniero');",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/organization.test.ts",
+          "line": 64,
+          "excerpt": "  it('role sets: non-empty, canonical and all allowed (mirrors Go RolesAllowedInOrg)', () => {\n    expect(rolesAllowedInOrg(['vendedor'], 'store')).toBe(true);\n    expect(rolesAllowedInOrg(['vendedor', 'gerente_ventas'], 'store')).toBe(\n      true,\n    );\n    expect(rolesAllowedInOrg(['vendedor', 'ingeniero'], 'store')).toBe(false);\n    expect(rolesAllowedInOrg([], 'factory')).toBe(false);\n    expect(rolesAllowedInOrg(['nope'], 'factory')).toBe(false);\n  });\n});",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/db/migration/000089_connected_orgs.up.sql",
+          "line": 1,
+          "excerpt": "-- #326: factories manage their sales network. A connected store/dealer points\n-- at its parent factory; the parent link is set at creation and is not part\n-- of any generic update flow.\nALTER TABLE organizations\n    ADD COLUMN IF NOT EXISTS parent_organization_id UUID REFERENCES organizations(id);\n\nCREATE INDEX IF NOT EXISTS idx_organizations_parent ON organizations(parent_organization_id);",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F177",
+      "title": "Cierre de deudas multi-org — DROP de users.role/license_* (000090) y pulidos UX",
+      "scope": "Retiro columnas de usuario",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Sin lectores/escritores de users.role/license_* en el código (grep limpio)",
+        "Migración 000090 up/down; chain legacy 000001→000090 testeada (backfill 000081 corre antes del DROP)",
+        "Sectores validados por roles de membresía (cualquier rol del set habilita el sector)",
+        "AuthUser.role opcional; login funciona sin user.role (roles sibling)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "actualVsAcceptance": "Migration090 elimina role/license_plan/license_expires_at y metadata final confirma ausencia. Lectura membership une org/status/roles actuales; sectores luego migraron a membership_sectors.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "No repetir grep histórico como claim exhaustivo; confirmar serialización de clientes legacy cuando corresponda.",
+      "nextProof": "No repetir grep histórico como claim exhaustivo; confirmar serialización de clientes legacy cuando corresponda.",
+      "evidence": [
+        {
+          "file": "backend-go/db/migration/000090_drop_deprecated_user_columns.up.sql",
+          "line": 5,
+          "excerpt": "-- resurface.\nALTER TABLE users\n    DROP COLUMN IF EXISTS role,\n    DROP COLUMN IF EXISTS license_plan,\n    DROP COLUMN IF EXISTS license_expires_at;",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/organizations.go",
+          "line": 164,
+          "excerpt": "\tm.id, m.organization_id, m.user_id, m.roles, m.status, m.joined_at, m.suspended_at, m.suspended_by::text, m.suspension_reason, m.left_at, m.left_by::text, m.leave_reason, m.created_at, m.updated_at, m.version, m.credential_version, m.sessions_revoked_at,\n\to.id, o.name, o.slug, o.type, o.license_plan, o.license_expires_at,\n\to.status, o.credential_version, o.status_changed_at, o.status_changed_by::text,\n\to.status_reason, o.suspended_at, o.offboarding_started_at, o.terminated_at,\n\to.parent_organization_id, o.created_at, o.updated_at, o.version`\n\nfunc scanMembershipWithOrg(row pgx.Row) (*domain.MembershipWithOrg, error) {\n\tvar m domain.MembershipWithOrg\n\terr := row.Scan(&m.ID, &m.OrganizationID, &m.UserID, &m.Roles, &m.Status, &m.JoinedAt, &m.SuspendedAt, &m.SuspendedBy, &m.SuspensionReason, &m.LeftAt, &m.LeftBy, &m.LeaveReason, &m.CreatedAt, &m.UpdatedAt, &m.Version, &m.CredentialVersion, &m.SessionsRevokedAt,\n\t\t&m.Organization.ID, &m.Organization.Name, &m.Organization.Slug, &m.Organization.Type,\n\t\t&m.Organization.LicensePlan, &m.Organization.LicenseExpiresAt,\n\t\t&m.Organization.Status, &m.Organization.CredentialVersion, &m.Organization.StatusChangedAt,",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/db/migration/000097_membership_sectors.up.sql",
+          "line": 62,
+          "excerpt": "DROP TABLE user_sectors;",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F178",
+      "title": "Fixes del re-review de #325/#326/#327 — consola plataforma, CLI post-000090, gate de manufactura y regresiones FE",
+      "scope": "Regresiones scan org y gates manufacturing",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "PATCH de organización de plataforma funciona (test de regresión storage)",
+        "cmd/admin set-license/seed/admin create funcionan contra 000090",
+        "31 rutas de manufactura devuelven 404 a la org comercial (test wrapper)",
+        "GET proyecto a org comercial sin material_planning/quality/costing/cut_plan (test)",
+        "store/dealer sin fábrica asignada → 400 en create (test)",
+        "Embarques/instalaciones visibles de nuevo para roles autorizados (unión)",
+        "go test ./... + pnpm typecheck + pnpm test verdes"
+      ],
+      "actualVsAcceptance": "TestUpdateOrganization modifica nombre y comprueba roundtrip de status; API prueba manufacturingOnly y redacción subprocesses. CLI seed actual scoping por organización y owner vía membership. No demuestra manualmente todos los nueve fixes UI históricos.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Smoke CLI set-license/admin y UI manufacturing multi-rol en entorno exacto; sin depender de ledger.",
+      "nextProof": "Smoke CLI set-license/admin y UI manufacturing multi-rol en entorno exacto; sin depender de ledger.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/storage/multi_org_isolation_test.go",
+          "line": 301,
+          "excerpt": "func TestUpdateOrganization_ScanMatchesColumns(t *testing.T) {\n\tstore, _, _ := isolationSetup(t)\n\tctx := context.Background()\n\n\torg := &domain.Organization{\n\t\tName: \"Fábrica Update\", Slug: \"fabrica-update\",\n\t\tType: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,\n\t}\n\tif err := store.CreateOrganization(ctx, org); err != nil {\n\t\tt.Fatalf(\"create: %v\", err)\n\t}\n",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/projectOwnership_test.go",
+          "line": 247,
+          "excerpt": "func TestManufacturingOnly_RouteGate(t *testing.T) {\n\tconst orgSales, orgFactory = \"org-sales\", \"org-factory\"\n\tnewSrv := func() *Server {\n\t\treturn &Server{Store: &stubStore{projectReturnedByID: &domain.Project{\n\t\t\tID:                          \"p1\",\n\t\t\tName:                        \"Split\",\n\t\t\tSalesOrganizationID:         orgSales,\n\t\t\tManufacturingOrganizationID: orgFactory,\n\t\t}}}\n\t}\n\twrapped := func(srv *Server) http.HandlerFunc {\n\t\treturn srv.manufacturingOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/projectOwnership_test.go",
+          "line": 319,
+          "excerpt": "func TestProjectOrgOwnership_GetRedactsSubprocessesForSalesOrg(t *testing.T) {\n\tconst orgSales, orgFactory = \"org-sales\", \"org-factory\"\n\texisting := &domain.Project{\n\t\tID:                          \"p1\",\n\t\tName:                        \"Split\",\n\t\tOwnerUserID:                 \"u1\",\n\t\tSalesOrganizationID:         orgSales,\n\t\tManufacturingOrganizationID: orgFactory,\n\t\tCutPlan:                     json.RawMessage(`{\"sheets\":1}`),\n\t\tMaterialPlanning:            &domain.MaterialPlanning{ID: \"mrp-1\"},\n\t\tQuality:                     &domain.QualityJob{ID: \"q-1\"},\n\t\tCosting:                     &domain.JobCosting{ID: \"jc-1\"},",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/cmd/admin/main.go",
+          "line": 393,
+          "excerpt": "func runSeed(args []string) {\n\tfs := flag.NewFlagSet(\"seed\", flag.ExitOnError)\n\torgSlug := fs.String(\"org\", \"inicial\", \"organization slug to seed (defaults to the initial org)\")\n\t_ = fs.Parse(args)\n\n\tstore, closeStore, err := openStore()\n\tif err != nil {\n\t\tfatal(err)\n\t}\n\tdefer closeStore()\n\n\tctx := context.Background()",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F179",
+      "title": "Suite de Pilot Readiness multi-org — gate automatizado de coexistencia sin fuga de datos",
+      "scope": "Gate pilot HTTP+PostgreSQL",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Suite identificable y ejecutable: go test ./tests/pilotreadiness/ (14 tests) verde contra PostgreSQL real",
+        "Cross-org A→B y B→A: list/get/update/delete/media/settings/catálogo con 404 uniforme (assertUniform404)",
+        "Membresías: select-org explícito, roles por membresía, unión roles[], baja y role change revalidados en vivo",
+        "Platform admin: consola sí, datos de negocio no; support session scoped + auditada; logout/expiración cortan",
+        "Catálogo clonado: misma base, filas independientes; edición en A deja B intacto",
+        "Ownership: organization_id del caller siempre; sales/manufacturing validados contra membresías; PUT no reasigna",
+        "Backup/restore: restore en base scratch conserva ownership/membresías/settings; media sobrevive round-trip",
+        "scripts/pilot-gate.sh falla (no salta) sin DB; documentado en docs/pilot-readiness.md + deployment §5.3",
+        "go test ./... backend completo verde tras los fixes; CI corre la suite con postgresql-client"
+      ],
+      "actualVsAcceptance": "Suite tiene pruebas crossorg bidireccional, clone independence y pg_dump/restore. Gate root ejecutado PASS en DB dedicada, sin skips; separar ese gate de operación productiva real.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "Root evidence/pilot-foundation-proof.log PASS; no new test execution in this subtask",
+      "preciseUnknown": "Restore VPS operativo y carga/roles representativos aún no demostrados.",
+      "nextProof": "Restore VPS operativo y carga/roles representativos aún no demostrados.",
+      "evidence": [
+        {
+          "file": "backend-go/tests/pilotreadiness/crossorg_test.go",
+          "line": 21,
+          "excerpt": "func TestPilotReadiness_CrossOrgIsolation(t *testing.T) {\n\tfor _, d := range []crossDirection{\n\t\t{name: \"token_A_sees_nothing_of_B\", viewer: fx.a, target: fx.b},\n\t\t{name: \"token_B_sees_nothing_of_A\", viewer: fx.b, target: fx.a},\n\t} {\n\t\tt.Run(d.name, func(t *testing.T) { crossOrgDirection(t, d) })\n\t}\n}\n\nfunc crossOrgDirection(t *testing.T, d crossDirection) {\n\tt.Helper()\n\ttok := d.viewer.admin.token",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/tests/pilotreadiness/catalog_test.go",
+          "line": 12,
+          "excerpt": "func TestPilotReadiness_CatalogCloneIndependence(t *testing.T) {\n\ttype board struct {\n\t\tID         string  `json:\"id\"`\n\t\tCode       string  `json:\"code\"`\n\t\tName       string  `json:\"name\"`\n\t\tBoardPrice float64 `json:\"board_price\"`\n\t}\n\tvar listA, listB []board\n\tfx.decode(t, http.MethodGet, \"/api/catalog/materials\", fx.a.admin.token, nil, http.StatusOK, &listA)\n\tfx.decode(t, http.MethodGet, \"/api/catalog/materials\", fx.b.admin.token, nil, http.StatusOK, &listB)\n\n\tbyCodeB := map[string]board{}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/tests/pilotreadiness/backup_test.go",
+          "line": 31,
+          "excerpt": "func TestPilotReadiness_BackupRestore(t *testing.T) {\n\tpgDump, err := exec.LookPath(\"pg_dump\")\n\tif err != nil {\n\t\tt.Skipf(\"pg_dump not in PATH — install postgresql-client to run the backup/restore leg of the pilot gate: %v\", err)\n\t}\n\tpgRestore, err := exec.LookPath(\"pg_restore\")\n\tif err != nil {\n\t\tt.Skipf(\"pg_restore not in PATH — install postgresql-client to run the backup/restore leg of the pilot gate: %v\", err)\n\t}\n\n\t// --- 1. Dump the live pilot database (custom format, like backup.sh) ---\n\tdumpFile := filepath.Join(t.TempDir(), \"pilot-readiness.dump\")",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F180",
+      "title": "Política cero datos-demo en migraciones/arranque — seed explícito y pineado",
+      "scope": "Migraciones sin seed de negocio",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Fresh DB + RunMigrations → 0 filas en tablas de catálogo/CRM/compras/identidad (test de regresión)",
+        "Excepciones estructurales explícitas: 1 organización inicial, ≤1 workshop_settings de defaults",
+        "Comando de seed documentado (deployment §4.5): CLI + API, idempotencia y cuándo NO usarlo",
+        "Política registrada en verification §11 y AGENTS.md reglas duras",
+        "go test ./... backend verde"
+      ],
+      "actualVsAcceptance": "TestMigrations_NoBusinessData lista explícita de tablas y falla si hay rows tras migrar; seed CLI es explícito y scoped. Claim descriptivo init nunca escribe DB es incorrecto como regla operacional: init ejecuta tests que migran/escriben bases de prueba.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Mantener DB dedicada al ejecutar init; no afirmar servidor compartido intacto. Test no cubre automáticamente tabla futura no listada.",
+      "nextProof": "Mantener DB dedicada al ejecutar init; no afirmar servidor compartido intacto. Test no cubre automáticamente tabla futura no listada.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/storage/migrations_no_seed_test.go",
+          "line": 17,
+          "excerpt": "func TestMigrations_NoBusinessData(t *testing.T) {\n\tpool := multiOrgFreshDB(t)\n\tstore := &storage.PostgresStore{Pool: pool}\n\tif err := store.RunMigrations(context.Background()); err != nil {\n\t\tt.Fatalf(\"run migrations: %v\", err)\n\t}\n\tctx := context.Background()\n\n\tzero := []string{\n\t\t// Catálogo\n\t\t\"material_categories\", \"module_categories\", \"ambient_categories\",\n\t\t\"material_boards\", \"edge_bands\", \"hardwares\", \"components\", \"agregados\",",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/cmd/admin/main.go",
+          "line": 393,
+          "excerpt": "func runSeed(args []string) {\n\tfs := flag.NewFlagSet(\"seed\", flag.ExitOnError)\n\torgSlug := fs.String(\"org\", \"inicial\", \"organization slug to seed (defaults to the initial org)\")\n\t_ = fs.Parse(args)\n\n\tstore, closeStore, err := openStore()\n\tif err != nil {\n\t\tfatal(err)\n\t}\n\tdefer closeStore()\n\n\tctx := context.Background()",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "init.sh",
+          "line": 1,
+          "excerpt": "#!/usr/bin/env bash\n# init.sh — Verificación e inicialización del entorno\n#\n# Lo ejecuta el agente al COMENZAR una sesión y antes de declarar cualquier\n# tarea como `done`. Si falla, la sesión no debe avanzar.\n#\n# Modos:\n#   bootstrap — monorepo TS aún no scaffolded; solo valida el harness.\n#   full      — monorepo existe; valida harness + instala deps + tests (TS, Go y SketchUp Ruby).\n#\n# Salida: [OK] / [WARN] / [FAIL] por sección. Exit code 0 solo si todo verde.\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F181",
+      "title": "cmd/admin clean-demo-data — limpieza segura del catálogo demo + seed no destructivo",
+      "scope": "Clean demo transaccional opt-in",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "admin clean-demo-data dry-run reporta sin modificar la base (verificado CLI + test)",
+        "apply elimina todo el rastro del seed por org; org y data real intactas",
+        "Rows demo referenciados por obras/plantillas/módulos reales se conservan y se reportan",
+        "admin seed ya no trunca globalmente: siembra --org y backfillea owners dentro de la org",
+        "Test del ciclo seed→clean→re-seed pasa (guard de deriva de listas) + protección de obra real",
+        "go test ./... backend verde"
+      ],
+      "actualVsAcceptance": "CleanDemoData inicia transacción con rollback diferido y reporta referencias; runSeed identifica org y backfillea owners scoped sin truncate global. Dry-run describe efecto dentro de transacción, no necesariamente bajo rol SQL read-only.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "No ejecutar limpieza real durante auditoría; validar lista seed/clean contra datos propios antes de apply.",
+      "nextProof": "No ejecutar limpieza real durante auditoría; validar lista seed/clean contra datos propios antes de apply.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/storage/clean_demo.go",
+          "line": 57,
+          "excerpt": "// CleanDemoData removes the demo/plantilla seed rows of one organization,\n// protecting anything referenced by surviving (real) data. With apply=false\n// the whole run happens inside a transaction that is rolled back — the\n// returned report is exactly what apply=true would do.\nfunc (s *PostgresStore) CleanDemoData(ctx context.Context, orgID string, apply bool) (*CleanDemoOrgResult, error) {\n\ttx, err := s.beginTx(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer tx.Rollback(ctx)\n\n\tres := &CleanDemoOrgResult{OrgID: orgID, Deleted: map[string]int{}}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/clean_demo_test.go",
+          "line": 15,
+          "excerpt": "func TestCleanDemoData(t *testing.T) {\n\tpool := multiOrgFreshDB(t)\n\tstore := &storage.PostgresStore{Pool: pool}\n\tif err := store.RunMigrations(context.Background()); err != nil {\n\t\tt.Fatalf(\"run migrations: %v\", err)\n\t}\n\tctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)\n\tif err := store.SeedCatalog(ctx); err != nil {\n\t\tt.Fatalf(\"seed: %v\", err)\n\t}\n\n\tcount := func(sql string, args ...any) int {",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/cmd/admin/main.go",
+          "line": 393,
+          "excerpt": "func runSeed(args []string) {\n\tfs := flag.NewFlagSet(\"seed\", flag.ExitOnError)\n\torgSlug := fs.String(\"org\", \"inicial\", \"organization slug to seed (defaults to the initial org)\")\n\t_ = fs.Parse(args)\n\n\tstore, closeStore, err := openStore()\n\tif err != nil {\n\t\tfatal(err)\n\t}\n\tdefer closeStore()\n\n\tctx := context.Background()",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F182",
+      "title": "Aislamiento cross-org de las familias restantes + guardrails de reconciliación de issues",
+      "scope": "PKs stock/picking y familias aisladas",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "go test ./internal/storage/ -run TestIsolation verde: 11 familias nuevas + writes de mutators con not-found indistinguible de inexistente",
+        "Regresión 000091: upsert cross-org de min-stock/picking crea la row propia del caller y NO muta la de la otra org (afirmado por SQL directo)",
+        "Migración 000091 aditiva sin datos de negocio (TestMigrations_NoBusinessData sigue verde); down restaura las PKs previas",
+        "go test ./... backend completo verde (storage + pilotreadiness con migraciones desde cero)",
+        "docs/verification.md documenta el guardrail de PRs apilados y cómo correr la suite de aislamiento",
+        "issue-reconcile.yml: semanal + dispatch manual, filtro por closing keywords, un solo comentario marcado por issue, nunca cierra solo; dry-run contra el backlog real: 0 flags"
+      ],
+      "actualVsAcceptance": "Migration091 incluye organization_id en ambas PKs; upsert actual usa conflict target scoped. Tests familias cubren stock/picking/templates/ambient/mutators. Esa corrección no hace atómico picking+stock multi-request.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Separar regresión tenancy de defecto transaccional actual; revisar reconciliación GitHub workflow sin inferir que issues fueron cerradas.",
+      "nextProof": "Separar regresión tenancy de defecto transaccional actual; revisar reconciliación GitHub workflow sin inferir que issues fueron cerradas.",
+      "evidence": [
+        {
+          "file": "backend-go/db/migration/000091_org_scoped_stock_picking_pk.up.sql",
+          "line": 8,
+          "excerpt": "ALTER TABLE material_stock DROP CONSTRAINT material_stock_pkey;\nALTER TABLE material_stock\n    ADD CONSTRAINT material_stock_pkey PRIMARY KEY (kind, material_id, organization_id);\n\nALTER TABLE project_picking DROP CONSTRAINT project_picking_pkey;\nALTER TABLE project_picking\n    ADD CONSTRAINT project_picking_pkey PRIMARY KEY (project_id, material, organization_id);",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/projectPicking.go",
+          "line": 42,
+          "excerpt": "func (s *PostgresStore) UpsertProjectPicking(ctx context.Context, pick domain.ProjectPicking) error {\n\t_, err := s.db(ctx).Exec(ctx, `\n\t\tINSERT INTO project_picking (project_id, material, status, marked_at, marked_by, organization_id)\n\t\tVALUES ($1, $2, $3, $4, $5, $6)\n\t\tON CONFLICT (project_id, material, organization_id) DO UPDATE SET\n\t\t\tstatus    = EXCLUDED.status,\n\t\t\tmarked_at = EXCLUDED.marked_at,\n\t\t\tmarked_by = EXCLUDED.marked_by\n\t`, pick.ProjectID, pick.Material, pick.Status, pick.MarkedAt, pick.MarkedBy, OrgFromCtx(ctx))\n\treturn err\n}",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/multi_org_isolation_families_test.go",
+          "line": 305,
+          "excerpt": "func TestIsolation_ProjectPicking(t *testing.T) {\n\tstore, orgA, orgB := isolationSetup(t)\n\tctx := context.Background()\n\n\tmarked := time.Now().UTC()\n\tif err := store.UpsertProjectPicking(scoped(ctx, orgA), domain.ProjectPicking{\n\t\tProjectID: isoProjectA, Material: \"Tablero Roble\",\n\t\tStatus: \"completo\", MarkedAt: &marked,\n\t}); err != nil {\n\t\tt.Fatalf(\"seed picking: %v\", err)\n\t}\n",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F188",
+      "title": "Cambio de material: re-resolución y rebuild nativo atómico en SketchUp (#404 / MT-3)",
+      "scope": "Material rebuild host nativo",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Cambiar BODY actualiza todos los ComponentInstances ligados a BODY sin alterar la intención FRONT/BACK; cambiar FRONT alcanza puerta normal y frentes de cajón de agregados",
+        "La elección 16→18 mm produce geometría local, definiciones y transforms recibidos del layout server-side; Ruby no calcula espesor/orientación ni usa non-uniform scale",
+        "Los herrajes se regeneran desde el layout nuevo y siguen la geometría recalculada de su host componentInstanceId",
+        "La instancia top-level, business IDs, Project/Design binding y world transform sobreviven; los materialChoices no modificados se preservan y hacen round-trip",
+        "Una definición top-level compartida accidentalmente se aísla antes del rebuild para que FI-A no modifique FI-B",
+        "Fallo de resolución o rebuild conserva jerarquía y metadata válidas anteriores; metadata aceptada se escribe después de construir y la edición es una sola operación Undo",
+        "Una actualización de material sin NativeLayout válido falla cerrado; no cae al renderer genérico/offline",
+        "Legacy Group sigue fallando cerrado con referencia a #416; no se agrega migración ni heurística Group→ComponentInstance"
+      ],
+      "actualVsAcceptance": "update_furniture rechaza Group y material change sin NativeLayout, aísla shared definition con make_unique, rebuild dentro de operación con abort. Parámetro sin cambio material puede seguir fallback; no extender gate material a toda edición.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Repetir host material BODY/FRONT real con IDs/world transform/undo y falla de resolve; no ejecutado aquí.",
+      "nextProof": "Repetir host material BODY/FRONT real con IDs/world transform/undo y falla de resolve; no ejecutado aquí.",
+      "evidence": [
+        {
+          "file": "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb",
+          "line": 446,
+          "excerpt": "        def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,\n                             material_choices: nil)\n          # Host-accurate native check: in SketchUp a Group ALSO responds to\n          # #definition, so entity type — not duck typing — is the only safe\n          # discriminator. Legacy Group representations fail closed: use the\n          # migration workflow (Granete → Migrar modelos anteriores).\n          unless furniture.is_a?(::Sketchup::ComponentInstance)\n            return { 'success' => false, 'error' => LEGACY_REPRESENTATION_ERROR }\n          end\n\n          parameters = normalize_parameters(definition, raw_parameters)\n          existing_meta = @metadata_store&.read(furniture)",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb",
+          "line": 461,
+          "excerpt": "          if material_choices_changed?(existing_meta, merged_material_choices) &&\n             !resolved_layout.is_a?(Library::NativeLayout)\n            return { 'success' => false, 'error' => MATERIAL_RESOLUTION_REQUIRED_ERROR }\n          end\n\n          model.start_operation(\"Editar Mueble #{definition['name']}\", true)\n          begin\n            # A native copy/paste can temporarily leave two top-level furniture\n            # instances sharing one host definition. Isolate the target before\n            # touching its children so FI-A can never mutate FI-B. make_unique\n            # returns this same instance and preserves its world transform.\n            furniture.make_unique if furniture.definition.instances.length > 1",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_NativeValidationSmoke.rb",
+          "line": 147,
+          "excerpt": "      def test_fi_b_front_change_never_mutates_fi_a\n        insert_cabinet\n        insert_cabinet\n        top_a, top_b = granete_furniture_instances.first(2)\n        refute_nil top_a\n        refute_nil top_b\n        refute_same top_a.definition, top_b.definition,\n                    'two units of one FurnitureDefinition must not share a top-level definition'\n\n        fi_a_before = furniture_snapshot(top_a)\n        rebuild = builder.update_furniture(model, top_b, definition, {},\n                                           resolved_layout: parse_layout(front16_layout_body),",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F189",
+      "title": "Paridad TS ↔ Go ↔ SketchUp para espesor y propagación de materiales (#405 / MT-4)",
+      "scope": "Paridad espesor: cobertura contractual distinta de host",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Un fixture contractual compartido pinnea nominales 15/18 y materiales BODY/FRONT/BACK 16/18/6; TS, Go y Ruby lo consumen textualmente",
+        "TS y Go BOM/layout demuestran que el material seleccionado gana antes de fórmulas, poses, dimensiones y herrajes",
+        "BODY, FRONT y BACK permanecen aislados; una puerta y tres frentes de cajón de agregado siguen FRONT",
+        "FRONT 18→16 reconstruye las cuatro piezas y el herraje, preservando identity, world transform, dimensiones exteriores y metadata",
+        "Material inválido/fallo conserva el último mueble válido y no abre/commitea una reconstrucción parcial",
+        "La prueba negativa falla explícitamente si Go vuelve a usar Component.ThicknessMm nominal"
+      ],
+      "actualVsAcceptance": "Fixture material-aware y pruebas nativas contienen cambio FRONT y aislamiento FI-A/FI-B; helper de rebuild preserva metadata tras render. Root no abrió modelo de usuario para repetir operación.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Reejecutar fixture contractual TS/Go/Ruby exacto y host build pinneado; evidencia histórica no prueba esta instalación.",
+      "nextProof": "Reejecutar fixture contractual TS/Go/Ruby exacto y host build pinneado; evidencia histórica no prueba esta instalación.",
+      "evidence": [
+        {
+          "file": "apps/sketchup-extension/src/granete_for_sketchup/model/furniture_builder.rb",
+          "line": 446,
+          "excerpt": "        def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,\n                             material_choices: nil)\n          # Host-accurate native check: in SketchUp a Group ALSO responds to\n          # #definition, so entity type — not duck typing — is the only safe\n          # discriminator. Legacy Group representations fail closed: use the\n          # migration workflow (Granete → Migrar modelos anteriores).\n          unless furniture.is_a?(::Sketchup::ComponentInstance)\n            return { 'success' => false, 'error' => LEGACY_REPRESENTATION_ERROR }\n          end\n\n          parameters = normalize_parameters(definition, raw_parameters)\n          existing_meta = @metadata_store&.read(furniture)",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_NativeValidationSmoke.rb",
+          "line": 75,
+          "excerpt": "      def test_role_thicknesses_render_as_local_geometry_by_material\n        _result, top = insert_cabinet\n\n        expected_by_option_role = { 'BODY' => 16.0, 'FRONT' => 18.0, 'BACK' => 6.0 }\n        fixture_boards.each do |board|\n          child = find_child(top, board['name'])\n          refute_nil child, \"missing managed child #{board['name']}\"\n          bounds = child.definition.bounds\n          # Local box [0,width]x[0,thickness]x[0,length] on X/Y/Z — the role's\n          # effective material thickness is the LOCAL Y extent, never a world\n          # dimension.\n          assert_in_delta expected_by_option_role.fetch(board['optionRole']) * MM, bounds.height, TOLERANCE,",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_NativeValidationSmoke.rb",
+          "line": 147,
+          "excerpt": "      def test_fi_b_front_change_never_mutates_fi_a\n        insert_cabinet\n        insert_cabinet\n        top_a, top_b = granete_furniture_instances.first(2)\n        refute_nil top_a\n        refute_nil top_b\n        refute_same top_a.definition, top_b.definition,\n                    'two units of one FurnitureDefinition must not share a top-level definition'\n\n        fi_a_before = furniture_snapshot(top_a)\n        rebuild = builder.update_furniture(model, top_b, definition, {},\n                                           resolved_layout: parse_layout(front16_layout_body),",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F190",
+      "title": "Validación real SketchUp nativo + interoperabilidad OpenCutList (#417 / SU-ENT-4)",
+      "scope": "Validación TestUp/OCL histórica",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Fixture canónico pasa todos los checks estructurales de SketchUp en host real (28/28 TestUp CI, 968 assertions)",
+        "Mueble rotado/movido preserva ejes locales de tableros: transforms y geometría de definición intactos, mundo movido por composición",
+        "FI-A y FI-B siguen rebuildables de forma independiente; FRONT 18→16 en FI-B no toca jerarquía ni metadata de FI-A",
+        "El fixture material-aware 16/18/6 no regresa a rendering Group/AABB-only: sin Groups, sin caras sueltas, sin escala no-uniforme, sin world-baking en definiciones",
+        "OpenCutList 7.1.0 documentado con versión, resultado esperado y diferencias (docs/sketchup-opencutlist-interop.md + progress/opencutlist_smoke_F190.json)",
+        "Ningún output de terceros se usa como prueba autoritativa de BOM; las assertions comparan la lectura OCL contra la verdad del fixture Granete",
+        "Los tests de regresión fallan si los tableros físicos gestionados vuelven a wrappers Group (counts de clase + 6 caras + extents locales por rol)",
+        "El smoke de host verifica jerarquía Outliner/Outliner-names y selección estructural en SketchUp real, no sólo stubs Ruby",
+        "Negative proof: sin código de compatibilidad OpenCutList en runtime (boundary ownership test con términos ladb/opencutlist prohibidos)"
+      ],
+      "actualVsAcceptance": "TestUp fuente contiene jerarquía nativa, espesor por rol, transforms rígidos e independencia de instancias. Documento OCL es interoperabilidad acotada, no autoridad BOM ni CNC. Ninguna assertion fue corrida en host actual por esta subtarea.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Host limpio con build exacto, versión OCL y resultado reproducido; no usar 968 assertions históricas como ejecución actual.",
+      "nextProof": "Host limpio con build exacto, versión OCL y resultado reproducido; no usar 968 assertions históricas como ejecución actual.",
+      "evidence": [
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_NativeValidationSmoke.rb",
+          "line": 48,
+          "excerpt": "      def test_canonical_cabinet_is_a_full_native_hierarchy\n        result, top = insert_cabinet\n\n        assert result['success'], \"insert failed: #{result['error']}\"\n        assert_instance_of Sketchup::ComponentInstance, top\n        assert_equal 1, granete_furniture_instances.length\n\n        # Managed children: 10 boards + 3 hardware placements, every one a\n        # native ComponentInstance. No Group and no raw face may live at the\n        # furniture level — board geometry belongs inside part definitions.\n        children = top.definition.entities.grep(Sketchup::ComponentInstance)\n        assert top.definition.entities.grep(Sketchup::Group).empty?,",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_NativeValidationSmoke.rb",
+          "line": 125,
+          "excerpt": "      def test_instance_transforms_are_rigid_never_scaled\n        _result, top = insert_cabinet\n\n        top.definition.entities.grep(Sketchup::ComponentInstance).each do |child|\n          transform = child.transformation\n          axes = [transform.xaxis, transform.yaxis, transform.zaxis]\n          axes.each_with_index do |axis, index|\n            assert_in_delta 1.0, axis.length, 1e-6,\n                            \"#{child.name}: basis vector #{index} is scaled (non-uniform scale forbidden)\"\n          end\n          (0..2).each do |a|\n            ((a + 1)..2).each do |b|",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_OpenCutListInteropSmoke.rb",
+          "line": 1,
+          "excerpt": "# frozen_string_literal: true\n\nrequire 'json'\nrequire 'stringio'\nrequire 'testup/testcase'\n\n# OpenCutList interoperability smoke for #417 (SU-ENT-4). Builds the canonical\n# carpentry cabinet (FI-A, FRONT oak 18) plus a rebuilt sibling (FI-B, FRONT\n# white 16) with the INSTALLED Granete extension, round-trips both through a\n# saved .skp and asks the installed OpenCutList — driven through its public\n# CutlistGenerateWorker, never its UI — how it reads Granete's native\n# ComponentInstance hierarchy.",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F195",
+      "title": "Contrato versionado de resolve de autoría rica para mutaciones semánticas SketchUp (#477)",
+      "scope": "Resolve stateless de autoría rica",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "#467/#468 pueden expresar sus primeros slices sin claves ad-hoc: mover/agregar/quitar entrepaño, mover/reemplazar bisagra viajan en components/relationships/hardwarePlacements del body versionado",
+        "El resolve con sólo parámetros/materiales es idéntico al endpoint GET de layout (paridad de contract a nivel API en Go + fixture escenario 01)",
+        "componentInstanceId/hardwarePlacementId del request sobreviven request→resolve→parseo Ruby (fixture + tests de identidad en las tres capas)",
+        "Ruby jamás es autoridad de joints/drilling: el boundary test prohíbe el vocabulario de resolución manufacturera en runtime y el parser sólo consume",
+        "La respuesta basta para rebuild nativo atómico sin inferencia de orientación/espesor (layout #415 con localTransform dentro del envelope)",
+        "Errores/códigos estables (SCHEMA_ID_MISMATCH, RELATIONSHIP_ORPHANED, QUERY_PARAMETERS_UNSUPPORTED, DRILLING_CONFLICT, …); el comportamiento nunca depende de substrings de mensajes localizados",
+        "Retries stateless son deterministas (byte-identidad probada) y no crean registros de negocio ni consumen receipts de idempotencia",
+        "Schema JSON canónico + fixture compartido consumidos por TS/Go/Ruby: TS valida el wire y recomputa deriveRelationshipMachining + manufacturingFingerprint SHA-256 sobre el mismo escenario que Go",
+        "Auth transitoria: allowlist POST por client/path nombra el endpoint para tokens de extensión; capability efectiva dentro del token y uso comercial permanecen bloqueados por #460",
+        "Mismatch de schema/versión falla antes de mutar host (400 con envelope y código estable)",
+        "Negative proofs: query params de autoría rechazados (QUERY_PARAMETERS_UNSUPPORTED), parámetros ad-hoc en body rechazados (PARAMETER_INVALID), ocurrencia duplicada rechazada, snapshot incompleto rechazado, catálogo stale rechazado sin latest implícito"
+      ],
+      "actualVsAcceptance": "POST handler valida método/auth/licencia de organización y envelope; respuesta layout/machining versionada no persiste Design. API disponible no prueba caller nativo usando el camino rico: inserción/edición base siguen layout GET según auditoría SketchUp.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Conectar primeros comandos host de relación/herraje y comprobar contrato+rollback real, no basta test de parser.",
+      "nextProof": "Conectar primeros comandos host de relación/herraje y comprobar contrato+rollback real, no basta test de parser.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/api/authoring_resolve.go",
+          "line": 40,
+          "excerpt": "// POST allowlist in the auth middleware that names this endpoint.\nfunc (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.Request) {\n\tif r.Method != http.MethodPost {\n\t\ts.writeAuthoringResolveEnvelope(w, http.StatusMethodNotAllowed, authoringResolveRequest{}, authoringStatusRejected, []domain.ContractIssue{{\n\t\t\tCode: \"METHOD_NOT_ALLOWED\", Message: \"el resolve de autoría sólo acepta POST\",\n\t\t\tSeverity: domain.IssueSeverityError, Path: \"method\",\n\t\t}})\n\t\treturn\n\t}\n\n\tclaims, ok := r.Context().Value(UserContextKey).(*auth.Claims)\n\tif !ok || claims == nil {",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/api/authoring_resolve_test.go",
+          "line": 1,
+          "excerpt": "package api\n\nimport (\n\t\"bytes\"\n\t\"encoding/json\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/tiagofur/muebles-backend/internal/auth\"",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "packages/domain/src/sketchupAuthoringResolve.contract.test.ts",
+          "line": 1,
+          "excerpt": "/**\n * #477 contract parity: the shared fixture at\n * contracts/sketchupAuthoringResolve.contract.json is generated from the Go\n * resolver's own HTTP responses (golden author). This test recomputes the\n * machining truth on the TS side with the #356 relationship resolver over\n * the SAME scenario inputs and asserts the operations and the deterministic\n * fingerprint match the Go wire byte-for-byte — Go and TS must never maintain\n * incompatible parallel payload shapes.\n */\n\nimport { readFileSync } from 'node:fs';\nimport { describe, expect, test } from 'vitest';",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F197",
+      "title": "Lifecycle explícito y provisioning atómico de organizaciones (#452)",
+      "scope": "Provisioning/lifecycle atómicos",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Organization usa un status canónico con las seis fases aprobadas y active deja de ser autoridad runtime",
+        "Platform, Factory y CLI crean organizaciones únicamente mediante ProvisionOrganization con bootstrap admin explícito",
+        "Settings, entitlements, admin, catálogo, readiness, audit y receipt confirman o revierten en una sola transacción",
+        "Slug, retries y concurrencia producen resultados idempotentes o errores tipados sin duplicados",
+        "Suspensión y reactivación invalidan credenciales de la organización sin afectar otras memberships del User",
+        "Offboarding y termination usan preview versionado, blockers reales, preservan historia y nunca hard-deletean",
+        "organization_entitlements conserva maxActiveMembers y agrega la autoridad única para network, manufacturing, SketchUp y advanced audit",
+        "Generated OpenAPI, RLS directo, migrations fresh/upgrade/down, race, API, auth y UI mínima tienen pruebas ejecutables"
+      ],
+      "actualVsAcceptance": "OrganizationService valida bootstrap/entitlements, usa WithinTenantTx para org/settings/membership/catalog/audit y readiness. Tests PostgreSQL prueban failure rollback y slug concurrency; esquema canónico sustituye active bool.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "Related root Foundation/pilot proof PASS; this review is source/metadata only",
+      "preciseUnknown": "No inferir todos los flujos UI por gate backend; cancelación step-up Platform/Team debe conservar feedback honesto.",
+      "nextProof": "No inferir todos los flujos UI por gate backend; cancelación step-up Platform/Team debe conservar feedback honesto.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/application/organizations.go",
+          "line": 168,
+          "excerpt": "func (s *OrganizationService) ProvisionOrganization(ctx context.Context, cmd ProvisionOrganizationCommand) (*ProvisionOrganizationResult, error) {\n\tcmd.Name = strings.TrimSpace(cmd.Name)\n\tcmd.Slug = strings.TrimSpace(cmd.Slug)\n\tif cmd.ActorUserID == \"\" || cmd.Name == \"\" || cmd.Slug == \"\" || cmd.BootstrapAdminUserID == \"\" {\n\t\treturn nil, fmt.Errorf(\"%w: actor, name, slug and bootstrap admin are required\", ErrInvalidOrganizationCommand)\n\t}\n\tif !domain.IsValidOrganizationType(cmd.Type) || !domain.IsValidLicensePlan(cmd.LicensePlan) {\n\t\treturn nil, fmt.Errorf(\"%w: invalid organization type or license plan\", ErrInvalidOrganizationCommand)\n\t}\n\tentitlements := DefaultOrganizationEntitlements(cmd.Type, cmd.LicensePlan)\n\tif cmd.Entitlements != nil {\n\t\tentitlements = *cmd.Entitlements",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/gate_a_provisioning_test.go",
+          "line": 18,
+          "excerpt": "func TestGateAProvisioningRealPostgresRollsBackEveryMaterialFailure(t *testing.T) {\n\tfx := newRLSFixture(t)\n\thandler, token := gateAProvisioningHTTP(t, fx)\n\tsteps := []struct {\n\t\tname      string\n\t\ttable     string\n\t\ttiming    string\n\t\tcondition string\n\t}{\n\t\t{name: \"entitlements\", table: \"organization_entitlements\", timing: \"BEFORE INSERT OR UPDATE\", condition: \"NEW.organization_id\"},\n\t\t{name: \"settings\", table: \"workshop_settings\", timing: \"BEFORE INSERT OR UPDATE\", condition: \"NEW.organization_id\"},\n\t\t{name: \"bootstrap_membership\", table: \"memberships\", timing: \"BEFORE INSERT\", condition: \"NEW.organization_id\"},",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/organization_lifecycle_migration_test.go",
+          "line": 607,
+          "excerpt": "func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {\n\tfx := newRLSFixture(t)\n\tctx := context.Background()\n\tconst (\n\t\tsecret = \"platform-lifecycle-runtime-test-secret\"\n\t\torgID  = \"c2000000-0000-0000-0000-000000000200\"\n\t)\n\tadminStore := &storage.PostgresStore{Pool: fx.admin}\n\torganization := &domain.Organization{\n\t\tID: orgID, Name: \"Platform Lifecycle\", Slug: \"platform-lifecycle-runtime\",\n\t\tType: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusProvisioning,\n\t}",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F200",
+      "title": "Paridad Go del tratamiento de base: ZOCLO-AUTO y effective base context (#442)",
+      "scope": "Base treatment y cantidad fraccional",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "TS y Go resuelven el mismo BOM normalizado para none/legs/plinth_board/plinth_strip (contract fixture compartido, 13 escenarios)",
+        "ZOCLO-AUTO explícito y testeado en Go: id {moduleCode}-zoclo-auto, L=ancho, W=B, canto L1, material por rol ZOCLO con alias FRENTE",
+        "El override de ítem/layout gana al default de módulo en ambos motores (B del plano pisa B del módulo; wall elevation → B=0)",
+        "Negativos anti-phantom: componente ZOCLO propio no duplica; legs sin elección PATAS no sintetiza; none no sintetiza nada",
+        "La regresión de auditoría plinth-b (B=100, designBomPrice.json) sigue verde",
+        "hardware_lines.quantity DOUBLE PRECISION con round-trip fraccional (0.6 ml) probado bajo rol app en DB fresca"
+      ],
+      "actualVsAcceptance": "Go resuelve modo/altura con contexto y define ZOCLO-AUTO; test consume mismo fixture plinthBaseParity y almacenamiento hardware quantity soporta 0.6. Metadata final double precision confirma tipo, no precio/volumen de proyecto real.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "Recalcular demo real con patas/zócalo seleccionado y comparar BOM/export; no ejecutar contra catálogo genérico equivocado.",
+      "nextProof": "Recalcular demo real con patas/zócalo seleccionado y comparar BOM/export; no ejecutar contra catálogo genérico equivocado.",
+      "evidence": [
+        {
+          "file": "backend-go/internal/domain/engine/base_treatment.go",
+          "line": 102,
+          "excerpt": "func ResolveBaseModeWithContext(module domain.Module, ctx *BaseResolutionContext) string {\n\tif ctx != nil && isModuleBaseMode(ctx.BaseMode) {\n\t\treturn ctx.BaseMode\n\t}\n\treturn resolveModuleBaseMode(module)\n}\n\n// ResolveBaseClearanceWithContext mirrors TS resolveBaseClearanceWithContext.\n// The effective mode (item override included) decides whether a height exists\n// at all — a module without its own baseMode must still honor the context\n// mode's default height.\nfunc ResolveBaseClearanceWithContext(module domain.Module, ctx *BaseResolutionContext) int {",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/domain/engine/plinthBaseParityContract_test.go",
+          "line": 391,
+          "excerpt": "func TestPlinthBaseParity_SharedContract(t *testing.T) {\n\tfx := loadPlinthFixture(t)\n\tcatalog := fx.toDomainCatalog()\n\n\tfor _, sc := range fx.Scenarios {\n\t\tsc := sc\n\t\tt.Run(sc.ID, func(t *testing.T) {\n\t\t\tvar module domain.Module\n\t\t\tfoundModule := false\n\t\t\tfor _, m := range catalog.Modules {\n\t\t\t\tif m.ID == sc.ModuleID {\n\t\t\t\t\tmodule = m",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "backend-go/internal/storage/hardware_line_quantity_test.go",
+          "line": 15,
+          "excerpt": "func TestHardwareLineQuantityDoublePrecision(t *testing.T) {\n\tpool := multiOrgFreshDB(t)\n\tstore := &storage.PostgresStore{Pool: pool}\n\tif err := store.RunMigrations(context.Background()); err != nil {\n\t\tt.Fatalf(\"run migrations: %v\", err)\n\t}\n\tctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)\n\n\tvar dataType string\n\tif err := pool.QueryRow(context.Background(), `\n\t\tSELECT data_type FROM information_schema.columns\n\t\tWHERE table_name = 'hardware_lines' AND column_name = 'quantity'`,",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F201",
+      "title": "Migración segura de entidades legacy Group a ComponentInstance nativo (#416 / SU-ENT-3)",
+      "scope": "Migración legacy batch",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "Detección determinística por metadata namespaced, no por display name (test de rename)",
+        "Review clasifica native/legacy/unsupported/unmanaged antes de convertir",
+        "Posición/rotación mundial y parámetros/elecciones de material preservados",
+        "instanceRef sobrevive sin cambios; furnitureInstanceId nunca se inventa",
+        "Identidad faltante queda expuesta para #397, no adivinada",
+        "Fallo de resolve/reconstrucción deja el Group legacy intacto (abort total del lote)",
+        "La jerarquía resultante es exactamente la de #415 (definiciones aisladas, transforms #414)",
+        "Save/reopen no re-pregunta tras migración exitosa (scan limpio)",
+        "UNA operación coherente de Undo revierte el lote completo (política documentada)",
+        "El resumen batch jamás reporta éxito total con ítems restantes",
+        "TestUp en host real: migración exitosa + fallo-preserva-fuente + save/reopen"
+      ],
+      "actualVsAcceptance": "Migrator pre-resuelve cada item antes de operación, conserva no resueltos como review y hace un batch con rollback ante fallo interno. Tests afirman que fuente no se borra antes de validar replacement y rename no cambia identidad.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "UNKNOWN — no feature-specific execution in this subtask",
+      "preciseUnknown": "TestUp limpio success/failure/save-reopen/undo; no migrar modelo activo del usuario durante auditoría.",
+      "nextProof": "TestUp limpio success/failure/save-reopen/undo; no migrar modelo activo del usuario durante auditoría.",
+      "evidence": [
+        {
+          "file": "apps/sketchup-extension/src/granete_for_sketchup/migration/migrator.rb",
+          "line": 40,
+          "excerpt": "        # signal and is false whenever anything stayed legacy.\n        def migrate(model, scan_result)\n          plan, demoted = build_plan(scan_result.ready)\n          # Report entries are ALWAYS plain hashes: the report crosses the\n          # HtmlDialog JSON bridge, and a ScannedEntity struct serializes as\n          # an opaque \"#<struct …>\" string (losing reason/instanceRef in the\n          # UI). Scanner leftovers keep their own reason.\n          requires_review = scan_result.requires_review.map { |item| review_item(item) } + demoted\n\n          if plan.empty?\n            return report(committed: false, aborted: false, plan: [],\n                          requires_review: requires_review,",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/unit/migration/migrator_test.rb",
+          "line": 244,
+          "excerpt": "  def test_source_is_never_erased_before_its_replacement_validates\n    legacy = Granete::SketchUpExtension::LegacyModelBuilder.add_legacy_furniture(\n      @model, @store, definition: @definition, instance_ref: 'inst-validate', parameters: {}\n    )\n    # Builder whose build succeeds but whose validation gate fails: the\n    # migrator must abort before erasing the legacy Group.\n    invalid_builder = Object.new\n    invalid_builder.define_singleton_method(:build_migrated_furniture) do |*_args|\n      raise 'migración: el layout resuelto no produjo componentes'\n    end\n    migrator = Granete::SketchUpExtension::Migration::Migrator.new(\n      metadata_store: @store,",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "apps/sketchup-extension/test/testup/TC_MigrationSmoke.rb",
+          "line": 1,
+          "excerpt": "# frozen_string_literal: true\n\nrequire 'json'\nrequire 'stringio'\nrequire 'tmpdir'\nrequire 'testup/testcase'\n\n# Host smoke for the #416 legacy Group → native ComponentInstance migration.\n# Like TC_NativeEntitySmoke, the product under test is the INSTALLED RBZ: the\n# legacy scene is built in-code with the historical metadata shape, and the\n# authoritative layout is injected from the repo fixture exactly like the\n# insertion smoke (the catalog provider is test infrastructure; the pipeline",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    },
+    {
+      "id": "F203",
+      "title": "Executable Foundation Gate A (#462)",
+      "scope": "Gate A compuesto ejecutable, no programa completo",
+      "ledgerStatus": "done",
+      "acceptance": [
+        "The final #462 Gate A matrix maps all 34 scenarios to executable proofs with no partial or missing row",
+        "Critical Foundation mutations and durable audit failures are proven atomically against real PostgreSQL",
+        "Fresh and representative upgrade fixtures run under explicit no-skip semantics",
+        "The browser suite uses the real Go API, authentication, MFA/step-up, PostgreSQL and Chromium",
+        "A single pnpm gate:foundation:a entrypoint is wired into CI and passes",
+        "#385 DT-1 may start while #460/#461 and Gate B remain explicitly incomplete"
+      ],
+      "actualVsAcceptance": "Script exige infraestructura, rechaza SKIP, ejecuta OpenAPI/typecheck/tests/smoke/pilot fresh/browser. Root posee CI exact SHA Foundation green y componentes locales pilot + 17 tests browser PASS, no inventar wrapper local completo si no se ejecutó.",
+      "auditDepth": "SEMANTIC_SOURCE_REVIEW + targeted test contract inspection; acceptance not exhaustively exercised",
+      "sourceStatus": "SOURCE_PARTIAL — feature-specific behavior reviewed",
+      "status": "PARTIAL",
+      "runtimeStatus": "Root evidence/main-checks.json exact-SHA green; local pilot PASS and organization-browser 17/17; wrapper not rerun here",
+      "preciseUnknown": "Gate B y #460/#461 completos quedan separados; conservar evidencia exacta CI vs ejecución local.",
+      "nextProof": "Gate B y #460/#461 completos quedan separados; conservar evidencia exacta CI vs ejecución local.",
+      "evidence": [
+        {
+          "file": "scripts/foundation-gate-a.sh",
+          "line": 17,
+          "excerpt": "for command in docker go pnpm python3 pg_dump pg_restore; do\n  command -v \"${command}\" >/dev/null 2>&1 || fail \"${command} is required; Gate A never skips missing infrastructure\"\ndone\ndocker info >/dev/null 2>&1 || fail \"Docker is not available\"\n\nrun_no_skip() {\n  local name=\"$1\"\n  shift\n  local log=\"${OUTPUT}/${name}.log\"\n  \"$@\" 2>&1 | tee \"${log}\"\n  if grep -E -- '(^|[[:space:]])(SKIP|skipped)(:|[[:space:]])|--- SKIP:' \"${log}\" >/dev/null; then\n    fail \"${name} reported a skipped proof\"",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "scripts/foundation-gate-a.sh",
+          "line": 23,
+          "excerpt": "  local name=\"$1\"\n  shift\n  local log=\"${OUTPUT}/${name}.log\"\n  \"$@\" 2>&1 | tee \"${log}\"\n  if grep -E -- '(^|[[:space:]])(SKIP|skipped)(:|[[:space:]])|--- SKIP:' \"${log}\" >/dev/null; then\n    fail \"${name} reported a skipped proof\"\n  fi\n}\n\ncd \"${ROOT}\"\nprintf '[foundation-gate-a] generated contract\\n'\npnpm openapi:check",
+          "basis": "source/test body inspected; not execution"
+        },
+        {
+          "file": "scripts/foundation-gate-a.sh",
+          "line": 39,
+          "excerpt": "scripts/smoke-deploy.sh\nprintf '[foundation-gate-a] PostgreSQL/RLS/API/fresh/upgrade/atomic proofs\\n'\nrun_no_skip postgres env PILOT_GATE_FOUNDATION_A=1 scripts/pilot-gate.sh --fresh-container\nprintf '[foundation-gate-a] real browser/auth/MFA/tenant proofs\\n'\nrun_no_skip browser scripts/organization-browser-gate.sh\ngit diff --check\nprintf '[foundation-gate-a] PASS — 34/34 Foundation scenarios executable; #385 DT-1 may start\\n'",
+          "basis": "source/test body inspected; not execution"
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "fragments": 28,
+    "method": "Targeted source + test contracts; no product changes/tests/new runtime claims"
+  }
+}

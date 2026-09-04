@@ -1,0 +1,67 @@
+{
+  "baseline": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "scope": "CONFIRMED runtime local guest browser only; no authenticated API, PostgreSQL, real customer, email sending or physical manufacturing. Created synthetic data only on isolated localhost55462.",
+  "checks": [
+    {
+      "id": "GUEST-J01",
+      "title": "Customer form rejects empty required name and saves synthetic customer",
+      "status": "PASS",
+      "evidence": [
+        "evidence/guest-customer-create-dom.txt"
+      ],
+      "observation": "Empty form native validationMessage Completa este campo; filled only fictitious name Cliente de ensayo AUDIT 360; row visible."
+    },
+    {
+      "id": "GUEST-J02",
+      "title": "New quote selects the newly created customer and adds catalog furniture",
+      "status": "PASS",
+      "evidence": [
+        "evidence/guest-quote-created-dom.txt"
+      ],
+      "observation": "Cotización de ensayo AUDIT360; one MOD-GAB-01 with selected materials/hinge; total864.77MXN from seed prices (not real commercial price)."
+    },
+    {
+      "id": "GUEST-J03",
+      "title": "Quote furniture placement connects to local price and undo/redo",
+      "status": "PASS",
+      "evidence": [
+        "evidence/guest-quote-placed-dom.txt"
+      ],
+      "observation": "Proyectar→De la obra→Colocar:1unplaced becomes1placed; total864.77→904.13. Undo restores0placed/864.77; redo restores1placed/904.13. Inspector shows plinth choices. Precise pricing cause not independently established; no price-correctness claim."
+    },
+    {
+      "id": "GUEST-J04",
+      "title": "Quoted state and price survive local reload but version footer contradicts its promise",
+      "status": "PASS_WITH_ISSUE",
+      "evidence": [
+        "evidence/guest-quote-frozen-dom.txt"
+      ],
+      "observation": "Enviar al cliente→confirmation Enviar changes state to Cotizado and shows item Rev1(cerrada). Reload same observed quote URL preserves904.13/Cotizado. Footer still says no saved versions and versions created on state change; root-cause source check pending."
+    },
+    {
+      "id": "GUEST-J05",
+      "title": "Acceptance surfaces order on plant board",
+      "status": "PASS",
+      "evidence": [
+        "evidence/guest-quote-accepted-dom.txt",
+        "evidence/guest-created-order-plant-dom.txt"
+      ],
+      "observation": "Aceptar confirmation changes state to Aceptado; primary action Marcar en producción; Estado de Planta shows synthetic order1furniture,1inCorte queue. Does not prove production transitions, server release or installation."
+    },
+    {
+      "id": "GUEST-J06",
+      "title": "Local commercial production status changes without physical completion",
+      "status": "PASS_SCOPED",
+      "evidence": [
+        "evidence/guest-quote-production-dom.txt"
+      ],
+      "observation": "Marcar en producción changes label to En producción/Producción and success toast. Physical stage summary remains0% and0/1 each. This is not proof of manufacturing release or part/QC execution."
+    }
+  ],
+  "unknowns": [
+    {
+      "title": "Authenticated commercial journey",
+      "missing": "Repeat customer→quote→place→accept→production→installation with real isolated API/PostgreSQL, reload, permitted/denied roles and authoritative state checks. Guest success cannot certify this."
+    }
+  ]
+}

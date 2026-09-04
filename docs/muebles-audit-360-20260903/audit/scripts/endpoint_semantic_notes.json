@@ -1,0 +1,1146 @@
+{
+  "HandleCustomers": {
+    "purpose": "CRUD clientes con owner",
+    "authAndRoles": "GET RoleCanAccessCustomers; POST/PUT/DELETE RoleCanMutateCustomers, además scope owner en individual",
+    "validation": "GET filtra owner; POST resolve owner create; PUT carga existing y resuelve owner update; DELETE comprueba ownership; JSON dominio; duplicate create409.",
+    "sideEffects": "Create activo; update; delete desactiva, no hard-delete. Falla lookup o owner inaccesible404.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Sales / customer ownership"
+  },
+  "HandleCustomerByID": {
+    "purpose": "CRUD clientes con owner",
+    "authAndRoles": "GET RoleCanAccessCustomers; POST/PUT/DELETE RoleCanMutateCustomers, además scope owner en individual",
+    "validation": "GET filtra owner; POST resolve owner create; PUT carga existing y resuelve owner update; DELETE comprueba ownership; JSON dominio; duplicate create409.",
+    "sideEffects": "Create activo; update; delete desactiva, no hard-delete. Falla lookup o owner inaccesible404.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Sales / customer ownership"
+  },
+  "HandleEdgeBands": {
+    "purpose": "CRUD cantos",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body EdgeBand; id requerido; POST activo; duplicate409; PUT missing404 por substring; GET redacta costos según actorCanViewCosts.",
+    "sideEffects": "Persistencia catálogo; DELETE desactiva; sin prueba de validación física/material del storage en este bloque.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / edges"
+  },
+  "HandleEdgeBandByID": {
+    "purpose": "CRUD cantos",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body EdgeBand; id requerido; POST activo; duplicate409; PUT missing404 por substring; GET redacta costos según actorCanViewCosts.",
+    "sideEffects": "Persistencia catálogo; DELETE desactiva; sin prueba de validación física/material del storage en este bloque.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / edges"
+  },
+  "HandleOptionGroups": {
+    "purpose": "CRUD grupos de opciones",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body OptionGroup; id requerido; duplicate409; PUT missing404 substring; DELETE error genérico500.",
+    "sideEffects": "Create/update/delete grupo; no fabricación ni resolución de selección por lectura de este endpoint.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / options"
+  },
+  "HandleOptionGroupByID": {
+    "purpose": "CRUD grupos de opciones",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body OptionGroup; id requerido; duplicate409; PUT missing404 substring; DELETE error genérico500.",
+    "sideEffects": "Create/update/delete grupo; no fabricación ni resolución de selección por lectura de este endpoint.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / options"
+  },
+  "HandleAgregados": {
+    "purpose": "CRUD subensambles reutilizables",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body Agregado; POST active; duplicate409; PUT missing404; DELETE missing404/in use409 por texto.",
+    "sideEffects": "DeleteAgregado, no confundir con desactivación de material; storage decide referencias en uso.",
+    "evidence": [
+      "backend-go/internal/api/agregados.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / subassemblies"
+  },
+  "HandleAgregadoByID": {
+    "purpose": "CRUD subensambles reutilizables",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body Agregado; POST active; duplicate409; PUT missing404; DELETE missing404/in use409 por texto.",
+    "sideEffects": "DeleteAgregado, no confundir con desactivación de material; storage decide referencias en uso.",
+    "evidence": [
+      "backend-go/internal/api/agregados.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / subassemblies"
+  },
+  "HandleAmbientMaterials": {
+    "purpose": "CRUD acabados de presentación",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body AmbientMaterial; POST active; duplicate409; PUT missing404; no pricing/redaction en esta entidad.",
+    "sideEffects": "PUT reemplaza textura y limpia archivo previo best effort; DELETE desactiva. No material de manufactura.",
+    "evidence": [
+      "backend-go/internal/api/ambient.go"
+    ],
+    "tests": [],
+    "domain": "Presentation / ambient material"
+  },
+  "HandleAmbientMaterialByID": {
+    "purpose": "CRUD acabados de presentación",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body AmbientMaterial; POST active; duplicate409; PUT missing404; no pricing/redaction en esta entidad.",
+    "sideEffects": "PUT reemplaza textura y limpia archivo previo best effort; DELETE desactiva. No material de manufactura.",
+    "evidence": [
+      "backend-go/internal/api/ambient.go"
+    ],
+    "tests": [],
+    "domain": "Presentation / ambient material"
+  },
+  "HandleAmbientCategories": {
+    "purpose": "Jerarquía categorías de acabados",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body AmbientCategory; storage placement/name/depth se mapea400; PUT ciclos/self/descendant400; GETmissing404; DELETEchildren409.",
+    "sideEffects": "Create/update/delete categorías presentación.",
+    "evidence": [
+      "backend-go/internal/api/ambient.go"
+    ],
+    "tests": [],
+    "domain": "Presentation / category hierarchy"
+  },
+  "HandleAmbientCategoryByID": {
+    "purpose": "Jerarquía categorías de acabados",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body AmbientCategory; storage placement/name/depth se mapea400; PUT ciclos/self/descendant400; GETmissing404; DELETEchildren409.",
+    "sideEffects": "Create/update/delete categorías presentación.",
+    "evidence": [
+      "backend-go/internal/api/ambient.go"
+    ],
+    "tests": [],
+    "domain": "Presentation / category hierarchy"
+  },
+  "HandleMaterialCategories": {
+    "purpose": "Jerarquía subgrupos tableros",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body MaterialCategory; placement/name/depth400; PUT self/descendant400; GETmissing404; DELETEchildren409 por substring.",
+    "sideEffects": "Create/update/delete categorías; no modificar tableros por inferencia.",
+    "evidence": [
+      "backend-go/internal/api/materialCategories.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / material categories"
+  },
+  "HandleMaterialCategoryByID": {
+    "purpose": "Jerarquía subgrupos tableros",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body MaterialCategory; placement/name/depth400; PUT self/descendant400; GETmissing404; DELETEchildren409 por substring.",
+    "sideEffects": "Create/update/delete categorías; no modificar tableros por inferencia.",
+    "evidence": [
+      "backend-go/internal/api/materialCategories.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / material categories"
+  },
+  "HandleCategories": {
+    "purpose": "Jerarquía categorías muebles",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body ModuleCategory; placement/name/depth400; PUT ciclos400; DELETEchildren400 (diferente de ambient/material409).",
+    "sideEffects": "Create/update/delete; códigos de error mayormente texto, no contrato generado.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / module category"
+  },
+  "HandleCategoryByID": {
+    "purpose": "Jerarquía categorías muebles",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateCatalog(admin/ingeniero)",
+    "validation": "Body ModuleCategory; placement/name/depth400; PUT ciclos400; DELETEchildren400 (diferente de ambient/material409).",
+    "sideEffects": "Create/update/delete; códigos de error mayormente texto, no contrato generado.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / module category"
+  },
+  "HandleModules": {
+    "purpose": "CRUD muebles plantilla",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateModules (predicado distinto de mutate catalog)",
+    "validation": "GETlist usa GetFullCatalog y retorna Modules; POST/PUT FurnitureParameterDefinitionsError400; duplicate409; DELETE missing404/inuse409.",
+    "sideEffects": "PUT/DELETE limpian imagen previa después de persistencia exitosa; no identity de FurnitureInstance.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / module definition"
+  },
+  "HandleModuleByID": {
+    "purpose": "CRUD muebles plantilla",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateModules (predicado distinto de mutate catalog)",
+    "validation": "GETlist usa GetFullCatalog y retorna Modules; POST/PUT FurnitureParameterDefinitionsError400; duplicate409; DELETE missing404/inuse409.",
+    "sideEffects": "PUT/DELETE limpian imagen previa después de persistencia exitosa; no identity de FurnitureInstance.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / module definition"
+  },
+  "HandleStructures": {
+    "purpose": "CRUD estructuras",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateModules (predicado distinto de mutate catalog)",
+    "validation": "Body Structure; create duplicate409; update missing404/duplicate409; delete missing404; no engine.ValidateComponent en este handler.",
+    "sideEffects": "Create/update/delete estructura, no release manufactura.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / structure"
+  },
+  "HandleStructureByID": {
+    "purpose": "CRUD estructuras",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateModules (predicado distinto de mutate catalog)",
+    "validation": "Body Structure; create duplicate409; update missing404/duplicate409; delete missing404; no engine.ValidateComponent en este handler.",
+    "sideEffects": "Create/update/delete estructura, no release manufactura.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / structure"
+  },
+  "HandleComponents": {
+    "purpose": "CRUD componentes paramétricos",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateModules (predicado distinto de mutate catalog)",
+    "validation": "POST/PUT engine.ValidateComponent antes de storage; invalid400; duplicate409; individualmissing404.",
+    "sideEffects": "Create/update/delete componente; no host mutation de SketchUp.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / parametric component"
+  },
+  "HandleComponentByID": {
+    "purpose": "CRUD componentes paramétricos",
+    "authAndRoles": "GET autenticado; POST/PUT/DELETE AnyRole RoleCanMutateModules (predicado distinto de mutate catalog)",
+    "validation": "POST/PUT engine.ValidateComponent antes de storage; invalid400; duplicate409; individualmissing404.",
+    "sideEffects": "Create/update/delete componente; no host mutation de SketchUp.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / parametric component"
+  },
+  "HandleProjectTemplates": {
+    "purpose": "CRUD plantillas de cotización",
+    "authAndRoles": "GET RoleCanAccessProjects; POST/PUT/DELETE RoleCanMutateModules",
+    "validation": "Create moneda por defectoMXN/margin1.35/items[]; PUT monedaMXN/items[], sin mismo defaultmargin; create duplicate409.",
+    "sideEffects": "Plantilla persistente; PUT readback luego de update; DELETE oktrue, error500.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Sales / quote template"
+  },
+  "HandleProjectTemplateByID": {
+    "purpose": "CRUD plantillas de cotización",
+    "authAndRoles": "GET RoleCanAccessProjects; POST/PUT/DELETE RoleCanMutateModules",
+    "validation": "Create moneda por defectoMXN/margin1.35/items[]; PUT monedaMXN/items[], sin mismo defaultmargin; create duplicate409.",
+    "sideEffects": "Plantilla persistente; PUT readback luego de update; DELETE oktrue, error500.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Sales / quote template"
+  },
+  "HandleWorkshopSettings": {
+    "purpose": "Leer/actualizar ajustes taller",
+    "authAndRoles": "GET autenticado; PUT AnyRole RoleCanAccessSettings",
+    "validation": "JSON WorkshopSettings; handler delega Upsert sin validación semántica adicional visible.",
+    "sideEffects": "GET lectura; PUT upsert settings scoped por request context.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Organization / settings"
+  },
+  "HandleAssignableOwners": {
+    "purpose": "Enumerar responsables asignables",
+    "authAndRoles": "RoleCanAssignOwner y claims.OrgID obligatorio",
+    "validation": "Solo memberships activas; roles elegibles admin/gerente_ventas/vendedor/user; ranking rol para proyección.",
+    "sideEffects": "Lectura id/name/role; no crea cuentas ni invita miembros.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Sales / ownership assignment"
+  },
+  "HandleSeed": {
+    "purpose": "Sembrar catálogo explícitamente",
+    "authAndRoles": "RoleCanMutateModules, aunque texto error diga solo administradores",
+    "validation": "No body; routePOST; storage SeedCatalog controla contenido.",
+    "sideEffects": "Mutación catálogo explícita; no se ejecutó en auditoría.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Catalog / explicit seeding"
+  },
+  "HandleProjectCalculate": {
+    "purpose": "Calcular desglose comercial sin persistir",
+    "authAndRoles": "RoleCanAccessProjects + CanAccessOwnedResourceRoles",
+    "validation": "id requerido; project404; carga catálogo; engine.CalcProjectBreakdown invalid400; redacción costos por actor.",
+    "sideEffects": "Retorna breakdown; no actualización Project ni congelación en este handler.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Sales / pricing engine"
+  },
+  "HandleStockList": {
+    "purpose": "Leer stock e historial",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET RoleCanAccessPurchasingNav",
+    "validation": "List devuelve StockStatusOf(quantity,min); movements kind opcional válido, limit default50/cap200/positivo.",
+    "sideEffects": "Lectura; balance actual y ledger separados.",
+    "evidence": [
+      "backend-go/internal/api/stock.go"
+    ],
+    "tests": [],
+    "domain": "Inventory"
+  },
+  "HandleStockMovementsList": {
+    "purpose": "Leer stock e historial",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET RoleCanAccessPurchasingNav",
+    "validation": "List devuelve StockStatusOf(quantity,min); movements kind opcional válido, limit default50/cap200/positivo.",
+    "sideEffects": "Lectura; balance actual y ledger separados.",
+    "evidence": [
+      "backend-go/internal/api/stock.go"
+    ],
+    "tests": [],
+    "domain": "Inventory"
+  },
+  "HandleStockUpsertMin": {
+    "purpose": "Cambiar mínimo de inventario",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. PUT RoleCanManageStock",
+    "validation": "kind enum; material_id no vacío; min>=0; no movimiento de cantidad por este endpoint.",
+    "sideEffects": "UpsertStockMin y devuelve status derivado.",
+    "evidence": [
+      "backend-go/internal/api/stock.go"
+    ],
+    "tests": [],
+    "domain": "Inventory"
+  },
+  "HandleSuppliers": {
+    "purpose": "CRUD proveedores",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET purchasingNav; POST/PUT/DELETE managePurchasing",
+    "validation": "Create id/name obligatorios; PUT usa pathid/name; campos trim; active defaulttrue si omitido.",
+    "sideEffects": "Create/update; DELETE desactiva. Persist errors500; no exact idempotency receipt inspeccionado.",
+    "evidence": [
+      "backend-go/internal/api/suppliers.go"
+    ],
+    "tests": [],
+    "domain": "Procurement"
+  },
+  "HandleSupplierByID": {
+    "purpose": "CRUD proveedores",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET purchasingNav; POST/PUT/DELETE managePurchasing",
+    "validation": "Create id/name obligatorios; PUT usa pathid/name; campos trim; active defaulttrue si omitido.",
+    "sideEffects": "Create/update; DELETE desactiva. Persist errors500; no exact idempotency receipt inspeccionado.",
+    "evidence": [
+      "backend-go/internal/api/suppliers.go"
+    ],
+    "tests": [],
+    "domain": "Procurement"
+  },
+  "HandlePickingList": {
+    "purpose": "Consultar estados de picking",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET purchasingNav",
+    "validation": "Sin filtro por proyecto en handler; ListAllPicking del contexto tenant.",
+    "sideEffects": "Lectura. No confundir con movimiento de stock ni consumo reservas.",
+    "evidence": [
+      "backend-go/internal/api/projectPicking.go"
+    ],
+    "tests": [],
+    "domain": "Inventory / picking"
+  },
+  "HandleProjectEvents": {
+    "purpose": "Leer/registrar eventos de proyecto",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET no owner/capability adicional; POST RoleCanAppendProjectEvent por tipo",
+    "validation": "Project existe; tipo enum; client_signed_off/project_closed aplican ValidateCloseoutEventAppend; actor stamped; ID/time opcional cliente; decoder simple.",
+    "sideEffects": "GET lectura; POST InsertProjectEvent; source normalizado. No proceso de transiciones implícitas.",
+    "evidence": [
+      "backend-go/internal/api/projectEvents.go"
+    ],
+    "tests": [],
+    "domain": "Project lifecycle"
+  },
+  "HandleProjectInternalMessages": {
+    "purpose": "Leer/publicar mensajes internos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET/POST sin capability/owner adicional visible",
+    "validation": "Project lookup; POST content trim requerido; default comment/resolvedtrue; senderID actor, senderName admite override cliente.",
+    "sideEffects": "CreateProjectInternalMessage; attachments JSON sin validación semántica visible en handler.",
+    "evidence": [
+      "backend-go/internal/api/internal_messages.go"
+    ],
+    "tests": [],
+    "domain": "Project collaboration"
+  },
+  "HandleProjectTechnicalWorkflow": {
+    "purpose": "Actualizar workflow técnico legacy",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. PATCH sin command capability ni owner check visible",
+    "validation": "project existe; targetStatus/body engineer; loading gate puede omitirse con force_release; no reason obligatorio.",
+    "sideEffects": "UpdateProjectTechnicalWorkflow filtra organization_id; comentario opcional best-effort; devuelve proyecto sin redactor en handler. Ver EPS-F01, no confundir con DesignRelease.",
+    "evidence": [
+      "backend-go/internal/api/internal_messages.go"
+    ],
+    "tests": [],
+    "domain": "Projects / legacy technical workflow"
+  },
+  "HandleProjectFloorScan": {
+    "purpose": "Avanzar piso legacy por línea",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST/PATCH markProduced OR exportProduction OR claimProductionJob; target station sector check",
+    "validation": "Resuelve itemID o factory/module code; normaliza status/next; rechaza409 si existen ModuleUnits; project/item404.",
+    "sideEffects": "SetProjectItemFloorStatus; recordFloorEvent separado best-effort. No identity física por cada unidad en ruta legacy.",
+    "evidence": [
+      "backend-go/internal/api/floorScan.go"
+    ],
+    "tests": [],
+    "domain": "Production / legacy line status"
+  },
+  "HandleProjectItemFloorStatus": {
+    "purpose": "Avanzar piso legacy por línea",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST/PATCH markProduced OR exportProduction OR claimProductionJob; target station sector check",
+    "validation": "Resuelve itemID o factory/module code; normaliza status/next; rechaza409 si existen ModuleUnits; project/item404.",
+    "sideEffects": "SetProjectItemFloorStatus; recordFloorEvent separado best-effort. No identity física por cada unidad en ruta legacy.",
+    "evidence": [
+      "backend-go/internal/api/floorScan.go"
+    ],
+    "tests": [],
+    "domain": "Production / legacy line status"
+  },
+  "HandleProjectFloorEvents": {
+    "purpose": "Leer eventos de piso y carga",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET sin capability adicional en handler",
+    "validation": "projectid requerido y proyecto existente; no owner adicional; eventos[] cuando nil.",
+    "sideEffects": "Lectura; loading CalculateLoadingProgress; no marca carga.",
+    "evidence": [
+      "backend-go/internal/api/floorScan.go"
+    ],
+    "tests": [],
+    "domain": "Production / logistics"
+  },
+  "HandleProjectLoadingStatus": {
+    "purpose": "Leer eventos de piso y carga",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET sin capability adicional en handler",
+    "validation": "projectid requerido y proyecto existente; no owner adicional; eventos[] cuando nil.",
+    "sideEffects": "Lectura; loading CalculateLoadingProgress; no marca carga.",
+    "evidence": [
+      "backend-go/internal/api/floorScan.go"
+    ],
+    "tests": [],
+    "domain": "Production / logistics"
+  },
+  "HandleProjectPartExecutions": {
+    "purpose": "Leer piezas/unidades físicas",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET sin capability adicional en handler",
+    "validation": "Project404; partes/unidades[] cuando nil; CheckAssemblyReadiness por release actual.",
+    "sideEffects": "Lectura; no avance ni regeneración.",
+    "evidence": [
+      "backend-go/internal/api/partExecutions.go"
+    ],
+    "tests": [],
+    "domain": "Production / physical execution"
+  },
+  "HandleGeneratePartExecutions": {
+    "purpose": "Generar/reemplazar ejecuciones físicas",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. PUT RoleCanSuperviseFloor",
+    "validation": "Arrays requeridos; línea existe/unitIndex rango/countqty; unit awaiting_parts, part pending; IDs de pieza únicos; cut primero; release match cuando hayrelease; progress requiereforce.",
+    "sideEffects": "MutateProjectPartExecutions reemplaza parts/units; deriva estadolegacy y agrega floorevents por regresión. Validaciónserver no equivale cálculoBOMserver.",
+    "evidence": [
+      "backend-go/internal/api/partExecutions.go"
+    ],
+    "tests": [],
+    "domain": "Production / execution generation"
+  },
+  "HandleAdvanceModuleUnit": {
+    "purpose": "Avanzar unidad física",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST markProduced/exportProduction/claimJob; actorCanWorkSectorInTx target",
+    "validation": "unit exacta; target enum/next; assembly readiness y QCpackaging409; transición dominio; package_count1–99.",
+    "sideEffects": "Mutation closure devuelve parts/units/status/events; release obtenido de Project antes de closure. Runtime race no verificado.",
+    "evidence": [
+      "backend-go/internal/api/partExecutions.go"
+    ],
+    "tests": [],
+    "domain": "Production / unit convergence and logistics"
+  },
+  "HandleAssemblyOverride": {
+    "purpose": "Override de armado",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST RoleCanSuperviseFloor",
+    "validation": "reason no vacío (sin trim en este handler); unit encontrada; override existente409.",
+    "sideEffects": "RecordSupervisorAssemblyOverride + floorevent en mutation; no autoriza CNC.",
+    "evidence": [
+      "backend-go/internal/api/partExecutions.go"
+    ],
+    "tests": [],
+    "domain": "Production / assembly override"
+  },
+  "HandlePartRework": {
+    "purpose": "Retrabajar/refabricar pieza",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST RoleCanSuperviseFloor",
+    "validation": "action rework/refabricate; reason requerido; targetoperationenum; cost/minutes>=0; part exacta; TriggerPartReworkchanged.",
+    "sideEffects": "Physical mutation con floorevents; lifecycle quality_issue_reported/rework_started inserts después best-effort, no prometer audit crítico atómico.",
+    "evidence": [
+      "backend-go/internal/api/partExecutions.go"
+    ],
+    "tests": [],
+    "domain": "Production / rework"
+  },
+  "HandleProjectQuality": {
+    "purpose": "Calidad y retrabajos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET/POST roleCanManageQuality=eventquality_issue_reported",
+    "validation": "Issue description/category; transition enum/existing/CanTransition; rework action/reason accept_as_is/part target y costos>=0; ValidateQualityJobTransition.",
+    "sideEffects": "MutateProjectQuality; issue/rework events, parts/status effects en mismo mutation objeto. GET qualityview/gates/costs; transición mismoestado retorna no-op.",
+    "evidence": [
+      "backend-go/internal/api/quality.go"
+    ],
+    "tests": [],
+    "domain": "Quality / rework"
+  },
+  "HandleQualityIssue": {
+    "purpose": "Calidad y retrabajos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET/POST roleCanManageQuality=eventquality_issue_reported",
+    "validation": "Issue description/category; transition enum/existing/CanTransition; rework action/reason accept_as_is/part target y costos>=0; ValidateQualityJobTransition.",
+    "sideEffects": "MutateProjectQuality; issue/rework events, parts/status effects en mismo mutation objeto. GET qualityview/gates/costs; transición mismoestado retorna no-op.",
+    "evidence": [
+      "backend-go/internal/api/quality.go"
+    ],
+    "tests": [],
+    "domain": "Quality / rework"
+  },
+  "HandleQualityIssueTransition": {
+    "purpose": "Calidad y retrabajos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET/POST roleCanManageQuality=eventquality_issue_reported",
+    "validation": "Issue description/category; transition enum/existing/CanTransition; rework action/reason accept_as_is/part target y costos>=0; ValidateQualityJobTransition.",
+    "sideEffects": "MutateProjectQuality; issue/rework events, parts/status effects en mismo mutation objeto. GET qualityview/gates/costs; transición mismoestado retorna no-op.",
+    "evidence": [
+      "backend-go/internal/api/quality.go"
+    ],
+    "tests": [],
+    "domain": "Quality / rework"
+  },
+  "HandleQualityRework": {
+    "purpose": "Calidad y retrabajos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET/POST roleCanManageQuality=eventquality_issue_reported",
+    "validation": "Issue description/category; transition enum/existing/CanTransition; rework action/reason accept_as_is/part target y costos>=0; ValidateQualityJobTransition.",
+    "sideEffects": "MutateProjectQuality; issue/rework events, parts/status effects en mismo mutation objeto. GET qualityview/gates/costs; transición mismoestado retorna no-op.",
+    "evidence": [
+      "backend-go/internal/api/quality.go"
+    ],
+    "tests": [],
+    "domain": "Quality / rework"
+  },
+  "HandleQualityUnitQcOverride": {
+    "purpose": "Override QC para packaging",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST RoleCanSuperviseFloor",
+    "validation": "reason trim requerido; unit exacta; ValidateQualityJobTransition; mantiene checklist anterior.",
+    "sideEffects": "Sella Override actor/time/reason en UnitQC; no avanza unidad automáticamente.",
+    "evidence": [
+      "backend-go/internal/api/quality.go"
+    ],
+    "tests": [],
+    "domain": "Quality / packaging gate"
+  },
+  "HandleProjectMaterials": {
+    "purpose": "Leer planificación y disponibilidad",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET roleCanManagePlanning(eventmaterials_required)",
+    "validation": "MutateProjectMaterialPlanning usado como lectura; buildMaterialsView derive coverage/availability/releasechecks.",
+    "sideEffects": "Devuelve mutation Planning actual; no asumir ausencia de escritura por método GET sin inspeccionar storage.",
+    "evidence": [
+      "backend-go/internal/api/materialPlanning.go"
+    ],
+    "tests": [],
+    "domain": "Procurement / MRP"
+  },
+  "HandleMaterialsDerive": {
+    "purpose": "Derivar requerimientos de BOM liberado",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanManagePlanning",
+    "validation": "Lines no vacías/kindenum/id/qty>0; releaseID requerido; planning release ya existente409; ValidateMaterialPlanningShape.",
+    "sideEffects": "Guarda lines provistas por cliente ligadas a releaseID/fingerprint + materials_required; no recalcula BOMautoridad en handler.",
+    "evidence": [
+      "backend-go/internal/api/materialPlanning.go"
+    ],
+    "tests": [],
+    "domain": "Procurement / MRP requirements"
+  },
+  "HandleMaterialsReserve": {
+    "purpose": "Reservar material disponible",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanManagePlanning",
+    "validation": "Nonpositive lines omitidas; kind/id validación; requiere requirements y no liberado; PlanReservations; no pendiente409.",
+    "sideEffects": "Mutation reserva+shortages/eventos; lectura stocks/otrasreservas en snapshot; no consumo stock directo.",
+    "evidence": [
+      "backend-go/internal/api/materialPlanning.go"
+    ],
+    "tests": [],
+    "domain": "Procurement / reservations"
+  },
+  "HandleMaterialsConsume": {
+    "purpose": "Consumir reservas planeadas",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanManagePlanning",
+    "validation": "Nonpositive omitidas; kind/id; planningnil intenta no-op view; ValidateMaterialPlanningTransition.",
+    "sideEffects": "ConsumePlannedMaterials reserva; distinto de débito ledger stock. Atomicidad entre ambas rutas no demostrada.",
+    "evidence": [
+      "backend-go/internal/api/materialPlanning.go"
+    ],
+    "tests": [],
+    "domain": "Procurement / reservations consumption"
+  },
+  "HandleMaterialsRelease": {
+    "purpose": "Liberar materiales con evidencia",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST eventmaterials_ready; override requiere eventmaterials_release_overridden",
+    "validation": "Check readiness; faltantes sinreason409; reasontrim +capability; ValidateMaterialPlanningTransition.",
+    "sideEffects": "Planning release/failingchecks + actor/time + materials_release_overridden/materials_ready + stamp en mutation. No DesignRelease ni CNC output.",
+    "evidence": [
+      "backend-go/internal/api/materialPlanning.go"
+    ],
+    "tests": [],
+    "domain": "Procurement / material release"
+  },
+  "HandleProjectCosting": {
+    "purpose": "Ver costos reales vs estimado",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. GET actorCanViewCosts",
+    "validation": "Mutation usada lectura; summary por ComputeJobCostSummary, consumos ValueMaterialConsumptions, missingvaluation explícita.",
+    "sideEffects": "Costingnil mutation; no baseline automático.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing"
+  },
+  "HandleCostingBaseline": {
+    "purpose": "Baseline y tarifa costos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanManageCosting(eventcost_baseline_captured)",
+    "validation": "Baseline BuildCostBaseline(snapshot/release); rate>0 y costing existente; ValidateJobCostingTransition.",
+    "sideEffects": "Baseline con event y provenance; tarifa aplica a entradas futuras, no reescribe rate congelado.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing / baseline"
+  },
+  "HandleCostingLaborRate": {
+    "purpose": "Baseline y tarifa costos",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanManageCosting(eventcost_baseline_captured)",
+    "validation": "Baseline BuildCostBaseline(snapshot/release); rate>0 y costing existente; ValidateJobCostingTransition.",
+    "sideEffects": "Baseline con event y provenance; tarifa aplica a entradas futuras, no reescribe rate congelado.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing / baseline"
+  },
+  "HandleCostingTime": {
+    "purpose": "Registrar tiempo real",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanRecordCostTime(eventcost_time_recorded)",
+    "validation": "Categoryenum/minutes>0/costing iniciado; validate transition.",
+    "sideEffects": "Nueva entrada actor/time/rate actual congelado+event en mutation; no retry receipt en ruta inspeccionada.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing / labor"
+  },
+  "HandleCostingOther": {
+    "purpose": "Registrar costo externo",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanRecordOtherCost(eventcost_other_recorded)",
+    "validation": "Kind enum/amount>0/costing iniciado; validate transition.",
+    "sideEffects": "Entrada actor/time/vendor/note +event en mutation.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing / other actual"
+  },
+  "HandleCostingTimeVoid": {
+    "purpose": "Anular costo sin borrar historial",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanVoidCostEntry(eventcost_entry_voided)",
+    "validation": "Target exacto por entryId/costId; missing404; yaanulado409; bodyreason no validación novacío visible; validate transition.",
+    "sideEffects": "Softvoid actor/time, event cost_entry_voided en mutation; no delete.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing / correction"
+  },
+  "HandleCostingOtherVoid": {
+    "purpose": "Anular costo sin borrar historial",
+    "authAndRoles": "AuthMiddleware establece sesión/tenant vivo; rol adicional indicado por método; rutas físicas además manufacturingOnly. POST roleCanVoidCostEntry(eventcost_entry_voided)",
+    "validation": "Target exacto por entryId/costId; missing404; yaanulado409; bodyreason no validación novacío visible; validate transition.",
+    "sideEffects": "Softvoid actor/time, event cost_entry_voided en mutation; no delete.",
+    "evidence": [
+      "backend-go/internal/api/jobCosting.go"
+    ],
+    "tests": [],
+    "domain": "Costing / correction"
+  },
+  "HandleProjectFurnitureInstances": {
+    "purpose": "Lista/crea identidad física de proyecto",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects; POST RoleCanMutateProjects",
+    "validation": "projectUUID; optionaldefinitionUUID; generatedbody; origen servidor manual o design según ExtensionClient.",
+    "sideEffects": "GET summary/labels/dims servidor; POST CreateFurnitureInstance con actor/IP/requestID, ETag. Domain storage error targetnotwritable403/lifecycle409.",
+    "evidence": [
+      "backend-go/internal/api/furniture_instances.go"
+    ],
+    "tests": [],
+    "domain": "Projects / FurnitureInstance"
+  },
+  "HandleFurnitureInstanceDuplicate": {
+    "purpose": "Duplicar unidad en mismo proyecto",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; POST RoleCanMutateProjects + rutaRequireIdempotency",
+    "validation": "projectID e instanceID UUID; router separa :duplicate y rechaza comando desconocido.",
+    "sideEffects": "DuplicateFurnitureInstance con provenance servidor, created201/ETag; no copiar identity del host.",
+    "evidence": [
+      "backend-go/internal/api/furniture_instances.go"
+    ],
+    "tests": [],
+    "domain": "Projects / FurnitureInstance"
+  },
+  "HandleFurnitureInstanceRemove": {
+    "purpose": "Retirar identidad física terminal",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; POST RoleCanMutateProjects + idempotency en ruta",
+    "validation": "If-Match requerido; instanceUUID; router:remove; version/lifecycle409, forbidden403.",
+    "sideEffects": "RemoveFurnitureInstance preserva semántica terminal en storage; devuelve instance+ETag, no reciclaje identidad.",
+    "evidence": [
+      "backend-go/internal/api/furniture_instances.go"
+    ],
+    "tests": [],
+    "domain": "Projects / FurnitureInstance lifecycle"
+  },
+  "HandleQuoteLineFurnitureInstances": {
+    "purpose": "Consultar unidades por línea cotización",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects",
+    "validation": "project/quotelineUUID; storage mapea line404, owner403 y errores dominio.",
+    "sideEffects": "Lectura DTO link+instance; no materialización implícita.",
+    "evidence": [
+      "backend-go/internal/api/quote_line_furniture_instances.go"
+    ],
+    "tests": [],
+    "domain": "Sales / quote-line physical links"
+  },
+  "HandleQuoteLineMaterialize": {
+    "purpose": "Converger cantidad cotizada a unidades físicas",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; POST RoleCanMutateProjects + idempotency ruta",
+    "validation": "project/quotelineUUID; sin inputidentity; acceptedrevision409 y durablehistory409 mapeados.",
+    "sideEffects": "MaterializeQuoteLine retorna created/cancelled/unlinkedIDs/quantity; ownership/domain delegated storage.",
+    "evidence": [
+      "backend-go/internal/api/quote_line_furniture_instances.go"
+    ],
+    "tests": [],
+    "domain": "Sales / physical materialization"
+  },
+  "HandleProjectDesigns": {
+    "purpose": "Leer diseños y revisiones",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects; ramasPOST sharedhandler RoleCanMutateProjects (solo afirmar ruta registrada)",
+    "validation": "IDsUUID; create name/revisionuuid; publishevent source/base; erroresdesign/revision404/notactive409/crossproject400.",
+    "sideEffects": "GET DTOs tipados incluidos artifacts cuando presentes; ramaswrites CreateDesign/PublishDesignRevision, no asumir toda rama registrada.",
+    "evidence": [
+      "backend-go/internal/api/designs.go"
+    ],
+    "tests": [],
+    "domain": "Design / revision history"
+  },
+  "HandleDesign": {
+    "purpose": "Leer diseños y revisiones",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects; ramasPOST sharedhandler RoleCanMutateProjects (solo afirmar ruta registrada)",
+    "validation": "IDsUUID; create name/revisionuuid; publishevent source/base; erroresdesign/revision404/notactive409/crossproject400.",
+    "sideEffects": "GET DTOs tipados incluidos artifacts cuando presentes; ramaswrites CreateDesign/PublishDesignRevision, no asumir toda rama registrada.",
+    "evidence": [
+      "backend-go/internal/api/designs.go"
+    ],
+    "tests": [],
+    "domain": "Design / revision history"
+  },
+  "HandleDesignRevisions": {
+    "purpose": "Leer diseños y revisiones",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects; ramasPOST sharedhandler RoleCanMutateProjects (solo afirmar ruta registrada)",
+    "validation": "IDsUUID; create name/revisionuuid; publishevent source/base; erroresdesign/revision404/notactive409/crossproject400.",
+    "sideEffects": "GET DTOs tipados incluidos artifacts cuando presentes; ramaswrites CreateDesign/PublishDesignRevision, no asumir toda rama registrada.",
+    "evidence": [
+      "backend-go/internal/api/designs.go"
+    ],
+    "tests": [],
+    "domain": "Design / revision history"
+  },
+  "HandleDesignWorkingCopy": {
+    "purpose": "Leer borrador de diseño",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects; shared PUT usa mismoRoleCanAccessProjects, no mutateProjects",
+    "validation": "designUUID; sharedPUTbaseUUID/sourceenum/fiUUID/definitionUUID; transform sólo copia si len3; storage valida crossproject/duplicate/lifecycle.",
+    "sideEffects": "GET read; sharedPUT UpdateDesignWorkingCopy; rutaPUT previamente revisada en endpoint-deep. No duplicar cobertura runtime.",
+    "evidence": [
+      "backend-go/internal/api/designs.go"
+    ],
+    "tests": [],
+    "domain": "Design / working copy"
+  },
+  "HandleDesignWorkingCopyReset": {
+    "purpose": "Reset borrador desde revisión",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; POST RoleCanAccessProjects",
+    "validation": "design/revisionUUID; JSONbody; erroresdesign/revision/workingcopy.",
+    "sideEffects": "ResetDesignWorkingCopy actorID, no modifica revisión publicada; idempotency según registro.",
+    "evidence": [
+      "backend-go/internal/api/designs.go"
+    ],
+    "tests": [],
+    "domain": "Design / working copy reset"
+  },
+  "HandleProjectDesignBindingValidate": {
+    "purpose": "Validar enlace de modelo contra contexto autoritativo",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; POST RoleCanAccessProjects",
+    "validation": "project/designUUID; generatedbody clientSchemaVersion>=1; base opcional; GetModelBindingContext foreign/crossproject404.",
+    "sideEffects": "Read stateless; schemaVersion1, contextobase, archivedstate; canEdit accessProjects/canPublish mutateProjects. Cliente decide stale/incompatible comparando.",
+    "evidence": [
+      "backend-go/internal/api/design_binding.go"
+    ],
+    "tests": [],
+    "domain": "Design / SketchUp binding"
+  },
+  "HandleFurnitureAuthoringResolve": {
+    "purpose": "Resolver snapshot semántico de autoría",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; métodoPOST; usuario y licenciaorg activa; extension capability allowlist",
+    "validation": "ContentTypeJSON; sinquery; max2MiB/DisallowUnknownFields/sinJSONtrailing; schemaID/name/versionexactos; catalogrevisionpinned; helpers occurrence/placement/parameters/materialchoice; issues422.",
+    "sideEffects": "Una carga catálogo; engine.ResolveAuthoringLayout; salida accepted/rejected conissues; stateless, sin Project/FurnitureInstance mutation. Helpers internos no enteramente reprobados en suplemento.",
+    "evidence": [
+      "backend-go/internal/api/authoring_resolve.go"
+    ],
+    "tests": [],
+    "domain": "Engineering / authoring resolve"
+  },
+  "HandleDesignPublishArtifactUpload": {
+    "purpose": "Subir artefacto a sesión publicación",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; RoleCanMutateProjects",
+    "validation": "IDsUUID/kindenum; prepared no vencida; límites porkind; model.skp opaco extensión, previewPNG/JPEGsniff, manifest canonical igual prepared.",
+    "sideEffects": "Tempfile+hash+rename por org/session; RecordDesignPublishArtifact; limpia reemplazo/error metadata; SHA calculado duranteupload, no parseSKP semántico.",
+    "evidence": [
+      "backend-go/internal/api/design_publish.go"
+    ],
+    "tests": [],
+    "domain": "Design / staged publication artifacts"
+  },
+  "HandleDesignPublishFinalize": {
+    "purpose": "Finalizar revisión inmutable",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; RoleCanMutateProjects + RequireIdempotency ruta",
+    "validation": "design/sessionUUID; prepared requiredartifacts existen tamañoexacto; FinalizeDesignPublish revalida almacenamiento.",
+    "sideEffects": "Publicaciónstorage + actor/IP/requestID, rev201. Handler filesystem check size/existence, no rehashenfinalize visible.",
+    "evidence": [
+      "backend-go/internal/api/design_publish.go"
+    ],
+    "tests": [],
+    "domain": "Design / publish commit"
+  },
+  "HandleDesignRevisionArtifacts": {
+    "purpose": "Listar metadata artefactos publicados",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; GET RoleCanAccessProjects",
+    "validation": "design/revisionUUID, storage ListDesignRevisionArtifacts exactos.",
+    "sideEffects": "Lectura DTO; no URLspermanentes.",
+    "evidence": [
+      "backend-go/internal/api/design_publish.go"
+    ],
+    "tests": [],
+    "domain": "Design / artifact metadata"
+  },
+  "HandleDesignRevisionArtifactAuthorize": {
+    "purpose": "Grant de lectura artefacto publicado",
+    "authAndRoles": "AuthMiddleware; identidad claims requerida; POST RoleCanAccessProjects/no-store",
+    "validation": "UUID/kind; signer requerido503; artifact exacto; resourcekey canonical.",
+    "sideEffects": "Grant resource/org/session con absolute cap; no URLpúblicapermanente.",
+    "evidence": [
+      "backend-go/internal/api/design_publish.go"
+    ],
+    "tests": [],
+    "domain": "Design / artifact authorization"
+  },
+  "HandleDesignArtifactGet": {
+    "purpose": "Streaming de artefacto exacto",
+    "authAndRoles": "designArtifactGetAuth: Authorization→AuthMiddleware; sinheader grant MediaTokens válido+exactresource; no dueño por nombre",
+    "validation": "Keycanonical; filepartitionorg/path; missing404; invalid400; expiredgrant401.",
+    "sideEffects": "Lectura filesystem; privatecache/VaryAuthorization/capgrant; model/manifest attachment. No ejecución ni parse del modelo.",
+    "evidence": [
+      "backend-go/internal/api/design_publish.go"
+    ],
+    "tests": [],
+    "domain": "Design / artifact delivery"
+  },
+  "HandleProjectPhotos": {
+    "purpose": "Galería de fotos de proyecto",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET/POST sin capability/owner adicional visible",
+    "validation": "Projectlookup; JSON URL requerida/default installed; multipart file3MiB/sniff con fallbackextension igual BE-001; stage no enumvalidator visible.",
+    "sideEffects": "POST filesystem+CreateProjectPhoto actor; metadatafailure no cleanup visible; GET list. No subir durante auditoría.",
+    "evidence": [
+      "backend-go/internal/api/photos.go"
+    ],
+    "tests": [],
+    "domain": "Project media"
+  },
+  "HandleProjectPhotoByID": {
+    "purpose": "Editar/eliminar foto proyecto",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; PATCH/DELETE sin capability/owner adicional visible",
+    "validation": "Lookup photoId; path projectid no comparado en handler; PATCH opcionales stage/caption/showcase; DELETE lookup requerido.",
+    "sideEffects": "Update metadata o delete row; filesystem remove best-effort por tenant. Falta vínculo routeprojectid es source caveat, no cross-tenant claim.",
+    "evidence": [
+      "backend-go/internal/api/photos.go"
+    ],
+    "tests": [],
+    "domain": "Project media"
+  },
+  "HandleShowcasePhotos": {
+    "purpose": "Consultar galería comercial",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET sin guard específico adicional",
+    "validation": "only_showcase true exacto; ListShowcasePhotos tenant-context.",
+    "sideEffects": "Lectura colección; no sharing público por este handler.",
+    "evidence": [
+      "backend-go/internal/api/photos.go"
+    ],
+    "tests": [],
+    "domain": "Commercial showcase"
+  },
+  "HandleWarrantyTickets": {
+    "purpose": "CRUD tickets garantía",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET/POST/PATCH/DELETE sin RoleCan* adicional visible",
+    "validation": "POST projectID/title requeridos; defaults categoryother/prioritynormal/statusopen; PATCH status/fields directos; RFC3339invalid resolvedAt ignorado; lookup404.",
+    "sideEffects": "Create/update/delete garantía; resolvedstatus timestampa si faltaba; no transición domain explícita en handler; cliente puedeproveerticketid/number.",
+    "evidence": [
+      "backend-go/internal/api/warranties.go"
+    ],
+    "tests": [],
+    "domain": "After sales / warranty"
+  },
+  "HandleWarrantyTicketByID": {
+    "purpose": "CRUD tickets garantía",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET/POST/PATCH/DELETE sin RoleCan* adicional visible",
+    "validation": "POST projectID/title requeridos; defaults categoryother/prioritynormal/statusopen; PATCH status/fields directos; RFC3339invalid resolvedAt ignorado; lookup404.",
+    "sideEffects": "Create/update/delete garantía; resolvedstatus timestampa si faltaba; no transición domain explícita en handler; cliente puedeproveerticketid/number.",
+    "evidence": [
+      "backend-go/internal/api/warranties.go"
+    ],
+    "tests": [],
+    "domain": "After sales / warranty"
+  },
+  "HandleWarrantyTicketPhotos": {
+    "purpose": "Fotos garantía",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET/POST/DELETE sin capability adicional visible",
+    "validation": "Ticketlookup; JSON URL obligatoria, kinddefault y thumbnailfallbackURL; multipart cap3MiB/sniff+extension; delete ticket/photoID requeridos.",
+    "sideEffects": "Photo metadata+file; delete cleanupbest-effort; sin prueba de rollback filesystem.",
+    "evidence": [
+      "backend-go/internal/api/warranties.go"
+    ],
+    "tests": [],
+    "domain": "After sales / evidence media"
+  },
+  "HandleWarrantyTicketPhotoDelete": {
+    "purpose": "Fotos garantía",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET/POST/DELETE sin capability adicional visible",
+    "validation": "Ticketlookup; JSON URL obligatoria, kinddefault y thumbnailfallbackURL; multipart cap3MiB/sniff+extension; delete ticket/photoID requeridos.",
+    "sideEffects": "Photo metadata+file; delete cleanupbest-effort; sin prueba de rollback filesystem.",
+    "evidence": [
+      "backend-go/internal/api/warranties.go"
+    ],
+    "tests": [],
+    "domain": "After sales / evidence media"
+  },
+  "HandleProductionClaim": {
+    "purpose": "Reclamar actividad estación",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST RoleCanClaimProductionJob; roles scoped requieren sectorasignado",
+    "validation": "project/sector requeridos; sectorenum; lookup project/item; conflicto actividad del mismo operador/item/sector; failedquery conflicto se ignora.",
+    "sideEffects": "Inserta ProductionActivity actor/time/machine; no avancepieza; raceunique storage pendiente.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / activity"
+  },
+  "HandleProductionFinish": {
+    "purpose": "Finalizar actividad",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST RoleCanClaimProductionJob; operador dueño o admin; sectorasignado si scoped",
+    "validation": "Activityactiva404; JSON piecesCount/notes sin rango piecescount visible; actor/sector rechecks.",
+    "sideEffects": "FinishProductionActivity y luego avancelegacybest-effort/floorevent; returns completed incluso si mirrorfloor falla. No avancepiezanormalizada.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / activity completion"
+  },
+  "HandleProductionDamage": {
+    "purpose": "Reportar daño",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST RoleCanClaimProductionJob; sectorasignado si scoped",
+    "validation": "project/item/damagetype requeridos; projectlookup; itempertenencia y damageenum no validados explícitamente aquí.",
+    "sideEffects": "InsertDamageReport actor/time; no reworkmutation automático.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / damage report"
+  },
+  "HandleProductionDashboard": {
+    "purpose": "Métricas producción",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET RoleCanAccessProductionDashboard",
+    "validation": "GetDashboardMetrics storage; métricas no recalculadas handler.",
+    "sideEffects": "Lectura; semántica de cadaKPI storage/domain queda fuera de esta lectura.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / metrics"
+  },
+  "HandleProductionActiveJobs": {
+    "purpose": "Actividad activa por sectores",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET productionDashboard OR claimProductionJob",
+    "validation": "Scoped→sectoresusuario; unscoped todos; errors sectorqueries omitidos; FinishedAtnil only.",
+    "sideEffects": "Proyecta jobs+duración tiempoactual; failureparcial puede aparecer colecciónparcial sin flag.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / active jobs"
+  },
+  "HandleProductionDamageResolve": {
+    "purpose": "Resolver reporte daño",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; PATCH RoleCanManageProductionStaff",
+    "validation": "id requerido; ResolveDamageReport storage, error500.",
+    "sideEffects": "Marca resolved; no evidencia de razón/rework/cierrecalidad exigida en handler.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / damage resolution"
+  },
+  "HandleOperatorsBySector": {
+    "purpose": "Consultar operadores sector",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET RoleCanManageProductionStaff",
+    "validation": "sectorquery requerido; sin enum check explícito; GetUsersBySector; DTOpúblico.",
+    "sideEffects": "Lectura usuarios; no credentialfields proyectados por ToPublicUserDTOs.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Production / staff"
+  },
+  "HandleMySectors": {
+    "purpose": "Sectores del actor",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET actorUserID requerido",
+    "validation": "ListUserSectors(actorID); nillist→[].",
+    "sideEffects": "Lectura propia; no acepta userID del cliente.",
+    "evidence": [
+      "backend-go/internal/api/productionActivity.go"
+    ],
+    "tests": [],
+    "domain": "Organization / sector assignments"
+  },
+  "HandleProjectSiteSurvey": {
+    "purpose": "Leer/iniciar levantamiento",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET sin rol adicional; POST roleCanCaptureSurvey(eventsurvey_captured); manufacturingOnly ruta",
+    "validation": "GET mutationvacía para view; POST existing409; revision1/spaces[]/actor.",
+    "sideEffects": "Start Survey+event; SurveyFabricationBlockers en respuesta; no campo createdAtproxy.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / structured site"
+  },
+  "HandleSiteSurveySpaces": {
+    "purpose": "Mantener espacios de levantamiento",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; PUT/DELETE roleCanCaptureSurvey; manufacturingOnly",
+    "validation": "PUT SurveySpaceInput→UpsertSurveySpace; DELETE spaceID→RemoveSurveySpace; erroresdomain via mutationmapper.",
+    "sideEffects": "MutateProjectSurvey devuelve nuevo survey; no event explícito en estas ramas.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / spaces"
+  },
+  "HandleSiteSurveySpaceDelete": {
+    "purpose": "Mantener espacios de levantamiento",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; PUT/DELETE roleCanCaptureSurvey; manufacturingOnly",
+    "validation": "PUT SurveySpaceInput→UpsertSurveySpace; DELETE spaceID→RemoveSurveySpace; erroresdomain via mutationmapper.",
+    "sideEffects": "MutateProjectSurvey devuelve nuevo survey; no event explícito en estas ramas.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / spaces"
+  },
+  "HandleSiteSurveyCapture": {
+    "purpose": "Capturar medidas de espacio",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST roleCanCaptureSurvey; manufacturingOnly",
+    "validation": "SpaceMeasures body; CaptureSpaceMeasures valida dentroclosure; project/space target exacto.",
+    "sideEffects": "Nuevo survey + survey_captured actor/time/revision/dimensions.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / field measures"
+  },
+  "HandleSiteSurveyApprove": {
+    "purpose": "Aprobar medidas espacio",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST roleCanApproveSurveyMeasures(eventsurvey_measures_approved); manufacturingOnly",
+    "validation": "ApproveSpaceMeasures valida estado/target; sin body clienteextra en handler.",
+    "sideEffects": "Survey+event actor/time; approval no fabricación directa.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / approval"
+  },
+  "HandleSiteSurveyVerify": {
+    "purpose": "Verificar levantamiento completo",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST roleCanVerifySurvey(eventsurvey_verified); manufacturingOnly",
+    "validation": "VerifySiteSurvey domain dentro mutation; retorna errorprefix mapper.",
+    "sideEffects": "Survey+survey_verified countspaces; no inferir instalaciones listas.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / verification"
+  },
+  "HandleSiteSurveyFreeze": {
+    "purpose": "Congelar medidas para fabricar",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; POST roleCanApproveSurveyMeasures; manufacturingOnly",
+    "validation": "FreezeMeasuresForFabrication domain con actor/time; targetproject.",
+    "sideEffects": "Survey+event survey_measures_approved con frozen/revision; freeze preserva semántica medidas, no DesignRelease.",
+    "evidence": [
+      "backend-go/internal/api/siteSurvey.go"
+    ],
+    "tests": [],
+    "domain": "Survey / fabrication basis"
+  },
+  "HandleProjectInstallation": {
+    "purpose": "Leer instalación y closeout readiness",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET roleCanManageInstallation(eventinstallation_started); manufacturingOnly",
+    "validation": "Projectid/lookup404; buildInstallationView. SharedPUT validatesjobtransition+closeout facts immutable; diff eventcapability.",
+    "sideEffects": "GET lectura; PUT MutateProjectInstallation job+events previamente revisado en endpoint-deep, no duplicarcobertura.",
+    "evidence": [
+      "backend-go/internal/api/installation.go"
+    ],
+    "tests": [],
+    "domain": "Installation / visits and punch"
+  },
+  "HandleProjectByID": {
+    "purpose": "Leer/eliminar proyecto con filtros",
+    "authAndRoles": "AuthMiddleware; tenant/session vivos; GET accessProjects+owner; DELETE deleteProject+owner; sharedPUT permisos por transición",
+    "validation": "idrequerido; ownerdenial404; GET orgSeesManufacturing y actorCanViewCosts redaction; DELETE existinglookup.",
+    "sideEffects": "GET lectura; DELETE storage; sharedPUT restaura org/installation, valida UUID/eventos; problemas OP01/OP02 existentes, no cerrar con presenthandler.",
+    "evidence": [
+      "backend-go/internal/api/handlers.go"
+    ],
+    "tests": [],
+    "domain": "Projects / aggregate"
+  }
+}

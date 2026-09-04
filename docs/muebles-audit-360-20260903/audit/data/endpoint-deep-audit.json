@@ -1,0 +1,2208 @@
+{
+  "baseline": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "generatedAt": "2026-09-04T05:26:29.671322+00:00",
+  "scope": "21 deliberately selected critical demo endpoints, NOT all 265 inventory routes.",
+  "method": "Reviewed handler source plus roles, dependency definitions and existing backend/Web/SketchUp/operational reports. Automated extraction adds traceable supporting lines; it is not runtime authorization proof.",
+  "endpoints": [
+    {
+      "id": "EP-01",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "purpose": "Identity session entry",
+      "authAndRoles": "Public, auth rate limiter; active account/password and selectable membership checks; no-store",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "email/password, transport and optional organization slug hint",
+      "validation": "Uniform invalid-credentials response; organization hint resolves active scope, multi-membership returns selection-required scope",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusForbidden",
+          "StatusMethodNotAllowed",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, response)",
+          "\trespondWithJSON(w, http.StatusOK, response)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [],
+      "dependencies": [
+        {
+          "method": "GetUserByEmail",
+          "evidence": "backend-go/internal/storage/users.go:31-33"
+        },
+        {
+          "method": "ListMembershipsByUser",
+          "evidence": "backend-go/internal/storage/organizations.go:190-227"
+        },
+        {
+          "method": "UpdateLastLogin",
+          "evidence": "backend-go/internal/storage/users.go:50-65"
+        }
+      ],
+      "sideEffects": "Creates session/refresh family through issuance helpers and login audit; no business project",
+      "webAndSketchUp": "Web login; SketchUp now uses device flow rather than credential sharing",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:116",
+          "excerpt": "login(body: LoginRequest, signal?: AbortSignal): Promise<LoginResponse> { return this.request(\"POST\", \"/auth/login\", { schema: \"LoginResponse\", bodySchema: \"LoginRequest\", body, signal }); }"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/handlers_test.go:2518",
+          "match": "func TestHandleLogin_Uniform401ForMissingUser(t *testing.T) {"
+        },
+        {
+          "evidence": "backend-go/internal/api/middleware_test.go:458",
+          "match": "req1 := httptest.NewRequest(\"POST\", \"/api/auth/login\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/login_org_test.go:72",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/auth/login\", bytes.NewReader(body))"
+        },
+        {
+          "evidence": "backend-go/internal/api/auth_transport_test.go:22",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/auth/login\", strings.NewReader(fmt.Sprintf(`{\"email\":\"a@b.test\",\"password\":\"secret123\",\"transport\":%q}`, transport)))"
+        },
+        {
+          "evidence": "backend-go/internal/api/furniture_test.go:315",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/auth/login\", bytes.NewReader(body))"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "No new defect asserted; do not show tokens in portal",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:517-705",
+        "backend-go/internal/api/routes.go:102"
+      ],
+      "permissionEvidence": [],
+      "registration": "mux.Handle(\"POST /api/auth/login\", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleLogin))))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "No independent role whitelist in this reviewed handler; identity/session/license boundaries above apply. See middleware extension allowlist for restricted token transport.",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "Web login; SketchUp now uses device flow rather than credential sharing",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-02",
+      "method": "POST",
+      "path": "/api/auth/select-org",
+      "purpose": "Select organization in existing session",
+      "authAndRoles": "Authenticated session; active membership + active org + nonempty role grants; support sessions denied; no-store",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "organization_id generated request",
+      "validation": "MembershipNotSelectable on forbidden target; tenant actor changed only after authoritative selection",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusForbidden",
+          "StatusMethodNotAllowed",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusOK, response)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeMembershipNotSelectable",
+          "ApiErrorCodeSessionRevoked"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [],
+      "dependencies": [
+        {
+          "method": "GetActiveMembership",
+          "evidence": "backend-go/internal/storage/organizations.go:228-237"
+        },
+        {
+          "method": "GetUserByID",
+          "evidence": "backend-go/internal/storage/users.go:93-95"
+        },
+        {
+          "method": "UpdateAuthSessionScope",
+          "evidence": "backend-go/internal/storage/auth_sessions.go:128-192"
+        }
+      ],
+      "sideEffects": "Session scope/token update and required audit share request transaction",
+      "webAndSketchUp": "Web organization switch; not a SketchUp credential handoff",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:119",
+          "excerpt": "selectOrganization(token: string, body: SelectOrganizationRequest, signal?: AbortSignal): Promise<LoginResponse> { return this.request(\"POST\", \"/auth/select-org\", { schema: \"LoginResponse\", token, bodySchema: \"SelectOrganizationRequest\", body, signal }); }"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/session_registry_test.go:226",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/auth/select-org\", strings.NewReader(body))"
+        },
+        {
+          "evidence": "backend-go/internal/api/login_org_test.go:241",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/auth/select-org\", bytes.NewReader(body))"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Current browser tenant cache guarantees require consumer/runtime proof",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:706-864",
+        "backend-go/internal/api/routes.go:161"
+      ],
+      "permissionEvidence": [],
+      "registration": "mux.Handle(\"POST /api/auth/select-org\", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleSelectOrg))))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "No independent role whitelist in this reviewed handler; identity/session/license boundaries above apply. See middleware extension allowlist for restricted token transport.",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "Web organization switch; not a SketchUp credential handoff",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-03",
+      "method": "GET",
+      "path": "/api/projects",
+      "purpose": "List visible quotes/projects",
+      "authAndRoles": "RoleCanAccessProjects, then owner filter and manufacturing/cost redaction",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "No pagination parameters consumed in handler",
+      "validation": "Storage scoped list then actor owner filter; no mutation",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusConflict",
+          "StatusCreated",
+          "StatusMethodNotAllowed",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, filtered)",
+          "\t\trespondWithJSON(w, http.StatusCreated, p)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "RedactProjectCosts",
+        "RedactProjectManufacturing",
+        "RedactProjectsList",
+        "ResolveOwnerOnCreateRoles"
+      ],
+      "dependencies": [
+        {
+          "method": "CreateProject",
+          "evidence": "backend-go/internal/storage/projects.go:987-1061"
+        },
+        {
+          "method": "ListProjects",
+          "evidence": "backend-go/internal/storage/projects.go:359-499"
+        }
+      ],
+      "sideEffects": "Read-only full project collection",
+      "webAndSketchUp": "Web quotes/project dashboards via apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:609",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/projects`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/quote_line_furniture_instances_test.go:32",
+          "match": "\"/api/projects/\"+qlfiTestProjectID+\"/quote-lines/\"+qlfiTestLineID+\"/furniture-instances\","
+        },
+        {
+          "evidence": "backend-go/internal/api/model_binding_contract_test.go:53",
+          "match": "\"/api/projects/\"+designTestProjectID+\"/designs/\"+designTestDesignID+\"/binding:validate\","
+        },
+        {
+          "evidence": "backend-go/internal/api/projectEvents_test.go:38",
+          "match": "req := httptest.NewRequest(http.MethodGet, \"/api/projects/p1/events\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/handlers_test.go:1864",
+          "match": "func TestHandleProjectsDuplicateKeyReturns409(t *testing.T) {"
+        },
+        {
+          "evidence": "backend-go/internal/api/siteSurvey_test.go:76",
+          "match": "rr := doSurvey(srv, http.MethodPost, \"/api/projects/p1/site-survey\", string(domain.RoleVendedor), `{}`)"
+        },
+        {
+          "evidence": "backend-go/internal/api/internal_messages_test.go:81",
+          "match": "// 1. GET /api/projects/proj-1/messages"
+        },
+        {
+          "evidence": "backend-go/internal/api/middleware_test.go:268",
+          "match": "req := httptest.NewRequest(\"GET\", \"/api/projects\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/designs_test.go:43",
+          "match": "req := designRequest(http.MethodPost, \"/api/projects/\"+designTestProjectID+\"/designs\","
+        },
+        {
+          "evidence": "backend-go/internal/api/design_binding_test.go:60",
+          "match": "\"/api/projects/\"+designTestProjectID+\"/designs/\"+designTestDesignID+\"/binding:validate\","
+        },
+        {
+          "evidence": "backend-go/internal/api/projectOwnership_test.go:60",
+          "match": "req := withOrgClaims(httptest.NewRequest(http.MethodPost, \"/api/projects\", body), \"u1\", orgSales, string(domain.RoleVendedor))"
+        },
+        {
+          "evidence": "backend-go/internal/api/reconciliation_test.go:41",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/projects/10000000-0000-0000-0000-000000000001/reconciliation\", bytes.NewBufferString(\"{}\"))"
+        },
+        {
+          "evidence": "backend-go/internal/api/partExecutions_test.go:81",
+          "match": "rr := doPartExec(srv, http.MethodPost, \"/api/projects/p1/parts/p1_i1_u1_LAT_1/advance\","
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "BE-004 / OPS-08: unbounded heavy response; measured scale UNKNOWN",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:1252-1323",
+        "backend-go/internal/api/routes.go:342"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        },
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"GET /api/projects\", authMW(http.HandlerFunc(server.HandleProjects)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor, ingeniero, produccion, gerente_produccion",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web quotes/project dashboards via apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-04",
+      "method": "POST",
+      "path": "/api/projects",
+      "purpose": "Create draft quotation/project",
+      "authAndRoles": "RoleCanMutateProjects; actor-createdBy and owner resolver; org ownership authorization",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "domain.Project JSON; customer/items/material option UUIDs",
+      "validation": "Required related IDs validated; status forced draft, default currency MXN; duplicate key conflict",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusConflict",
+          "StatusCreated",
+          "StatusMethodNotAllowed",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, filtered)",
+          "\t\trespondWithJSON(w, http.StatusCreated, p)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "RedactProjectCosts",
+        "RedactProjectManufacturing",
+        "RedactProjectsList",
+        "ResolveOwnerOnCreateRoles"
+      ],
+      "dependencies": [
+        {
+          "method": "CreateProject",
+          "evidence": "backend-go/internal/storage/projects.go:987-1061"
+        },
+        {
+          "method": "ListProjects",
+          "evidence": "backend-go/internal/storage/projects.go:359-499"
+        }
+      ],
+      "sideEffects": "CreateProject persists new aggregate",
+      "webAndSketchUp": "Web create quote via apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:625",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/projects`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/quote_line_furniture_instances_test.go:32",
+          "match": "\"/api/projects/\"+qlfiTestProjectID+\"/quote-lines/\"+qlfiTestLineID+\"/furniture-instances\","
+        },
+        {
+          "evidence": "backend-go/internal/api/model_binding_contract_test.go:53",
+          "match": "\"/api/projects/\"+designTestProjectID+\"/designs/\"+designTestDesignID+\"/binding:validate\","
+        },
+        {
+          "evidence": "backend-go/internal/api/projectEvents_test.go:38",
+          "match": "req := httptest.NewRequest(http.MethodGet, \"/api/projects/p1/events\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/handlers_test.go:1864",
+          "match": "func TestHandleProjectsDuplicateKeyReturns409(t *testing.T) {"
+        },
+        {
+          "evidence": "backend-go/internal/api/siteSurvey_test.go:76",
+          "match": "rr := doSurvey(srv, http.MethodPost, \"/api/projects/p1/site-survey\", string(domain.RoleVendedor), `{}`)"
+        },
+        {
+          "evidence": "backend-go/internal/api/internal_messages_test.go:81",
+          "match": "// 1. GET /api/projects/proj-1/messages"
+        },
+        {
+          "evidence": "backend-go/internal/api/middleware_test.go:268",
+          "match": "req := httptest.NewRequest(\"GET\", \"/api/projects\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/designs_test.go:43",
+          "match": "req := designRequest(http.MethodPost, \"/api/projects/\"+designTestProjectID+\"/designs\","
+        },
+        {
+          "evidence": "backend-go/internal/api/design_binding_test.go:60",
+          "match": "\"/api/projects/\"+designTestProjectID+\"/designs/\"+designTestDesignID+\"/binding:validate\","
+        },
+        {
+          "evidence": "backend-go/internal/api/projectOwnership_test.go:60",
+          "match": "req := withOrgClaims(httptest.NewRequest(http.MethodPost, \"/api/projects\", body), \"u1\", orgSales, string(domain.RoleVendedor))"
+        },
+        {
+          "evidence": "backend-go/internal/api/reconciliation_test.go:41",
+          "match": "req := httptest.NewRequest(http.MethodPost, \"/api/projects/10000000-0000-0000-0000-000000000001/reconciliation\", bytes.NewBufferString(\"{}\"))"
+        },
+        {
+          "evidence": "backend-go/internal/api/partExecutions_test.go:81",
+          "match": "rr := doPartExec(srv, http.MethodPost, \"/api/projects/p1/parts/p1_i1_u1_LAT_1/advance\","
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "No route-level durable idempotency wrapper on this legacy aggregate route",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:1252-1323",
+        "backend-go/internal/api/routes.go:343"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        },
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/projects\", authMW(http.HandlerFunc(server.HandleProjects)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web create quote via apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-05",
+      "method": "PUT",
+      "path": "/api/projects/{id}",
+      "purpose": "Save project and legacy status/production-release state",
+      "authAndRoles": "Actor ownership; RoleCanMutateProjects normally, RoleCanMarkProduced/reopen permissions for transitions",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "Full domain.Project; id path; status and embedded production_release",
+      "validation": "Preserves installation/org ownership; role-specific produced change; freezes structure pins; checks appended event/closeout gates",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusMethodNotAllowed",
+          "StatusNotFound",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, p)",
+          "\t\trespondWithJSON(w, http.StatusOK, p)",
+          "\t\trespondWithJSON(w, http.StatusOK, map[string]string{\"message\": \"project deleted\"})"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "CanAccessOwnedResourceRoles",
+        "CaptureProjectItemStructurePins",
+        "IsProjectClosed",
+        "ProjectAllowsReopenToDraft",
+        "RedactProjectCosts",
+        "RedactProjectManufacturing",
+        "ResolveOwnerOnUpdateRoles",
+        "RestoreProjectManufacturing"
+      ],
+      "dependencies": [
+        {
+          "method": "DeleteProject",
+          "evidence": "backend-go/internal/storage/projects.go:1242-1258"
+        },
+        {
+          "method": "GetFullCatalog",
+          "evidence": "backend-go/internal/storage/projects.go:163-293"
+        },
+        {
+          "method": "GetProjectByID",
+          "evidence": "backend-go/internal/storage/projects.go:754-985"
+        },
+        {
+          "method": "UpdateProject",
+          "evidence": "backend-go/internal/storage/projects.go:1134-1240"
+        }
+      ],
+      "sideEffects": "UpdateProject replaces aggregate; legacy release fields travel here, not a dedicated release command",
+      "webAndSketchUp": "Web projectStore patch/changeProjectStatus via saveProject",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:639",
+          "excerpt": "`/projects/${project.id}`,"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/handlers_test.go:713",
+          "match": "// #108: HandleProjectByID now loads the catalog to pin structure revisions"
+        },
+        {
+          "evidence": "backend-go/internal/api/projectOwnership_test.go:151",
+          "match": "srv.HandleProjectByID(rr, req)"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "OP-01 frozen quote price and OP-02 generic physical-state writer; OP-03 optimistic Web success. Dedicated immutable manufacturing release endpoint NOT established",
+      "evidence": [
+        "backend-go/internal/api/handlers.go:1373-1551",
+        "backend-go/internal/api/routes.go:345"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        },
+        {
+          "name": "RoleCanDeleteProject",
+          "evidence": "backend-go/internal/domain/rbac.go:66-70"
+        },
+        {
+          "name": "RoleCanMarkProduced",
+          "evidence": "backend-go/internal/domain/rbac.go:93-105"
+        },
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"PUT /api/projects/{id}\", authMW(http.HandlerFunc(server.HandleProjectByID)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "General save: admin, gerente_ventas, vendedor; produced/reopen use their separate predicates; owner scope still applies",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web projectStore patch/changeProjectStatus via saveProject",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-06",
+      "method": "GET",
+      "path": "/api/furniture/definitions",
+      "purpose": "Catalog definitions for authoring library",
+      "authAndRoles": "Authenticated user and active organization license; extension allowlisted read",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "Authenticated catalog read; no body",
+      "validation": "User/org validation, assembles modules and catalog dependencies into definitions response",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusForbidden",
+          "StatusInternalServerError",
+          "StatusMethodNotAllowed",
+          "StatusNotModified",
+          "StatusOK",
+          "StatusUnauthorized",
+          "StatusUnprocessableEntity"
+        ],
+        "returnExpressions": [
+          "\t\t\trespondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "LicenseStatusAt"
+      ],
+      "dependencies": [
+        {
+          "method": "GetOrganizationByID",
+          "evidence": "backend-go/internal/storage/organizations.go:60-63"
+        },
+        {
+          "method": "GetUserByID",
+          "evidence": "backend-go/internal/storage/users.go:93-95"
+        },
+        {
+          "method": "ListAgregados",
+          "evidence": "backend-go/internal/storage/agregados.go:15-40"
+        },
+        {
+          "method": "ListCategories",
+          "evidence": "backend-go/internal/storage/categories.go:12-42"
+        },
+        {
+          "method": "ListComponents",
+          "evidence": "backend-go/internal/storage/components.go:13-68"
+        },
+        {
+          "method": "ListHardwares",
+          "evidence": "backend-go/internal/storage/materials.go:309-353"
+        },
+        {
+          "method": "ListMaterialBoards",
+          "evidence": "backend-go/internal/storage/materials.go:183-239"
+        },
+        {
+          "method": "ListMaterialCategories",
+          "evidence": "backend-go/internal/storage/materialCategories.go:18-48"
+        },
+        {
+          "method": "ListModules",
+          "evidence": "backend-go/internal/storage/projects.go:1259-1359"
+        },
+        {
+          "method": "ListOptionGroups",
+          "evidence": "backend-go/internal/storage/materials.go:355-408"
+        },
+        {
+          "method": "ListStructures",
+          "evidence": "backend-go/internal/storage/structures.go:200-271"
+        }
+      ],
+      "sideEffects": "Read-only catalog hydration",
+      "webAndSketchUp": "SketchUp catalog provider and generated Web client availability",
+      "callers": [
+        {
+          "evidence": "apps/sketchup-extension/src/granete_for_sketchup/library/catalog_provider.rb:311",
+          "excerpt": "{ 'method' => 'GET', 'path' => '/furniture/definitions', 'headers' => headers },"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/furniture_layout_test.go:90",
+          "match": "req := httptest.NewRequest(http.MethodGet, \"/api/furniture/definitions/11111111-1111-1111-1111-111111111111/layout\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/furniture_test.go:60",
+          "match": "handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitions))"
+        },
+        {
+          "evidence": "backend-go/internal/api/authoring_resolve_test.go:170",
+          "match": "req := httptest.NewRequest(http.MethodGet, \"/api/furniture/definitions\", nil)"
+        },
+        {
+          "evidence": "backend-go/internal/api/devices_test.go:141",
+          "match": "req := httptest.NewRequest(http.MethodGet, \"/api/furniture/definitions\", nil)"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "OPS-07 sequential full-family loads; SU-06 consumer cache staleness",
+      "evidence": [
+        "backend-go/internal/api/furniture.go:21-137",
+        "backend-go/internal/api/routes.go:236"
+      ],
+      "permissionEvidence": [],
+      "registration": "mux.Handle(\"GET /api/furniture/definitions\", authMW(http.HandlerFunc(server.HandleFurnitureDefinitions)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "No independent role whitelist in this reviewed handler; identity/session/license boundaries above apply. See middleware extension allowlist for restricted token transport.",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "SketchUp catalog provider and generated Web client availability",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "SOURCE_TRANSPORT",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-07",
+      "method": "GET",
+      "path": "/api/furniture/definitions/{definitionId}/layout",
+      "purpose": "Authoritative native furniture layout",
+      "authAndRoles": "Authenticated user, active scoped organization license",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "definitionId; dimensions query; choice.ROLE material IDs",
+      "validation": "Module lookup, layoutDimsFromQuery and material-aware resolution; nil module 404; invalid dimensions 400",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusForbidden",
+          "StatusInternalServerError",
+          "StatusMethodNotAllowed",
+          "StatusNotFound",
+          "StatusOK",
+          "StatusUnauthorized",
+          "StatusUnprocessableEntity"
+        ],
+        "returnExpressions": []
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "LicenseStatusAt",
+        "ResolveFurnitureLayout"
+      ],
+      "dependencies": [
+        {
+          "method": "GetModuleByID",
+          "evidence": "backend-go/internal/storage/projects.go:1444-1566"
+        },
+        {
+          "method": "GetOrganizationByID",
+          "evidence": "backend-go/internal/storage/organizations.go:60-63"
+        },
+        {
+          "method": "GetUserByID",
+          "evidence": "backend-go/internal/storage/users.go:93-95"
+        },
+        {
+          "method": "ListAgregados",
+          "evidence": "backend-go/internal/storage/agregados.go:15-40"
+        },
+        {
+          "method": "ListComponents",
+          "evidence": "backend-go/internal/storage/components.go:13-68"
+        },
+        {
+          "method": "ListHardwares",
+          "evidence": "backend-go/internal/storage/materials.go:309-353"
+        },
+        {
+          "method": "ListMaterialBoards",
+          "evidence": "backend-go/internal/storage/materials.go:183-239"
+        },
+        {
+          "method": "ListStructures",
+          "evidence": "backend-go/internal/storage/structures.go:200-271"
+        }
+      ],
+      "sideEffects": "Pure geometry/domain resolution; no furniture instance created",
+      "webAndSketchUp": "SketchUp catalog provider layout load",
+      "callers": [
+        {
+          "evidence": "apps/sketchup-extension/src/granete_for_sketchup/library/catalog_provider.rb:259",
+          "excerpt": "path = \"/furniture/definitions/#{definition_id}/layout#{RemoteLayoutTransport.layout_query(parameters,"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/furniture_layout_test.go:89",
+          "match": "handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))"
+        },
+        {
+          "evidence": "backend-go/internal/api/authoring_resolve_test.go:788",
+          "match": "getHandler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureDefinitionLayout))"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "SU-03 consumer fallback on nil layout; real host placement still needs proof",
+      "evidence": [
+        "backend-go/internal/api/furniture_layout.go:30-136",
+        "backend-go/internal/api/routes.go:239"
+      ],
+      "permissionEvidence": [],
+      "registration": "mux.Handle(\"GET /api/furniture/definitions/{definitionId}/layout\", authMW(http.HandlerFunc(server.HandleFurnitureDefinitionLayout)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "No independent role whitelist in this reviewed handler; identity/session/license boundaries above apply. See middleware extension allowlist for restricted token transport.",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "SketchUp catalog provider layout load",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "SOURCE_TRANSPORT",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-08",
+      "method": "POST",
+      "path": "/api/furniture/authoring/resolve",
+      "purpose": "Rich stateless authoring/machining resolution",
+      "authAndRoles": "Authenticated user + active license; explicit extension POST allowlist",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "Versioned semantic snapshot JSON; Content-Type application/json; no query parameters",
+      "validation": "Strict schema/version/content-type/body/query checks; occurrence identities, relationship intent, preflight and fingerprint",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusForbidden",
+          "StatusMethodNotAllowed",
+          "StatusRequestEntityTooLarge",
+          "StatusUnauthorized",
+          "StatusUnprocessableEntity",
+          "StatusUnsupportedMediaType"
+        ],
+        "returnExpressions": []
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "LicenseStatusAt",
+        "ResolveAuthoringLayout"
+      ],
+      "dependencies": [
+        {
+          "method": "GetOrganizationByID",
+          "evidence": "backend-go/internal/storage/organizations.go:60-63"
+        },
+        {
+          "method": "GetUserByID",
+          "evidence": "backend-go/internal/storage/users.go:93-95"
+        }
+      ],
+      "sideEffects": "No project/FurnitureInstance persistence; returns accepted/rejected resolution envelope",
+      "webAndSketchUp": "SketchUp provider has transport; rich authoring UI remains disconnected (SU-04)",
+      "callers": [
+        {
+          "evidence": "apps/sketchup-extension/src/granete_for_sketchup/library/catalog_provider.rb:279",
+          "excerpt": "{ 'method' => 'POST', 'path' => '/furniture/authoring/resolve', 'body' => request_payload },"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/furniture_test.go:417",
+          "match": "if got := send(http.MethodPost, \"/api/furniture/authoring/resolve\"); got == http.StatusForbidden {"
+        },
+        {
+          "evidence": "backend-go/internal/api/authoring_resolve_test.go:211",
+          "match": "handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "SU-04 disconnected interaction; SU-05 compiled machining profile limits; successful API is not enabled operator workflow",
+      "evidence": [
+        "backend-go/internal/api/authoring_resolve.go:41-380",
+        "backend-go/internal/api/routes.go:244"
+      ],
+      "permissionEvidence": [],
+      "registration": "mux.Handle(\"POST /api/furniture/authoring/resolve\", authoringResolve)",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "No independent role whitelist in this reviewed handler; identity/session/license boundaries above apply. See middleware extension allowlist for restricted token transport.",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "SketchUp provider has transport; rich authoring UI remains disconnected (SU-04)",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "SOURCE_TRANSPORT",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-09",
+      "method": "POST",
+      "path": "/api/projects/{projectId}/designs",
+      "purpose": "Create logical design under project",
+      "authAndRoles": "RoleCanMutateProjects and authenticated tenant",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "CreateDesignRequest and project UUID; Idempotency-Key",
+      "validation": "UUID validation, generated body; storage owns linked project/Design identity",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusCreated",
+          "StatusMethodNotAllowed",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, dtos)",
+          "\t\trespondWithJSON(w, http.StatusCreated, toDesignDTO(*design))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithDesignError",
+          "respondWithError",
+          "respondWithInternalError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole"
+      ],
+      "dependencies": [
+        {
+          "method": "CreateDesign",
+          "evidence": "backend-go/internal/storage/designs.go:95-191"
+        },
+        {
+          "method": "ListDesignsByProject",
+          "evidence": "backend-go/internal/storage/designs.go:205-244"
+        }
+      ],
+      "sideEffects": "CreateProjectDesign command with actor/request context and durable receipt",
+      "webAndSketchUp": "Generated Web/Ruby client; operator usage requires calling UI path evidence",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:185",
+          "excerpt": "createProjectDesign(token: string, projectId: string, body: CreateDesignRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<Design> { return this.request(\"POST\", `/projects/${encodeURIComponent(projectId)}/designs`, { schema: \"Design\", token, bodySchema: \"CreateDesignRequest\", body, idempotencyKey: key, signal }); }"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/model_binding_contract_test.go:127",
+          "match": "Endpoint:            \"POST /api/projects/{projectId}/designs/{designId}/binding:validate\","
+        },
+        {
+          "evidence": "backend-go/internal/api/designs_test.go:40",
+          "match": "func TestHandleProjectDesigns_CreateReturns201(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "No native UI completion inferred from generated client",
+      "evidence": [
+        "backend-go/internal/api/designs.go:196-266",
+        "backend-go/internal/api/routes.go:375"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        },
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/projects/{projectId}/designs\", authMW(server.RequireIdempotency(\"project.create-design\", http.HandlerFunc(server.HandleProjectDesigns))))",
+      "idempotency": [
+        "project.create-design"
+      ],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "Generated Web/Ruby client; operator usage requires calling UI path evidence",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-10",
+      "method": "PUT",
+      "path": "/api/designs/{designId}/working-copy",
+      "purpose": "Persist mutable design working copy",
+      "authAndRoles": "RoleCanAccessProjects in actual PUT handler (not RoleCanMutateProjects)",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "UpdateDesignWorkingCopyRequest; base_revision_id, source_type, furniture-instance items and parameters/materials",
+      "validation": "Valid design/base/FI/definition UUIDs, source-type enum, storage command validation",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusMethodNotAllowed",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))",
+          "\t\trespondWithJSON(w, http.StatusOK, toDesignWorkingCopyDTO(*wc))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithDesignError",
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "DesignRevisionSourceType",
+        "IsValidDesignRevisionSourceType"
+      ],
+      "dependencies": [
+        {
+          "method": "GetDesignWorkingCopy",
+          "evidence": "backend-go/internal/storage/designs.go:935-998"
+        },
+        {
+          "method": "UpdateDesignWorkingCopy",
+          "evidence": "backend-go/internal/storage/designs.go:1000-1180"
+        }
+      ],
+      "sideEffects": "Replaces working copy through UpdateDesignWorkingCopy; does not mutate immutable revisions",
+      "webAndSketchUp": "SketchUp working-copy synchronization; Web generated client",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:190",
+          "excerpt": "updateDesignWorkingCopy(token: string, designId: string, body: UpdateDesignWorkingCopyRequest, signal?: AbortSignal): Promise<DesignWorkingCopy> { return this.request(\"PUT\", `/designs/${encodeURIComponent(designId)}/working-copy`, { schema: \"DesignWorkingCopy\", token, bodySchema: \"UpdateDesignWorkingCopyRequest\", body, signal }); }"
+        },
+        {
+          "evidence": "apps/sketchup-extension/src/granete_for_sketchup/connection/project_furniture.rb:104",
+          "excerpt": "body = request(:put, \"/designs/#{design_id}/working-copy\", payload)"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/designs_test.go:269",
+          "match": "func TestHandleDesignWorkingCopy_GetReturns200(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Permission uses access-project predicate; report as actual contract, not presumed escalation without role policy proof",
+      "evidence": [
+        "backend-go/internal/api/designs.go:387-506",
+        "backend-go/internal/api/routes.go:378"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        }
+      ],
+      "registration": "mux.Handle(\"PUT /api/designs/{designId}/working-copy\", authMW(http.HandlerFunc(server.HandleDesignWorkingCopy)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor, ingeniero, produccion, gerente_produccion",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "SketchUp working-copy synchronization; Web generated client",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "SOURCE_TRANSPORT",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-11",
+      "method": "POST",
+      "path": "/api/designs/{designId}/revisions",
+      "purpose": "Publish immutable revision from working state",
+      "authAndRoles": "RoleCanMutateProjects; auth tenant receipt wrapper",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "PublishDesignRevisionRequest base_revision_id/source_type; Idempotency-Key",
+      "validation": "Design/base UUIDs; storage publication checks working items and revision lineage",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusCreated",
+          "StatusMethodNotAllowed",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, dtos)",
+          "\t\trespondWithJSON(w, http.StatusCreated, toDesignRevisionDTO(*rev))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithDesignError",
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "DesignRevisionSourceType"
+      ],
+      "dependencies": [
+        {
+          "method": "ListDesignRevisions",
+          "evidence": "backend-go/internal/storage/designs.go:874-907"
+        },
+        {
+          "method": "PublishDesignRevision",
+          "evidence": "backend-go/internal/storage/designs.go:372-447"
+        }
+      ],
+      "sideEffects": "PublishDesignRevision creates exact immutable revision and audit context",
+      "webAndSketchUp": "Generated Web/Ruby client; distinct from staged artifact publish",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:193",
+          "excerpt": "publishDesignRevision(token: string, designId: string, body: PublishDesignRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request(\"POST\", `/designs/${encodeURIComponent(designId)}/revisions`, { schema: \"DesignRevision\", token, bodySchema: \"PublishDesignRevisionRequest\", body, idempotencyKey: key, signal }); }"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/designs_test.go:138",
+          "match": "func TestHandleDesignRevisions_PublishReturns201(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Not equivalent to manufacturing approval/release or machine-compatible outputs",
+      "evidence": [
+        "backend-go/internal/api/designs.go:293-359",
+        "backend-go/internal/api/routes.go:381"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        },
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/designs/{designId}/revisions\", authMW(server.RequireIdempotency(\"design.publish-revision\", http.HandlerFunc(server.HandleDesignRevisions))))",
+      "idempotency": [
+        "design.publish-revision"
+      ],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "Generated Web/Ruby client; distinct from staged artifact publish",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-12",
+      "method": "GET",
+      "path": "/api/designs/{designId}/revisions/{revisionId}",
+      "purpose": "Read exact historical revision",
+      "authAndRoles": "RoleCanAccessProjects with tenant-scoped storage",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "designId and revisionId UUIDs",
+      "validation": "Exact IDs; errors routed through respondWithDesignError",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusOK, toDesignRevisionDTO(*rev))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithDesignError",
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole"
+      ],
+      "dependencies": [
+        {
+          "method": "GetDesignRevision",
+          "evidence": "backend-go/internal/storage/designs.go:842-872"
+        }
+      ],
+      "sideEffects": "Read-only immutable selected revision",
+      "webAndSketchUp": "Web revision surface and SketchUp generated transport",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:194",
+          "excerpt": "getDesignRevision(token: string, designId: string, revisionId: string, signal?: AbortSignal): Promise<DesignRevision> { return this.request(\"GET\", `/designs/${encodeURIComponent(designId)}/revisions/${encodeURIComponent(revisionId)}`, { schema: \"DesignRevision\", token, signal }); }"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/design_publish_test.go:356",
+          "match": "func TestHandleDesignRevisionArtifacts_List(t *testing.T) {"
+        },
+        {
+          "evidence": "backend-go/internal/api/designs_test.go:138",
+          "match": "func TestHandleDesignRevisions_PublishReturns201(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Do not replace selected revision with implicit latest in consumers",
+      "evidence": [
+        "backend-go/internal/api/designs.go:360-386",
+        "backend-go/internal/api/routes.go:382"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        }
+      ],
+      "registration": "mux.Handle(\"GET /api/designs/{designId}/revisions/{revisionId}\", authMW(http.HandlerFunc(server.HandleDesignRevision)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor, ingeniero, produccion, gerente_produccion",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "Web revision surface and SketchUp generated transport",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-13",
+      "method": "POST",
+      "path": "/api/designs/{designId}/publish:prepare",
+      "purpose": "Start staged immutable revision publication",
+      "authAndRoles": "RoleCanMutateProjects; no-store + durable receipt",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "PrepareDesignPublishRequest.manifest; Idempotency-Key",
+      "validation": "Design UUID and ParseDesignPublishManifest; authoritative working-item matching delegated to store",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusCreated",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\n\trespondWithJSON(w, http.StatusCreated, toDesignPublishSessionDTO(*result.Session))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithDesignPublishError",
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole"
+      ],
+      "dependencies": [
+        {
+          "method": "PrepareDesignPublish",
+          "evidence": "backend-go/internal/storage/design_publish.go:122-221"
+        }
+      ],
+      "sideEffects": "Creates staging session/manifest; lazy expired staging cleanup may leave file orphans on IO failure",
+      "webAndSketchUp": "SketchUp publication flow; generated client",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:195",
+          "excerpt": "prepareDesignPublish(token: string, designId: string, body: PrepareDesignPublishRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignPublishSession> { return this.request(\"POST\", `/designs/${encodeURIComponent(designId)}/publish:prepare`, { schema: \"DesignPublishSession\", token, bodySchema: \"PrepareDesignPublishRequest\", body, idempotencyKey: key, signal }); }"
+        },
+        {
+          "evidence": "apps/sketchup-extension/src/granete_for_sketchup/connection/design_publish.rb:161",
+          "excerpt": "body = request(:post, \"/designs/#{design_id}/publish:prepare\","
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/design_publish_test.go:66",
+          "match": "func TestHandleDesignPublishPrepare_Returns201(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Preparation alone is not a published revision or manufacturing release",
+      "evidence": [
+        "backend-go/internal/api/design_publish.go:142-193",
+        "backend-go/internal/api/routes.go:398"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/designs/{designId}/publish:prepare\", noStoreMiddleware(authMW(server.RequireIdempotency(\"design.publish-prepare\", http.HandlerFunc(server.HandleDesignPublishPrepare)))))",
+      "idempotency": [
+        "design.publish-prepare"
+      ],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "SketchUp publication flow; generated client",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "SOURCE_TRANSPORT",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-14",
+      "method": "POST",
+      "path": "/api/designs/{designId}/publish/{sessionId}:finalize",
+      "purpose": "Finalize staged revision only with required artifacts",
+      "authAndRoles": "RoleCanMutateProjects; no-store + durable receipt; wildcard command dispatch",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "designId/sessionId UUIDs; Idempotency-Key",
+      "validation": "Required artifact metadata and file existence/size checks before transactional finalize",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusCreated",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusCreated, toDesignRevisionDTO(*rev))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithDesignPublishError",
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole"
+      ],
+      "dependencies": [
+        {
+          "method": "FinalizeDesignPublish",
+          "evidence": "backend-go/internal/storage/design_publish.go:485-652"
+        },
+        {
+          "method": "GetDesignPublishSession",
+          "evidence": "backend-go/internal/storage/design_publish.go:303-323"
+        }
+      ],
+      "sideEffects": "FinalizeDesignPublish commits immutable revision; retry receipt returns same outcome",
+      "webAndSketchUp": "SketchUp publish workflow; generated client",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:196",
+          "excerpt": "finalizeDesignPublish(token: string, designId: string, sessionId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<DesignRevision> { return this.request(\"POST\", `/designs/${encodeURIComponent(designId)}/publish/${encodeURIComponent(sessionId)}:finalize`, { schema: \"DesignRevision\", token, idempotencyKey: key, signal }); }"
+        },
+        {
+          "evidence": "apps/sketchup-extension/src/granete_for_sketchup/connection/design_publish.rb:189",
+          "excerpt": "body = request(:post, \"/designs/#{design_id}/publish/#{session_id}:finalize\","
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/design_publish_test.go:306",
+          "match": "func TestHandleDesignPublishFinalize_Returns201Revision(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Static proof only; real host upload/save/reopen not repeated here",
+      "evidence": [
+        "backend-go/internal/api/design_publish.go:431-494",
+        "backend-go/internal/api/routes.go:400"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanMutateProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:56-65"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/designs/{designId}/publish/{publishCommand...}\", noStoreMiddleware(authMW(server.RequireIdempotency(\"design.publish-finalize\", publishCommandRouter(map[string]http.Handler{\n\t\t\"finalize\": http.HandlerFunc(server.HandleDesignPublishFinalize),\n\t})))))",
+      "idempotency": [
+        "design.publish-finalize"
+      ],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "SketchUp publish workflow; generated client",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "SOURCE_TRANSPORT",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-15",
+      "method": "POST",
+      "path": "/api/projects/{projectId}/reconciliation",
+      "purpose": "Compare exact quote and design revisions by physical identity",
+      "authAndRoles": "RoleCanAccessProjects; authenticated tenant storage",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "quoteRevisionId/designRevisionId + projectId UUIDs",
+      "validation": "Reject invalid UUIDs, cross-project comparison, missing revisions and corrupt snapshots",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusConflict",
+          "StatusInternalServerError",
+          "StatusNotFound",
+          "StatusOK",
+          "StatusUnauthorized"
+        ],
+        "returnExpressions": [
+          "\n\trespondWithJSON(w, http.StatusOK, toReconciliationResultDTO(result))"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [
+          "ApiErrorCodeBadRequest",
+          "ApiErrorCodeConflict",
+          "ApiErrorCodeNotFound"
+        ],
+        "mappingHelpers": [
+          "respondWithAPIError",
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole"
+      ],
+      "dependencies": [
+        {
+          "method": "ReconcileProject",
+          "evidence": "backend-go/internal/storage/reconciliation.go:350-532"
+        }
+      ],
+      "sideEffects": "Read-only deterministic differences/counts; no automatic overwrite/release",
+      "webAndSketchUp": "Web reconciliation generated client; SketchUp endpoint availability is not UI proof",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/openapi/generated/client.ts:187",
+          "excerpt": "reconcileProjectDesign(token: string, projectId: string, body: ReconcileProjectDesignRequest, signal?: AbortSignal): Promise<ProjectDesignReconciliationResult> { return this.request(\"POST\", `/projects/${encodeURIComponent(projectId)}/reconciliation`, { schema: \"ProjectDesignReconciliationResult\", token, bodySchema: \"ReconcileProjectDesignRequest\", body, signal }); }"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/reconciliation_test.go:39",
+          "match": "func TestHandleProjectReconciliation_Unauthorized(t *testing.T) {"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Comparison does not approve, accept changes or release physical production",
+      "evidence": [
+        "backend-go/internal/api/reconciliation.go:19-72",
+        "backend-go/internal/api/routes.go:389"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAccessProjects",
+          "evidence": "backend-go/internal/domain/rbac.go:46-55"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/projects/{projectId}/reconciliation\", authMW(http.HandlerFunc(server.HandleProjectReconciliation)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, vendedor, ingeniero, produccion, gerente_produccion",
+      "web": {
+        "status": "GENERATED_OR_RELATED_SURFACE_ONLY",
+        "description": "Web reconciliation generated client; SketchUp endpoint availability is not UI proof",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-16",
+      "method": "POST",
+      "path": "/api/projects/{id}/parts/{partId}/advance",
+      "purpose": "Advance one physical piece operation",
+      "authAndRoles": "Production/export/mark-produced role union plus assigned sector; factory-only wrapper",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "operation_type or advance=true; operator_name/machine_id/notes",
+      "validation": "Operation vocabulary/current sequence and part belongs to project; scanner resolves current preassembly op",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusForbidden",
+          "StatusNotFound",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusOK, map[string]interface{}{"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithMutationError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AdvancePartOperation",
+        "AnyRole",
+        "CheckAssemblyReadiness",
+        "IsValidPartOperationType",
+        "NormalizeFloorEventSource",
+        "PartOperationType"
+      ],
+      "dependencies": [
+        {
+          "method": "GetProjectByID",
+          "evidence": "backend-go/internal/storage/projects.go:754-985"
+        },
+        {
+          "method": "MutateProjectPartExecutions",
+          "evidence": "backend-go/internal/storage/partExecutions.go:30-121"
+        }
+      ],
+      "sideEffects": "MutateProjectPartExecutions updates piece plus floor events and readiness under mutation boundary",
+      "webAndSketchUp": "Web floor queue/scanner through apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:1001",
+          "excerpt": "`/projects/${projectId}/parts/${encodeURIComponent(partId)}/advance`,"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/partExecutions_test.go:66",
+          "match": "srv.HandleAdvancePartOperation(rr, req)"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "OP-02: separate generic project save path can overwrite dedicated result; endpoint transaction alone is insufficient",
+      "evidence": [
+        "backend-go/internal/api/partExecutions.go:197-330",
+        "backend-go/internal/api/routes.go:422"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanClaimProductionJob",
+          "evidence": "backend-go/internal/domain/rbac.go:192-201"
+        },
+        {
+          "name": "RoleCanExportProduction",
+          "evidence": "backend-go/internal/domain/rbac.go:119-128"
+        },
+        {
+          "name": "RoleCanMarkProduced",
+          "evidence": "backend-go/internal/domain/rbac.go:93-105"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/projects/{id}/parts/{partId}/advance\", authMW(mfgOnly(http.HandlerFunc(server.HandleAdvancePartOperation))))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, gerente_produccion, ingeniero, produccion; sector checks remain",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web floor queue/scanner through apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-17",
+      "method": "POST",
+      "path": "/api/projects/{id}/quality/qc/{unitId}",
+      "purpose": "Record furniture-unit QC checklist",
+      "authAndRoles": "roleCanManageQuality; factory-only wrapper",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "checklist[{code,passed}], notes/photo IDs; project/unit path",
+      "validation": "Nonempty checklist, valid check codes, unit exists in project; passed state derives from checklist",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusOK, view)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithMutationError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "IsValidQcCheckCode",
+        "QcCheckCode",
+        "ValidateQualityJobTransition"
+      ],
+      "dependencies": [
+        {
+          "method": "MutateProjectQuality",
+          "evidence": "backend-go/internal/storage/quality.go:27-128"
+        }
+      ],
+      "sideEffects": "MutateProjectQuality persists QC record, stamps actor/time and constructs quality view",
+      "webAndSketchUp": "Web QualityScreen/quality API path; not SketchUp authoring",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:2278",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/quality/qc/${unitId}`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/materialPlanningQuality_test.go:293",
+          "match": "srv.HandleQualityUnitQcOverride(rr, req)"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Does not prove machine inspection or physical quality; no new dedicated-route defect asserted",
+      "evidence": [
+        "backend-go/internal/api/quality.go:493-595",
+        "backend-go/internal/api/routes.go:441"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "roleCanManageQuality",
+          "evidence": "backend-go/internal/api/quality.go:39-55"
+        },
+        {
+          "name": "projectEventAppendRoles",
+          "evidence": "backend-go/internal/domain/rbac.go:347-363"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/projects/{id}/quality/qc/{unitId}\", authMW(mfgOnly(http.HandlerFunc(server.HandleQualityUnitQc))))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_produccion, produccion",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web QualityScreen/quality API path; not SketchUp authoring",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-18",
+      "method": "PUT",
+      "path": "/api/projects/{id}/installation",
+      "purpose": "Save installation visits/issues/punch work",
+      "authAndRoles": "roleCanManageInstallation; factory-only wrapper",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "Installation job command body; project path",
+      "validation": "Domain installation validation and mutation path; generic project PUT preserves stored installation",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusForbidden",
+          "StatusMethodNotAllowed",
+          "StatusNotFound",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\t\trespondWithJSON(w, http.StatusOK, buildInstallationView(project, project.Installation))",
+          "\t\trespondWithJSON(w, http.StatusOK, view)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithMutationError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "ValidateInstallationJobTransition"
+      ],
+      "dependencies": [
+        {
+          "method": "GetProjectByID",
+          "evidence": "backend-go/internal/storage/projects.go:754-985"
+        },
+        {
+          "method": "MutateProjectInstallation",
+          "evidence": "backend-go/internal/storage/installation.go:29-113"
+        }
+      ],
+      "sideEffects": "MutateProjectInstallation persists dedicated job state/events",
+      "webAndSketchUp": "Web installation editor through apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:1139",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/installation_test.go:59",
+          "match": "srv.HandleProjectInstallationCloseout(rr, req)"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Readiness and client closeout remain separate actions, not one generic saved=true",
+      "evidence": [
+        "backend-go/internal/api/installation.go:157-239",
+        "backend-go/internal/api/routes.go:447"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "roleCanManageInstallation",
+          "evidence": "backend-go/internal/api/installation.go:79-83"
+        },
+        {
+          "name": "projectEventAppendRoles",
+          "evidence": "backend-go/internal/domain/rbac.go:347-363"
+        }
+      ],
+      "registration": "mux.Handle(\"PUT /api/projects/{id}/installation\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallation))))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, gerente_ventas, gerente_produccion, produccion",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web installation editor through apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-19",
+      "method": "POST",
+      "path": "/api/projects/{id}/installation/closeout",
+      "purpose": "Complete installation, record signoff, close project",
+      "authAndRoles": "RoleCanAppendProjectEvent specific to mapped action; factory-only wrapper",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "action complete_installation/sign_off/close; signer and note fields",
+      "validation": "All units installed/no open visits for completion; EvaluateCloseoutReadiness for signoff/close; signer required",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusConflict",
+          "StatusNotFound",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\t\t\trespondWithJSON(w, http.StatusConflict, map[string]interface{}{",
+          "\trespondWithJSON(w, http.StatusOK, map[string]interface{}{"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError",
+          "respondWithMutationError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "EvaluateCloseoutReadiness",
+        "InstallationUnitsSummary",
+        "OpenInstallationVisits",
+        "RoleCanAppendProjectEvent"
+      ],
+      "dependencies": [
+        {
+          "method": "GetProjectByID",
+          "evidence": "backend-go/internal/storage/projects.go:754-985"
+        },
+        {
+          "method": "MutateProjectInstallation",
+          "evidence": "backend-go/internal/storage/installation.go:29-113"
+        }
+      ],
+      "sideEffects": "MutateProjectInstallation emits milestone and closeout state; repeated completion conflict",
+      "webAndSketchUp": "Web closeout through apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:1164",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/projects/${projectId}/installation/closeout`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/installation_test.go:59",
+          "match": "srv.HandleProjectInstallationCloseout(rr, req)"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "Physical completion/signature evidence is external; API state not proof customer actually signed",
+      "evidence": [
+        "backend-go/internal/api/installation.go:240-396",
+        "backend-go/internal/api/routes.go:448"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanAppendProjectEvent",
+          "evidence": "backend-go/internal/domain/rbac.go:378-393"
+        },
+        {
+          "name": "projectEventAppendRoles",
+          "evidence": "backend-go/internal/domain/rbac.go:347-363"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/projects/{id}/installation/closeout\", authMW(mfgOnly(http.HandlerFunc(server.HandleProjectInstallationCloseout))))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "complete: admin, gerente_ventas, gerente_produccion, produccion; sign_off/close: admin, gerente_ventas, gerente_produccion",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web closeout through apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-20",
+      "method": "PUT",
+      "path": "/api/picking",
+      "purpose": "Set material dispatch state for project",
+      "authAndRoles": "RoleCanMarkPicking = admin or almacen; authenticated tenant",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "project_id, material herrajes/tableros/cintillas, status pendiente/despachado",
+      "validation": "Allowed material/status, nonempty project ID, project exists; server markedAt/By",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusInternalServerError",
+          "StatusMethodNotAllowed",
+          "StatusNotFound",
+          "StatusOK"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusOK, pick)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole"
+      ],
+      "dependencies": [
+        {
+          "method": "GetProjectByID",
+          "evidence": "backend-go/internal/storage/projects.go:754-985"
+        },
+        {
+          "method": "UpsertProjectPicking",
+          "evidence": "backend-go/internal/storage/projectPicking.go:42-52"
+        }
+      ],
+      "sideEffects": "UpsertProjectPicking only; does NOT debit stock in this request",
+      "webAndSketchUp": "Web purchasingStore \u2192 apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:1723",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/picking`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/projectPicking_test.go:23",
+          "match": "req := withClaims(httptest.NewRequest(http.MethodGet, \"/api/picking\", nil), \"u1\", string(role))"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "BE-002 canonical / WEB-01 corroboration: separate stock/picking writes; control-flow reproduction in defect-proofs.json",
+      "evidence": [
+        "backend-go/internal/api/projectPicking.go:53-106",
+        "backend-go/internal/api/routes.go:493"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanMarkPicking",
+          "evidence": "backend-go/internal/domain/rbac.go:173-179"
+        }
+      ],
+      "registration": "mux.Handle(\"PUT /api/picking\", authMW(http.HandlerFunc(server.HandlePickingUpsert)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, almacen",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web purchasingStore \u2192 apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    },
+    {
+      "id": "EP-21",
+      "method": "POST",
+      "path": "/api/stock/movements",
+      "purpose": "Record stock ledger movement or exact dispatch reversal",
+      "authAndRoles": "RoleCanManageStock = admin or almacen; authenticated tenant",
+      "tenantScope": "AuthMiddleware validates session/membership and establishes tenant transaction/RLS context; resource-specific storage evidence below. Login is anonymous issuance; select-org explicitly changes actor scope. No live cross-tenant request repeated in this subtask.",
+      "input": "kind/material_id/type/quantity/project_id/note/reverts_id",
+      "validation": "Kind/type and delta validation; linked project; reversal same material/exact amount/original despacho; duplicate reversal conflict",
+      "output": {
+        "description": "Authoritative response at handler boundary; exact status and return expressions below (shared-method handlers contain other method branches).",
+        "observedStatusSymbols": [
+          "StatusBadRequest",
+          "StatusConflict",
+          "StatusCreated",
+          "StatusInternalServerError",
+          "StatusMethodNotAllowed",
+          "StatusNotFound"
+        ],
+        "returnExpressions": [
+          "\trespondWithJSON(w, http.StatusCreated, saved)"
+        ]
+      },
+      "errors": {
+        "codeSymbols": [],
+        "mappingHelpers": [
+          "respondWithError"
+        ],
+        "limitations": "Status lists include all branches of shared handler; method-specific semantics in description. Error helpers/storage can add errors beyond these direct symbols."
+      },
+      "domain": [
+        "AnyRole",
+        "StockDeltaForType",
+        "StockMaterialKind",
+        "StockMovementType",
+        "ValidStockMaterialKind",
+        "ValidStockMovementType"
+      ],
+      "dependencies": [
+        {
+          "method": "GetProjectByID",
+          "evidence": "backend-go/internal/storage/projects.go:754-985"
+        },
+        {
+          "method": "GetStockMovementByID",
+          "evidence": "backend-go/internal/storage/stock.go:58-75"
+        },
+        {
+          "method": "GetStockMovementByRevertsID",
+          "evidence": "backend-go/internal/storage/stock.go:76-97"
+        },
+        {
+          "method": "GetUserByID",
+          "evidence": "backend-go/internal/storage/users.go:93-95"
+        },
+        {
+          "method": "RecordStockMovement",
+          "evidence": "backend-go/internal/storage/stock.go:98-118"
+        }
+      ],
+      "sideEffects": "RecordStockMovement updates ledger/balance; actor stamped; no picking status write",
+      "webAndSketchUp": "Web purchasingStore/stock UI \u2192 apiWorkspaceRepository",
+      "callers": [
+        {
+          "evidence": "packages/storage/src/apiWorkspaceRepository.ts:1788",
+          "excerpt": "const res = await this.fetch(`${this.baseUrl}/stock/movements`, {"
+        }
+      ],
+      "callerEvidenceLimit": "Curated actual transport anchor. Generated client availability alone does not prove an operator screen invokes it.",
+      "tests": [
+        {
+          "evidence": "backend-go/internal/api/stock_test.go:107",
+          "match": "req := withClaims(httptest.NewRequest(http.MethodPost, \"/api/stock/movements\", body), \"a1\", string(domain.RoleAdmin))"
+        }
+      ],
+      "testEvidenceLevel": "Source presence only; no endpoint runtime test executed by this inventory worker. Parent runtime reports remain separate.",
+      "problems": "BE-002 canonical: ordinary retry fresh dispatch not combined with picking receipt; no database failure reproduced here",
+      "evidence": [
+        "backend-go/internal/api/stock.go:112-243",
+        "backend-go/internal/api/routes.go:499"
+      ],
+      "permissionEvidence": [
+        {
+          "name": "RoleCanManageStock",
+          "evidence": "backend-go/internal/domain/rbac.go:180-185"
+        }
+      ],
+      "registration": "mux.Handle(\"POST /api/stock/movements\", authMW(http.HandlerFunc(server.HandleStockMovementCreate)))",
+      "idempotency": [],
+      "coverage": "SOURCE_DEEP_REVIEW_WITH_RUNTIME_UNKNOWN",
+      "missingProof": [
+        "Exact actor/tenant routed happy/denied/stale/retry response for this endpoint not executed here.",
+        "Native Web/SketchUp behavior must be taken from runtime-ui.json or explicit host evidence, not inferred from this row."
+      ],
+      "roles": "admin, almacen",
+      "web": {
+        "status": "SOURCE_CONSUMER",
+        "description": "Web purchasingStore/stock UI \u2192 apiWorkspaceRepository",
+        "runtime": "Not executed for this row by this worker; see runtime-ui.json separately."
+      },
+      "sketchup": {
+        "status": "NO_DIRECT_CALLER_ESTABLISHED_IN_THIS_ROW",
+        "runtime": "Licensed host run not performed; transport is not workflow completion."
+      },
+      "dependencyEvidenceLimit": "Methods extracted from full handler; shared GET/POST/PUT handlers include branch-specific methods. Storage references locate implementation, not proof every helper was exhaustively audited."
+    }
+  ],
+  "crossCuttingEvidence": [
+    "backend-go/internal/api/middleware.go:139-175",
+    "backend-go/internal/domain/rbac.go:45-65",
+    "backend-go/internal/domain/rbac.go:170-180"
+  ],
+  "reportsUsed": [
+    "backend-audit.json",
+    "web-inventory.json",
+    "sketchup-audit.json",
+    "operational-flows.json"
+  ],
+  "releaseBoundary": "No new standalone manufacturing release route invented. Legacy production_release crosses generic PUT /api/projects/{id}, covered by OP-02; immutable DesignRevision publish is a distinct concern.",
+  "unknowns": [
+    "No DB, HTTP invocation, security attack, install or product changes.",
+    "Endpoint depth target fulfilled with 21 selected endpoints; remaining inventory routes are not individually deep-reviewed here.",
+    "Complete role-by-method/storage-error/runtime exhaustiveness not claimed; explicit remaining proof per row."
+  ],
+  "rolesEvidence": "backend-go/internal/domain/rbac.go:45-65,91-100,117-125,170-199,347-363; union semantics plus per-resource checks."
+}

@@ -1,0 +1,86 @@
+{
+  "snapshot": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "scope": "Read-only source trace with root-owned guest browser evidence; no backend execution or product modifications.",
+  "findings": [
+    {
+      "id": "QV-01",
+      "title": "El cambio de estado omite el historial de versiones al tomar el snapshot después de la transición",
+      "area": "Web / cotizaciones / historial",
+      "severity": "HIGH",
+      "status": "CONFIRMED source defect + root-observed guest symptom",
+      "confidence": "CONFIRMED static control flow; guest symptom corroborated",
+      "currentBehavior": "changeProjectStatus llama transitionProjectStatus(project,status), que devuelve status nuevo; después pasa ese resultado a snapshotOnStatusChange(withTransition,status). El helper ve status idéntico y retorna sin snapshot ni incremento de version. VersionHistoryPanel lee project.history vacío y muestra que las versiones se crean automáticamente al cambiar estado.",
+      "expectedBehavior": "Una transición real debe conservar el historial/snapshot de la revisión que corresponda al contrato y presentar un historial coherente tras guardar/recargar. No se debe usar un estado ya cambiado como prueba de que no hubo transición.",
+      "why": "Orden incorrecto de composición: la condición project.status===newStatus del helper requiere el estado anterior, pero recibe el objeto posterior a la transición.",
+      "businessImpact": "La promesa visible de historial automático no se cumple en el recorrido guest probado; reduce trazabilidad y confianza al cotizar. No demuestra pérdida de revisiones nuevas backend DesignRevision/QuoteRevision.",
+      "demoImpact": "No presentar Rev1(cerrada) del mueble como historial de cotización. Historial automático debe corregirse y ensayarse antes de prometerlo.",
+      "technicalImpact": "El mismo orden aparece en reopenProject y rutas markProduced; esos callers están corroborados estáticamente, no ejecutados por esta investigación.",
+      "recommendation": "Definir explícitamente si se snapshottea el estado anterior o el nuevo, preservar catálogo/pins/precio según ese contrato y componer transición/snapshot sin perder la diferencia oldStatus/newStatus. Añadir prueba del store para draft→quoted, quoted→accepted, reopen y reload de historial; después probar integración real API/PostgreSQL.",
+      "effort": "M",
+      "dependencies": [
+        "Contrato semántico de Project.history frente a QuoteRevision/DesignRevision"
+      ],
+      "evidence": [
+        "apps/web/src/stores/projectStore.ts:1024-1050",
+        "packages/domain/src/engine/pricing.ts:392-438",
+        "packages/domain/src/projectVersioning.ts:31-58",
+        "packages/domain/src/projectVersioning.ts:96-104",
+        "packages/ui/src/projects/components/VersionHistoryPanel.tsx:148-155",
+        "packages/ui/src/projects/components/VersionHistoryPanel.tsx:193-203",
+        "evidence/guest-quote-frozen-dom.txt:75",
+        "evidence/guest-quote-frozen-dom.txt:90-93",
+        "evidence/guest-quote-frozen-dom.txt:193"
+      ],
+      "relatedFiles": [
+        "apps/web/src/stores/projectStore.ts",
+        "packages/domain/src/engine/pricing.ts",
+        "packages/domain/src/projectVersioning.ts",
+        "packages/ui/src/projects/components/VersionHistoryPanel.tsx",
+        "packages/ui/src/projects/components/ProjectItemStructureRevisionIndicator.tsx",
+        "packages/ui/src/projects/components/ProjectTotalsAside.tsx"
+      ],
+      "relatedIssues": [],
+      "relatedPRs": []
+    }
+  ],
+  "distinctions": [
+    {
+      "title": "Rev 1 (cerrada) no es una versión de la cotización",
+      "evidence": [
+        "packages/ui/src/projects/components/ProjectItemStructureRevisionIndicator.tsx:1-25",
+        "packages/domain/src/engine/pricing.ts:402-407"
+      ],
+      "explanation": "El indicador recibe ProjectItem.structureRevisionPin: revisión de estructura del mueble congelada al cerrar. No usa Project.version ni Project.history; por sí solo no contradice historial vacío."
+    },
+    {
+      "title": "La contradicción real es el historial automático prometido después de Enviar",
+      "evidence": [
+        "evidence/guest-quote-frozen-dom.txt:75",
+        "evidence/guest-quote-frozen-dom.txt:193",
+        "packages/domain/src/projectVersioning.ts:96-104"
+      ],
+      "explanation": "La prueba guest fue una cotización nueva creada por root; por ello no se explica solamente por datos seed antiguos. La causa estática coincide con ausencia de historial tras transición."
+    }
+  ],
+  "runtimeProvenance": {
+    "executor": "root agent browser session",
+    "mode": "guest/local data, not API/PostgreSQL commercial persistence",
+    "observed": "Cotización nueva creada, mueble agregado, Enviar→Cotizado tras reload y historial vacío. Root también observó place/undo/redo con precio 864.77→904.13→864.77→904.13; no se usa ese precio como benchmark ni oferta.",
+    "evidence": [
+      "evidence/guest-quote-frozen-dom.txt"
+    ]
+  },
+  "unknowns": [
+    "No se ejecutó en esta tarea un test store ni un workflow backend para este defecto.",
+    "No se afirma que QuoteRevision/DesignRevision persistidos en backend sufran el mismo defecto.",
+    "Restauración, produced y reapertura necesitan pruebas ejecutadas; aquí solamente se identifica el patrón estático."
+  ],
+  "sourceHashes": {
+    "apps/web/src/stores/projectStore.ts": "1b735362b9883c1b7b85840eb1439f2a36eb7693054f252694998dfd8b78628c",
+    "packages/domain/src/engine/pricing.ts": "098af5757b925d22435b6bc3802f667de6c722a3769fa560fc61b8e5bafb0170",
+    "packages/domain/src/projectVersioning.ts": "ac016a8ae7aed3f3dd986147880d470745fd439d7bf182d77e3c90e09909e40f",
+    "packages/ui/src/projects/components/VersionHistoryPanel.tsx": "10890f4dbd8de1a8e47f95515c06de36251fdf7c36076fd83197885c0152903b",
+    "packages/ui/src/projects/components/ProjectItemStructureRevisionIndicator.tsx": "97b32bd5eab38fa9d70a20fca239aab2df72e20197a231d05f2dd9f269d8db05",
+    "packages/ui/src/projects/components/ProjectTotalsAside.tsx": "35a85efebf1f60110d2fceab65e8f05bc38e38c20ce23e2237d85ff2c0912913"
+  }
+}

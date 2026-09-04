@@ -1,0 +1,9 @@
+{
+  "startedAt": "2026-09-04T05:11:27.400585+00:00",
+  "command": "pnpm audit --json",
+  "status": "UNKNOWN_TIMEOUT",
+  "timeoutSeconds": 90,
+  "missingEvidence": "pnpm audit --json did not complete within 90 seconds; no advisory response captured. Timeout cause (network/registry/client) UNKNOWN. No vulnerability count, direct/transitive classification or reachability conclusion available.",
+  "lockfileSha256Before": "bb2f18662d4593b5d5372fbdeec6aa6ccd222da64a10b0473e72bf65061f0edb",
+  "lockfileSha256After": "bb2f18662d4593b5d5372fbdeec6aa6ccd222da64a10b0473e72bf65061f0edb"
+}

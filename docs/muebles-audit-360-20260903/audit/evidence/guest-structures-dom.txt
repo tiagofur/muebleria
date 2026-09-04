@@ -1,0 +1,222 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta":
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras" [active]:
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: LIBRERÍA
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - heading "Estructuras" [level=2]
+  - paragraph: Cuerpos de ingeniería reutilizables para el taller
+  - generic "Acciones de Estructuras":
+    - button "Nueva estructura":
+      - text: Nueva estructura
+  - generic "Buscar y filtrar estructuras":
+    - searchbox "Buscar"
+    - group "Filtrar por estado":
+      - button "Todos"
+      - button "Activos" [pressed]
+      - button "Inactivos"
+  - list:
+    - 'button "EST-GAB-01 Rev 1 Cuerpo Gabinete 1 Puerta Dimensiones: 300 × 720 × 590 mm Componentes: 4 Presets: 1"':
+      - generic: EST-GAB-01
+      - generic: Rev 1
+      - heading "Cuerpo Gabinete 1 Puerta" [level=3]
+      - text: "Dimensiones:"
+      - strong: 300 × 720 × 590 mm
+      - text: "Componentes:"
+      - strong: "4"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-CAJ-01 Rev 1 Cuerpo Cajonera 4 Cajones Dimensiones: 500 × 720 × 590 mm Componentes: 3 Presets: 1"':
+      - generic: EST-CAJ-01
+      - generic: Rev 1
+      - heading "Cuerpo Cajonera 4 Cajones" [level=3]
+      - text: "Dimensiones:"
+      - strong: 500 × 720 × 590 mm
+      - text: "Componentes:"
+      - strong: "3"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-COMP-600 Rev 1 Estructura Compuesta 600 Dimensiones: 600 × 720 × 560 mm Componentes: 2 Presets: 1"':
+      - generic: EST-COMP-600
+      - generic: Rev 1
+      - heading "Estructura Compuesta 600" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 720 × 560 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-ALA-600 Rev 1 Cuerpo Alacena 600 Dimensiones: 600 × 720 × 320 mm Componentes: 3 Presets: 1"':
+      - generic: EST-ALA-600
+      - generic: Rev 1
+      - heading "Cuerpo Alacena 600" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 720 × 320 mm
+      - text: "Componentes:"
+      - strong: "3"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-DES-600 Rev 1 Cuerpo Despensa 600 Dimensiones: 600 × 2100 × 600 mm Componentes: 3 Presets: 1"':
+      - generic: EST-DES-600
+      - generic: Rev 1
+      - heading "Cuerpo Despensa 600" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 2100 × 600 mm
+      - text: "Componentes:"
+      - strong: "3"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-GAB-800 Rev 1 Cuerpo Gabinete 800 Dimensiones: 800 × 720 × 590 mm Componentes: 3 Presets: 1"':
+      - generic: EST-GAB-800
+      - generic: Rev 1
+      - heading "Cuerpo Gabinete 800" [level=3]
+      - text: "Dimensiones:"
+      - strong: 800 × 720 × 590 mm
+      - text: "Componentes:"
+      - strong: "3"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-GAB-900 Rev 1 Cuerpo Gabinete 900 Dimensiones: 900 × 720 × 590 mm Componentes: 3 Presets: 1"':
+      - generic: EST-GAB-900
+      - generic: Rev 1
+      - heading "Cuerpo Gabinete 900" [level=3]
+      - text: "Dimensiones:"
+      - strong: 900 × 720 × 590 mm
+      - text: "Componentes:"
+      - strong: "3"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-GAB-600 Rev 1 Cuerpo Gabinete 600 Dimensiones: 600 × 720 × 590 mm Componentes: 3 Presets: 1"':
+      - generic: EST-GAB-600
+      - generic: Rev 1
+      - heading "Cuerpo Gabinete 600" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 720 × 590 mm
+      - text: "Componentes:"
+      - strong: "3"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-ESQ-900 Rev 1 Cuerpo Esquinero 900 Dimensiones: 900 × 720 × 900 mm Componentes: 2 Presets: 1"':
+      - generic: EST-ESQ-900
+      - generic: Rev 1
+      - heading "Cuerpo Esquinero 900" [level=3]
+      - text: "Dimensiones:"
+      - strong: 900 × 720 × 900 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-CAJ-600 Rev 1 Cuerpo Cajonera 600 Dimensiones: 600 × 720 × 590 mm Componentes: 2 Presets: 1"':
+      - generic: EST-CAJ-600
+      - generic: Rev 1
+      - heading "Cuerpo Cajonera 600" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 720 × 590 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-ALA-800 Rev 1 Cuerpo Alacena 800 Dimensiones: 800 × 720 × 320 mm Componentes: 2 Presets: 1"':
+      - generic: EST-ALA-800
+      - generic: Rev 1
+      - heading "Cuerpo Alacena 800" [level=3]
+      - text: "Dimensiones:"
+      - strong: 800 × 720 × 320 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-ALA-400 Rev 1 Cuerpo Alacena 400 Dimensiones: 600 × 400 × 320 mm Componentes: 2 Presets: 1"':
+      - generic: EST-ALA-400
+      - generic: Rev 1
+      - heading "Cuerpo Alacena 400" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 400 × 320 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-ALA-ESQ Rev 1 Cuerpo Alacena Esquinera Dimensiones: 600 × 720 × 600 mm Componentes: 2 Presets: 1"':
+      - generic: EST-ALA-ESQ
+      - generic: Rev 1
+      - heading "Cuerpo Alacena Esquinera" [level=3]
+      - text: "Dimensiones:"
+      - strong: 600 × 720 × 600 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+    - 'button "EST-ISLA-1200 Rev 1 Cuerpo Isla 1200 Dimensiones: 1200 × 860 × 700 mm Componentes: 2 Presets: 1"':
+      - generic: EST-ISLA-1200
+      - generic: Rev 1
+      - heading "Cuerpo Isla 1200" [level=3]
+      - text: "Dimensiones:"
+      - strong: 1200 × 860 × 700 mm
+      - text: "Componentes:"
+      - strong: "2"
+      - text: "Presets:"
+      - strong: "1"
+- generic "Notificaciones"

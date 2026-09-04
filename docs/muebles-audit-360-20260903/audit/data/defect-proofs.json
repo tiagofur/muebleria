@@ -1,0 +1,69 @@
+{
+  "title": "Audit-only executable hazard proofs",
+  "baseline": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "executedAt": "2026-09-04T05:01:54.028377+00:00",
+  "status": "REPRODUCED_NOT_FIXED",
+  "testResult": {
+    "passed": 3,
+    "failed": 0,
+    "exitCode": 0
+  },
+  "command": "cd /Users/tiagofur/dev/carpinteria/muebles-audit-360-20260903/source && pnpm exec vitest run --config ../audit/proofs/vitest.config.mjs --reporter=verbose",
+  "sourceHashes": {
+    "packages/excel/src/dxfCutPlanExport.ts": "234e7cdfe9cef28284e73ddef80f0fe34423daab8758bb769aa5526943376f9f",
+    "packages/domain/src/projectDrilling.ts": "3a21708c0d50beaad2f3a50a67b0aac2d17b4e675154c94cf521a07ab5024f11",
+    "apps/web/src/stores/purchasingStore.ts": "337f3240c391581901466c0c556ad840208006b96fa3ec008408f285f9f0b935"
+  },
+  "log": "evidence/defect-proofs.log",
+  "harness": "proofs/defect-proofs.test.ts",
+  "proofs": [
+    {
+      "id": "DXF_ROTATED_HOLES",
+      "status": "REPRODUCED",
+      "boundary": "Real generateDxfBySheet source with synthetic valid placed piece and one front hole; no mocks.",
+      "observation": "Same hole: non-rotated output has 1 CIRCLE; rotated output has 0 CIRCLE, retains piece outline and successful EOF.",
+      "source": "packages/excel/src/dxfCutPlanExport.ts:238-250",
+      "artifacts": [
+        "evidence/defect-dxf-normal.dxf",
+        "evidence/defect-dxf-rotated.dxf"
+      ],
+      "limitations": [
+        "Not a machine/CAM readback or controller compatibility proof.",
+        "The exporter explicitly documents non-rotated-only drilling; evidence proves omission, not that a transform convention is defined. Product safety concern is using output as complete CNC drilling."
+      ]
+    },
+    {
+      "id": "DRILLING_PROVENANCE",
+      "status": "REPRODUCED",
+      "boundary": "Real resolveProjectDrilling and underlying BOM/resolver with existing plantilla fixture; audit input preserves hardware IDs but removes optional machining profiles.",
+      "observation": "8 resolved patterns, 7 fallbackUsed=true; exported data.patterns has 0 fallbackUsed fields and no issues fields; hole arrays remain identical.",
+      "source": "packages/domain/src/projectDrilling.ts:191-199",
+      "artifacts": [
+        "evidence/defect-drilling-provenance.json"
+      ],
+      "limitations": [
+        "Fixture has zero nonempty geometry issue lists; proves fields stripped and real fallback flags lost, not suppression of an actual geometry error in this runtime fixture.",
+        "First harness attempt removed required hardware IDs and failed BOM validation; retained in defect-proofs-first-attempt.log, corrected fixture only."
+      ]
+    },
+    {
+      "id": "PICKING_PARTIAL_FAILURE",
+      "status": "REPRODUCED_CONTROL_FLOW",
+      "boundary": "Real createPurchasingStore; repository transport/state simulated in memory; UI toast/workspace imports mocked.",
+      "observation": "Successful debit 2 followed by failed picking persistence leaves stock 10\u21928 and picking pendiente. Retry after in-flight lock release leaves stock 8\u21926; two debit calls and zero compensation calls.",
+      "source": "apps/web/src/stores/purchasingStore.ts:348-450",
+      "artifacts": [
+        "evidence/defect-picking-partial-failure.json"
+      ],
+      "limitations": [
+        "Not HTTP/Go/PostgreSQL/RLS E2E; fake repository deliberately accepts stock calls and rejects picking calls.",
+        "Proves missing client compensation and retry orchestration only; does not claim verified DB balance or prove actual endpoint outage."
+      ]
+    }
+  ],
+  "constraints": [
+    "No product fixes or source writes.",
+    "No database connections.",
+    "Green assertions mean hazards were reproduced, not remediation or production readiness."
+  ]
+}

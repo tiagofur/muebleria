@@ -1,0 +1,5274 @@
+{
+  "findingId": "FM-03",
+  "scope": "Pure-domain production functions; existing plantillaDemo fixture with only line custom dimensions changed; no UI/DB/machine",
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "matchesIndependent": false,
+  "orderIndependent": false,
+  "counts": {
+    "a": 8,
+    "b": 8,
+    "together": 16
+  },
+  "expected": [
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 1000,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 496,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 528,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 884,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 916,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 1000,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 496,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 528,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 884,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 916,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 604,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 636,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 604,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 636,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 520,
+      "widthMm": 269,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 800,
+      "widthMm": 769,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 769,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 769,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Piso Gabinete",
+      "lengthMm": 269,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "bottom",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Piso Gabinete",
+      "lengthMm": 769,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "bottom",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Puerta Gabinete",
+      "lengthMm": 717,
+      "widthMm": 296,
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 100,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 77.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 122.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 617,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 594.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 639.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Puerta Gabinete",
+      "lengthMm": 997,
+      "widthMm": 796,
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 100,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 77.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 122.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 512,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 489.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 534.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 897,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 874.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 919.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 689,
+      "widthMm": 269,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 969,
+      "widthMm": 769,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 384,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 384,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 320,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 320,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 640,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 640,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    }
+  ],
+  "actual": [
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 1000,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 604,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 636,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Cazuela minifix\" (Ø15 mm en x=540, y=7.5) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 15,
+            "depthMm": 13,
+            "type": "minifix",
+            "description": "Cazuela minifix"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 15,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=508, y=7.5) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=572, y=7.5) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 1\" (Ø5 mm en x=553, y=84) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 84,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 84,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 2\" (Ø5 mm en x=553, y=116) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 116,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 116,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 1\" (Ø5 mm en x=553, y=604) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 604,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 604,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 2\" (Ø5 mm en x=553, y=636) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 636,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 636,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 1000,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 604,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 636,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Cazuela minifix\" (Ø15 mm en x=540, y=7.5) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 15,
+            "depthMm": 13,
+            "type": "minifix",
+            "description": "Cazuela minifix"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 15,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=508, y=7.5) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=572, y=7.5) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 1\" (Ø5 mm en x=553, y=84) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 84,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 84,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 2\" (Ø5 mm en x=553, y=116) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 116,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 116,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 1\" (Ø5 mm en x=553, y=604) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 604,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 604,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 2\" (Ø5 mm en x=553, y=636) queda fuera de los límites de la cara \"front\" (450 × 1000 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 553,
+            "yMm": 636,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 553,
+            "yMm": 636,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 1000
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 604,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 636,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 604,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 553,
+          "yMm": 636,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 520,
+      "widthMm": 269,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 800,
+      "widthMm": 769,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 769,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 769,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Piso Gabinete",
+      "lengthMm": 269,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "bottom",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Piso Gabinete",
+      "lengthMm": 769,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "bottom",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 540,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 508,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 572,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Piloto perno\" (Ø5 mm en x=540, y=7.5) queda fuera de los límites de la cara \"bottom\" (450 × 15 mm) en la pieza \"Piso Gabinete\".",
+          "hole": {
+            "face": "bottom",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 5,
+            "depthMm": 12,
+            "type": "minifix",
+            "description": "Piloto perno"
+          },
+          "context": {
+            "pieceId": "comp-gab-piso-copy-0",
+            "pieceCode": "comp-gab-piso-copy-0",
+            "face": "bottom",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 15
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=508, y=7.5) queda fuera de los límites de la cara \"bottom\" (450 × 15 mm) en la pieza \"Piso Gabinete\".",
+          "hole": {
+            "face": "bottom",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-piso-copy-0",
+            "pieceCode": "comp-gab-piso-copy-0",
+            "face": "bottom",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 15
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=572, y=7.5) queda fuera de los límites de la cara \"bottom\" (450 × 15 mm) en la pieza \"Piso Gabinete\".",
+          "hole": {
+            "face": "bottom",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-piso-copy-0",
+            "pieceCode": "comp-gab-piso-copy-0",
+            "face": "bottom",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 15
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Piloto perno\" (Ø5 mm en x=540, y=7.5) queda fuera de los límites de la cara \"top\" (450 × 15 mm) en la pieza \"Piso Gabinete\".",
+          "hole": {
+            "face": "top",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 5,
+            "depthMm": 12,
+            "type": "minifix",
+            "description": "Piloto perno"
+          },
+          "context": {
+            "pieceId": "comp-gab-piso-copy-0",
+            "pieceCode": "comp-gab-piso-copy-0",
+            "face": "top",
+            "xMm": 540,
+            "yMm": 7.5,
+            "diameterMm": 5,
+            "faceWidthMm": 450,
+            "faceHeightMm": 15
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=508, y=7.5) queda fuera de los límites de la cara \"top\" (450 × 15 mm) en la pieza \"Piso Gabinete\".",
+          "hole": {
+            "face": "top",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-piso-copy-0",
+            "pieceCode": "comp-gab-piso-copy-0",
+            "face": "top",
+            "xMm": 508,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 15
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Perforación por lado\" (Ø8 mm en x=572, y=7.5) queda fuera de los límites de la cara \"top\" (450 × 15 mm) en la pieza \"Piso Gabinete\".",
+          "hole": {
+            "face": "top",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "depthMm": 15,
+            "type": "dowel",
+            "description": "Perforación por lado"
+          },
+          "context": {
+            "pieceId": "comp-gab-piso-copy-0",
+            "pieceCode": "comp-gab-piso-copy-0",
+            "face": "top",
+            "xMm": 572,
+            "yMm": 7.5,
+            "diameterMm": 8,
+            "faceWidthMm": 450,
+            "faceHeightMm": 15
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Puerta Gabinete",
+      "lengthMm": 717,
+      "widthMm": 296,
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 100,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 77.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 122.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 617,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 594.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 639.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Puerta Gabinete",
+      "lengthMm": 997,
+      "widthMm": 796,
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 100,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 77.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 122.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 617,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 594.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 639.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 689,
+      "widthMm": 269,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 969,
+      "widthMm": 769,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 673,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 253,
+          "yMm": 352,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    }
+  ],
+  "reversed": [
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 1000,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 496,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 528,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 884,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 916,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 1000,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 496,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 528,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 884,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 916,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 496,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 528,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 884,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 916,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 1\" (Ø5 mm en x=413, y=884) queda fuera de los límites de la cara \"front\" (590 × 720 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 413,
+            "yMm": 884,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 413,
+            "yMm": 884,
+            "diameterMm": 5,
+            "faceWidthMm": 590,
+            "faceHeightMm": 720
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 2\" (Ø5 mm en x=413, y=916) queda fuera de los límites de la cara \"front\" (590 × 720 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 413,
+            "yMm": 916,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-0",
+            "pieceCode": "comp-gab-costado-copy-0",
+            "face": "front",
+            "xMm": 413,
+            "yMm": 916,
+            "diameterMm": 5,
+            "faceWidthMm": 590,
+            "faceHeightMm": 720
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Costado Gabinete",
+      "lengthMm": 720,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 15,
+          "depthMm": 13,
+          "type": "minifix",
+          "description": "Cazuela minifix"
+        },
+        {
+          "face": "front",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 84,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 116,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 496,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 528,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 884,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 1"
+        },
+        {
+          "face": "front",
+          "xMm": 413,
+          "yMm": 916,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación placa 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 1\" (Ø5 mm en x=413, y=884) queda fuera de los límites de la cara \"front\" (590 × 720 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 413,
+            "yMm": 884,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 413,
+            "yMm": 884,
+            "diameterMm": 5,
+            "faceWidthMm": 590,
+            "faceHeightMm": 720
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación placa 2\" (Ø5 mm en x=413, y=916) queda fuera de los límites de la cara \"front\" (590 × 720 mm) en la pieza \"Costado Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 413,
+            "yMm": 916,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación placa 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-costado-copy-1",
+            "pieceCode": "comp-gab-costado-copy-1",
+            "face": "front",
+            "xMm": 413,
+            "yMm": 916,
+            "diameterMm": 5,
+            "faceWidthMm": 590,
+            "faceHeightMm": 720
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 520,
+      "widthMm": 269,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Entrepaño Gabinete",
+      "lengthMm": 800,
+      "widthMm": 769,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 269,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 769,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Manguete",
+      "lengthMm": 769,
+      "widthMm": 120,
+      "holes": [],
+      "fallbackUsed": true,
+      "issues": []
+    },
+    {
+      "partName": "Piso Gabinete",
+      "lengthMm": 269,
+      "widthMm": 590,
+      "holes": [
+        {
+          "face": "bottom",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Piso Gabinete",
+      "lengthMm": 769,
+      "widthMm": 450,
+      "holes": [
+        {
+          "face": "bottom",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 50,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 18,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 82,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "bottom",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "bottom",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 400,
+          "yMm": 7.5,
+          "diameterMm": 5,
+          "depthMm": 12,
+          "type": "minifix",
+          "description": "Piloto perno"
+        },
+        {
+          "face": "top",
+          "xMm": 368,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        },
+        {
+          "face": "top",
+          "xMm": 432,
+          "yMm": 7.5,
+          "diameterMm": 8,
+          "depthMm": 15,
+          "type": "dowel",
+          "description": "Perforación por lado"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Puerta Gabinete",
+      "lengthMm": 717,
+      "widthMm": 296,
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 100,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 77.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 122.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 512,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 489.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 534.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 897,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 874.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 919.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Taza 35 mm\" (Ø35 mm en x=22.5, y=897) queda fuera de los límites de la cara \"back\" (296 × 717 mm) en la pieza \"Puerta Gabinete\".",
+          "hole": {
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 897,
+            "diameterMm": 35,
+            "depthMm": 12.5,
+            "type": "hinge",
+            "description": "Taza 35 mm"
+          },
+          "context": {
+            "pieceId": "comp-gab-puerta-copy-0",
+            "pieceCode": "comp-gab-puerta-copy-0",
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 897,
+            "diameterMm": 35,
+            "faceWidthMm": 296,
+            "faceHeightMm": 717
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación taza 1\" (Ø5 mm en x=22.5, y=874.5) queda fuera de los límites de la cara \"back\" (296 × 717 mm) en la pieza \"Puerta Gabinete\".",
+          "hole": {
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 874.5,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación taza 1"
+          },
+          "context": {
+            "pieceId": "comp-gab-puerta-copy-0",
+            "pieceCode": "comp-gab-puerta-copy-0",
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 874.5,
+            "diameterMm": 5,
+            "faceWidthMm": 296,
+            "faceHeightMm": 717
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Fijación taza 2\" (Ø5 mm en x=22.5, y=919.5) queda fuera de los límites de la cara \"back\" (296 × 717 mm) en la pieza \"Puerta Gabinete\".",
+          "hole": {
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 919.5,
+            "diameterMm": 5,
+            "depthMm": 10,
+            "type": "hinge",
+            "description": "Fijación taza 2"
+          },
+          "context": {
+            "pieceId": "comp-gab-puerta-copy-0",
+            "pieceCode": "comp-gab-puerta-copy-0",
+            "face": "back",
+            "xMm": 22.5,
+            "yMm": 919.5,
+            "diameterMm": 5,
+            "faceWidthMm": 296,
+            "faceHeightMm": 717
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Puerta Gabinete",
+      "lengthMm": 997,
+      "widthMm": 796,
+      "holes": [
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 100,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 77.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 122.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 512,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 489.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 534.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 897,
+          "diameterMm": 35,
+          "depthMm": 12.5,
+          "type": "hinge",
+          "description": "Taza 35 mm"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 874.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 1"
+        },
+        {
+          "face": "back",
+          "xMm": 22.5,
+          "yMm": 919.5,
+          "diameterMm": 5,
+          "depthMm": 10,
+          "type": "hinge",
+          "description": "Fijación taza 2"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    },
+    {
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 689,
+      "widthMm": 269,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 384,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 384,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 320,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 320,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 640,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 640,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": [
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=16, y=953) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 16,
+            "yMm": 953,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 16,
+            "yMm": 953,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=384, y=16) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 384,
+            "yMm": 16,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 384,
+            "yMm": 16,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=384, y=953) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 384,
+            "yMm": 953,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 384,
+            "yMm": 953,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=753, y=16) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 753,
+            "yMm": 16,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 753,
+            "yMm": 16,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=753, y=953) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 753,
+            "yMm": 953,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 753,
+            "yMm": 953,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=753, y=320) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 753,
+            "yMm": 320,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 753,
+            "yMm": 320,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        },
+        {
+          "code": "HOLE_OUT_OF_BOUNDS",
+          "message": "La perforación \"Tornillo 4x50 mm (pilot-through)\" (Ø3 mm en x=753, y=640) queda fuera de los límites de la cara \"front\" (269 × 689 mm) en la pieza \"Respaldo Gabinete\".",
+          "hole": {
+            "face": "front",
+            "xMm": 753,
+            "yMm": 640,
+            "diameterMm": 3,
+            "depthMm": 15,
+            "type": "screw",
+            "description": "Tornillo 4x50 mm (pilot-through)"
+          },
+          "context": {
+            "pieceId": "comp-gab-respaldo-copy-0",
+            "pieceCode": "comp-gab-respaldo-copy-0",
+            "face": "front",
+            "xMm": 753,
+            "yMm": 640,
+            "diameterMm": 3,
+            "faceWidthMm": 269,
+            "faceHeightMm": 689
+          }
+        }
+      ]
+    },
+    {
+      "partName": "Respaldo Gabinete",
+      "lengthMm": 969,
+      "widthMm": 769,
+      "holes": [
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 384,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 384,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 16,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 953,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 320,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 320,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 16,
+          "yMm": 640,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        },
+        {
+          "face": "front",
+          "xMm": 753,
+          "yMm": 640,
+          "diameterMm": 3,
+          "depthMm": 15,
+          "type": "screw",
+          "description": "Tornillo 4x50 mm (pilot-through)"
+        }
+      ],
+      "fallbackUsed": false,
+      "issues": []
+    }
+  ],
+  "links": {
+    "a": [
+      {
+        "partId": "comp-gab-costado-copy-0",
+        "labelRef": "MOD-GAB-01-P01",
+        "partCode": "P01",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-0",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 720,
+          "widthMm": 590,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-costado-copy-1",
+        "labelRef": "MOD-GAB-01-P02",
+        "partCode": "P02",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-1",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 720,
+          "widthMm": 590,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 285,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-entrepano-copy-0",
+        "labelRef": "MOD-GAB-01-P08",
+        "partCode": "P08",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-entrepano-copy-0",
+          "description": "Entrepaño Gabinete",
+          "quantity": 1,
+          "lengthMm": 520,
+          "widthMm": 269,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 150,
+          "rotateX": 0,
+          "rotateY": 0,
+          "rotateZ": 0,
+          "componentPlacement": "interno",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-0",
+        "labelRef": "MOD-GAB-01-P05",
+        "partCode": "P05",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-0",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 269,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 705,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-1",
+        "labelRef": "MOD-GAB-01-P06",
+        "partCode": "P06",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-1",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 269,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 470,
+          "z": 705,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-piso-copy-0",
+        "labelRef": "MOD-GAB-01-P04",
+        "partCode": "P04",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-piso-copy-0",
+          "description": "Piso Gabinete",
+          "quantity": 1,
+          "lengthMm": 269,
+          "widthMm": 590,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 0,
+          "rotateX": 0,
+          "rotateY": 90,
+          "rotateZ": 0,
+          "componentPlacement": "base",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-puerta-copy-0",
+        "labelRef": "MOD-GAB-01-P07",
+        "partCode": "P07",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-puerta-copy-0",
+          "description": "Puerta Gabinete",
+          "quantity": 1,
+          "lengthMm": 717,
+          "widthMm": 296,
+          "grain": 1,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "FRENTE",
+          "materialId": "mat-maderado-frente",
+          "edgeBandId": "edge-maderado-frente",
+          "x": 2,
+          "y": 590,
+          "z": 2,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "puerta",
+          "thicknessMm": 18
+        }
+      },
+      {
+        "partId": "comp-gab-respaldo-copy-0",
+        "labelRef": "MOD-GAB-01-P03",
+        "partCode": "P03",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-respaldo-copy-0",
+          "description": "Respaldo Gabinete",
+          "quantity": 1,
+          "lengthMm": 689,
+          "widthMm": 269,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 15,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "trasera",
+          "thicknessMm": 15
+        }
+      }
+    ],
+    "b": [
+      {
+        "partId": "comp-gab-costado-copy-0",
+        "labelRef": "MOD-GAB-01-P01",
+        "partCode": "P01",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-0",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 1000,
+          "widthMm": 450,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-costado-copy-1",
+        "labelRef": "MOD-GAB-01-P02",
+        "partCode": "P02",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-1",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 1000,
+          "widthMm": 450,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 785,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-entrepano-copy-0",
+        "labelRef": "MOD-GAB-01-P08",
+        "partCode": "P08",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-entrepano-copy-0",
+          "description": "Entrepaño Gabinete",
+          "quantity": 1,
+          "lengthMm": 800,
+          "widthMm": 769,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 150,
+          "rotateX": 0,
+          "rotateY": 0,
+          "rotateZ": 0,
+          "componentPlacement": "interno",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-0",
+        "labelRef": "MOD-GAB-01-P05",
+        "partCode": "P05",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-0",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 769,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 985,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-1",
+        "labelRef": "MOD-GAB-01-P06",
+        "partCode": "P06",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-1",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 769,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 330,
+          "z": 985,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-piso-copy-0",
+        "labelRef": "MOD-GAB-01-P04",
+        "partCode": "P04",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-piso-copy-0",
+          "description": "Piso Gabinete",
+          "quantity": 1,
+          "lengthMm": 769,
+          "widthMm": 450,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 0,
+          "rotateX": 0,
+          "rotateY": 90,
+          "rotateZ": 0,
+          "componentPlacement": "base",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-puerta-copy-0",
+        "labelRef": "MOD-GAB-01-P07",
+        "partCode": "P07",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-puerta-copy-0",
+          "description": "Puerta Gabinete",
+          "quantity": 1,
+          "lengthMm": 997,
+          "widthMm": 796,
+          "grain": 1,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "FRENTE",
+          "materialId": "mat-maderado-frente",
+          "edgeBandId": "edge-maderado-frente",
+          "x": 2,
+          "y": 450,
+          "z": 2,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "puerta",
+          "thicknessMm": 18
+        }
+      },
+      {
+        "partId": "comp-gab-respaldo-copy-0",
+        "labelRef": "MOD-GAB-01-P03",
+        "partCode": "P03",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-respaldo-copy-0",
+          "description": "Respaldo Gabinete",
+          "quantity": 1,
+          "lengthMm": 969,
+          "widthMm": 769,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 15,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "trasera",
+          "thicknessMm": 15
+        }
+      }
+    ],
+    "together": [
+      {
+        "partId": "comp-gab-costado-copy-0",
+        "labelRef": "MOD-GAB-01-P01",
+        "partCode": "P01",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-0",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 720,
+          "widthMm": 590,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-costado-copy-0",
+        "labelRef": "MOD-GAB-01-L2-P01",
+        "partCode": "P01",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-0",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 1000,
+          "widthMm": 450,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-costado-copy-1",
+        "labelRef": "MOD-GAB-01-P02",
+        "partCode": "P02",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-1",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 720,
+          "widthMm": 590,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 285,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-costado-copy-1",
+        "labelRef": "MOD-GAB-01-L2-P02",
+        "partCode": "P02",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-costado-copy-1",
+          "description": "Costado Gabinete",
+          "quantity": 1,
+          "lengthMm": 1000,
+          "widthMm": 450,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 785,
+          "y": 0,
+          "z": 0,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 90,
+          "componentPlacement": "lateral_izquierdo",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-entrepano-copy-0",
+        "labelRef": "MOD-GAB-01-P08",
+        "partCode": "P08",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-entrepano-copy-0",
+          "description": "Entrepaño Gabinete",
+          "quantity": 1,
+          "lengthMm": 520,
+          "widthMm": 269,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 150,
+          "rotateX": 0,
+          "rotateY": 0,
+          "rotateZ": 0,
+          "componentPlacement": "interno",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-entrepano-copy-0",
+        "labelRef": "MOD-GAB-01-L2-P08",
+        "partCode": "P08",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-entrepano-copy-0",
+          "description": "Entrepaño Gabinete",
+          "quantity": 1,
+          "lengthMm": 800,
+          "widthMm": 769,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 150,
+          "rotateX": 0,
+          "rotateY": 0,
+          "rotateZ": 0,
+          "componentPlacement": "interno",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-0",
+        "labelRef": "MOD-GAB-01-P05",
+        "partCode": "P05",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-0",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 269,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 705,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-0",
+        "labelRef": "MOD-GAB-01-L2-P05",
+        "partCode": "P05",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-0",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 769,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 985,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-1",
+        "labelRef": "MOD-GAB-01-P06",
+        "partCode": "P06",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-1",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 269,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 470,
+          "z": 705,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-manguete-copy-1",
+        "labelRef": "MOD-GAB-01-L2-P06",
+        "partCode": "P06",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-manguete-copy-1",
+          "description": "Manguete",
+          "quantity": 1,
+          "lengthMm": 769,
+          "widthMm": 120,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 330,
+          "z": 985,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "frontal",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-piso-copy-0",
+        "labelRef": "MOD-GAB-01-P04",
+        "partCode": "P04",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-piso-copy-0",
+          "description": "Piso Gabinete",
+          "quantity": 1,
+          "lengthMm": 269,
+          "widthMm": 590,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 0,
+          "rotateX": 0,
+          "rotateY": 90,
+          "rotateZ": 0,
+          "componentPlacement": "base",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-piso-copy-0",
+        "labelRef": "MOD-GAB-01-L2-P04",
+        "partCode": "P04",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-piso-copy-0",
+          "description": "Piso Gabinete",
+          "quantity": 1,
+          "lengthMm": 769,
+          "widthMm": 450,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "edgeBandId": "edge-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 0,
+          "rotateX": 0,
+          "rotateY": 90,
+          "rotateZ": 0,
+          "componentPlacement": "base",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-puerta-copy-0",
+        "labelRef": "MOD-GAB-01-P07",
+        "partCode": "P07",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-puerta-copy-0",
+          "description": "Puerta Gabinete",
+          "quantity": 1,
+          "lengthMm": 717,
+          "widthMm": 296,
+          "grain": 1,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "FRENTE",
+          "materialId": "mat-maderado-frente",
+          "edgeBandId": "edge-maderado-frente",
+          "x": 2,
+          "y": 590,
+          "z": 2,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "puerta",
+          "thicknessMm": 18
+        }
+      },
+      {
+        "partId": "comp-gab-puerta-copy-0",
+        "labelRef": "MOD-GAB-01-L2-P07",
+        "partCode": "P07",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-puerta-copy-0",
+          "description": "Puerta Gabinete",
+          "quantity": 1,
+          "lengthMm": 997,
+          "widthMm": 796,
+          "grain": 1,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": true
+            },
+            {
+              "side": "L2",
+              "enabled": true
+            },
+            {
+              "side": "W1",
+              "enabled": true
+            },
+            {
+              "side": "W2",
+              "enabled": true
+            }
+          ],
+          "optionRole": "FRENTE",
+          "materialId": "mat-maderado-frente",
+          "edgeBandId": "edge-maderado-frente",
+          "x": 2,
+          "y": 450,
+          "z": 2,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "puerta",
+          "thicknessMm": 18
+        }
+      },
+      {
+        "partId": "comp-gab-respaldo-copy-0",
+        "labelRef": "MOD-GAB-01-P03",
+        "partCode": "P03",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-respaldo-copy-0",
+          "description": "Respaldo Gabinete",
+          "quantity": 1,
+          "lengthMm": 689,
+          "widthMm": 269,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 15,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "trasera",
+          "thicknessMm": 15
+        }
+      },
+      {
+        "partId": "comp-gab-respaldo-copy-0",
+        "labelRef": "MOD-GAB-01-L2-P03",
+        "partCode": "P03",
+        "moduleCode": "MOD-GAB-01",
+        "part": {
+          "id": "comp-gab-respaldo-copy-0",
+          "description": "Respaldo Gabinete",
+          "quantity": 1,
+          "lengthMm": 969,
+          "widthMm": 769,
+          "grain": 0,
+          "edges": [
+            {
+              "side": "L1",
+              "enabled": false
+            },
+            {
+              "side": "L2",
+              "enabled": false
+            },
+            {
+              "side": "W1",
+              "enabled": false
+            },
+            {
+              "side": "W2",
+              "enabled": false
+            }
+          ],
+          "optionRole": "INTERIOR",
+          "materialId": "mat-arauco-blanco",
+          "x": 15,
+          "y": 0,
+          "z": 15,
+          "rotateX": 90,
+          "rotateY": 180,
+          "rotateZ": 0,
+          "componentPlacement": "trasera",
+          "thicknessMm": 15
+        }
+      }
+    ]
+  }
+}

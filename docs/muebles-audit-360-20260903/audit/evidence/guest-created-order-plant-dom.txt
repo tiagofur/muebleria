@@ -1,0 +1,127 @@
+- complementary "Navegación principal":
+  - generic: Granete
+  - navigation "Secciones":
+    - paragraph: TRABAJO
+    - list:
+      - link "Inicio":
+        - /url: /
+        - generic: Inicio
+      - link "Estado de Planta" [active]:
+        - /url: /plant-board
+        - generic: Estado de Planta
+    - paragraph: VENTAS
+    - list:
+      - link "Cotizaciones":
+        - /url: /quotes
+        - generic: Cotizaciones
+      - link "Clientes":
+        - /url: /customers
+        - generic: Clientes
+      - link "Vitrina":
+        - /url: /showcase
+        - generic: Vitrina
+    - paragraph: LIBRERÍA
+    - list:
+      - link "Muebles":
+        - /url: /modules
+        - generic: Muebles
+      - link "Estructuras":
+        - /url: /structures
+        - generic: Estructuras
+      - link "Agregados":
+        - /url: /add-ons
+        - generic: Agregados
+      - link "Componentes":
+        - /url: /components
+        - generic: Componentes
+      - link "Grupos":
+        - /url: /option-groups
+        - generic: Grupos
+    - paragraph: CATÁLOGOS
+    - list:
+      - link "Materiales":
+        - /url: /materials
+        - generic: Materiales
+      - link "Cantos":
+        - /url: /edges
+        - generic: Cantos
+      - link "Herrajes":
+        - /url: /hardware
+        - generic: Herrajes
+      - link "Acabados":
+        - /url: /finishes
+        - generic: Acabados
+    - paragraph: CONFIG
+    - list:
+      - link "Ajustes":
+        - /url: /settings
+        - generic: Ajustes
+- banner:
+  - paragraph: TRABAJO
+  - button "Buscar secciones o atajos (Cmd+K)":
+    - generic: Buscar…
+    - generic: ⌘K
+  - 'generic "Modo local: datos guardados en este navegador, sin conexión al servidor"':
+    - generic: Invitado
+    - generic: Modo local
+  - button "Salir":
+    - text: Salir
+- main:
+  - region "Estado de planta":
+    - heading "Estado de Planta" [level=2]
+    - paragraph: Dónde está cada obra en el taller, por sector. Solo lectura — el avance se marca desde Producción.
+    - table:
+      - rowgroup:
+        - row "Obra Corte Encintado Armado Embalaje Despacho Instalación Avance":
+          - columnheader "Obra"
+          - columnheader "Corte"
+          - columnheader "Encintado"
+          - columnheader "Armado"
+          - columnheader "Embalaje"
+          - columnheader "Despacho"
+          - columnheader "Instalación"
+          - columnheader "Avance"
+      - rowgroup:
+        - row "Cocina López (Proyecto Demo L-Shaped 3D) Cliente Demo 10 muebles 0/10 10 en cola 0/10 0/10 0/10 0/10 0/10 0% en Corte":
+          - cell "Cocina López (Proyecto Demo L-Shaped 3D) Cliente Demo 10 muebles":
+            - button "Cocina López (Proyecto Demo L-Shaped 3D)"
+            - generic: Cliente Demo
+            - generic: 10 muebles
+          - cell "0/10 10 en cola":
+            - generic: 0/10
+            - generic: 10 en cola
+          - cell "0/10":
+            - generic: 0/10
+          - cell "0/10":
+            - generic: 0/10
+          - cell "0/10":
+            - generic: 0/10
+          - cell "0/10":
+            - generic: 0/10
+          - cell "0/10":
+            - generic: 0/10
+          - cell "0% en Corte":
+            - generic: 0%
+            - generic: en Corte
+        - row "Cotización de ensayo AUDIT 360 Cliente de ensayo AUDIT 360 1 mueble 0/1 1 en cola 0/1 0/1 0/1 0/1 0/1 0% en Corte":
+          - cell "Cotización de ensayo AUDIT 360 Cliente de ensayo AUDIT 360 1 mueble":
+            - button "Cotización de ensayo AUDIT 360"
+            - generic: Cliente de ensayo AUDIT 360
+            - generic: 1 mueble
+          - cell "0/1 1 en cola":
+            - generic: 0/1
+            - generic: 1 en cola
+          - cell "0/1":
+            - generic: 0/1
+          - cell "0/1":
+            - generic: 0/1
+          - cell "0/1":
+            - generic: 0/1
+          - cell "0/1":
+            - generic: 0/1
+          - cell "0/1":
+            - generic: 0/1
+          - cell "0% en Corte":
+            - generic: 0%
+            - generic: en Corte
+- generic "Notificaciones"

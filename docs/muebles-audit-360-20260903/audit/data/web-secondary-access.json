@@ -1,0 +1,645 @@
+{
+  "sourceCommit": "316df57c7c3c9d5470b5a3f22b39fffeacfd7676",
+  "method": "Read-only semantic component inspection; 19 whole small component files plus named AppContent slices; no UI/browser/tests/API requests",
+  "features": [
+    {
+      "id": "WEB-ACCESS-01",
+      "file": "packages/ui/src/auth/AcceptInvitationScreen.tsx",
+      "claim": "Generated acceptance client trims invitation token/name, keeps password exact, reports typed invitation lifecycle errors, calls onAccepted only after response; disabled form and focused alert while error.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/auth/AcceptInvitationScreen.tsx",
+          "startLine": 25,
+          "endLine": 38,
+          "excerpt": "function invitationErrorMessage(error: unknown): string {\n  if (!(error instanceof GraneteApiError)) {\n    return error instanceof Error ? error.message : 'No se pudo aceptar la invitación';\n  }\n  const messages: Partial<Record<ApiErrorCode, string>> = {\n    INVITATION_EXPIRED: 'Esta invitación venció. Pedile al administrador que la reenvíe.',\n    INVITATION_REVOKED: 'Esta invitación fue revocada. Pedile una nueva al administrador.',\n    INVITATION_TOKEN_ROTATED: 'Este enlace fue reemplazado por uno más reciente. Usá el último que recibiste.',\n    INVITATION_ALREADY_USED: 'Esta invitación ya fue aceptada. Iniciá sesión con tu cuenta.',\n    ACCOUNT_DISABLED: 'Tu cuenta está deshabilitada. Contactá al administrador de plataforma.',\n    UNAUTHORIZED: 'La contraseña no coincide con tu cuenta existente.',\n  };\n  return messages[error.code] ?? error.message;\n}",
+          "sha256": "acc7c5ef04ab0a44b3619b5c6b3d56600eaeaaaf04882b1b42cabdf975a05717"
+        },
+        {
+          "file": "packages/ui/src/auth/AcceptInvitationScreen.tsx",
+          "startLine": 53,
+          "endLine": 75,
+          "excerpt": "  useEffect(() => {\n    if (error) errorRef.current?.focus();\n  }, [error]);\n\n  const handleSubmit = async (e: React.FormEvent) => {\n    e.preventDefault();\n    if (!password) {\n      setError('La contraseña es requerida');\n      return;\n    }\n    setLoading(true);\n    setError(null);\n\n    try {\n      const authData = await new GraneteApiClient(baseUrl, fetchImpl).acceptInvitation({\n        token: token.trim(), password, ...(name.trim() ? { name: name.trim() } : {}),\n      });\n      onAccepted(authData);\n    } catch (err) {\n      setError(invitationErrorMessage(err));\n    } finally {\n      setLoading(false);\n    }",
+          "sha256": "acc7c5ef04ab0a44b3619b5c6b3d56600eaeaaaf04882b1b42cabdf975a05717"
+        },
+        {
+          "file": "packages/ui/src/auth/AcceptInvitationScreen.tsx",
+          "startLine": 93,
+          "endLine": 105,
+          "excerpt": "        {error && (\n          <div\n            ref={errorRef}\n            id=\"invitation-error\"\n            role=\"alert\"\n            tabIndex={-1}\n            className=\"accept-invitation-alert accept-invitation-alert--error\"\n          >\n            {error}\n          </div>\n        )}\n\n        <form className=\"accept-invitation-form\" onSubmit={handleSubmit}>",
+          "sha256": "acc7c5ef04ab0a44b3619b5c6b3d56600eaeaaaf04882b1b42cabdf975a05717"
+        },
+        {
+          "file": "packages/ui/src/auth/AcceptInvitationScreen.tsx",
+          "startLine": 141,
+          "endLine": 171,
+          "excerpt": "              <input\n                id=\"inv-password\"\n                type=\"password\"\n                className=\"input\"\n                required\n                placeholder=\"Tu contraseña\"\n                value={password}\n                onChange={(e) => setPassword(e.target.value)}\n                aria-describedby={`invitation-password-hint${error ? ' invitation-error' : ''}`}\n                disabled={loading}\n              />\n            </div>\n            <p id=\"invitation-password-hint\" className=\"accept-invitation-form__hint\">\n              Si ya tenías cuenta en Granete, ingresá tu contraseña habitual. Si sos nuevo, creá una contraseña segura.\n            </p>\n          </div>\n\n          <button\n            type=\"submit\"\n            className=\"btn btn--primary\"\n            disabled={loading || !password}\n            aria-busy={loading}\n          >\n            {loading ? (\n              'Aceptando...'\n            ) : (\n              <>\n                <UserCheck size={16} strokeWidth={1.5} aria-hidden=\"true\" /> Aceptar invitación y entrar\n              </>\n            )}\n          </button>",
+          "sha256": "acc7c5ef04ab0a44b3619b5c6b3d56600eaeaaaf04882b1b42cabdf975a05717"
+        }
+      ],
+      "missingProof": [
+        "Real invitation retry/session/cookie flow",
+        "Callback/unmount/token change race; no component abort guard",
+        "Server error and focus behavior"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-02",
+      "file": "packages/ui/src/auth/LoginScreen.tsx",
+      "claim": "Validates nonempty trimmed inputs, passes original password to parent; parent owns loading/error/auth. Password visibility button has accessible name; guest action disabled while loading.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/auth/LoginScreen.tsx",
+          "startLine": 28,
+          "endLine": 38,
+          "excerpt": "  const handleSubmit = (e: FormEvent) => {\n    e.preventDefault();\n    setLocalError(null);\n    if (!email.trim() || !password.trim()) {\n      setLocalError('Completá email y contraseña');\n      return;\n    }\n    void onLogin(email.trim(), password);\n  };\n\n  const displayError = error ?? localError;",
+          "sha256": "94ea63fc5619a2b67eaba65db082e2171537a3841401e7ad7e96e6a1de9b5c61"
+        },
+        {
+          "file": "packages/ui/src/auth/LoginScreen.tsx",
+          "startLine": 61,
+          "endLine": 94,
+          "excerpt": "        <form className=\"login-form\" onSubmit={handleSubmit}>\n          {notice ? (\n            <div className=\"login-notice\" role=\"status\">\n              {notice}\n            </div>\n          ) : null}\n          {displayError ? (\n            <div className=\"login-error\" role=\"alert\">\n              {displayError}\n            </div>\n          ) : null}\n\n          <div className=\"login-field\">\n            <label className=\"login-field__label\" htmlFor=\"login-email\">\n              Email\n            </label>\n            <div className=\"login-field__control\">\n              <Mail\n                className=\"login-field__icon\"\n                size={16}\n                strokeWidth={1.5}\n                aria-hidden\n              />\n              <input\n                id=\"login-email\"\n                className=\"login-field__input\"\n                type=\"email\"\n                required\n                autoComplete=\"email\"\n                value={email}\n                onChange={(e) => setEmail(e.target.value)}\n                placeholder=\"ejemplo@correo.com\"\n                disabled={loading}\n              />",
+          "sha256": "94ea63fc5619a2b67eaba65db082e2171537a3841401e7ad7e96e6a1de9b5c61"
+        },
+        {
+          "file": "packages/ui/src/auth/LoginScreen.tsx",
+          "startLine": 109,
+          "endLine": 144,
+          "excerpt": "              <input\n                id=\"login-password\"\n                className=\"login-field__input login-field__input--with-toggle\"\n                type={showPassword ? 'text' : 'password'}\n                required\n                autoComplete=\"current-password\"\n                value={password}\n                onChange={(e) => setPassword(e.target.value)}\n                placeholder=\"••••••••\"\n                disabled={loading}\n              />\n              <button\n                type=\"button\"\n                className=\"login-field__toggle\"\n                onClick={() => setShowPassword((prev) => !prev)}\n                title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}\n                aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}\n                disabled={loading}\n              >\n                {showPassword ? (\n                  <EyeOff size={16} strokeWidth={1.5} aria-hidden />\n                ) : (\n                  <Eye size={16} strokeWidth={1.5} aria-hidden />\n                )}\n              </button>\n            </div>\n          </div>\n\n\n          <button\n            type=\"submit\"\n            className=\"login-submit\"\n            disabled={loading}\n          >\n            <LogIn size={16} strokeWidth={1.5} aria-hidden />\n            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}",
+          "sha256": "94ea63fc5619a2b67eaba65db082e2171537a3841401e7ad7e96e6a1de9b5c61"
+        },
+        {
+          "file": "packages/ui/src/auth/LoginScreen.tsx",
+          "startLine": 154,
+          "endLine": 162,
+          "excerpt": "        <button\n          type=\"button\"\n          className=\"login-guest\"\n          onClick={onGuestAccess}\n          disabled={loading}\n        >\n          <WifiOff size={16} strokeWidth={1.5} aria-hidden />\n          Acceder sin conexión (Invitado)\n        </button>",
+          "sha256": "94ea63fc5619a2b67eaba65db082e2171537a3841401e7ad7e96e6a1de9b5c61"
+        }
+      ],
+      "missingProof": [
+        "Actual authentication/guest persistence",
+        "Parent catches rejected onLogin promise; component intentionally discards promise",
+        "Keyboard and visual contrast"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-03",
+      "file": "packages/ui/src/common/BrandMark.tsx",
+      "claim": "Decorative aria-hidden SVG mark with size-prop dimensions; visual parent/CSS owns contrast, not an image content label.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/BrandMark.tsx",
+          "startLine": 19,
+          "endLine": 39,
+          "excerpt": "export function BrandMark({\n  size = 32,\n  className,\n}: BrandMarkProps): ReactNode {\n  const rootClass = className\n    ? `app-brand-mark ${className}`\n    : 'app-brand-mark';\n  return (\n    <span\n      className={rootClass}\n      style={{ width: size, height: size }}\n      aria-hidden\n      data-testid=\"app-brand-mark\"\n    >\n      <svg\n        className=\"app-brand-mark__svg\"\n        viewBox=\"0 0 32 32\"\n        width={size}\n        height={size}\n        fill=\"none\"\n        xmlns=\"http://www.w3.org/2000/svg\"",
+          "sha256": "3bd423c02994446887da3df6b316e0a34073c245f04634012780007a701733a8"
+        }
+      ],
+      "missingProof": [
+        "Computed light/dark contrast",
+        "Invalid external size prop"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-04",
+      "file": "packages/ui/src/common/EmptyState.tsx",
+      "claim": "Separates empty workspace from no-results styling/icon; actions render only with both label and callback; status live-region semantics do not prove upstream error/empty classification.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/EmptyState.tsx",
+          "startLine": 33,
+          "endLine": 59,
+          "excerpt": "export function EmptyState({\n  icon,\n  title,\n  description,\n  actionLabel,\n  onAction,\n  secondaryActionLabel,\n  onSecondaryAction,\n  secondaryActionTestId,\n  variant = 'empty',\n}: EmptyStateProps): ReactNode {\n  const isNoResults = variant === 'no-results';\n  const Icon = icon ?? (isNoResults ? SearchX : Plus);\n  const rootClass = isNoResults ? 'ui-empty ui-empty--no-results' : 'ui-empty';\n  const buttonClass = isNoResults ? 'btn' : 'btn btn--primary';\n  const hasPrimary = Boolean(actionLabel && onAction);\n  const hasSecondary = Boolean(secondaryActionLabel && onSecondaryAction);\n\n  return (\n    <div\n      className={rootClass}\n      role=\"status\"\n      data-testid={isNoResults ? 'empty-state-no-results' : 'empty-state'}\n      data-variant={variant}\n    >\n      <div className=\"ui-empty__icon-wrap\" aria-hidden>\n        <Icon className=\"ui-empty__icon\" size={48} strokeWidth={1.5} />",
+          "sha256": "451e6799927f5ad52ae51c63aa3f6e714f75572dbc301d5e691b2611596589a9"
+        },
+        {
+          "file": "packages/ui/src/common/EmptyState.tsx",
+          "startLine": 61,
+          "endLine": 85,
+          "excerpt": "      <h3 className=\"ui-empty__title\">{title}</h3>\n      {description ? (\n        <p className=\"ui-empty__description\">{description}</p>\n      ) : null}\n      {hasPrimary || hasSecondary ? (\n        <div className=\"ui-empty__actions\">\n          {hasPrimary ? (\n            <button type=\"button\" className={buttonClass} onClick={onAction}>\n              {!isNoResults ? (\n                <Plus size={16} strokeWidth={1.5} aria-hidden />\n              ) : null}\n              {actionLabel}\n            </button>\n          ) : null}\n          {hasSecondary ? (\n            <button\n              type=\"button\"\n              className=\"btn\"\n              onClick={onSecondaryAction}\n              data-testid={secondaryActionTestId}\n            >\n              {secondaryActionLabel}\n            </button>\n          ) : null}\n        </div>",
+          "sha256": "451e6799927f5ad52ae51c63aa3f6e714f75572dbc301d5e691b2611596589a9"
+        }
+      ],
+      "missingProof": [
+        "Every consumer classification",
+        "Callback success/persistence",
+        "Screen reader action behavior"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-05",
+      "file": "packages/ui/src/common/EngineeringDetailLayout.tsx",
+      "claim": "Composition-only shell renders chrome, optional notes, primary and optional secondary columns; no domain/permission mutation.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/EngineeringDetailLayout.tsx",
+          "startLine": 23,
+          "endLine": 49,
+          "excerpt": "export function EngineeringDetailLayout({\n  dataTestId,\n  className,\n  chrome,\n  notes,\n  primary,\n  secondary,\n}: EngineeringDetailLayoutProps): ReactNode {\n  const rootClass = className\n    ? `eng-detail ${className}`\n    : 'eng-detail';\n\n  return (\n    <div className={rootClass} data-testid={dataTestId}>\n      {chrome}\n      {notes ? (\n        <div className=\"eng-detail__notes-slot\">{notes}</div>\n      ) : null}\n      <div className=\"eng-detail__body\">\n        <div className=\"eng-detail__primary\">{primary}</div>\n        {secondary ? (\n          <div className=\"eng-detail__secondary\">{secondary}</div>\n        ) : null}\n      </div>\n    </div>\n  );\n}",
+          "sha256": "1c47795153fc25c608b59c6718c4fddab09fd2b7326b538a878a05a39938d761"
+        }
+      ],
+      "missingProof": [
+        "Responsive CSS layout",
+        "Consumer engineering values/authority"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-06",
+      "file": "packages/ui/src/common/InlineLoading.tsx",
+      "claim": "Status/busy/polite loading label wraps decorative small Spinner; defaults to Cargando.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/InlineLoading.tsx",
+          "startLine": 14,
+          "endLine": 30,
+          "excerpt": "export function InlineLoading({\n  label = 'Cargando…',\n  'data-testid': dataTestId = 'inline-loading',\n}: InlineLoadingProps): ReactNode {\n  return (\n    <p\n      className=\"ui-inline-loading\"\n      role=\"status\"\n      aria-busy=\"true\"\n      aria-live=\"polite\"\n      data-testid={dataTestId}\n    >\n      <Spinner size=\"sm\" />\n      <span>{label}</span>\n    </p>\n  );\n}",
+          "sha256": "366b30637adb9a674cbf6e843fde2f674659554ca9ffa8f55091b8b5f23a6f35"
+        }
+      ],
+      "missingProof": [
+        "Screen reader announcements and repetition",
+        "Real async completion"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-07",
+      "file": "packages/ui/src/common/ListSkeleton.tsx",
+      "claim": "Skeleton clamps rows between1 and12 with Math min/max, exposes status/busy and loading label; placeholders are not loaded records.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/ListSkeleton.tsx",
+          "startLine": 13,
+          "endLine": 31,
+          "excerpt": "export function ListSkeleton({\n  rows = 4,\n  'data-testid': dataTestId = 'list-skeleton',\n}: ListSkeletonProps): ReactNode {\n  const count = Math.max(1, Math.min(rows, 12));\n  return (\n    <div\n      className=\"ui-list-skeleton\"\n      role=\"status\"\n      aria-busy=\"true\"\n      aria-label=\"Cargando lista\"\n      data-testid={dataTestId}\n    >\n      {Array.from({ length: count }, (_, i) => (\n        <div key={i} className=\"ui-list-skeleton__row\" />\n      ))}\n    </div>\n  );\n}",
+          "sha256": "cbbaf36cd9545ae8da6253e7b81ef904eca9f0d947759f34599955c2f160707f"
+        }
+      ],
+      "missingProof": [
+        "Noninteger/NaN caller inputs",
+        "Reduced-motion rendering",
+        "Consumer empty/error handling"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-08",
+      "file": "packages/ui/src/common/PageLoading.tsx",
+      "claim": "Loading shell chooses full viewport class and larger spinner; role status/busy/polite with visible label.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/PageLoading.tsx",
+          "startLine": 16,
+          "endLine": 37,
+          "excerpt": "export function PageLoading({\n  label = 'Cargando…',\n  fullPage = false,\n  'data-testid': dataTestId = 'page-loading',\n}: PageLoadingProps): ReactNode {\n  return (\n    <div\n      className={\n        fullPage\n          ? 'ui-page-loading ui-page-loading--full'\n          : 'ui-page-loading'\n      }\n      role=\"status\"\n      aria-busy=\"true\"\n      aria-live=\"polite\"\n      data-testid={dataTestId}\n    >\n      <Spinner size={fullPage ? 'lg' : 'md'} />\n      <p className=\"ui-page-loading__label\">{label}</p>\n    </div>\n  );\n}",
+          "sha256": "b02455fddd33b74f798ab0dca502815974907de530f9f3abd2e567e517cabd46"
+        }
+      ],
+      "missingProof": [
+        "Viewport behavior",
+        "Caller async gate semantics"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-09",
+      "file": "packages/ui/src/common/SearchInput.tsx",
+      "claim": "Controlled search emits immediate parent change and optional debounce; effect cleans old timer on value/callback delay change; named clear button empties value.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/SearchInput.tsx",
+          "startLine": 22,
+          "endLine": 48,
+          "excerpt": "export function SearchInput({\n  value,\n  onChange,\n  onDebouncedChange,\n  placeholder = 'Buscar…',\n  debounceMs = SEARCH_DEBOUNCE_MS,\n  id,\n  'aria-label': ariaLabel = 'Buscar',\n}: SearchInputProps): ReactNode {\n  const autoId = useId();\n  const inputId = id ?? autoId;\n\n  useEffect(() => {\n    if (!onDebouncedChange) return;\n    const timer = window.setTimeout(() => {\n      onDebouncedChange(value);\n    }, debounceMs);\n    return () => window.clearTimeout(timer);\n  }, [value, debounceMs, onDebouncedChange]);\n\n  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {\n    onChange(e.target.value);\n  };\n\n  const clear = () => {\n    onChange('');\n  };",
+          "sha256": "294fb80e261ebd2446980e48292a899f02a947f5fd1da3aadc236c298b4c216f"
+        },
+        {
+          "file": "packages/ui/src/common/SearchInput.tsx",
+          "startLine": 58,
+          "endLine": 77,
+          "excerpt": "      <input\n        id={inputId}\n        type=\"search\"\n        className=\"ui-search__input\"\n        value={value}\n        onChange={handleChange}\n        placeholder={placeholder}\n        aria-label={ariaLabel}\n        autoComplete=\"off\"\n      />\n      {value ? (\n        <button\n          type=\"button\"\n          className=\"ui-search__clear\"\n          onClick={clear}\n          aria-label=\"Limpiar búsqueda\"\n        >\n          <X size={14} strokeWidth={1.5} aria-hidden />\n        </button>\n      ) : null}",
+          "sha256": "294fb80e261ebd2446980e48292a899f02a947f5fd1da3aadc236c298b4c216f"
+        }
+      ],
+      "missingProof": [
+        "Timer behavior under real renders",
+        "Consumer query cancellation and stale responses",
+        "Keyboard/contrast"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-10",
+      "file": "packages/ui/src/common/Spinner.tsx",
+      "claim": "Accessible label opts into status; otherwise spinner is presentation and aria-hidden, avoiding duplicate text with sibling loading labels.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/Spinner.tsx",
+          "startLine": 17,
+          "endLine": 38,
+          "excerpt": "export function Spinner({\n  size = 'md',\n  className,\n  'aria-label': ariaLabel,\n}: SpinnerProps): ReactNode {\n  const classes = [\n    'ui-spinner',\n    `ui-spinner--${size}`,\n    className,\n  ]\n    .filter(Boolean)\n    .join(' ');\n\n  return (\n    <span\n      className={classes}\n      role={ariaLabel ? 'status' : 'presentation'}\n      aria-label={ariaLabel}\n      aria-hidden={ariaLabel ? undefined : true}\n    />\n  );\n}",
+          "sha256": "7044ee35ee1d1781de47e59ecf07fc33feeeb1998a05484ed93e23e928df8eb1"
+        }
+      ],
+      "missingProof": [
+        "Computed animation/contrast",
+        "Consumer accessible-name appropriateness"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-11",
+      "file": "packages/ui/src/common/StatusChips.tsx",
+      "claim": "Controlled generic chip options default to catalog all/active/inactive; semantic group and aria-pressed reflect selected value; callback does not persist state itself.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/common/StatusChips.tsx",
+          "startLine": 31,
+          "endLine": 68,
+          "excerpt": "export function StatusChips<T extends string = CatalogStatusFilter>({\n  value,\n  onChange,\n  options,\n  'aria-label': ariaLabel = 'Filtrar por estado',\n  'data-testid': dataTestId,\n}: StatusChipsProps<T>): ReactNode {\n  const opts = (options ??\n    CATALOG_OPTIONS) as readonly StatusChipOption<T>[];\n\n  return (\n    <div\n      className=\"ui-status-chips\"\n      role=\"group\"\n      aria-label={ariaLabel}\n      data-testid={dataTestId}\n    >\n      {opts.map((opt) => {\n        const selected = value === opt.value;\n        return (\n          <button\n            key={opt.value}\n            type=\"button\"\n            className={\n              selected\n                ? 'ui-status-chips__chip is-selected'\n                : 'ui-status-chips__chip'\n            }\n            aria-pressed={selected}\n            onClick={() => onChange(opt.value)}\n          >\n            {opt.label}\n          </button>\n        );\n      })}\n    </div>\n  );\n}",
+          "sha256": "98431a72cd7b479bc8c52a5ee5f4c1b3f1cc4f818962d4e58cd5e3179cf2ca63"
+        }
+      ],
+      "missingProof": [
+        "Consumer filter correctness",
+        "Focus appearance and wrapping"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-12",
+      "file": "packages/ui/src/settings/DevicesScreen.tsx",
+      "claim": "Own-device generated API directory distinguishes load error/loading/empty/revoked; approval uses scoped device_enrollment step-up callback key and only shows success after result. Revoke waits mutation then reload; no local abort/generation guard in load.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/settings/DevicesScreen.tsx",
+          "startLine": 40,
+          "endLine": 55,
+          "excerpt": "  const load = useCallback(async (silent = false) => {\n    if (!silent) setReloading(true);\n    setLoadError(null);\n    try {\n      const directory = await api.listMyDevices(token);\n      setDevices(directory.devices);\n    } catch {\n      setLoadError('No se pudo cargar los dispositivos. Reintentá en unos segundos.');\n    } finally {\n      if (!silent) setReloading(false);\n    }\n  }, [api, token]);\n\n  useEffect(() => {\n    void load(true);\n  }, [load]);",
+          "sha256": "3b658cdc5ae9ec0a4ef605982c1f7fd2ae2510f14ca155e96124afbaf8f9d36a"
+        },
+        {
+          "file": "packages/ui/src/settings/DevicesScreen.tsx",
+          "startLine": 57,
+          "endLine": 99,
+          "excerpt": "  const handleSubmit = async (e: FormEvent) => {\n    e.preventDefault();\n    const cleanCode = code.trim().toUpperCase();\n    if (!cleanCode) return;\n    setStatus('submitting');\n    setErrorMsg(null);\n    try {\n      const result = await stepUp.run('device_enrollment', 'aprobar el dispositivo', (key) =>\n        api.approveDeviceEnrollment(token, { code: cleanCode }, key));\n      if (result) {\n        setStatus('success');\n        setCode('');\n        void load(true);\n      } else {\n        // Cancelled challenge or MFA enrollment required: back to idle, the\n        // user decides the next step.\n        setStatus('idle');\n      }\n    } catch (err: any) {\n      setStatus('error');\n      const status_ = err?.status ?? null;\n      setErrorMsg(\n        status_ === 409\n          ? 'El código ya fue usado o expiró. Generá uno nuevo en SketchUp.'\n          : status_ === 404 || status_ === 400\n            ? 'Código inválido o expiró.'\n            : 'Error al aprobar el dispositivo.',\n      );\n    }\n  };\n\n  const revoke = async (deviceId: string) => {\n    setRevokingId(deviceId);\n    setRevokeError(null);\n    try {\n      await api.revokeMyDevice(token, { device_id: deviceId });\n      await load(true);\n    } catch {\n      setRevokeError('No se pudo revocar el dispositivo. Reintentá en unos segundos.');\n    } finally {\n      setRevokingId(null);\n    }\n  };",
+          "sha256": "3b658cdc5ae9ec0a4ef605982c1f7fd2ae2510f14ca155e96124afbaf8f9d36a"
+        },
+        {
+          "file": "packages/ui/src/settings/DevicesScreen.tsx",
+          "startLine": 205,
+          "endLine": 244,
+          "excerpt": "        {loadError ? (\n          <div role=\"alert\" style={{ padding: 12, backgroundColor: 'var(--destructive-50)', color: 'var(--destructive-700)', borderRadius: 4, fontSize: 14 }}>\n            {loadError}\n          </div>\n        ) : devices === null ? (\n          <p className=\"settings-hint\" role=\"status\">Cargando dispositivos…</p>\n        ) : devices.length === 0 ? (\n          <p className=\"settings-hint\">Todavía no vinculaste ningún dispositivo. Aprobá un código para empezar.</p>\n        ) : (\n          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>\n            {devices.map((device) => {\n              const revoked = device.revoked_at != null;\n              return (\n                <li\n                  key={device.id}\n                  style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 12, opacity: revoked ? 0.7 : 1 }}\n                >\n                  <Smartphone size={18} color={revoked ? 'var(--text-muted)' : 'var(--brand-600)'} aria-hidden />\n                  <div style={{ flex: 1, minWidth: 0 }}>\n                    <div style={{ fontWeight: 500 }}>\n                      {device.display_name}\n                      {revoked ? <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · revocado</span> : null}\n                    </div>\n                    <div className=\"settings-hint\" style={{ margin: 0 }}>\n                      SketchUp · vinculado {formatWhen(device.created_at)} · última actividad {formatWhen(device.last_seen_at)}\n                    </div>\n                  </div>\n                  {revoked ? null : (\n                    <button\n                      type=\"button\"\n                      className=\"btn btn--secondary\"\n                      onClick={() => void revoke(device.id)}\n                      disabled={revokingId != null}\n                    >\n                      {revokingId === device.id ? 'Revocando…' : 'Revocar'}\n                    </button>\n                  )}\n                </li>\n              );\n            })}",
+          "sha256": "3b658cdc5ae9ec0a4ef605982c1f7fd2ae2510f14ca155e96124afbaf8f9d36a"
+        }
+      ],
+      "missingProof": [
+        "Real step-up same-key retry/deny proof",
+        "Session change/unmount stale response behavior; reuse WEB-02 class rather than new finding",
+        "Actual revocation/session authority"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-13",
+      "file": "packages/ui/src/settings/SalesNetworkSection.tsx",
+      "claim": "Factory-linked provisioning uses generated API, restricts type to store/dealer and checks active+readiness before insertion/success. Entry disabled for nonactive org; load and create errors distinct. This is not future relationship API implementation.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/settings/SalesNetworkSection.tsx",
+          "startLine": 55,
+          "endLine": 110,
+          "excerpt": "  const load = async () => {\n    setLoading(true);\n    setLoadError(null);\n    try {\n      setOrgs(await api.listFactoryOrganizations(token));\n    } catch {\n      setLoadError('No se pudo cargar la red de ventas. Revisá tu conexión y volvé a intentar.');\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  useEffect(() => {\n    void load();\n    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, [baseUrl, token]);\n\n  const create = async () => {\n    const trimmed = name.trim();\n    if (!trimmed) {\n      setCreateError('Poné un nombre para la nueva organización.');\n      return;\n    }\n    setCreating(true);\n    setCreateError(null);\n    try {\n      const data = await api.provisionOrganization(token, {\n        name: trimmed,\n        type,\n        license_plan: 'none',\n      });\n      const provisioned = data.organization;\n      if (provisioned.type !== 'store' && provisioned.type !== 'dealer') {\n        throw new Error('Organization provisioning returned an invalid connected organization type');\n      }\n      if (provisioned.status !== 'active' || !data.readiness.ready) {\n        throw new Error('Organization provisioning did not reach authoritative readiness');\n      }\n      const organization: FactoryOrganization = {\n        id: provisioned.id,\n        name: provisioned.name,\n        slug: provisioned.slug,\n        type: provisioned.type,\n        status: provisioned.status,\n        created_at: provisioned.created_at,\n        version: provisioned.version,\n      };\n      setOrgs((prev) => [organization, ...prev]);\n      setJustCreated(organization);\n      setName('');\n    } catch {\n      setCreateError('No se pudo crear la organización. Revisá tu conexión.');\n    } finally {\n      setCreating(false);\n    }\n  };",
+          "sha256": "a1368a1292bdac95905b1ce304a17264c12a913bce1375a6d4a1054f68d8fabb"
+        },
+        {
+          "file": "packages/ui/src/settings/SalesNetworkSection.tsx",
+          "startLine": 147,
+          "endLine": 159,
+          "excerpt": "      {loading ? (\n        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>Cargando red…</p>\n      ) : loadError ? (\n        <EmptyState\n          title=\"No se pudo cargar la red de ventas\"\n          description={loadError}\n          actionLabel=\"Reintentar\"\n          onAction={() => void load()}\n        />\n      ) : orgs.length === 0 ? (\n        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', margin: 0 }}>\n          Todavía no tenés tiendas ni distribuidores conectados. Creá la primera con el\n          formulario de abajo.",
+          "sha256": "a1368a1292bdac95905b1ce304a17264c12a913bce1375a6d4a1054f68d8fabb"
+        },
+        {
+          "file": "packages/ui/src/settings/SalesNetworkSection.tsx",
+          "startLine": 195,
+          "endLine": 203,
+          "excerpt": "              <button\n                type=\"button\"\n                className=\"btn btn--secondary btn--small\"\n                onClick={() => onEnterOrg(o.id, o.name)}\n                disabled={o.status !== 'active'}\n                title={o.status === 'active' ? undefined : `No podés entrar mientras esté ${STATUS_LABELS[o.status].toLowerCase()}`}\n              >\n                Entrar\n              </button>",
+          "sha256": "a1368a1292bdac95905b1ce304a17264c12a913bce1375a6d4a1054f68d8fabb"
+        }
+      ],
+      "missingProof": [
+        "Cross-org provisioning/tenant switch runtime",
+        "Load lifecycle race: no abort/generation guard here; related WEB-02 only",
+        "Readiness/audit persisted server proof"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-14",
+      "file": "packages/ui/src/shell/CommandPalette.tsx",
+      "claim": "Normalizes diacritics/case, filters props, wraps active index with arrow keys, Enter selects exact item ID then closes, Escape closes. Portal dialog locks body scroll and autofocuses search; no Tab trapping/trigger-focus restoration implemented in this component.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/shell/CommandPalette.tsx",
+          "startLine": 36,
+          "endLine": 49,
+          "excerpt": "function normalize(s: string): string {\n  return s\n    .normalize('NFD')\n    .replace(/\\p{M}/gu, '')\n    .toLocaleLowerCase('es-MX');\n}\n\nfunction matchesQuery(item: CommandPaletteItem, q: string): boolean {\n  if (!q) return true;\n  const hay = normalize(\n    `${item.label} ${item.group} ${item.keywords ?? ''} ${item.id}`,\n  );\n  return hay.includes(q);\n}",
+          "sha256": "9796bd2be3c21ab25f5cb470708bbd1f48a6d32d00799806eca0d252eaf65ffc"
+        },
+        {
+          "file": "packages/ui/src/shell/CommandPalette.tsx",
+          "startLine": 63,
+          "endLine": 102,
+          "excerpt": "  const filtered = useMemo(() => {\n    const q = normalize(query.trim());\n    return items.filter((item) => matchesQuery(item, q));\n  }, [items, query]);\n\n  // Reset when opened\n  useEffect(() => {\n    if (!open) return;\n    setQuery('');\n    setActiveIndex(0);\n    const t = window.setTimeout(() => inputRef.current?.focus(), 0);\n    return () => window.clearTimeout(t);\n  }, [open]);\n\n  // Keep active index in range\n  useEffect(() => {\n    if (activeIndex >= filtered.length) {\n      setActiveIndex(Math.max(0, filtered.length - 1));\n    }\n  }, [filtered.length, activeIndex]);\n\n  // Body scroll lock while open\n  useEffect(() => {\n    if (!open) return;\n    const prev = document.body.style.overflow;\n    document.body.style.overflow = 'hidden';\n    return () => {\n      document.body.style.overflow = prev;\n    };\n  }, [open]);\n\n  const selectIndex = useCallback(\n    (index: number) => {\n      const item = filtered[index];\n      if (!item) return;\n      onSelect(item.id);\n      onClose();\n    },\n    [filtered, onSelect, onClose],\n  );",
+          "sha256": "9796bd2be3c21ab25f5cb470708bbd1f48a6d32d00799806eca0d252eaf65ffc"
+        },
+        {
+          "file": "packages/ui/src/shell/CommandPalette.tsx",
+          "startLine": 104,
+          "endLine": 131,
+          "excerpt": "  const onKeyDown = (event: ReactKeyboardEvent) => {\n    if (event.key === 'Escape') {\n      event.preventDefault();\n      event.stopPropagation();\n      onClose();\n      return;\n    }\n    if (event.key === 'ArrowDown') {\n      event.preventDefault();\n      setActiveIndex((i) =>\n        filtered.length === 0 ? 0 : (i + 1) % filtered.length,\n      );\n      return;\n    }\n    if (event.key === 'ArrowUp') {\n      event.preventDefault();\n      setActiveIndex((i) =>\n        filtered.length === 0\n          ? 0\n          : (i - 1 + filtered.length) % filtered.length,\n      );\n      return;\n    }\n    if (event.key === 'Enter') {\n      event.preventDefault();\n      selectIndex(activeIndex);\n    }\n  };",
+          "sha256": "9796bd2be3c21ab25f5cb470708bbd1f48a6d32d00799806eca0d252eaf65ffc"
+        },
+        {
+          "file": "packages/ui/src/shell/CommandPalette.tsx",
+          "startLine": 138,
+          "endLine": 156,
+          "excerpt": "  return createPortal(\n    <div\n      className=\"cmd-palette-root\"\n      role=\"presentation\"\n      data-testid=\"command-palette\"\n      onKeyDown={onKeyDown}\n    >\n      <button\n        type=\"button\"\n        className=\"cmd-palette__overlay\"\n        aria-label=\"Cerrar búsqueda\"\n        tabIndex={-1}\n        onClick={onClose}\n      />\n      <div\n        className=\"cmd-palette\"\n        role=\"dialog\"\n        aria-modal=\"true\"\n        aria-labelledby={titleId}",
+          "sha256": "9796bd2be3c21ab25f5cb470708bbd1f48a6d32d00799806eca0d252eaf65ffc"
+        },
+        {
+          "file": "packages/ui/src/shell/CommandPalette.tsx",
+          "startLine": 168,
+          "endLine": 185,
+          "excerpt": "          <input\n            ref={inputRef}\n            type=\"search\"\n            className=\"cmd-palette__input\"\n            placeholder=\"Ir a sección o buscar cotización / mueble…\"\n            value={query}\n            onChange={(e) => {\n              setQuery(e.target.value);\n              setActiveIndex(0);\n            }}\n            aria-controls={listboxId}\n            aria-autocomplete=\"list\"\n            aria-activedescendant={\n              filtered[activeIndex]\n                ? `${listboxId}-opt-${filtered[activeIndex]!.id}`\n                : undefined\n            }\n            data-testid=\"command-palette-input\"",
+          "sha256": "9796bd2be3c21ab25f5cb470708bbd1f48a6d32d00799806eca0d252eaf65ffc"
+        },
+        {
+          "file": "packages/ui/src/shell/CommandPalette.tsx",
+          "startLine": 258,
+          "endLine": 288,
+          "excerpt": "export function useCommandPaletteHotkey(\n  onToggle: () => void,\n  enabled = true,\n): void {\n  useEffect(() => {\n    if (!enabled) return;\n    const onKeyDown = (event: KeyboardEvent) => {\n      const isModK =\n        (event.metaKey || event.ctrlKey) &&\n        (event.key === 'k' || event.key === 'K');\n      if (!isModK) return;\n\n      const target = event.target as HTMLElement | null;\n      const tag = target?.tagName;\n      const isEditable =\n        tag === 'INPUT' ||\n        tag === 'TEXTAREA' ||\n        tag === 'SELECT' ||\n        target?.isContentEditable;\n      // Still allow Cmd+K from inputs to open palette (Linear-style)\n      if (isEditable && (event.key as string) === '/' && !event.metaKey && !event.ctrlKey) {\n        return;\n      }\n\n      event.preventDefault();\n      onToggle();\n    };\n    window.addEventListener('keydown', onKeyDown);\n    return () => window.removeEventListener('keydown', onKeyDown);\n  }, [onToggle, enabled]);\n}",
+          "sha256": "9796bd2be3c21ab25f5cb470708bbd1f48a6d32d00799806eca0d252eaf65ffc"
+        }
+      ],
+      "missingProof": [
+        "Real keyboard focus containment/restoration and accessible search name",
+        "Consumer item role filtering",
+        "Computed layout/contrast; no WCAG pass claimed"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-15",
+      "file": "apps/web/src/OrgPicker.tsx",
+      "claim": "Presentational membership buttons show organization and all roles, pass exact organization ID, disable pick/logout while loading and display error escape action. Parent controls scope switching, not this component.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "apps/web/src/OrgPicker.tsx",
+          "startLine": 70,
+          "endLine": 108,
+          "excerpt": "        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 'var(--space-2)' }}>\n          {memberships.map((m) => (\n            <li key={m.organization_id}>\n              <button\n                type=\"button\"\n                disabled={loading}\n                onClick={() => onPick(m.organization_id)}\n                style={{\n                  width: '100%',\n                  display: 'flex',\n                  flexDirection: 'column',\n                  alignItems: 'flex-start',\n                  gap: 'var(--space-1)',\n                  padding: 'var(--space-3) var(--space-4)',\n                  borderRadius: 'var(--radius-md)',\n                  border: '1px solid var(--border)',\n                  background: 'var(--surface)',\n                  cursor: loading ? 'wait' : 'pointer',\n                  textAlign: 'left',\n                  fontFamily: 'var(--font-sans)',\n                  transition: 'background var(--transition-fast), border-color var(--transition-fast)',\n                }}\n                onMouseEnter={(e) => {\n                  if (!loading) e.currentTarget.style.borderColor = 'var(--brand-400)';\n                }}\n                onMouseLeave={(e) => {\n                  e.currentTarget.style.borderColor = 'var(--border)';\n                }}\n              >\n                <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>\n                  {m.organization.name}\n                </span>\n                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>\n                  {m.roles.map(roleLabelEs).join(' · ')}\n                </span>\n              </button>\n            </li>\n          ))}\n        </ul>",
+          "sha256": "872e8237576a234d75695e34991e65d19863d5496d43a4d4e8fe9f8a51ecc0b4"
+        },
+        {
+          "file": "apps/web/src/OrgPicker.tsx",
+          "startLine": 109,
+          "endLine": 129,
+          "excerpt": "        {error ? (\n          <p role=\"alert\" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', margin: 'var(--space-3) 0 0' }}>\n            {error}\n          </p>\n        ) : null}\n        {loading ? (\n          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', margin: 'var(--space-3) 0 0' }}>\n            Entrando…\n          </p>\n        ) : null}\n        {onLogout ? (\n          <button\n            type=\"button\"\n            className=\"btn btn--secondary\"\n            style={{ width: '100%', marginTop: 'var(--space-4)' }}\n            disabled={loading}\n            onClick={onLogout}\n          >\n            Cerrar sesión y volver al login\n          </button>\n        ) : null}",
+          "sha256": "872e8237576a234d75695e34991e65d19863d5496d43a4d4e8fe9f8a51ecc0b4"
+        }
+      ],
+      "missingProof": [
+        "Authoritative tenant switch/cancellation",
+        "Empty membership branch at caller",
+        "Keyboard focus/announcements"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-16",
+      "file": "apps/web/src/SupportBanner.tsx",
+      "claim": "Persistent polite status shows support organization/name fallback and reason; exit callback disabled while exiting. Banner does not revoke session itself.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "apps/web/src/SupportBanner.tsx",
+          "startLine": 11,
+          "endLine": 26,
+          "excerpt": "export function SupportBanner({\n  support,\n  organization,\n  onExit,\n  exiting,\n}: {\n  readonly support: SupportInfo;\n  readonly organization: OrgSummary | null;\n  readonly onExit: () => void;\n  readonly exiting: boolean;\n}): ReactNode {\n  const orgName = organization?.name ?? support.organization_id;\n  return (\n    <div\n      role=\"status\"\n      aria-live=\"polite\"",
+          "sha256": "ba7016044a98484494b8af1c594d743f33a5ee182d5435b7614a5032afcd2add"
+        },
+        {
+          "file": "apps/web/src/SupportBanner.tsx",
+          "startLine": 39,
+          "endLine": 59,
+          "excerpt": "      <span>\n        <strong style={{ fontWeight: 600 }}>Soporte Granete</strong> — estás operando en{' '}\n        {orgName} · motivo: {support.reason}\n      </span>\n      <button\n        type=\"button\"\n        disabled={exiting}\n        onClick={onExit}\n        style={{\n          border: '1px solid var(--brand-300)',\n          background: 'transparent',\n          color: 'var(--brand-50)',\n          borderRadius: 'var(--radius-md)',\n          padding: 'var(--space-1) var(--space-3)',\n          cursor: exiting ? 'wait' : 'pointer',\n          fontFamily: 'var(--font-sans)',\n          fontSize: 'var(--text-sm)',\n        }}\n      >\n        {exiting ? 'Saliendo…' : 'Salir del soporte (vuelve al login)'}\n      </button>",
+          "sha256": "ba7016044a98484494b8af1c594d743f33a5ee182d5435b7614a5032afcd2add"
+        }
+      ],
+      "missingProof": [
+        "Actual exit request and credential cleanup",
+        "Long reason/organization narrow-width layout"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-17",
+      "file": "apps/web/src/app/providers/ServerStateProvider.tsx",
+      "claim": "QueryClient allocated once per provider via lazy state; effect registers client for tenant transitions and returns register function cleanup; provider itself does not build tenant query keys.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "apps/web/src/app/providers/ServerStateProvider.tsx",
+          "startLine": 1,
+          "endLine": 10,
+          "excerpt": "import { useEffect, useState, type PropsWithChildren } from 'react';\nimport { QueryClientProvider } from '@tanstack/react-query';\nimport { createGraneteQueryClient } from '../../shared/query/queryClient';\nimport { registerTenantQueryClient } from '../../shared/query/tenantTransition';\n\nexport function ServerStateProvider({ children }: PropsWithChildren) {\n  const [queryClient] = useState(createGraneteQueryClient);\n  useEffect(() => registerTenantQueryClient(queryClient), [queryClient]);\n  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;\n}",
+          "sha256": "e8649da3cc4e870d2c3f3a110b4a4e94031b59616e5781c549c14c61f7433b5f"
+        }
+      ],
+      "missingProof": [
+        "registerTenantQueryClient implementation beyond this exact fragment",
+        "Session transition cancellation/key behavior; existing shared contract evidence separate"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-18",
+      "file": "apps/web/src/components/ToastViewport.tsx",
+      "claim": "Store toasts portal into body and expose polite status per card; close invokes dismiss exact ID; progress duration shares store constant. Renderer guards document absence, but does not own expiration queue semantics.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "apps/web/src/components/ToastViewport.tsx",
+          "startLine": 40,
+          "endLine": 86,
+          "excerpt": "function ToastCard({\n  item,\n  onDismiss,\n}: {\n  readonly item: InternalToast;\n  readonly onDismiss: (id: string) => void;\n}): ReactNode {\n  const className = [\n    'ui-toast',\n    `ui-toast--${item.type}`,\n    item.phase === 'enter' ? 'is-enter' : '',\n    item.phase === 'visible' ? 'is-visible' : '',\n    item.phase === 'exit' ? 'is-exit' : '',\n  ]\n    .filter(Boolean)\n    .join(' ');\n\n  return (\n    <div\n      className={className}\n      role=\"status\"\n      aria-live=\"polite\"\n      data-testid=\"ui-toast\"\n      data-toast-type={item.type}\n      data-toast-id={item.id}\n      data-toast-phase={item.phase}\n    >\n      <span className=\"ui-toast__icon\">\n        <ToastIcon type={item.type} />\n      </span>\n      <p className=\"ui-toast__message\">{item.message}</p>\n      <button\n        type=\"button\"\n        className=\"ui-toast__close\"\n        aria-label=\"Cerrar notificación\"\n        onClick={() => onDismiss(item.id)}\n      >\n        <X size={14} strokeWidth={1.5} aria-hidden />\n      </button>\n      {item.phase !== 'exit' ? (\n        <span\n          className=\"ui-toast__progress\"\n          data-testid=\"ui-toast-progress\"\n          style={{ animationDuration: `${TOAST_DURATION_MS}ms` }}\n        />\n      ) : null}\n    </div>",
+          "sha256": "a9f8dff265ad26e3b48870b45d6014a25fddde19a14b6714fd05683998c29fa1"
+        },
+        {
+          "file": "apps/web/src/components/ToastViewport.tsx",
+          "startLine": 90,
+          "endLine": 108,
+          "excerpt": "export function ToastViewport(): ReactNode {\n  const items = useUiStore((s) => s.items);\n  const dismiss = useUiStore((s) => s.dismiss);\n\n  if (typeof document === 'undefined') return null;\n\n  return createPortal(\n    <div\n      className=\"ui-toast-viewport\"\n      data-testid=\"ui-toast-viewport\"\n      aria-label=\"Notificaciones\"\n    >\n      {items.map((item) => (\n        <ToastCard key={item.id} item={item} onDismiss={dismiss} />\n      ))}\n    </div>,\n    document.body,\n  );\n}",
+          "sha256": "a9f8dff265ad26e3b48870b45d6014a25fddde19a14b6714fd05683998c29fa1"
+        }
+      ],
+      "missingProof": [
+        "Queue timer/phase correctness",
+        "Live-region announcement/overlap and reduced motion",
+        "Persistence-critical errors should not be certified by toast alone"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-19",
+      "file": "packages/ui/src/crm/WhatsAppButton.tsx",
+      "claim": "Button only toggles modal state and forwards supplied customer/project/template fields; compact mode hides label with title remaining. No send/delivery claim from this wrapper.",
+      "scope": "Named component control-flow/markup only; no consumer-wide or runtime certification",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "packages/ui/src/crm/WhatsAppButton.tsx",
+          "startLine": 18,
+          "endLine": 55,
+          "excerpt": "export function WhatsAppButton({\n  customerName,\n  phone,\n  projectName,\n  quoteAmount,\n  scheduledDate,\n  workshopName,\n  compact = false,\n  label = 'WhatsApp',\n  className = '',\n}: WhatsAppButtonProps) {\n  const [modalOpen, setModalOpen] = useState(false);\n\n  return (\n    <>\n      <button\n        type=\"button\"\n        className={`btn btn--secondary whatsapp-btn ${compact ? 'whatsapp-btn--compact' : ''} ${className}`}\n        onClick={() => setModalOpen(true)}\n        title={`Enviar WhatsApp a ${customerName || 'cliente'}`}\n      >\n        <MessageSquare size={16} className=\"whatsapp-btn__icon\" aria-hidden=\"true\" />\n        {!compact && <span>{label}</span>}\n      </button>\n\n      <WhatsAppModal\n        open={modalOpen}\n        onClose={() => setModalOpen(false)}\n        customerName={customerName}\n        phone={phone}\n        projectName={projectName}\n        quoteAmount={quoteAmount}\n        scheduledDate={scheduledDate}\n        workshopName={workshopName}\n      />\n    </>\n  );\n}",
+          "sha256": "cf2a4f4ae8c6a86d749033d2c5f34f405236de181e1bc77f0f27ff706c7d0e69"
+        }
+      ],
+      "missingProof": [
+        "WhatsAppModal URL/escaping/phone validation",
+        "Compact accessible name and user-confirmed send",
+        "No external message sent"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    },
+    {
+      "id": "WEB-ACCESS-20",
+      "file": "apps/web/src/AppContent.tsx",
+      "claim": "Bounded shell slice: purchasing load/reset follows guest or anyRole access; route IDs parsed per nav; unknown/blocked sections redirect home with explicit denial toast; SupportBanner remains outside ShellView. Not entire3076-line component review.",
+      "scope": "Only cited purchasing load, route normalization and support-banner slices; not full AppContent coverage",
+      "auditDepth": "EXACT_SURFACE_FRAGMENT_SOURCE_REVIEW",
+      "status": "PARTIAL",
+      "evidence": [
+        {
+          "file": "apps/web/src/AppContent.tsx",
+          "startLine": 670,
+          "endLine": 690,
+          "excerpt": "  // ─── F119: Compras/Almacén lives in purchasingStore ─────────────────────\n  const canAccessPurchasing =\n    session === 'guest' || anyRole(actorRoles, roleCanAccessPurchasingNav);\n  ensurePurchasingStore({ deps: { getRepository } });\n  const pickingStates = usePurchasingStore((s) => s.pickingStates);\n  const stockRows = usePurchasingStore((s) => s.stockRows);\n  const stockMovements = usePurchasingStore((s) => s.stockMovements);\n  const suppliers = usePurchasingStore((s) => s.suppliers);\n  const purchaseOrders = usePurchasingStore((s) => s.purchaseOrders);\n\n  // Bulk load per workspace/session (seq bumps on login/logout/reload).\n  useEffect(() => {\n    if (!canAccessPurchasing) {\n      resetPurchasingStore();\n      return;\n    }\n    void getPurchasingStoreState().loadAll();\n  }, [canAccessPurchasing, workspaceSeq]);\n\n  const canManagePurchasing = session === 'guest' || anyRole(actorRoles, roleCanManagePurchasing);\n",
+          "sha256": "969888bbf594b7b926859c9a71c1d287c8c340c6dfdaaf75302b37c61f63ce19"
+        },
+        {
+          "file": "apps/web/src/AppContent.tsx",
+          "startLine": 901,
+          "endLine": 956,
+          "excerpt": "  const goHomeFromScreen = useCallback(() => {\n    const target = pathForNav('home');\n    if (location.pathname !== target) navigate(target);\n  }, [location.pathname, navigate]);\n\n  const routeEntityId =\n    isEntitySection(navId)\n      ? entityIdFromPath(location.pathname, navId)\n      : null;\n  const routeProjectId =\n    navId === 'quotes' ? routeEntityId : null;\n  const routeModuleId = navId === 'modules' ? routeEntityId : null;\n  const routeStructureId = navId === 'structures' ? routeEntityId : null;\n  const routeComponentId = navId === 'components' ? routeEntityId : null;\n  const productionOrderRoute =\n    navId === 'orders' ? productionOrderFromPath(location.pathname) : null;\n  const routeProductionOrderId = productionOrderRoute?.projectId ?? null;\n  const routeProductionOrderTab = parseProductionOrderTab(\n    productionOrderRoute?.tab ?? 'resumen',\n  );\n  const routeShipmentProjectId =\n    navId === 'shipments' ? shipmentDetailFromPath(location.pathname) : null;\n  const routeInstallationProjectId =\n    navId === 'installations' ? installationDetailFromPath(location.pathname) : null;\n  const routeEngineeringProjectId =\n    navId === 'engineering' ? engineeringProjectFromPath(location.pathname) : null;\n  // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).\n  const routeModuleEditId =\n    navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;\n  const routeStructureEditId =\n    navId === 'structures' ? structureEditIdFromPath(location.pathname) : null;\n  const routeComponentEditId =\n    navId === 'components' ? componentEditIdFromPath(location.pathname) : null;\n\n  // Keep the address bar on a known section path (bookmarkable SPA routes).\n  useEffect(() => {\n    const resolved = navFromPath(location.pathname);\n    if (resolved === null) {\n      navigate(pathForNav('home'), { replace: true });\n      return;\n    }\n    const blocked =\n      (session === 'auth' || session === 'guest') &&\n      navBlockedForSession(session, actorRoles, resolved, isPlatformAdmin);\n    if (blocked) {\n      toast({\n        type: 'error',\n        message:\n          session === 'guest'\n            ? 'Esta sección necesita sesión con el servidor. Salí del modo local y entrá con tu cuenta.'\n            : 'No tenés permiso para esta sección. Pedile a un admin que te asigne el puesto correcto.',\n      });\n      navigate(pathForNav('home'), { replace: true });\n    }\n  }, [location.pathname, navigate, session, actorRole, toast, actorRoles, isPlatformAdmin]);\n",
+          "sha256": "969888bbf594b7b926859c9a71c1d287c8c340c6dfdaaf75302b37c61f63ce19"
+        },
+        {
+          "file": "apps/web/src/AppContent.tsx",
+          "startLine": 3063,
+          "endLine": 3076,
+          "excerpt": "  return (\n    <>\n      {supportInfo ? (\n        <SupportBanner\n          support={supportInfo}\n          organization={activeOrg}\n          exiting={supportExiting}\n          onExit={() => void exitSupport()}\n        />\n      ) : null}\n      <ShellView ctx={shellViewCtx} />\n    </>\n  );\n}",
+          "sha256": "969888bbf594b7b926859c9a71c1d287c8c340c6dfdaaf75302b37c61f63ce19"
+        }
+      ],
+      "missingProof": [
+        "All unrelated AppContent handlers remain outside this fragment",
+        "No live deep-link/tenant switching proof",
+        "Per-screen data loading authorization independent of nav guard"
+      ],
+      "runtimeStatus": "NOT EXECUTED",
+      "testStatus": "No tests executed or inferred from file presence"
+    }
+  ],
+  "coverage": {
+    "uniqueFiles": 20,
+    "namedEvidenceRanges": 42,
+    "runtimeExecutions": 0
+  },
+  "relatedFindings": [
+    "WEB-02 for presentation-owned load stale-response class; no duplicate finding",
+    "AUTH-CONTRACT-01 not re-audited or duplicated"
+  ],
+  "limits": [
+    "Static JSX/CSS cannot certify WCAG contrast, responsive usability or real authentication",
+    "Nested child/callback behavior not inherited automatically"
+  ]
+}
